@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "chat",
     "nodes",
     "accounts",
+    "subscriptions",
 ]
 
 MIDDLEWARE = [
