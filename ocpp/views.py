@@ -10,6 +10,7 @@ from . import store
 from .models import Transaction
 
 
+
 def charger_list(request):
     """Return a JSON list of known chargers and state."""
     data = []

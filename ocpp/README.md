@@ -14,6 +14,7 @@ A connected charge point may send standard OCPP CALL messages
 server replies with basic CALLRESULT payloads and records transactions
 in the database while keeping active connections in memory.
 
+
 ### REST Endpoints
 
 - `GET /ocpp/chargers/` – list known chargers and their current state.

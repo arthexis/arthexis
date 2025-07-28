@@ -99,3 +99,4 @@ in the database while keeping active connections in memory.
 Active connections and logs remain in-memory via `ocpp.store`, but
 completed charging sessions are saved in the `Transaction` model for
 later inspection.
+Data is stored in the in-memory module `ocpp.store` and is not persisted.
