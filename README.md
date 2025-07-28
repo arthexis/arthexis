@@ -33,10 +33,17 @@ Launch configurations are provided in `.vscode/launch.json`:
 
 Open the *Run and Debug* pane in VS Code and choose the desired configuration.
 
+## Maintaining Documentation
 
-# Accounts App
+Documentation is split across multiple files. `README.base.md` provides the
+overview while each app has its own `README.md` with app-specific details.
+After updating any of these files, regenerate `README.md` with:
 
-Users may authenticate using the UID of an RFID card. POST the UID as JSON to `/accounts/rfid-login/` and the server will return the user's details if the UID matches an existing account.
+```bash
+python manage.py build_readme
+```
+
+Avoid editing the combined `README.md` directly.
 
 
 # Chat App
@@ -50,6 +57,11 @@ The `nodes` app exposes a simple JSON interface for keeping track of other insta
 
 - `POST /nodes/register/` with `hostname`, `address` and optional `port` will register or update the node.
 - `GET /nodes/list/` returns all known nodes.
+
+
+# Accounts App
+
+Users may authenticate using the UID of an RFID card. POST the UID as JSON to `/accounts/rfid-login/` and the server will return the user's details if the UID matches an existing account.
 
 
 # Subscriptions App

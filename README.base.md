@@ -32,3 +32,15 @@ Launch configurations are provided in `.vscode/launch.json`:
 2. **Debug Django Server** – runs the server with debugging enabled.
 
 Open the *Run and Debug* pane in VS Code and choose the desired configuration.
+
+## Maintaining Documentation
+
+Documentation is split across multiple files. `README.base.md` provides the
+overview while each app has its own `README.md` with app-specific details.
+After updating any of these files, regenerate `README.md` with:
+
+```bash
+python manage.py build_readme
+```
+
+Avoid editing the combined `README.md` directly.
