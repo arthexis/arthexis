@@ -18,6 +18,11 @@ This repository contains a basic [Django](https://www.djangoproject.com/) projec
    ```
 
 The default configuration uses SQLite and is for local development only.
+To use PostgreSQL instead, set the `POSTGRES_DB` environment variable (and
+optionally `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST` and
+`POSTGRES_PORT`) before running management commands. If `POSTGRES_DB` is
+defined, the project will connect to a PostgreSQL server using these
+settings.
 
 ### Websocket example
 
