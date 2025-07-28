@@ -12,7 +12,8 @@ ws://<host>/ws/ocpp/<charger_id>/
 A connected charge point may send standard OCPP CALL messages
 (BootNotification, Heartbeat, Authorize, Start/StopTransaction). The
 server replies with basic CALLRESULT payloads and records transactions
-in memory.
+in the database while keeping active connections in memory.
+
 
 ### REST Endpoints
 
@@ -21,4 +22,6 @@ in memory.
 - `POST /ocpp/chargers/<cid>/action/` – send actions such as `remote_stop` or
   `reset` to the charger.
 
-Data is stored in the in-memory module `ocpp.store` and is not persisted.
+Active connections and logs remain in-memory via `ocpp.store`, but
+completed charging sessions are saved in the `Transaction` model for
+later inspection.

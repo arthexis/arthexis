@@ -1,10 +1,13 @@
 import asyncio
 import json
 from datetime import datetime
+from django.utils import timezone
 
 from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.db import database_sync_to_async
 
 from . import store
+from .models import Transaction
 
 
 class CSMSConsumer(AsyncWebsocketConsumer):
@@ -45,20 +48,23 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 reply_payload = {"idTagInfo": {"status": "Accepted"}}
             elif action == "StartTransaction":
                 tx_id = int(datetime.utcnow().timestamp())
-                store.transactions[self.charger_id] = {
-                    "transactionId": tx_id,
-                    "meterStart": payload.get("meterStart"),
-                }
+                tx_obj = await database_sync_to_async(Transaction.objects.create)(
+                    charger_id=self.charger_id,
+                    transaction_id=tx_id,
+                    meter_start=payload.get("meterStart"),
+                    start_time=timezone.now(),
+                )
+                store.transactions[self.charger_id] = tx_obj
                 reply_payload = {
                     "transactionId": tx_id,
                     "idTagInfo": {"status": "Accepted"},
                 }
             elif action == "StopTransaction":
-                tx = store.transactions.pop(self.charger_id, None)
-                if tx:
-                    tx["meterStop"] = payload.get("meterStop")
-                    tx["stopTime"] = datetime.utcnow().isoformat() + "Z"
-                    store.history.setdefault(self.charger_id, []).append(tx)
+                tx_obj = store.transactions.pop(self.charger_id, None)
+                if tx_obj:
+                    tx_obj.meter_stop = payload.get("meterStop")
+                    tx_obj.stop_time = timezone.now()
+                    await database_sync_to_async(tx_obj.save)()
                 reply_payload = {"idTagInfo": {"status": "Accepted"}}
             response = [3, msg_id, reply_payload]
             await self.send(json.dumps(response))
