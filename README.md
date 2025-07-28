@@ -27,3 +27,4 @@ Launch configurations are provided in `.vscode/launch.json`:
 2. **Debug Django Server** – runs the server with debugging enabled.
 
 Open the *Run and Debug* pane in VS Code and choose the desired configuration.
+
