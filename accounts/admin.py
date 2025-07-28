@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from .models import User
+from .models import User, BlacklistedRFID
 
 
 @admin.register(User)
@@ -12,3 +12,8 @@ class UserAdmin(DjangoUserAdmin):
     add_fieldsets = DjangoUserAdmin.add_fieldsets + (
         ("RFID", {"fields": ("rfid_uid",)}),
     )
+
+
+@admin.register(BlacklistedRFID)
+class BlacklistedRFIDAdmin(admin.ModelAdmin):
+    list_display = ("uid", "added_on")
