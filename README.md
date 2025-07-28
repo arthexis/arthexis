@@ -48,3 +48,9 @@ instances of this project:
 - `POST /nodes/register/` with `hostname`, `address` and optional `port` will
   register or update the node.
 - `GET /nodes/list/` returns all known nodes.
+
+### RFID login
+
+Users may authenticate using the UID of an RFID card. POST the UID as JSON to
+`/accounts/rfid-login/` and the server will return the user's details if the UID
+matches an existing account.
