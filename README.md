@@ -19,6 +19,15 @@ This repository contains a basic [Django](https://www.djangoproject.com/) projec
 
 The default configuration uses SQLite and is for local development only.
 
+## VS Code
+
+Launch configurations are provided in `.vscode/launch.json`:
+
+1. **Run Django Server** – starts the site normally without the debugger.
+2. **Debug Django Server** – runs the server with debugging enabled.
+
+Open the *Run and Debug* pane in VS Code and choose the desired configuration.
+
 ### Websocket example
 
 This project includes basic websocket support using
