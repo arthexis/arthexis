@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "channels",
     "chat",
     "nodes",
+    "accounts",
 ]
 
 MIDDLEWARE = [
@@ -76,6 +77,15 @@ ASGI_APPLICATION = "config.asgi.application"
 # Channels configuration
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
+
+# Custom user model
+AUTH_USER_MODEL = "accounts.User"
+
+# Enable RFID authentication backend in addition to Django's default
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "accounts.backends.RFIDBackend",
+]
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
