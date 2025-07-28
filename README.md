@@ -28,3 +28,9 @@ Launch configurations are provided in `.vscode/launch.json`:
 
 Open the *Run and Debug* pane in VS Code and choose the desired configuration.
 
+### Websocket example
+
+This project includes basic websocket support using
+[Django Channels](https://channels.readthedocs.io/). After launching the
+development server you can connect a websocket client to
+`ws://localhost:8000/ws/echo/` and any text you send will be echoed back.
