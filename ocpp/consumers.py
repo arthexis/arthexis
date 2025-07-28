@@ -1,0 +1,71 @@
+import asyncio
+import json
+from datetime import datetime
+from django.utils import timezone
+
+from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.db import database_sync_to_async
+
+from . import store
+from .models import Transaction
+
+
+class CSMSConsumer(AsyncWebsocketConsumer):
+    """Very small subset of OCPP 1.6 CSMS behaviour."""
+
+    async def connect(self):
+        self.charger_id = self.scope["url_route"]["kwargs"].get("cid", "")
+        await self.accept()
+        store.connections[self.charger_id] = self
+        store.logs.setdefault(self.charger_id, [])
+
+    async def disconnect(self, close_code):
+        store.connections.pop(self.charger_id, None)
+
+    async def receive(self, text_data=None, bytes_data=None):
+        if text_data is None:
+            return
+        store.logs.setdefault(self.charger_id, []).append(f"> {text_data}")
+        try:
+            msg = json.loads(text_data)
+        except json.JSONDecodeError:
+            return
+        if isinstance(msg, list) and msg and msg[0] == 2:
+            msg_id, action = msg[1], msg[2]
+            payload = msg[3] if len(msg) > 3 else {}
+            reply_payload = {}
+            if action == "BootNotification":
+                reply_payload = {
+                    "currentTime": datetime.utcnow().isoformat() + "Z",
+                    "interval": 300,
+                    "status": "Accepted",
+                }
+            elif action == "Heartbeat":
+                reply_payload = {
+                    "currentTime": datetime.utcnow().isoformat() + "Z"
+                }
+            elif action == "Authorize":
+                reply_payload = {"idTagInfo": {"status": "Accepted"}}
+            elif action == "StartTransaction":
+                tx_id = int(datetime.utcnow().timestamp())
+                tx_obj = await database_sync_to_async(Transaction.objects.create)(
+                    charger_id=self.charger_id,
+                    transaction_id=tx_id,
+                    meter_start=payload.get("meterStart"),
+                    start_time=timezone.now(),
+                )
+                store.transactions[self.charger_id] = tx_obj
+                reply_payload = {
+                    "transactionId": tx_id,
+                    "idTagInfo": {"status": "Accepted"},
+                }
+            elif action == "StopTransaction":
+                tx_obj = store.transactions.pop(self.charger_id, None)
+                if tx_obj:
+                    tx_obj.meter_stop = payload.get("meterStop")
+                    tx_obj.stop_time = timezone.now()
+                    await database_sync_to_async(tx_obj.save)()
+                reply_payload = {"idTagInfo": {"status": "Accepted"}}
+            response = [3, msg_id, reply_payload]
+            await self.send(json.dumps(response))
+            store.logs.setdefault(self.charger_id, []).append(f"< {json.dumps(response)}")
