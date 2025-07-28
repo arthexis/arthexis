@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "nodes",
     "accounts",
     "subscriptions",
+    "ocpp",
     "qr_links",
 ]
 
