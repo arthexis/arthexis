@@ -33,24 +33,29 @@ Launch configurations are provided in `.vscode/launch.json`:
 
 Open the *Run and Debug* pane in VS Code and choose the desired configuration.
 
-### Websocket example
 
-This project includes basic websocket support using
-[Django Channels](https://channels.readthedocs.io/). After launching the
-development server you can connect a websocket client to
-`ws://localhost:8000/ws/echo/` and any text you send will be echoed back.
+# Accounts App
 
-### Node tracking API
+Users may authenticate using the UID of an RFID card. POST the UID as JSON to `/accounts/rfid-login/` and the server will return the user's details if the UID matches an existing account.
 
-The `nodes` app exposes a simple JSON interface for keeping track of other
-instances of this project:
 
-- `POST /nodes/register/` with `hostname`, `address` and optional `port` will
-  register or update the node.
+# Chat App
+
+This project includes basic websocket support using [Django Channels](https://channels.readthedocs.io/). After launching the development server you can connect a websocket client to `ws://localhost:8000/ws/echo/` and any text you send will be echoed back.
+
+
+# Nodes App
+
+The `nodes` app exposes a simple JSON interface for keeping track of other instances of this project:
+
+- `POST /nodes/register/` with `hostname`, `address` and optional `port` will register or update the node.
 - `GET /nodes/list/` returns all known nodes.
 
-### RFID login
 
-Users may authenticate using the UID of an RFID card. POST the UID as JSON to
-`/accounts/rfid-login/` and the server will return the user's details if the UID
-matches an existing account.
+# Subscriptions App
+
+Provides a simple subscription model:
+
+- `GET /subscriptions/products/` returns available products.
+- `POST /subscriptions/subscribe/` with `user_id` and `product_id` creates a subscription.
+- `GET /subscriptions/list/?user_id=<id>` lists subscriptions for a user.
