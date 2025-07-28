@@ -44,18 +44,3 @@ python manage.py build_readme
 ```
 
 Avoid editing the combined `README.md` directly.
-
-
-# Chat App
-
-This project includes basic websocket support using [Django Channels](https://channels.readthedocs.io/). After launching the development server you can connect a websocket client to `ws://localhost:8000/ws/echo/` and any text you send will be echoed back.
-
-
-# Nodes App
-
-The `nodes` app exposes a simple JSON interface for keeping track of other instances of this project:
-
-- `POST /nodes/register/` with `hostname`, `address` and optional `port` will register or update the node.
-- `GET /nodes/list/` returns all known nodes.
-
-
