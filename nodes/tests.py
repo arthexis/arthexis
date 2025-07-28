@@ -1,5 +1,6 @@
 from django.test import Client, TestCase
 from django.urls import reverse
+from django.contrib.auth import get_user_model
 
 from .models import Node
 
@@ -26,3 +27,19 @@ class NodeTests(TestCase):
         data = list_resp.json()
         self.assertEqual(len(data["nodes"]), 1)
         self.assertEqual(data["nodes"][0]["hostname"], "local")
+
+class NodeAdminTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="admin", password="adminpass", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+
+    def test_register_current_host(self):
+        url = reverse("admin:nodes_node_register_current")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Node.objects.count(), 1)
+
