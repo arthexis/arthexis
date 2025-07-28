@@ -1,16 +1,20 @@
-## Hi there 👋
+# Arthexis Django Project
 
-<!--
-**arthexis/arthexis** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+This repository contains a basic [Django](https://www.djangoproject.com/) project.
 
-Here are some ideas to get you started:
+## Setup
 
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Apply database migrations:
+   ```bash
+   python manage.py migrate
+   ```
+3. Run the development server:
+   ```bash
+   python manage.py runserver
+   ```
+
+The default configuration uses SQLite and is for local development only.
