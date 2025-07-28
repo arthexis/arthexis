@@ -53,4 +53,6 @@ instances of this project:
 
 Users may authenticate using the UID of an RFID card. POST the UID as JSON to
 `/accounts/rfid-login/` and the server will return the user's details if the UID
-matches an existing account.
+matches an existing account. RFID identifiers can be blacklisted via the admin
+site. When blacklisted, the UID is removed from any current account and cannot
+be assigned again.
