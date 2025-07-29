@@ -281,16 +281,21 @@ asyncio.run(sim._run_session())
 
 The simulator establishes an OCPP 1.6 connection, starts a transaction and
 sends periodic meter values.  See the module for additional options such as
-RFID authentication or repeat mode.
+RFID authentication or repeat mode.  The `interval` and `kwh_max` parameters
+control how often meter values are sent (in seconds) and the total kWh a
+simulated session will deliver.
 
 Simulators can also be preconfigured in the Django admin site.  Add
 `Simulator` entries and use the provided actions to start or stop them
-without writing any code.
+without writing any code.  The admin list shows the full WebSocket URL for
+each simulator along with its configured interval and kWh limit.
 
 
 # QRCodes App
 
 Provides a small `QRLink` model that stores a value and generates a QR image for it. A template tag `qr_img` renders the QR code in templates and automatically creates the record if needed.
+
+A simple landing page at `/qr/` can generate a QR code for arbitrary text without saving anything to the database.
 
 
 # AWG App
@@ -358,3 +363,4 @@ When visiting the default *website* domain, a navigation bar shows links to all
 enabled apps that expose public URLs. Views decorated with `footer_link` are
 collected into a footer where links can be grouped into columns. The
 automatically generated sitemap now appears there.
+
