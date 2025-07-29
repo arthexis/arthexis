@@ -8,7 +8,9 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 
 from . import store
-from .models import Transaction, Charger
+from decimal import Decimal
+from django.utils.dateparse import parse_datetime
+from .models import Transaction, Charger, MeterReading
 
 
 class CSMSConsumer(AsyncWebsocketConsumer):
@@ -40,6 +42,32 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         if tag and hasattr(tag.user, "account"):
             return tag.user.account
         return None
+
+    async def _store_meter_values(self, payload: dict) -> None:
+        """Parse a MeterValues payload into MeterReading rows."""
+        connector = payload.get("connectorId")
+        tx_id = payload.get("transactionId")
+        readings = []
+        for mv in payload.get("meterValue", []):
+            ts = parse_datetime(mv.get("timestamp"))
+            for sv in mv.get("sampledValue", []):
+                try:
+                    val = Decimal(str(sv.get("value")))
+                except Exception:
+                    continue
+                readings.append(
+                    MeterReading(
+                        charger=self.charger,
+                        connector_id=connector,
+                        transaction_id=tx_id,
+                        timestamp=ts,
+                        measurand=sv.get("measurand", ""),
+                        value=val,
+                        unit=sv.get("unit", ""),
+                    )
+                )
+        if readings:
+            await database_sync_to_async(MeterReading.objects.bulk_create)(readings)
 
     async def disconnect(self, close_code):
         store.connections.pop(self.charger_id, None)
@@ -81,6 +109,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     status = "Accepted"
                 reply_payload = {"idTagInfo": {"status": status}}
             elif action == "MeterValues":
+                await self._store_meter_values(payload)
                 await database_sync_to_async(
                     Charger.objects.filter(charger_id=self.charger_id).update
                 )(last_meter_values=payload)

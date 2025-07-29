@@ -3,7 +3,7 @@ from django import forms
 
 import asyncio
 
-from .models import Charger, Simulator
+from .models import Charger, Simulator, MeterReading
 from .simulator import ChargePointSimulator
 from . import store
 
@@ -94,3 +94,17 @@ class SimulatorAdmin(admin.ModelAdmin):
         self.message_user(request, "Stopping simulators")
 
     stop_simulator.short_description = "Stop selected simulators"
+
+
+@admin.register(MeterReading)
+class MeterReadingAdmin(admin.ModelAdmin):
+    list_display = (
+        "charger",
+        "timestamp",
+        "value",
+        "measurand",
+        "unit",
+        "connector_id",
+        "transaction_id",
+    )
+    list_filter = ("charger", "measurand")

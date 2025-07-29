@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from config.asgi import application
-from .models import Transaction, Charger
+from .models import Transaction, Charger, MeterReading
 from accounts.models import RFID, Account, Credit
 
 
@@ -187,3 +187,35 @@ class ChargerLocationTests(TestCase):
         )
         self.assertAlmostEqual(float(charger.latitude), 10.123456)
         self.assertAlmostEqual(float(charger.longitude), -20.654321)
+
+
+class MeterReadingTests(TransactionTestCase):
+    async def test_meter_values_saved_as_readings(self):
+        communicator = WebsocketCommunicator(application, "/MR1/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        payload = {
+            "connectorId": 1,
+            "transactionId": 100,
+            "meterValue": [
+                {
+                    "timestamp": "2025-07-29T10:01:51Z",
+                    "sampledValue": [
+                        {
+                            "value": "2.749",
+                            "measurand": "Energy.Active.Import.Register",
+                            "unit": "kWh",
+                        }
+                    ],
+                }
+            ],
+        }
+        await communicator.send_json_to([2, "1", "MeterValues", payload])
+        await communicator.receive_json_from()
+
+        reading = await database_sync_to_async(MeterReading.objects.get)(charger__charger_id="MR1")
+        self.assertEqual(reading.transaction_id, 100)
+        self.assertEqual(str(reading.value), "2.749")
+
+        await communicator.disconnect()
