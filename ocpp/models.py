@@ -15,6 +15,8 @@ class Charger(models.Model):
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_meter_values = models.JSONField(default=dict, blank=True)
     qr = models.OneToOneField(QRLink, null=True, blank=True, on_delete=models.SET_NULL)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.charger_id
