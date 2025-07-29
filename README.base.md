@@ -47,6 +47,12 @@ available under `locale/es`.  You can activate it by setting the `LANGUAGE_CODE`
 setting or selecting the language via Django's i18n mechanisms.  The supported
 languages are defined in `config/settings.py`.
 
+## Logging
+
+Log messages from all apps are written to `logs/arthexis.log`. The file
+rotates at midnight with the date appended to the filename. When running the
+test suite, logs are stored in `logs/tests.log` instead.
+
 ## Maintaining Documentation
 
 Documentation is split across multiple files. `README.base.md` provides the
