@@ -63,6 +63,16 @@ The `nodes` app exposes a simple JSON interface for keeping track of other insta
 
 Users may authenticate using the UID of an RFID card. POST the UID as JSON to `/accounts/rfid-login/` and the server will return the user's details if the UID matches an existing account.
 
+## Account Credits
+
+Each user may have an associated **Account** record that tracks available energy credits. The model stores:
+
+- `credits_kwh` – total kWh purchased or granted to the user.
+- `total_kwh_spent` – kWh consumed so far.
+- `balance_kwh` – property returning the remaining credit.
+
+The account is linked to the user with a one‑to‑one relationship and can be referenced during authorization or billing steps.
+
 
 # Subscriptions App
 
@@ -94,6 +104,9 @@ includes a JSON `config` field for storing charger-specific settings.
 Each charger also has a `require_rfid` flag that can be enabled to
 enforce RFID authentication. When set, the server validates the `idTag`
 against known users before allowing a transaction to start.
+
+It also records the timestamp of the last `Heartbeat` message and the
+payload of the most recent `MeterValues` message received from the charger.
 
 
 ### REST Endpoints

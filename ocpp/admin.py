@@ -5,5 +5,5 @@ from .models import Charger
 
 @admin.register(Charger)
 class ChargerAdmin(admin.ModelAdmin):
-    list_display = ("charger_id", "name", "require_rfid")
+    list_display = ("charger_id", "name", "require_rfid", "last_heartbeat")
     search_fields = ("charger_id", "name")

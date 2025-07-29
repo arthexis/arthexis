@@ -1,7 +1,7 @@
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from .models import User, BlacklistedRFID
+from .models import User, BlacklistedRFID, Account
 from django.core.exceptions import ValidationError
 
 
@@ -45,3 +45,10 @@ class BlacklistRFIDTests(TestCase):
             User.objects.create_user(
                 username="bob", password="pwd", rfid_uid="BAD123"
             )
+
+
+class AccountTests(TestCase):
+    def test_balance_calculation(self):
+        user = User.objects.create_user(username="balance", password="x")
+        acc = Account.objects.create(user=user, credits_kwh=50, total_kwh_spent=20)
+        self.assertEqual(acc.balance_kwh, 30)

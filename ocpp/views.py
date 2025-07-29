@@ -41,6 +41,8 @@ def charger_list(request):
                 "config": charger.config,
                 "require_rfid": charger.require_rfid,
                 "transaction": tx_data,
+                "lastHeartbeat": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None,
+                "lastMeterValues": charger.last_meter_values,
                 "connected": cid in store.connections,
             }
         )
@@ -80,6 +82,8 @@ def charger_detail(request, cid):
             "config": charger.config,
             "require_rfid": charger.require_rfid,
             "transaction": tx_data,
+            "lastHeartbeat": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None,
+            "lastMeterValues": charger.last_meter_values,
             "log": log,
         }
     )

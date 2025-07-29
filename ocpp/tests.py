@@ -94,4 +94,29 @@ class CSMSConsumerTests(TransactionTestCase):
         exists = await database_sync_to_async(Transaction.objects.filter(transaction_id=tx_id, charger_id="RFIDOK").exists)()
         self.assertTrue(exists)
 
+    async def test_status_fields_updated(self):
+        communicator = WebsocketCommunicator(application, "/ws/ocpp/STAT/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to([2, "1", "Heartbeat", {}])
+        await communicator.receive_json_from()
+
+        charger = await database_sync_to_async(Charger.objects.get)(charger_id="STAT")
+        self.assertIsNotNone(charger.last_heartbeat)
+
+        payload = {
+            "meterValue": [
+                {
+                    "timestamp": "2025-01-01T00:00:00Z",
+                    "sampledValue": [{"value": "42"}],
+                }
+            ]
+        }
+        await communicator.send_json_to([2, "2", "MeterValues", payload])
+        await communicator.receive_json_from()
+
+        await database_sync_to_async(charger.refresh_from_db)()
+        self.assertEqual(charger.last_meter_values.get("meterValue")[0]["sampledValue"][0]["value"], "42")
+
         await communicator.disconnect()
