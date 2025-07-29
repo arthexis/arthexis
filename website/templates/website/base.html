@@ -9,7 +9,6 @@
   </head>
   <body class="p-3">
     <div class="container">
-      {% if nav_apps %}
       <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-3">
         <div class="container-fluid">
           <a class="navbar-brand" href="/">Arthexis</a>
@@ -18,23 +17,24 @@
           </button>
           <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-              {% for app in nav_apps %}
-              <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">{{ app.name }}</a>
-                <ul class="dropdown-menu">
-                  {% for view in app.views %}
-                  <li><a class="dropdown-item" href="{{ view.path }}">{{ view.name }}</a></li>
-                  {% endfor %}
-                </ul>
-              </li>
-              {% endfor %}
+              {% if nav_apps %}
+                {% for app in nav_apps %}
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">{{ app.name }}</a>
+                  <ul class="dropdown-menu">
+                    {% for view in app.views %}
+                    <li><a class="dropdown-item" href="{{ view.path }}">{{ view.name }}</a></li>
+                    {% endfor %}
+                  </ul>
+                </li>
+                {% endfor %}
+              {% endif %}
               <li class="nav-item"><a class="nav-link" href="{% url 'website:website-sitemap' %}">Sitemap</a></li>
               <li class="nav-item"><a class="nav-link" href="{% url 'website:login' %}?next={{ request.path }}">Login</a></li>
             </ul>
           </div>
         </div>
       </nav>
-      {% endif %}
       <div class="text-end mb-3">
         <button id="theme-toggle" class="btn btn-sm btn-outline-secondary" onclick="toggleTheme()">{% trans "Dark Mode" %}</button>
       </div>
