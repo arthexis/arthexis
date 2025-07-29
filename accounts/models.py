@@ -216,6 +216,8 @@ class RFID(models.Model):
     class Meta:
         verbose_name = "RFID"
         verbose_name_plural = "RFIDs"
+        app_label = "auth"
+        db_table = "accounts_rfid"
 
 
 class Account(models.Model):
