@@ -25,7 +25,4 @@ class Migration(migrations.Migration):
             name='vin',
             field=models.CharField(max_length=17, unique=True, verbose_name='VIN'),
         ),
-        migrations.DeleteModel(
-            name='RFID',
-        ),
     ]
