@@ -56,7 +56,7 @@ class Simulator(models.Model):
     name = models.CharField(max_length=100, unique=True)
     cp_path = models.CharField(max_length=100)
     host = models.CharField(max_length=100, default="127.0.0.1")
-    ws_port = models.IntegerField(default=9000)
+    ws_port = models.IntegerField(default=8000)
     rfid = models.CharField(max_length=8, default="FFFFFFFF")
     repeat = models.BooleanField(default=False)
     username = models.CharField(max_length=100, blank=True)
