@@ -1,0 +1,24 @@
+{% extends "website/base.html" %}
+
+{% load i18n %}
+
+{% block title %}{{ charger.name|default:charger.charger_id }} - {% trans "Status" %}{% endblock %}
+
+{% block content %}
+<h1>{{ charger.name|default:charger.charger_id }}</h1>
+<p>Serial Number: {{ charger.charger_id }}</p>
+<div class="mb-3 d-flex align-items-center">
+  <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
+  <strong>{{ state }}</strong>
+</div>
+{% if tx %}
+<h2>{% trans "Current Transaction" %}</h2>
+<ul>
+  <li>{% trans "Transaction ID" %}: {{ tx.transaction_id }}</li>
+  <li>{% trans "Meter Start" %}: {{ tx.meter_start }}</li>
+  <li>{% trans "Start Time" %}: {{ tx.start_time }}</li>
+</ul>
+{% else %}
+<p>{% trans "No active transaction" %}</p>
+{% endif %}
+{% endblock %}

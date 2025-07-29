@@ -4,11 +4,25 @@ from datetime import datetime
 
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import render
-from django.shortcuts import get_object_or_404
+from django.shortcuts import render, get_object_or_404
+
+from website.utils import landing
 
 from . import store
 from .models import Transaction, Charger
+
+
+def _charger_state(charger: Charger, tx_obj: Transaction | None):
+    """Return human readable state and color for a charger."""
+    cid = charger.charger_id
+    connected = cid in store.connections
+    if connected and tx_obj:
+        return "Charging", "green"
+    if connected:
+        return "Available", "blue"
+    if tx_obj:
+        return "Errors", "red"
+    return "Unknown", "grey"
 
 
 
@@ -90,6 +104,23 @@ def charger_detail(request, cid):
     )
 
 
+@landing("Dashboard")
+def dashboard(request):
+    """Landing page listing all known chargers and their status."""
+    chargers = []
+    for charger in Charger.objects.all():
+        tx_obj = store.transactions.get(charger.charger_id)
+        if not tx_obj:
+            tx_obj = (
+                Transaction.objects.filter(charger_id=charger.charger_id)
+                .order_by("-start_time")
+                .first()
+            )
+        state, color = _charger_state(charger, tx_obj)
+        chargers.append({"charger": charger, "state": state, "color": color})
+    return render(request, "ocpp/dashboard.html", {"chargers": chargers})
+
+
 def charger_page(request, cid):
     charger = get_object_or_404(Charger, charger_id=cid)
     return render(request, "ocpp/charger_page.html", {"charger": charger})
@@ -103,6 +134,16 @@ def charger_log_page(request, cid):
         request,
         "ocpp/charger_logs.html",
         {"charger": charger, "log": log},
+
+def charger_status(request, cid):
+    """Display current transaction and charger state."""
+    charger = get_object_or_404(Charger, charger_id=cid)
+    tx_obj = store.transactions.get(cid)
+    state, color = _charger_state(charger, tx_obj)
+    return render(
+        request,
+        "ocpp/charger_status.html",
+        {"charger": charger, "tx": tx_obj, "state": state, "color": color},
     )
 
 

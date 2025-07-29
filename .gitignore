@@ -57,9 +57,16 @@ cover/
 
 # Django stuff:
 *.log
+# Additional log files
+*.logs
+*.log.*
+*.logs.*
+# Log directories
+logs/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+media/
 
 # Flask stuff:
 instance/
@@ -138,6 +145,7 @@ celerybeat.pid
 .env
 .envrc
 .venv
+envs/*.env
 env/
 venv/
 ENV/

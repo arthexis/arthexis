@@ -15,9 +15,10 @@ class SimulatorConfig:
     """Configuration for a simulated charge point."""
 
     host: str = "127.0.0.1"
-    ws_port: int = 9000
+    ws_port: int = 8000
     rfid: str = "FFFFFFFF"
-    cp_path: str = "CPX"
+    # WebSocket path for the charge point. Defaults to just the charger ID at the root.
+    cp_path: str = "CPX/"
     duration: int = 600
     kwh_min: float = 30.0
     kwh_max: float = 60.0

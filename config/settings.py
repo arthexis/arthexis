@@ -12,6 +12,9 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+import sys
+from django.utils.translation import gettext_lazy as _
+from .active_app import get_active_app
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -33,10 +36,11 @@ ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
     "django.contrib.admin",
-    "django.contrib.auth",
+    "config.auth_app.AuthConfig",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
+    "readme",  # Provide custom management commands (e.g., runserver)
     "django.contrib.staticfiles",
     "import_export",
     "django.contrib.sites",
@@ -47,8 +51,10 @@ INSTALLED_APPS = [
     "subscriptions",
     "ocpp",
     "qrcodes",
+    "awg",
+    "release",
     "odoo",
-    "readme",
+    "mailer",
     "website",
 ]
 
@@ -57,6 +63,8 @@ SITE_ID = 1
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "config.middleware.ActiveAppMiddleware",
+    "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -75,6 +83,7 @@ TEMPLATES = [
             "context_processors": [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
+                "django.template.context_processors.i18n",
                 "django.contrib.messages.context_processors.messages",
             ],
         },
@@ -144,6 +153,13 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
+LANGUAGES = [
+    ("en", _("English")),
+    ("es", _("Spanish")),
+]
+
+LOCALE_PATHS = [BASE_DIR / "locale"]
+
 TIME_ZONE = "UTC"
 
 USE_I18N = True
@@ -162,3 +178,32 @@ MEDIA_ROOT = BASE_DIR / "media"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Logging configuration
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+LOG_FILE_NAME = "tests.log" if "test" in sys.argv else "website.log"
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        }
+    },
+    "handlers": {
+        "file": {
+            "class": "config.logging.ActiveAppFileHandler",
+            "filename": str(LOG_DIR / LOG_FILE_NAME),
+            "when": "midnight",
+            "backupCount": 7,
+            "encoding": "utf-8",
+            "formatter": "standard",
+        }
+    },
+    "root": {
+        "handlers": ["file"],
+        "level": "DEBUG",
+    },
+}

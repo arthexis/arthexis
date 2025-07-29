@@ -1,21 +1,46 @@
 from django.contrib import admin
+from django import forms
 
 import asyncio
 
-from .models import Charger, Simulator
+from .models import Charger, Simulator, MeterReading
 from .simulator import ChargePointSimulator
 from . import store
 
 
+class ChargerAdminForm(forms.ModelForm):
+    class Meta:
+        model = Charger
+        fields = "__all__"
+
+        widgets = {
+            "latitude": forms.NumberInput(attrs={"step": "any"}),
+            "longitude": forms.NumberInput(attrs={"step": "any"}),
+        }
+
+    class Media:
+        css = {
+            "all": ("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",)
+        }
+        js = (
+            "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+            "ocpp/charger_map.js",
+        )
+
+
 @admin.register(Charger)
 class ChargerAdmin(admin.ModelAdmin):
+    form = ChargerAdminForm
     list_display = (
         "charger_id",
         "name",
         "require_rfid",
+        "latitude",
+        "longitude",
         "last_heartbeat",
         "test_link",
         "log_link",
+        "status_link",
     )
     search_fields = ("charger_id", "name")
 
@@ -36,6 +61,15 @@ class ChargerAdmin(admin.ModelAdmin):
         return format_html('<a href="{}" target="_blank">view</a>', url)
 
     log_link.short_description = "Log"
+    
+    def status_link(self, obj):
+        from django.utils.html import format_html
+        from django.urls import reverse
+
+        url = reverse("charger-status", args=[obj.charger_id])
+        return format_html('<a href="{}" target="_blank">status</a>', url)
+
+    status_link.short_description = "Status Page"
 
 
 @admin.register(Simulator)
@@ -79,3 +113,18 @@ class SimulatorAdmin(admin.ModelAdmin):
         return format_html('<a href="{}" target="_blank">view</a>', url)
 
     log_link.short_description = "Log"
+
+
+@admin.register(MeterReading)
+class MeterReadingAdmin(admin.ModelAdmin):
+    list_display = (
+        "charger",
+        "timestamp",
+        "value",
+        "measurand",
+        "unit",
+        "connector_id",
+        "transaction_id",
+    )
+    list_filter = ("charger", "measurand")
+

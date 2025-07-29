@@ -8,7 +8,9 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 
 from . import store
-from .models import Transaction, Charger
+from decimal import Decimal
+from django.utils.dateparse import parse_datetime
+from .models import Transaction, Charger, MeterReading
 
 
 class CSMSConsumer(AsyncWebsocketConsumer):
@@ -19,8 +21,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         await self.accept()
         store.connections[self.charger_id] = self
         store.logs.setdefault(self.charger_id, [])
-        self.charger, _ = await database_sync_to_async(Charger.objects.get_or_create)(
-            charger_id=self.charger_id
+        self.charger, _ = await database_sync_to_async(
+            Charger.objects.update_or_create
+        )(
+            charger_id=self.charger_id,
+            defaults={"last_path": self.scope.get("path", "")},
         )
 
     async def _get_account(self, id_tag: str) -> Account | None:
@@ -37,6 +42,32 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         if tag and hasattr(tag.user, "account"):
             return tag.user.account
         return None
+
+    async def _store_meter_values(self, payload: dict) -> None:
+        """Parse a MeterValues payload into MeterReading rows."""
+        connector = payload.get("connectorId")
+        tx_id = payload.get("transactionId")
+        readings = []
+        for mv in payload.get("meterValue", []):
+            ts = parse_datetime(mv.get("timestamp"))
+            for sv in mv.get("sampledValue", []):
+                try:
+                    val = Decimal(str(sv.get("value")))
+                except Exception:
+                    continue
+                readings.append(
+                    MeterReading(
+                        charger=self.charger,
+                        connector_id=connector,
+                        transaction_id=tx_id,
+                        timestamp=ts,
+                        measurand=sv.get("measurand", ""),
+                        value=val,
+                        unit=sv.get("unit", ""),
+                    )
+                )
+        if readings:
+            await database_sync_to_async(MeterReading.objects.bulk_create)(readings)
 
     async def disconnect(self, close_code):
         store.connections.pop(self.charger_id, None)
@@ -68,16 +99,31 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 )(last_heartbeat=timezone.now())
             elif action == "Authorize":
                 account = await self._get_account(payload.get("idTag"))
-                status = "Accepted" if (account or not self.charger.require_rfid) else "Invalid"
+                if self.charger.require_rfid:
+                    status = (
+                        "Accepted"
+                        if account and await database_sync_to_async(account.can_authorize)()
+                        else "Invalid"
+                    )
+                else:
+                    status = "Accepted"
                 reply_payload = {"idTagInfo": {"status": status}}
             elif action == "MeterValues":
+                await self._store_meter_values(payload)
                 await database_sync_to_async(
                     Charger.objects.filter(charger_id=self.charger_id).update
                 )(last_meter_values=payload)
                 reply_payload = {}
             elif action == "StartTransaction":
                 account = await self._get_account(payload.get("idTag"))
-                if account or not self.charger.require_rfid:
+                if self.charger.require_rfid:
+                    authorized = (
+                        account is not None
+                        and await database_sync_to_async(account.can_authorize)()
+                    )
+                else:
+                    authorized = True
+                if authorized:
                     tx_id = int(datetime.utcnow().timestamp())
                     tx_obj = await database_sync_to_async(Transaction.objects.create)(
                         charger_id=self.charger_id,

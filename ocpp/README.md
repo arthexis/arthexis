@@ -6,8 +6,13 @@ This app implements a lightweight Charge Point management system using
 ### WebSocket Endpoint
 
 ```
-ws://<host>/ws/ocpp/<charger_id>/
+ws://127.0.0.1:8000/<path>/<charger_id>/
 ```
+
+The server accepts connections on any path. The final segment is treated as the
+charger ID, so `/CP1/` and `/foo/bar/CP1/` both register charger `CP1`. The full
+path used by a charger is stored in the `last_path` field of its database
+record.
 
 A connected charge point may send standard OCPP CALL messages
 (BootNotification, Heartbeat, Authorize, Start/StopTransaction). The
@@ -23,6 +28,13 @@ against entries in the `RFID` table before allowing a transaction to start.
 
 It also records the timestamp of the last `Heartbeat` message and the
 payload of the most recent `MeterValues` message received from the charger.
+Every individual sampled value is also stored in the `MeterReading` model so
+historical meter data can be queried per charger.
+
+Chargers may optionally store their geographic `latitude` and `longitude`.
+The admin interface displays a map (centered on Monterrey, Mexico by default)
+where these coordinates can be selected by dragging a marker or clicking on the
+map.
 
 
 
@@ -33,6 +45,7 @@ payload of the most recent `MeterValues` message received from the charger.
 - `POST /ocpp/chargers/<cid>/action/` – send actions such as `remote_stop` or
   `reset` to the charger.
 - `GET /ocpp/log/<cid>/` – HTML page showing the message log for a charger.
+- `GET /ocpp/` – dashboard listing all chargers and their status.
 
 ### Charger Landing Pages
 
@@ -43,9 +56,9 @@ charger is saved and can be embedded in templates via the `qr_img` tag from the
 Another "Log" link opens `/ocpp/log/<charger_id>/` which renders the stored
 message exchange as HTML.
 
-Active connections and logs remain in-memory via `ocpp.store`, but
-completed charging sessions are saved in the `Transaction` model for
-later inspection.
+Active connections remain in-memory via `ocpp.store`. OCPP messages are
+also written to the project's log file. Completed charging sessions are
+saved in the `Transaction` model for later inspection.
 
 ### Simulator
 
@@ -57,7 +70,7 @@ development.  Example usage:
 import asyncio
 from ocpp.simulator import SimulatorConfig, ChargePointSimulator
 
-config = SimulatorConfig(host="localhost", ws_port=8000, cp_path="SIM1")
+config = SimulatorConfig(host="127.0.0.1", ws_port=8000, cp_path="SIM1/")
 sim = ChargePointSimulator(config)
 asyncio.run(sim._run_session())
 ```

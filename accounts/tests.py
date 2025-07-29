@@ -2,7 +2,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from django.utils import timezone
-from .models import User, RFID, Account, Vehicle, Credit
+from .models import User, RFID, Account, Vehicle, Credit, Address
 from ocpp.models import Transaction
 
 from django.core.exceptions import ValidationError
@@ -86,6 +86,19 @@ class AccountTests(TestCase):
         self.assertEqual(acc.total_kwh_spent, 20)
         self.assertEqual(acc.balance_kwh, 30)
 
+    def test_authorization_requires_positive_balance(self):
+        user = User.objects.create_user(username="auth", password="x")
+        acc = Account.objects.create(user=user)
+        self.assertFalse(acc.can_authorize())
+
+        Credit.objects.create(account=acc, amount_kwh=5)
+        self.assertTrue(acc.can_authorize())
+
+    def test_service_account_ignores_balance(self):
+        user = User.objects.create_user(username="service", password="x")
+        acc = Account.objects.create(user=user, service_account=True)
+        self.assertTrue(acc.can_authorize())
+
 
 class VehicleTests(TestCase):
     def test_account_can_have_multiple_vehicles(self):
@@ -94,3 +107,27 @@ class VehicleTests(TestCase):
         Vehicle.objects.create(account=acc, brand="Tesla", model="Model S", vin="VIN12345678901234")
         Vehicle.objects.create(account=acc, brand="Nissan", model="Leaf", vin="VIN23456789012345")
         self.assertEqual(acc.vehicles.count(), 2)
+
+
+class AddressTests(TestCase):
+    def test_invalid_municipality_state(self):
+        addr = Address(
+            street="Main",
+            number="1",
+            municipality="Monterrey",
+            state=Address.State.COAHUILA,
+            postal_code="00000",
+        )
+        with self.assertRaises(ValidationError):
+            addr.full_clean()
+
+    def test_user_link(self):
+        addr = Address.objects.create(
+            street="Main",
+            number="2",
+            municipality="Monterrey",
+            state=Address.State.NUEVO_LEON,
+            postal_code="64000",
+        )
+        user = User.objects.create_user(username="addr", password="pwd", address=addr)
+        self.assertEqual(user.address, addr)

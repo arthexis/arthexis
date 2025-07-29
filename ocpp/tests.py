@@ -6,13 +6,18 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from config.asgi import application
+
 from .models import Transaction, Charger, Simulator
 from accounts.models import RFID, Account
+
+from .models import Transaction, Charger, MeterReading
+from accounts.models import RFID, Account, Credit
+
 
 
 class CSMSConsumerTests(TransactionTestCase):
     async def test_transaction_saved(self):
-        communicator = WebsocketCommunicator(application, "/ws/ocpp/TEST/")
+        communicator = WebsocketCommunicator(application, "/TEST/")
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
@@ -56,6 +61,13 @@ class ChargerLandingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "PAGE1")
 
+    def test_status_page_renders(self):
+        charger = Charger.objects.create(charger_id="PAGE2")
+        client = Client()
+        resp = client.get(reverse("charger-status", args=["PAGE2"]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "PAGE2")
+
 
 class ChargerAdminTests(TestCase):
     def setUp(self):
@@ -71,6 +83,8 @@ class ChargerAdminTests(TestCase):
         url = reverse("admin:ocpp_charger_changelist")
         resp = self.client.get(url)
         self.assertContains(resp, charger.get_absolute_url())
+        status_url = reverse("charger-status", args=["ADMIN1"])
+        self.assertContains(resp, status_url)
 
     def test_admin_lists_log_link(self):
         charger = Charger.objects.create(charger_id="LOG1")
@@ -97,18 +111,31 @@ class SimulatorAdminTests(TestCase):
         self.assertContains(resp, log_url)
 
     async def test_unknown_charger_auto_registered(self):
-        communicator = WebsocketCommunicator(application, "/ws/ocpp/NEWCHG/")
+        communicator = WebsocketCommunicator(application, "/NEWCHG/")
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
         exists = await database_sync_to_async(Charger.objects.filter(charger_id="NEWCHG").exists)()
         self.assertTrue(exists)
 
+        charger = await database_sync_to_async(Charger.objects.get)(charger_id="NEWCHG")
+        self.assertEqual(charger.last_path, "/NEWCHG/")
+
         await communicator.disconnect()
+
+    async def test_nested_path_accepted_and_recorded(self):
+        communicator = WebsocketCommunicator(application, "/foo/NEST/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.disconnect()
+
+        charger = await database_sync_to_async(Charger.objects.get)(charger_id="NEST")
+        self.assertEqual(charger.last_path, "/foo/NEST/")
 
     async def test_rfid_required_rejects_invalid(self):
         await database_sync_to_async(Charger.objects.create)(charger_id="RFID", require_rfid=True)
-        communicator = WebsocketCommunicator(application, "/ws/ocpp/RFID/")
+        communicator = WebsocketCommunicator(application, "/RFID/")
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
@@ -128,11 +155,16 @@ class SimulatorAdminTests(TestCase):
 
     async def test_rfid_required_accepts_known_tag(self):
         User = get_user_model()
-        user = await database_sync_to_async(User.objects.create_user)(username="bob", password="pwd")
-        await database_sync_to_async(Account.objects.create)(user=user)
+        user = await database_sync_to_async(User.objects.create_user)(
+            username="bob", password="pwd"
+        )
+        acc = await database_sync_to_async(Account.objects.create)(user=user)
+        await database_sync_to_async(Credit.objects.create)(
+            account=acc, amount_kwh=10
+        )
         await database_sync_to_async(RFID.objects.create)(rfid="CARDX", user=user)
         await database_sync_to_async(Charger.objects.create)(charger_id="RFIDOK", require_rfid=True)
-        communicator = WebsocketCommunicator(application, "/ws/ocpp/RFIDOK/")
+        communicator = WebsocketCommunicator(application, "/RFIDOK/")
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
@@ -150,7 +182,7 @@ class SimulatorAdminTests(TestCase):
         self.assertEqual(tx.account_id, user.account.id)
 
     async def test_status_fields_updated(self):
-        communicator = WebsocketCommunicator(application, "/ws/ocpp/STAT/")
+        communicator = WebsocketCommunicator(application, "/STAT/")
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
@@ -173,5 +205,46 @@ class SimulatorAdminTests(TestCase):
 
         await database_sync_to_async(charger.refresh_from_db)()
         self.assertEqual(charger.last_meter_values.get("meterValue")[0]["sampledValue"][0]["value"], "42")
+
+        await communicator.disconnect()
+
+
+class ChargerLocationTests(TestCase):
+    def test_lat_lon_fields_saved(self):
+        charger = Charger.objects.create(
+            charger_id="LOC1", latitude=10.123456, longitude=-20.654321
+        )
+        self.assertAlmostEqual(float(charger.latitude), 10.123456)
+        self.assertAlmostEqual(float(charger.longitude), -20.654321)
+
+
+class MeterReadingTests(TransactionTestCase):
+    async def test_meter_values_saved_as_readings(self):
+        communicator = WebsocketCommunicator(application, "/MR1/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        payload = {
+            "connectorId": 1,
+            "transactionId": 100,
+            "meterValue": [
+                {
+                    "timestamp": "2025-07-29T10:01:51Z",
+                    "sampledValue": [
+                        {
+                            "value": "2.749",
+                            "measurand": "Energy.Active.Import.Register",
+                            "unit": "kWh",
+                        }
+                    ],
+                }
+            ],
+        }
+        await communicator.send_json_to([2, "1", "MeterValues", payload])
+        await communicator.receive_json_from()
+
+        reading = await database_sync_to_async(MeterReading.objects.get)(charger__charger_id="MR1")
+        self.assertEqual(reading.transaction_id, 100)
+        self.assertEqual(str(reading.value), "2.749")
 
         await communicator.disconnect()
