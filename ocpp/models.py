@@ -53,6 +53,23 @@ class Transaction(models.Model):
         return f"{self.charger_id}:{self.transaction_id}"
 
 
+class MeterReading(models.Model):
+    """Parsed meter values reported by chargers."""
+
+    charger = models.ForeignKey(
+        Charger, on_delete=models.CASCADE, related_name="meter_readings"
+    )
+    connector_id = models.IntegerField(null=True, blank=True)
+    transaction_id = models.BigIntegerField(null=True, blank=True)
+    timestamp = models.DateTimeField()
+    measurand = models.CharField(max_length=100, blank=True)
+    value = models.DecimalField(max_digits=12, decimal_places=3)
+    unit = models.CharField(max_length=16, blank=True)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.charger} {self.measurand} {self.value}{self.unit}".strip()
+
+
 class Simulator(models.Model):
     """Preconfigured simulator that can be started from the admin."""
 

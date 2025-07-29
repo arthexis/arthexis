@@ -28,6 +28,8 @@ against entries in the `RFID` table before allowing a transaction to start.
 
 It also records the timestamp of the last `Heartbeat` message and the
 payload of the most recent `MeterValues` message received from the charger.
+Every individual sampled value is also stored in the `MeterReading` model so
+historical meter data can be queried per charger.
 
 Chargers may optionally store their geographic `latitude` and `longitude`.
 The admin interface displays a map (centered on Monterrey, Mexico by default)
