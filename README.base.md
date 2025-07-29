@@ -101,6 +101,10 @@ python manage.py build_pypi --all
 
 Run the command with `--help` to see individual options.
 
+Package metadata lives in the `release.DEFAULT_PACKAGE` dataclass. Provide a
+custom `Package` instance or a `Credentials` object to `release.utils.build()` if
+you need to override the defaults or supply PyPI credentials programmatically.
+
 ## Subdomain Routing
 
 The project uses Django's **sites** framework together with the `website`
