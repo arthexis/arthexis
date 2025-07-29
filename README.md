@@ -272,6 +272,11 @@ without writing any code.
 Provides a small `QRLink` model that stores a value and generates a QR image for it. A template tag `qr_img` renders the QR code in templates and automatically creates the record if needed.
 
 
+# AWG App
+
+Provides reference tables for American Wire Gauge calculations. Two models store cable specifications and conduit fill allowances.
+
+
 # Release App
 
 Provides utilities for packaging the project and uploading it to PyPI.
