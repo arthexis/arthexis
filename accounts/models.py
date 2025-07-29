@@ -52,3 +52,18 @@ class Account(models.Model):
 
     def __str__(self):  # pragma: no cover - simple representation
         return f"Account for {self.user}"
+
+
+class Vehicle(models.Model):
+    """Vehicle associated with an Account."""
+
+    account = models.ForeignKey(
+        Account, on_delete=models.CASCADE, related_name="vehicles"
+    )
+    brand = models.CharField(max_length=100, blank=True)
+    model = models.CharField(max_length=100, blank=True)
+    vin = models.CharField(max_length=17, unique=True)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        parts = " ".join(p for p in [self.brand, self.model] if p)
+        return f"{parts} ({self.vin})" if parts else self.vin

@@ -1,7 +1,8 @@
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from .models import User, RFID, Account
+from .models import User, RFID, Account, Vehicle
+
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 
@@ -54,3 +55,12 @@ class AccountTests(TestCase):
         user = User.objects.create_user(username="balance", password="x")
         acc = Account.objects.create(user=user, credits_kwh=50, total_kwh_spent=20)
         self.assertEqual(acc.balance_kwh, 30)
+
+
+class VehicleTests(TestCase):
+    def test_account_can_have_multiple_vehicles(self):
+        user = User.objects.create_user(username="cars", password="x")
+        acc = Account.objects.create(user=user)
+        Vehicle.objects.create(account=acc, brand="Tesla", model="Model S", vin="VIN12345678901234")
+        Vehicle.objects.create(account=acc, brand="Nissan", model="Leaf", vin="VIN23456789012345")
+        self.assertEqual(acc.vehicles.count(), 2)

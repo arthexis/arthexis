@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from .models import User, RFID, Account
+from .models import User, RFID, Account, Vehicle
 
 
 @admin.register(User)
@@ -19,3 +19,8 @@ class RFIDAdmin(admin.ModelAdmin):
 class AccountAdmin(admin.ModelAdmin):
     list_display = ("user", "credits_kwh", "total_kwh_spent", "balance_kwh")
     readonly_fields = ("balance_kwh",)
+
+
+@admin.register(Vehicle)
+class VehicleAdmin(admin.ModelAdmin):
+    list_display = ("vin", "brand", "model", "account")

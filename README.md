@@ -83,6 +83,12 @@ Each user may have an associated **Account** record that tracks available energy
 
 The account is linked to the user with a one‑to‑one relationship and can be referenced during authorization or billing steps.
 
+## Vehicles
+
+An account may be associated with multiple **Vehicle** records. Each vehicle
+stores the `brand`, `model` and `vin` (Vehicle Identification Number) so that a
+user's cars can be identified when using OCPP chargers.
+
 
 # Subscriptions App
 
