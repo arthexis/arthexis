@@ -7,7 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 @csrf_exempt
 def rfid_login(request):
-    """Authenticate a user using an RFID UID."""
+    """Authenticate a user using an RFID."""
 
     if request.method != "POST":
         return JsonResponse({"detail": "POST required"}, status=400)
@@ -21,7 +21,7 @@ def rfid_login(request):
     if not rfid:
         return JsonResponse({"detail": "rfid required"}, status=400)
 
-    user = authenticate(request, rfid_uid=rfid)
+    user = authenticate(request, rfid=rfid)
     if user is None:
         return JsonResponse({"detail": "invalid RFID"}, status=401)
 

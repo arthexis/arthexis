@@ -1,8 +1,8 @@
 # Accounts App
 
-Users may authenticate using any RFID tag assigned to their account. POST the UID as JSON to `/accounts/rfid-login/` and the server will return the user's details if the tag matches one stored in the `RFID` model.
+Users may authenticate using any RFID tag assigned to their account. POST the RFID value as JSON to `/accounts/rfid-login/` and the server will return the user's details if the tag matches one stored in the `RFID` model.
 
-The `RFID` model stores card identifiers. A tag may belong to a user or be marked as `blacklisted` to disable it.
+The `RFID` model stores card identifiers (8 hexadecimal digits). A tag may belong to a user or be marked as `blacklisted` to disable it.
 
 ## Account Credits
 

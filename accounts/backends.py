@@ -3,13 +3,13 @@ from .models import RFID
 
 
 class RFIDBackend:
-    """Authenticate using a user's RFID UID."""
+    """Authenticate using a user's RFID."""
 
-    def authenticate(self, request, rfid_uid=None, **kwargs):
-        if not rfid_uid:
+    def authenticate(self, request, rfid=None, **kwargs):
+        if not rfid:
             return None
         tag = RFID.objects.filter(
-            uid=rfid_uid, blacklisted=False, user__isnull=False
+            rfid=rfid.upper(), blacklisted=False, user__isnull=False
         ).select_related("user").first()
         if tag:
             return tag.user

@@ -13,7 +13,7 @@ class RFIDLoginTests(TestCase):
         self.user = User.objects.create_user(
             username="alice", password="secret"
         )
-        RFID.objects.create(uid="CARD123", user=self.user)
+        RFID.objects.create(rfid="CARD123", user=self.user)
 
     def test_rfid_login_success(self):
         response = self.client.post(
@@ -38,7 +38,7 @@ class BlacklistRFIDTests(TestCase):
         self.user = User.objects.create_user(
             username="eve", password="secret"
         )
-        self.rfid = RFID.objects.create(uid="BAD123", user=self.user)
+        self.rfid = RFID.objects.create(rfid="BAD123", user=self.user)
 
     def test_blacklist_removes_and_blocks(self):
         self.rfid.blacklisted = True
@@ -47,7 +47,24 @@ class BlacklistRFIDTests(TestCase):
         self.assertFalse(self.user.rfids.exists())
 
         with self.assertRaises(IntegrityError):
-            RFID.objects.create(uid="BAD123", user=self.user)
+            RFID.objects.create(rfid="BAD123", user=self.user)
+
+
+class RFIDValidationTests(TestCase):
+    def test_invalid_format_raises(self):
+        tag = RFID(rfid="xyz")
+        with self.assertRaises(ValidationError):
+            tag.full_clean()
+
+    def test_lowercase_saved_uppercase(self):
+        tag = RFID.objects.create(rfid="deadbeef")
+        self.assertEqual(tag.rfid, "DEADBEEF")
+
+    def test_find_user_by_rfid(self):
+        user = User.objects.create_user(username="finder", password="pwd")
+        RFID.objects.create(rfid="ABCD1234", user=user)
+        found = RFID.get_user_by_rfid("abcd1234")
+        self.assertEqual(found, user)
 
 
 class AccountTests(TestCase):

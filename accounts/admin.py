@@ -12,7 +12,7 @@ class UserAdmin(DjangoUserAdmin):
 
 @admin.register(RFID)
 class RFIDAdmin(admin.ModelAdmin):
-    list_display = ("uid", "user", "blacklisted", "added_on")
+    list_display = ("rfid", "user", "blacklisted", "added_on")
 
 
 @admin.register(Account)
