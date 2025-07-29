@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "subscriptions",
     "ocpp",
     "qr_links",
+    "odoo",
     "readme",
     "website",
 ]
