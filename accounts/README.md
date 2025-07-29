@@ -4,6 +4,10 @@ Users may authenticate using any RFID tag assigned to their account. POST the RF
 
 The `RFID` model stores card identifiers (8 hexadecimal digits). A tag may belong to a user and is `allowed` by default. Set `allowed` to `false` to disable it.
 
+The `User` model includes an optional `phone_number` field for storing a contact phone number.
+
+The `RFID` model stores card identifiers (8 hexadecimal digits). A tag may belong to a user or be marked as `blacklisted` to disable it.
+
 ## Account Credits
 
 Each user may have an associated **Account** record that tracks available energy credits. The model stores:

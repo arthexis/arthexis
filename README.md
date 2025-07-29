@@ -17,6 +17,13 @@ This repository contains a basic [Django](https://www.djangoproject.com/) projec
    python manage.py runserver
    ```
 
+   To have the server automatically restart when files change, set
+   the `DJANGO_DEV_RELOAD` environment variable:
+
+   ```bash
+   DJANGO_DEV_RELOAD=1 python manage.py runserver
+   ```
+
 The default configuration uses SQLite and is for local development only.
 To use PostgreSQL instead, set the `POSTGRES_DB` environment variable (and
 optionally `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST` and
@@ -72,6 +79,10 @@ The `nodes` app exposes a simple JSON interface for keeping track of other insta
 Users may authenticate using any RFID tag assigned to their account. POST the RFID value as JSON to `/accounts/rfid-login/` and the server will return the user's details if the tag matches one stored in the `RFID` model.
 
 The `RFID` model stores card identifiers (8 hexadecimal digits). A tag may belong to a user and is `allowed` by default. Set `allowed` to `false` to disable it.
+
+The `User` model includes an optional `phone_number` field for storing a contact phone number.
+
+The `RFID` model stores card identifiers (8 hexadecimal digits). A tag may belong to a user or be marked as `blacklisted` to disable it.
 
 ## Account Credits
 
@@ -164,6 +175,13 @@ asyncio.run(sim._run_session())
 The simulator establishes an OCPP 1.6 connection, starts a transaction and
 sends periodic meter values.  See the module for additional options such as
 RFID authentication or repeat mode.
+
+
+# Odoo App
+
+Provides a simple integration with an Odoo server. The `Instance` model stores
+connection credentials and a `/odoo/test/<id>/` endpoint checks whether the
+specified instance can be authenticated.
 
 
 # Readme App

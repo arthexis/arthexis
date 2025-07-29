@@ -8,7 +8,8 @@ from .models import User, RFID, Account, Vehicle
 
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
-    pass
+    fieldsets = DjangoUserAdmin.fieldsets + ((None, {"fields": ("phone_number",)}),)
+    add_fieldsets = DjangoUserAdmin.add_fieldsets + ((None, {"fields": ("phone_number",)}),)
 
 
 

@@ -8,6 +8,12 @@ from django.contrib.auth import get_user_model
 class User(AbstractUser):
     """Custom user model."""
 
+    phone_number = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Optional contact phone number",
+    )
+
     def __str__(self):
         return self.username
 
