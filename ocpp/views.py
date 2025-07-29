@@ -121,13 +121,11 @@ def dashboard(request):
     return render(request, "ocpp/dashboard.html", {"chargers": chargers})
 
 
-@landing("Charger Page")
 def charger_page(request, cid):
     charger = get_object_or_404(Charger, charger_id=cid)
     return render(request, "ocpp/charger_page.html", {"charger": charger})
 
 
-@landing("Status")
 def charger_status(request, cid):
     """Display current transaction and charger state."""
     charger = get_object_or_404(Charger, charger_id=cid)
