@@ -153,8 +153,13 @@ This app implements a lightweight Charge Point management system using
 ### WebSocket Endpoint
 
 ```
-ws://127.0.0.1:8000/ws/ocpp/<charger_id>/
+ws://127.0.0.1:8000/<path>/<charger_id>/
 ```
+
+The server accepts connections on any path. The final segment is treated as the
+charger ID, so `/CP1/` and `/foo/bar/CP1/` both register charger `CP1`. The full
+path used by a charger is stored in the `last_path` field of its database
+record.
 
 A connected charge point may send standard OCPP CALL messages
 (BootNotification, Heartbeat, Authorize, Start/StopTransaction). The
@@ -206,7 +211,7 @@ development.  Example usage:
 import asyncio
 from ocpp.simulator import SimulatorConfig, ChargePointSimulator
 
-config = SimulatorConfig(host="127.0.0.1", ws_port=8000, cp_path="ws/ocpp/SIM1/")
+config = SimulatorConfig(host="127.0.0.1", ws_port=8000, cp_path="SIM1/")
 sim = ChargePointSimulator(config)
 asyncio.run(sim._run_session())
 ```

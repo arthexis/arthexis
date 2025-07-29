@@ -12,7 +12,7 @@ from accounts.models import RFID, Account, Credit
 
 class CSMSConsumerTests(TransactionTestCase):
     async def test_transaction_saved(self):
-        communicator = WebsocketCommunicator(application, "/ws/ocpp/TEST/")
+        communicator = WebsocketCommunicator(application, "/TEST/")
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
@@ -73,18 +73,31 @@ class ChargerAdminTests(TestCase):
         self.assertContains(resp, charger.get_absolute_url())
 
     async def test_unknown_charger_auto_registered(self):
-        communicator = WebsocketCommunicator(application, "/ws/ocpp/NEWCHG/")
+        communicator = WebsocketCommunicator(application, "/NEWCHG/")
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
         exists = await database_sync_to_async(Charger.objects.filter(charger_id="NEWCHG").exists)()
         self.assertTrue(exists)
 
+        charger = await database_sync_to_async(Charger.objects.get)(charger_id="NEWCHG")
+        self.assertEqual(charger.last_path, "/NEWCHG/")
+
         await communicator.disconnect()
+
+    async def test_nested_path_accepted_and_recorded(self):
+        communicator = WebsocketCommunicator(application, "/foo/NEST/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.disconnect()
+
+        charger = await database_sync_to_async(Charger.objects.get)(charger_id="NEST")
+        self.assertEqual(charger.last_path, "/foo/NEST/")
 
     async def test_rfid_required_rejects_invalid(self):
         await database_sync_to_async(Charger.objects.create)(charger_id="RFID", require_rfid=True)
-        communicator = WebsocketCommunicator(application, "/ws/ocpp/RFID/")
+        communicator = WebsocketCommunicator(application, "/RFID/")
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
@@ -113,7 +126,7 @@ class ChargerAdminTests(TestCase):
         )
         await database_sync_to_async(RFID.objects.create)(rfid="CARDX", user=user)
         await database_sync_to_async(Charger.objects.create)(charger_id="RFIDOK", require_rfid=True)
-        communicator = WebsocketCommunicator(application, "/ws/ocpp/RFIDOK/")
+        communicator = WebsocketCommunicator(application, "/RFIDOK/")
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
@@ -131,7 +144,7 @@ class ChargerAdminTests(TestCase):
         self.assertEqual(tx.account_id, user.account.id)
 
     async def test_status_fields_updated(self):
-        communicator = WebsocketCommunicator(application, "/ws/ocpp/STAT/")
+        communicator = WebsocketCommunicator(application, "/STAT/")
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 

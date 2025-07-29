@@ -8,7 +8,7 @@ class Command(RunserverCommand):
         host = self.addr or (self.default_addr_ipv6 if self.use_ipv6 else self.default_addr)
         scheme = 'wss' if self.ssl_options else 'ws'
         # Display available websocket URLs.
-        websocket_paths = ['/ws/echo/', '/ws/ocpp/<cid>/']
+        websocket_paths = ['/ws/echo/', '/<path>/<cid>/']
         for path in websocket_paths:
             self.stdout.write(f"WebSocket available at {scheme}://{host}:{server_port}{path}")
 

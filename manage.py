@@ -21,7 +21,7 @@ def main():
                 self.default_addr_ipv6 if self.use_ipv6 else self.default_addr
             )
             scheme = "wss" if getattr(self, "ssl_options", None) else "ws"
-            for path in ["/ws/echo/", "/ws/ocpp/<cid>/"]:
+            for path in ["/ws/echo/", "/<path>/<cid>/"]:
                 self.stdout.write(
                     f"WebSocket available at {scheme}://{host}:{server_port}{path}"
                 )
