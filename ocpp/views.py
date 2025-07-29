@@ -95,6 +95,17 @@ def charger_page(request, cid):
     return render(request, "ocpp/charger_page.html", {"charger": charger})
 
 
+def charger_log_page(request, cid):
+    """Render a simple page with the log for the charger."""
+    charger = get_object_or_404(Charger, charger_id=cid)
+    log = store.logs.get(cid, [])
+    return render(
+        request,
+        "ocpp/charger_logs.html",
+        {"charger": charger, "log": log},
+    )
+
+
 @csrf_exempt
 def dispatch_action(request, cid):
     ws = store.connections.get(cid)

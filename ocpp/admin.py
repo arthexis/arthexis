@@ -15,6 +15,7 @@ class ChargerAdmin(admin.ModelAdmin):
         "require_rfid",
         "last_heartbeat",
         "test_link",
+        "log_link",
     )
     search_fields = ("charger_id", "name")
 
@@ -27,10 +28,19 @@ class ChargerAdmin(admin.ModelAdmin):
 
     test_link.short_description = "Landing Page"
 
+    def log_link(self, obj):
+        from django.utils.html import format_html
+        from django.urls import reverse
+
+        url = reverse("charger-log", args=[obj.charger_id])
+        return format_html('<a href="{}" target="_blank">view</a>', url)
+
+    log_link.short_description = "Log"
+
 
 @admin.register(Simulator)
 class SimulatorAdmin(admin.ModelAdmin):
-    list_display = ("name", "cp_path", "host", "ws_port", "running")
+    list_display = ("name", "cp_path", "host", "ws_port", "running", "log_link")
     actions = ("start_simulator", "stop_simulator")
 
     def running(self, obj):
@@ -60,3 +70,12 @@ class SimulatorAdmin(admin.ModelAdmin):
         self.message_user(request, "Stopping simulators")
 
     stop_simulator.short_description = "Stop selected simulators"
+
+    def log_link(self, obj):
+        from django.utils.html import format_html
+        from django.urls import reverse
+
+        url = reverse("charger-log", args=[obj.cp_path])
+        return format_html('<a href="{}" target="_blank">view</a>', url)
+
+    log_link.short_description = "Log"
