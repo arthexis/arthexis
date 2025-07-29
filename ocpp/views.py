@@ -7,14 +7,22 @@ from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render
 
 from . import store
-from .models import Transaction
+from .models import Transaction, Charger
 
 
 
 def charger_list(request):
     """Return a JSON list of known chargers and state."""
     data = []
-    for cid, tx_obj in store.transactions.items():
+    for charger in Charger.objects.all():
+        cid = charger.charger_id
+        tx_obj = store.transactions.get(cid)
+        if not tx_obj:
+            tx_obj = (
+                Transaction.objects.filter(charger_id=cid)
+                .order_by("-start_time")
+                .first()
+            )
         tx_data = None
         if tx_obj:
             tx_data = {
@@ -26,16 +34,31 @@ def charger_list(request):
                 tx_data["meterStop"] = tx_obj.meter_stop
             if tx_obj.stop_time is not None:
                 tx_data["stopTime"] = tx_obj.stop_time.isoformat()
-        data.append({
-            "charger_id": cid,
-            "transaction": tx_data,
-            "connected": cid in store.connections,
-        })
+        data.append(
+            {
+                "charger_id": cid,
+                "name": charger.name,
+                "config": charger.config,
+                "transaction": tx_data,
+                "connected": cid in store.connections,
+            }
+        )
     return JsonResponse({"chargers": data})
 
 
 def charger_detail(request, cid):
+    charger = Charger.objects.filter(charger_id=cid).first()
+    if charger is None:
+        return JsonResponse({"detail": "not found"}, status=404)
+
     tx_obj = store.transactions.get(cid)
+    if not tx_obj:
+        tx_obj = (
+            Transaction.objects.filter(charger_id=cid)
+            .order_by("-start_time")
+            .first()
+        )
+
     tx_data = None
     if tx_obj:
         tx_data = {
@@ -47,22 +70,17 @@ def charger_detail(request, cid):
             tx_data["meterStop"] = tx_obj.meter_stop
         if tx_obj.stop_time is not None:
             tx_data["stopTime"] = tx_obj.stop_time.isoformat()
-    else:
-        tx_obj = (
-            Transaction.objects.filter(charger_id=cid)
-            .order_by("-start_time")
-            .first()
-        )
-        if tx_obj:
-            tx_data = {
-                "transactionId": tx_obj.transaction_id,
-                "meterStart": tx_obj.meter_start,
-                "startTime": tx_obj.start_time.isoformat(),
-                "meterStop": tx_obj.meter_stop,
-                "stopTime": tx_obj.stop_time.isoformat() if tx_obj.stop_time else None,
-            }
+
     log = store.logs.get(cid, [])
-    return JsonResponse({"transaction": tx_data, "log": log})
+    return JsonResponse(
+        {
+            "charger_id": cid,
+            "name": charger.name,
+            "config": charger.config,
+            "transaction": tx_data,
+            "log": log,
+        }
+    )
 
 
 @csrf_exempt

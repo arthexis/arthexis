@@ -12,7 +12,10 @@ ws://<host>/ws/ocpp/<charger_id>/
 A connected charge point may send standard OCPP CALL messages
 (BootNotification, Heartbeat, Authorize, Start/StopTransaction). The
 server replies with basic CALLRESULT payloads and records transactions
-in the database while keeping active connections in memory.
+in the database while keeping active connections in memory. Every charger
+known to the system is stored in the `Charger` model. When a device
+connects with an unknown ID it will be created automatically. The model
+includes a JSON `config` field for storing charger-specific settings.
 
 
 ### REST Endpoints

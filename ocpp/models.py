@@ -1,6 +1,17 @@
 from django.db import models
 
 
+class Charger(models.Model):
+    """Known charge point with optional configuration."""
+
+    charger_id = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=200, blank=True)
+    config = models.JSONField(default=dict, blank=True)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.charger_id
+
+
 class Transaction(models.Model):
     """Charging session data stored for each charger."""
 
