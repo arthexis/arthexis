@@ -31,6 +31,7 @@ urlpatterns = [
     path("accounts/", include("accounts.urls")),
     path("subscriptions/", include("subscriptions.urls")),
     path("ocpp/", include("ocpp.urls")),
+    path("qr/", include("qrcodes.urls")),
     path("odoo/", include("odoo.urls")),
     path("mailer/", include("mailer.urls")),
 ]
