@@ -1,9 +1,10 @@
 from pathlib import Path
 from django.conf import settings
 from django.contrib.sites.shortcuts import get_current_site
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.urls import reverse
+from django.contrib.auth.views import LoginView
 
 import inspect
 import markdown
@@ -77,3 +78,24 @@ def sitemap(request):
             lines.append(f"  <url><loc>{base}{page['path']}</loc></url>")
     lines.append("</urlset>")
     return HttpResponse("\n".join(lines), content_type="application/xml")
+
+
+class CustomLoginView(LoginView):
+    """Login view that redirects staff to the admin."""
+
+    template_name = "website/login.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            if request.user.is_staff:
+                return redirect("admin:index")
+            return redirect(self.get_success_url())
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_success_url(self):
+        if self.request.user.is_staff:
+            return reverse("admin:index")
+        return self.get_redirect_url() or "/"
+
+
+login_view = CustomLoginView.as_view()

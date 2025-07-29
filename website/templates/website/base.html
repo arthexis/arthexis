@@ -29,6 +29,7 @@
               </li>
               {% endfor %}
               <li class="nav-item"><a class="nav-link" href="{% url 'website:website-sitemap' %}">Sitemap</a></li>
+              <li class="nav-item"><a class="nav-link" href="{% url 'website:login' %}?next={{ request.path }}">Login</a></li>
             </ul>
           </div>
         </div>
