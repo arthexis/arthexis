@@ -9,7 +9,7 @@ class RFIDBackend:
         if not rfid:
             return None
         tag = RFID.objects.filter(
-            rfid=rfid.upper(), blacklisted=False, user__isnull=False
+            rfid=rfid.upper(), allowed=True, user__isnull=False
         ).select_related("user").first()
         if tag:
             return tag.user

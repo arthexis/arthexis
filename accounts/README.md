@@ -2,7 +2,7 @@
 
 Users may authenticate using any RFID tag assigned to their account. POST the RFID value as JSON to `/accounts/rfid-login/` and the server will return the user's details if the tag matches one stored in the `RFID` model.
 
-The `RFID` model stores card identifiers (8 hexadecimal digits). A tag may belong to a user or be marked as `blacklisted` to disable it.
+The `RFID` model stores card identifiers (8 hexadecimal digits). A tag may belong to a user and is `allowed` by default. Set `allowed` to `false` to disable it.
 
 ## Account Credits
 
@@ -19,3 +19,10 @@ The account is linked to the user with a one‑to‑one relationship and can be 
 An account may be associated with multiple **Vehicle** records. Each vehicle
 stores the `brand`, `model` and `vin` (Vehicle Identification Number) so that a
 user's cars can be identified when using OCPP chargers.
+
+## RFID CSV Utilities
+
+RFID tags can be exported and imported using management commands:
+
+- `python manage.py export_rfids [path]` writes all tags to CSV. If `path` is omitted the data is printed to stdout.
+- `python manage.py import_rfids path` loads tags from a CSV file created by the export command.
