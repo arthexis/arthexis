@@ -4,3 +4,4 @@ psycopg[binary]>=3
 markdown
 qrcode
 Pillow
+websockets>=12

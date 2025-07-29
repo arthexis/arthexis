@@ -138,6 +138,25 @@ Active connections and logs remain in-memory via `ocpp.store`, but
 completed charging sessions are saved in the `Transaction` model for
 later inspection.
 
+### Simulator
+
+The app includes a small WebSocket charge point simulator located in
+`ocpp/simulator.py`.  It can be used to exercise the CSMS during
+development.  Example usage:
+
+```python
+import asyncio
+from ocpp.simulator import SimulatorConfig, ChargePointSimulator
+
+config = SimulatorConfig(host="localhost", ws_port=8000, cp_path="SIM1")
+sim = ChargePointSimulator(config)
+asyncio.run(sim._run_session())
+```
+
+The simulator establishes an OCPP 1.6 connection, starts a transaction and
+sends periodic meter values.  See the module for additional options such as
+RFID authentication or repeat mode.
+
 
 # Readme App
 
