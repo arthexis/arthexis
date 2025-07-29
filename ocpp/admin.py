@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django import forms
 
 import asyncio
 
@@ -7,12 +8,35 @@ from .simulator import ChargePointSimulator
 from . import store
 
 
+class ChargerAdminForm(forms.ModelForm):
+    class Meta:
+        model = Charger
+        fields = "__all__"
+
+        widgets = {
+            "latitude": forms.NumberInput(attrs={"step": "any"}),
+            "longitude": forms.NumberInput(attrs={"step": "any"}),
+        }
+
+    class Media:
+        css = {
+            "all": ("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",)
+        }
+        js = (
+            "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+            "ocpp/charger_map.js",
+        )
+
+
 @admin.register(Charger)
 class ChargerAdmin(admin.ModelAdmin):
+    form = ChargerAdminForm
     list_display = (
         "charger_id",
         "name",
         "require_rfid",
+        "latitude",
+        "longitude",
         "last_heartbeat",
         "test_link",
     )

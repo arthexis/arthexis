@@ -151,3 +151,12 @@ class ChargerAdminTests(TestCase):
         self.assertEqual(charger.last_meter_values.get("meterValue")[0]["sampledValue"][0]["value"], "42")
 
         await communicator.disconnect()
+
+
+class ChargerLocationTests(TestCase):
+    def test_lat_lon_fields_saved(self):
+        charger = Charger.objects.create(
+            charger_id="LOC1", latitude=10.123456, longitude=-20.654321
+        )
+        self.assertAlmostEqual(float(charger.latitude), 10.123456)
+        self.assertAlmostEqual(float(charger.longitude), -20.654321)

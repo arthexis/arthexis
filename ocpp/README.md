@@ -24,6 +24,11 @@ against entries in the `RFID` table before allowing a transaction to start.
 It also records the timestamp of the last `Heartbeat` message and the
 payload of the most recent `MeterValues` message received from the charger.
 
+Chargers may optionally store their geographic `latitude` and `longitude`.
+The admin interface displays a map (centered on Monterrey, Mexico by default)
+where these coordinates can be selected by dragging a marker or clicking on the
+map.
+
 
 
 ### REST Endpoints
