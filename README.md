@@ -361,3 +361,4 @@ When visiting the default *website* domain, a navigation bar shows links to all
 enabled apps that expose public URLs. Views decorated with `footer_link` are
 collected into a footer where links can be grouped into columns. The
 automatically generated sitemap now appears there.
+
