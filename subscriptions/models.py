@@ -1,6 +1,6 @@
 from datetime import timedelta
-from django.conf import settings
 from django.db import models
+from accounts.models import Account
 
 
 class Product(models.Model):
@@ -15,9 +15,9 @@ class Product(models.Model):
 
 
 class Subscription(models.Model):
-    """A user's subscription to a product."""
+    """An account's subscription to a product."""
 
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    account = models.ForeignKey(Account, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     start_date = models.DateField(auto_now_add=True)
     next_renewal = models.DateField(blank=True)
@@ -28,4 +28,4 @@ class Subscription(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.user} -> {self.product}"
+        return f"{self.account.user} -> {self.product}"

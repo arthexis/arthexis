@@ -15,7 +15,7 @@ def product_list(request):
 
 @csrf_exempt
 def add_subscription(request):
-    """Create a subscription for a user to a product from POSTed JSON."""
+    """Create a subscription for an account from POSTed JSON."""
     if request.method != "POST":
         return JsonResponse({"detail": "POST required"}, status=400)
 
@@ -24,11 +24,11 @@ def add_subscription(request):
     except json.JSONDecodeError:
         data = request.POST
 
-    user_id = data.get("user_id")
+    account_id = data.get("account_id")
     product_id = data.get("product_id")
 
-    if not user_id or not product_id:
-        return JsonResponse({"detail": "user_id and product_id required"}, status=400)
+    if not account_id or not product_id:
+        return JsonResponse({"detail": "account_id and product_id required"}, status=400)
 
     try:
         product = Product.objects.get(id=product_id)
@@ -36,7 +36,7 @@ def add_subscription(request):
         return JsonResponse({"detail": "invalid product"}, status=404)
 
     sub = Subscription.objects.create(
-        user_id=user_id,
+        account_id=account_id,
         product=product,
         next_renewal=date.today() + timedelta(days=product.renewal_period),
     )
@@ -44,13 +44,13 @@ def add_subscription(request):
 
 
 def subscription_list(request):
-    """Return subscriptions for the given user_id."""
-    user_id = request.GET.get("user_id")
-    if not user_id:
-        return JsonResponse({"detail": "user_id required"}, status=400)
+    """Return subscriptions for the given account_id."""
+    account_id = request.GET.get("account_id")
+    if not account_id:
+        return JsonResponse({"detail": "account_id required"}, status=400)
 
     subs = list(
-        Subscription.objects.filter(user_id=user_id)
+        Subscription.objects.filter(account_id=account_id)
         .select_related("product")
         .values(
             "id",
