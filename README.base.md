@@ -84,6 +84,18 @@ python manage.py build_readme
 
 Avoid editing the combined `README.md` directly.
 
+## Release
+
+The `release` app provides utilities for publishing the project to PyPI.
+Use the `build_pypi` management command to bump the version, build the
+distribution and upload it via Twine:
+
+```bash
+python manage.py build_pypi --all
+```
+
+Run the command with `--help` to see individual options.
+
 ## Subdomain Routing
 
 The project uses Django's **sites** framework together with the `website`
