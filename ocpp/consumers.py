@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from django.utils import timezone
 from django.contrib.auth import get_user_model
+from accounts.models import RFID
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -28,8 +29,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return True
         if not id_tag:
             return False
-        User = get_user_model()
-        return await database_sync_to_async(User.objects.filter(rfid_uid=id_tag).exists)()
+        return await database_sync_to_async(
+            RFID.objects.filter(
+                uid=id_tag, blacklisted=False, user__isnull=False
+            ).exists
+        )()
 
     async def disconnect(self, close_code):
         store.connections.pop(self.charger_id, None)

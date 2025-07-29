@@ -1,16 +1,19 @@
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from .models import User, BlacklistedRFID, Account, Vehicle
+from .models import User, RFID, Account, Vehicle
+
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 
 
 class RFIDLoginTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            username="alice", password="secret", rfid_uid="CARD123"
+            username="alice", password="secret"
         )
+        RFID.objects.create(uid="CARD123", user=self.user)
 
     def test_rfid_login_success(self):
         response = self.client.post(
@@ -33,18 +36,18 @@ class RFIDLoginTests(TestCase):
 class BlacklistRFIDTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
-            username="eve", password="secret", rfid_uid="BAD123"
+            username="eve", password="secret"
         )
+        self.rfid = RFID.objects.create(uid="BAD123", user=self.user)
 
     def test_blacklist_removes_and_blocks(self):
-        BlacklistedRFID.objects.create(uid="BAD123")
+        self.rfid.blacklisted = True
+        self.rfid.save()
         self.user.refresh_from_db()
-        self.assertIsNone(self.user.rfid_uid)
+        self.assertFalse(self.user.rfids.exists())
 
-        with self.assertRaises(ValidationError):
-            User.objects.create_user(
-                username="bob", password="pwd", rfid_uid="BAD123"
-            )
+        with self.assertRaises(IntegrityError):
+            RFID.objects.create(uid="BAD123", user=self.user)
 
 
 class AccountTests(TestCase):

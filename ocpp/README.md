@@ -19,7 +19,7 @@ includes a JSON `config` field for storing charger-specific settings.
 
 Each charger also has a `require_rfid` flag that can be enabled to
 enforce RFID authentication. When set, the server validates the `idTag`
-against known users before allowing a transaction to start.
+against entries in the `RFID` table before allowing a transaction to start.
 
 It also records the timestamp of the last `Heartbeat` message and the
 payload of the most recent `MeterValues` message received from the charger.
