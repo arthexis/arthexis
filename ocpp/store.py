@@ -4,3 +4,4 @@ connections = {}
 transactions = {}
 logs = {}
 history = {}
+simulators = {}

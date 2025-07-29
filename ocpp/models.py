@@ -31,3 +31,32 @@ class Transaction(models.Model):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.charger_id}:{self.transaction_id}"
 
+
+class Simulator(models.Model):
+    """Preconfigured simulator that can be started from the admin."""
+
+    name = models.CharField(max_length=100, unique=True)
+    cp_path = models.CharField(max_length=100)
+    host = models.CharField(max_length=100, default="127.0.0.1")
+    ws_port = models.IntegerField(default=9000)
+    rfid = models.CharField(max_length=8, default="FFFFFFFF")
+    repeat = models.BooleanField(default=False)
+    username = models.CharField(max_length=100, blank=True)
+    password = models.CharField(max_length=100, blank=True)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+    def as_config(self):
+        from .simulator import SimulatorConfig
+
+        return SimulatorConfig(
+            host=self.host,
+            ws_port=self.ws_port,
+            rfid=self.rfid,
+            cp_path=self.cp_path,
+            repeat=self.repeat,
+            username=self.username or None,
+            password=self.password or None,
+        )
+

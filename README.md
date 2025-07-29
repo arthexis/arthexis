@@ -176,6 +176,10 @@ The simulator establishes an OCPP 1.6 connection, starts a transaction and
 sends periodic meter values.  See the module for additional options such as
 RFID authentication or repeat mode.
 
+Simulators can also be preconfigured in the Django admin site.  Add
+`Simulator` entries and use the provided actions to start or stop them
+without writing any code.
+
 
 # Odoo App
 
