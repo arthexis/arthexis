@@ -44,3 +44,11 @@ python manage.py build_readme
 ```
 
 Avoid editing the combined `README.md` directly.
+
+## Subdomain Routing
+
+The project uses Django's **sites** framework together with the `website`
+app to select which application handles requests for a given domain.  Each
+`Site`'s *name* should be set to the label of the Django app whose `urls`
+module will serve that domain.  Requests for unknown domains fall back to
+the `readme` site which renders this documentation.

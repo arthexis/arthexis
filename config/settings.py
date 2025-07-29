@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.sites",
     "channels",
     "chat",
     "nodes",
@@ -45,7 +46,11 @@ INSTALLED_APPS = [
     "subscriptions",
     "ocpp",
     "qr_links",
+    "readme",
+    "website",
 ]
+
+SITE_ID = 1
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
