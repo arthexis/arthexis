@@ -29,7 +29,7 @@ quickly verify whether an account would be accepted by a charger.
 ## Vehicles
 
 An account may be associated with multiple **Vehicle** records. Each vehicle
-stores the `brand`, `model` and `vin` (Vehicle Identification Number) so that a
+stores the `brand`, `model` and `VIN` (Vehicle Identification Number) so that a
 user's cars can be identified when using OCPP chargers.
 
 ## RFID CSV Utilities

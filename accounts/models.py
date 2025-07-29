@@ -159,7 +159,7 @@ class Vehicle(models.Model):
     )
     brand = models.CharField(max_length=100, blank=True)
     model = models.CharField(max_length=100, blank=True)
-    vin = models.CharField(max_length=17, unique=True)
+    vin = models.CharField(max_length=17, unique=True, verbose_name="VIN")
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         parts = " ".join(p for p in [self.brand, self.model] if p)
