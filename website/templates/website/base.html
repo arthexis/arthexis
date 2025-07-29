@@ -18,8 +18,15 @@
           </button>
           <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-              {% for item in nav_apps %}
-              <li class="nav-item"><a class="nav-link" href="{{ item.path }}">{{ item.name }}</a></li>
+              {% for app in nav_apps %}
+              <li class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">{{ app.name }}</a>
+                <ul class="dropdown-menu">
+                  {% for view in app.views %}
+                  <li><a class="dropdown-item" href="{{ view.path }}">{{ view.name }}</a></li>
+                  {% endfor %}
+                </ul>
+              </li>
               {% endfor %}
               <li class="nav-item"><a class="nav-link" href="{% url 'website:website-sitemap' %}">Sitemap</a></li>
             </ul>
