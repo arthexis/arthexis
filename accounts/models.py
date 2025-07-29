@@ -19,7 +19,7 @@ class User(AbstractUser):
 
 
 class RFID(models.Model):
-    """RFID tag assigned to a user or blacklisted."""
+    """RFID tag assigned to a user and marked allowed or not."""
 
     rfid = models.CharField(
         max_length=8,
@@ -39,13 +39,13 @@ class RFID(models.Model):
         related_name="rfids",
         on_delete=models.SET_NULL,
     )
-    blacklisted = models.BooleanField(default=False)
+    allowed = models.BooleanField(default=True)
     added_on = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
         if self.rfid:
             self.rfid = self.rfid.upper()
-        if self.blacklisted:
+        if not self.allowed:
             self.user = None
         super().save(*args, **kwargs)
 
@@ -57,7 +57,7 @@ class RFID(models.Model):
         """Return the user associated with an RFID code if it exists."""
         tag = (
             RFID.objects.filter(
-                rfid=value.upper(), blacklisted=False, user__isnull=False
+                rfid=value.upper(), allowed=True, user__isnull=False
             )
             .select_related("user")
             .first()

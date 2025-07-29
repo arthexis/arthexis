@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from import_export import resources
+from import_export.admin import ImportExportModelAdmin
 
 from .models import User, RFID, Account, Vehicle
 
@@ -11,9 +13,16 @@ class UserAdmin(DjangoUserAdmin):
 
 
 
+class RFIDResource(resources.ModelResource):
+    class Meta:
+        model = RFID
+        fields = ("rfid", "user__username", "allowed")
+
+
 @admin.register(RFID)
-class RFIDAdmin(admin.ModelAdmin):
-    list_display = ("rfid", "user", "blacklisted", "added_on")
+class RFIDAdmin(ImportExportModelAdmin):
+    resource_class = RFIDResource
+    list_display = ("rfid", "user", "allowed", "added_on")
 
 
 @admin.register(Account)

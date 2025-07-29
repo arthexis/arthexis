@@ -33,15 +33,15 @@ class RFIDLoginTests(TestCase):
         self.assertEqual(response.status_code, 401)
 
 
-class BlacklistRFIDTests(TestCase):
+class AllowedRFIDTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
             username="eve", password="secret"
         )
         self.rfid = RFID.objects.create(rfid="BAD123", user=self.user)
 
-    def test_blacklist_removes_and_blocks(self):
-        self.rfid.blacklisted = True
+    def test_disallow_removes_and_blocks(self):
+        self.rfid.allowed = False
         self.rfid.save()
         self.user.refresh_from_db()
         self.assertFalse(self.user.rfids.exists())
