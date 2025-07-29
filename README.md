@@ -109,7 +109,11 @@ transactions. The account exposes:
 - `total_kwh_spent` – kWh consumed across transactions.
 - `balance_kwh` – remaining credit after subtracting usage.
 
-The account is linked to the user with a one‑to‑one relationship and can be referenced during authorization or billing steps.
+The account is linked to the user with a one‑to‑one relationship and can be
+referenced during authorization or billing steps. Accounts include a **Service
+Account** flag which, when enabled, bypasses balance checks during
+authorization. The admin lists the current authorization status so staff can
+quickly verify whether an account would be accepted by a charger.
 
 ## Vehicles
 

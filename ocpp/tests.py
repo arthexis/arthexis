@@ -7,7 +7,7 @@ from django.urls import reverse
 
 from config.asgi import application
 from .models import Transaction, Charger
-from accounts.models import RFID, Account
+from accounts.models import RFID, Account, Credit
 
 
 class CSMSConsumerTests(TransactionTestCase):
@@ -104,8 +104,13 @@ class ChargerAdminTests(TestCase):
 
     async def test_rfid_required_accepts_known_tag(self):
         User = get_user_model()
-        user = await database_sync_to_async(User.objects.create_user)(username="bob", password="pwd")
-        await database_sync_to_async(Account.objects.create)(user=user)
+        user = await database_sync_to_async(User.objects.create_user)(
+            username="bob", password="pwd"
+        )
+        acc = await database_sync_to_async(Account.objects.create)(user=user)
+        await database_sync_to_async(Credit.objects.create)(
+            account=acc, amount_kwh=10
+        )
         await database_sync_to_async(RFID.objects.create)(rfid="CARDX", user=user)
         await database_sync_to_async(Charger.objects.create)(charger_id="RFIDOK", require_rfid=True)
         communicator = WebsocketCommunicator(application, "/ws/ocpp/RFIDOK/")

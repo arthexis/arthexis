@@ -75,6 +75,14 @@ class Account(models.Model):
     user = models.OneToOneField(
         get_user_model(), on_delete=models.CASCADE, related_name="account"
     )
+    service_account = models.BooleanField(
+        default=False,
+        help_text="Allow transactions even when the balance is zero or negative",
+    )
+
+    def can_authorize(self) -> bool:
+        """Return True if this account should be authorized for charging."""
+        return self.service_account or self.balance_kwh > 0
 
     @property
     def credits_kwh(self):

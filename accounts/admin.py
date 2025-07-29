@@ -34,9 +34,37 @@ class CreditInline(admin.TabularInline):
 
 @admin.register(Account)
 class AccountAdmin(admin.ModelAdmin):
-    list_display = ("user", "credits_kwh", "total_kwh_spent", "balance_kwh")
-    readonly_fields = ("credits_kwh", "total_kwh_spent", "balance_kwh")
+    list_display = (
+        "user",
+        "credits_kwh",
+        "total_kwh_spent",
+        "balance_kwh",
+        "service_account",
+        "authorized",
+    )
+    readonly_fields = (
+        "credits_kwh",
+        "total_kwh_spent",
+        "balance_kwh",
+        "authorized",
+    )
     inlines = [CreditInline]
+    actions = ["test_authorization"]
+
+    def authorized(self, obj):
+        return obj.can_authorize()
+
+    authorized.boolean = True
+    authorized.short_description = "Authorized"
+
+    def test_authorization(self, request, queryset):
+        for acc in queryset:
+            if acc.can_authorize():
+                self.message_user(request, f"{acc.user} authorized")
+            else:
+                self.message_user(request, f"{acc.user} denied")
+
+    test_authorization.short_description = "Test authorization"
 
     def save_formset(self, request, form, formset, change):
         objs = formset.save(commit=False)
