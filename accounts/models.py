@@ -46,3 +46,23 @@ class BlacklistedRFID(models.Model):
 
     def __str__(self):  # pragma: no cover - simple representation
         return self.uid
+
+
+class Account(models.Model):
+    """Track kWh credits for a user."""
+
+    user = models.OneToOneField(
+        get_user_model(), on_delete=models.CASCADE, related_name="account"
+    )
+    credits_kwh = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    total_kwh_spent = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0
+    )
+
+    @property
+    def balance_kwh(self):
+        """Remaining kWh available for the account."""
+        return self.credits_kwh - self.total_kwh_spent
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return f"Account for {self.user}"
