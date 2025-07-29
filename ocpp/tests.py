@@ -56,6 +56,13 @@ class ChargerLandingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "PAGE1")
 
+    def test_status_page_renders(self):
+        charger = Charger.objects.create(charger_id="PAGE2")
+        client = Client()
+        resp = client.get(reverse("charger-status", args=["PAGE2"]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "PAGE2")
+
 
 class ChargerAdminTests(TestCase):
     def setUp(self):
@@ -71,6 +78,8 @@ class ChargerAdminTests(TestCase):
         url = reverse("admin:ocpp_charger_changelist")
         resp = self.client.get(url)
         self.assertContains(resp, charger.get_absolute_url())
+        status_url = reverse("charger-status", args=["ADMIN1"])
+        self.assertContains(resp, status_url)
 
     async def test_unknown_charger_auto_registered(self):
         communicator = WebsocketCommunicator(application, "/NEWCHG/")

@@ -39,6 +39,7 @@ class ChargerAdmin(admin.ModelAdmin):
         "longitude",
         "last_heartbeat",
         "test_link",
+        "status_link",
     )
     search_fields = ("charger_id", "name")
 
@@ -50,6 +51,15 @@ class ChargerAdmin(admin.ModelAdmin):
         )
 
     test_link.short_description = "Landing Page"
+
+    def status_link(self, obj):
+        from django.utils.html import format_html
+        from django.urls import reverse
+
+        url = reverse("charger-status", args=[obj.charger_id])
+        return format_html('<a href="{}" target="_blank">status</a>', url)
+
+    status_link.short_description = "Status Page"
 
 
 @admin.register(Simulator)
