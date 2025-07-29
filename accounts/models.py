@@ -216,6 +216,8 @@ class RFID(models.Model):
     class Meta:
         verbose_name = "RFID"
         verbose_name_plural = "RFIDs"
+        app_label = "auth"
+        db_table = "accounts_rfid"
 
 
 class Account(models.Model):
@@ -266,7 +268,7 @@ class Account(models.Model):
         return self.credits_kwh - self.total_kwh_spent
 
     def __str__(self):  # pragma: no cover - simple representation
-        return f"Account for {self.user}"
+        return f"{self.user}"
 
 
 class Credit(models.Model):

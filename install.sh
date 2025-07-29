@@ -24,6 +24,9 @@ done
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
 
+# Ensure envs directory exists for environment files
+mkdir -p envs
+
 # Create virtual environment if missing
 if [ ! -d .venv ]; then
     python3 -m venv .venv
