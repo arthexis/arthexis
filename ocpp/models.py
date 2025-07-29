@@ -2,6 +2,7 @@ from django.db import models
 from django.urls import reverse
 
 from qrcodes.models import QRLink
+from accounts.models import Account
 
 
 class Charger(models.Model):
@@ -34,6 +35,9 @@ class Transaction(models.Model):
 
     charger_id = models.CharField(max_length=100)
     transaction_id = models.BigIntegerField()
+    account = models.ForeignKey(
+        Account, on_delete=models.PROTECT, related_name="transactions", null=True
+    )
     meter_start = models.IntegerField(null=True, blank=True)
     meter_stop = models.IntegerField(null=True, blank=True)
     start_time = models.DateTimeField()

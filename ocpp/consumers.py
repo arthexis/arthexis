@@ -2,8 +2,7 @@ import asyncio
 import json
 from datetime import datetime
 from django.utils import timezone
-from django.contrib.auth import get_user_model
-from accounts.models import RFID
+from accounts.models import RFID, Account
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -24,16 +23,20 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             charger_id=self.charger_id
         )
 
-    async def _valid_idtag(self, id_tag: str) -> bool:
-        if not self.charger.require_rfid:
-            return True
+    async def _get_account(self, id_tag: str) -> Account | None:
+        """Return the account for the provided RFID if valid."""
         if not id_tag:
-            return False
-        return await database_sync_to_async(
+            return None
+        tag = await database_sync_to_async(
             RFID.objects.filter(
                 rfid=id_tag.upper(), allowed=True, user__isnull=False
-            ).exists
+            )
+            .select_related("user__account")
+            .first
         )()
+        if tag and hasattr(tag.user, "account"):
+            return tag.user.account
+        return None
 
     async def disconnect(self, close_code):
         store.connections.pop(self.charger_id, None)
@@ -64,9 +67,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     Charger.objects.filter(charger_id=self.charger_id).update
                 )(last_heartbeat=timezone.now())
             elif action == "Authorize":
-                status = (
-                    "Accepted" if await self._valid_idtag(payload.get("idTag")) else "Invalid"
-                )
+                account = await self._get_account(payload.get("idTag"))
+                status = "Accepted" if (account or not self.charger.require_rfid) else "Invalid"
                 reply_payload = {"idTagInfo": {"status": status}}
             elif action == "MeterValues":
                 await database_sync_to_async(
@@ -74,11 +76,13 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 )(last_meter_values=payload)
                 reply_payload = {}
             elif action == "StartTransaction":
-                if await self._valid_idtag(payload.get("idTag")):
+                account = await self._get_account(payload.get("idTag"))
+                if account or not self.charger.require_rfid:
                     tx_id = int(datetime.utcnow().timestamp())
                     tx_obj = await database_sync_to_async(Transaction.objects.create)(
                         charger_id=self.charger_id,
                         transaction_id=tx_id,
+                        account=account,
                         meter_start=payload.get("meterStart"),
                         start_time=timezone.now(),
                     )
