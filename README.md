@@ -17,6 +17,11 @@ This repository contains a basic [Django](https://www.djangoproject.com/) projec
    python manage.py runserver
    ```
 
+If you prefer an automated setup, run `./install.sh` which creates a
+virtual environment and installs dependencies for you.  Adding
+`--service <name>` installs a systemd service with the specified name
+that launches the server on boot.
+
    To have the server automatically restart when files change, set
    the `DJANGO_DEV_RELOAD` environment variable:
 
@@ -52,6 +57,13 @@ languages are defined in `config/settings.py`.
 Log messages from all apps are written to `logs/arthexis.log`. The file
 rotates at midnight with the date appended to the filename. When running the
 test suite, logs are stored in `logs/tests.log` instead.
+
+## Updating
+
+Run `./upgrade.sh` to fetch the latest code from this repository. Any
+local changes are stashed automatically before pulling and restored
+afterwards.  When a virtual environment exists, the script also
+reinstalls dependencies.
 
 ## Maintaining Documentation
 
