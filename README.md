@@ -73,7 +73,7 @@ the `readme` site which renders this documentation.
 This project includes basic websocket support using [Django Channels](https://channels.readthedocs.io/). After launching the development server the console now prints the available WebSocket endpoint:
 
 ```
-WebSocket available at ws://localhost:8000/ws/echo/
+WebSocket available at ws://127.0.0.1:8000/ws/echo/
 ```
 
 You can connect a WebSocket client to this URL and any text you send will be echoed back.
@@ -143,7 +143,7 @@ This app implements a lightweight Charge Point management system using
 ### WebSocket Endpoint
 
 ```
-ws://<host>/ws/ocpp/<charger_id>/
+ws://127.0.0.1:8000/ws/ocpp/<charger_id>/
 ```
 
 A connected charge point may send standard OCPP CALL messages
@@ -191,7 +191,7 @@ development.  Example usage:
 import asyncio
 from ocpp.simulator import SimulatorConfig, ChargePointSimulator
 
-config = SimulatorConfig(host="localhost", ws_port=8000, cp_path="SIM1")
+config = SimulatorConfig(host="127.0.0.1", ws_port=8000, cp_path="ws/ocpp/SIM1/")
 sim = ChargePointSimulator(config)
 asyncio.run(sim._run_session())
 ```
