@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from django.utils import timezone
 from django.contrib.auth import get_user_model
+from accounts.models import RFID
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -28,8 +29,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return True
         if not id_tag:
             return False
-        User = get_user_model()
-        return await database_sync_to_async(User.objects.filter(rfid_uid=id_tag).exists)()
+        return await database_sync_to_async(
+            RFID.objects.filter(
+                uid=id_tag, blacklisted=False, user__isnull=False
+            ).exists
+        )()
 
     async def disconnect(self, close_code):
         store.connections.pop(self.charger_id, None)
@@ -63,21 +67,12 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 status = (
                     "Accepted" if await self._valid_idtag(payload.get("idTag")) else "Invalid"
                 )
-                reply_payload = {"idTagInfo": {"status": "Accepted"}}
+                reply_payload = {"idTagInfo": {"status": status}}
             elif action == "MeterValues":
                 await database_sync_to_async(
                     Charger.objects.filter(charger_id=self.charger_id).update
                 )(last_meter_values=payload)
                 reply_payload = {}
-            elif action == "StartTransaction":
-                tx_id = int(datetime.utcnow().timestamp())
-                tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                    charger_id=self.charger_id,
-                    transaction_id=tx_id,
-                    meter_start=payload.get("meterStart"),
-                    start_time=timezone.now(),
-                )
-                reply_payload = {"idTagInfo": {"status": status}}
             elif action == "StartTransaction":
                 if await self._valid_idtag(payload.get("idTag")):
                     tx_id = int(datetime.utcnow().timestamp())

@@ -69,7 +69,9 @@ The `nodes` app exposes a simple JSON interface for keeping track of other insta
 
 # Accounts App
 
-Users may authenticate using the UID of an RFID card. POST the UID as JSON to `/accounts/rfid-login/` and the server will return the user's details if the UID matches an existing account.
+Users may authenticate using any RFID tag assigned to their account. POST the UID as JSON to `/accounts/rfid-login/` and the server will return the user's details if the tag matches one stored in the `RFID` model.
+
+The `RFID` model stores card identifiers. A tag may belong to a user or be marked as `blacklisted` to disable it.
 
 ## Account Credits
 
@@ -109,12 +111,14 @@ in the database while keeping active connections in memory. Every charger
 known to the system is stored in the `Charger` model. When a device
 connects with an unknown ID it will be created automatically. The model
 includes a JSON `config` field for storing charger-specific settings.
+
 Each charger also has a `require_rfid` flag that can be enabled to
 enforce RFID authentication. When set, the server validates the `idTag`
-against known users before allowing a transaction to start.
+against entries in the `RFID` table before allowing a transaction to start.
 
 It also records the timestamp of the last `Heartbeat` message and the
 payload of the most recent `MeterValues` message received from the charger.
+
 
 
 ### REST Endpoints
