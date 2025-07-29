@@ -31,7 +31,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return False
         return await database_sync_to_async(
             RFID.objects.filter(
-                uid=id_tag, blacklisted=False, user__isnull=False
+                rfid=id_tag.upper(), blacklisted=False, user__isnull=False
             ).exists
         )()
 

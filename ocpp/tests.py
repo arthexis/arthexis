@@ -77,7 +77,7 @@ class CSMSConsumerTests(TransactionTestCase):
     async def test_rfid_required_accepts_known_tag(self):
         User = get_user_model()
         user = await database_sync_to_async(User.objects.create_user)(username="bob", password="pwd")
-        await database_sync_to_async(RFID.objects.create)(uid="CARDX", user=user)
+        await database_sync_to_async(RFID.objects.create)(rfid="CARDX", user=user)
         await database_sync_to_async(Charger.objects.create)(charger_id="RFIDOK", require_rfid=True)
         communicator = WebsocketCommunicator(application, "/ws/ocpp/RFIDOK/")
         connected, _ = await communicator.connect()

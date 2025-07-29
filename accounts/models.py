@@ -1,4 +1,5 @@
 from django.contrib.auth.models import AbstractUser
+from django.core.validators import RegexValidator
 from django.db import models
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -14,7 +15,17 @@ class User(AbstractUser):
 class RFID(models.Model):
     """RFID tag assigned to a user or blacklisted."""
 
-    uid = models.CharField(max_length=64, unique=True)
+    rfid = models.CharField(
+        max_length=8,
+        unique=True,
+        verbose_name="RFID",
+        validators=[
+            RegexValidator(
+                r"^[0-9A-Fa-f]{8}$",
+                message="RFID must be 8 hexadecimal digits",
+            )
+        ],
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -26,12 +37,30 @@ class RFID(models.Model):
     added_on = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
+        if self.rfid:
+            self.rfid = self.rfid.upper()
         if self.blacklisted:
             self.user = None
         super().save(*args, **kwargs)
 
     def __str__(self):  # pragma: no cover - simple representation
-        return self.uid
+        return self.rfid
+
+    @staticmethod
+    def get_user_by_rfid(value):
+        """Return the user associated with an RFID code if it exists."""
+        tag = (
+            RFID.objects.filter(
+                rfid=value.upper(), blacklisted=False, user__isnull=False
+            )
+            .select_related("user")
+            .first()
+        )
+        return tag.user if tag else None
+
+    class Meta:
+        verbose_name = "RFID"
+        verbose_name_plural = "RFIDs"
 
 
 class Account(models.Model):
