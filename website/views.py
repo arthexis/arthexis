@@ -71,11 +71,14 @@ def sitemap(request):
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-        f"  <url><loc>{base}/</loc></url>",
     ]
+    seen = set()
     for app in apps:
         for page in app["views"]:
-            lines.append(f"  <url><loc>{base}{page['path']}</loc></url>")
+            loc = f"{base}{page['path']}"
+            if loc not in seen:
+                seen.add(loc)
+                lines.append(f"  <url><loc>{loc}</loc></url>")
     lines.append("</urlset>")
     return HttpResponse("\n".join(lines), content_type="application/xml")
 
