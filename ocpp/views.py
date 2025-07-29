@@ -39,6 +39,7 @@ def charger_list(request):
                 "charger_id": cid,
                 "name": charger.name,
                 "config": charger.config,
+                "require_rfid": charger.require_rfid,
                 "transaction": tx_data,
                 "connected": cid in store.connections,
             }
@@ -77,6 +78,7 @@ def charger_detail(request, cid):
             "charger_id": cid,
             "name": charger.name,
             "config": charger.config,
+            "require_rfid": charger.require_rfid,
             "transaction": tx_data,
             "log": log,
         }

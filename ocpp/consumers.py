@@ -2,6 +2,7 @@ import asyncio
 import json
 from datetime import datetime
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -18,9 +19,17 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         await self.accept()
         store.connections[self.charger_id] = self
         store.logs.setdefault(self.charger_id, [])
-        await database_sync_to_async(Charger.objects.get_or_create)(
+        self.charger, _ = await database_sync_to_async(Charger.objects.get_or_create)(
             charger_id=self.charger_id
         )
+
+    async def _valid_idtag(self, id_tag: str) -> bool:
+        if not self.charger.require_rfid:
+            return True
+        if not id_tag:
+            return False
+        User = get_user_model()
+        return await database_sync_to_async(User.objects.filter(rfid_uid=id_tag).exists)()
 
     async def disconnect(self, close_code):
         store.connections.pop(self.charger_id, None)
@@ -48,20 +57,26 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     "currentTime": datetime.utcnow().isoformat() + "Z"
                 }
             elif action == "Authorize":
-                reply_payload = {"idTagInfo": {"status": "Accepted"}}
-            elif action == "StartTransaction":
-                tx_id = int(datetime.utcnow().timestamp())
-                tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                    charger_id=self.charger_id,
-                    transaction_id=tx_id,
-                    meter_start=payload.get("meterStart"),
-                    start_time=timezone.now(),
+                status = (
+                    "Accepted" if await self._valid_idtag(payload.get("idTag")) else "Invalid"
                 )
-                store.transactions[self.charger_id] = tx_obj
-                reply_payload = {
-                    "transactionId": tx_id,
-                    "idTagInfo": {"status": "Accepted"},
-                }
+                reply_payload = {"idTagInfo": {"status": status}}
+            elif action == "StartTransaction":
+                if await self._valid_idtag(payload.get("idTag")):
+                    tx_id = int(datetime.utcnow().timestamp())
+                    tx_obj = await database_sync_to_async(Transaction.objects.create)(
+                        charger_id=self.charger_id,
+                        transaction_id=tx_id,
+                        meter_start=payload.get("meterStart"),
+                        start_time=timezone.now(),
+                    )
+                    store.transactions[self.charger_id] = tx_obj
+                    reply_payload = {
+                        "transactionId": tx_id,
+                        "idTagInfo": {"status": "Accepted"},
+                    }
+                else:
+                    reply_payload = {"idTagInfo": {"status": "Invalid"}}
             elif action == "StopTransaction":
                 tx_obj = store.transactions.pop(self.charger_id, None)
                 if tx_obj:

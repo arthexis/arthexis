@@ -2,6 +2,7 @@
 from channels.testing import WebsocketCommunicator
 from channels.db import database_sync_to_async
 from django.test import TransactionTestCase
+from django.contrib.auth import get_user_model
 
 from config.asgi import application
 from .models import Transaction, Charger
@@ -48,6 +49,49 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertTrue(connected)
 
         exists = await database_sync_to_async(Charger.objects.filter(charger_id="NEWCHG").exists)()
+        self.assertTrue(exists)
+
+        await communicator.disconnect()
+
+    async def test_rfid_required_rejects_invalid(self):
+        await database_sync_to_async(Charger.objects.create)(charger_id="RFID", require_rfid=True)
+        communicator = WebsocketCommunicator(application, "/ws/ocpp/RFID/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to([
+            2,
+            "1",
+            "StartTransaction",
+            {"meterStart": 0},
+        ])
+        response = await communicator.receive_json_from()
+        self.assertEqual(response[2]["idTagInfo"]["status"], "Invalid")
+
+        exists = await database_sync_to_async(Transaction.objects.filter(charger_id="RFID").exists)()
+        self.assertFalse(exists)
+
+        await communicator.disconnect()
+
+    async def test_rfid_required_accepts_known_tag(self):
+        User = get_user_model()
+        await database_sync_to_async(User.objects.create_user)(username="bob", password="pwd", rfid_uid="CARDX")
+        await database_sync_to_async(Charger.objects.create)(charger_id="RFIDOK", require_rfid=True)
+        communicator = WebsocketCommunicator(application, "/ws/ocpp/RFIDOK/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to([
+            2,
+            "1",
+            "StartTransaction",
+            {"meterStart": 5, "idTag": "CARDX"},
+        ])
+        response = await communicator.receive_json_from()
+        self.assertEqual(response[2]["idTagInfo"]["status"], "Accepted")
+        tx_id = response[2]["transactionId"]
+
+        exists = await database_sync_to_async(Transaction.objects.filter(transaction_id=tx_id, charger_id="RFIDOK").exists)()
         self.assertTrue(exists)
 
         await communicator.disconnect()

@@ -91,6 +91,9 @@ in the database while keeping active connections in memory. Every charger
 known to the system is stored in the `Charger` model. When a device
 connects with an unknown ID it will be created automatically. The model
 includes a JSON `config` field for storing charger-specific settings.
+Each charger also has a `require_rfid` flag that can be enabled to
+enforce RFID authentication. When set, the server validates the `idTag`
+against known users before allowing a transaction to start.
 
 
 ### REST Endpoints

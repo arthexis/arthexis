@@ -7,6 +7,7 @@ class Charger(models.Model):
     charger_id = models.CharField(max_length=100, unique=True)
     name = models.CharField(max_length=200, blank=True)
     config = models.JSONField(default=dict, blank=True)
+    require_rfid = models.BooleanField(default=False)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.charger_id
