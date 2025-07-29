@@ -74,7 +74,17 @@ class ChargerAdmin(admin.ModelAdmin):
 
 @admin.register(Simulator)
 class SimulatorAdmin(admin.ModelAdmin):
-    list_display = ("name", "cp_path", "host", "ws_port", "running", "log_link")
+    list_display = (
+        "name",
+        "cp_path",
+        "host",
+        "ws_port",
+        "ws_url",
+        "interval",
+        "kwh_max",
+        "running",
+        "log_link",
+    )
     actions = ("start_simulator", "stop_simulator")
 
     def running(self, obj):
