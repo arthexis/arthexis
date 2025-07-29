@@ -7,6 +7,8 @@ class Charger(models.Model):
     charger_id = models.CharField(max_length=100, unique=True)
     name = models.CharField(max_length=200, blank=True)
     config = models.JSONField(default=dict, blank=True)
+    last_heartbeat = models.DateTimeField(null=True, blank=True)
+    last_meter_values = models.JSONField(default=dict, blank=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.charger_id
