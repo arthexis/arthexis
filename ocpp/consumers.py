@@ -47,8 +47,16 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 reply_payload = {
                     "currentTime": datetime.utcnow().isoformat() + "Z"
                 }
+                await database_sync_to_async(
+                    Charger.objects.filter(charger_id=self.charger_id).update
+                )(last_heartbeat=timezone.now())
             elif action == "Authorize":
                 reply_payload = {"idTagInfo": {"status": "Accepted"}}
+            elif action == "MeterValues":
+                await database_sync_to_async(
+                    Charger.objects.filter(charger_id=self.charger_id).update
+                )(last_meter_values=payload)
+                reply_payload = {}
             elif action == "StartTransaction":
                 tx_id = int(datetime.utcnow().timestamp())
                 tx_obj = await database_sync_to_async(Transaction.objects.create)(

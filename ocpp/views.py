@@ -40,6 +40,8 @@ def charger_list(request):
                 "name": charger.name,
                 "config": charger.config,
                 "transaction": tx_data,
+                "lastHeartbeat": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None,
+                "lastMeterValues": charger.last_meter_values,
                 "connected": cid in store.connections,
             }
         )
@@ -78,6 +80,8 @@ def charger_detail(request, cid):
             "name": charger.name,
             "config": charger.config,
             "transaction": tx_data,
+            "lastHeartbeat": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None,
+            "lastMeterValues": charger.last_meter_values,
             "log": log,
         }
     )

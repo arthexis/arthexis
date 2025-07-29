@@ -91,6 +91,8 @@ in the database while keeping active connections in memory. Every charger
 known to the system is stored in the `Charger` model. When a device
 connects with an unknown ID it will be created automatically. The model
 includes a JSON `config` field for storing charger-specific settings.
+It also records the timestamp of the last `Heartbeat` message and the
+payload of the most recent `MeterValues` message received from the charger.
 
 
 ### REST Endpoints
