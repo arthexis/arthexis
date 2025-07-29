@@ -3,8 +3,8 @@
 {% block title %}{{ charger.name|default:charger.charger_id }}{% endblock %}
 
 {% block content %}
-<h1>Charger {{ charger.name|default:charger.charger_id }}</h1>
-<p>ID: {{ charger.charger_id }}</p>
+<h1>{{ charger.name|default:charger.charger_id }}</h1>
+<p>Serial Number: {{ charger.charger_id }}</p>
 {% load qr_tags %}
 <p>{% qr_img charger.get_absolute_url 200 %}</p>
 {% endblock %}
