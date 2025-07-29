@@ -42,6 +42,11 @@ optionally `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST` and
 defined, the project will connect to a PostgreSQL server using these
 settings.
 
+Environment variables can also be placed in files inside the `envs/` directory.
+Any `*.env` file found there is automatically loaded when running management
+commands or the server. The directory is included in the repository but `.env`
+files themselves are ignored so secrets remain local.
+
 ## VS Code
 
 Launch configurations are provided in `.vscode/launch.json`:

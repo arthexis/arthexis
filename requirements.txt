@@ -7,3 +7,4 @@ qrcode
 Pillow
 websockets>=12
 django-import-export
+python-dotenv
