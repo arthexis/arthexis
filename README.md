@@ -89,6 +89,13 @@ module will serve that domain.  Requests for unknown domains fall back to
 the `readme` site which renders this documentation.
 
 
+# Readme App
+
+Provides a view for rendering the project's generated `README.md` as HTML
+and a management command `build_readme` that rebuilds the file from
+`README.base.md` and each app's own `README.md`.
+
+
 # Chat App
 
 This project includes basic websocket support using [Django Channels](https://channels.readthedocs.io/). After launching the development server the console now prints the available WebSocket endpoint:
@@ -252,13 +259,6 @@ connection credentials and a `/odoo/test/<id>/` endpoint checks whether the
 specified instance can be authenticated. Instances can be managed through the
 Django admin where a **Test connection** action attempts to authenticate with
 the selected servers.
-
-
-# Readme App
-
-Provides a view for rendering the project's generated `README.md` as HTML
-and a management command `build_readme` that rebuilds the file from
-`README.base.md` and each app's own `README.md`.
 
 
 # Website App
