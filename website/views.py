@@ -11,6 +11,7 @@ import markdown
 from config import urls as project_urls
 from django.urls.resolvers import URLResolver, URLPattern
 from website.utils import landing
+from footer.utils import footer_link
 
 
 def _collect_landings(resolver: URLResolver, prefix: str = ""):
@@ -65,6 +66,7 @@ def index(request):
     return render(request, "website/readme.html", context)
 
 
+@footer_link("Sitemap")
 def sitemap(request):
     apps = get_landing_apps()
     base = request.build_absolute_uri("/").rstrip("/")

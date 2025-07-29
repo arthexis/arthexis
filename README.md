@@ -334,6 +334,13 @@ Queued emails can be sent with the `send_queued` helper or via a management
 command. A `/purge/` endpoint deletes sent entries from the queue.
 
 
+# Footer App
+
+Collects and exposes links displayed at the bottom of the site.
+Views can be decorated with `footer_link()` to appear in the footer.
+Links can be grouped into columns by providing a column name to the decorator.
+
+
 # Website App
 
 Displays the README for a particular app depending on the subdomain.
@@ -348,5 +355,6 @@ in the upper-right corner toggles between light and dark themes and remembers
 the preference using `localStorage`.
 
 When visiting the default *website* domain, a navigation bar shows links to all
-enabled apps that expose public URLs, plus a link to an automatically generated
-sitemap.
+enabled apps that expose public URLs. Views decorated with `footer_link` are
+collected into a footer where links can be grouped into columns. The
+automatically generated sitemap now appears there.
