@@ -7,7 +7,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 
 from . import store
-from .models import Transaction
+from .models import Transaction, Charger
 
 
 class CSMSConsumer(AsyncWebsocketConsumer):
@@ -18,6 +18,9 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         await self.accept()
         store.connections[self.charger_id] = self
         store.logs.setdefault(self.charger_id, [])
+        await database_sync_to_async(Charger.objects.get_or_create)(
+            charger_id=self.charger_id
+        )
 
     async def disconnect(self, close_code):
         store.connections.pop(self.charger_id, None)

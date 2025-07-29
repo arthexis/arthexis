@@ -4,7 +4,7 @@ from channels.db import database_sync_to_async
 from django.test import TransactionTestCase
 
 from config.asgi import application
-from .models import Transaction
+from .models import Transaction, Charger
 
 
 class CSMSConsumerTests(TransactionTestCase):
@@ -39,5 +39,15 @@ class CSMSConsumerTests(TransactionTestCase):
         await database_sync_to_async(tx.refresh_from_db)()
         self.assertEqual(tx.meter_stop, 20)
         self.assertIsNotNone(tx.stop_time)
+
+        await communicator.disconnect()
+
+    async def test_unknown_charger_auto_registered(self):
+        communicator = WebsocketCommunicator(application, "/ws/ocpp/NEWCHG/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        exists = await database_sync_to_async(Charger.objects.filter(charger_id="NEWCHG").exists)()
+        self.assertTrue(exists)
 
         await communicator.disconnect()
