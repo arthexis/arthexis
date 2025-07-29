@@ -5,6 +5,43 @@ import sys
 from config.loadenv import loadenv
 
 
+def _dev_tasks() -> None:
+    """Perform optional maintenance tasks during auto-reload."""
+    if not os.environ.get("DJANGO_DEV_RELOAD"):
+        return
+    try:
+        import subprocess
+        from pathlib import Path
+
+        import django
+        from django.core.management import call_command
+
+        django.setup()
+
+        req = Path("requirements.txt")
+        if req.exists():
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-r", str(req)],
+                check=False,
+            )
+
+        call_command("makemigrations", merge=True)
+        call_command("migrate", interactive=False)
+
+        proc = subprocess.run(
+            ["git", "status", "--porcelain"], capture_output=True, text=True
+        )
+        if proc.stdout.strip():
+            subprocess.run(["git", "add", "-A"], check=False)
+            subprocess.run(
+                ["git", "commit", "-m", "Auto migrations"],
+                check=False,
+            )
+            subprocess.run(["git", "push"], check=False)
+    except Exception as exc:  # pragma: no cover - dev helper
+        print(f"Dev task error: {exc}")
+
+
 def main():
     """Run administrative tasks."""
     loadenv()
@@ -48,6 +85,7 @@ def main():
         ) from exc
 
     def _execute():
+        _dev_tasks()
         execute_from_command_line(sys.argv)
 
     if (

@@ -35,6 +35,11 @@ that launches the server on boot.
    DJANGO_DEV_RELOAD=1 python manage.py runserver
    ```
 
+   When the server restarts under VS Code with this variable set, it
+   automatically installs any updated dependencies from
+   `requirements.txt`, merges and applies migrations, and commits and
+   pushes the changes if anything was modified.
+
 The default configuration uses SQLite and is for local development only.
 To use PostgreSQL instead, set the `POSTGRES_DB` environment variable (and
 optionally `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST` and
