@@ -1,19 +1,15 @@
 from __future__ import annotations
+
 import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
-import toml
+
 import requests
+import toml
 
-
-PROJECT_NAME = "arthexis"
-DESCRIPTION = "Django-based MESH system"
-AUTHOR = "Rafael J. Guill\u00e9n-Osorio"
-EMAIL = "tecnologia@gelectriic.com"
-PYTHON_REQUIRES = ">=3.10"
-LICENSE = "MIT"
+from . import Credentials, Package, DEFAULT_PACKAGE
 
 
 class ReleaseError(Exception):
@@ -33,28 +29,28 @@ def _current_commit() -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
 
 
-def _write_pyproject(version: str, requirements: list[str]) -> None:
+def _write_pyproject(package: Package, version: str, requirements: list[str]) -> None:
     content = {
         "build-system": {
             "requires": ["setuptools", "wheel"],
             "build-backend": "setuptools.build_meta",
         },
         "project": {
-            "name": PROJECT_NAME,
+            "name": package.name,
             "version": version,
-            "description": DESCRIPTION,
+            "description": package.description,
             "readme": {"file": "README.md", "content-type": "text/markdown"},
-            "requires-python": PYTHON_REQUIRES,
-            "license": LICENSE,
-            "authors": [{"name": AUTHOR, "email": EMAIL}],
+            "requires-python": package.python_requires,
+            "license": package.license,
+            "authors": [{"name": package.author, "email": package.email}],
             "classifiers": [
                 "Programming Language :: Python :: 3",
                 "Framework :: Django",
             ],
             "dependencies": requirements,
             "urls": {
-                "Repository": "https://github.com/arthexis/arthexis",
-                "Homepage": "https://arthexis.com",
+                "Repository": package.repository_url,
+                "Homepage": package.homepage_url,
             },
         },
         "tool": {
@@ -150,6 +146,8 @@ def build(
     tag: bool = False,
     all: bool = False,
     force: bool = False,
+    package: Package = DEFAULT_PACKAGE,
+    creds: Optional[Credentials] = None,
 ) -> None:
     if all:
         bump = dist = twine = git = tag = True
@@ -179,7 +177,7 @@ def build(
     prev_build = _last_changelog_build()
     update_changelog(version, commit_hash, prev_build)
 
-    _write_pyproject(version, requirements)
+    _write_pyproject(package, version, requirements)
 
     if dist:
         if Path("dist").exists():
@@ -189,14 +187,14 @@ def build(
         _run([sys.executable, "-m", "build"])
         if twine:
             if not force:
-                resp = requests.get(f"https://pypi.org/pypi/{PROJECT_NAME}/json")
+                resp = requests.get(f"https://pypi.org/pypi/{package.name}/json")
                 if resp.ok:
                     releases = resp.json().get("releases", {})
                     if version in releases:
                         raise ReleaseError(f"Version {version} already on PyPI")
-            token = os.environ.get("PYPI_API_TOKEN")
-            user = os.environ.get("PYPI_USERNAME")
-            pwd = os.environ.get("PYPI_PASSWORD")
+            token = os.environ.get("PYPI_API_TOKEN") if creds is None else creds.token
+            user = os.environ.get("PYPI_USERNAME") if creds is None else creds.username
+            pwd = os.environ.get("PYPI_PASSWORD") if creds is None else creds.password
             cmd = [sys.executable, "-m", "twine", "upload", "dist/*"]
             if token:
                 cmd += ["--username", "__token__", "--password", token]
