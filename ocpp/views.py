@@ -6,6 +6,8 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
 
+from website.utils import landing
+
 from . import store
 from .models import Transaction, Charger
 
@@ -102,11 +104,13 @@ def charger_detail(request, cid):
     )
 
 
+@landing("Charger Page")
 def charger_page(request, cid):
     charger = get_object_or_404(Charger, charger_id=cid)
     return render(request, "ocpp/charger_page.html", {"charger": charger})
 
 
+@landing("Status")
 def charger_status(request, cid):
     """Display current transaction and charger state."""
     charger = get_object_or_404(Charger, charger_id=cid)
