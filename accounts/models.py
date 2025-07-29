@@ -266,7 +266,7 @@ class Account(models.Model):
         return self.credits_kwh - self.total_kwh_spent
 
     def __str__(self):  # pragma: no cover - simple representation
-        return f"Account for {self.user}"
+        return f"{self.user}"
 
 
 class Credit(models.Model):
