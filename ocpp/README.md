@@ -45,9 +45,9 @@ Each `Charger` instance automatically gets a public landing page at
 charger is saved and can be embedded in templates via the `qr_img` tag from the
 `qrcodes` app. The admin list displays a "Landing Page" link for quick testing.
 
-Active connections and logs remain in-memory via `ocpp.store`, but
-completed charging sessions are saved in the `Transaction` model for
-later inspection.
+Active connections remain in-memory via `ocpp.store`. OCPP messages are
+also written to the project's log file. Completed charging sessions are
+saved in the `Transaction` model for later inspection.
 
 ### Simulator
 
