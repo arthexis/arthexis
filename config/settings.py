@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "release",
     "odoo",
     "mailer",
+    "footer",
     "website",
 ]
 
@@ -85,6 +86,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.template.context_processors.i18n",
                 "django.contrib.messages.context_processors.messages",
+                "footer.context_processors.footer_links",
             ],
         },
     },
