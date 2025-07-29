@@ -1,7 +1,7 @@
 from pathlib import Path
 from django.conf import settings
 from django.contrib.sites.shortcuts import get_current_site
-from django.http import HttpResponse
+from django.shortcuts import render
 import markdown
 
 
@@ -15,4 +15,8 @@ def index(request):
         readme_file = Path(settings.BASE_DIR) / "README.md"
     text = readme_file.read_text(encoding="utf-8")
     html = markdown.markdown(text)
-    return HttpResponse(html)
+    return render(
+        request,
+        "website/readme.html",
+        {"content": html, "title": readme_file.stem},
+    )
