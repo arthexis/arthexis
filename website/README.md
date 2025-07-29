@@ -6,4 +6,6 @@ label of the app whose README should be shown. If the domain isn't
 recognized, the project README is rendered instead.
 
 Rendered pages use [Bootstrap](https://getbootstrap.com/) loaded from a CDN so
-the README content has simple default styling.
+the README content has simple default styling. A button in the upper-right
+corner toggles between light and dark themes and remembers the preference using
+`localStorage`.
