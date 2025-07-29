@@ -39,7 +39,7 @@ if [ -n "$SERVICE" ]; then
     SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
     sudo bash -c "cat > '$SERVICE_FILE'" <<SERVICEEOF
 [Unit]
-Description=Arthexis Django service
+Description=Arthexis Constellation Django service
 After=network.target
 
 [Service]
