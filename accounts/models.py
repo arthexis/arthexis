@@ -14,6 +14,8 @@ class User(AbstractUser):
         blank=True,
         help_text="Optional contact phone number",
     )
+    address = models.TextField(blank=True)
+    has_charger = models.BooleanField(default=False)
 
     def __str__(self):
         return self.username

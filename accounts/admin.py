@@ -8,8 +8,12 @@ from .models import UserProxy, RFID, Account, Vehicle, Credit
 
 @admin.register(UserProxy)
 class UserAdmin(DjangoUserAdmin):
-    fieldsets = DjangoUserAdmin.fieldsets + ((None, {"fields": ("phone_number",)}),)
-    add_fieldsets = DjangoUserAdmin.add_fieldsets + ((None, {"fields": ("phone_number",)}),)
+    fieldsets = DjangoUserAdmin.fieldsets + (
+        ("Contact", {"fields": ("phone_number", "address", "has_charger")}),
+    )
+    add_fieldsets = DjangoUserAdmin.add_fieldsets + (
+        ("Contact", {"fields": ("phone_number", "address", "has_charger")}),
+    )
 
 
 
