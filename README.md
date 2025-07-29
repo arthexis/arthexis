@@ -281,11 +281,14 @@ asyncio.run(sim._run_session())
 
 The simulator establishes an OCPP 1.6 connection, starts a transaction and
 sends periodic meter values.  See the module for additional options such as
-RFID authentication or repeat mode.
+RFID authentication or repeat mode.  The `interval` and `kwh_max` parameters
+control how often meter values are sent (in seconds) and the total kWh a
+simulated session will deliver.
 
 Simulators can also be preconfigured in the Django admin site.  Add
 `Simulator` entries and use the provided actions to start or stop them
-without writing any code.
+without writing any code.  The admin list shows the full WebSocket URL for
+each simulator along with its configured interval and kWh limit.
 
 
 # QRCodes App
@@ -334,6 +337,13 @@ Queued emails can be sent with the `send_queued` helper or via a management
 command. A `/purge/` endpoint deletes sent entries from the queue.
 
 
+# Footer App
+
+Collects and exposes links displayed at the bottom of the site.
+Views can be decorated with `footer_link()` to appear in the footer.
+Links can be grouped into columns by providing a column name to the decorator.
+
+
 # Website App
 
 Displays the README for a particular app depending on the subdomain.
@@ -348,6 +358,7 @@ in the upper-right corner toggles between light and dark themes and remembers
 the preference using `localStorage`.
 
 When visiting the default *website* domain, a navigation bar shows links to all
-enabled apps that expose public URLs. These links are injected via a context
-processor so the bar remains consistent across pages. It also includes a link
-to an automatically generated sitemap.
+enabled apps that expose public URLs. Views decorated with `footer_link` are
+collected into a footer where links can be grouped into columns. The
+automatically generated sitemap now appears there.
+

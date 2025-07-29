@@ -77,8 +77,11 @@ asyncio.run(sim._run_session())
 
 The simulator establishes an OCPP 1.6 connection, starts a transaction and
 sends periodic meter values.  See the module for additional options such as
-RFID authentication or repeat mode.
+RFID authentication or repeat mode.  The `interval` and `kwh_max` parameters
+control how often meter values are sent (in seconds) and the total kWh a
+simulated session will deliver.
 
 Simulators can also be preconfigured in the Django admin site.  Add
 `Simulator` entries and use the provided actions to start or stop them
-without writing any code.
+without writing any code.  The admin list shows the full WebSocket URL for
+each simulator along with its configured interval and kWh limit.

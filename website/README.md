@@ -12,6 +12,7 @@ in the upper-right corner toggles between light and dark themes and remembers
 the preference using `localStorage`.
 
 When visiting the default *website* domain, a navigation bar shows links to all
-enabled apps that expose public URLs. These links are injected via a context
-processor so the bar remains consistent across pages. It also includes a link
-to an automatically generated sitemap.
+enabled apps that expose public URLs. Views decorated with `footer_link` are
+collected into a footer where links can be grouped into columns. The
+automatically generated sitemap now appears there.
+
