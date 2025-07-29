@@ -1,8 +1,9 @@
 
 from channels.testing import WebsocketCommunicator
 from channels.db import database_sync_to_async
-from django.test import TransactionTestCase
+from django.test import Client, TransactionTestCase, TestCase
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 
 from config.asgi import application
 from .models import Transaction, Charger
@@ -43,6 +44,33 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertIsNotNone(tx.stop_time)
 
         await communicator.disconnect()
+
+
+class ChargerLandingTests(TestCase):
+    def test_qr_created_and_page_renders(self):
+        charger = Charger.objects.create(charger_id="PAGE1")
+        self.assertIsNotNone(charger.qr)
+
+        client = Client()
+        response = client.get(reverse("charger-page", args=["PAGE1"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "PAGE1")
+
+
+class ChargerAdminTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="admin", password="secret", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+
+    def test_admin_lists_landing_link(self):
+        charger = Charger.objects.create(charger_id="ADMIN1")
+        url = reverse("admin:ocpp_charger_changelist")
+        resp = self.client.get(url)
+        self.assertContains(resp, charger.get_absolute_url())
 
     async def test_unknown_charger_auto_registered(self):
         communicator = WebsocketCommunicator(application, "/ws/ocpp/NEWCHG/")

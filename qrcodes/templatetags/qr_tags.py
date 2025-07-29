@@ -1,6 +1,6 @@
 from django import template
 
-from qr_links.models import QRLink
+from qrcodes.models import QRLink
 
 register = template.Library()
 

@@ -33,6 +33,13 @@ payload of the most recent `MeterValues` message received from the charger.
 - `POST /ocpp/chargers/<cid>/action/` – send actions such as `remote_stop` or
   `reset` to the charger.
 
+### Charger Landing Pages
+
+Each `Charger` instance automatically gets a public landing page at
+`/ocpp/c/<charger_id>/`. A QR code pointing to this URL is created when the
+charger is saved and can be embedded in templates via the `qr_img` tag from the
+`qrcodes` app. The admin list displays a "Landing Page" link for quick testing.
+
 Active connections and logs remain in-memory via `ocpp.store`, but
 completed charging sessions are saved in the `Transaction` model for
 later inspection.
