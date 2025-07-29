@@ -104,6 +104,23 @@ def charger_detail(request, cid):
     )
 
 
+@landing("Dashboard")
+def dashboard(request):
+    """Landing page listing all known chargers and their status."""
+    chargers = []
+    for charger in Charger.objects.all():
+        tx_obj = store.transactions.get(charger.charger_id)
+        if not tx_obj:
+            tx_obj = (
+                Transaction.objects.filter(charger_id=charger.charger_id)
+                .order_by("-start_time")
+                .first()
+            )
+        state, color = _charger_state(charger, tx_obj)
+        chargers.append({"charger": charger, "state": state, "color": color})
+    return render(request, "ocpp/dashboard.html", {"chargers": chargers})
+
+
 @landing("Charger Page")
 def charger_page(request, cid):
     charger = get_object_or_404(Charger, charger_id=cid)
