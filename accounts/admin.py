@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 
-from .models import UserProxy, RFID, Account, Vehicle, Credit
+from .models import UserProxy, RFID, Account, Vehicle, Credit, Address
 
 
 @admin.register(UserProxy)
@@ -14,6 +14,12 @@ class UserAdmin(DjangoUserAdmin):
     add_fieldsets = DjangoUserAdmin.add_fieldsets + (
         ("Contact", {"fields": ("phone_number", "address", "has_charger")}),
     )
+
+
+@admin.register(Address)
+class AddressAdmin(admin.ModelAdmin):
+    list_display = ("street", "number", "municipality", "state", "postal_code")
+    search_fields = ("street", "municipality", "postal_code")
 
 
 

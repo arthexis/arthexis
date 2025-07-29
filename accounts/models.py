@@ -6,6 +6,137 @@ from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 
 
+class Address(models.Model):
+    """Physical location information for a user."""
+
+    class State(models.TextChoices):
+        COAHUILA = "CO", "Coahuila"
+        NUEVO_LEON = "NL", "Nuevo León"
+
+    COAHUILA_MUNICIPALITIES = [
+        "Abasolo",
+        "Acuña",
+        "Allende",
+        "Arteaga",
+        "Candela",
+        "Castaños",
+        "Cuatro Ciénegas",
+        "Escobedo",
+        "Francisco I. Madero",
+        "Frontera",
+        "General Cepeda",
+        "Guerrero",
+        "Hidalgo",
+        "Jiménez",
+        "Juárez",
+        "Lamadrid",
+        "Matamoros",
+        "Monclova",
+        "Morelos",
+        "Múzquiz",
+        "Nadadores",
+        "Nava",
+        "Ocampo",
+        "Parras",
+        "Piedras Negras",
+        "Progreso",
+        "Ramos Arizpe",
+        "Sabinas",
+        "Sacramento",
+        "Saltillo",
+        "San Buenaventura",
+        "San Juan de Sabinas",
+        "San Pedro",
+        "Sierra Mojada",
+        "Torreón",
+        "Viesca",
+        "Villa Unión",
+        "Zaragoza",
+    ]
+
+    NUEVO_LEON_MUNICIPALITIES = [
+        "Abasolo",
+        "Agualeguas",
+        "Los Aldamas",
+        "Allende",
+        "Anáhuac",
+        "Apodaca",
+        "Aramberri",
+        "Bustamante",
+        "Cadereyta Jiménez",
+        "El Carmen",
+        "Cerralvo",
+        "Ciénega de Flores",
+        "China",
+        "Doctor Arroyo",
+        "Doctor Coss",
+        "Doctor González",
+        "Galeana",
+        "García",
+        "General Bravo",
+        "General Escobedo",
+        "General Terán",
+        "General Treviño",
+        "General Zaragoza",
+        "General Zuazua",
+        "Guadalupe",
+        "Los Herreras",
+        "Higueras",
+        "Hualahuises",
+        "Iturbide",
+        "Juárez",
+        "Lampazos de Naranjo",
+        "Linares",
+        "Marín",
+        "Melchor Ocampo",
+        "Mier y Noriega",
+        "Mina",
+        "Montemorelos",
+        "Monterrey",
+        "Parás",
+        "Pesquería",
+        "Los Ramones",
+        "Rayones",
+        "Sabinas Hidalgo",
+        "Salinas Victoria",
+        "San Nicolás de los Garza",
+        "San Pedro Garza García",
+        "Santa Catarina",
+        "Santiago",
+        "Vallecillo",
+        "Villaldama",
+        "Hidalgo",
+    ]
+
+    MUNICIPALITIES_BY_STATE = {
+        State.COAHUILA: COAHUILA_MUNICIPALITIES,
+        State.NUEVO_LEON: NUEVO_LEON_MUNICIPALITIES,
+    }
+
+    MUNICIPALITY_CHOICES = [
+        (name, name)
+        for name in COAHUILA_MUNICIPALITIES + NUEVO_LEON_MUNICIPALITIES
+    ]
+
+    street = models.CharField(max_length=255)
+    number = models.CharField(max_length=20)
+    municipality = models.CharField(max_length=100, choices=MUNICIPALITY_CHOICES)
+    state = models.CharField(max_length=2, choices=State.choices)
+    postal_code = models.CharField(max_length=10)
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        allowed = self.MUNICIPALITIES_BY_STATE.get(self.state, [])
+        if self.municipality not in allowed:
+            raise ValidationError(
+                {"municipality": _("Invalid municipality for the selected state")}
+            )
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return f"{self.street} {self.number}, {self.municipality}, {self.state}"
+
+
 class User(AbstractUser):
     """Custom user model."""
 
@@ -14,7 +145,12 @@ class User(AbstractUser):
         blank=True,
         help_text="Optional contact phone number",
     )
-    address = models.TextField(blank=True)
+    address = models.ForeignKey(
+        Address,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
     has_charger = models.BooleanField(default=False)
 
     def __str__(self):
