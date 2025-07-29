@@ -5,6 +5,7 @@ import random
 import time
 from dataclasses import dataclass
 from typing import Optional
+import threading
 
 import websockets
 
@@ -32,8 +33,8 @@ class ChargePointSimulator:
 
     def __init__(self, config: SimulatorConfig) -> None:
         self.config = config
-        self._task: Optional[asyncio.Task] = None
-        self._stop_event = asyncio.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
 
     async def _run_session(self) -> None:
         cfg = self.config
@@ -151,19 +152,23 @@ class ChargePointSimulator:
                 break
 
     def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._run())
+        if self._thread and self._thread.is_alive():
+            return
+
+        self._stop_event.clear()
+
+        def _runner() -> None:
+            asyncio.run(self._run())
+
+        self._thread = threading.Thread(target=_runner, daemon=True)
+        self._thread.start()
 
     async def stop(self) -> None:
-        if self._task:
+        if self._thread and self._thread.is_alive():
             self._stop_event.set()
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-            self._task = None
-            self._stop_event = asyncio.Event()
+            await asyncio.to_thread(self._thread.join)
+            self._thread = None
+            self._stop_event = threading.Event()
 
 
 __all__ = ["SimulatorConfig", "ChargePointSimulator"]
