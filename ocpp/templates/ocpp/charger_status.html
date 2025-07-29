@@ -5,8 +5,8 @@
 {% block title %}{{ charger.name|default:charger.charger_id }} - {% trans "Status" %}{% endblock %}
 
 {% block content %}
-<h1>Charger {{ charger.name|default:charger.charger_id }}</h1>
-<p>ID: {{ charger.charger_id }}</p>
+<h1>{{ charger.name|default:charger.charger_id }}</h1>
+<p>Serial Number: {{ charger.charger_id }}</p>
 <div class="mb-3 d-flex align-items-center">
   <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
   <strong>{{ state }}</strong>
