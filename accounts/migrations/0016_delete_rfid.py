@@ -9,8 +9,4 @@ class Migration(migrations.Migration):
         ('accounts', '0015_alter_address_municipality_alter_address_state_and_more'),
     ]
 
-    operations = [
-        migrations.DeleteModel(
-            name='RFID',
-        ),
-    ]
+    operations = []
