@@ -17,6 +17,13 @@ This repository contains a basic [Django](https://www.djangoproject.com/) projec
    python manage.py runserver
    ```
 
+   To have the server automatically restart when files change, set
+   the `DJANGO_DEV_RELOAD` environment variable:
+
+   ```bash
+   DJANGO_DEV_RELOAD=1 python manage.py runserver
+   ```
+
 The default configuration uses SQLite and is for local development only.
 To use PostgreSQL instead, set the `POSTGRES_DB` environment variable (and
 optionally `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST` and
