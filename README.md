@@ -248,6 +248,7 @@ map.
 - `GET /ocpp/chargers/<cid>/` – retrieve details and message log for a charger.
 - `POST /ocpp/chargers/<cid>/action/` – send actions such as `remote_stop` or
   `reset` to the charger.
+- `GET /ocpp/log/<cid>/` – HTML page showing the message log for a charger.
 - `GET /ocpp/` – dashboard listing all chargers and their status.
 
 ### Charger Landing Pages
@@ -256,6 +257,8 @@ Each `Charger` instance automatically gets a public landing page at
 `/ocpp/c/<charger_id>/`. A QR code pointing to this URL is created when the
 charger is saved and can be embedded in templates via the `qr_img` tag from the
 `qrcodes` app. The admin list displays a "Landing Page" link for quick testing.
+Another "Log" link opens `/ocpp/log/<charger_id>/` which renders the stored
+message exchange as HTML.
 
 Active connections remain in-memory via `ocpp.store`. OCPP messages are
 also written to the project's log file. Completed charging sessions are

@@ -6,8 +6,13 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from config.asgi import application
+
+from .models import Transaction, Charger, Simulator
+from accounts.models import RFID, Account
+
 from .models import Transaction, Charger, MeterReading
 from accounts.models import RFID, Account, Credit
+
 
 
 class CSMSConsumerTests(TransactionTestCase):
@@ -80,6 +85,30 @@ class ChargerAdminTests(TestCase):
         self.assertContains(resp, charger.get_absolute_url())
         status_url = reverse("charger-status", args=["ADMIN1"])
         self.assertContains(resp, status_url)
+
+    def test_admin_lists_log_link(self):
+        charger = Charger.objects.create(charger_id="LOG1")
+        url = reverse("admin:ocpp_charger_changelist")
+        resp = self.client.get(url)
+        log_url = reverse("charger-log", args=["LOG1"])
+        self.assertContains(resp, log_url)
+
+
+class SimulatorAdminTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="admin2", password="secret", email="admin2@example.com"
+        )
+        self.client.force_login(self.admin)
+
+    def test_admin_lists_log_link(self):
+        sim = Simulator.objects.create(name="SIM", cp_path="SIMX")
+        url = reverse("admin:ocpp_simulator_changelist")
+        resp = self.client.get(url)
+        log_url = reverse("charger-log", args=["SIMX"])
+        self.assertContains(resp, log_url)
 
     async def test_unknown_charger_auto_registered(self):
         communicator = WebsocketCommunicator(application, "/NEWCHG/")

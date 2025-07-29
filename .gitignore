@@ -167,6 +167,8 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+# local media generated during tests
+media/
 # Pyre type checker
 .pyre/
 
