@@ -86,11 +86,13 @@ The `RFID` model stores card identifiers (8 hexadecimal digits). A tag may belon
 
 ## Account Credits
 
-Each user may have an associated **Account** record that tracks available energy credits. The model stores:
+Each user may have an associated **Account** record that tracks available energy credits.
+Credits are added using the **Credit** model and consumption is calculated from
+recorded transactions. The account exposes:
 
-- `credits_kwh` – total kWh purchased or granted to the user.
-- `total_kwh_spent` – kWh consumed so far.
-- `balance_kwh` – property returning the remaining credit.
+- `credits_kwh` – sum of all credit amounts.
+- `total_kwh_spent` – kWh consumed across transactions.
+- `balance_kwh` – remaining credit after subtracting usage.
 
 The account is linked to the user with a one‑to‑one relationship and can be referenced during authorization or billing steps.
 

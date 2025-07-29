@@ -75,10 +75,33 @@ class Account(models.Model):
     user = models.OneToOneField(
         get_user_model(), on_delete=models.CASCADE, related_name="account"
     )
-    credits_kwh = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    total_kwh_spent = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0
-    )
+
+    @property
+    def credits_kwh(self):
+        """Total kWh credits added to the account."""
+        from django.db.models import Sum
+        from decimal import Decimal
+
+        total = self.credits.aggregate(total=Sum("amount_kwh"))["total"]
+        return total if total is not None else Decimal("0")
+
+    @property
+    def total_kwh_spent(self):
+        """Total kWh consumed across all transactions."""
+        from django.db.models import F, Sum, ExpressionWrapper, FloatField
+        from decimal import Decimal
+
+        expr = ExpressionWrapper(
+            F("meter_stop") - F("meter_start"), output_field=FloatField()
+        )
+        total = (
+            self.transactions.filter(
+                meter_start__isnull=False, meter_stop__isnull=False
+            ).aggregate(total=Sum(expr))["total"]
+        )
+        if total is None:
+            return Decimal("0")
+        return Decimal(str(total))
 
     @property
     def balance_kwh(self):
@@ -87,6 +110,19 @@ class Account(models.Model):
 
     def __str__(self):  # pragma: no cover - simple representation
         return f"Account for {self.user}"
+
+
+class Credit(models.Model):
+    """Credits added to an account."""
+
+    account = models.ForeignKey(
+        Account, on_delete=models.CASCADE, related_name="credits"
+    )
+    amount_kwh = models.DecimalField(max_digits=10, decimal_places=2)
+    created_on = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.amount_kwh} kWh for {self.account.user}"
 
 
 class Vehicle(models.Model):

@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 
 from config.asgi import application
 from .models import Transaction, Charger
-from accounts.models import RFID
+from accounts.models import RFID, Account
 
 
 class CSMSConsumerTests(TransactionTestCase):
@@ -77,6 +77,7 @@ class CSMSConsumerTests(TransactionTestCase):
     async def test_rfid_required_accepts_known_tag(self):
         User = get_user_model()
         user = await database_sync_to_async(User.objects.create_user)(username="bob", password="pwd")
+        await database_sync_to_async(Account.objects.create)(user=user)
         await database_sync_to_async(RFID.objects.create)(rfid="CARDX", user=user)
         await database_sync_to_async(Charger.objects.create)(charger_id="RFIDOK", require_rfid=True)
         communicator = WebsocketCommunicator(application, "/ws/ocpp/RFIDOK/")
@@ -93,8 +94,8 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertEqual(response[2]["idTagInfo"]["status"], "Accepted")
         tx_id = response[2]["transactionId"]
 
-        exists = await database_sync_to_async(Transaction.objects.filter(transaction_id=tx_id, charger_id="RFIDOK").exists)()
-        self.assertTrue(exists)
+        tx = await database_sync_to_async(Transaction.objects.get)(transaction_id=tx_id, charger_id="RFIDOK")
+        self.assertEqual(tx.account_id, user.account.id)
 
     async def test_status_fields_updated(self):
         communicator = WebsocketCommunicator(application, "/ws/ocpp/STAT/")

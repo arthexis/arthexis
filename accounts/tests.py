@@ -1,7 +1,9 @@
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from .models import User, RFID, Account, Vehicle
+from django.utils import timezone
+from .models import User, RFID, Account, Vehicle, Credit
+from ocpp.models import Transaction
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
@@ -70,7 +72,18 @@ class RFIDValidationTests(TestCase):
 class AccountTests(TestCase):
     def test_balance_calculation(self):
         user = User.objects.create_user(username="balance", password="x")
-        acc = Account.objects.create(user=user, credits_kwh=50, total_kwh_spent=20)
+        acc = Account.objects.create(user=user)
+        Credit.objects.create(account=acc, amount_kwh=50)
+        Transaction.objects.create(
+            charger_id="T1",
+            transaction_id=1,
+            account=acc,
+            meter_start=0,
+            meter_stop=20,
+            start_time=timezone.now(),
+            stop_time=timezone.now(),
+        )
+        self.assertEqual(acc.total_kwh_spent, 20)
         self.assertEqual(acc.balance_kwh, 30)
 
 

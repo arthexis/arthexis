@@ -28,7 +28,7 @@ class RFIDAdmin(ImportExportModelAdmin):
 @admin.register(Account)
 class AccountAdmin(admin.ModelAdmin):
     list_display = ("user", "credits_kwh", "total_kwh_spent", "balance_kwh")
-    readonly_fields = ("balance_kwh",)
+    readonly_fields = ("credits_kwh", "total_kwh_spent", "balance_kwh")
 
 
 @admin.register(Vehicle)
