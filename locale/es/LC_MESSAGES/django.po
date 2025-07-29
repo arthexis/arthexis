@@ -31,8 +31,8 @@ msgid "Register current host"
 msgstr "Registrar anfitri\xC3\xB3n actual"
 
 #: website/templates/website/base.html:7
-msgid "Arthexis"
-msgstr "Arthexis"
+msgid "Arthexis Constellation"
+msgstr "Arthexis Constellation"
 
 #: website/templates/website/base.html:13
 #: website/templates/website/base.html:21

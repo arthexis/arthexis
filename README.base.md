@@ -1,6 +1,6 @@
-# Arthexis Django Project
+# Arthexis Constellation
 
-This repository contains a basic [Django](https://www.djangoproject.com/) project.
+A Django-based MESH system. Its objective is to serve as a monorepo that centralizes all the functions and models required by the distinct nodes in the system.
 
 ## Setup
 
