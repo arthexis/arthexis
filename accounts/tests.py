@@ -86,6 +86,19 @@ class AccountTests(TestCase):
         self.assertEqual(acc.total_kwh_spent, 20)
         self.assertEqual(acc.balance_kwh, 30)
 
+    def test_authorization_requires_positive_balance(self):
+        user = User.objects.create_user(username="auth", password="x")
+        acc = Account.objects.create(user=user)
+        self.assertFalse(acc.can_authorize())
+
+        Credit.objects.create(account=acc, amount_kwh=5)
+        self.assertTrue(acc.can_authorize())
+
+    def test_service_account_ignores_balance(self):
+        user = User.objects.create_user(username="service", password="x")
+        acc = Account.objects.create(user=user, service_account=True)
+        self.assertTrue(acc.can_authorize())
+
 
 class VehicleTests(TestCase):
     def test_account_can_have_multiple_vehicles(self):

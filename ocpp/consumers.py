@@ -68,7 +68,14 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 )(last_heartbeat=timezone.now())
             elif action == "Authorize":
                 account = await self._get_account(payload.get("idTag"))
-                status = "Accepted" if (account or not self.charger.require_rfid) else "Invalid"
+                if self.charger.require_rfid:
+                    status = (
+                        "Accepted"
+                        if account and await database_sync_to_async(account.can_authorize)()
+                        else "Invalid"
+                    )
+                else:
+                    status = "Accepted"
                 reply_payload = {"idTagInfo": {"status": status}}
             elif action == "MeterValues":
                 await database_sync_to_async(
@@ -77,7 +84,14 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 reply_payload = {}
             elif action == "StartTransaction":
                 account = await self._get_account(payload.get("idTag"))
-                if account or not self.charger.require_rfid:
+                if self.charger.require_rfid:
+                    authorized = (
+                        account is not None
+                        and await database_sync_to_async(account.can_authorize)()
+                    )
+                else:
+                    authorized = True
+                if authorized:
                     tx_id = int(datetime.utcnow().timestamp())
                     tx_obj = await database_sync_to_async(Transaction.objects.create)(
                         charger_id=self.charger_id,
