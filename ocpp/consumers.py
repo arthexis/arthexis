@@ -63,21 +63,12 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 status = (
                     "Accepted" if await self._valid_idtag(payload.get("idTag")) else "Invalid"
                 )
-                reply_payload = {"idTagInfo": {"status": "Accepted"}}
+                reply_payload = {"idTagInfo": {"status": status}}
             elif action == "MeterValues":
                 await database_sync_to_async(
                     Charger.objects.filter(charger_id=self.charger_id).update
                 )(last_meter_values=payload)
                 reply_payload = {}
-            elif action == "StartTransaction":
-                tx_id = int(datetime.utcnow().timestamp())
-                tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                    charger_id=self.charger_id,
-                    transaction_id=tx_id,
-                    meter_start=payload.get("meterStart"),
-                    start_time=timezone.now(),
-                )
-                reply_payload = {"idTagInfo": {"status": status}}
             elif action == "StartTransaction":
                 if await self._valid_idtag(payload.get("idTag")):
                     tx_id = int(datetime.utcnow().timestamp())

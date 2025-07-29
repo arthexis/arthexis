@@ -81,6 +81,12 @@ Each user may have an associated **Account** record that tracks available energy
 
 The account is linked to the user with a one‑to‑one relationship and can be referenced during authorization or billing steps.
 
+## Vehicles
+
+An account may be associated with multiple **Vehicle** records. Each vehicle
+stores the `brand`, `model` and `vin` (Vehicle Identification Number) so that a
+user's cars can be identified when using OCPP chargers.
+
 
 # Subscriptions App
 
@@ -109,12 +115,14 @@ in the database while keeping active connections in memory. Every charger
 known to the system is stored in the `Charger` model. When a device
 connects with an unknown ID it will be created automatically. The model
 includes a JSON `config` field for storing charger-specific settings.
+
 Each charger also has a `require_rfid` flag that can be enabled to
 enforce RFID authentication. When set, the server validates the `idTag`
 against known users before allowing a transaction to start.
 
 It also records the timestamp of the last `Heartbeat` message and the
 payload of the most recent `MeterValues` message received from the charger.
+
 
 
 ### REST Endpoints
