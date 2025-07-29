@@ -11,7 +11,7 @@ def main():
         from django.core.management import execute_from_command_line
         from django.conf import settings
         from django.utils.autoreload import run_with_reloader
-        from django.contrib.staticfiles.management.commands.runserver import (
+        from daphne.management.commands.runserver import (
             Command as RunserverCommand,
         )
         # Patch the runserver command to display WebSocket URLs
