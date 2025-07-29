@@ -292,6 +292,13 @@ Django admin where a **Test connection** action attempts to authenticate with
 the selected servers.
 
 
+# Mailer App
+
+Allows creation of email templates and queuing of emails using those templates.
+Queued emails can be sent with the `send_queued` helper or via a management
+command. A `/purge/` endpoint deletes sent entries from the queue.
+
+
 # Website App
 
 Displays the README for a particular app depending on the subdomain.

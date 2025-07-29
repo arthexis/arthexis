@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "qrcodes",
     "release",
     "odoo",
+    "mailer",
     "website",
 ]
 
