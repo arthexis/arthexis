@@ -94,8 +94,10 @@ The `RFID` model stores card identifiers (8 hexadecimal digits). A tag may belon
 ## Account Credits
 
 Each user may have an associated **Account** record that tracks available energy credits.
-Credits are added using the **Credit** model and consumption is calculated from
-recorded transactions. The account exposes:
+Credits are added (or removed) in the Django admin by creating **Credit** entries.
+Each entry stores the amount, who created it and when it was added so every
+movement is tracked individually. Consumption is calculated from recorded
+transactions. The account exposes:
 
 - `credits_kwh` – sum of all credit amounts.
 - `total_kwh_spent` – kWh consumed across transactions.

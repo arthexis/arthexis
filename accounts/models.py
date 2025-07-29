@@ -119,6 +119,13 @@ class Credit(models.Model):
         Account, on_delete=models.CASCADE, related_name="credits"
     )
     amount_kwh = models.DecimalField(max_digits=10, decimal_places=2)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="credit_entries",
+    )
     created_on = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
