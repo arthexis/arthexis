@@ -1,4 +1,4 @@
-from django.core.management.commands.runserver import Command as RunserverCommand
+from daphne.management.commands.runserver import Command as RunserverCommand
 
 class Command(RunserverCommand):
     """Extended runserver command that also prints WebSocket URLs."""

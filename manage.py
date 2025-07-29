@@ -11,10 +11,15 @@ def main():
         from django.core.management import execute_from_command_line
         from django.conf import settings
         from django.utils.autoreload import run_with_reloader
-        from django.contrib.staticfiles.management.commands.runserver import (
-            Command as RunserverCommand,
+        # Always serve the ASGI application by replacing Django's runserver
+        from daphne.management.commands.runserver import (
+            Command as DaphneRunserver,
         )
-        # Patch the runserver command to display WebSocket URLs
+        from django.core.management.commands import runserver as core_runserver
+
+        core_runserver.Command = DaphneRunserver
+
+        # Patch the runserver command to display WebSocket URLs when it binds
         def patched_on_bind(self, server_port):
             original_on_bind(self, server_port)
             host = self.addr or (
@@ -26,8 +31,8 @@ def main():
                     f"WebSocket available at {scheme}://{host}:{server_port}{path}"
                 )
 
-        original_on_bind = RunserverCommand.on_bind
-        RunserverCommand.on_bind = patched_on_bind
+        original_on_bind = core_runserver.Command.on_bind
+        core_runserver.Command.on_bind = patched_on_bind
     except ImportError as exc:
         raise ImportError(
             "Couldn't import Django. Are you sure it's installed and "
