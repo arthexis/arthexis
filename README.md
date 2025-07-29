@@ -57,9 +57,10 @@ languages are defined in `config/settings.py`.
 
 ## Logging
 
-Log messages from all apps are written to `logs/arthexis.log`. The file
-rotates at midnight with the date appended to the filename. When running the
-test suite, logs are stored in `logs/tests.log` instead.
+Log messages are written to `logs/<active_app>.log` where `<active_app>` is the
+application handling the current request. By default this is `website.log`. The
+file rotates at midnight with the date appended to the filename. When running
+the test suite, logs are stored in `logs/tests.log` instead.
 
 ## Updating
 
