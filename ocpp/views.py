@@ -134,6 +134,7 @@ def charger_log_page(request, cid):
         request,
         "ocpp/charger_logs.html",
         {"charger": charger, "log": log},
+    )
 
 def charger_status(request, cid):
     """Display current transaction and charger state."""
