@@ -84,6 +84,18 @@ python manage.py build_readme
 
 Avoid editing the combined `README.md` directly.
 
+## Release
+
+The `release` app provides utilities for publishing the project to PyPI.
+Use the `build_pypi` management command to bump the version, build the
+distribution and upload it via Twine:
+
+```bash
+python manage.py build_pypi --all
+```
+
+Run the command with `--help` to see individual options.
+
 ## Subdomain Routing
 
 The project uses Django's **sites** framework together with the `website`
@@ -254,6 +266,21 @@ without writing any code.
 # QRCodes App
 
 Provides a small `QRLink` model that stores a value and generates a QR image for it. A template tag `qr_img` renders the QR code in templates and automatically creates the record if needed.
+
+
+# Release App
+
+Provides utilities for packaging the project and uploading it to PyPI.
+
+The management command `build_pypi` wraps the release logic. Run it with `--all`
+for the full workflow:
+
+```bash
+python manage.py build_pypi --all
+```
+
+Individual flags exist for incrementing the version, building the distribution
+and uploading via Twine. See `--help` for details.
 
 
 # Odoo App
