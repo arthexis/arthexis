@@ -19,8 +19,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         await self.accept()
         store.connections[self.charger_id] = self
         store.logs.setdefault(self.charger_id, [])
-        self.charger, _ = await database_sync_to_async(Charger.objects.get_or_create)(
-            charger_id=self.charger_id
+        self.charger, _ = await database_sync_to_async(
+            Charger.objects.update_or_create
+        )(
+            charger_id=self.charger_id,
+            defaults={"last_path": self.scope.get("path", "")},
         )
 
     async def _get_account(self, id_tag: str) -> Account | None:
