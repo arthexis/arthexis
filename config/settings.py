@@ -14,6 +14,7 @@ from pathlib import Path
 import os
 import sys
 from django.utils.translation import gettext_lazy as _
+from .active_app import get_active_app
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -59,6 +60,7 @@ SITE_ID = 1
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "config.middleware.ActiveAppMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -177,7 +179,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Logging configuration
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
-LOG_FILE_NAME = "tests.log" if "test" in sys.argv else "arthexis.log"
+LOG_FILE_NAME = "tests.log" if "test" in sys.argv else "website.log"
 
 LOGGING = {
     "version": 1,
@@ -189,7 +191,7 @@ LOGGING = {
     },
     "handlers": {
         "file": {
-            "class": "logging.handlers.TimedRotatingFileHandler",
+            "class": "config.logging.ActiveAppFileHandler",
             "filename": str(LOG_DIR / LOG_FILE_NAME),
             "when": "midnight",
             "backupCount": 7,
