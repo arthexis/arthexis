@@ -1,0 +1,28 @@
+{% extends "website/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Chargers" %}{% endblock %}
+
+{% block content %}
+<h1>{% trans "Chargers" %}</h1>
+<table class="table">
+  <thead>
+    <tr>
+      <th>{% trans "Name" %}</th>
+      <th>{% trans "Serial Number" %}</th>
+      <th>{% trans "Status" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in chargers %}
+    <tr>
+      <td><a href="{% url 'charger-page' item.charger.charger_id %}">{{ item.charger.name|default:item.charger.charger_id }}</a></td>
+      <td>{{ item.charger.charger_id }}</td>
+      <td><span class="badge" style="background-color: {{ item.color }};">{{ item.state }}</span></td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="3">{% trans "No chargers found." %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

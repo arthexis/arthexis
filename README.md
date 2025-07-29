@@ -239,6 +239,7 @@ map.
 - `GET /ocpp/chargers/<cid>/` – retrieve details and message log for a charger.
 - `POST /ocpp/chargers/<cid>/action/` – send actions such as `remote_stop` or
   `reset` to the charger.
+- `GET /ocpp/` – dashboard listing all chargers and their status.
 
 ### Charger Landing Pages
 
