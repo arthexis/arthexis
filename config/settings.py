@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
+    "readme",  # Provide custom management commands (e.g., runserver)
     "django.contrib.staticfiles",
     "import_export",
     "django.contrib.sites",
@@ -50,7 +51,6 @@ INSTALLED_APPS = [
     "ocpp",
     "qrcodes",
     "odoo",
-    "readme",
     "website",
 ]
 

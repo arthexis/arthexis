@@ -17,6 +17,9 @@ This repository contains a basic [Django](https://www.djangoproject.com/) projec
    python manage.py runserver
    ```
 
+   The included `runserver` command comes from Daphne via Django Channels,
+   so it serves the ASGI application and supports WebSocket endpoints.
+
 If you prefer an automated setup, run `./install.sh` which creates a
 virtual environment and installs dependencies for you.  Adding
 `--service <name>` installs a systemd service with the specified name
@@ -84,6 +87,13 @@ app to select which application handles requests for a given domain.  Each
 `Site`'s *name* should be set to the label of the Django app whose `urls`
 module will serve that domain.  Requests for unknown domains fall back to
 the `readme` site which renders this documentation.
+
+
+# Readme App
+
+Provides a view for rendering the project's generated `README.md` as HTML
+and a management command `build_readme` that rebuilds the file from
+`README.base.md` and each app's own `README.md`.
 
 
 # Chat App
@@ -249,13 +259,6 @@ connection credentials and a `/odoo/test/<id>/` endpoint checks whether the
 specified instance can be authenticated. Instances can be managed through the
 Django admin where a **Test connection** action attempts to authenticate with
 the selected servers.
-
-
-# Readme App
-
-Provides a view for rendering the project's generated `README.md` as HTML
-and a management command `build_readme` that rebuilds the file from
-`README.base.md` and each app's own `README.md`.
 
 
 # Website App
