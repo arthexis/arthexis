@@ -9,8 +9,23 @@ from . import store
 
 @admin.register(Charger)
 class ChargerAdmin(admin.ModelAdmin):
-    list_display = ("charger_id", "name", "require_rfid", "last_heartbeat")
+    list_display = (
+        "charger_id",
+        "name",
+        "require_rfid",
+        "last_heartbeat",
+        "test_link",
+    )
     search_fields = ("charger_id", "name")
+
+    def test_link(self, obj):
+        from django.utils.html import format_html
+
+        return format_html(
+            '<a href="{}" target="_blank">open</a>', obj.get_absolute_url()
+        )
+
+    test_link.short_description = "Landing Page"
 
 
 @admin.register(Simulator)

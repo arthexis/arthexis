@@ -1,4 +1,7 @@
 from django.db import models
+from django.urls import reverse
+
+from qrcodes.models import QRLink
 from accounts.models import Account
 
 
@@ -11,9 +14,20 @@ class Charger(models.Model):
     require_rfid = models.BooleanField(default=False)
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_meter_values = models.JSONField(default=dict, blank=True)
+    qr = models.OneToOneField(QRLink, null=True, blank=True, on_delete=models.SET_NULL)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.charger_id
+
+    def get_absolute_url(self):
+        return reverse("charger-page", args=[self.charger_id])
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if not self.qr:
+            qr, _ = QRLink.objects.get_or_create(value=self.get_absolute_url())
+            self.qr = qr
+            super().save(update_fields=["qr"])
 
 
 class Transaction(models.Model):
