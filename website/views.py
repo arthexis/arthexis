@@ -21,6 +21,8 @@ def _collect_landings(resolver: URLResolver, prefix: str = ""):
             view = pattern.callback
             if getattr(view, "landing", False):
                 route = prefix + pattern.pattern._route
+                if "<" in route:
+                    continue
                 label = getattr(view, "landing_label", pattern.name or route)
                 pages.append({"name": label, "path": "/" + route})
     return pages
