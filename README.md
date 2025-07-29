@@ -17,6 +17,9 @@ This repository contains a basic [Django](https://www.djangoproject.com/) projec
    python manage.py runserver
    ```
 
+   The included `runserver` command comes from Daphne via Django Channels,
+   so it serves the ASGI application and supports WebSocket endpoints.
+
 If you prefer an automated setup, run `./install.sh` which creates a
 virtual environment and installs dependencies for you.  Adding
 `--service <name>` installs a systemd service with the specified name
