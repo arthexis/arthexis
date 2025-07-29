@@ -40,6 +40,13 @@ Launch configurations are provided in `.vscode/launch.json`:
 
 Open the *Run and Debug* pane in VS Code and choose the desired configuration.
 
+## Internationalization
+
+English is the primary language for this project.  A Spanish translation is
+available under `locale/es`.  You can activate it by setting the `LANGUAGE_CODE`
+setting or selecting the language via Django's i18n mechanisms.  The supported
+languages are defined in `config/settings.py`.
+
 ## Maintaining Documentation
 
 Documentation is split across multiple files. `README.base.md` provides the
