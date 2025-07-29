@@ -3,10 +3,10 @@ from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 
-from .models import User, RFID, Account, Vehicle, Credit
+from .models import UserProxy, RFID, Account, Vehicle, Credit
 
 
-@admin.register(User)
+@admin.register(UserProxy)
 class UserAdmin(DjangoUserAdmin):
     fieldsets = DjangoUserAdmin.fieldsets + ((None, {"fields": ("phone_number",)}),)
     add_fieldsets = DjangoUserAdmin.add_fieldsets + ((None, {"fields": ("phone_number",)}),)
