@@ -322,3 +322,7 @@ Rendered pages use [Bootstrap](https://getbootstrap.com/) loaded from a CDN so
 the README content has simple default styling. A button in the upper-right
 corner toggles between light and dark themes and remembers the preference using
 `localStorage`.
+
+When visiting the default *website* domain, a navigation bar shows links to all
+enabled apps that expose public URLs, plus a link to an automatically generated
+sitemap.
