@@ -110,6 +110,20 @@ class SimulatorAdminTests(TestCase):
         log_url = reverse("charger-log", args=["SIMX"])
         self.assertContains(resp, log_url)
 
+    def test_admin_shows_ws_url(self):
+        sim = Simulator.objects.create(name="SIM2", cp_path="SIMY", host="h",
+                                      ws_port=1111)
+        url = reverse("admin:ocpp_simulator_changelist")
+        resp = self.client.get(url)
+        self.assertContains(resp, "ws://h:1111/SIMY/")
+
+    def test_as_config_includes_custom_fields(self):
+        sim = Simulator.objects.create(name="SIM3", cp_path="S3", interval=3.5,
+                                      kwh_max=70)
+        cfg = sim.as_config()
+        self.assertEqual(cfg.interval, 3.5)
+        self.assertEqual(cfg.kwh_max, 70)
+
     async def test_unknown_charger_auto_registered(self):
         communicator = WebsocketCommunicator(application, "/NEWCHG/")
         connected, _ = await communicator.connect()
