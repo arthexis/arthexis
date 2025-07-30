@@ -14,4 +14,5 @@ the preference using `localStorage`.
 When visiting the default *website* domain, a navigation bar shows links to all
 enabled apps that expose public URLs. Views decorated with `footer_link` are
 collected into a footer where links can be grouped into columns. The
-automatically generated sitemap now appears there.
+automatically generated sitemap now appears there. The footer stays at the
+bottom of short pages but scrolls into view on longer ones.
