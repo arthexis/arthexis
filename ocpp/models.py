@@ -41,6 +41,20 @@ class Charger(models.Model):
             self.qr = qr
             super().save(update_fields=["qr"])
 
+    @property
+    def total_kwh(self) -> float:
+        """Return total energy delivered by this charger in kWh."""
+        total = 0.0
+        for tx in Transaction.objects.filter(
+            charger_id=self.charger_id,
+            meter_start__isnull=False,
+            meter_stop__isnull=False,
+        ):
+            diff = tx.meter_stop - tx.meter_start
+            if diff > 0:
+                total += diff / 1000.0
+        return total
+
 
 class Transaction(models.Model):
     """Charging session data stored for each charger."""
@@ -60,6 +74,16 @@ class Transaction(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.charger_id}:{self.transaction_id}"
+
+    @property
+    def kwh(self) -> float | None:
+        """Return consumed energy in kWh for this session."""
+        if self.meter_start is None or self.meter_stop is None:
+            return None
+        diff = self.meter_stop - self.meter_start
+        if diff < 0:
+            return 0.0
+        return diff / 1000.0
 
 
 class MeterReading(models.Model):

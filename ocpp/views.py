@@ -20,9 +20,7 @@ def _charger_state(charger: Charger, tx_obj: Transaction | None):
         return "Charging", "green"
     if connected:
         return "Available", "blue"
-    if tx_obj:
-        return "Errors", "red"
-    return "Unknown", "grey"
+    return "Offline", "grey"
 
 
 
@@ -123,7 +121,21 @@ def dashboard(request):
 
 def charger_page(request, cid):
     charger = get_object_or_404(Charger, charger_id=cid)
-    return render(request, "ocpp/charger_page.html", {"charger": charger})
+    tx_active = store.transactions.get(cid)
+    state, color = _charger_state(charger, tx_active)
+    transactions = (
+        Transaction.objects.filter(charger_id=cid).order_by("-start_time")
+    )
+    return render(
+        request,
+        "ocpp/charger_page.html",
+        {
+            "charger": charger,
+            "state": state,
+            "color": color,
+            "transactions": transactions,
+        },
+    )
 
 
 def charger_log_page(request, cid):
