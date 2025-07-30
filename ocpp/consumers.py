@@ -18,7 +18,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         self.charger_id = self.scope["url_route"]["kwargs"].get("cid", "")
-        await self.accept()
+        subprotocol = None
+        offered = self.scope.get("subprotocols", [])
+        if "ocpp1.6" in offered:
+            subprotocol = "ocpp1.6"
+        await self.accept(subprotocol=subprotocol)
         store.connections[self.charger_id] = self
         store.logs.setdefault(self.charger_id, [])
         self.charger, _ = await database_sync_to_async(

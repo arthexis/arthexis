@@ -14,6 +14,10 @@ charger ID, so `/CP1/` and `/foo/bar/CP1/` both register charger `CP1`. The full
 path used by a charger is stored in the `last_path` field of its database
 record.
 
+If a client offers the `ocpp1.6` WebSocket subprotocol, the server will
+acknowledge it during the handshake. Clients may also omit the subprotocol and
+still connect successfully.
+
 A connected charge point may send standard OCPP CALL messages
 (BootNotification, Heartbeat, Authorize, Start/StopTransaction). The
 server replies with basic CALLRESULT payloads and records transactions
