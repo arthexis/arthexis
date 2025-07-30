@@ -4,13 +4,11 @@ from channels.db import database_sync_to_async
 from django.test import Client, TransactionTestCase, TestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from django.utils import timezone
 
 from config.asgi import application
 
-from .models import Transaction, Charger, Simulator
-from accounts.models import RFID, Account
-
-from .models import Transaction, Charger, MeterReading
+from .models import Transaction, Charger, Simulator, MeterReading
 from accounts.models import RFID, Account, Credit
 
 
@@ -67,6 +65,21 @@ class ChargerLandingTests(TestCase):
         resp = client.get(reverse("charger-status", args=["PAGE2"]))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "PAGE2")
+
+    def test_charger_page_shows_stats(self):
+        charger = Charger.objects.create(charger_id="STATS")
+        Transaction.objects.create(
+            charger_id="STATS",
+            transaction_id=1,
+            meter_start=1000,
+            meter_stop=3000,
+            start_time=timezone.now(),
+            stop_time=timezone.now(),
+        )
+        client = Client()
+        resp = client.get(reverse("charger-page", args=["STATS"]))
+        self.assertContains(resp, "2.00")
+        self.assertContains(resp, "Offline")
 
 
 class ChargerAdminTests(TestCase):
