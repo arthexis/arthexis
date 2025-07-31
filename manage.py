@@ -7,16 +7,17 @@ from config.loadenv import loadenv
 
 def _dev_tasks() -> None:
     """Perform optional maintenance tasks during auto-reload."""
-    if not os.environ.get("DJANGO_DEV_RELOAD"):
-        return
     try:
         import subprocess
         from pathlib import Path
 
         import django
+        from django.conf import settings
         from django.core.management import call_command
 
         django.setup()
+        if not settings.DEBUG:
+            return
 
         req = Path("requirements.txt")
         if req.exists():
@@ -89,9 +90,10 @@ def main():
         execute_from_command_line(sys.argv)
 
     if (
-        os.environ.get("DJANGO_DEV_RELOAD")
-        and settings.DEBUG
+        settings.DEBUG
         and os.environ.get("RUN_MAIN") != "true"
+        and len(sys.argv) > 1
+        and sys.argv[1] == "runserver"
     ):
         run_with_reloader(_execute)
     else:
