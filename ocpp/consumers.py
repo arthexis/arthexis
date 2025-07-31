@@ -6,6 +6,7 @@ from accounts.models import Account
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
+from config.offline import requires_network
 
 from . import store
 from decimal import Decimal
@@ -16,6 +17,7 @@ from .models import Transaction, Charger, MeterReading
 class CSMSConsumer(AsyncWebsocketConsumer):
     """Very small subset of OCPP 1.6 CSMS behaviour."""
 
+    @requires_network
     async def connect(self):
         self.charger_id = self.scope["url_route"]["kwargs"].get("cid", "")
         subprotocol = None

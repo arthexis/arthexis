@@ -8,6 +8,7 @@ from typing import Optional
 import threading
 
 import websockets
+from config.offline import requires_network
 
 
 @dataclass
@@ -37,6 +38,7 @@ class ChargePointSimulator:
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
+    @requires_network
     async def _run_session(self) -> None:
         cfg = self.config
         uri = f"ws://{cfg.host}:{cfg.ws_port}/{cfg.cp_path}"
