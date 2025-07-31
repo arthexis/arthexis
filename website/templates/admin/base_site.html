@@ -1,0 +1,32 @@
+{% extends "admin/base.html" %}
+{% load i18n %}
+{% block title %}{% if title %}{{ title }} | {% endif %}{{ site_title|default:_('Django site admin') }}{% endblock %}
+{% block extrastyle %}
+{{ block.super }}
+<style>
+#site-name .badge {
+    margin-left: 0.5em;
+    font-size: 0.7em;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+.badge-success {background-color:#28a745;color:white;}
+.badge-warning {background-color:#dc3545;color:white;}
+</style>
+{% endblock %}
+{% block branding %}
+<h1 id="site-name">
+  <a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a>
+  {% if badge_site %}
+    <span class="badge badge-success">SITE: {{ badge_site.domain }}</span>
+  {% else %}
+    <span class="badge badge-warning">SITE: Unknown</span>
+  {% endif %}
+  {% if badge_node %}
+    <span class="badge badge-success">NODE: {{ badge_node.hostname }}</span>
+  {% else %}
+    <span class="badge badge-warning">NODE: Unknown</span>
+  {% endif %}
+</h1>
+{% endblock %}
+{% block nav-global %}{% endblock %}
