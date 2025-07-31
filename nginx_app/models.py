@@ -45,14 +45,14 @@ class NginxConfig(models.Model):
     config_text = models.TextField(blank=True)
 
     class Meta:
-        verbose_name = 'Nginx configuration'
-        verbose_name_plural = 'Nginx configurations'
+        verbose_name = 'NGINX Template'
+        verbose_name_plural = 'NGINX Templates'
 
     def __str__(self):
         return self.name
 
     def render_config(self):
-        """Generate an nginx configuration with websocket support and optional SSL."""
+        """Generate an NGINX template with websocket support and optional SSL."""
         upstream_name = f"{self.name}_upstream"
         lines = [
             f"upstream {upstream_name} {{",
