@@ -55,7 +55,9 @@ INSTALLED_APPS = [
     "release",
     "odoo",
     "mailer",
+    "post_office",
     "footer",
+    "nginx_app",
     "website",
 ]
 
@@ -88,6 +90,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "website.context_processors.nav_links",
                 "footer.context_processors.footer_links",
+                "config.context_processors.site_and_node",
             ],
         },
     },
@@ -210,3 +213,6 @@ LOGGING = {
         "level": "DEBUG",
     },
 }
+
+NGINX_CONFIG_ROOT = os.environ.get("NGINX_CONFIG_ROOT", "/etc/nginx/conf.d")
+

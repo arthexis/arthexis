@@ -1,9 +1,10 @@
 import json
-from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from post_office import mail
+from post_office.models import Email, STATUS
 
-from .models import EmailTemplate, QueuedEmail
+from .models import EmailTemplate
 
 
 @csrf_exempt
@@ -38,17 +39,22 @@ def queue_email(request):
     context = data.get("context") or {}
     if not to or not template_id:
         return JsonResponse({"detail": "to and template_id required"}, status=400)
-    qe = QueuedEmail.objects.create(to=to, template_id=template_id, context=context)
-    return JsonResponse({"id": qe.id})
+    tpl = EmailTemplate.objects.get(id=template_id)
+    subject = tpl.subject.format(**context)
+    body = tpl.body.format(**context)
+    email = mail.send(recipients=[to], subject=subject, message=body)
+    return JsonResponse({"id": email.id})
 
 
 def email_status(request, qid):
     """Return whether a queued email was sent."""
     try:
-        qe = QueuedEmail.objects.get(id=qid)
-    except QueuedEmail.DoesNotExist:
+        email = Email.objects.get(id=qid)
+    except Email.DoesNotExist:
         return JsonResponse({"detail": "not found"}, status=404)
-    return JsonResponse({"sent": qe.sent, "sent_at": qe.sent_at})
+    sent = email.status == STATUS.sent
+    sent_at = email.last_updated if sent else None
+    return JsonResponse({"sent": sent, "sent_at": sent_at})
 
 
 @csrf_exempt
@@ -56,15 +62,7 @@ def purge(request):
     """Delete all sent queued emails."""
     if request.method != "POST":
         return JsonResponse({"detail": "POST required"}, status=400)
-    count, _ = QueuedEmail.objects.filter(sent=True).delete()
+    emails = Email.objects.filter(status=STATUS.sent)
+    count = emails.count()
+    emails.delete()
     return JsonResponse({"purged": count})
-
-
-def send_queued():
-    """Send all unsent queued emails."""
-    for email in QueuedEmail.objects.filter(sent=False).select_related("template"):
-        tpl = email.template
-        subject = tpl.subject.format(**email.context)
-        body = tpl.body.format(**email.context)
-        send_mail(subject, body, None, [email.to])
-        email.mark_sent()
