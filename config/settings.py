@@ -54,7 +54,6 @@ INSTALLED_APPS = [
     "awg",
     "release",
     "odoo",
-    "mailer",
     "post_office",
     "footer",
     "nginx_app",

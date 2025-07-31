@@ -33,7 +33,6 @@ urlpatterns = [
     path("ocpp/", include("ocpp.urls")),
     path("qr/", include("qrcodes.urls")),
     path("odoo/", include("odoo.urls")),
-    path("mailer/", include("mailer.urls")),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
