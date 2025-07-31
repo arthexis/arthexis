@@ -117,6 +117,12 @@ Package metadata lives in the `release.DEFAULT_PACKAGE` dataclass. Provide a
 custom `Package` instance or a `Credentials` object to `release.utils.build()` if
 you need to override the defaults or supply PyPI credentials programmatically.
 
+## Todos
+
+The `todos` app offers a lightweight API for recording project tasks and a
+management command that scans the codebase for `# TODO` comments to populate the
+database.
+
 ## Subdomain Routing
 
 The project uses Django's **sites** framework together with the `website`

@@ -117,6 +117,12 @@ Package metadata lives in the `release.DEFAULT_PACKAGE` dataclass. Provide a
 custom `Package` instance or a `Credentials` object to `release.utils.build()` if
 you need to override the defaults or supply PyPI credentials programmatically.
 
+## Todos
+
+The `todos` app offers a lightweight API for recording project tasks and a
+management command that scans the codebase for `# TODO` comments to populate the
+database.
+
 ## Subdomain Routing
 
 The project uses Django's **sites** framework together with the `website`
@@ -392,3 +398,23 @@ enabled apps that expose public URLs. Views decorated with `footer_link` are
 collected into a footer where links can be grouped into columns. The
 automatically generated sitemap now appears there. The footer stays at the
 bottom of short pages but scrolls into view on longer ones.
+
+
+# Todos
+
+Simple app for tracking tasks within the project.
+
+## API
+
+- `GET /todos/` – list all todos.
+- `POST /todos/` – create a new todo. JSON body: `{ "text": "Buy milk" }`
+- `POST /todos/<id>/toggle/` – toggle completion status.
+
+## Importing from Code
+
+Run the management command to create todo items from `# TODO` comments found in
+project files:
+
+```bash
+python manage.py import_todos
+```

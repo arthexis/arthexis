@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "post_office",
     "footer",
     "nginx_app",
+    "todos",
     "website",
 ]
 
@@ -80,7 +81,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "website" / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
