@@ -4,6 +4,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from .models import EmailTemplate, QueuedEmail
+from config.offline import requires_network
 
 
 @csrf_exempt
@@ -60,6 +61,7 @@ def purge(request):
     return JsonResponse({"purged": count})
 
 
+@requires_network
 def send_queued():
     """Send all unsent queued emails."""
     for email in QueuedEmail.objects.filter(sent=False).select_related("template"):

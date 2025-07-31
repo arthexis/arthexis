@@ -52,6 +52,13 @@ Any `*.env` file found there is automatically loaded when running management
 commands or the server. The directory is included in the repository but `.env`
 files themselves are ignored so secrets remain local.
 
+### Offline Mode
+
+Set the environment variable `ARTHEXIS_OFFLINE=1` to prevent code paths that
+require network access from running. Functions marked with a special decorator
+will raise an error if they execute while this flag is set, allowing tests or
+other strict operations to ensure no external services are contacted.
+
 ## VS Code
 
 Launch configurations are provided in `.vscode/launch.json`:
