@@ -110,7 +110,6 @@ class AccountAdmin(admin.ModelAdmin):
                     "user",
                     ("service_account", "authorized"),
                     ("credits_kwh", "total_kwh_spent", "balance_kwh"),
-                  ]
                 )
             },
         ),
