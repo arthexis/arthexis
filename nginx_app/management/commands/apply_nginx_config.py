@@ -6,7 +6,7 @@ from nginx_app.models import NginxConfig
 
 
 class Command(BaseCommand):
-    help = "Apply an nginx configuration by writing it to the nginx directory and reloading nginx"
+    help = "Apply an NGINX template by writing it to the NGINX directory and reloading NGINX"
 
     def add_arguments(self, parser):
         parser.add_argument('config_id', type=int, help='ID of the NginxConfig to apply')
@@ -26,4 +26,4 @@ class Command(BaseCommand):
 
         subprocess.run(['nginx', '-t'], check=True)
         subprocess.run(['nginx', '-s', 'reload'], check=True)
-        self.stdout.write(self.style.SUCCESS(f"Applied configuration {cfg.name} to {path}"))
+        self.stdout.write(self.style.SUCCESS(f"Applied template {cfg.name} to {path}"))

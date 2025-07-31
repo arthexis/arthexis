@@ -20,7 +20,7 @@ class NginxConfigAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("rendered_config",)
 
-    @admin.action(description="Test selected nginx configurations")
+    @admin.action(description="Test selected NGINX templates")
     def test_configuration(self, request, queryset):
         for cfg in queryset:
             if cfg.test_connection():
