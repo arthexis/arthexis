@@ -14,6 +14,7 @@ def _dev_tasks() -> None:
         import django
         from django.conf import settings
         from django.core.management import call_command
+        from django.core.management.base import CommandError
 
         django.setup()
         if not settings.DEBUG:
@@ -26,7 +27,10 @@ def _dev_tasks() -> None:
                 check=False,
             )
 
-        call_command("makemigrations", merge=True)
+        try:
+            call_command("makemigrations")
+        except CommandError:
+            call_command("makemigrations", merge=True)
         call_command("migrate", interactive=False)
 
         proc = subprocess.run(
