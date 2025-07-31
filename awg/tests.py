@@ -8,9 +8,38 @@ class AWGCalculatorTests(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "<form")
-        resp = self.client.get(url, {"awg_size": "4", "material": "cu", "line_num": "1"})
+
+        data = {
+            "meters": "10",
+            "amps": "40",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "1",
+        }
+        resp = self.client.post(url, data)
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "5.189")  # diameter in mm for AWG 4 Cu
-        self.assertContains(resp, "95")  # 90C ampacity
-        self.assertContains(resp, "Conduit Fill")
+        self.assertContains(resp, "AWG Size:")
+        self.assertContains(resp, "8")
+        self.assertContains(resp, "Voltage Drop")
         self.assertContains(resp, "EMT")
+
+    def test_no_cable_found(self):
+        url = reverse("awg:calculator")
+        data = {
+            "meters": "1000",
+            "amps": "200",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "1",
+        }
+        resp = self.client.post(url, data)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "No Suitable Cable Found")
