@@ -5,8 +5,10 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 
 from .models import Instance
+from config.offline import requires_network
 
 
+@requires_network
 def test_connection(request, pk):
     instance = get_object_or_404(Instance, pk=pk)
     server = xmlrpc.client.ServerProxy(urljoin(instance.url, "/xmlrpc/2/common"))

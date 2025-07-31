@@ -1,7 +1,9 @@
 from channels.generic.websocket import AsyncWebsocketConsumer
 import json
+from config.offline import requires_network
 
 class EchoConsumer(AsyncWebsocketConsumer):
+    @requires_network
     async def connect(self):
         await self.accept()
 

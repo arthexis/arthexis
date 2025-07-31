@@ -52,6 +52,13 @@ Any `*.env` file found there is automatically loaded when running management
 commands or the server. The directory is included in the repository but `.env`
 files themselves are ignored so secrets remain local.
 
+### Offline Mode
+
+Set the environment variable `ARTHEXIS_OFFLINE=1` to prevent code paths that
+require network access from running. Functions marked with a special decorator
+will raise an error if they execute while this flag is set, allowing tests or
+other strict operations to ensure no external services are contacted.
+
 ## VS Code
 
 Launch configurations are provided in `.vscode/launch.json`:
@@ -341,8 +348,9 @@ the selected servers.
 # Mailer App
 
 Allows creation of email templates and queuing of emails using those templates.
-Queued emails can be sent with the `send_queued` helper or via a management
-command. A `/purge/` endpoint deletes sent entries from the queue.
+Queued emails are stored using django-post-office. Use its `send_queued` helper
+or the `send_queued_mail` management command to process the queue. A `/purge/`
+endpoint deletes sent entries from the queue.
 
 
 # Footer App

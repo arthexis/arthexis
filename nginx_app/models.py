@@ -35,6 +35,13 @@ class NginxConfig(models.Model):
         blank=True,
         help_text="Path to SSL certificate key (e.g., /etc/ssl/private/example.key)",
     )
+    name = models.CharField(max_length=100, unique=True)
+    server_name = models.CharField(max_length=255)
+    primary_upstream = models.CharField(max_length=255, help_text='Primary upstream in host:port form')
+    backup_upstream = models.CharField(max_length=255, blank=True, help_text='Backup upstream in host:port form')
+    listen_port = models.PositiveIntegerField(default=80)
+    ssl_certificate = models.CharField(max_length=255, blank=True)
+    ssl_certificate_key = models.CharField(max_length=255, blank=True)
     config_text = models.TextField(blank=True)
 
     class Meta:

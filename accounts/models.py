@@ -168,7 +168,7 @@ class UserProxy(User):
 
 
 class RFID(models.Model):
-    """RFID tag assigned to a user and marked allowed or not."""
+    """RFID tag that may be assigned to one or more accounts."""
 
     rfid = models.CharField(
         max_length=8,
@@ -181,42 +181,32 @@ class RFID(models.Model):
             )
         ],
     )
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        blank=True,
-        related_name="rfids",
-        on_delete=models.SET_NULL,
-    )
     allowed = models.BooleanField(default=True)
     added_on = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
         if self.rfid:
             self.rfid = self.rfid.upper()
-        if not self.allowed:
-            self.user = None
         super().save(*args, **kwargs)
+        if not self.allowed:
+            self.accounts.clear()
 
     def __str__(self):  # pragma: no cover - simple representation
         return self.rfid
 
     @staticmethod
-    def get_user_by_rfid(value):
-        """Return the user associated with an RFID code if it exists."""
-        tag = (
-            RFID.objects.filter(
-                rfid=value.upper(), allowed=True, user__isnull=False
+    def get_account_by_rfid(value):
+        """Return the account associated with an RFID code if it exists."""
+        return (
+            Account.objects.filter(
+                rfids__rfid=value.upper(), rfids__allowed=True
             )
-            .select_related("user")
             .first()
         )
-        return tag.user if tag else None
 
     class Meta:
         verbose_name = "RFID"
         verbose_name_plural = "RFIDs"
-        app_label = "auth"
         db_table = "accounts_rfid"
 
 
@@ -224,7 +214,14 @@ class Account(models.Model):
     """Track kWh credits for a user."""
 
     user = models.OneToOneField(
-        get_user_model(), on_delete=models.CASCADE, related_name="account"
+        get_user_model(),
+        on_delete=models.CASCADE,
+        related_name="account",
+        null=True,
+        blank=True,
+    )
+    rfids = models.ManyToManyField(
+        "RFID", blank=True, related_name="accounts"
     )
     service_account = models.BooleanField(
         default=False,
@@ -268,7 +265,7 @@ class Account(models.Model):
         return self.credits_kwh - self.total_kwh_spent
 
     def __str__(self):  # pragma: no cover - simple representation
-        return f"{self.user}"
+        return str(self.user) if self.user else f"Account {self.pk}"
 
 
 class Credit(models.Model):
@@ -288,7 +285,8 @@ class Credit(models.Model):
     created_on = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.amount_kwh} kWh for {self.account.user}"
+        user = self.account.user if self.account.user else f"Account {self.account_id}"
+        return f"{self.amount_kwh} kWh for {user}"
 
 
 class Vehicle(models.Model):

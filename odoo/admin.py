@@ -4,6 +4,7 @@ from .models import Instance
 
 import xmlrpc.client
 from urllib.parse import urljoin
+from config.offline import requires_network
 
 
 @admin.register(Instance)
@@ -11,6 +12,7 @@ class InstanceAdmin(admin.ModelAdmin):
     list_display = ("name", "url", "database", "username")
     actions = ["test_connection"]
 
+    @requires_network
     def test_connection(self, request, queryset):
         for instance in queryset:
             server = xmlrpc.client.ServerProxy(

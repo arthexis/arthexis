@@ -37,3 +37,31 @@ class LoginViewTests(TestCase):
         )
         self.assertRedirects(resp, "/nodes/list/")
 
+
+class AdminBadgesTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="admin", password="pwd", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "test", "domain": "testserver"}
+        )
+        from nodes.models import Node
+
+        Node.objects.create(hostname="testserver", address="127.0.0.1")
+
+    def test_badges_show_site_and_node(self):
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, "SITE: testserver")
+        self.assertContains(resp, "NODE: testserver")
+
+    def test_badges_warn_when_node_missing(self):
+        from nodes.models import Node
+
+        Node.objects.all().delete()
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, "NODE: Unknown")
+

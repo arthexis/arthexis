@@ -10,6 +10,7 @@ import requests
 import toml
 
 from . import Credentials, Package, DEFAULT_PACKAGE
+from config.offline import requires_network
 
 
 class ReleaseError(Exception):
@@ -137,6 +138,7 @@ def update_changelog(version: str, build_hash: str, prev_build: Optional[str] = 
     Path("CHANGELOG.rst").write_text(new_text, encoding="utf-8")
 
 
+@requires_network
 def build(
     *,
     bump: bool = False,

@@ -15,7 +15,9 @@ class RFIDLoginTests(TestCase):
         self.user = User.objects.create_user(
             username="alice", password="secret"
         )
-        RFID.objects.create(rfid="CARD123", user=self.user)
+        self.account = Account.objects.create(user=self.user)
+        tag = RFID.objects.create(rfid="CARD123")
+        self.account.rfids.add(tag)
 
     def test_rfid_login_success(self):
         response = self.client.post(
@@ -40,16 +42,18 @@ class AllowedRFIDTests(TestCase):
         self.user = User.objects.create_user(
             username="eve", password="secret"
         )
-        self.rfid = RFID.objects.create(rfid="BAD123", user=self.user)
+        self.account = Account.objects.create(user=self.user)
+        self.rfid = RFID.objects.create(rfid="BAD123")
+        self.account.rfids.add(self.rfid)
 
     def test_disallow_removes_and_blocks(self):
         self.rfid.allowed = False
         self.rfid.save()
-        self.user.refresh_from_db()
-        self.assertFalse(self.user.rfids.exists())
+        self.account.refresh_from_db()
+        self.assertFalse(self.account.rfids.exists())
 
         with self.assertRaises(IntegrityError):
-            RFID.objects.create(rfid="BAD123", user=self.user)
+            RFID.objects.create(rfid="BAD123")
 
 
 class RFIDValidationTests(TestCase):
@@ -64,9 +68,11 @@ class RFIDValidationTests(TestCase):
 
     def test_find_user_by_rfid(self):
         user = User.objects.create_user(username="finder", password="pwd")
-        RFID.objects.create(rfid="ABCD1234", user=user)
-        found = RFID.get_user_by_rfid("abcd1234")
-        self.assertEqual(found, user)
+        acc = Account.objects.create(user=user)
+        tag = RFID.objects.create(rfid="ABCD1234")
+        acc.rfids.add(tag)
+        found = RFID.get_account_by_rfid("abcd1234")
+        self.assertEqual(found, acc)
 
 
 class AccountTests(TestCase):
@@ -98,6 +104,13 @@ class AccountTests(TestCase):
         user = User.objects.create_user(username="service", password="x")
         acc = Account.objects.create(user=user, service_account=True)
         self.assertTrue(acc.can_authorize())
+
+    def test_account_without_user(self):
+        acc = Account.objects.create()
+        tag = RFID.objects.create(rfid="NOUSER1")
+        acc.rfids.add(tag)
+        self.assertIsNone(acc.user)
+        self.assertTrue(acc.rfids.filter(rfid="NOUSER1").exists())
 
 
 class VehicleTests(TestCase):
