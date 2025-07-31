@@ -1,9 +1,45 @@
+from django import forms
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 
 from .models import UserProxy, RFID, Account, Vehicle, Credit, Address
+
+
+class AccountRFIDForm(forms.ModelForm):
+    """Simple text input for assigning RFIDs to an account."""
+
+    rfid = forms.CharField(max_length=8, label="RFID")
+
+    class Meta:
+        model = Account.rfids.through
+        fields = ["rfid"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk and getattr(self.instance, "rfid_id", None):
+            self.fields["rfid"].initial = self.instance.rfid.rfid
+
+    def clean_rfid(self):
+        value = self.cleaned_data["rfid"].strip().upper()
+        if not RFID._meta.get_field("rfid").validators[0].regex.match(value):
+            raise forms.ValidationError("RFID must be 8 hexadecimal digits")
+        return value
+
+    def save(self, commit=True):
+        value = self.cleaned_data["rfid"]
+        rfid_obj, _ = RFID.objects.get_or_create(rfid=value)
+        self.instance.rfid = rfid_obj
+        return super().save(commit)
+
+
+class AccountRFIDInline(admin.TabularInline):
+    model = Account.rfids.through
+    form = AccountRFIDForm
+    extra = 0
+    verbose_name = "RFID"
+    verbose_name_plural = "RFIDs"
 
 
 @admin.register(UserProxy)
@@ -64,7 +100,7 @@ class AccountAdmin(admin.ModelAdmin):
         "balance_kwh",
         "authorized",
     )
-    inlines = [CreditInline]
+    inlines = [AccountRFIDInline, CreditInline]
     actions = ["test_authorization"]
     fieldsets = (
         (
@@ -74,7 +110,7 @@ class AccountAdmin(admin.ModelAdmin):
                     "user",
                     ("service_account", "authorized"),
                     ("credits_kwh", "total_kwh_spent", "balance_kwh"),
-                    "rfids",
+                  ]
                 )
             },
         ),
