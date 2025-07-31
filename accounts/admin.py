@@ -14,7 +14,7 @@ class AccountRFIDForm(forms.ModelForm):
 
     class Meta:
         model = Account.rfids.through
-        fields = ["rfid"]
+        fields = []
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
