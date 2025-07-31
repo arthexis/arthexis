@@ -44,8 +44,8 @@ class Migration(migrations.Migration):
                 ("config_text", models.TextField(blank=True)),
             ],
             options={
-                "verbose_name": "Nginx configuration",
-                "verbose_name_plural": "Nginx configurations",
+                "verbose_name": "NGINX Template",
+                "verbose_name_plural": "NGINX Templates",
             },
         ),
     ]

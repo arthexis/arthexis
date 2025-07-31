@@ -351,14 +351,6 @@ Django admin where a **Test connection** action attempts to authenticate with
 the selected servers.
 
 
-# Mailer App
-
-Allows creation of email templates and queuing of emails using those templates.
-Queued emails are stored using django-post-office. Use its `send_queued` helper
-or the `send_queued_mail` management command to process the queue. A `/purge/`
-endpoint deletes sent entries from the queue.
-
-
 # Footer App
 
 Collects and exposes links displayed at the bottom of the site.
@@ -368,8 +360,8 @@ Links can be grouped into columns by providing a column name to the decorator.
 
 # Nginx App
 
-Provides management of nginx configurations with support for HTTP, WebSockets, optional SSL
-certificates and fallback upstream servers. Configurations can be applied to the host using a
+Provides management of NGINX templates with support for HTTP, WebSockets, optional SSL
+certificates and fallback upstream servers. Templates can be applied to the host using a
 management command:
 
 ```bash
@@ -377,7 +369,7 @@ python manage.py apply_nginx_config <id>
 ```
 
 The Django admin includes an action to test connectivity to the configured upstream servers.
-It also shows the rendered configuration so it can be reviewed or copied.
+It also shows the rendered template so it can be reviewed or copied.
 
 
 # Website App
