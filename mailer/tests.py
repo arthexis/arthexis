@@ -1,9 +1,11 @@
-from django.core import mail
+from django.core import mail as django_mail
 from django.test import Client, TestCase
 from django.urls import reverse
+from post_office import mail
+from post_office.mail import send_queued
+from post_office.models import Email, STATUS
 
-from .models import EmailTemplate, QueuedEmail
-from .views import send_queued
+from .models import EmailTemplate
 
 
 class MailerTests(TestCase):
@@ -21,18 +23,18 @@ class MailerTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         qid = response.json()["id"]
-        self.assertEqual(QueuedEmail.objects.filter(id=qid).count(), 1)
+        self.assertEqual(Email.objects.filter(id=qid).count(), 1)
 
         send_queued()
-        qe = QueuedEmail.objects.get(id=qid)
-        self.assertTrue(qe.sent)
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("Hello Bob", mail.outbox[0].subject)
+        email = Email.objects.get(id=qid)
+        self.assertEqual(email.status, STATUS.sent)
+        self.assertEqual(len(django_mail.outbox), 1)
+        self.assertIn("Hello Bob", django_mail.outbox[0].subject)
 
     def test_purge_sent(self):
-        qe = QueuedEmail.objects.create(to="x@example.com", template=self.template)
-        qe.mark_sent()
+        mail.send(recipients=["x@example.com"], subject="Hi", message="Hello")
+        send_queued()
         response = self.client.post(reverse("purge-queue"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["purged"], 1)
-        self.assertEqual(QueuedEmail.objects.count(), 0)
+        self.assertEqual(Email.objects.count(), 0)

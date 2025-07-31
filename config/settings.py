@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "release",
     "odoo",
     "mailer",
+    "post_office",
     "footer",
     "nginx_app",
     "website",
