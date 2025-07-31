@@ -1,5 +1,4 @@
 from django.contrib import admin
-from .models import EmailTemplate, QueuedEmail
+from .models import EmailTemplate
 
 admin.site.register(EmailTemplate)
-admin.site.register(QueuedEmail)
