@@ -3,6 +3,38 @@ from django.db import models
 
 
 class NginxConfig(models.Model):
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Identifier for this configuration (e.g., 'myapp')",
+    )
+    server_name = models.CharField(
+        max_length=255,
+        help_text="Host name(s) for the server block (e.g., example.com)",
+    )
+    primary_upstream = models.CharField(
+        max_length=255,
+        help_text="Primary upstream in host:port form (e.g., 10.0.0.1:8000)",
+    )
+    backup_upstream = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Backup upstream in host:port form (e.g., 127.0.0.1:9000)",
+    )
+    listen_port = models.PositiveIntegerField(
+        default=80,
+        help_text="Port nginx listens on (e.g., 80 or 443)",
+    )
+    ssl_certificate = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Path to SSL certificate (e.g., /etc/ssl/certs/example.crt)",
+    )
+    ssl_certificate_key = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Path to SSL certificate key (e.g., /etc/ssl/private/example.key)",
+    )
     name = models.CharField(max_length=100, unique=True)
     server_name = models.CharField(max_length=255)
     primary_upstream = models.CharField(max_length=255, help_text='Primary upstream in host:port form')
