@@ -26,13 +26,18 @@ class AddressAdmin(admin.ModelAdmin):
 class RFIDResource(resources.ModelResource):
     class Meta:
         model = RFID
-        fields = ("rfid", "user__username", "allowed")
+        fields = ("rfid", "allowed")
 
 
 @admin.register(RFID)
 class RFIDAdmin(ImportExportModelAdmin):
     resource_class = RFIDResource
-    list_display = ("rfid", "user", "allowed", "added_on")
+    list_display = ("rfid", "accounts_display", "allowed", "added_on")
+
+    def accounts_display(self, obj):
+        return ", ".join(str(a) for a in obj.accounts.all())
+
+    accounts_display.short_description = "Accounts"
 
 
 class CreditInline(admin.TabularInline):
@@ -52,6 +57,7 @@ class AccountAdmin(admin.ModelAdmin):
         "service_account",
         "authorized",
     )
+    filter_horizontal = ("rfids",)
     readonly_fields = (
         "credits_kwh",
         "total_kwh_spent",
@@ -60,6 +66,19 @@ class AccountAdmin(admin.ModelAdmin):
     )
     inlines = [CreditInline]
     actions = ["test_authorization"]
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "user",
+                    ("service_account", "authorized"),
+                    ("credits_kwh", "total_kwh_spent", "balance_kwh"),
+                    "rfids",
+                )
+            },
+        ),
+    )
 
     def authorized(self, obj):
         return obj.can_authorize()

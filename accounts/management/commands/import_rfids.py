@@ -1,9 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
-from django.contrib.auth import get_user_model
-from accounts.models import RFID
+from accounts.models import RFID, Account
 import csv
-
-User = get_user_model()
 
 class Command(BaseCommand):
     help = "Import RFIDs from CSV"
@@ -19,20 +16,18 @@ class Command(BaseCommand):
                 count = 0
                 for row in reader:
                     rfid = row.get('rfid', '').strip()
-                    user = row.get('user', '').strip()
+                    accounts = row.get('accounts', '').strip()
                     allowed = row.get('allowed', 'True').strip().lower() != 'false'
                     if not rfid:
                         continue
-                    user_obj = None
-                    if user:
-                        try:
-                            user_obj = User.objects.get(username=user)
-                        except User.DoesNotExist:
-                            raise CommandError(f'Unknown user {user}')
-                    RFID.objects.update_or_create(
-                        rfid=rfid.upper(),
-                        defaults={'user': user_obj, 'allowed': allowed},
+                    tag, _ = RFID.objects.update_or_create(
+                        rfid=rfid.upper(), defaults={"allowed": allowed}
                     )
+                    if accounts:
+                        ids = [int(a) for a in accounts.split(",") if a]
+                        tag.accounts.set(Account.objects.filter(id__in=ids))
+                    else:
+                        tag.accounts.clear()
                     count += 1
         except FileNotFoundError as exc:
             raise CommandError(str(exc))
