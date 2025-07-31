@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from .models import RFID
+from .models import Account
 
 
 class RFIDBackend:
@@ -8,11 +8,15 @@ class RFIDBackend:
     def authenticate(self, request, rfid=None, **kwargs):
         if not rfid:
             return None
-        tag = RFID.objects.filter(
-            rfid=rfid.upper(), allowed=True, user__isnull=False
-        ).select_related("user").first()
-        if tag:
-            return tag.user
+        account = (
+            Account.objects.filter(
+                rfids__rfid=rfid.upper(), rfids__allowed=True, user__isnull=False
+            )
+            .select_related("user")
+            .first()
+        )
+        if account:
+            return account.user
         return None
 
     def get_user(self, user_id):

@@ -189,7 +189,8 @@ class SimulatorAdminTests(TestCase):
         await database_sync_to_async(Credit.objects.create)(
             account=acc, amount_kwh=10
         )
-        await database_sync_to_async(RFID.objects.create)(rfid="CARDX", user=user)
+        tag = await database_sync_to_async(RFID.objects.create)(rfid="CARDX")
+        await database_sync_to_async(acc.rfids.add)(tag)
         await database_sync_to_async(Charger.objects.create)(charger_id="RFIDOK", require_rfid=True)
         communicator = WebsocketCommunicator(application, "/RFIDOK/")
         connected, _ = await communicator.connect()
