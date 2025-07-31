@@ -32,6 +32,7 @@ urlpatterns = [
     path("subscriptions/", include("subscriptions.urls")),
     path("ocpp/", include("ocpp.urls")),
     path("qr/", include("qrcodes.urls")),
+    path("awg/", include("awg.urls")),
     path("odoo/", include("odoo.urls")),
     path("mailer/", include("mailer.urls")),
 ]
