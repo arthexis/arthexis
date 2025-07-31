@@ -2,7 +2,7 @@ import asyncio
 import json
 from datetime import datetime
 from django.utils import timezone
-from accounts.models import RFID, Account
+from accounts.models import Account
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -36,16 +36,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         """Return the account for the provided RFID if valid."""
         if not id_tag:
             return None
-        tag = await database_sync_to_async(
-            RFID.objects.filter(
-                rfid=id_tag.upper(), allowed=True, user__isnull=False
-            )
-            .select_related("user__account")
-            .first
+        return await database_sync_to_async(
+            Account.objects.filter(
+                rfids__rfid=id_tag.upper(), rfids__allowed=True
+            ).first
         )()
-        if tag and hasattr(tag.user, "account"):
-            return tag.user.account
-        return None
 
     async def _store_meter_values(self, payload: dict) -> None:
         """Parse a MeterValues payload into MeterReading rows."""
