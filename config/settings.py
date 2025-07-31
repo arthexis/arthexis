@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "odoo",
     "mailer",
     "footer",
+    "nginx_app",
     "website",
 ]
 
@@ -210,3 +211,6 @@ LOGGING = {
         "level": "DEBUG",
     },
 }
+
+NGINX_CONFIG_ROOT = os.environ.get("NGINX_CONFIG_ROOT", "/etc/nginx/conf.d")
+
