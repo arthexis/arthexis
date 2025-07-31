@@ -1,20 +1,15 @@
-"""
-URL configuration for config project.
+"""Project URL configuration with automatic app discovery.
 
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+This module includes URL patterns from any installed application that exposes
+an internal ``urls`` module. This allows new apps with URL configurations to be
+added without editing this file, except for top-level routes such as the admin
+interface or the main website.
 """
 
+from importlib import import_module
+from pathlib import Path
+
+from django.apps import apps
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -24,16 +19,52 @@ from django.utils.translation import gettext_lazy as _
 admin.site.site_header = _("Arthexis Constellation")
 admin.site.site_title = _("Arthexis Constellation")
 
+
+# Apps that require a custom prefix for their URLs
+URL_PREFIX_OVERRIDES = {"qrcodes": "qr"}
+
+
+def autodiscovered_urlpatterns():
+    """Collect URL patterns from project apps automatically.
+
+    Scans all installed apps located inside the project directory. If an app
+    exposes a ``urls`` module, it is included under ``/<app_label>/`` unless a
+    custom prefix is defined in :data:`URL_PREFIX_OVERRIDES`.
+    """
+
+    patterns = []
+    base_dir = Path(settings.BASE_DIR).resolve()
+    for app_config in apps.get_app_configs():
+        app_path = Path(app_config.path).resolve()
+        try:
+            app_path.relative_to(base_dir)
+        except ValueError:
+            # Skip third-party apps outside of the project
+            continue
+
+        if app_config.label == "website":
+            # Root website URLs are handled explicitly below
+            continue
+
+        module_name = f"{app_config.name}.urls"
+        try:
+            import_module(module_name)
+        except ModuleNotFoundError:
+            continue
+
+        prefix = URL_PREFIX_OVERRIDES.get(app_config.label, app_config.label)
+        patterns.append(path(f"{prefix}/", include(module_name)))
+
+    return patterns
+
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("website.urls")),
-    path("nodes/", include("nodes.urls")),
-    path("accounts/", include("accounts.urls")),
-    path("subscriptions/", include("subscriptions.urls")),
-    path("ocpp/", include("ocpp.urls")),
-    path("qr/", include("qrcodes.urls")),
-    path("odoo/", include("odoo.urls")),
-    path("todos/", include("todos.urls")),
 ]
+
+urlpatterns += autodiscovered_urlpatterns()
+
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
