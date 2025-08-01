@@ -7,6 +7,10 @@ Package metadata and PyPI credentials are represented by simple dataclasses. The
 `Credentials` class can hold either an API token or a username/password pair for
 Twine uploads.
 
+For convenience the `PackageConfig` model stores this information in the
+database. It is exposed in the Django admin where an action can invoke the
+release workflow using the stored metadata and credentials.
+
 The management command `build_pypi` wraps the release logic. Run it with `--all`
 for the full workflow:
 

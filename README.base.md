@@ -104,8 +104,11 @@ Avoid editing the combined `README.md` directly.
 ## Release
 
 The `release` app provides utilities for publishing the project to PyPI.
-Use the `build_pypi` management command to bump the version, build the
-distribution and upload it via Twine:
+Package metadata and optional credentials may be stored in the
+`PackageConfig` model which is managed through the Django admin. An admin
+action can invoke the full release workflow using the saved settings. Use the
+`build_pypi` management command to bump the version, build the distribution and
+upload it via Twine:
 
 ```bash
 python manage.py build_pypi --all
