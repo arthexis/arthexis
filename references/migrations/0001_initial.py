@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name="QRLink",
+            name="Reference",
             fields=[
                 (
                     "id",
@@ -23,7 +23,10 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("value", models.CharField(max_length=2000, unique=True)),
-                ("image", models.ImageField(blank=True, upload_to="qr_codes/")),
+                ("alt_text", models.CharField(blank=True, max_length=500)),
+                ("image", models.ImageField(blank=True, upload_to="references/")),
+                ("uses", models.PositiveIntegerField(default=0)),
+                ("method", models.CharField(default="qr", max_length=50)),
             ],
         ),
     ]

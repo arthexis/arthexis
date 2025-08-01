@@ -1,5 +1,5 @@
 {% extends "website/base.html" %}
-{% load qr_tags i18n %}
+{% load ref_tags i18n %}
 
 {% block title %}{{ charger.name|default:charger.charger_id }}{% endblock %}
 
@@ -11,7 +11,7 @@
   <strong>{{ state }}</strong>
 </div>
 <p>{% trans "Total Energy" %}: {{ charger.total_kwh|floatformat:2 }} kWh</p>
-<p>{% qr_img charger.get_absolute_url 200 %}</p>
+<p>{% ref_img charger.get_absolute_url 200 %}</p>
 
 <h2>{% trans "Sessions" %}</h2>
 <table class="table">

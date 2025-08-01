@@ -1,10 +1,10 @@
 {% extends "website/base.html" %}
 {% load i18n %}
 
-{% block title %}{% trans "QR Generator" %}{% endblock %}
+{% block title %}{% trans "Reference Generator" %}{% endblock %}
 
 {% block content %}
-<h1>{% trans "QR Generator" %}</h1>
+<h1>{% trans "Reference Generator" %}</h1>
 <form method="get" class="mb-3">
   <div class="input-group">
     <input type="text" class="form-control" name="data" placeholder="Enter text" value="{{ request.GET.data }}" required>

@@ -6,14 +6,17 @@ from django.db import models
 import qrcode
 
 
-class QRLink(models.Model):
-    """Store a value and the generated QR code image for it."""
+class Reference(models.Model):
+    """Store a reference value and optional generated QR image."""
 
     value = models.CharField(max_length=2000, unique=True)
-    image = models.ImageField(upload_to="qr_codes/", blank=True)
+    alt_text = models.CharField(max_length=500, blank=True)
+    image = models.ImageField(upload_to="references/", blank=True)
+    uses = models.PositiveIntegerField(default=0)
+    method = models.CharField(max_length=50, default="qr")
 
     def save(self, *args, **kwargs):
-        if not self.image:
+        if self.method == "qr" and not self.image:
             qr = qrcode.QRCode(box_size=10, border=4)
             qr.add_data(self.value)
             qr.make(fit=True)
@@ -26,3 +29,4 @@ class QRLink(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.value
+
