@@ -55,7 +55,6 @@ INSTALLED_APPS = [
     "odoo",
     "post_office",
     "footer",
-    "nginx_app",
     "todos",
     "website",
     "bsky",

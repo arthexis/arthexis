@@ -2,7 +2,7 @@ import os
 import subprocess
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from nginx_app.models import NginxConfig
+from nodes.models import NginxConfig
 
 
 class Command(BaseCommand):
