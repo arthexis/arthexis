@@ -1,0 +1,12 @@
+.simulator-form { margin-bottom: 1em; }
+.simulator-form div { margin: 0.25em 0; }
+.simulator-form label { display: inline-block; width: 160px; }
+.simulator-form input, .simulator-form select { width: 200px; }
+.form-btns { margin-top: 0.5em; }
+.state-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+.state-dot.online { background: #4caf50; }
+.state-dot.stopped { background: #f44336; }
+.simulator-details { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; margin-top: 0.5em; }
+.simulator-details .stat { font-family: monospace; }
+.sim-msg { margin-bottom: 1em; color: #333; }
+.error { color: #b00020; }
