@@ -117,6 +117,14 @@ Package metadata lives in the `release.DEFAULT_PACKAGE` dataclass. Provide a
 custom `Package` instance or a `Credentials` object to `release.utils.build()` if
 you need to override the defaults or supply PyPI credentials programmatically.
 
+## Bluesky Integration
+
+The `bsky` app links user accounts with the [Bluesky](https://bsky.app) social
+network. Users may register their Bluesky handle and app password so the project
+can publish posts on their behalf. A domain-wide account can also be configured
+using the `BSKY_HANDLE` and `BSKY_APP_PASSWORD` environment variables to send
+posts from the site itself.
+
 ## Todos
 
 The `todos` app offers a lightweight API for recording project tasks and a
@@ -378,6 +386,26 @@ The Django admin includes an action to test connectivity to the configured upstr
 It also shows the rendered template so it can be reviewed or copied.
 
 
+# Todos
+
+Simple app for tracking tasks within the project.
+
+## API
+
+- `GET /todos/` – list all todos.
+- `POST /todos/` – create a new todo. JSON body: `{ "text": "Buy milk" }`
+- `POST /todos/<id>/toggle/` – toggle completion status.
+
+## Importing from Code
+
+Run the management command to create todo items from `# TODO` comments found in
+project files:
+
+```bash
+python manage.py import_todos
+```
+
+
 # Website App
 
 Displays the README for a particular app depending on the subdomain.
@@ -398,21 +426,11 @@ automatically generated sitemap now appears there. The footer stays at the
 bottom of short pages but scrolls into view on longer ones.
 
 
-# Todos
+# bsky
 
-Simple app for tracking tasks within the project.
+Integration with [Bluesky](https://bsky.app).
 
-## API
-
-- `GET /todos/` – list all todos.
-- `POST /todos/` – create a new todo. JSON body: `{ "text": "Buy milk" }`
-- `POST /todos/<id>/toggle/` – toggle completion status.
-
-## Importing from Code
-
-Run the management command to create todo items from `# TODO` comments found in
-project files:
-
-```bash
-python manage.py import_todos
-```
+Users can register their Bluesky handle with an app password so the
+project can publish posts on their behalf.  A domain-wide account may
+also be configured using the `BSKY_HANDLE` and `BSKY_APP_PASSWORD`
+settings to send posts from the site itself.

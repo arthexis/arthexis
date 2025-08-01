@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "nginx_app",
     "todos",
     "website",
+    "bsky",
 ]
 
 SITE_ID = 1
@@ -184,6 +185,10 @@ MEDIA_ROOT = BASE_DIR / "media"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Bluesky domain account (optional)
+BSKY_HANDLE = os.environ.get("BSKY_HANDLE")
+BSKY_APP_PASSWORD = os.environ.get("BSKY_APP_PASSWORD")
 
 # Logging configuration
 LOG_DIR = BASE_DIR / "logs"
