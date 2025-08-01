@@ -1,9 +1,11 @@
 import json
+import socket
 
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import Node
+from .models import Node, NodeScreenshot
+from .utils import capture_screenshot
 
 
 def node_list(request):
@@ -41,3 +43,21 @@ def register_node(request):
     )
 
     return JsonResponse({"id": node.id})
+
+
+def capture(request):
+    """Capture a screenshot of the site's root URL and record it."""
+
+    url = request.build_absolute_uri("/")
+    path = capture_screenshot(url)
+    hostname = socket.gethostname()
+    node = Node.objects.filter(
+        hostname=hostname, port=request.get_port()
+    ).first()
+    screenshot = NodeScreenshot.objects.create(node=node, path=str(path))
+    return JsonResponse(
+        {
+            "screenshot": str(path),
+            "node": screenshot.node.id if screenshot.node else None,
+        }
+    )
