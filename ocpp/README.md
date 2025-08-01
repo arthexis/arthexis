@@ -55,8 +55,8 @@ map.
 
 Each `Charger` instance automatically gets a public landing page at
 `/ocpp/c/<charger_id>/`. A QR code pointing to this URL is created when the
-charger is saved and can be embedded in templates via the `qr_img` tag from the
-`qrcodes` app. The admin list displays a "Landing Page" link for quick testing.
+charger is saved and can be embedded in templates via the `ref_img` tag from the
+`references` app. The admin list displays a "Landing Page" link for quick testing.
 Another "Log" link opens `/ocpp/log/<charger_id>/` which renders the stored
 message exchange as HTML. The landing page lists the charger status, the total
 energy delivered so far and a table of recorded sessions with the energy used

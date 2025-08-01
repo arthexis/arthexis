@@ -5,7 +5,7 @@ from django.shortcuts import render
 from website.utils import landing
 
 
-@landing("QR Generator")
+@landing("Reference Generator")
 def generator(request):
     """Landing page with a form to generate QR codes without storing them."""
     data = request.GET.get("data")
@@ -18,5 +18,5 @@ def generator(request):
         buffer = BytesIO()
         img.save(buffer, format="PNG")
         img_src = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
-    return render(request, "qrcodes/landing.html", {"img_src": img_src})
+    return render(request, "references/landing.html", {"img_src": img_src})
 

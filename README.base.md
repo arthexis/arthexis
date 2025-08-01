@@ -1,6 +1,6 @@
 # Arthexis Constellation
 
-A Django-based MESH system. Its objective is to serve as a monorepo that centralizes all the functions and models required by the distinct nodes in the system.
+A Django-based MESH-like system. Its objective is to serve as a monorepo that centralizes all the functions and models required by the distinct nodes that compose the execution platform.
 
 ## Setup
 
