@@ -4,7 +4,16 @@ from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 
-from .models import UserProxy, RFID, Account, Vehicle, Credit, Address
+from .models import (
+    UserProxy,
+    RFID,
+    Account,
+    Vehicle,
+    Credit,
+    Address,
+    Product,
+    Subscription,
+)
 
 
 class AccountRFIDForm(forms.ModelForm):
@@ -153,3 +162,7 @@ class CreditAdmin(admin.ModelAdmin):
         if not obj.created_by:
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
+
+
+admin.site.register(Product)
+admin.site.register(Subscription)

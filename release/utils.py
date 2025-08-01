@@ -61,7 +61,6 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
                     "chat",
                     "config",
                     "nodes",
-                    "subscriptions",
                     "ocpp",
                     "qrcodes",
                     "readme",
