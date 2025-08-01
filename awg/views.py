@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from typing import Literal, Optional, Union
 
-from django.http import HttpResponse
+from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 
 from website.utils import landing
@@ -225,199 +225,31 @@ def find_awg(
 
 @csrf_exempt
 @landing("AWG Calculator")
-def calculator(
-    request,
-    *,
-    meters=None,
-    amps="40",
-    volts="220",
-    material="cu",
-    max_lines="1",
-    max_awg=None,
-    phases="1",
-    temperature="60",
-    conduit=None,
-    ground="1",
-    neutral="0",
-    **kwargs,
-):
-    """Display the AWG calculator form and results."""
-
-    if request.method != "POST" or not request.POST.get("meters"):
-        return HttpResponse(
-            '''<link rel="stylesheet" href="/static/awg/cable_finder.css">
-            <script src="/static/awg/calc_info.js"></script>
-            <h1>Cable & Conduit Calculator</h1>
-            <div class="calc-layout">
-            <div class="form-wrapper">
-            <form method="post" class="cable-form">
-                <table class="form-table two-col">
-                    <tr>
-                        <td>
-                            <label for="meters">Meters:</label>
-                            <input id="meters" type="number" name="meters" required min="1" />
-                        </td>
-                        <td>
-                            <label for="amps">Amps:</label>
-                            <input id="amps" type="number" name="amps" value="40" />
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <label for="volts">Volts:</label>
-                            <input id="volts" type="number" name="volts" value="220" />
-                        </td>
-                        <td>
-                            <label for="material">Material:</label>
-                            <select id="material" name="material">
-                                <option value="cu">Copper (cu)</option>
-                                <option value="al">Aluminum (al)</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <label for="phases">Phases:</label>
-                            <select id="phases" name="phases">
-                                <option value="2">AC Two Phases (2)</option>
-                                <option value="1">AC Single Phase (1)</option>
-                                <option value="3">AC Three Phases (3)</option>
-                            </select>
-                        </td>
-                        <td>
-                            <label for="temperature">Temperature:</label>
-                            <select id="temperature" name="temperature">
-                                <option value="60" selected>60C (140F)</option>
-                                <option value="75">75C (167F)</option>
-                                <option value="90">90C (194F)</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <label for="conduit">Conduit:</label>
-                            <select id="conduit" name="conduit">
-                                <option value="emt" selected>EMT</option>
-                                <option value="imc">IMC</option>
-                                <option value="rmc">RMC</option>
-                                <option value="fmc">FMC</option>
-                                <option value="none">None</option>
-                            </select>
-                        </td>
-                        <td>
-                            <label for="max_awg">Max AWG:</label>
-                            <input id="max_awg" type="text" name="max_awg" />
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <label for="ground">Ground:</label>
-                            <select id="ground" name="ground">
-                                <option value="1" selected>1</option>
-                                <option value="0">0</option>
-                            </select>
-                        </td>
-                        <td>
-                            <label for="max_lines">Max Lines:</label>
-                            <select id="max_lines" name="max_lines">
-                                <option value="1">1</option>
-                                <option value="2">2</option>
-                                <option value="3">3</option>
-                                <option value="4">4</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <button type="submit" class="submit">Calculate</button>
-                        </td>
-                        <td></td>
-                    </tr>
-                </table>
-            </form>
-            </div>
-            <div id="calc-info" class="calc-info">
-                <button type="button" id="info-close" class="info-close hidden">[X]</button>
-                <p>This tool helps you select cable sizes and conduit using standard AWG tables. Fill in your system details and press Calculate.</p>
-                <h3>Glossary</h3>
-                <ul class="glossary">
-                    <li><strong>AWG</strong>: American Wire Gauge</li>
-                    <li><strong>A</strong>: ampere (current)</li>
-                    <li><strong>V</strong>: volt (voltage)</li>
-                    <li><strong>m</strong>: meter (length)</li>
-                    <li><strong>°C</strong>: degrees Celsius</li>
-                    <li><strong>°F</strong>: degrees Fahrenheit</li>
-                    <li><strong>cu</strong>: copper conductor</li>
-                    <li><strong>al</strong>: aluminum conductor</li>
-                </ul>
-            </div>
-            <button type="button" id="info-toggle" class="info-toggle">&#128278;</button>
-            </div>
-        ''')
-
-    max_awg = request.POST.get("max_awg") or None
-    conduit_field = request.POST.get("conduit")
-    conduit_arg = None if conduit_field in (None, "", "none", "None") else conduit_field
-
-    try:
-        result = find_awg(
-            meters=request.POST.get("meters"),
-            amps=request.POST.get("amps", "40"),
-            volts=request.POST.get("volts", "220"),
-            material=request.POST.get("material", "cu"),
-            max_lines=request.POST.get("max_lines", "1"),
-            phases=request.POST.get("phases", "2"),
-            max_awg=max_awg,
-            temperature=request.POST.get("temperature"),
-            conduit=conduit_arg,
-            ground=request.POST.get("ground", "1"),
-        )
-    except Exception as exc:  # pragma: no cover - defensive
-        return HttpResponse(
-            f"<p class='error'>Error: {exc}</p><p><a href='/awg/awg-calculator'>&#8592; Try again</a></p>"
-        )
-
-    if result.get("awg") == "n/a":
-        return HttpResponse(
-            """
-            <h1>No Suitable Cable Found</h1>
-            <p>No cable was found that meets the requirements within a 3% voltage drop.<br>
-            Try adjusting the <b>cable size, amps, length, or material</b> and try again.</p>
-            <p><a href="/awg/awg-calculator">&#8592; Calculate again</a></p>
-        """
-        )
-
-    conduit_line = (
-        f'<li><strong>Conduit:</strong> {result["conduit"].upper()} {result["pipe_inch"]}&quot;</li>'
-        if result.get("pipe_inch")
-        else ""
-    )
-    warning = (
-        f"<p class='warning'>{result['warning']}</p>" if result.get("warning") else ""
-    )
-
-    return HttpResponse(
-        f"""
-        <div class='calc-result'>
-        <h1>Calculator Results <img src='/static/awg/sponsor_logo.png' alt='Sponsor Logo' class='sponsor-logo'></h1>
-        <ul class='result-list'>
-            <li><strong>AWG Size:</strong> {result['awg']}</li>
-            <li><strong>Lines:</strong> {result['lines']}</li>
-            <li><strong>Total Cables:</strong> {result['cables']}</li>
-            <li><strong>Total Length (m):</strong> {result['total_meters']}</li>
-            <li><strong>Voltage Drop:</strong> {result['vdrop']:.2f} V ({result['vdperc']:.2f}%)</li>
-            <li><strong>Voltage at End:</strong> {result['vend']:.2f} V</li>
-            <li><strong>Temperature Rating:</strong> {result['temperature']}C</li>
-            {conduit_line}
-        </ul>
-        {warning}
-        <p>
-        <em>Special thanks to the expert engineers at <strong>
-        <a href="https://www.gelectriic.com" target="_blank">Gelectriic Solutions</a></strong> for their
-        support in creating this calculator.</em>
-        </p>
-        <p><a href="/awg/awg-calculator">&#8592; Calculate again</a></p>
-        </div>
-    """
-    )
-
+def calculator(request):
+    """Display the AWG calculator form and results using a template."""
+    context: dict[str, object] = {}
+    if request.method == "POST" and request.POST.get("meters"):
+        max_awg = request.POST.get("max_awg") or None
+        conduit_field = request.POST.get("conduit")
+        conduit_arg = None if conduit_field in (None, "", "none", "None") else conduit_field
+        try:
+            result = find_awg(
+                meters=request.POST.get("meters"),
+                amps=request.POST.get("amps", "40"),
+                volts=request.POST.get("volts", "220"),
+                material=request.POST.get("material", "cu"),
+                max_lines=request.POST.get("max_lines", "1"),
+                phases=request.POST.get("phases", "2"),
+                max_awg=max_awg,
+                temperature=request.POST.get("temperature"),
+                conduit=conduit_arg,
+                ground=request.POST.get("ground", "1"),
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            context["error"] = str(exc)
+        else:
+            if result.get("awg") == "n/a":
+                context["no_cable"] = True
+            else:
+                context["result"] = result
+    return render(request, "awg/calculator.html", context)

@@ -1,0 +1,102 @@
+{% extends "website/base.html" %}
+{% load static %}
+{% block title %}AWG Calculator{% endblock %}
+{% block content %}
+<h1>Cable & Conduit Calculator</h1>
+<form method="post" class="row row-cols-lg-2 g-3 mb-3">
+  {% csrf_token %}
+  <div class="col">
+    <label class="form-label" for="meters">Meters:</label>
+    <input id="meters" type="number" class="form-control" name="meters" required min="1" value="{{ request.POST.meters }}" />
+  </div>
+  <div class="col">
+    <label class="form-label" for="amps">Amps:</label>
+    <input id="amps" type="number" class="form-control" name="amps" value="{{ request.POST.amps|default:40 }}" />
+  </div>
+  <div class="col">
+    <label class="form-label" for="volts">Volts:</label>
+    <input id="volts" type="number" class="form-control" name="volts" value="{{ request.POST.volts|default:220 }}" />
+  </div>
+  <div class="col">
+    <label class="form-label" for="material">Material:</label>
+    <select id="material" name="material" class="form-select">
+      <option value="cu" {% if request.POST.material == "cu" %}selected{% endif %}>Copper (cu)</option>
+      <option value="al" {% if request.POST.material == "al" %}selected{% endif %}>Aluminum (al)</option>
+    </select>
+  </div>
+  <div class="col">
+    <label class="form-label" for="phases">Phases:</label>
+    <select id="phases" name="phases" class="form-select">
+      <option value="2" {% if request.POST.phases == "2" %}selected{% endif %}>AC Two Phases (2)</option>
+      <option value="1" {% if request.POST.phases == "1" %}selected{% endif %}>AC Single Phase (1)</option>
+      <option value="3" {% if request.POST.phases == "3" %}selected{% endif %}>AC Three Phases (3)</option>
+    </select>
+  </div>
+  <div class="col">
+    <label class="form-label" for="temperature">Temperature:</label>
+    <select id="temperature" name="temperature" class="form-select">
+      <option value="60" {% if request.POST.temperature == "60" %}selected{% endif %}>60C (140F)</option>
+      <option value="75" {% if request.POST.temperature == "75" %}selected{% endif %}>75C (167F)</option>
+      <option value="90" {% if request.POST.temperature == "90" %}selected{% endif %}>90C (194F)</option>
+    </select>
+  </div>
+  <div class="col">
+    <label class="form-label" for="conduit">Conduit:</label>
+    <select id="conduit" name="conduit" class="form-select">
+      <option value="emt" {% if request.POST.conduit == "emt" %}selected{% endif %}>EMT</option>
+      <option value="imc" {% if request.POST.conduit == "imc" %}selected{% endif %}>IMC</option>
+      <option value="rmc" {% if request.POST.conduit == "rmc" %}selected{% endif %}>RMC</option>
+      <option value="fmc" {% if request.POST.conduit == "fmc" %}selected{% endif %}>FMC</option>
+      <option value="none" {% if request.POST.conduit == "none" %}selected{% endif %}>None</option>
+    </select>
+  </div>
+  <div class="col">
+    <label class="form-label" for="max_awg">Max AWG:</label>
+    <input id="max_awg" type="text" class="form-control" name="max_awg" value="{{ request.POST.max_awg }}" />
+  </div>
+  <div class="col">
+    <label class="form-label" for="ground">Ground:</label>
+    <select id="ground" name="ground" class="form-select">
+      <option value="1" {% if request.POST.ground == "1" or request.POST.ground == None %}selected{% endif %}>1</option>
+      <option value="0" {% if request.POST.ground == "0" %}selected{% endif %}>0</option>
+    </select>
+  </div>
+  <div class="col">
+    <label class="form-label" for="max_lines">Max Lines:</label>
+    <select id="max_lines" name="max_lines" class="form-select">
+      <option value="1" {% if request.POST.max_lines == "1" or request.POST.max_lines == None %}selected{% endif %}>1</option>
+      <option value="2" {% if request.POST.max_lines == "2" %}selected{% endif %}>2</option>
+      <option value="3" {% if request.POST.max_lines == "3" %}selected{% endif %}>3</option>
+      <option value="4" {% if request.POST.max_lines == "4" %}selected{% endif %}>4</option>
+    </select>
+  </div>
+  <div class="col-12">
+    <button type="submit" class="btn btn-primary">Calculate</button>
+  </div>
+</form>
+{% if error %}
+<p class="text-danger">Error: {{ error }}</p>
+{% elif no_cable %}
+<h2>No Suitable Cable Found</h2>
+<p>No cable was found that meets the requirements within a 3% voltage drop.<br>Try adjusting the <b>cable size, amps, length, or material</b> and try again.</p>
+{% elif result %}
+<div class="calc-result">
+  <h2>Calculator Results</h2>
+  <ul class="list-unstyled result-list">
+    <li><strong>AWG Size:</strong> {{ result.awg }}</li>
+    <li><strong>Lines:</strong> {{ result.lines }}</li>
+    <li><strong>Total Cables:</strong> {{ result.cables }}</li>
+    <li><strong>Total Length (m):</strong> {{ result.total_meters }}</li>
+    <li><strong>Voltage Drop:</strong> {{ result.vdrop|floatformat:2 }} V ({{ result.vdperc|floatformat:2 }}%)</li>
+    <li><strong>Voltage at End:</strong> {{ result.vend|floatformat:2 }} V</li>
+    <li><strong>Temperature Rating:</strong> {{ result.temperature }}C</li>
+    {% if result.conduit %}
+    <li><strong>Conduit:</strong> {{ result.conduit|upper }} {{ result.pipe_inch }}&quot;</li>
+    {% endif %}
+  </ul>
+  {% if result.warning %}
+  <p class="warning">{{ result.warning }}</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
