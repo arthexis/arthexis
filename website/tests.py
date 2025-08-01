@@ -64,4 +64,6 @@ class AdminBadgesTests(TestCase):
         Node.objects.all().delete()
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "NODE: Unknown")
+        self.assertContains(resp, "badge-unknown")
+        self.assertContains(resp, "#6c757d")
 
