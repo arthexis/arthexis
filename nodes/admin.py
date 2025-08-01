@@ -1,17 +1,28 @@
 from django.contrib import admin, messages
 from django.urls import path
 from django.shortcuts import redirect
+from django import forms
 import socket
 import os
 
 from .models import Node, NodeScreenshot
 
 
+class NodeAdminForm(forms.ModelForm):
+    class Meta:
+        model = Node
+        fields = "__all__"
+        widgets = {
+            "badge_color": forms.TextInput(attrs={"type": "color"})
+        }
+
+
 @admin.register(Node)
 class NodeAdmin(admin.ModelAdmin):
-    list_display = ("hostname", "address", "port", "last_seen")
+    list_display = ("hostname", "address", "port", "badge_color", "last_seen")
     search_fields = ("hostname", "address")
     change_list_template = "admin/nodes/node/change_list.html"
+    form = NodeAdminForm
 
     def get_urls(self):
         urls = super().get_urls()
