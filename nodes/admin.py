@@ -4,7 +4,7 @@ from django.shortcuts import redirect
 import socket
 import os
 
-from .models import Node
+from .models import Node, NodeScreenshot
 
 
 @admin.register(Node)
@@ -42,3 +42,8 @@ class NodeAdmin(admin.ModelAdmin):
         else:
             self.message_user(request, "Current host already registered", messages.INFO)
         return redirect("..")
+
+
+@admin.register(NodeScreenshot)
+class NodeScreenshotAdmin(admin.ModelAdmin):
+    list_display = ("path", "node", "created")

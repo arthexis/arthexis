@@ -1,8 +1,12 @@
+from pathlib import Path
+from unittest.mock import patch
+import socket
+
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 
-from .models import Node
+from .models import Node, NodeScreenshot
 
 
 class NodeTests(TestCase):
@@ -27,6 +31,22 @@ class NodeTests(TestCase):
         data = list_resp.json()
         self.assertEqual(len(data["nodes"]), 1)
         self.assertEqual(data["nodes"][0]["hostname"], "local")
+
+    @patch("nodes.views.capture_screenshot")
+    def test_capture_screenshot(self, mock_capture):
+        hostname = socket.gethostname()
+        node = Node.objects.create(
+            hostname=hostname, address="127.0.0.1", port=80
+        )
+        mock_capture.return_value = Path("screenshots/test.png")
+        response = self.client.get(reverse("node-screenshot"))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["screenshot"], "screenshots/test.png")
+        self.assertEqual(data["node"], node.id)
+        mock_capture.assert_called_once()
+        self.assertEqual(NodeScreenshot.objects.count(), 1)
+        self.assertEqual(NodeScreenshot.objects.first().node, node)
 
 class NodeAdminTests(TestCase):
     def setUp(self):

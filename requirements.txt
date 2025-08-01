@@ -10,3 +10,6 @@ django-import-export
 python-dotenv
 django-post-office
 atproto
+selenium
+requests
+toml
