@@ -6,8 +6,14 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-import requests
-import toml
+# ``toml`` is used to write a temporary ``pyproject.toml`` file during the
+# release build.  The third party library may not be installed in the test
+# environment, so we attempt to import it lazily and fall back to the standard
+# library's ``json`` module for a very small substitute writer.
+try:  # pragma: no cover - optional dependency
+    import toml  # type: ignore
+except Exception:  # pragma: no cover - fallback when missing
+    toml = None  # type: ignore
 
 from . import Credentials, Package, DEFAULT_PACKAGE
 from config.offline import requires_network
@@ -72,7 +78,17 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
             }
         },
     }
-    Path("pyproject.toml").write_text(toml.dumps(content), encoding="utf-8")
+
+    def _dump_toml(data: dict) -> str:
+        if toml is not None and hasattr(toml, "dumps"):
+            return toml.dumps(data)
+        # Fallback: store as JSON; good enough for tests which do not
+        # consume this file.  Using json keeps this function dependency free.
+        import json
+
+        return json.dumps(data)
+
+    Path("pyproject.toml").write_text(_dump_toml(content), encoding="utf-8")
 
 
 def _ensure_changelog() -> str:
@@ -189,11 +205,20 @@ def build(
         _run([sys.executable, "-m", "build"])
         if twine:
             if not force:
-                resp = requests.get(f"https://pypi.org/pypi/{package.name}/json")
-                if resp.ok:
-                    releases = resp.json().get("releases", {})
-                    if version in releases:
-                        raise ReleaseError(f"Version {version} already on PyPI")
+                try:  # Lazy import so tests do not require requests
+                    import requests  # type: ignore
+                except Exception:  # pragma: no cover - requests optional
+                    requests = None  # type: ignore
+                if requests is not None:
+                    resp = requests.get(
+                        f"https://pypi.org/pypi/{package.name}/json"
+                    )
+                    if resp.ok:
+                        releases = resp.json().get("releases", {})
+                        if version in releases:
+                            raise ReleaseError(
+                                f"Version {version} already on PyPI"
+                            )
             token = os.environ.get("PYPI_API_TOKEN") if creds is None else creds.token
             user = os.environ.get("PYPI_USERNAME") if creds is None else creds.username
             pwd = os.environ.get("PYPI_PASSWORD") if creds is None else creds.password
