@@ -4,6 +4,7 @@ from channels.db import database_sync_to_async
 from django.test import Client, TransactionTestCase, TestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from website.views import get_landing_apps
 from django.utils import timezone
 
 from config.asgi import application
@@ -82,6 +83,15 @@ class ChargerLandingTests(TestCase):
         resp = client.get(reverse("charger-page", args=["STATS"]))
         self.assertContains(resp, "2.00")
         self.assertContains(resp, "Offline")
+
+
+class SimulatorLandingTests(TestCase):
+    def test_simulator_page_in_nav(self):
+        apps = get_landing_apps()
+        ocpp_app = next((a for a in apps if a["name"] == "Ocpp"), None)
+        self.assertIsNotNone(ocpp_app)
+        paths = [v["path"] for v in ocpp_app["views"]]
+        self.assertIn("/ocpp/simulator/", paths)
 
 
 class ChargerAdminTests(TestCase):

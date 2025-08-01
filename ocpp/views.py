@@ -7,9 +7,16 @@ from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
 
 from website.utils import landing
+from gway import gw
 
 from . import store
 from .models import Transaction, Charger
+from .evcs import (
+    _start_simulator,
+    _stop_simulator,
+    get_simulator_state,
+    _simulator_status_json,
+)
 
 
 def _charger_state(charger: Charger, tx_obj: Transaction | None):
@@ -117,6 +124,80 @@ def dashboard(request):
         state, color = _charger_state(charger, tx_obj)
         chargers.append({"charger": charger, "state": state, "color": color})
     return render(request, "ocpp/dashboard.html", {"chargers": chargers})
+
+
+@landing("Simulator")
+def cp_simulator(request):
+    """Public landing page to control the OCPP charge point simulator."""
+    ws_url = gw.web.build_ws_url("ocpp", "csms")
+    default_host = ws_url.split("://")[-1].split(":")[0]
+    default_ws_port = (
+        ws_url.split(":")[-1].split("/")[0] if ":" in ws_url else "9000"
+    )
+    default_cp_paths = ["CP1", "CP2"]
+    default_rfid = "FFFFFFFF"
+
+    message = ""
+    if request.method == "POST":
+        cp_idx = int(request.POST.get("cp") or 1)
+        action = request.POST.get("action")
+        if action == "start":
+            sim_params = dict(
+                host=request.POST.get("host") or default_host,
+                ws_port=int(request.POST.get("ws_port") or default_ws_port),
+                cp_path=request.POST.get("cp_path")
+                or default_cp_paths[cp_idx - 1],
+                rfid=request.POST.get("rfid") or default_rfid,
+                duration=int(request.POST.get("duration") or 600),
+                interval=float(request.POST.get("interval") or 5),
+                kwh_min=float(request.POST.get("kwh_min") or 30),
+                kwh_max=float(request.POST.get("kwh_max") or 60),
+                pre_charge_delay=float(request.POST.get("pre_charge_delay") or 0),
+                repeat=request.POST.get("repeat") or False,
+                daemon=True,
+                username=request.POST.get("username") or None,
+                password=request.POST.get("password") or None,
+            )
+            try:
+                started = _start_simulator(sim_params, cp=cp_idx)
+                message = (
+                    f"CP{cp_idx} started."
+                    if started
+                    else f"CP{cp_idx} already running."
+                )
+            except Exception as exc:  # pragma: no cover - unexpected
+                message = f"Failed to start CP{cp_idx}: {exc}"
+        elif action == "stop":
+            try:
+                _stop_simulator(cp=cp_idx)
+                message = f"CP{cp_idx} stop requested."
+            except Exception as exc:  # pragma: no cover - unexpected
+                message = f"Failed to stop CP{cp_idx}: {exc}"
+        else:
+            message = "Unknown action."
+
+    states_dict = get_simulator_state()
+    state_list = [states_dict[1], states_dict[2]]
+    params_jsons = [
+        json.dumps(state_list[0].get("params", {}), indent=2),
+        json.dumps(state_list[1].get("params", {}), indent=2),
+    ]
+    state_jsons = [
+        _simulator_status_json(1),
+        _simulator_status_json(2),
+    ]
+
+    context = {
+        "message": message,
+        "states": state_list,
+        "default_host": default_host,
+        "default_ws_port": default_ws_port,
+        "default_cp_paths": default_cp_paths,
+        "default_rfid": default_rfid,
+        "params_jsons": params_jsons,
+        "state_jsons": state_jsons,
+    }
+    return render(request, "ocpp/cp_simulator.html", context)
 
 
 def charger_page(request, cid):
