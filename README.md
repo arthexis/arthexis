@@ -169,6 +169,19 @@ The `nodes` app exposes a simple JSON interface for keeping track of other insta
 - `GET /nodes/list/` returns all known nodes.
 - `GET /nodes/screenshot/` captures a screenshot of the site and records it for the current node.
 
+## NGINX Templates
+
+The `NginxConfig` model manages NGINX templates with support for HTTP, WebSockets,
+optional SSL certificates and fallback upstream servers. Templates can be applied
+to the host using a management command:
+
+```bash
+python manage.py apply_nginx_config <id>
+```
+
+The Django admin includes an action to test connectivity to the configured
+upstream servers and shows the rendered template for review.
+
 
 # Accounts and Products App
 
@@ -380,20 +393,6 @@ authenticate with the selected servers.
 Collects and exposes links displayed at the bottom of the site.
 Views can be decorated with `footer_link()` to appear in the footer.
 Links can be grouped into columns by providing a column name to the decorator.
-
-
-# Nginx App
-
-Provides management of NGINX templates with support for HTTP, WebSockets, optional SSL
-certificates and fallback upstream servers. Templates can be applied to the host using a
-management command:
-
-```bash
-python manage.py apply_nginx_config <id>
-```
-
-The Django admin includes an action to test connectivity to the configured upstream servers.
-It also shows the rendered template so it can be reviewed or copied.
 
 
 # Todos
