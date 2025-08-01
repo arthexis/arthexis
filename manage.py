@@ -22,10 +22,50 @@ def _dev_tasks() -> None:
 
         req = Path("requirements.txt")
         if req.exists():
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-r", str(req)],
+            freeze = subprocess.run(
+                [sys.executable, "-m", "pip", "freeze"],
+                capture_output=True,
+                text=True,
                 check=False,
             )
+            installed = {}
+            for line in freeze.stdout.splitlines():
+                if "==" in line:
+                    name, ver = line.split("==", 1)
+                    installed[name.lower()] = ver
+                elif "@" in line:
+                    name = line.split("@", 1)[0]
+                    installed[name.strip().lower()] = None
+            from packaging.requirements import Requirement
+
+            req_lines = [
+                line.strip()
+                for line in req.read_text().splitlines()
+                if line.strip() and not line.startswith("#")
+            ]
+            needs_install = False
+            for line in req_lines:
+                try:
+                    requirement = Requirement(line)
+                except Exception:
+                    needs_install = True
+                    break
+                name = requirement.name.lower()
+                version = installed.get(name)
+                if version is None:
+                    if name not in installed:
+                        needs_install = True
+                        break
+                elif requirement.specifier and not requirement.specifier.contains(
+                    version, prereleases=True
+                ):
+                    needs_install = True
+                    break
+            if needs_install:
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "-r", str(req)],
+                    check=False,
+                )
 
         try:
             call_command("makemigrations")
