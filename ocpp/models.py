@@ -55,6 +55,29 @@ class Charger(models.Model):
                 total += diff / 1000.0
         return total
 
+    def purge(self):
+        from . import store
+
+        Transaction.objects.filter(charger_id=self.charger_id).delete()
+        self.meter_readings.all().delete()
+        store.logs.pop(self.charger_id, None)
+        store.transactions.pop(self.charger_id, None)
+        store.history.pop(self.charger_id, None)
+
+    def delete(self, *args, **kwargs):
+        from django.db.models.deletion import ProtectedError
+        from . import store
+
+        if (
+            Transaction.objects.filter(charger_id=self.charger_id).exists()
+            or self.meter_readings.exists()
+            or store.logs.get(self.charger_id)
+            or store.transactions.get(self.charger_id)
+            or store.history.get(self.charger_id)
+        ):
+            raise ProtectedError("Purge data before deleting charger.", [])
+        super().delete(*args, **kwargs)
+
 
 class Transaction(models.Model):
     """Charging session data stored for each charger."""
