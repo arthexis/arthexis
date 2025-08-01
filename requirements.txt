@@ -9,3 +9,4 @@ websockets>=12
 django-import-export
 python-dotenv
 django-post-office
+atproto
