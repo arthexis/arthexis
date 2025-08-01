@@ -10,6 +10,8 @@ from config.asgi import application
 
 from .models import Transaction, Charger, Simulator, MeterReading
 from accounts.models import RFID, Account, Credit
+from . import store
+from django.db.models.deletion import ProtectedError
 
 
 
@@ -105,6 +107,41 @@ class ChargerAdminTests(TestCase):
         resp = self.client.get(url)
         log_url = reverse("charger-log", args=["LOG1"])
         self.assertContains(resp, log_url)
+
+    def test_purge_action_removes_data(self):
+        charger = Charger.objects.create(charger_id="PURGE1")
+        Transaction.objects.create(
+            charger_id="PURGE1",
+            transaction_id=1,
+            start_time=timezone.now(),
+        )
+        MeterReading.objects.create(
+            charger=charger,
+            timestamp=timezone.now(),
+            value=1,
+        )
+        store.logs["PURGE1"] = ["entry"]
+        url = reverse("admin:ocpp_charger_changelist")
+        self.client.post(url, {"action": "purge_data", "_selected_action": [charger.pk]})
+        self.assertFalse(Transaction.objects.filter(charger_id="PURGE1").exists())
+        self.assertFalse(MeterReading.objects.filter(charger=charger).exists())
+        self.assertNotIn("PURGE1", store.logs)
+
+    def test_delete_requires_purge(self):
+        charger = Charger.objects.create(charger_id="DEL1")
+        Transaction.objects.create(
+            charger_id="DEL1",
+            transaction_id=1,
+            start_time=timezone.now(),
+        )
+        delete_url = reverse("admin:ocpp_charger_delete", args=[charger.pk])
+        with self.assertRaises(ProtectedError):
+            self.client.post(delete_url, {"post": "yes"})
+        self.assertTrue(Charger.objects.filter(pk=charger.pk).exists())
+        url = reverse("admin:ocpp_charger_changelist")
+        self.client.post(url, {"action": "purge_data", "_selected_action": [charger.pk]})
+        self.client.post(delete_url, {"post": "yes"})
+        self.assertFalse(Charger.objects.filter(pk=charger.pk).exists())
 
 
 class SimulatorAdminTests(TestCase):

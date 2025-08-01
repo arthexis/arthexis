@@ -43,6 +43,7 @@ class ChargerAdmin(admin.ModelAdmin):
         "status_link",
     )
     search_fields = ("charger_id", "name")
+    actions = ["purge_data", "delete_selected"]
 
     def test_link(self, obj):
         from django.utils.html import format_html
@@ -70,6 +71,17 @@ class ChargerAdmin(admin.ModelAdmin):
         return format_html('<a href="{}" target="_blank">status</a>', url)
 
     status_link.short_description = "Status Page"
+
+    def purge_data(self, request, queryset):
+        for charger in queryset:
+            charger.purge()
+        self.message_user(request, "Data purged for selected chargers")
+
+    purge_data.short_description = "Purge data"
+
+    def delete_queryset(self, request, queryset):
+        for obj in queryset:
+            obj.delete()
 
 
 @admin.register(Simulator)
