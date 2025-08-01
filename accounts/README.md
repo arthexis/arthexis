@@ -1,4 +1,4 @@
-# Accounts App
+# Accounts and Products App
 
 Users may authenticate using any RFID tag assigned to their account. POST the RFID value as JSON to `/accounts/rfid-login/` and the server will return the user's details if the tag matches one stored in the `RFID` model.
 
@@ -36,6 +36,14 @@ quickly verify whether an account would be accepted by a charger.
 An account may be associated with multiple **Vehicle** records. Each vehicle
 stores the `brand`, `model` and `VIN` (Vehicle Identification Number) so that a
 user's cars can be identified when using OCPP chargers.
+
+## Products and Subscriptions
+
+Provides a simple subscription model:
+
+- `GET /accounts/products/` returns available products.
+- `POST /accounts/subscribe/` with `account_id` and `product_id` creates a subscription.
+- `GET /accounts/list/?account_id=<id>` lists subscriptions for an account.
 
 ## RFID CSV Utilities
 

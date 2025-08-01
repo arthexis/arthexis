@@ -4,6 +4,7 @@ from django.db import models
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
+from datetime import timedelta
 
 
 class Address(models.Model):
@@ -302,3 +303,31 @@ class Vehicle(models.Model):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         parts = " ".join(p for p in [self.brand, self.model] if p)
         return f"{parts} ({self.vin})" if parts else self.vin
+
+
+class Product(models.Model):
+    """A product that users can subscribe to."""
+
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    renewal_period = models.PositiveIntegerField(help_text="Renewal period in days")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+
+class Subscription(models.Model):
+    """An account's subscription to a product."""
+
+    account = models.ForeignKey(Account, on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    start_date = models.DateField(auto_now_add=True)
+    next_renewal = models.DateField(blank=True)
+
+    def save(self, *args, **kwargs):
+        if not self.next_renewal:
+            self.next_renewal = self.start_date + timedelta(days=self.product.renewal_period)
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.account.user} -> {self.product}"

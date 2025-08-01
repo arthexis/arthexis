@@ -167,7 +167,7 @@ The `nodes` app exposes a simple JSON interface for keeping track of other insta
 - `GET /nodes/screenshot/` captures a screenshot of the site and records it for the current node.
 
 
-# Accounts App
+# Accounts and Products App
 
 Users may authenticate using any RFID tag assigned to their account. POST the RFID value as JSON to `/accounts/rfid-login/` and the server will return the user's details if the tag matches one stored in the `RFID` model.
 
@@ -206,6 +206,14 @@ An account may be associated with multiple **Vehicle** records. Each vehicle
 stores the `brand`, `model` and `VIN` (Vehicle Identification Number) so that a
 user's cars can be identified when using OCPP chargers.
 
+## Products and Subscriptions
+
+Provides a simple subscription model:
+
+- `GET /accounts/products/` returns available products.
+- `POST /accounts/subscribe/` with `account_id` and `product_id` creates a subscription.
+- `GET /accounts/list/?account_id=<id>` lists subscriptions for an account.
+
 ## RFID CSV Utilities
 
 RFID tags can be exported and imported using management commands:
@@ -213,15 +221,6 @@ RFID tags can be exported and imported using management commands:
 - `python manage.py export_rfids [path]` writes all tags to CSV. If `path` is omitted the data is printed to stdout.
 - `python manage.py import_rfids path` loads tags from a CSV file created by the export command.
 - The Django admin also provides export and import actions powered by [`django-import-export`](https://django-import-export.readthedocs.io/).
-
-
-# Subscriptions App
-
-Provides a simple subscription model:
-
-- `GET /subscriptions/products/` returns available products.
-- `POST /subscriptions/subscribe/` with `account_id` and `product_id` creates a subscription.
-- `GET /subscriptions/list/?account_id=<id>` lists subscriptions for an account.
 
 
 # OCPP App
