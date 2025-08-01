@@ -283,8 +283,8 @@ map.
 
 Each `Charger` instance automatically gets a public landing page at
 `/ocpp/c/<charger_id>/`. A QR code pointing to this URL is created when the
-charger is saved and can be embedded in templates via the `qr_img` tag from the
-`qrcodes` app. The admin list displays a "Landing Page" link for quick testing.
+charger is saved and can be embedded in templates via the `ref_img` tag from the
+`references` app. The admin list displays a "Landing Page" link for quick testing.
 Another "Log" link opens `/ocpp/log/<charger_id>/` which renders the stored
 message exchange as HTML. The landing page lists the charger status, the total
 energy delivered so far and a table of recorded sessions with the energy used
@@ -321,11 +321,14 @@ without writing any code.  The admin list shows the full WebSocket URL for
 each simulator along with its configured interval and kWh limit.
 
 
-# QRCodes App
+# References App
 
-Provides a small `QRLink` model that stores a value and generates a QR image for it. A template tag `qr_img` renders the QR code in templates and automatically creates the record if needed.
+Provides a small `Reference` model that stores values or links which can be represented by QR codes or other methods. Each
+reference can store alternative text and tracks how often it is used. A template tag `ref_img` renders the QR image in templates
+and automatically creates or updates the record when needed.
 
-A simple landing page at `/qr/` can generate a QR code for arbitrary text without saving anything to the database.
+A simple landing page at `/ref/` can generate a QR code for arbitrary text without saving anything to the database.
+
 
 
 # AWG App

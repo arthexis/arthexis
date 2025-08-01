@@ -68,7 +68,7 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
                     "config",
                     "nodes",
                     "ocpp",
-                    "qrcodes",
+                    "references",
                     "readme",
                     "website",
                     "release",

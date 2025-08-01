@@ -3,7 +3,7 @@ from django.urls import reverse
 from django.contrib.sites.models import Site
 from django.conf import settings
 
-from qrcodes.models import QRLink
+from references.models import Reference
 from accounts.models import Account
 
 
@@ -16,7 +16,7 @@ class Charger(models.Model):
     require_rfid = models.BooleanField("Require RFID", default=False)
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_meter_values = models.JSONField(default=dict, blank=True)
-    qr = models.OneToOneField(QRLink, null=True, blank=True, on_delete=models.SET_NULL)
+    reference = models.OneToOneField(Reference, null=True, blank=True, on_delete=models.SET_NULL)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     last_path = models.CharField(max_length=255, blank=True)
@@ -35,11 +35,11 @@ class Charger(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        qr_value = self._full_url()
-        if not self.qr or self.qr.value != qr_value:
-            qr, _ = QRLink.objects.get_or_create(value=qr_value)
-            self.qr = qr
-            super().save(update_fields=["qr"])
+        ref_value = self._full_url()
+        if not self.reference or self.reference.value != ref_value:
+            ref, _ = Reference.objects.get_or_create(value=ref_value)
+            self.reference = ref
+            super().save(update_fields=["reference"])
 
     @property
     def total_kwh(self) -> float:

@@ -52,9 +52,9 @@ class CSMSConsumerTests(TransactionTestCase):
 
 
 class ChargerLandingTests(TestCase):
-    def test_qr_created_and_page_renders(self):
+    def test_reference_created_and_page_renders(self):
         charger = Charger.objects.create(charger_id="PAGE1")
-        self.assertIsNotNone(charger.qr)
+        self.assertIsNotNone(charger.reference)
 
         client = Client()
         response = client.get(reverse("charger-page", args=["PAGE1"]))

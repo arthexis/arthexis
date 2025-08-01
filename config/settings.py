@@ -49,7 +49,7 @@ INSTALLED_APPS = [
     "nodes",
     "accounts",
     "ocpp",
-    "qrcodes",
+    "references",
     "awg",
     "release",
     "odoo",
