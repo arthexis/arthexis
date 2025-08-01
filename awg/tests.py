@@ -22,7 +22,8 @@ class AWGCalculatorTests(TestCase):
         }
         resp = self.client.post(url, data)
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "AWG Size:")
+        self.assertContains(resp, "<table")
+        self.assertContains(resp, "AWG Size</th>")
         self.assertContains(resp, "8")
         self.assertContains(resp, "Voltage Drop")
         self.assertContains(resp, "EMT")
