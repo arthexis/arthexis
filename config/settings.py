@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "todos",
     "website",
     "bsky",
+    "clipboard",
 ]
 
 SITE_ID = 1
