@@ -58,7 +58,8 @@ INSTALLED_APPS = [
     "footer",
     "todos",
     "website",
-    "bsky",
+    "social.bsky",
+    "social.meta",
     "clipboard",
 ]
 

@@ -120,13 +120,13 @@ Package metadata lives in the `release.DEFAULT_PACKAGE` dataclass. Provide a
 custom `Package` instance or a `Credentials` object to `release.utils.build()` if
 you need to override the defaults or supply PyPI credentials programmatically.
 
-## Bluesky Integration
+## Social Integrations
 
-The `bsky` app links user accounts with the [Bluesky](https://bsky.app) social
-network. Users may register their Bluesky handle and app password so the project
-can publish posts on their behalf. A domain-wide account can also be configured
-using the `BSKY_HANDLE` and `BSKY_APP_PASSWORD` environment variables to send
-posts from the site itself.
+The `social` app groups functionality for connecting with external social
+networks. The `bsky` sub-app links user accounts with the
+[Bluesky](https://bsky.app) network, allowing posts on their behalf. The
+`meta` sub-app provides basic interaction with Facebook Pages through the Graph
+API so content can be published to a page.
 
 ## Todos
 
