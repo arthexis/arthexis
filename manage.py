@@ -28,9 +28,9 @@ def _dev_tasks() -> None:
             )
 
         try:
-            call_command("makemigrations")
+            call_command("makemigrations", interactive=False)
         except CommandError:
-            call_command("makemigrations", merge=True)
+            call_command("makemigrations", merge=True, interactive=False)
         call_command("migrate", interactive=False)
 
         proc = subprocess.run(
