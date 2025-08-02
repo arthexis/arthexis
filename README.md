@@ -1,6 +1,6 @@
 # Arthexis Constellation
 
-A Django-based MESH system. Its objective is to serve as a monorepo that centralizes all the functions and models required by the distinct nodes in the system.
+A Django-based MESH-like system. Its objective is to serve as a monorepo that centralizes all the functions and models required by the distinct nodes that compose the execution platform.
 
 ## Setup
 
@@ -443,3 +443,10 @@ Users can register their Bluesky handle with an app password so the
 project can publish posts on their behalf.  A domain-wide account may
 also be configured using the `BSKY_HANDLE` and `BSKY_APP_PASSWORD`
 settings to send posts from the site itself.
+
+
+# Clipboard
+
+Stores clipboard text snippets as `Sample` entries. Use the management command
+`sample_clipboard` or the Django admin to capture the current system clipboard
+content.
