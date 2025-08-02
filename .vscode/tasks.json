@@ -4,7 +4,7 @@
         {
             "label": "Update requirements",
             "type": "shell",
-            "command": "python -m pip install -U -r requirements.txt && python -m pip freeze > requirements.txt",
+            "command": "${config:python.defaultInterpreterPath} -m pip install -U -r requirements.txt && ${config:python.defaultInterpreterPath} -m pip freeze > requirements.txt",
             "problemMatcher": []
         }
     ]
