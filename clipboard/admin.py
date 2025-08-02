@@ -1,6 +1,9 @@
 from django.contrib import admin, messages
 
 from .models import Pattern, Sample
+from django.contrib import admin
+
+from .models import Sample
 
 
 @admin.register(Sample)
@@ -42,3 +45,4 @@ class PatternAdmin(admin.ModelAdmin):
             "No pattern matched the latest sample.",
             level=messages.INFO,
         )
+

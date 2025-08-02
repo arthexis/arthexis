@@ -58,3 +58,4 @@ class Pattern(models.Model):
         pattern_parts.append(re.escape(self.mask[last_index:]))
         regex = "".join(pattern_parts)
         return regex, sigil_names
+

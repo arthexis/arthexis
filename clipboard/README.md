@@ -7,3 +7,4 @@ content.
 Patterns can be defined with optional `[sigils]` to scan the most recent sample.
 Each pattern has a `priority` and the admin action **Scan latest sample**
 returns the first matching pattern along with any sigil substitutions.
+

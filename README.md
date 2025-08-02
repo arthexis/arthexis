@@ -120,13 +120,13 @@ Package metadata lives in the `release.DEFAULT_PACKAGE` dataclass. Provide a
 custom `Package` instance or a `Credentials` object to `release.utils.build()` if
 you need to override the defaults or supply PyPI credentials programmatically.
 
-## Bluesky Integration
+## Social Integrations
 
-The `bsky` app links user accounts with the [Bluesky](https://bsky.app) social
-network. Users may register their Bluesky handle and app password so the project
-can publish posts on their behalf. A domain-wide account can also be configured
-using the `BSKY_HANDLE` and `BSKY_APP_PASSWORD` environment variables to send
-posts from the site itself.
+The `social` app groups functionality for connecting with external social
+networks. The `bsky` sub-app links user accounts with the
+[Bluesky](https://bsky.app) network, allowing posts on their behalf. The
+`meta` sub-app provides basic interaction with Facebook Pages through the Graph
+API so content can be published to a page.
 
 ## Todos
 
@@ -435,22 +435,9 @@ automatically generated sitemap now appears there. The footer stays at the
 bottom of short pages but scrolls into view on longer ones.
 
 
-# bsky
-
-Integration with [Bluesky](https://bsky.app).
-
-Users can register their Bluesky handle with an app password so the
-project can publish posts on their behalf.  A domain-wide account may
-also be configured using the `BSKY_HANDLE` and `BSKY_APP_PASSWORD`
-settings to send posts from the site itself.
-
-
 # Clipboard
 
 Stores clipboard text snippets as `Sample` entries. Use the management command
 `sample_clipboard` or the Django admin to capture the current system clipboard
 content.
 
-Patterns can be defined with optional `[sigils]` to scan the most recent sample.
-Each pattern has a `priority` and the admin action **Scan latest sample**
-returns the first matching pattern along with any sigil substitutions.
