@@ -2,14 +2,19 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
+from pathlib import Path
+
 from config.loadenv import loadenv
+
+
+BASE_DIR = Path(__file__).resolve().parent
+VENV_PYTHON = BASE_DIR / ".venv" / "bin" / "python"
 
 
 def _dev_tasks() -> None:
     """Perform optional maintenance tasks during auto-reload."""
     try:
         import subprocess
-        from pathlib import Path
 
         import django
         from django.conf import settings
@@ -20,10 +25,14 @@ def _dev_tasks() -> None:
         if not settings.DEBUG:
             return
 
+        venv_dir = VENV_PYTHON.parent.parent
+        if not VENV_PYTHON.exists():
+            subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False)
+
         req = Path("requirements.txt")
         if req.exists():
             freeze = subprocess.run(
-                [sys.executable, "-m", "pip", "freeze"],
+                [str(VENV_PYTHON), "-m", "pip", "freeze"],
                 capture_output=True,
                 text=True,
                 check=False,
@@ -63,7 +72,7 @@ def _dev_tasks() -> None:
                     break
             if needs_install:
                 subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "-r", str(req)],
+                    [str(VENV_PYTHON), "-m", "pip", "install", "-r", str(req)],
                     check=False,
                 )
 
@@ -131,6 +140,8 @@ def main():
 
     def _execute():
         _dev_tasks()
+        if settings.DEBUG and Path(sys.executable).resolve() != VENV_PYTHON.resolve():
+            os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), *sys.argv])
         execute_from_command_line(sys.argv)
 
     if (
