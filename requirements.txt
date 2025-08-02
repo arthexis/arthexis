@@ -13,3 +13,5 @@ atproto
 selenium
 requests
 toml
+
+pyperclip
