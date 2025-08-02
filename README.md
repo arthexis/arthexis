@@ -150,17 +150,6 @@ and a management command `build_readme` that rebuilds the file from
 `README.base.md` and each app's own `README.md`.
 
 
-# Chat App
-
-This project includes basic websocket support using [Django Channels](https://channels.readthedocs.io/). After launching the development server the console now prints the available WebSocket endpoint:
-
-```
-WebSocket available at ws://127.0.0.1:8000/ws/echo/
-```
-
-You can connect a WebSocket client to this URL and any text you send will be echoed back.
-
-
 # Nodes App
 
 The `nodes` app exposes a simple JSON interface for keeping track of other instances of this project:
@@ -243,6 +232,13 @@ RFID tags can be exported and imported using management commands:
 
 This app implements a lightweight Charge Point management system using
 [OCPP 1.6](https://github.com/OCA/ocpp) over WebSockets.
+
+### Sink Endpoint
+
+A permissive WebSocket sink is exposed at `ws://127.0.0.1:8000/ws/sink/` which
+accepts any OCPP CALL message and replies with an empty CALLRESULT payload. This
+is useful when a charge point should be able to send data without triggering
+validation errors.
 
 ### WebSocket Endpoint
 
@@ -440,4 +436,8 @@ bottom of short pages but scrolls into view on longer ones.
 Stores clipboard text snippets as `Sample` entries. Use the management command
 `sample_clipboard` or the Django admin to capture the current system clipboard
 content.
+
+Patterns can be defined with optional `[sigils]` to scan the most recent sample.
+Each pattern has a `priority` and the admin action **Scan latest sample**
+returns the first matching pattern along with any sigil substitutions.
 

@@ -15,6 +15,18 @@ from . import store
 from django.db.models.deletion import ProtectedError
 
 
+class SinkConsumerTests(TransactionTestCase):
+    async def test_sink_replies(self):
+        communicator = WebsocketCommunicator(application, "/ws/sink/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to([2, "1", "Foo", {}])
+        response = await communicator.receive_json_from()
+        self.assertEqual(response, [3, "1", {}])
+
+        await communicator.disconnect()
+
 
 class CSMSConsumerTests(TransactionTestCase):
     async def test_transaction_saved(self):
