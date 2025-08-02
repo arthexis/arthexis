@@ -3,6 +3,13 @@
 This app implements a lightweight Charge Point management system using
 [OCPP 1.6](https://github.com/OCA/ocpp) over WebSockets.
 
+### Sink Endpoint
+
+A permissive WebSocket sink is exposed at `ws://127.0.0.1:8000/ws/sink/` which
+accepts any OCPP CALL message and replies with an empty CALLRESULT payload. This
+is useful when a charge point should be able to send data without triggering
+validation errors.
+
 ### WebSocket Endpoint
 
 ```

@@ -14,6 +14,24 @@ from django.utils.dateparse import parse_datetime
 from .models import Transaction, Charger, MeterReading
 
 
+class SinkConsumer(AsyncWebsocketConsumer):
+    """Accept any message without validation."""
+
+    @requires_network
+    async def connect(self) -> None:
+        await self.accept()
+
+    async def receive(self, text_data: str | None = None, bytes_data: bytes | None = None) -> None:
+        if text_data is None:
+            return
+        try:
+            msg = json.loads(text_data)
+            if isinstance(msg, list) and msg and msg[0] == 2:
+                await self.send(json.dumps([3, msg[1], {}]))
+        except Exception:
+            pass
+
+
 class CSMSConsumer(AsyncWebsocketConsumer):
     """Very small subset of OCPP 1.6 CSMS behaviour."""
 
