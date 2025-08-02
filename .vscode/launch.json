@@ -9,7 +9,6 @@
             "args": ["runserver"],
             "django": true,
             "noDebug": true,
-            "env": {"DJANGO_DEV_RELOAD": "1"}
         },
         {
             "name": "Debug Server",
@@ -18,7 +17,6 @@
             "program": "${workspaceFolder}/manage.py",
             "args": ["runserver"],
             "django": true,
-            "env": {"DJANGO_DEV_RELOAD": "1"}
         }
     ]
 }
