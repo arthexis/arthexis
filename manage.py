@@ -8,7 +8,9 @@ from config.loadenv import loadenv
 
 
 BASE_DIR = Path(__file__).resolve().parent
-VENV_PYTHON = BASE_DIR / ".venv" / "bin" / "python"
+VENV_DIR = BASE_DIR / ".venv"
+VENV_BIN = "Scripts" if os.name == "nt" else "bin"
+VENV_PYTHON = VENV_DIR / VENV_BIN / ("python.exe" if os.name == "nt" else "python")
 
 
 def _dev_tasks() -> None:
@@ -25,9 +27,11 @@ def _dev_tasks() -> None:
         if not settings.DEBUG:
             return
 
-        venv_dir = VENV_PYTHON.parent.parent
+        venv_dir = VENV_DIR
         if not VENV_PYTHON.exists():
             subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False)
+        if not VENV_PYTHON.exists():
+            return
 
         req = Path("requirements.txt")
         if req.exists():
@@ -140,7 +144,11 @@ def main():
 
     def _execute():
         _dev_tasks()
-        if settings.DEBUG and Path(sys.executable).resolve() != VENV_PYTHON.resolve():
+        if (
+            settings.DEBUG
+            and VENV_PYTHON.exists()
+            and Path(sys.executable).resolve() != VENV_PYTHON.resolve()
+        ):
             os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), *sys.argv])
         execute_from_command_line(sys.argv)
 
