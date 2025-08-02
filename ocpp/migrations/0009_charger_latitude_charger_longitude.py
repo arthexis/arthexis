@@ -6,7 +6,8 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("ocpp", "0008_merge_0007_charger_reference_0007_transaction_account"),
+        ("ocpp", "0007_charger_reference"),
+        ("ocpp", "0007_transaction_account"),
     ]
 
     operations = [
