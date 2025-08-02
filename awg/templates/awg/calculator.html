@@ -75,10 +75,7 @@
         </select>
       </div>
     </div>
-    <div class="col-lg-6">
-      <div class="mb-3">
-        <button type="submit" class="btn btn-primary w-100">Calculate</button>
-      </div>
+    <div class="col-lg-6 d-flex flex-column">
       {% if error %}
       <p class="text-danger">Error: {{ error }}</p>
       {% elif no_cable %}
@@ -106,6 +103,9 @@
         {% endif %}
       </div>
       {% endif %}
+      <div class="mt-auto mb-3">
+        <button type="submit" class="btn btn-primary w-100">Calculate</button>
+      </div>
     </div>
   </div>
 </form>
