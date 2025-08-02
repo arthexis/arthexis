@@ -5,18 +5,26 @@
             "name": "Run Server",
             "type": "python",
             "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "windows": {
+                "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+            },
             "program": "${workspaceFolder}/manage.py",
             "args": ["runserver"],
             "django": true,
-            "noDebug": true,
+            "noDebug": true
         },
         {
             "name": "Debug Server",
             "type": "python",
             "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "windows": {
+                "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+            },
             "program": "${workspaceFolder}/manage.py",
             "args": ["runserver"],
-            "django": true,
+            "django": true
         }
     ]
 }
