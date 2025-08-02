@@ -1,4 +1,6 @@
 {
     "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
-    "python.defaultInterpreterPath.windows": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+    "[windows]": {
+        "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+    }
 }

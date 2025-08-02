@@ -4,7 +4,10 @@
         {
             "label": "Update requirements",
             "type": "shell",
-            "command": "${config:python.defaultInterpreterPath} -m pip install -U -r requirements.txt && ${config:python.defaultInterpreterPath} -m pip freeze > requirements.txt",
+            "command": "${workspaceFolder}/.venv/bin/python -m pip install -U -r requirements.txt && ${workspaceFolder}/.venv/bin/python -m pip freeze > requirements.txt",
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe -m pip install -U -r requirements.txt && ${workspaceFolder}\\.venv\\Scripts\\python.exe -m pip freeze > requirements.txt"
+            },
             "problemMatcher": []
         }
     ]
