@@ -64,7 +64,6 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
             "setuptools": {
                 "packages": [
                     "accounts",
-                    "chat",
                     "config",
                     "nodes",
                     "ocpp",
