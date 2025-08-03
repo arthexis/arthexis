@@ -5,7 +5,6 @@ import sys
 
 from config.loadenv import loadenv
 
-
 def main() -> None:
     """Run administrative tasks."""
     loadenv()
@@ -44,7 +43,6 @@ def main() -> None:
         ) from exc
 
     execute_from_command_line(sys.argv)
-
 
 if __name__ == "__main__":  # pragma: no cover - script entry
     main()
