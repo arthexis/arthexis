@@ -126,3 +126,43 @@ class NginxConfig(models.Model):
             except OSError:
                 continue
         return False
+
+
+class Recipe(models.Model):
+    """A collection of script steps that can be executed by nodes."""
+
+    name = models.CharField(max_length=100)
+    full_script = models.TextField(blank=True)
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return self.name
+
+    def sync_full_script(self):
+        """Update ``full_script`` to match the joined step scripts."""
+        steps = self.steps.order_by("order").values_list("script", flat=True)
+        self.full_script = "\n".join(steps)
+        super().save(update_fields=["full_script"])
+
+
+class Step(models.Model):
+    """Individual step belonging to a :class:`Recipe`."""
+
+    recipe = models.ForeignKey(
+        Recipe, related_name="steps", on_delete=models.CASCADE
+    )
+    order = models.PositiveIntegerField()
+    script = models.TextField()
+
+    class Meta:
+        ordering = ["order"]
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return f"{self.order}: {self.script[:30]}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.recipe.sync_full_script()
+
+    def delete(self, *args, **kwargs):
+        super().delete(*args, **kwargs)
+        self.recipe.sync_full_script()

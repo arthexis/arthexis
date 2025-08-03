@@ -3,10 +3,11 @@ from django.urls import path
 from django.shortcuts import redirect
 from django.utils.html import format_html
 from django import forms
+from django.db import models
 import socket
 import os
 
-from .models import Node, NodeScreenshot, NginxConfig
+from .models import Node, NodeScreenshot, NginxConfig, Recipe, Step
 
 
 class NodeAdminForm(forms.ModelForm):
@@ -59,6 +60,27 @@ class NodeAdmin(admin.ModelAdmin):
 @admin.register(NodeScreenshot)
 class NodeScreenshotAdmin(admin.ModelAdmin):
     list_display = ("path", "node", "created")
+
+
+class StepInline(admin.TabularInline):
+    model = Step
+    extra = 0
+
+
+@admin.register(Recipe)
+class RecipeAdmin(admin.ModelAdmin):
+    fields = ("name", "full_script")
+    inlines = [StepInline]
+    formfield_overrides = {
+        models.TextField: {"widget": forms.Textarea(attrs={"rows": 20, "style": "width:100%"})}
+    }
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        lines = [line for line in obj.full_script.splitlines() if line.strip()]
+        obj.steps.all().delete()
+        for idx, script in enumerate(lines, start=1):
+            Step.objects.create(recipe=obj, order=idx, script=script)
 
 
 @admin.register(NginxConfig)
