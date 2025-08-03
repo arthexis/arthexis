@@ -12,7 +12,8 @@
             "program": "${workspaceFolder}/manage.py",
             "args": ["runserver"],
             "django": true,
-            "noDebug": true
+            "noDebug": true,
+            "preLaunchTask": "Dev: maintenance"
         },
         {
             "name": "Debug Server",
@@ -24,7 +25,8 @@
             },
             "program": "${workspaceFolder}/manage.py",
             "args": ["runserver"],
-            "django": true
+            "django": true,
+            "preLaunchTask": "Dev: maintenance"
         }
     ]
 }

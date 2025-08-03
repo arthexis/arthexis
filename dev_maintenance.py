@@ -1,0 +1,36 @@
+#!/usr/bin/env python
+"""Development maintenance tasks.
+
+Ensures migrations are up to date and fixes inconsistent histories.
+"""
+from __future__ import annotations
+
+import os
+import subprocess
+
+import django
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.db import connection
+from django.db.migrations.exceptions import InconsistentMigrationHistory
+from django.db.migrations.recorder import MigrationRecorder
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+django.setup()
+
+try:
+    call_command("makemigrations", interactive=False)
+except CommandError:
+    call_command("makemigrations", merge=True, interactive=False)
+
+try:
+    call_command("migrate", interactive=False)
+except InconsistentMigrationHistory:
+    MigrationRecorder(connection).migration_qs.filter(app="ocpp").delete()
+    call_command("migrate", interactive=False)
+
+proc = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+if proc.stdout.strip():
+    subprocess.run(["git", "add", "-A"], check=False)
+    subprocess.run(["git", "commit", "-m", "Auto migrations"], check=False)
+    subprocess.run(["git", "push"], check=False)
