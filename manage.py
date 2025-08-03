@@ -22,6 +22,7 @@ def _dev_tasks() -> None:
         from django.conf import settings
         from django.core.management import call_command
         from django.core.management.base import CommandError
+        from django.db.migrations.exceptions import InconsistentMigrationHistory
 
         django.setup()
         if not settings.DEBUG:
@@ -84,7 +85,17 @@ def _dev_tasks() -> None:
             call_command("makemigrations", interactive=False)
         except CommandError:
             call_command("makemigrations", merge=True, interactive=False)
-        call_command("migrate", interactive=False)
+        try:
+            call_command("migrate", interactive=False)
+        except InconsistentMigrationHistory:
+            call_command(
+                "migrate",
+                "ocpp",
+                "zero",
+                fake=True,
+                interactive=False,
+            )
+            call_command("migrate", interactive=False)
 
         proc = subprocess.run(
             ["git", "status", "--porcelain"], capture_output=True, text=True
