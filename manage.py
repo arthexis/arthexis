@@ -2,28 +2,42 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
+from pathlib import Path
+
 from config.loadenv import loadenv
+
+
+BASE_DIR = Path(__file__).resolve().parent
+VENV_DIR = BASE_DIR / ".venv"
+VENV_BIN = "Scripts" if os.name == "nt" else "bin"
+VENV_PYTHON = VENV_DIR / VENV_BIN / ("python.exe" if os.name == "nt" else "python")
 
 
 def _dev_tasks() -> None:
     """Perform optional maintenance tasks during auto-reload."""
     try:
         import subprocess
-        from pathlib import Path
 
         import django
         from django.conf import settings
         from django.core.management import call_command
         from django.core.management.base import CommandError
+        from django.db.migrations.exceptions import InconsistentMigrationHistory
 
         django.setup()
         if not settings.DEBUG:
             return
 
+        venv_dir = VENV_DIR
+        if not VENV_PYTHON.exists():
+            subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False)
+        if not VENV_PYTHON.exists():
+            return
+
         req = Path("requirements.txt")
         if req.exists():
             freeze = subprocess.run(
-                [sys.executable, "-m", "pip", "freeze"],
+                [str(VENV_PYTHON), "-m", "pip", "freeze"],
                 capture_output=True,
                 text=True,
                 check=False,
@@ -63,7 +77,7 @@ def _dev_tasks() -> None:
                     break
             if needs_install:
                 subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "-r", str(req)],
+                    [str(VENV_PYTHON), "-m", "pip", "install", "-r", str(req)],
                     check=False,
                 )
 
@@ -71,7 +85,17 @@ def _dev_tasks() -> None:
             call_command("makemigrations", interactive=False)
         except CommandError:
             call_command("makemigrations", merge=True, interactive=False)
-        call_command("migrate", interactive=False)
+        try:
+            call_command("migrate", interactive=False)
+        except InconsistentMigrationHistory:
+            call_command(
+                "migrate",
+                "ocpp",
+                "zero",
+                fake=True,
+                interactive=False,
+            )
+            call_command("migrate", interactive=False)
 
         proc = subprocess.run(
             ["git", "status", "--porcelain"], capture_output=True, text=True
@@ -131,6 +155,12 @@ def main():
 
     def _execute():
         _dev_tasks()
+        if (
+            settings.DEBUG
+            and VENV_PYTHON.exists()
+            and Path(sys.executable).resolve() != VENV_PYTHON.resolve()
+        ):
+            os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), *sys.argv])
         execute_from_command_line(sys.argv)
 
     if (
