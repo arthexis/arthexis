@@ -2,6 +2,15 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Dev: maintenance",
+            "type": "shell",
+            "command": "${workspaceFolder}/dev-maintenance.sh",
+            "windows": {
+                "command": "${workspaceFolder}\\dev-maintenance.bat"
+            },
+            "problemMatcher": []
+        },
+        {
             "label": "Update requirements",
             "type": "shell",
             "command": "${workspaceFolder}/.venv/bin/python -m pip install -U -r requirements.txt && ${workspaceFolder}/.venv/bin/python -m pip freeze > requirements.txt",
