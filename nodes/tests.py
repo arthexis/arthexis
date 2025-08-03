@@ -8,8 +8,11 @@ import socketserver
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.contrib import admin
 
-from .models import Node, NodeScreenshot, NginxConfig
+from .admin import RecipeAdmin
+
+from .models import Node, NodeScreenshot, NginxConfig, Recipe, Step
 
 
 class NodeTests(TestCase):
@@ -92,4 +95,24 @@ class NginxConfigTests(TestCase):
         finally:
             server.shutdown()
             server.server_close()
+
+
+class RecipeTests(TestCase):
+    def test_step_sync_and_text_update(self):
+        recipe = Recipe.objects.create(name="sample")
+        Step.objects.create(recipe=recipe, order=1, script="echo one")
+        Step.objects.create(recipe=recipe, order=2, script="echo two")
+        recipe.refresh_from_db()
+        self.assertEqual(recipe.full_script, "echo one\necho two")
+
+        recipe.full_script = "first\nsecond"
+
+        class DummyForm:
+            cleaned_data = {"full_script": recipe.full_script}
+
+        admin_instance = RecipeAdmin(Recipe, admin.site)
+        admin_instance.save_model(None, recipe, DummyForm(), False)
+
+        steps = list(recipe.steps.order_by("order").values_list("script", flat=True))
+        self.assertEqual(steps, ["first", "second"])
 
