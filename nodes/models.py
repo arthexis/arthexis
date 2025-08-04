@@ -66,7 +66,6 @@ class NginxConfig(models.Model):
     class Meta:
         verbose_name = "NGINX Template"
         verbose_name_plural = "NGINX Templates"
-        db_table = "nginx_app_nginxconfig"
 
     def __str__(self):  # pragma: no cover - simple representation
         return self.name
