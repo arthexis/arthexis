@@ -64,6 +64,7 @@ python manage.py reset_ocpp_migrations
 This command deletes recorded migration entries for the OCPP app and reapplies
 them using Django's migration framework without dropping existing tables.
 
+
 ### Offline Mode
 
 Set the environment variable `ARTHEXIS_OFFLINE=1` to prevent code paths that
