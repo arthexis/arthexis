@@ -5,7 +5,7 @@ This app implements a lightweight Charge Point management system using
 
 ### Resetting Migrations
 
-If OCPP migrations become inconsistent, clear and reapply them:
+If OCPP migrations become inconsistent, clear and reapply them for the OCPP app only:
 
 ```bash
 python manage.py reset_ocpp_migrations

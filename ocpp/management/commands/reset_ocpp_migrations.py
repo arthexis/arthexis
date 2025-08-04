@@ -9,5 +9,5 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         MigrationRecorder(connection).migration_qs.filter(app="ocpp").delete()
-        call_command("migrate")
+        call_command("migrate", "ocpp", fake_initial=True)
 
