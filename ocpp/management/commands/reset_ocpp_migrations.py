@@ -11,13 +11,5 @@ class Command(BaseCommand):
         recorder = MigrationRecorder(connection)
         if recorder.has_table():
             recorder.migration_qs.filter(app="ocpp").delete()
-
-        with connection.cursor() as cursor:
-            tables = [
-                t for t in connection.introspection.table_names() if t.startswith("ocpp_")
-            ]
-            for table in tables:
-                cursor.execute(f"DROP TABLE {connection.ops.quote_name(table)}")
-
-        call_command("migrate", "ocpp", fake_initial=True)
+        call_command("migrate", "ocpp", fake=True)
 

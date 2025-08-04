@@ -54,13 +54,14 @@ files themselves are ignored so secrets remain local.
 
 ### Resetting OCPP Migrations
 
-If OCPP migrations become inconsistent during development, remove all OCPP tables and rerun their migrations:
-
+If OCPP migrations become inconsistent during development, clear their recorded
+state and rerun them:
 ```bash
 python manage.py reset_ocpp_migrations
 ```
 
-This command deletes all OCPP data before reapplying migrations only for the OCPP app.
+This command deletes recorded migration entries for the OCPP app and reapplies
+them using Django's migration framework without dropping existing tables.
 
 ### Offline Mode
 
@@ -251,13 +252,16 @@ This app implements a lightweight Charge Point management system using
 
 ### Resetting Migrations
 
-If OCPP migrations become inconsistent, drop all OCPP tables and reapply them:
+If OCPP migrations become inconsistent, clear their recorded state and rerun
+them:
+
 
 ```bash
 python manage.py reset_ocpp_migrations
 ```
 
-This removes all OCPP data before running migrations again.
+This deletes recorded migration entries for the OCPP app and reapplies them
+without dropping existing tables.
 
 ### Sink Endpoint
 
