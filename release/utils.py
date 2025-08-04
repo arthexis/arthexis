@@ -189,6 +189,8 @@ def build(
         if line.strip() and not line.startswith("#")
     ]
 
+    _run([sys.executable, "manage.py", "build_readme"])
+
     commit_hash = _current_commit()
     Path("BUILD").write_text(commit_hash + "\n")
     prev_build = _last_changelog_build()
