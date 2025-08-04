@@ -171,6 +171,12 @@ python manage.py apply_nginx_config <id>
 The Django admin includes an action to test connectivity to the configured
 upstream servers and shows the rendered template for review.
 
+## Recipes
+
+`Recipe` objects allow storing scripts as ordered `Step` entries. In the Django
+admin the recipe can be edited either as a list of steps or as a single text
+block representing the full script.
+
 
 # Accounts and Products App
 
@@ -232,6 +238,14 @@ RFID tags can be exported and imported using management commands:
 
 This app implements a lightweight Charge Point management system using
 [OCPP 1.6](https://github.com/OCA/ocpp) over WebSockets.
+
+### Resetting Migrations
+
+If OCPP migrations become inconsistent, clear and reapply them for the OCPP app only:
+
+```bash
+python manage.py reset_ocpp_migrations
+```
 
 ### Sink Endpoint
 
