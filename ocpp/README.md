@@ -3,6 +3,18 @@
 This app implements a lightweight Charge Point management system using
 [OCPP 1.6](https://github.com/OCA/ocpp) over WebSockets.
 
+### Resetting Migrations
+
+If OCPP migrations become inconsistent, clear their recorded state and rerun
+them:
+
+```bash
+python manage.py reset_ocpp_migrations
+```
+
+This deletes recorded migration entries for the OCPP app and reapplies them
+without dropping existing tables.
+
 ### Sink Endpoint
 
 A permissive WebSocket sink is exposed at `ws://127.0.0.1:8000/ws/sink/` which
