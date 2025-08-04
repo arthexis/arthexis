@@ -52,6 +52,18 @@ Any `*.env` file found there is automatically loaded when running management
 commands or the server. The directory is included in the repository but `.env`
 files themselves are ignored so secrets remain local.
 
+### Resetting OCPP Migrations
+
+If OCPP migrations become inconsistent during development, clear their recorded
+state and rerun them:
+
+```bash
+python manage.py reset_ocpp_migrations
+```
+
+This command deletes recorded migration entries for the OCPP app and reapplies
+them with Django's `--fake-initial` option so existing tables remain untouched.
+
 ### Offline Mode
 
 Set the environment variable `ARTHEXIS_OFFLINE=1` to prevent code paths that

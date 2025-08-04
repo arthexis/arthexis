@@ -52,6 +52,18 @@ Any `*.env` file found there is automatically loaded when running management
 commands or the server. The directory is included in the repository but `.env`
 files themselves are ignored so secrets remain local.
 
+### Resetting OCPP Migrations
+
+If OCPP migrations become inconsistent during development, clear their recorded
+state and rerun them:
+
+```bash
+python manage.py reset_ocpp_migrations
+```
+
+This command deletes recorded migration entries for the OCPP app and reapplies
+them with Django's `--fake-initial` option so existing tables remain untouched.
+
 ### Offline Mode
 
 Set the environment variable `ARTHEXIS_OFFLINE=1` to prevent code paths that
@@ -171,6 +183,12 @@ python manage.py apply_nginx_config <id>
 The Django admin includes an action to test connectivity to the configured
 upstream servers and shows the rendered template for review.
 
+## Recipes
+
+`Recipe` objects allow storing scripts as ordered `Step` entries. In the Django
+admin the recipe can be edited either as a list of steps or as a single text
+block representing the full script.
+
 
 # Accounts and Products App
 
@@ -232,6 +250,18 @@ RFID tags can be exported and imported using management commands:
 
 This app implements a lightweight Charge Point management system using
 [OCPP 1.6](https://github.com/OCA/ocpp) over WebSockets.
+
+### Resetting Migrations
+
+If OCPP migrations become inconsistent, clear their recorded state and rerun
+them:
+
+```bash
+python manage.py reset_ocpp_migrations
+```
+
+This deletes recorded migration entries for the OCPP app and reapplies them with
+Django's `--fake-initial` option so existing tables remain untouched.
 
 ### Sink Endpoint
 
