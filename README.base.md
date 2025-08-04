@@ -105,12 +105,7 @@ reinstalls dependencies.
 
 Documentation is split across multiple files. `README.base.md` provides the
 overview while each app has its own `README.md` with app-specific details.
-After updating any of these files, regenerate `README.md` with:
-
-```bash
-python manage.py build_readme
-```
-
+The combined `README.md` is generated during the release process.
 Avoid editing the combined `README.md` directly.
 
 ## Release
@@ -118,9 +113,9 @@ Avoid editing the combined `README.md` directly.
 The `release` app provides utilities for publishing the project to PyPI.
 Package metadata and optional credentials may be stored in the
 `PackageConfig` model which is managed through the Django admin. An admin
-action can invoke the full release workflow using the saved settings. Use the
-`build_pypi` management command to bump the version, build the distribution and
-upload it via Twine:
+action can invoke the full release workflow using the saved settings. The
+`build_pypi` management command regenerates the project `README.md`, bumps the
+version, builds the distribution and optionally uploads it via Twine:
 
 ```bash
 python manage.py build_pypi --all
