@@ -12,8 +12,9 @@ them:
 python manage.py reset_ocpp_migrations
 ```
 
-This deletes recorded migration entries for the OCPP app and reapplies them
-without dropping existing tables.
+This deletes recorded migration entries for the OCPP app and reapplies them with
+Django's `--fake-initial` option so existing tables remain untouched.
+
 
 ### Sink Endpoint
 

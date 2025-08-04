@@ -62,8 +62,7 @@ python manage.py reset_ocpp_migrations
 ```
 
 This command deletes recorded migration entries for the OCPP app and reapplies
-them using Django's migration framework without dropping existing tables.
-
+them with Django's `--fake-initial` option so existing tables remain untouched.
 
 ### Offline Mode
 

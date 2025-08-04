@@ -11,5 +11,5 @@ class Command(BaseCommand):
         recorder = MigrationRecorder(connection)
         if recorder.has_table():
             recorder.migration_qs.filter(app="ocpp").delete()
-        call_command("migrate", "ocpp", fake=True)
+        call_command("migrate", "ocpp", fake_initial=True)
 

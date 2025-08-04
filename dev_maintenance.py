@@ -11,9 +11,8 @@ import subprocess
 import django
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import connection
 from django.db.migrations.exceptions import InconsistentMigrationHistory
-from django.db.migrations.recorder import MigrationRecorder
+from django.db.utils import OperationalError
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
@@ -25,8 +24,8 @@ except CommandError:
 
 try:
     call_command("migrate", interactive=False)
-except InconsistentMigrationHistory:
-    MigrationRecorder(connection).migration_qs.filter(app="ocpp").delete()
+except (InconsistentMigrationHistory, OperationalError):
+    call_command("reset_ocpp_migrations")
     call_command("migrate", interactive=False)
 
 proc = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)

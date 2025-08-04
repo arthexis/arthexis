@@ -56,12 +56,15 @@ files themselves are ignored so secrets remain local.
 
 If OCPP migrations become inconsistent during development, clear their recorded
 state and rerun them:
+
+
 ```bash
 python manage.py reset_ocpp_migrations
 ```
 
 This command deletes recorded migration entries for the OCPP app and reapplies
-them using Django's migration framework without dropping existing tables.
+them with Django's `--fake-initial` option so existing tables remain untouched.
+
 
 ### Offline Mode
 
@@ -260,8 +263,9 @@ them:
 python manage.py reset_ocpp_migrations
 ```
 
-This deletes recorded migration entries for the OCPP app and reapplies them
-without dropping existing tables.
+This deletes recorded migration entries for the OCPP app and reapplies them with
+Django's `--fake-initial` option so existing tables remain untouched.
+
 
 ### Sink Endpoint
 
