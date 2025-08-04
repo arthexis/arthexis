@@ -52,6 +52,16 @@ Any `*.env` file found there is automatically loaded when running management
 commands or the server. The directory is included in the repository but `.env`
 files themselves are ignored so secrets remain local.
 
+### Resetting OCPP Migrations
+
+If OCPP migrations become inconsistent during development, remove all OCPP tables and rerun their migrations:
+
+```bash
+python manage.py reset_ocpp_migrations
+```
+
+This command deletes all OCPP data before reapplying migrations only for the OCPP app.
+
 ### Offline Mode
 
 Set the environment variable `ARTHEXIS_OFFLINE=1` to prevent code paths that
@@ -241,11 +251,13 @@ This app implements a lightweight Charge Point management system using
 
 ### Resetting Migrations
 
-If OCPP migrations become inconsistent, clear and reapply them for the OCPP app only:
+If OCPP migrations become inconsistent, drop all OCPP tables and reapply them:
 
 ```bash
 python manage.py reset_ocpp_migrations
 ```
+
+This removes all OCPP data before running migrations again.
 
 ### Sink Endpoint
 

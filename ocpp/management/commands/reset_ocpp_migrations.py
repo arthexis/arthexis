@@ -8,6 +8,16 @@ class Command(BaseCommand):
     help = "Clear recorded OCPP migrations and apply them again."
 
     def handle(self, *args, **options):
-        MigrationRecorder(connection).migration_qs.filter(app="ocpp").delete()
+        recorder = MigrationRecorder(connection)
+        if recorder.has_table():
+            recorder.migration_qs.filter(app="ocpp").delete()
+
+        with connection.cursor() as cursor:
+            tables = [
+                t for t in connection.introspection.table_names() if t.startswith("ocpp_")
+            ]
+            for table in tables:
+                cursor.execute(f"DROP TABLE {connection.ops.quote_name(table)}")
+
         call_command("migrate", "ocpp", fake_initial=True)
 
