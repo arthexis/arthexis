@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0017_readd_rfid'),
+        ('accounts', '0015_alter_address_municipality_alter_address_state_and_more'),
     ]
 
     operations = [
