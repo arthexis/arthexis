@@ -67,3 +67,14 @@ class AdminBadgesTests(TestCase):
         self.assertContains(resp, "badge-unknown")
         self.assertContains(resp, "#6c757d")
 
+
+class ReadmeSidebarTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        Site.objects.update_or_create(id=1, defaults={"name": "website"})
+
+    def test_table_of_contents_sidebar_present(self):
+        resp = self.client.get(reverse("website:index"))
+        self.assertIn("toc", resp.context)
+        self.assertContains(resp, 'class="toc"')
+
