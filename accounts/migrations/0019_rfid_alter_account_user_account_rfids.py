@@ -13,10 +13,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            "DROP TABLE IF EXISTS accounts_rfid",
-            reverse_sql=migrations.RunSQL.noop,
-        ),
         migrations.CreateModel(
             name="RFID",
             fields=[
