@@ -52,6 +52,13 @@ Any `*.env` file found there is automatically loaded when running management
 commands or the server. The directory is included in the repository but `.env`
 files themselves are ignored so secrets remain local.
 
+### Development Maintenance
+
+Running `dev-maintenance.bat` (or `./dev-maintenance.sh`) installs dependencies,
+removes the SQLite database (default `db.sqlite3` or the path from `DB_PATH`),
+and reruns migrations. This resets the database automatically for a clean
+development setup.
+
 ### Resetting OCPP Migrations
 
 If OCPP migrations become inconsistent during development, clear their recorded
