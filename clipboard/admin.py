@@ -1,15 +1,42 @@
 from django.contrib import admin, messages
+from django.shortcuts import redirect
+from django.urls import path
+
+import pyperclip
+from pyperclip import PyperclipException
 
 from .models import Pattern, Sample
-from django.contrib import admin
-
-from .models import Sample
 
 
 @admin.register(Sample)
 class SampleAdmin(admin.ModelAdmin):
     list_display = ("created_at", "short_content")
     readonly_fields = ("created_at",)
+    change_list_template = "admin/clipboard/sample/change_list.html"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "from-clipboard/",
+                self.admin_site.admin_view(self.add_from_clipboard),
+                name="clipboard_sample_from_clipboard",
+            )
+        ]
+        return custom + urls
+
+    def add_from_clipboard(self, request):
+        try:
+            content = pyperclip.paste()
+        except PyperclipException as exc:  # pragma: no cover - depends on OS clipboard
+            self.message_user(request, f"Clipboard error: {exc}", level=messages.ERROR)
+            return redirect("..")
+        if not content:
+            self.message_user(request, "Clipboard is empty.", level=messages.INFO)
+            return redirect("..")
+        Sample.objects.create(content=content)
+        self.message_user(request, "Sample added from clipboard.", level=messages.SUCCESS)
+        return redirect("..")
 
     def short_content(self, obj):
         return obj.content[:50]
