@@ -1,5 +1,6 @@
 from django.test import Client, TestCase
 from django.urls import reverse
+from django.http import HttpRequest
 
 from django.utils import timezone
 from .models import User, RFID, Account, Vehicle, Credit, Address, Product, Subscription
@@ -7,6 +8,25 @@ from ocpp.models import Transaction
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
+from .backends import LocalhostAdminBackend
+
+
+class DefaultAdminTests(TestCase):
+    def test_admin_created_and_localhost_only(self):
+        self.assertTrue(User.objects.filter(username="admin").exists())
+        backend = LocalhostAdminBackend()
+
+        local = HttpRequest()
+        local.META["REMOTE_ADDR"] = "127.0.0.1"
+        self.assertIsNotNone(
+            backend.authenticate(local, username="admin", password="admin")
+        )
+
+        remote = HttpRequest()
+        remote.META["REMOTE_ADDR"] = "10.0.0.1"
+        self.assertIsNone(
+            backend.authenticate(remote, username="admin", password="admin")
+        )
 
 
 class RFIDLoginTests(TestCase):
