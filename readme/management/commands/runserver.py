@@ -1,3 +1,6 @@
+import os
+import webbrowser
+
 from daphne.management.commands.runserver import Command as RunserverCommand
 
 class Command(RunserverCommand):
@@ -10,9 +13,16 @@ class Command(RunserverCommand):
         # Display available websocket URLs.
         websocket_paths = ['/ws/echo/', '/<path>/<cid>/']
         for path in websocket_paths:
-            self.stdout.write(f"WebSocket available at {scheme}://{host}:{server_port}{path}")
-        http_scheme = 'https' if self.ssl_options else 'http'
-        self.stdout.write(f"Admin available at {http_scheme}://{host}:{server_port}/admin/")
+            self.stdout.write(
+                f"WebSocket available at {scheme}://{host}:{server_port}{path}"
+            )
+        http_scheme = "https" if self.ssl_options else "http"
+        self.stdout.write(
+            f"Admin available at {http_scheme}://{host}:{server_port}/admin/"
+        )
+
+        if os.environ.get("DJANGO_DEV_RELOAD") and os.environ.get("RUN_MAIN") == "true":
+            webbrowser.open(f"{http_scheme}://{host}:{server_port}/")
 
 
 
