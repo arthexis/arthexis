@@ -62,10 +62,18 @@ class PackageAdminTests(TestCase):
 
     def test_build_action_calls_utils(self):
         url = reverse("admin:release_packageconfig_changelist")
+        response = self.client.post(
+            url, {"action": "build_package", "_selected_action": [self.cfg.pk]}
+        )
+        self.assertEqual(response.status_code, 200)
         with patch("release.admin.utils.build") as mock_build:
             response = self.client.post(
                 url,
-                {"action": "build_package", "_selected_action": [self.cfg.pk]},
+                {
+                    "action": "build_package",
+                    "_selected_action": [self.cfg.pk],
+                    "apply": "1",
+                },
                 follow=True,
             )
             self.assertEqual(response.status_code, 200)
