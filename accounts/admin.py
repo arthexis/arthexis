@@ -1,5 +1,8 @@
 from django import forms
 from django.contrib import admin
+from django.urls import path
+from django.shortcuts import redirect, render
+from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
@@ -94,6 +97,7 @@ class CreditInline(admin.TabularInline):
 
 @admin.register(Account)
 class AccountAdmin(admin.ModelAdmin):
+    change_list_template = "admin/accounts/account/change_list.html"
     list_display = (
         "user",
         "credits_kwh",
@@ -146,6 +150,70 @@ class AccountAdmin(admin.ModelAdmin):
                 obj.created_by = request.user
             obj.save()
         formset.save_m2m()
+
+    # Onboarding wizard views
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "onboard/",
+                self.admin_site.admin_view(self.onboard_start),
+                name="accounts_account_onboard_start",
+            ),
+            path(
+                "onboard/details/",
+                self.admin_site.admin_view(self.onboard_details),
+                name="accounts_account_onboard_details",
+            ),
+        ]
+        return custom + urls
+
+    def onboard_start(self, request):
+        if request.method == "POST":
+            return redirect("admin:accounts_account_onboard_details")
+        context = self.admin_site.each_context(request)
+        return render(request, "accounts/onboard_start.html", context)
+
+    def onboard_details(self, request):
+        class OnboardForm(forms.Form):
+            first_name = forms.CharField(label="First name")
+            last_name = forms.CharField(label="Last name")
+            rfid = forms.CharField(max_length=8, required=False, label="RFID")
+            allow_login = forms.BooleanField(
+                required=False, initial=False, label="Allow login"
+            )
+            vehicle_id = forms.CharField(required=False, label="Vehicle ID")
+
+        if request.method == "POST":
+            form = OnboardForm(request.POST)
+            if form.is_valid():
+                User = get_user_model()
+                first = form.cleaned_data["first_name"]
+                last = form.cleaned_data["last_name"]
+                allow = form.cleaned_data["allow_login"]
+                username = f"{first}.{last}".lower()
+                user = User.objects.create_user(
+                    username=username,
+                    first_name=first,
+                    last_name=last,
+                    is_active=allow,
+                )
+                account = Account.objects.create(user=user)
+                rfid_val = form.cleaned_data["rfid"].upper()
+                if rfid_val:
+                    tag, _ = RFID.objects.get_or_create(rfid=rfid_val)
+                    account.rfids.add(tag)
+                vehicle_vin = form.cleaned_data["vehicle_id"]
+                if vehicle_vin:
+                    Vehicle.objects.create(account=account, vin=vehicle_vin)
+                self.message_user(request, "Customer onboarded")
+                return redirect("admin:accounts_account_changelist")
+        else:
+            form = OnboardForm()
+
+        context = self.admin_site.each_context(request)
+        context.update({"form": form})
+        return render(request, "accounts/onboard_details.html", context)
 
 
 @admin.register(Vehicle)
