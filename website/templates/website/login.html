@@ -1,22 +1,35 @@
 {% extends "website/base.html" %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block title %}{% trans "Login" %}{% endblock %}
 
 {% block content %}
-<h1>{% trans "Login" %}</h1>
-<form method="post">
-  {% csrf_token %}
-  {{ form.non_field_errors }}
-  <div class="mb-3">
-    <label for="id_username" class="form-label">{% trans "Username" %}</label>
-    <input type="text" name="username" class="form-control" id="id_username" required>
+<div class="row">
+  <div class="col-md-6 d-none d-md-flex align-items-center justify-content-center mb-4 mb-md-0">
+    {% with image=login_image|default:default_login_image %}
+    <img src="{{ image }}" alt="{% trans 'Login image' %}" class="img-fluid">
+    {% endwith %}
   </div>
-  <div class="mb-3">
-    <label for="id_password" class="form-label">{% trans "Password" %}</label>
-    <input type="password" name="password" class="form-control" id="id_password" required>
+  <div class="col-md-6 d-flex align-items-center justify-content-center">
+    <div class="card shadow-sm w-100" style="max-width: 400px;">
+      <div class="card-body">
+        <h1 class="h4 mb-4">{% trans "Login" %}</h1>
+        <form method="post">
+          {% csrf_token %}
+          {{ form.non_field_errors }}
+          <div class="mb-3">
+            <label for="id_username" class="form-label">{% trans "Username" %}</label>
+            <input type="text" name="username" class="form-control" id="id_username" required>
+          </div>
+          <div class="mb-3">
+            <label for="id_password" class="form-label">{% trans "Password" %}</label>
+            <input type="password" name="password" class="form-control" id="id_password" required>
+          </div>
+          {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+          <button type="submit" class="btn btn-primary w-100">{% trans "Log in" %}</button>
+        </form>
+      </div>
+    </div>
   </div>
-  {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
-  <button type="submit" class="btn btn-primary">{% trans "Log in" %}</button>
-</form>
+</div>
 {% endblock %}

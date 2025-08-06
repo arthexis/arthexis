@@ -37,6 +37,16 @@ class LoginViewTests(TestCase):
         )
         self.assertRedirects(resp, "/nodes/list/")
 
+    def test_login_page_uses_site_image(self):
+        from website.models import SiteBadge
+
+        site = Site.objects.get(id=1)
+        SiteBadge.objects.update_or_create(
+            site=site, defaults={"login_image": "http://example.com/img.png"}
+        )
+        resp = self.client.get(reverse("website:login"))
+        self.assertContains(resp, "http://example.com/img.png")
+
 
 class AdminBadgesTests(TestCase):
     def setUp(self):

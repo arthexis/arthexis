@@ -5,6 +5,7 @@ from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.urls import reverse
 from django.contrib.auth.views import LoginView
+from django.templatetags.static import static
 
 import inspect
 import markdown
@@ -89,6 +90,14 @@ class CustomLoginView(LoginView):
     """Login view that redirects staff to the admin."""
 
     template_name = "website/login.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        site = get_current_site(self.request)
+        badge = getattr(site, "badge", None)
+        context["login_image"] = getattr(badge, "login_image", "")
+        context["default_login_image"] = static("website/login-placeholder.svg")
+        return context
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated:
