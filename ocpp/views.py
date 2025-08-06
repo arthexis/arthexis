@@ -7,7 +7,6 @@ from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
 
 from website.utils import landing
-from gway import gw
 
 from . import store
 from .models import Transaction, Charger
@@ -129,11 +128,8 @@ def dashboard(request):
 @landing("Simulator")
 def cp_simulator(request):
     """Public landing page to control the OCPP charge point simulator."""
-    ws_url = gw.web.build_ws_url("ocpp", "csms")
-    default_host = ws_url.split("://")[-1].split(":")[0]
-    default_ws_port = (
-        ws_url.split(":")[-1].split("/")[0] if ":" in ws_url else "9000"
-    )
+    default_host = "127.0.0.1"
+    default_ws_port = "9000"
     default_cp_paths = ["CP1", "CP2"]
     default_rfid = "FFFFFFFF"
 
