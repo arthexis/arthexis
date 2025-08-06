@@ -10,9 +10,9 @@ behaviour of the upstream implementation in a lightweight, dependency free
 fashion.
 
 Only the portions that are useful for automated tests are implemented here.
-The web based user interface present in the original file relies on internal
-``gway`` helpers and the Bottle framework.  To keep the module self contained
-and importable in the test environment those parts are intentionally omitted.
+The web based user interface present in the original file relies on additional
+helpers and the Bottle framework.  To keep the module self contained and
+importable in the test environment those parts are intentionally omitted.
 
 The simulator exposes two high level helpers:
 
