@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
+import logging
 import os
 import subprocess
 import sys
@@ -40,13 +41,24 @@ def _maybe_sync_git() -> None:
     except Exception:
         return
 
-    subprocess.run(["git", "fetch"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-    dirty = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout.strip()
+    fetch_result = subprocess.run(
+        ["git", "fetch"], capture_output=True, text=True
+    )
+    if fetch_result.returncode != 0:
+        logging.error("Git fetch failed: %s", fetch_result.stderr.strip())
+        _notify_and_exit("Git fetch failed. Check logs for details.")
+
+    dirty = subprocess.run(
+        ["git", "status", "--porcelain"], capture_output=True, text=True
+    ).stdout.strip()
     status = subprocess.run(["git", "status", "-uno"], capture_output=True, text=True).stdout
     if "behind" in status:
         if not dirty:
-            result = subprocess.run(["git", "pull"], capture_output=True, text=True)
+            result = subprocess.run(
+                ["git", "pull", "--ff-only"], capture_output=True, text=True
+            )
             if result.returncode != 0:
+                logging.error("Git pull failed: %s", result.stderr.strip())
                 _notify_and_exit("Git pull failed. Check logs for details.")
         else:
             _notify_and_exit("Uncommitted changes prevent auto-sync.")
