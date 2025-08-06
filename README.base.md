@@ -38,7 +38,8 @@ that launches the server on boot.
    When the server restarts under VS Code with this variable set, it
    automatically installs any updated dependencies from
    `requirements.txt`, merges and applies migrations, and commits and
-   pushes the changes if anything was modified.
+   pushes the changes if anything was modified. It also opens the main
+   page in your default web browser each time the server reloads.
 
 The default configuration uses SQLite and is for local development only.
 To use PostgreSQL instead, set the `POSTGRES_DB` environment variable (and
