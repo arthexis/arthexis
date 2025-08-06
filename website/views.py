@@ -59,8 +59,9 @@ def index(request):
     if not readme_file.exists():
         readme_file = Path(settings.BASE_DIR) / "README.md"
     text = readme_file.read_text(encoding="utf-8")
-    html = markdown.markdown(text)
-    context = {"content": html, "title": readme_file.stem}
+    md = markdown.Markdown(extensions=["toc"])
+    html = md.convert(text)
+    context = {"content": html, "title": readme_file.stem, "toc": md.toc}
     if app_name in ("website", "readme"):
         context["nav_apps"] = get_landing_apps()
     return render(request, "website/readme.html", context)

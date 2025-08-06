@@ -3,5 +3,16 @@
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
-{{ content|safe }}
+<div class="row">
+  <div class="col-lg-9">
+    {{ content|safe }}
+  </div>
+  {% if toc %}
+  <div class="col-lg-3">
+    <nav class="toc" style="position: sticky; top: 1rem;">
+      {{ toc|safe }}
+    </nav>
+  </div>
+  {% endif %}
+</div>
 {% endblock %}
