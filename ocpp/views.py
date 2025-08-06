@@ -217,7 +217,10 @@ def charger_page(request, cid):
 
 def charger_log_page(request, cid):
     """Render a simple page with the log for the charger."""
-    charger = get_object_or_404(Charger, charger_id=cid)
+    try:
+        charger = Charger.objects.get(charger_id=cid)
+    except Charger.DoesNotExist:
+        charger = Charger(charger_id=cid)
     log = store.logs.get(cid, [])
     return render(
         request,

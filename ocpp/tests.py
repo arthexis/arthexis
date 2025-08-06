@@ -96,6 +96,14 @@ class ChargerLandingTests(TestCase):
         self.assertContains(resp, "2.00")
         self.assertContains(resp, "Offline")
 
+    def test_log_page_renders_without_charger(self):
+        store.logs["LOG1"] = ["hello"]
+        client = Client()
+        resp = client.get(reverse("charger-log", args=["LOG1"]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "hello")
+        store.logs.pop("LOG1", None)
+
 
 class SimulatorLandingTests(TestCase):
     def test_simulator_page_in_nav(self):
