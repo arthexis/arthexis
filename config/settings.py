@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     "social.bsky",
     "social.meta",
     "clipboard",
+    "rfid",
 ]
 
 SITE_ID = 1
