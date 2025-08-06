@@ -107,9 +107,9 @@ CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
 # Custom user model
 AUTH_USER_MODEL = "accounts.User"
 
-# Enable RFID authentication backend in addition to Django's default
+# Enable RFID authentication backend and restrict default admin login to localhost
 AUTHENTICATION_BACKENDS = [
-    "django.contrib.auth.backends.ModelBackend",
+    "accounts.backends.LocalhostAdminBackend",
     "accounts.backends.RFIDBackend",
 ]
 

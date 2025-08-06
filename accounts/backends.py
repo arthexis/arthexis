@@ -1,4 +1,8 @@
+"""Custom authentication backends for the accounts app."""
+
 from django.contrib.auth import get_user_model
+from django.contrib.auth.backends import ModelBackend
+
 from .models import Account
 
 
@@ -25,3 +29,15 @@ class RFIDBackend:
             return User.objects.get(pk=user_id)
         except User.DoesNotExist:
             return None
+
+
+class LocalhostAdminBackend(ModelBackend):
+    """Deny default admin credentials unless the request is from localhost."""
+
+    def authenticate(self, request, username=None, password=None, **kwargs):
+        if username == "admin" and password == "admin" and request is not None:
+            remote = request.META.get("REMOTE_ADDR")
+            if remote not in {"127.0.0.1", "::1"}:
+                return None
+        return super().authenticate(request, username, password, **kwargs)
+
