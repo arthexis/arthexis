@@ -196,3 +196,31 @@ class SubscriptionTests(TestCase):
         data = response.json()
         self.assertEqual(len(data["products"]), 1)
         self.assertEqual(data["products"][0]["name"], "Gold")
+
+
+class OnboardingWizardTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User.objects.create_superuser("super", "super@example.com", "pwd")
+        self.client.force_login(User.objects.get(username="super"))
+
+    def test_onboarding_flow_creates_account(self):
+        start_url = reverse("admin:accounts_account_onboard_start")
+        details_url = reverse("admin:accounts_account_onboard_details")
+        response = self.client.post(start_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, details_url)
+        data = {
+            "first_name": "John",
+            "last_name": "Doe",
+            "rfid": "ABCD1234",
+            "vehicle_id": "VIN12345678901234",
+        }
+        resp = self.client.post(details_url, data)
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, reverse("admin:accounts_account_changelist"))
+        user = User.objects.get(first_name="John", last_name="Doe")
+        self.assertFalse(user.is_active)
+        account = Account.objects.get(user=user)
+        self.assertTrue(account.rfids.filter(rfid="ABCD1234").exists())
+        self.assertTrue(account.vehicles.filter(vin="VIN12345678901234").exists())
