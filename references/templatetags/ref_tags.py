@@ -19,3 +19,9 @@ def ref_img(value, size=200, alt=None):
         f'<img src="{ref.image.url}" width="{size}" height="{size}" alt="{ref.alt_text}" />'
     )
 
+
+@register.inclusion_tag("references/footer.html")
+def render_footer():
+    """Render footer links for references marked to appear there."""
+    return {"footer_refs": Reference.objects.filter(include_in_footer=True)}
+

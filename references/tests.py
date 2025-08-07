@@ -34,3 +34,15 @@ class ReferenceLandingPageTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'data:image/png;base64')
         self.assertEqual(Reference.objects.count(), 0)
+
+
+class FooterTemplateTagTests(TestCase):
+    def test_footer_renders_selected_references(self):
+        Reference.objects.create(
+            value='https://example.com', alt_text='Example', include_in_footer=True
+        )
+        Reference.objects.create(value='https://ignored.com', alt_text='Ignore')
+        html = Template("{% load ref_tags %}{% render_footer %}").render(Context())
+        self.assertIn('https://example.com', html)
+        self.assertIn('Example', html)
+        self.assertNotIn('https://ignored.com', html)
