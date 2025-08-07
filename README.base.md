@@ -24,7 +24,8 @@ A Django-based MESH-like system. Its objective is to serve as a monorepo that ce
    and admin links printed to the console.
 
 If you prefer an automated setup, run `./install.sh` which creates a
-virtual environment and installs dependencies for you.  Adding
+virtual environment and installs dependencies for you, only reinstalling
+them when `requirements.txt` changes.  Adding
 `--service <name>` installs a systemd service with the specified name
 that launches the server on boot.
 
@@ -55,10 +56,10 @@ files themselves are ignored so secrets remain local.
 
 ### Development Maintenance
 
-Running `dev-maintenance.bat` (or `./dev-maintenance.sh`) installs dependencies,
-removes the SQLite database (default `db.sqlite3` or the path from `DB_PATH`),
-and reruns migrations. This resets the database automatically for a clean
-development setup.
+Running `dev-maintenance.bat` (or `./dev-maintenance.sh`) installs updated
+dependencies when `requirements.txt` changes, removes the SQLite database
+(default `db.sqlite3` or the path from `DB_PATH`), and reruns migrations.
+This resets the database automatically for a clean development setup.
 
 ### Resetting OCPP Migrations
 
@@ -106,8 +107,8 @@ the test suite, logs are stored in `logs/tests.log` instead.
 
 Run `./upgrade.sh` to fetch the latest code from this repository. Any
 local changes are stashed automatically before pulling and restored
-afterwards.  When a virtual environment exists, the script also
-reinstalls dependencies.
+afterwards.  When a virtual environment exists, the script installs
+updated dependencies only when `requirements.txt` changes.
 
 ## Maintaining Documentation
 

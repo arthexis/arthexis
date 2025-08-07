@@ -22,6 +22,16 @@ fi
 # Update dependencies if virtualenv exists
 if [ -d .venv ]; then
     source .venv/bin/activate
-    pip install -r requirements.txt
+    REQ_FILE="requirements.txt"
+    MD5_FILE="requirements.md5"
+    NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
+    STORED_HASH=""
+    [ -f "$MD5_FILE" ] && STORED_HASH=$(cat "$MD5_FILE")
+    if [ "$NEW_HASH" != "$STORED_HASH" ]; then
+        pip install -r "$REQ_FILE"
+        echo "$NEW_HASH" > "$MD5_FILE"
+    else
+        echo "Requirements unchanged. Skipping installation."
+    fi
     deactivate
 fi
