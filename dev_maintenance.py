@@ -39,6 +39,10 @@ except OperationalError:
     else:
         raise
 
+# Squash migrations back to a single initial state after a successful migrate
+call_command("reset_migrations")
+call_command("migrate", interactive=False, fake_initial=True)
+
 proc = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
 if proc.stdout.strip():
     subprocess.run(["git", "add", "-A"], check=False)
