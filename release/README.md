@@ -20,3 +20,7 @@ python manage.py build_pypi --all
 
 Individual flags exist for incrementing the version, building the distribution
 and uploading via Twine. See `--help` for details.
+
+Use the `--test` flag to execute the project's tests before building. Test
+output is stored in the `TestLog` model and can be reviewed or purged from the
+Django admin.

@@ -11,6 +11,7 @@ class Command(BaseCommand):
         parser.add_argument("--twine", action="store_true", help="Upload with Twine")
         parser.add_argument("--git", action="store_true", help="Commit and push changes")
         parser.add_argument("--tag", action="store_true", help="Create and push a git tag")
+        parser.add_argument("--test", action="store_true", help="Run tests before building")
         parser.add_argument("--all", action="store_true", help="Enable bump, dist, twine, git and tag")
         parser.add_argument("--force", action="store_true", help="Skip PyPI version check")
 
@@ -18,6 +19,7 @@ class Command(BaseCommand):
         try:
             utils.build(
                 bump=options["bump"],
+                tests=options["test"],
                 dist=options["dist"],
                 twine=options["twine"],
                 git=options["git"],

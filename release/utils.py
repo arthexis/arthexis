@@ -36,6 +36,17 @@ def _current_commit() -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
 
 
+def run_tests() -> "TestLog":
+    """Run the test suite and store the output in :class:`TestLog`."""
+    proc = subprocess.run(
+        [sys.executable, "manage.py", "test"], capture_output=True, text=True
+    )
+    from .models import TestLog
+
+    status = "success" if proc.returncode == 0 else "failure"
+    return TestLog.objects.create(status=status, output=proc.stdout + proc.stderr)
+
+
 def _write_pyproject(package: Package, version: str, requirements: list[str]) -> None:
     content = {
         "build-system": {
@@ -157,6 +168,7 @@ def update_changelog(version: str, build_hash: str, prev_build: Optional[str] = 
 def build(
     *,
     bump: bool = False,
+    tests: bool = False,
     dist: bool = False,
     twine: bool = False,
     git: bool = False,
@@ -190,6 +202,11 @@ def build(
     ]
 
     _run([sys.executable, "manage.py", "build_readme"])
+
+    if tests:
+        log = run_tests()
+        if log.status != "success":
+            raise ReleaseError("Tests failed")
 
     commit_hash = _current_commit()
     Path("BUILD").write_text(commit_hash + "\n")
