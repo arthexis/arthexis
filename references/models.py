@@ -14,6 +14,7 @@ class Reference(models.Model):
     image = models.ImageField(upload_to="references/", blank=True)
     uses = models.PositiveIntegerField(default=0)
     method = models.CharField(max_length=50, default="qr")
+    include_in_footer = models.BooleanField(default=False, verbose_name="Include in Footer")
 
     def save(self, *args, **kwargs):
         if self.method == "qr" and not self.image:
