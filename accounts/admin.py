@@ -151,28 +151,17 @@ class AccountAdmin(admin.ModelAdmin):
             obj.save()
         formset.save_m2m()
 
-    # Onboarding wizard views
+    # Onboarding wizard view
     def get_urls(self):
         urls = super().get_urls()
         custom = [
             path(
                 "onboard/",
-                self.admin_site.admin_view(self.onboard_start),
-                name="accounts_account_onboard_start",
-            ),
-            path(
-                "onboard/details/",
                 self.admin_site.admin_view(self.onboard_details),
                 name="accounts_account_onboard_details",
             ),
         ]
         return custom + urls
-
-    def onboard_start(self, request):
-        if request.method == "POST":
-            return redirect("admin:accounts_account_onboard_details")
-        context = self.admin_site.each_context(request)
-        return render(request, "accounts/onboard_start.html", context)
 
     def onboard_details(self, request):
         class OnboardForm(forms.Form):

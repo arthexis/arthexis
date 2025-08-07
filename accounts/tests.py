@@ -205,11 +205,9 @@ class OnboardingWizardTests(TestCase):
         self.client.force_login(User.objects.get(username="super"))
 
     def test_onboarding_flow_creates_account(self):
-        start_url = reverse("admin:accounts_account_onboard_start")
         details_url = reverse("admin:accounts_account_onboard_details")
-        response = self.client.post(start_url)
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, details_url)
+        response = self.client.get(details_url)
+        self.assertEqual(response.status_code, 200)
         data = {
             "first_name": "John",
             "last_name": "Doe",
