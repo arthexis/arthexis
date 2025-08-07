@@ -13,7 +13,6 @@ atproto
 selenium
 requests
 toml
-
 packaging
 pyperclip
 mfrc522
