@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
+import logging
 import os
 import subprocess
 import sys
@@ -40,16 +41,51 @@ def _maybe_sync_git() -> None:
     except Exception:
         return
 
-    subprocess.run(["git", "fetch"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-    dirty = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True).stdout.strip()
-    status = subprocess.run(["git", "status", "-uno"], capture_output=True, text=True).stdout
+    subprocess.run(
+        ["git", "fetch"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    dirty = (
+        subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
+    status = subprocess.run(
+        ["git", "status", "-uno"],
+        capture_output=True,
+        text=True,
+    ).stdout
     if "behind" in status:
         if not dirty:
             result = subprocess.run(["git", "pull"], capture_output=True, text=True)
             if result.returncode != 0:
                 _notify_and_exit("Git pull failed. Check logs for details.")
         else:
-            _notify_and_exit("Uncommitted changes prevent auto-sync.")
+            if os.environ.get("GIT_AUTO_STASH"):
+                stash = subprocess.run(
+                    ["git", "stash", "--include-untracked"],
+                    capture_output=True,
+                    text=True,
+                )
+                if stash.returncode == 0:
+                    result = subprocess.run(
+                        ["git", "pull"], capture_output=True, text=True
+                    )
+                    pop = subprocess.run(
+                        ["git", "stash", "pop"], capture_output=True, text=True
+                    )
+                    if result.returncode != 0:
+                        _notify_and_exit("Git pull failed. Check logs for details.")
+                    if pop.returncode != 0:
+                        logging.warning("Git stash pop failed: %s", pop.stderr)
+                else:
+                    logging.warning("Git stash failed: %s", stash.stderr)
+            else:
+                logging.warning("Uncommitted changes prevent auto-sync.")
 
 def main() -> None:
     """Run administrative tasks."""

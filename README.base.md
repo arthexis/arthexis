@@ -35,11 +35,15 @@ that launches the server on boot.
    DJANGO_DEV_RELOAD=1 python manage.py runserver
    ```
 
-   When the server restarts under VS Code with this variable set, it
-   automatically installs any updated dependencies from
-   `requirements.txt`, merges and applies migrations, and commits and
-   pushes the changes if anything was modified. It also opens the main
-   page in your default web browser each time the server reloads.
+    When the server restarts under VS Code with this variable set, it
+    automatically installs any updated dependencies from
+    `requirements.txt`, merges and applies migrations, and commits and
+    pushes the changes if anything was modified. It also opens the main
+    page in your default web browser each time the server reloads.
+
+    If you have local changes that aren't committed, the server normally
+    skips pulling updates. Set `GIT_AUTO_STASH=1` to stash your changes
+    before pulling and reapply them afterward.
 
 The default configuration uses SQLite and is for local development only.
 To use PostgreSQL instead, set the `POSTGRES_DB` environment variable (and
