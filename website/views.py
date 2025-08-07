@@ -59,7 +59,13 @@ def index(request):
     text = readme_file.read_text(encoding="utf-8")
     md = markdown.Markdown(extensions=["toc"])
     html = md.convert(text)
-    context = {"content": html, "title": readme_file.stem, "toc": md.toc}
+    toc_html = md.toc
+    if toc_html.strip().startswith('<div class="toc">'):
+        toc_html = toc_html.strip()[len('<div class="toc">') :]
+        if toc_html.endswith('</div>'):
+            toc_html = toc_html[: -len('</div>')]
+        toc_html = toc_html.strip()
+    context = {"content": html, "title": readme_file.stem, "toc": toc_html}
     if app_name in ("website", "readme"):
         context["nav_apps"] = get_landing_apps()
     return render(request, "website/readme.html", context)
