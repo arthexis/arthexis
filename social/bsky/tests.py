@@ -2,6 +2,7 @@ from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from unittest.mock import patch
 
+from .admin import BskyAccountAdminForm
 from .models import BskyAccount
 from .services import post_from_domain, post_from_user, register_account
 
@@ -12,7 +13,7 @@ User = get_user_model()
 class BskyServiceTests(TestCase):
     def test_register_creates_account(self):
         user = User.objects.create_user("alice", password="x")
-        with patch("social.bsky.services.Client") as MockClient:
+        with patch("atproto.Client") as MockClient:
             client = MockClient.return_value
             client.login.return_value = None
             register_account(user, "alice.bsky.social", "app-pw")
@@ -24,7 +25,7 @@ class BskyServiceTests(TestCase):
     def test_post_from_user_logs_in_and_posts(self):
         user = User.objects.create_user("bob", password="x")
         BskyAccount.objects.create(user=user, handle="bob.bsky.social", app_password="pw")
-        with patch("social.bsky.services.Client") as MockClient:
+        with patch("atproto.Client") as MockClient:
             client = MockClient.return_value
             post_from_user(user, "hello")
             client.login.assert_called_once_with("bob.bsky.social", "pw")
@@ -32,8 +33,27 @@ class BskyServiceTests(TestCase):
 
     @override_settings(BSKY_HANDLE="domain", BSKY_APP_PASSWORD="secret")
     def test_post_from_domain_uses_settings(self):
-        with patch("social.bsky.services.Client") as MockClient:
+        with patch("atproto.Client") as MockClient:
             client = MockClient.return_value
             post_from_domain("hi")
             client.login.assert_called_once_with("domain", "secret")
             client.send_post.assert_called_once_with("hi")
+
+
+class BskyAdminFormTests(TestCase):
+    def test_form_validates_credentials(self):
+        user = User.objects.create_user("eve", password="x")
+        form_data = {"user": user.pk, "handle": "eve.bsky.social", "app_password": "pw"}
+        with patch("atproto.Client") as MockClient:
+            MockClient.return_value.login.return_value = None
+            form = BskyAccountAdminForm(data=form_data)
+            self.assertTrue(form.is_valid())
+            MockClient.return_value.login.assert_called_once_with("eve.bsky.social", "pw")
+
+    def test_form_rejects_bad_credentials(self):
+        user = User.objects.create_user("mallory", password="x")
+        form_data = {"user": user.pk, "handle": "mal.bsky.social", "app_password": "bad"}
+        with patch("atproto.Client") as MockClient:
+            MockClient.return_value.login.side_effect = Exception("bad creds")
+            form = BskyAccountAdminForm(data=form_data)
+            self.assertFalse(form.is_valid())
