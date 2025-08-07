@@ -44,7 +44,7 @@ class AdminBadgesTests(TestCase):
         self.client = Client()
         User = get_user_model()
         self.admin = User.objects.create_superuser(
-            username="badge_admin", password="pwd", email="admin@example.com"
+            username="badge-admin", password="pwd", email="admin@example.com"
         )
         self.client.force_login(self.admin)
         Site.objects.update_or_create(
@@ -103,4 +103,27 @@ class ReadmeSidebarTests(TestCase):
         resp = self.client.get(reverse("website:index"))
         self.assertIn("toc", resp.context)
         self.assertContains(resp, 'class="toc"')
+
+
+class SiteAdminRegisterCurrentTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="site-admin", password="pwd", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "example", "domain": "example.com"}
+        )
+
+    def test_register_current_creates_site(self):
+        resp = self.client.get(reverse("admin:sites_site_changelist"))
+        self.assertContains(resp, "Register Current")
+
+        resp = self.client.get(reverse("admin:sites_site_register_current"))
+        self.assertRedirects(resp, reverse("admin:sites_site_changelist"))
+        self.assertTrue(Site.objects.filter(domain="testserver").exists())
+        site = Site.objects.get(domain="testserver")
+        self.assertEqual(site.name, "testserver")
 
