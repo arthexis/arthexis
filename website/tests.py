@@ -44,7 +44,7 @@ class AdminBadgesTests(TestCase):
         self.client = Client()
         User = get_user_model()
         self.admin = User.objects.create_superuser(
-            username="admin", password="pwd", email="admin@example.com"
+            username="badge_admin", password="pwd", email="admin@example.com"
         )
         self.client.force_login(self.admin)
         Site.objects.update_or_create(
@@ -71,6 +71,27 @@ class AdminBadgesTests(TestCase):
         self.assertContains(resp, "NODE: Unknown")
         self.assertContains(resp, "badge-unknown")
         self.assertContains(resp, "#6c757d")
+
+
+class AdminSidebarTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="sidebar_admin", password="pwd", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "test", "domain": "testserver"}
+        )
+        from nodes.models import Node
+
+        Node.objects.create(hostname="testserver", address="127.0.0.1")
+
+    def test_sidebar_app_groups_collapsible_script_present(self):
+        url = reverse("admin:nodes_node_changelist")
+        resp = self.client.get(url)
+        self.assertContains(resp, 'id="admin-collapsible-apps"')
 
 
 class ReadmeSidebarTests(TestCase):

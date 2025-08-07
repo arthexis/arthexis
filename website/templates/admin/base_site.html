@@ -1,6 +1,23 @@
 {% extends "admin/base.html" %}
 {% load i18n %}
 {% block title %}{% if title %}{{ title }} | {% endif %}{{ site_title|default:_('Django site admin') }}{% endblock %}
+{% block extrahead %}
+{{ block.super }}
+<script id="admin-collapsible-apps">
+document.addEventListener('DOMContentLoaded', function () {
+    const modules = document.querySelectorAll('#nav-sidebar .module');
+    modules.forEach(function (module) {
+        const header = module.querySelector('h2');
+        const content = module.querySelector('ul, table');
+        if (header && content) {
+            header.addEventListener('click', function () {
+                module.classList.toggle('collapsed');
+            });
+        }
+    });
+});
+</script>
+{% endblock %}
 {% block extrastyle %}
 {{ block.super }}
 <style>
@@ -12,6 +29,21 @@
     color: white;
 }
 .badge-unknown {background-color:#6c757d;}
+#nav-sidebar .module h2 {
+    cursor: pointer;
+}
+#nav-sidebar .module h2::after {
+    content: '\25BC';
+    float: right;
+    transition: transform 0.2s;
+}
+#nav-sidebar .module.collapsed h2::after {
+    transform: rotate(-90deg);
+}
+#nav-sidebar .module.collapsed ul,
+#nav-sidebar .module.collapsed table {
+    display: none;
+}
 </style>
 {% endblock %}
 {% block branding %}
