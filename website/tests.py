@@ -2,6 +2,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
+import socket
 
 
 class LoginViewTests(TestCase):
@@ -43,7 +44,7 @@ class AdminBadgesTests(TestCase):
         self.client = Client()
         User = get_user_model()
         self.admin = User.objects.create_superuser(
-            username="admin", password="pwd", email="admin@example.com"
+            username="badge-admin", password="pwd", email="admin@example.com"
         )
         self.client.force_login(self.admin)
         Site.objects.update_or_create(
@@ -51,12 +52,16 @@ class AdminBadgesTests(TestCase):
         )
         from nodes.models import Node
 
-        Node.objects.create(hostname="testserver", address="127.0.0.1")
+        self.node_hostname = "otherhost"
+        Node.objects.create(
+            hostname=self.node_hostname,
+            address=socket.gethostbyname(socket.gethostname()),
+        )
 
     def test_badges_show_site_and_node(self):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "SITE: testserver")
-        self.assertContains(resp, "NODE: testserver")
+        self.assertContains(resp, f"NODE: {self.node_hostname}")
 
     def test_badges_warn_when_node_missing(self):
         from nodes.models import Node
@@ -68,6 +73,27 @@ class AdminBadgesTests(TestCase):
         self.assertContains(resp, "#6c757d")
 
 
+class AdminSidebarTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="sidebar_admin", password="pwd", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "test", "domain": "testserver"}
+        )
+        from nodes.models import Node
+
+        Node.objects.create(hostname="testserver", address="127.0.0.1")
+
+    def test_sidebar_app_groups_collapsible_script_present(self):
+        url = reverse("admin:nodes_node_changelist")
+        resp = self.client.get(url)
+        self.assertContains(resp, 'id="admin-collapsible-apps"')
+
+
 class ReadmeSidebarTests(TestCase):
     def setUp(self):
         self.client = Client()
@@ -77,4 +103,27 @@ class ReadmeSidebarTests(TestCase):
         resp = self.client.get(reverse("website:index"))
         self.assertIn("toc", resp.context)
         self.assertContains(resp, 'class="toc"')
+
+
+class SiteAdminRegisterCurrentTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="site-admin", password="pwd", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "example", "domain": "example.com"}
+        )
+
+    def test_register_current_creates_site(self):
+        resp = self.client.get(reverse("admin:sites_site_changelist"))
+        self.assertContains(resp, "Register Current")
+
+        resp = self.client.get(reverse("admin:sites_site_register_current"))
+        self.assertRedirects(resp, reverse("admin:sites_site_changelist"))
+        self.assertTrue(Site.objects.filter(domain="testserver").exists())
+        site = Site.objects.get(domain="testserver")
+        self.assertEqual(site.name, "testserver")
 
