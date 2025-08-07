@@ -6,8 +6,17 @@ import time
 
 
 def _restart_server() -> None:
-    """Restart the current process with updated code."""
-    os.execv(sys.executable, [sys.executable, *sys.argv])
+    """Restart the current process with updated code.
+
+    When run under ``debugpy`` (e.g., launched from VS Code), the original
+    command line includes the debugpy launcher and a ``--`` separator before the
+    real Django command. Re‑executing that exact command fails once the debugger
+    detaches, so strip the launcher and only run the underlying command.
+    """
+    argv = sys.argv
+    if "debugpy" in sys.modules and "--" in argv:
+        argv = argv[argv.index("--") + 1 :]
+    os.execv(sys.executable, [sys.executable, *argv])
 
 
 def _sync_loop(interval: int) -> None:
