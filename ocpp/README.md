@@ -109,5 +109,7 @@ simulated session will deliver.
 
 Simulators can also be preconfigured in the Django admin site.  Add
 `Simulator` entries and use the provided actions to start or stop them
-without writing any code.  The admin list shows the full WebSocket URL for
-each simulator along with its configured interval and kWh limit.
+without writing any code.  Two simulators named `CP1` and `CP2` are bundled
+via an initial data migration for immediate testing.  The admin list shows
+the full WebSocket URL for each simulator along with its configured interval
+and kWh limit.
