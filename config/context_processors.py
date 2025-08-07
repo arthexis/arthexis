@@ -1,3 +1,5 @@
+import socket
+
 from django.contrib.sites.models import Site
 from django.http import HttpRequest
 
@@ -17,10 +19,23 @@ def site_and_node(request: HttpRequest):
     try:
         from nodes.models import Node
 
-        node = (
-            Node.objects.filter(hostname__iexact=host).first()
-            or Node.objects.filter(address=host).first()
-        )
+        hostname = socket.gethostname()
+        try:
+            addresses = socket.gethostbyname_ex(hostname)[2]
+        except socket.gaierror:
+            addresses = []
+
+        node = Node.objects.filter(hostname__iexact=hostname).first()
+        if not node:
+            for addr in addresses:
+                node = Node.objects.filter(address=addr).first()
+                if node:
+                    break
+        if not node:
+            node = (
+                Node.objects.filter(hostname__iexact=host).first()
+                or Node.objects.filter(address=host).first()
+            )
     except Exception:
         node = None
 
