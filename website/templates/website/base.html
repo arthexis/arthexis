@@ -11,6 +11,18 @@
       .navbar .dropdown:hover .dropdown-menu {
         display: block;
       }
+      .navbar-nav .nav-link {
+        text-align: right;
+      }
+      .navbar-nav .dropdown-toggle {
+        position: relative;
+      }
+      .navbar-nav .dropdown-toggle::after {
+        position: absolute;
+        right: -0.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+      }
       nav.toc ul {
         list-style: none;
         padding-left: 0;
@@ -26,7 +38,7 @@
             <span class="navbar-toggler-icon"></span>
           </button>
           <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
               {% if nav_apps %}
                 {% for app in nav_apps %}
                 <li class="nav-item dropdown">
