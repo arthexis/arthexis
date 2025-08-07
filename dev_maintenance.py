@@ -15,6 +15,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db.migrations.exceptions import InconsistentMigrationHistory
 from django.db.utils import OperationalError
+from django.db import connections
 from django.apps import apps
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -35,6 +36,7 @@ except InconsistentMigrationHistory:
     call_command("migrate", interactive=False)
 except OperationalError:
     if using_sqlite:
+        connections.close_all()
         Path(default_db["NAME"]).unlink(missing_ok=True)
         call_command("migrate", interactive=False)
     else:
@@ -61,6 +63,7 @@ def _has_non_initial_migrations() -> bool:
 
 if _has_non_initial_migrations():
     if using_sqlite:
+        connections.close_all()
         Path(default_db["NAME"]).unlink(missing_ok=True)
     else:
         call_command("migrate", "zero", interactive=False)
