@@ -2,6 +2,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
+import socket
 
 
 class LoginViewTests(TestCase):
@@ -51,12 +52,16 @@ class AdminBadgesTests(TestCase):
         )
         from nodes.models import Node
 
-        Node.objects.create(hostname="testserver", address="127.0.0.1")
+        self.node_hostname = "otherhost"
+        Node.objects.create(
+            hostname=self.node_hostname,
+            address=socket.gethostbyname(socket.gethostname()),
+        )
 
     def test_badges_show_site_and_node(self):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "SITE: testserver")
-        self.assertContains(resp, "NODE: testserver")
+        self.assertContains(resp, f"NODE: {self.node_hostname}")
 
     def test_badges_warn_when_node_missing(self):
         from nodes.models import Node
