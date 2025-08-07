@@ -2,9 +2,7 @@
 """Django's command-line utility for administrative tasks."""
 import logging
 import os
-import subprocess
 import sys
-from pathlib import Path
 
 from config.loadenv import loadenv
 
@@ -63,11 +61,17 @@ def _maybe_sync_git() -> None:
         else:
             _notify_and_exit("Uncommitted changes prevent auto-sync.")
 
+
 def main() -> None:
     """Run administrative tasks."""
     loadenv()
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-    _maybe_sync_git()
+    from django.conf import settings
+
+    if settings.DEBUG:
+        from utils.git_sync import start_background_sync
+
+        start_background_sync()
     try:
         from django.core.management import execute_from_command_line
         from daphne.management.commands.runserver import (
