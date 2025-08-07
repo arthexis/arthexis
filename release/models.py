@@ -2,6 +2,22 @@ from django.db import models
 from . import Package, Credentials, DEFAULT_PACKAGE
 
 
+class TestLog(models.Model):
+    """Store output of test runs for release builds."""
+
+    created = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(
+        max_length=7, choices=[("success", "Success"), ("failure", "Failure")]
+    )
+    output = models.TextField()
+
+    class Meta:
+        ordering = ["-created"]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"{self.created:%Y-%m-%d %H:%M:%S} - {self.status}"
+
+
 class PackageConfig(models.Model):
     """Store metadata and credentials for building a PyPI release."""
 

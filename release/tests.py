@@ -2,9 +2,11 @@ from django.test import SimpleTestCase, TestCase, Client
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from unittest.mock import patch
+from types import SimpleNamespace
 
 from . import Credentials, DEFAULT_PACKAGE
-from .models import PackageConfig
+from .models import PackageConfig, TestLog
+from . import utils
 
 
 class CredentialsTests(SimpleTestCase):
@@ -46,7 +48,7 @@ class PackageAdminTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.admin = User.objects.create_superuser(
-            username="admin", password="pass", email="a@a.com"
+            username="release_admin", password="pass", email="a@a.com"
         )
         self.client = Client()
         self.client.force_login(self.admin)
@@ -70,3 +72,40 @@ class PackageAdminTests(TestCase):
             )
             self.assertEqual(response.status_code, 200)
             mock_build.assert_called_once()
+
+
+class TestLogTests(TestCase):
+    @patch("release.utils.subprocess.run")
+    def test_run_tests_success(self, mock_run):
+        mock_run.return_value = SimpleNamespace(returncode=0, stdout="ok", stderr="")
+        log = utils.run_tests()
+        self.assertEqual(log.status, "success")
+        self.assertIn("ok", log.output)
+
+    @patch("release.utils.subprocess.run")
+    def test_run_tests_failure(self, mock_run):
+        mock_run.return_value = SimpleNamespace(returncode=1, stdout="", stderr="bad")
+        log = utils.run_tests()
+        self.assertEqual(log.status, "failure")
+        self.assertIn("bad", log.output)
+
+
+class TestLogAdminTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="release_admin", password="pass", email="a@a.com"
+        )
+        self.client = Client()
+        self.client.force_login(self.admin)
+        self.log = TestLog.objects.create(status="success", output="x")
+
+    def test_purge_action_deletes_logs(self):
+        url = reverse("admin:release_testlog_changelist")
+        response = self.client.post(
+            url,
+            {"action": "purge_logs", "_selected_action": [self.log.pk]},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(TestLog.objects.count(), 0)
