@@ -17,6 +17,16 @@ A Django-based MESH-like system. Its objective is to serve as a monorepo that ce
    python manage.py runserver
    ```
 
+4. Start the Celery worker to process asynchronous tasks:
+   ```bash
+   celery -A config worker -l info
+   ```
+
+5. Launch the Celery beat scheduler for periodic tasks:
+   ```bash
+   celery -A config beat -l info
+   ```
+
     The included `runserver` command comes from Daphne via Django Channels,
     so it serves the ASGI application and supports WebSocket endpoints.
 

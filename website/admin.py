@@ -5,6 +5,7 @@ from django import forms
 from django.db import models
 from django.shortcuts import redirect
 from django.urls import path
+import ipaddress
 
 from .models import SiteBadge
 
@@ -35,8 +36,14 @@ class SiteAdmin(DjangoSiteAdmin):
 
     def register_current(self, request):
         domain = request.get_host().split(":")[0]
+        try:
+            ipaddress.ip_address(domain)
+        except ValueError:
+            name = domain
+        else:
+            name = "localhost"
         site, created = Site.objects.get_or_create(
-            domain=domain, defaults={"name": domain}
+            domain=domain, defaults={"name": name}
         )
         if created:
             self.message_user(request, "Current domain registered", messages.SUCCESS)
