@@ -5,7 +5,7 @@ from django.contrib.auth import authenticate, login
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import Product, Subscription
+from .models import Product, Subscription, RFID, Account
 
 
 @csrf_exempt
@@ -91,3 +91,50 @@ def subscription_list(request):
         )
     )
     return JsonResponse({"subscriptions": subs})
+
+
+@csrf_exempt
+def rfid_batch(request):
+    """Export or import RFID tags in batch."""
+
+    if request.method == "GET":
+        tags = [
+            {
+                "rfid": t.rfid,
+                "accounts": list(t.accounts.values_list("id", flat=True)),
+                "allowed": t.allowed,
+            }
+            for t in RFID.objects.all().order_by("rfid")
+        ]
+        return JsonResponse({"rfids": tags})
+
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body.decode())
+        except json.JSONDecodeError:
+            return JsonResponse({"detail": "invalid JSON"}, status=400)
+
+        tags = data.get("rfids") if isinstance(data, dict) else data
+        if not isinstance(tags, list):
+            return JsonResponse({"detail": "rfids list required"}, status=400)
+
+        count = 0
+        for row in tags:
+            rfid = (row.get("rfid") or "").strip()
+            if not rfid:
+                continue
+            allowed = row.get("allowed", True)
+            accounts = row.get("accounts") or []
+
+            tag, _ = RFID.objects.update_or_create(
+                rfid=rfid.upper(), defaults={"allowed": allowed}
+            )
+            if accounts:
+                tag.accounts.set(Account.objects.filter(id__in=accounts))
+            else:
+                tag.accounts.clear()
+            count += 1
+
+        return JsonResponse({"imported": count})
+
+    return JsonResponse({"detail": "GET or POST required"}, status=400)
