@@ -52,3 +52,8 @@ RFID tags can be exported and imported using management commands:
 - `python manage.py export_rfids [path]` writes all tags to CSV. If `path` is omitted the data is printed to stdout.
 - `python manage.py import_rfids path` loads tags from a CSV file created by the export command.
 - The Django admin also provides export and import actions powered by [`django-import-export`](https://django-import-export.readthedocs.io/).
+
+## RFID Batch API
+
+- `GET /accounts/rfids/` returns all RFID tags with their associated accounts and allowed flag.
+- `POST /accounts/rfids/` accepts JSON in the form `{ "rfids": [{"rfid": "ABCD1234", "accounts": [1,2], "allowed": true}] }` to import or update tags in bulk.

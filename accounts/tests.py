@@ -1,6 +1,7 @@
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.http import HttpRequest
+import json
 
 from django.utils import timezone
 from .models import User, RFID, Account, Vehicle, Credit, Address, Product, Subscription
@@ -55,6 +56,40 @@ class RFIDLoginTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 401)
+
+
+class RFIDBatchApiTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(username="bob", password="secret")
+        self.account = Account.objects.create(user=self.user)
+
+    def test_export_rfids(self):
+        tag = RFID.objects.create(rfid="CARD999")
+        self.account.rfids.add(tag)
+        response = self.client.get(reverse("rfid-batch"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"rfids": [{"rfid": "CARD999", "accounts": [self.account.id], "allowed": True}]},
+        )
+
+    def test_import_rfids(self):
+        data = {
+            "rfids": [
+                {"rfid": "A1B2C3D4", "accounts": [self.account.id], "allowed": True}
+            ]
+        }
+        response = self.client.post(
+            reverse("rfid-batch"),
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["imported"], 1)
+        self.assertTrue(
+            RFID.objects.filter(rfid="A1B2C3D4", accounts=self.account).exists()
+        )
 
 
 class AllowedRFIDTests(TestCase):
