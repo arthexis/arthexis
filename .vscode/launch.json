@@ -23,7 +23,7 @@
             "windows": {
                 "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
             },
-            "program": "${workspaceFolder}/manage.py",
+            "program": "${workspaceFolder}/vscode_manage.py",
             "args": ["runserver"],
             "django": true,
             "preLaunchTask": "Dev: maintenance"

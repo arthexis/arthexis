@@ -14,7 +14,7 @@ def _restart_server() -> None:
     detaches, so strip the launcher and only run the underlying command.
     """
     argv = sys.argv
-    if "debugpy" in sys.modules and "--" in argv:
+    if "--" in argv and any("debugpy" in part for part in argv[: argv.index("--")]):
         argv = argv[argv.index("--") + 1 :]
     os.execv(sys.executable, [sys.executable, *argv])
 
