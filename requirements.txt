@@ -18,3 +18,4 @@ toml
 packaging
 pyperclip
 mfrc522
+gpiozero
