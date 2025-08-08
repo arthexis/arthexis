@@ -1,4 +1,4 @@
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
@@ -60,7 +60,7 @@ class AdminBadgesTests(TestCase):
 
     def test_badges_show_site_and_node(self):
         resp = self.client.get(reverse("admin:index"))
-        self.assertContains(resp, "SITE: testserver")
+        self.assertContains(resp, "SITE: test")
         self.assertContains(resp, f"NODE: {self.node_hostname}")
 
     def test_badges_warn_when_node_missing(self):
@@ -126,4 +126,31 @@ class SiteAdminRegisterCurrentTests(TestCase):
         self.assertTrue(Site.objects.filter(domain="testserver").exists())
         site = Site.objects.get(domain="testserver")
         self.assertEqual(site.name, "testserver")
+
+    @override_settings(ALLOWED_HOSTS=["127.0.0.1", "testserver"])
+    def test_register_current_ip_sets_localhost_name(self):
+        resp = self.client.get(
+            reverse("admin:sites_site_register_current"), HTTP_HOST="127.0.0.1"
+        )
+        self.assertRedirects(resp, reverse("admin:sites_site_changelist"))
+        site = Site.objects.get(domain="127.0.0.1")
+        self.assertEqual(site.name, "localhost")
+
+
+class AdminBadgesLocalhostTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="badge-admin2", password="pwd", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "localhost", "domain": "127.0.0.1"}
+        )
+
+    @override_settings(ALLOWED_HOSTS=["127.0.0.1", "testserver"])
+    def test_badge_shows_localhost_for_ip_domain(self):
+        resp = self.client.get(reverse("admin:index"), HTTP_HOST="127.0.0.1")
+        self.assertContains(resp, "SITE: localhost")
 
