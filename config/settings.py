@@ -14,6 +14,7 @@ from pathlib import Path
 import os
 import sys
 from django.utils.translation import gettext_lazy as _
+from celery.schedules import crontab
 from .active_app import get_active_app
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -60,6 +61,8 @@ INSTALLED_APPS = [
     "social.meta",
     "clipboard",
     "rfid",
+    "app",
+    "django_celery_beat",
 ]
 
 SITE_ID = 1
@@ -216,6 +219,19 @@ LOGGING = {
         "handlers": ["file"],
         "level": "DEBUG",
     },
+}
+
+
+# Celery configuration
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "memory://")
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+
+CELERY_BEAT_SCHEDULE = {
+    "heartbeat": {
+        "task": "app.tasks.heartbeat",
+        "schedule": crontab(minute="*/5"),
+    }
 }
 
 NGINX_CONFIG_ROOT = os.environ.get("NGINX_CONFIG_ROOT", "/etc/nginx/conf.d")
