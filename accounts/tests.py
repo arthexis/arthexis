@@ -4,7 +4,8 @@ from django.http import HttpRequest
 import json
 
 from django.utils import timezone
-from .models import User, RFID, Account, Vehicle, Credit, Address, Product, Subscription
+from .models import User, Account, Vehicle, Credit, Address, Product, Subscription
+from rfid.models import RFID
 from ocpp.models import Transaction
 
 from django.core.exceptions import ValidationError

@@ -11,7 +11,8 @@ from website.models import App
 from config.asgi import application
 
 from .models import Transaction, Charger, Simulator, MeterReading
-from accounts.models import RFID, Account, Credit
+from accounts.models import Account, Credit
+from rfid.models import RFID
 from . import store
 from django.db.models.deletion import ProtectedError
 

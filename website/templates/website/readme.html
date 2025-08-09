@@ -1,4 +1,5 @@
 {% extends "website/base.html" %}
+{% load rfid_tags %}
 
 {% block title %}{{ title }}{% endblock %}
 
@@ -41,6 +42,9 @@
         }
       })();
     </script>
+    <div class="mt-3 text-center">
+      {% current_page_qr %}
+    </div>
   </div>
   {% endif %}
   <div class="{% if toc %}col-lg-9{% else %}col-12{% endif %}">

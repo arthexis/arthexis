@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from accounts.models import RFID
+from rfid.models import RFID
 import csv
 
 class Command(BaseCommand):
