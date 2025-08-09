@@ -11,21 +11,6 @@
       .navbar .dropdown:hover .dropdown-menu {
         display: block;
       }
-      .navbar-nav .nav-item-wrapper {
-        float: right;
-        position: relative;
-      }
-      .navbar-nav .nav-item-wrapper .nav-link {
-        display: block;
-        text-align: right;
-        padding-right: 1rem;
-      }
-      .navbar-nav .nav-item-wrapper .dropdown-toggle::after {
-        position: absolute;
-        right: -0.5rem;
-        top: 50%;
-        transform: translateY(-50%);
-      }
       nav.toc ul {
         list-style: none;
         padding-left: 0;
@@ -41,13 +26,11 @@
             <span class="navbar-toggler-icon"></span>
           </button>
           <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+            <ul class="navbar-nav mb-2 mb-lg-0">
               {% if nav_apps %}
                 {% for app in nav_apps %}
-                <li class="nav-item dropdown clearfix">
-                  <div class="nav-item-wrapper">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">{{ app.name }}</a>
-                  </div>
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">{{ app.name }}</a>
                   <ul class="dropdown-menu">
                     {% for view in app.views %}
                     <li><a class="dropdown-item" href="{{ view.path }}">{{ view.name }}</a></li>
@@ -56,10 +39,8 @@
                 </li>
                 {% endfor %}
               {% endif %}
-              <li class="nav-item clearfix">
-                <div class="nav-item-wrapper">
-                  <a class="nav-link" href="{% url 'website:login' %}?next={{ request.path }}">Login</a>
-                </div>
+              <li class="nav-item">
+                <a class="nav-link" href="{% url 'website:login' %}?next={{ request.path }}">Login</a>
               </li>
             </ul>
           </div>
