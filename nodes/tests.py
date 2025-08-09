@@ -59,7 +59,7 @@ class NodeAdminTests(TestCase):
         self.client = Client()
         User = get_user_model()
         self.admin = User.objects.create_superuser(
-            username="admin", password="adminpass", email="admin@example.com"
+            username="nodes-admin", password="adminpass", email="admin@example.com"
         )
         self.client.force_login(self.admin)
 

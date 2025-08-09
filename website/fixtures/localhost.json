@@ -1,0 +1,20 @@
+[
+  {
+    "model": "sites.site",
+    "pk": 1,
+    "fields": {
+      "domain": "127.0.0.1",
+      "name": "localhost"
+    }
+  },
+  {
+    "model": "website.app",
+    "pk": 1,
+    "fields": {
+      "site": 1,
+      "name": "Readme",
+      "path": "/",
+      "is_default": true
+    }
+  }
+]

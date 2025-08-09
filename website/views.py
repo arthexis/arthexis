@@ -6,53 +6,19 @@ from django.http import HttpResponse
 from django.urls import reverse
 from django.contrib.auth.views import LoginView
 
-import inspect
 import markdown
-from config import urls as project_urls
-from django.urls.resolvers import URLResolver, URLPattern
 from website.utils import landing
-
-def _collect_landings(resolver: URLResolver, prefix: str = ""):
-    pages = []
-    for pattern in resolver.url_patterns:
-        if isinstance(pattern, URLResolver):
-            pages.extend(_collect_landings(pattern, prefix + pattern.pattern._route))
-        elif isinstance(pattern, URLPattern):
-            view = pattern.callback
-            if getattr(view, "landing", False):
-                route = prefix + pattern.pattern._route
-                if "<" in route:
-                    continue
-                label = getattr(view, "landing_label", pattern.name or route)
-                pages.append({"name": label, "path": "/" + route})
-    return pages
-
-
-def get_landing_apps():
-    apps = []
-    for p in project_urls.urlpatterns:
-        if isinstance(p, URLResolver):
-            prefix = p.pattern._route
-            if prefix.startswith("admin"):
-                continue
-            module = p.urlconf_module
-            name = (
-                module.__package__.split(".")[0]
-                if inspect.ismodule(module)
-                else str(module).split(".")[0]
-            )
-            pages = _collect_landings(p, prefix)
-            if pages:
-                apps.append({"name": name.capitalize(), "views": pages})
-    return apps
 
 
 @landing("Home")
 def index(request):
     site = get_current_site(request)
-    app_name = site.name or "readme"
+    app = site.apps.filter(is_default=True).first()
+    app_slug = "readme"
+    if app:
+        app_slug = app.path.strip("/") or "readme"
     readme_file = Path(settings.BASE_DIR) / (
-        "README.md" if app_name == "readme" else Path(app_name) / "README.md"
+        "README.md" if app_slug == "readme" else Path(app_slug) / "README.md"
     )
     if not readme_file.exists():
         readme_file = Path(settings.BASE_DIR) / "README.md"
@@ -66,12 +32,12 @@ def index(request):
             toc_html = toc_html[: -len('</div>')]
         toc_html = toc_html.strip()
     context = {"content": html, "title": readme_file.stem, "toc": toc_html}
-    if app_name in ("website", "readme"):
-        context["nav_apps"] = get_landing_apps()
     return render(request, "website/readme.html", context)
 
+
 def sitemap(request):
-    apps = get_landing_apps()
+    site = get_current_site(request)
+    apps = site.apps.all()
     base = request.build_absolute_uri("/").rstrip("/")
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -79,11 +45,10 @@ def sitemap(request):
     ]
     seen = set()
     for app in apps:
-        for page in app["views"]:
-            loc = f"{base}{page['path']}"
-            if loc not in seen:
-                seen.add(loc)
-                lines.append(f"  <url><loc>{loc}</loc></url>")
+        loc = f"{base}{app.path}"
+        if loc not in seen:
+            seen.add(loc)
+            lines.append(f"  <url><loc>{loc}</loc></url>")
     lines.append("</urlset>")
     return HttpResponse("\n".join(lines), content_type="application/xml")
 
