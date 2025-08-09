@@ -7,10 +7,6 @@
     <title>{% block title %}{% trans "Arthexis Constellation" %}{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-      /* Show dropdown menus on hover without disabling click functionality */
-      .navbar .dropdown:hover .dropdown-menu {
-        display: block;
-      }
       nav.toc ul {
         list-style: none;
         padding-left: 0;
@@ -29,13 +25,10 @@
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
               {% if nav_apps %}
                 {% for app in nav_apps %}
-                <li class="nav-item dropdown">
-                  <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">{{ app.name }}</a>
-                  <ul class="dropdown-menu">
-                    {% for view in app.views %}
-                    <li><a class="dropdown-item" href="{{ view.path }}">{{ view.name }}</a></li>
-                    {% endfor %}
-                  </ul>
+                <li class="nav-item">
+                  <a class="nav-link" href="{{ app.path }}">
+                    <span class="badge rounded-pill text-bg-secondary">{{ app.name }}</span>
+                  </a>
                 </li>
                 {% endfor %}
               {% endif %}

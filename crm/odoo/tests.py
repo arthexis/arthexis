@@ -37,7 +37,7 @@ class OdooAdminTests(TestCase):
         self.client = Client()
         User = get_user_model()
         self.admin = User.objects.create_superuser(
-            username="admin",
+            username="odoo-admin",
             password="secret",
             email="admin@example.com",
         )

@@ -3,6 +3,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 import socket
+from website.models import App
 
 
 class LoginViewTests(TestCase):
@@ -155,4 +156,18 @@ class AdminBadgesLocalhostTests(TestCase):
     def test_badge_shows_localhost_for_ip_domain(self):
         resp = self.client.get(reverse("admin:index"), HTTP_HOST="127.0.0.1")
         self.assertContains(resp, "SITE: localhost")
+
+
+class NavAppsTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        site, _ = Site.objects.update_or_create(
+            id=1, defaults={"domain": "127.0.0.1", "name": "localhost"}
+        )
+        App.objects.create(site=site, name="Readme", path="/", is_default=True)
+
+    def test_nav_pill_renders(self):
+        resp = self.client.get(reverse("website:index"))
+        self.assertContains(resp, "Readme")
+        self.assertContains(resp, 'badge rounded-pill')
 
