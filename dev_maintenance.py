@@ -78,6 +78,7 @@ def run_database_tasks() -> None:
         call_command("migrate", interactive=False, fake_initial=True)
 
     call_command("loaddata", "ocpp_simulators")
+    call_command("loaddata", "localhost")
 
 
 def run_git_tasks() -> None:
