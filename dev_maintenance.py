@@ -77,6 +77,8 @@ def run_database_tasks() -> None:
         call_command("reset_migrations")
         call_command("migrate", interactive=False, fake_initial=True)
 
+    call_command("loaddata", "ocpp_simulators")
+
 
 def run_git_tasks() -> None:
     """Commit and push auto-generated migrations."""

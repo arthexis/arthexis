@@ -1,0 +1,18 @@
+[
+  {
+    "model": "ocpp.simulator",
+    "pk": 1,
+    "fields": {
+      "name": "CP1",
+      "cp_path": "CP1"
+    }
+  },
+  {
+    "model": "ocpp.simulator",
+    "pk": 2,
+    "fields": {
+      "name": "CP2",
+      "cp_path": "CP2"
+    }
+  }
+]
