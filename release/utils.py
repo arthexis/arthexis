@@ -129,33 +129,37 @@ def _pop_unreleased(text: str) -> tuple[str, str]:
     return "\n".join(body), "\n".join(new_lines) + ("\n" if text.endswith("\n") else "")
 
 
-def _last_changelog_build() -> Optional[str]:
+def _last_changelog_revision() -> Optional[str]:
     path = Path("CHANGELOG.rst")
     if not path.exists():
         return None
     for line in path.read_text(encoding="utf-8").splitlines():
-        if "[build" in line:
+        if "[revision" in line:
             try:
-                return line.split("[build", 1)[1].split("]", 1)[0].strip()
+                return line.split("[revision", 1)[1].split("]", 1)[0].strip()
             except Exception:
                 return None
     return None
 
 
-def update_changelog(version: str, build_hash: str, prev_build: Optional[str] = None) -> None:
+def update_changelog(
+    version: str, revision: str, prev_revision: Optional[str] = None
+) -> None:
     text = _ensure_changelog()
     body, text = _pop_unreleased(text)
     if not body:
-        prev_build = prev_build or _last_changelog_build()
-        log_range = f"{prev_build}..HEAD" if prev_build else "HEAD"
+        prev_revision = prev_revision or _last_changelog_revision()
+        log_range = f"{prev_revision}..HEAD" if prev_revision else "HEAD"
         proc = subprocess.run(
             ["git", "log", "--pretty=%h %s", "--no-merges", log_range],
             capture_output=True,
             text=True,
             check=False,
         )
-        body = "\n".join(f"- {l.strip()}" for l in proc.stdout.splitlines() if l.strip())
-    header = f"{version} [build {build_hash}]"
+        body = "\n".join(
+            f"- {l.strip()}" for l in proc.stdout.splitlines() if l.strip()
+        )
+    header = f"{version} [revision {revision}]"
     underline = "-" * len(header)
     entry = "\n".join([header, underline, "", body, ""]).rstrip() + "\n\n"
     base_header = "Changelog\n=========\n\n"
@@ -209,9 +213,9 @@ def build(
             raise ReleaseError("Tests failed")
 
     commit_hash = _current_commit()
-    Path("BUILD").write_text(commit_hash + "\n")
-    prev_build = _last_changelog_build()
-    update_changelog(version, commit_hash, prev_build)
+    Path("REVISION").write_text(commit_hash + "\n")
+    prev_revision = _last_changelog_revision()
+    update_changelog(version, commit_hash, prev_revision)
 
     _write_pyproject(package, version, requirements)
 
@@ -250,7 +254,7 @@ def build(
             _run(cmd)
 
     if git:
-        files = ["VERSION", "BUILD", "pyproject.toml", "CHANGELOG.rst"]
+        files = ["VERSION", "REVISION", "pyproject.toml", "CHANGELOG.rst"]
         _run(["git", "add"] + files)
         msg = f"PyPI Release v{version}" if twine else f"Release v{version}"
         _run(["git", "commit", "-m", msg])
