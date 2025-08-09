@@ -7,7 +7,7 @@ from django.shortcuts import redirect
 from django.urls import path
 import ipaddress
 
-from .models import SiteBadge
+from .models import SiteBadge, App
 
 
 class SiteBadgeInline(admin.StackedInline):
@@ -56,3 +56,9 @@ class SiteAdmin(DjangoSiteAdmin):
 
 admin.site.unregister(Site)
 admin.site.register(Site, SiteAdmin)
+
+
+@admin.register(App)
+class AppAdmin(admin.ModelAdmin):
+    list_display = ("name", "site", "path", "is_default")
+    list_filter = ("site",)

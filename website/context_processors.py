@@ -1,10 +1,11 @@
 from django.contrib.sites.shortcuts import get_current_site
-from .views import get_landing_apps
+
 
 def nav_links(request):
-    """Provide navigation links when visiting the main site."""
+    """Provide navigation links for the current site."""
     site = get_current_site(request)
-    app_name = site.name or "readme"
-    if app_name in ("website", "readme"):
-        return {"nav_apps": get_landing_apps()}
-    return {}
+    try:
+        apps = site.apps.all()
+    except Exception:
+        apps = []
+    return {"nav_apps": apps}

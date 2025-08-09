@@ -1,8 +1,27 @@
 from django.test import TestCase
 from django.urls import reverse
 
+from .models import CableSize, ConduitFill
+
 
 class AWGCalculatorTests(TestCase):
+    def setUp(self):
+        CableSize.objects.create(
+            awg_size="8",
+            material="cu",
+            dia_in=0,
+            dia_mm=0,
+            area_kcmil=0,
+            area_mm2=0,
+            k_ohm_km=0.1,
+            k_ohm_kft=0.1,
+            amps_60c=55,
+            amps_75c=65,
+            amps_90c=75,
+            line_num=1,
+        )
+        ConduitFill.objects.create(trade_size="1", conduit="emt", awg_8=3)
+
     def test_page_renders_and_calculates(self):
         url = reverse("awg:calculator")
         resp = self.client.get(url)
