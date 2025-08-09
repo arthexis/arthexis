@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from django import template
 from django.utils.safestring import mark_safe
 
@@ -23,5 +25,12 @@ def ref_img(value, size=200, alt=None):
 @register.inclusion_tag("references/footer.html")
 def render_footer():
     """Render footer links for references marked to appear there."""
-    return {"footer_refs": Reference.objects.filter(include_in_footer=True)}
+    revision = ""
+    path = Path("REVISION")
+    if path.exists():
+        revision = path.read_text().strip()[-8:]
+    return {
+        "footer_refs": Reference.objects.filter(include_in_footer=True),
+        "revision": revision,
+    }
 

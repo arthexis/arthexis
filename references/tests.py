@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from django.template import Context, Template
 from django.test import TestCase
 
@@ -46,3 +48,5 @@ class FooterTemplateTagTests(TestCase):
         self.assertIn('https://example.com', html)
         self.assertIn('Example', html)
         self.assertNotIn('https://ignored.com', html)
+        rev = Path('REVISION').read_text().strip()[-8:]
+        self.assertIn(f'rev {rev}', html)
