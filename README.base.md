@@ -67,9 +67,15 @@ files themselves are ignored so secrets remain local.
 ### Development Maintenance
 
 Running `dev-maintenance.bat` (or `./dev-maintenance.sh`) installs updated
-dependencies when `requirements.txt` changes, removes the SQLite database
-(default `db.sqlite3` or the path from `DB_PATH`), and reruns migrations.
-This resets the database automatically for a clean development setup.
+dependencies when `requirements.txt` changes and then runs maintenance
+tasks. Database operations are grouped under the `database` task, which
+recreates the SQLite database (default `db.sqlite3` or the path from
+`DB_PATH`) and reapplies migrations. The `git` task commits and pushes any
+generated migrations. Both scripts invoke these tasks by default:
+
+```bash
+./dev-maintenance.sh database git
+```
 
 ### Resetting OCPP Migrations
 

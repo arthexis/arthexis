@@ -19,7 +19,4 @@ if exist requirements.txt (
         echo %REQ_HASH%>requirements.md5
     )
 )
-set "DB_FILE=%VENV%\..\db.sqlite3"
-if defined DB_PATH set "DB_FILE=%DB_PATH%"
-if exist "%DB_FILE%" del "%DB_FILE%"
-%VENV%\Scripts\python.exe dev_maintenance.py
+%VENV%\Scripts\python.exe dev_maintenance.py database git
