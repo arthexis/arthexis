@@ -1,0 +1,32 @@
+[
+  {
+    "model": "references.reference",
+    "pk": 1,
+    "fields": {
+      "value": "https://arthexis.com",
+      "alt_text": "Arthexis",
+      "method": "link",
+      "include_in_footer": true
+    }
+  },
+  {
+    "model": "references.reference",
+    "pk": 2,
+    "fields": {
+      "value": "https://pypi.org/project/arthexis/",
+      "alt_text": "Arthexis on PyPI",
+      "method": "link",
+      "include_in_footer": true
+    }
+  },
+  {
+    "model": "references.reference",
+    "pk": 3,
+    "fields": {
+      "value": "https://www.gelectriic.com",
+      "alt_text": "Gelectriic",
+      "method": "link",
+      "include_in_footer": true
+    }
+  }
+]
