@@ -1,10 +1,18 @@
+{% load rfid_tags %}
 <footer class="container mt-5 mt-auto">
   <div class="row">
-    {% for ref in footer_refs %}
-      <div class="col">
-        <a href="{{ ref.value }}">{{ ref.alt_text|default:ref.value }}</a>
+    <div class="col-lg-3 text-center mb-3 mb-lg-0">
+      {% current_page_qr %}
+    </div>
+    <div class="col-lg-9">
+      <div class="row justify-content-center">
+        {% for ref in footer_refs %}
+          <div class="col-auto">
+            <a href="{{ ref.value }}">{{ ref.alt_text|default:ref.value }}</a>
+          </div>
+        {% endfor %}
       </div>
-    {% endfor %}
+    </div>
   </div>
   {% if revision %}
   <div class="row">

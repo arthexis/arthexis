@@ -22,8 +22,8 @@ def ref_img(value, size=200, alt=None):
     )
 
 
-@register.inclusion_tag("references/footer.html")
-def render_footer():
+@register.inclusion_tag("references/footer.html", takes_context=True)
+def render_footer(context):
     """Render footer links for references marked to appear there."""
     revision = ""
     path = Path("REVISION")
@@ -32,5 +32,6 @@ def render_footer():
     return {
         "footer_refs": Reference.objects.filter(include_in_footer=True),
         "revision": revision,
+        "request": context.get("request"),
     }
 

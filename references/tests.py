@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from django.template import Context, Template
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 
 from .models import Reference
 
@@ -39,14 +39,21 @@ class ReferenceLandingPageTests(TestCase):
 
 
 class FooterTemplateTagTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+
     def test_footer_renders_selected_references(self):
         Reference.objects.create(
-            value='https://example.com', alt_text='Example', include_in_footer=True
+            value="https://example.com", alt_text="Example", include_in_footer=True
         )
-        Reference.objects.create(value='https://ignored.com', alt_text='Ignore')
-        html = Template("{% load ref_tags %}{% render_footer %}").render(Context())
-        self.assertIn('https://example.com', html)
-        self.assertIn('Example', html)
-        self.assertNotIn('https://ignored.com', html)
-        rev = Path('REVISION').read_text().strip()[-8:]
-        self.assertIn(f'rev {rev}', html)
+        Reference.objects.create(value="https://ignored.com", alt_text="Ignore")
+        request = self.factory.get("/")
+        html = Template("{% load ref_tags %}{% render_footer %}").render(
+            Context({"request": request})
+        )
+        self.assertIn("https://example.com", html)
+        self.assertIn("Example", html)
+        self.assertNotIn("https://ignored.com", html)
+        self.assertIn("data:image/png;base64", html)
+        rev = Path("REVISION").read_text().strip()[-8:]
+        self.assertIn(f"rev {rev}", html)
