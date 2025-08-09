@@ -103,6 +103,8 @@ class ReadmeSidebarTests(TestCase):
         resp = self.client.get(reverse("website:index"))
         self.assertIn("toc", resp.context)
         self.assertContains(resp, 'class="toc"')
+        html = resp.content.decode()
+        self.assertLess(html.index('nav class="toc"'), html.index('class="col-lg-9"'))
 
 
 class SiteAdminRegisterCurrentTests(TestCase):
