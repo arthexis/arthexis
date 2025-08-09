@@ -5,7 +5,8 @@ from django.contrib.auth import authenticate, login
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import Product, Subscription, RFID, Account
+from .models import Product, Subscription, Account
+from rfid.models import RFID
 
 
 @csrf_exempt

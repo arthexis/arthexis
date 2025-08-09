@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "channels",
     "nodes",
     "accounts",
+    "rfid",
     "ocpp",
     "references",
     "awg",

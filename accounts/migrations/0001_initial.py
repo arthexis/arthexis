@@ -2,7 +2,6 @@
 
 import django.contrib.auth.models
 import django.contrib.auth.validators
-import django.core.validators
 import django.utils.timezone
 from django.db import migrations, models
 
@@ -75,20 +74,6 @@ class Migration(migrations.Migration):
                 ('description', models.TextField(blank=True)),
                 ('renewal_period', models.PositiveIntegerField(help_text='Renewal period in days')),
             ],
-        ),
-        migrations.CreateModel(
-            name='RFID',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('rfid', models.CharField(max_length=8, unique=True, validators=[django.core.validators.RegexValidator('^[0-9A-Fa-f]{8}$', message='RFID must be 8 hexadecimal digits')], verbose_name='RFID')),
-                ('allowed', models.BooleanField(default=True)),
-                ('added_on', models.DateTimeField(auto_now_add=True)),
-            ],
-            options={
-                'verbose_name': 'RFID',
-                'verbose_name_plural': 'RFIDs',
-                'db_table': 'accounts_rfid',
-            },
         ),
         migrations.CreateModel(
             name='Subscription',
