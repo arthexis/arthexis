@@ -52,6 +52,13 @@ def run_database_tasks() -> None:
         call_command("makemigrations", interactive=False)
     except CommandError:
         call_command("makemigrations", merge=True, interactive=False)
+    except InconsistentMigrationHistory:
+        if using_sqlite:
+            connections.close_all()
+            Path(default_db["NAME"]).unlink(missing_ok=True)
+            call_command("makemigrations", interactive=False)
+        else:  # pragma: no cover - unreachable in sqlite
+            raise
 
     try:
         call_command("migrate", interactive=False)
