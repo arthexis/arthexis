@@ -4,9 +4,6 @@
 
 {% block content %}
 <div class="row">
-  <div class="col-lg-9">
-    {{ content|safe }}
-  </div>
   {% if toc %}
   <div class="col-lg-3">
     <nav class="toc" style="position: sticky; top: 1rem;">
@@ -46,5 +43,8 @@
     </script>
   </div>
   {% endif %}
+  <div class="{% if toc %}col-lg-9{% else %}col-12{% endif %}">
+    {{ content|safe }}
+  </div>
 </div>
 {% endblock %}
