@@ -2,8 +2,6 @@ import os
 import runpy
 import sys
 
-from utils import git_sync as _git_sync
-
 
 def _strip_debugpy() -> None:
     os.environ.pop("DEBUGPY_LAUNCHER_PORT", None)
@@ -16,20 +14,10 @@ def _strip_debugpy() -> None:
 def main(argv: list[str] | None = None) -> None:
     """Entry point for VS Code debugger.
 
-    Removes debugpy hooks and proxies execution to ``manage.py`` while
-    patching ``utils.git_sync._restart_server`` so subsequent restarts run
-    without the debugger attached.
+    Removes debugpy hooks and proxies execution to ``manage.py``.
     """
 
     _strip_debugpy()
-
-    orig_restart = _git_sync._restart_server
-
-    def restart() -> None:
-        _strip_debugpy()
-        orig_restart()
-
-    _git_sync._restart_server = restart
 
     if argv is None:
         argv = sys.argv[1:]

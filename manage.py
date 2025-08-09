@@ -1,77 +1,15 @@
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
-import logging
 import os
 import sys
 
 from config.loadenv import loadenv
 
 
-def _notify_and_exit(message: str) -> None:
-    """Display a Windows notification, open latest log, and exit."""
-    if os.name == "nt":  # pragma: no cover - Windows only behaviour
-        try:
-            import ctypes
-
-            ctypes.windll.user32.MessageBoxW(0, message, "ArtHexis", 0)
-        except Exception:
-            pass
-        logs_dir = Path(__file__).resolve().parent / "logs"
-        log_files = list(logs_dir.glob("*.log"))
-        if log_files:
-            latest = max(log_files, key=lambda p: p.stat().st_mtime)
-            try:
-                subprocess.Popen(["notepad.exe", str(latest)])
-            except Exception:
-                pass
-    raise SystemExit(message)
-
-
-def _maybe_sync_git() -> None:
-    """Check for pending git updates and sync if possible."""
-    if os.environ.get("RUN_MAIN") != "true":
-        return
-    try:
-        from django.conf import settings
-
-        if not settings.DEBUG:
-            return
-    except Exception:
-        return
-
-    fetch_result = subprocess.run(
-        ["git", "fetch"], capture_output=True, text=True
-    )
-    if fetch_result.returncode != 0:
-        logging.error("Git fetch failed: %s", fetch_result.stderr.strip())
-        _notify_and_exit("Git fetch failed. Check logs for details.")
-
-    dirty = subprocess.run(
-        ["git", "status", "--porcelain"], capture_output=True, text=True
-    ).stdout.strip()
-    status = subprocess.run(["git", "status", "-uno"], capture_output=True, text=True).stdout
-    if "behind" in status:
-        if not dirty:
-            result = subprocess.run(
-                ["git", "pull", "--ff-only"], capture_output=True, text=True
-            )
-            if result.returncode != 0:
-                logging.error("Git pull failed: %s", result.stderr.strip())
-                _notify_and_exit("Git pull failed. Check logs for details.")
-        else:
-            _notify_and_exit("Uncommitted changes prevent auto-sync.")
-
-
 def main() -> None:
     """Run administrative tasks."""
     loadenv()
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-    from django.conf import settings
-
-    if settings.DEBUG:
-        from utils.git_sync import start_background_sync
-
-        start_background_sync()
     try:
         from django.core.management import execute_from_command_line
         from daphne.management.commands.runserver import (
