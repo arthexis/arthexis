@@ -25,6 +25,3 @@ upstream servers and shows the rendered template for review.
 admin the recipe can be edited either as a list of steps or as a single text
 block representing the full script.
 
-## GPIO Control
-
-The `nodes.gpiozero` module wraps the [gpiozero](https://gpiozero.readthedocs.io/) library to interact with Raspberry Pi GPIO pins. The `LEDController` class uses gpiozero's `MockFactory` when no pin factory is configured, allowing code and tests to run without physical GPIO hardware.
