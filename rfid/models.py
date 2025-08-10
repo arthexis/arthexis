@@ -21,6 +21,7 @@ class RFID(models.Model):
     )
     allowed = models.BooleanField(default=True)
     added_on = models.DateTimeField(auto_now_add=True)
+    is_seed_data = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         if self.rfid:

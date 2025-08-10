@@ -22,6 +22,8 @@ class SiteBadgeInline(admin.StackedInline):
 class SiteAdmin(DjangoSiteAdmin):
     inlines = [SiteBadgeInline]
     change_list_template = "admin/sites/site/change_list.html"
+    fields = ("domain", "name", "is_seed_data")
+    list_display = ("domain", "name", "is_seed_data")
 
     def get_urls(self):
         urls = super().get_urls()

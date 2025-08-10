@@ -8,13 +8,13 @@ from .models import RFID
 class RFIDResource(resources.ModelResource):
     class Meta:
         model = RFID
-        fields = ("rfid", "allowed")
+        fields = ("rfid", "allowed", "is_seed_data")
 
 
 @admin.register(RFID)
 class RFIDAdmin(ImportExportModelAdmin):
     resource_class = RFIDResource
-    list_display = ("rfid", "accounts_display", "allowed", "added_on")
+    list_display = ("rfid", "accounts_display", "allowed", "added_on", "is_seed_data")
 
     def accounts_display(self, obj):
         return ", ".join(str(a) for a in obj.accounts.all())
