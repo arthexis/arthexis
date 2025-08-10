@@ -28,6 +28,10 @@ document.addEventListener('DOMContentLoaded', function () {
     border-radius: 4px;
     color: white;
 }
+#site-name .badge a {
+    color: white;
+    text-decoration: none;
+}
 .badge-unknown {background-color:#6c757d;}
 #nav-sidebar .module h2 {
     cursor: pointer;
@@ -50,14 +54,24 @@ document.addEventListener('DOMContentLoaded', function () {
 <h1 id="site-name">
   <a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a>
     {% if badge_site %}
-      <span class="badge" style="background-color: {{ badge_site_color }};">SITE: {{ badge_site.name }}</span>
+      <span class="badge" style="background-color: {{ badge_site_color }};">
+        <a href="{% url 'admin:sites_site_changelist' %}">SITE</a>:
+        <a href="{% url 'admin:sites_site_change' badge_site.id %}">{{ badge_site.name }}</a>
+      </span>
     {% else %}
-      <span class="badge badge-unknown">SITE: Unknown</span>
+      <span class="badge badge-unknown">
+        <a href="{% url 'admin:sites_site_changelist' %}">SITE</a>: Unknown
+      </span>
     {% endif %}
   {% if badge_node %}
-    <span class="badge" style="background-color: {{ badge_node_color }};">NODE: {{ badge_node.hostname }}</span>
+    <span class="badge" style="background-color: {{ badge_node_color }};">
+      <a href="{% url 'admin:nodes_node_changelist' %}">NODE</a>:
+      <a href="{% url 'admin:nodes_node_change' badge_node.id %}">{{ badge_node.hostname }}</a>
+    </span>
   {% else %}
-    <span class="badge badge-unknown">NODE: Unknown</span>
+    <span class="badge badge-unknown">
+      <a href="{% url 'admin:nodes_node_changelist' %}">NODE</a>: Unknown
+    </span>
   {% endif %}
 </h1>
 {% endblock %}
