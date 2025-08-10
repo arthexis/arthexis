@@ -9,6 +9,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
+from django_celery_beat.models import PeriodicTask
 
 from .admin import RecipeAdmin
 
@@ -20,7 +21,7 @@ from .models import (
     Recipe,
     Step,
     Pattern,
-    Sample,
+    TextSample,
 )
 from .tasks import capture_node_screenshot, sample_clipboard
 
@@ -90,6 +91,17 @@ class NodeTests(TestCase):
         url = reverse("node-public-endpoint", args=[node.public_endpoint])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 404)
+
+    def test_enable_clipboard_polling_creates_task(self):
+        node = Node.objects.create(hostname="clip", address="127.0.0.1", port=9000)
+        task_name = f"poll_clipboard_node_{node.pk}"
+        self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
+        node.enable_clipboard_polling = True
+        node.save()
+        self.assertTrue(PeriodicTask.objects.filter(name=task_name).exists())
+        node.enable_clipboard_polling = False
+        node.save()
+        self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
 
 class NodeAdminTests(TestCase):
     def setUp(self):
@@ -188,7 +200,7 @@ class PatternMatchTests(TestCase):
         self.assertIsNone(pattern.match("nothing to see"))
 
 
-class SampleAdminTests(TestCase):
+class TextSampleAdminTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_superuser(
@@ -199,11 +211,21 @@ class SampleAdminTests(TestCase):
     @patch("pyperclip.paste")
     def test_add_from_clipboard_creates_sample(self, mock_paste):
         mock_paste.return_value = "clip text"
-        url = reverse("admin:nodes_sample_from_clipboard")
+        url = reverse("admin:nodes_textsample_from_clipboard")
         response = self.client.get(url, follow=True)
-        self.assertEqual(Sample.objects.count(), 1)
-        self.assertEqual(Sample.objects.first().content, "clip text")
-        self.assertContains(response, "Sample added from clipboard")
+        self.assertEqual(TextSample.objects.count(), 1)
+        self.assertEqual(TextSample.objects.first().content, "clip text")
+        self.assertFalse(TextSample.objects.first().automated)
+        self.assertContains(response, "Text sample added from clipboard")
+
+    @patch("pyperclip.paste")
+    def test_add_from_clipboard_skips_duplicate(self, mock_paste):
+        mock_paste.return_value = "clip text"
+        url = reverse("admin:nodes_textsample_from_clipboard")
+        self.client.get(url, follow=True)
+        resp = self.client.get(url, follow=True)
+        self.assertEqual(TextSample.objects.count(), 1)
+        self.assertContains(resp, "Duplicate sample not created")
 
 
 class ClipboardTaskTests(TestCase):
@@ -211,8 +233,12 @@ class ClipboardTaskTests(TestCase):
     def test_sample_clipboard_task_creates_sample(self, mock_paste):
         mock_paste.return_value = "task text"
         sample_clipboard()
-        self.assertEqual(Sample.objects.count(), 1)
-        self.assertEqual(Sample.objects.first().content, "task text")
+        self.assertEqual(TextSample.objects.count(), 1)
+        self.assertEqual(TextSample.objects.first().content, "task text")
+        self.assertTrue(TextSample.objects.first().automated)
+        # Duplicate should not create another sample
+        sample_clipboard()
+        self.assertEqual(TextSample.objects.count(), 1)
 
     @patch("nodes.tasks.capture_screenshot")
     @patch("nodes.tasks.socket.gethostname")

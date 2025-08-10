@@ -2,6 +2,7 @@ from django.db import models
 import socket
 import re
 from django.utils.text import slugify
+import uuid
 
 
 class Node(models.Model):
@@ -14,6 +15,7 @@ class Node(models.Model):
     last_seen = models.DateTimeField(auto_now=True)
     enable_public_api = models.BooleanField(default=False)
     public_endpoint = models.SlugField(blank=True, unique=True)
+    enable_clipboard_polling = models.BooleanField(default=False)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.hostname}:{self.port}"
@@ -21,7 +23,30 @@ class Node(models.Model):
     def save(self, *args, **kwargs):
         if not self.public_endpoint:
             self.public_endpoint = slugify(self.hostname)
+        previous = None
+        if self.pk:
+            previous = Node.objects.get(pk=self.pk).enable_clipboard_polling
         super().save(*args, **kwargs)
+        if previous != self.enable_clipboard_polling:
+            self._sync_clipboard_task()
+
+    def _sync_clipboard_task(self):
+        from django_celery_beat.models import IntervalSchedule, PeriodicTask
+
+        task_name = f"poll_clipboard_node_{self.pk}"
+        if self.enable_clipboard_polling:
+            schedule, _ = IntervalSchedule.objects.get_or_create(
+                every=5, period=IntervalSchedule.SECONDS
+            )
+            PeriodicTask.objects.update_or_create(
+                name=task_name,
+                defaults={
+                    "interval": schedule,
+                    "task": "nodes.tasks.sample_clipboard",
+                },
+            )
+        else:
+            PeriodicTask.objects.filter(name=task_name).delete()
 
 
 class NodeScreenshot(models.Model):
@@ -191,21 +216,25 @@ class Step(models.Model):
         self.recipe.sync_full_script()
 
 
-class Sample(models.Model):
+class TextSample(models.Model):
     """Clipboard text captured with timestamp."""
 
+    name = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     content = models.TextField()
+    automated = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
+        verbose_name = "Text Sample"
+        verbose_name_plural = "Text Samples"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.content[:50] if len(self.content) > 50 else self.content
+        return str(self.name)
 
 
 class Pattern(models.Model):
-    """Text mask with optional sigils used to match against ``Sample`` content."""
+    """Text mask with optional sigils used to match against ``TextSample`` content."""
 
     mask = models.TextField()
     priority = models.IntegerField(default=0)
