@@ -1,0 +1,18 @@
+[
+  {
+    "model": "accounts.brand",
+    "pk": 1,
+    "fields": {
+      "name": "Porsche",
+      "is_seed_data": true
+    }
+  },
+  {
+    "model": "accounts.brand",
+    "pk": 2,
+    "fields": {
+      "name": "Audi",
+      "is_seed_data": true
+    }
+  }
+]
