@@ -6,7 +6,7 @@ import pyperclip
 from pyperclip import PyperclipException
 from celery import shared_task
 
-from .models import Sample, Node, NodeScreenshot
+from .models import TextSample, Node, NodeScreenshot
 from .utils import capture_screenshot
 
 logger = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 @shared_task
 def sample_clipboard() -> None:
-    """Save current clipboard contents to a :class:`Sample` entry."""
+    """Save current clipboard contents to a :class:`TextSample` entry."""
     try:
         content = pyperclip.paste()
     except PyperclipException as exc:  # pragma: no cover - depends on OS clipboard
@@ -23,7 +23,10 @@ def sample_clipboard() -> None:
     if not content:
         logger.info("Clipboard is empty")
         return
-    Sample.objects.create(content=content)
+    if TextSample.objects.filter(content=content).exists():
+        logger.info("Duplicate clipboard content; sample not created")
+        return
+    TextSample.objects.create(content=content, automated=True)
 
 
 @shared_task

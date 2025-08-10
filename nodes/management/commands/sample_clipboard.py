@@ -3,11 +3,11 @@ from django.core.management.base import BaseCommand
 import pyperclip
 from pyperclip import PyperclipException
 
-from nodes.models import Sample
+from nodes.models import TextSample
 
 
 class Command(BaseCommand):
-    help = "Save current clipboard contents to a Sample entry"
+    help = "Save current clipboard contents to a TextSample entry"
 
     def handle(self, *args, **options):
         try:
@@ -18,5 +18,8 @@ class Command(BaseCommand):
         if not content:
             self.stdout.write("Clipboard is empty")
             return
-        sample = Sample.objects.create(content=content)
+        if TextSample.objects.filter(content=content).exists():
+            self.stdout.write("Duplicate sample not created")
+            return
+        sample = TextSample.objects.create(content=content)
         self.stdout.write(self.style.SUCCESS(f"Saved sample at {sample.created_at}"))

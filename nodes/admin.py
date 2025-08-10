@@ -17,7 +17,7 @@ from .models import (
     NginxConfig,
     Recipe,
     Step,
-    Sample,
+    TextSample,
     Pattern,
 )
 
@@ -40,6 +40,7 @@ class NodeAdmin(admin.ModelAdmin):
         "badge_color",
         "enable_public_api",
         "public_endpoint",
+        "enable_clipboard_polling",
         "last_seen",
     )
     search_fields = ("hostname", "address")
@@ -165,11 +166,11 @@ class NginxConfigAdmin(admin.ModelAdmin):
         )
 
 
-@admin.register(Sample)
-class SampleAdmin(admin.ModelAdmin):
-    list_display = ("created_at", "short_content")
-    readonly_fields = ("created_at",)
-    change_list_template = "admin/nodes/sample/change_list.html"
+@admin.register(TextSample)
+class TextSampleAdmin(admin.ModelAdmin):
+    list_display = ("name", "created_at", "short_content", "automated")
+    readonly_fields = ("created_at", "name")
+    change_list_template = "admin/nodes/textsample/change_list.html"
 
     def get_urls(self):
         urls = super().get_urls()
@@ -177,7 +178,7 @@ class SampleAdmin(admin.ModelAdmin):
             path(
                 "from-clipboard/",
                 self.admin_site.admin_view(self.add_from_clipboard),
-                name="nodes_sample_from_clipboard",
+                name="nodes_textsample_from_clipboard",
             )
         ]
         return custom + urls
@@ -191,8 +192,15 @@ class SampleAdmin(admin.ModelAdmin):
         if not content:
             self.message_user(request, "Clipboard is empty.", level=messages.INFO)
             return redirect("..")
-        Sample.objects.create(content=content)
-        self.message_user(request, "Sample added from clipboard.", level=messages.SUCCESS)
+        if TextSample.objects.filter(content=content).exists():
+            self.message_user(
+                request, "Duplicate sample not created.", level=messages.INFO
+            )
+            return redirect("..")
+        TextSample.objects.create(content=content)
+        self.message_user(
+            request, "Text sample added from clipboard.", level=messages.SUCCESS
+        )
         return redirect("..")
 
     def short_content(self, obj):
@@ -208,7 +216,7 @@ class PatternAdmin(admin.ModelAdmin):
 
     @admin.action(description="Scan latest sample")
     def scan_latest_sample(self, request, queryset):
-        sample = Sample.objects.first()
+        sample = TextSample.objects.first()
         if not sample:
             self.message_user(request, "No samples available.", level=messages.WARNING)
             return
