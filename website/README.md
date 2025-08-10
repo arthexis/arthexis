@@ -11,6 +11,9 @@ included so interactive components like the navigation dropdowns work. A button
 in the upper-right corner toggles between light and dark themes and remembers
 the preference using `localStorage`.
 
+A sticky sidebar shows a table of contents styled after the Python Enhancement
+Proposal pages.
+
 When visiting the default *website* domain, a navigation bar shows links to all
 enabled apps that expose public URLs. References flagged with "Include in Footer"
 are rendered at the bottom of the page through the `render_footer` template tag.
