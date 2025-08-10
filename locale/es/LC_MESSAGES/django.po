@@ -35,7 +35,15 @@ msgstr ""
 msgid "EV Models"
 msgstr ""
 
-#: config/settings.py:162
+#: accounts/models.py:303
+msgid "EV Brand"
+msgstr ""
+
+#: accounts/models.py:304
+msgid "EV Brands"
+msgstr ""
+
+#: config/settings.py:167
 msgid "English"
 msgstr ""
 

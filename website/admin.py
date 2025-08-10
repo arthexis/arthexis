@@ -1,13 +1,16 @@
 from django.contrib import admin, messages
-from django.contrib.sites.models import Site
 from django.contrib.sites.admin import SiteAdmin as DjangoSiteAdmin
+from django.contrib.sites.models import Site
 from django import forms
 from django.db import models
 from django.shortcuts import redirect
 from django.urls import path
 import ipaddress
+from django.apps import apps as django_apps
+from django.core import checks
+from django.db.utils import OperationalError, ProgrammingError
 
-from .models import SiteBadge, App, SiteProxy
+from .models import SiteBadge, Application, SiteProxy
 
 
 class SiteBadgeInline(admin.StackedInline):
@@ -60,7 +63,26 @@ admin.site.unregister(Site)
 admin.site.register(SiteProxy, SiteAdmin)
 
 
-@admin.register(App)
-class AppAdmin(admin.ModelAdmin):
+@admin.register(Application)
+class ApplicationAdmin(admin.ModelAdmin):
     list_display = ("name", "site", "path", "is_default")
     list_filter = ("site",)
+
+    def check(self, **kwargs):
+        errors = super().check(**kwargs)
+        try:
+            missing = [
+                app.name
+                for app in self.model.objects.all()
+                if not django_apps.is_installed(app.name)
+            ]
+        except (OperationalError, ProgrammingError):
+            return errors
+        if missing:
+            errors.append(
+                checks.Error(
+                    f"Applications not installed: {', '.join(missing)}",
+                    id="website.E001",
+                )
+            )
+        return errors

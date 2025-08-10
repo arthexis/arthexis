@@ -13,7 +13,7 @@ from website.utils import landing
 @landing("Home")
 def index(request):
     site = get_current_site(request)
-    app = site.apps.filter(is_default=True).first()
+    app = site.applications.filter(is_default=True).first()
     app_slug = "readme"
     if app:
         app_slug = app.path.strip("/") or "readme"
@@ -37,14 +37,14 @@ def index(request):
 
 def sitemap(request):
     site = get_current_site(request)
-    apps = site.apps.all()
+    applications = site.applications.all()
     base = request.build_absolute_uri("/").rstrip("/")
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
     ]
     seen = set()
-    for app in apps:
+    for app in applications:
         loc = f"{base}{app.path}"
         if loc not in seen:
             seen.add(loc)

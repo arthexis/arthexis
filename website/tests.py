@@ -2,8 +2,10 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
+from django.contrib import admin
 import socket
-from website.models import App
+from website.models import Application
+from website.admin import ApplicationAdmin
 
 
 class LoginViewTests(TestCase):
@@ -169,9 +171,22 @@ class NavAppsTests(TestCase):
         site, _ = Site.objects.update_or_create(
             id=1, defaults={"domain": "127.0.0.1", "name": "localhost"}
         )
-        App.objects.create(site=site, name="Readme", path="/", is_default=True)
+        Application.objects.create(
+            site=site, name="Readme", path="/", is_default=True
+        )
 
     def test_nav_pill_renders(self):
         resp = self.client.get(reverse("website:index"))
         self.assertContains(resp, "Readme")
         self.assertContains(resp, "badge rounded-pill")
+
+
+class ApplicationAdminCheckTests(TestCase):
+    def test_error_when_app_not_installed(self):
+        site, _ = Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": "website"}
+        )
+        Application.objects.create(site=site, name="not_installed", path="/ni/")
+        admin_instance = ApplicationAdmin(Application, admin.site)
+        errors = admin_instance.check()
+        self.assertTrue(any(e.id == "website.E001" for e in errors))

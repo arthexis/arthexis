@@ -299,6 +299,10 @@ class Brand(models.Model):
     name = models.CharField(max_length=100, unique=True)
     is_seed_data = models.BooleanField(default=False)
 
+    class Meta:
+        verbose_name = _("EV Brand")
+        verbose_name_plural = _("EV Brands")
+
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
 
