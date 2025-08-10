@@ -6,11 +6,31 @@ from django.utils.html import format_html
 from .models import EmailPattern
 
 
-@admin.register(EmailPattern)
 class EmailPatternAdmin(admin.ModelAdmin):
     list_display = ("name", "subject", "test_button")
     actions = ["test_patterns"]
     change_form_template = "admin/emails/emailpattern/change_form.html"
+
+    permission_app_labels = ("post_office", "emails")
+
+    def _user_has_perm(self, request, perm):
+        model = self.model._meta.model_name
+        return any(
+            request.user.has_perm(f"{label}.{perm}_{model}")
+            for label in self.permission_app_labels
+        )
+
+    def has_view_permission(self, request, obj=None):
+        return self._user_has_perm(request, "view")
+
+    def has_change_permission(self, request, obj=None):
+        return self._user_has_perm(request, "change")
+
+    def has_delete_permission(self, request, obj=None):
+        return self._user_has_perm(request, "delete")
+
+    def has_add_permission(self, request):
+        return self._user_has_perm(request, "add")
 
     def get_urls(self):
         urls = super().get_urls()
