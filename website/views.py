@@ -23,13 +23,13 @@ def index(request):
     if not readme_file.exists():
         readme_file = Path(settings.BASE_DIR) / "README.md"
     text = readme_file.read_text(encoding="utf-8")
-    md = markdown.Markdown(extensions=["toc"])
+    md = markdown.Markdown(extensions=["toc", "tables"])
     html = md.convert(text)
     toc_html = md.toc
     if toc_html.strip().startswith('<div class="toc">'):
         toc_html = toc_html.strip()[len('<div class="toc">') :]
-        if toc_html.endswith('</div>'):
-            toc_html = toc_html[: -len('</div>')]
+        if toc_html.endswith("</div>"):
+            toc_html = toc_html[: -len("</div>")]
         toc_html = toc_html.strip()
     context = {"content": html, "title": readme_file.stem, "toc": toc_html}
     return render(request, "website/readme.html", context)
