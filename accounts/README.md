@@ -34,8 +34,8 @@ quickly verify whether an account would be accepted by a charger.
 ## Vehicles
 
 An account may be associated with multiple **Vehicle** records. Each vehicle
-stores a reference to a `Brand` (defined in the separate `Brand` model), its
-`model` and `VIN` (Vehicle Identification Number) so that a user's cars can be
+stores a reference to a `Brand` and a specific `EVModel` along with its
+`VIN` (Vehicle Identification Number) so that a user's cars can be
 identified when using OCPP chargers.
 
 ## Products and Subscriptions
