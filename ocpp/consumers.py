@@ -94,7 +94,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data=None, bytes_data=None):
         if text_data is None:
             return
-        store.logs.setdefault(self.charger_id, []).append(f"> {text_data}")
+        store.add_log(self.charger_id, f"> {text_data}")
         try:
             msg = json.loads(text_data)
         except json.JSONDecodeError:
@@ -167,4 +167,4 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 reply_payload = {"idTagInfo": {"status": "Accepted"}}
             response = [3, msg_id, reply_payload]
             await self.send(json.dumps(response))
-            store.logs.setdefault(self.charger_id, []).append(f"< {json.dumps(response)}")
+            store.add_log(self.charger_id, f"< {json.dumps(response)}")

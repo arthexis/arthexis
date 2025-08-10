@@ -121,6 +121,7 @@ class SimulatorAdmin(admin.ModelAdmin):
         for obj in queryset:
             if obj.pk in store.simulators:
                 continue
+            store.register_log_name(obj.cp_path, obj.name)
             sim = ChargePointSimulator(obj.as_config())
             sim.start()
             store.simulators[obj.pk] = sim
