@@ -1,4 +1,8 @@
 from django.db import models
+from django.core.management import call_command
+from io import StringIO
+from pathlib import Path
+import json
 from . import Package, Credentials, DEFAULT_PACKAGE
 
 
@@ -81,3 +85,60 @@ class PackageConfig(models.Model):
         from . import utils
 
         utils.build(package=self.to_package(), creds=self.to_credentials(), **kwargs)
+
+
+class SeedData(models.Model):
+    """Snapshot of data marked as seed data."""
+
+    created = models.DateTimeField(auto_now_add=True)
+    data = models.JSONField(default=list)
+    auto_install = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created"]
+
+    @property
+    def path(self) -> Path:
+        return Path(__file__).resolve().parent / "seed_data" / f"{self.pk}.json"
+
+    @classmethod
+    def create_snapshot(cls, auto_install: bool = False) -> "SeedData":
+        """Create a snapshot of current seed data."""
+        obj = cls.objects.create(data=[], auto_install=auto_install)
+        obj.path.parent.mkdir(parents=True, exist_ok=True)
+        call_command("dumpseeddata", str(obj.path))
+        obj.data = json.loads(obj.path.read_text())
+        obj.save(update_fields=["data"])
+        update_seeddata_fixture()
+        return obj
+
+    def install(self) -> None:
+        if self.path.exists():
+            call_command("loaddata", str(self.path))
+
+    def delete(self, *args, **kwargs) -> None:  # pragma: no cover - simple
+        path = self.path
+        super().delete(*args, **kwargs)
+        if path.exists():
+            path.unlink()
+        update_seeddata_fixture()
+
+
+FIXTURE_FILE = Path(__file__).resolve().parent / "fixtures" / "seed_data.json"
+
+
+def update_seeddata_fixture() -> None:
+    """Write all SeedData objects to the fixture file."""
+    FIXTURE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    out = StringIO()
+    call_command("dumpdata", "release.SeedData", "--indent", 2, stdout=out)
+    FIXTURE_FILE.write_text(out.getvalue(), encoding="utf-8")
+
+
+def load_seeddata_fixture(**_kwargs) -> None:
+    """Load SeedData objects and auto-install marked snapshots."""
+    if FIXTURE_FILE.exists() and FIXTURE_FILE.read_text().strip() not in ("", "[]"):
+        call_command("loaddata", str(FIXTURE_FILE), verbosity=0)
+        for seed in SeedData.objects.filter(auto_install=True):
+            if seed.path.exists():
+                call_command("loaddata", str(seed.path), verbosity=0)
