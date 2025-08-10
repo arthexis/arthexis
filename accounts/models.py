@@ -218,9 +218,15 @@ class RFIDSource(models.Model):
     """Endpoint configuration for syncing RFIDs."""
 
     name = models.CharField(max_length=100, unique=True)
-    endpoint = models.URLField()
+    endpoint = models.URLField(
+        help_text="Full URL to the RFID batch endpoint, including '/api/rfid/'"
+    )
     is_source = models.BooleanField(default=False)
     is_target = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "RFID source"
+        verbose_name_plural = "RFID sources"
 
     def set_source(self, value: bool = True) -> None:
         """Idempotently mark this endpoint as a source for RFIDs."""

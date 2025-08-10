@@ -21,7 +21,7 @@ admin.site.site_title = _("Arthexis Constellation")
 
 
 # Apps that require a custom prefix for their URLs
-URL_PREFIX_OVERRIDES = {"references": "ref"}
+URL_PREFIX_OVERRIDES = {"references": "ref", "accounts": "api/rfid"}
 
 
 def autodiscovered_urlpatterns():

@@ -9,7 +9,7 @@ django.setup()
 
 
 def test_accounts_url_autodiscovered():
-    match = resolve("/accounts/rfid-login/")
+    match = resolve("/api/rfid/rfid-login/")
     assert match.view_name == "rfid-login"
 
 
