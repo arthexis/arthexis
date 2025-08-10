@@ -17,6 +17,30 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 </script>
+<script id="admin-filter-empty-groups">
+document.addEventListener('DOMContentLoaded', function () {
+    const nav = document.getElementById('nav-filter');
+    const sidebar = document.getElementById('nav-sidebar');
+    if (!nav || !sidebar) {
+        return;
+    }
+
+    function toggleEmptyGroups() {
+        sidebar.querySelectorAll('.module').forEach(function (module) {
+            const hasVisibleRows = Array.from(module.querySelectorAll('tr')).some(function (row) {
+                return row.style.display !== 'none' && row.querySelector('th[scope="row"]');
+            });
+            module.style.display = hasVisibleRows ? '' : 'none';
+        });
+    }
+
+    nav.addEventListener('change', toggleEmptyGroups);
+    nav.addEventListener('input', toggleEmptyGroups);
+    nav.addEventListener('keyup', toggleEmptyGroups);
+
+    toggleEmptyGroups();
+});
+</script>
 {% endblock %}
 {% block extrastyle %}
 {{ block.super }}
