@@ -55,22 +55,20 @@ document.addEventListener('DOMContentLoaded', function () {
   <a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a>
     {% if badge_site %}
       <span class="badge" style="background-color: {{ badge_site_color }};">
-        <a href="{% url 'admin:sites_site_changelist' %}">SITE</a>:
-        <a href="{% url 'admin:sites_site_change' badge_site.id %}">{{ badge_site.name }}</a>
+        <a href="{% url 'admin:website_siteproxy_change' badge_site.id %}">SITE: {{ badge_site.name }}</a>
       </span>
     {% else %}
       <span class="badge badge-unknown">
-        <a href="{% url 'admin:sites_site_changelist' %}">SITE</a>: Unknown
+        <a href="{% url 'admin:website_siteproxy_changelist' %}">SITE</a>: Unknown
       </span>
     {% endif %}
   {% if badge_node %}
     <span class="badge" style="background-color: {{ badge_node_color }};">
-      <a href="{% url 'admin:nodes_node_changelist' %}">NODE</a>:
-      <a href="{% url 'admin:nodes_node_change' badge_node.id %}">{{ badge_node.hostname }}</a>
+      <a href="{% url 'admin:nodes_node_change' badge_node.id %}">NODE: {{ badge_node.hostname }}</a>
     </span>
   {% else %}
     <span class="badge badge-unknown">
-      <a href="{% url 'admin:nodes_node_changelist' %}">NODE</a>: Unknown
+      <a href="{% url 'admin:nodes_node_changelist' %}">NODE: Unknown</a>
     </span>
   {% endif %}
 </h1>
