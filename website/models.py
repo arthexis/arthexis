@@ -1,6 +1,9 @@
 from django.db import models
 from django.contrib.sites.models import Site
 
+if not hasattr(Site, "is_seed_data"):
+    Site.add_to_class("is_seed_data", models.BooleanField(default=False))
+
 
 class App(models.Model):
     site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="apps")
@@ -23,3 +26,11 @@ class SiteBadge(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"Badge for {self.site.domain}"
+
+
+class SiteProxy(Site):
+    class Meta:
+        proxy = True
+        app_label = "website"
+        verbose_name = "Site"
+        verbose_name_plural = "Sites"

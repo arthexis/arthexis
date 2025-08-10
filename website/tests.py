@@ -121,11 +121,13 @@ class SiteAdminRegisterCurrentTests(TestCase):
         )
 
     def test_register_current_creates_site(self):
-        resp = self.client.get(reverse("admin:sites_site_changelist"))
+        resp = self.client.get(reverse("admin:website_siteproxy_changelist"))
         self.assertContains(resp, "Register Current")
 
-        resp = self.client.get(reverse("admin:sites_site_register_current"))
-        self.assertRedirects(resp, reverse("admin:sites_site_changelist"))
+        resp = self.client.get(reverse("admin:website_siteproxy_register_current"))
+        self.assertRedirects(
+            resp, reverse("admin:website_siteproxy_changelist")
+        )
         self.assertTrue(Site.objects.filter(domain="testserver").exists())
         site = Site.objects.get(domain="testserver")
         self.assertEqual(site.name, "testserver")
@@ -133,9 +135,11 @@ class SiteAdminRegisterCurrentTests(TestCase):
     @override_settings(ALLOWED_HOSTS=["127.0.0.1", "testserver"])
     def test_register_current_ip_sets_localhost_name(self):
         resp = self.client.get(
-            reverse("admin:sites_site_register_current"), HTTP_HOST="127.0.0.1"
+            reverse("admin:website_siteproxy_register_current"), HTTP_HOST="127.0.0.1"
         )
-        self.assertRedirects(resp, reverse("admin:sites_site_changelist"))
+        self.assertRedirects(
+            resp, reverse("admin:website_siteproxy_changelist")
+        )
         site = Site.objects.get(domain="127.0.0.1")
         self.assertEqual(site.name, "localhost")
 
