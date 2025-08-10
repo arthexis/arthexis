@@ -12,7 +12,6 @@ class Migration(migrations.Migration):
     dependencies = [
         ('accounts', '0001_initial'),
         ('auth', '0001_initial'),
-        ('rfid', '0001_initial'),
     ]
 
     operations = [
@@ -25,11 +24,6 @@ class Migration(migrations.Migration):
             model_name='user',
             name='user_permissions',
             field=models.ManyToManyField(blank=True, help_text='Specific permissions for this user.', related_name='user_set', related_query_name='user', to='auth.permission', verbose_name='user permissions'),
-        ),
-        migrations.AddField(
-            model_name='account',
-            name='rfids',
-            field=models.ManyToManyField(blank=True, related_name='accounts', to='rfid.rfid'),
         ),
         migrations.AddField(
             model_name='account',

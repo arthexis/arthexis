@@ -21,7 +21,7 @@ class Command(BaseCommand):
         models = [
             apps.get_model("sites", "Site"),
             apps.get_model("ocpp", "Charger"),
-            apps.get_model("rfid", "RFID"),
+            apps.get_model("accounts", "RFID"),
             apps.get_model("references", "Reference"),
         ]
         objects = []

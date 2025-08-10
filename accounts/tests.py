@@ -15,7 +15,7 @@ from .models import (
     Brand,
     EVModel,
 )
-from rfid.models import RFID
+from accounts.models import RFID
 from ocpp.models import Transaction
 
 from django.core.exceptions import ValidationError
