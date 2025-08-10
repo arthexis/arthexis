@@ -14,11 +14,11 @@ from website.utils import landing
 def index(request):
     site = get_current_site(request)
     app = site.applications.filter(is_default=True).first()
-    app_slug = "readme"
-    if app:
-        app_slug = app.path.strip("/") or "readme"
-    readme_file = Path(settings.BASE_DIR) / (
-        "README.md" if app_slug == "readme" else Path(app_slug) / "README.md"
+    app_slug = app.path.strip("/") if app else ""
+    readme_file = (
+        Path(settings.BASE_DIR) / app_slug / "README.md"
+        if app_slug
+        else Path(settings.BASE_DIR) / "README.md"
     )
     if not readme_file.exists():
         readme_file = Path(settings.BASE_DIR) / "README.md"
