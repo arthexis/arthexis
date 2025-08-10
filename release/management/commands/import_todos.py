@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from todos.utils import create_todos_from_comments
+from release.utils import create_todos_from_comments
 
 
 class Command(BaseCommand):
