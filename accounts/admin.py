@@ -4,6 +4,8 @@ from django.urls import path
 from django.shortcuts import redirect, render
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from import_export import resources
+from import_export.admin import ImportExportModelAdmin
 
 from .models import (
     UserProxy,
@@ -15,8 +17,8 @@ from .models import (
     Subscription,
     Brand,
     EVModel,
+    RFID,
 )
-from rfid.models import RFID
 
 
 class AccountRFIDForm(forms.ModelForm):
@@ -219,3 +221,20 @@ class EVModelAdmin(admin.ModelAdmin):
 
 admin.site.register(Product)
 admin.site.register(Subscription)
+
+
+class RFIDResource(resources.ModelResource):
+    class Meta:
+        model = RFID
+        fields = ("rfid", "allowed", "is_seed_data")
+
+
+@admin.register(RFID)
+class RFIDAdmin(ImportExportModelAdmin):
+    resource_class = RFIDResource
+    list_display = ("rfid", "accounts_display", "allowed", "added_on", "is_seed_data")
+
+    def accounts_display(self, obj):
+        return ", ".join(str(a) for a in obj.accounts.all())
+
+    accounts_display.short_description = "Accounts"

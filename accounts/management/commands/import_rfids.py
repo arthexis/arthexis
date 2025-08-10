@@ -1,6 +1,5 @@
 from django.core.management.base import BaseCommand, CommandError
-from rfid.models import RFID
-from accounts.models import Account
+from accounts.models import Account, RFID
 import csv
 
 class Command(BaseCommand):
