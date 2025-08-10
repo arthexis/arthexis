@@ -62,7 +62,6 @@ INSTALLED_APPS = [
     "social.bsky",
     "social.meta",
     "emails",
-    "clipboard",
     "app",
     "django_celery_beat",
 ]
