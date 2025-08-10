@@ -24,23 +24,17 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
 
-def _has_non_initial_migrations() -> bool:
+def _local_app_labels() -> list[str]:
     base_dir = Path(settings.BASE_DIR)
+    labels: list[str] = []
     for app_config in apps.get_app_configs():
         app_path = Path(app_config.path)
         try:
             app_path.relative_to(base_dir)
         except ValueError:
             continue
-        migrations_path = app_path / "migrations"
-        if not migrations_path.exists():
-            continue
-        for item in migrations_path.iterdir():
-            if item.name in {"__init__.py", "0001_initial.py"}:
-                continue
-            if item.is_file() and item.suffix == ".py":
-                return True
-    return False
+        labels.append(app_config.label)
+    return labels
 
 
 def run_database_tasks() -> None:
@@ -48,15 +42,17 @@ def run_database_tasks() -> None:
     default_db = settings.DATABASES["default"]
     using_sqlite = default_db["ENGINE"] == "django.db.backends.sqlite3"
 
+    local_apps = _local_app_labels()
+
     try:
-        call_command("makemigrations", interactive=False)
+        call_command("makemigrations", *local_apps, interactive=False)
     except CommandError:
-        call_command("makemigrations", merge=True, interactive=False)
+        call_command("makemigrations", *local_apps, merge=True, interactive=False)
     except InconsistentMigrationHistory:
         if using_sqlite:
             connections.close_all()
             Path(default_db["NAME"]).unlink(missing_ok=True)
-            call_command("makemigrations", interactive=False)
+            call_command("makemigrations", *local_apps, interactive=False)
         else:  # pragma: no cover - unreachable in sqlite
             raise
 
@@ -72,17 +68,6 @@ def run_database_tasks() -> None:
             call_command("migrate", interactive=False)
         else:  # pragma: no cover - unreachable in sqlite
             raise
-
-    if _has_non_initial_migrations():
-        if using_sqlite:
-            connections.close_all()
-            Path(default_db["NAME"]).unlink(missing_ok=True)
-        else:
-            call_command("migrate", "zero", interactive=False)
-        call_command("migrate", interactive=False)
-        # Squash migrations back to a single initial state
-        call_command("reset_migrations")
-        call_command("migrate", interactive=False, fake_initial=True)
 
     call_command("loaddata", "ocpp_simulators")
     call_command("loaddata", "localhost")
