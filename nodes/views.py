@@ -3,8 +3,9 @@ import socket
 
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.shortcuts import get_object_or_404
 
-from .models import Node, NodeScreenshot
+from .models import Node, NodeScreenshot, NodeMessage
 from .utils import capture_screenshot
 
 
@@ -61,3 +62,37 @@ def capture(request):
             "node": screenshot.node.id if screenshot.node else None,
         }
     )
+
+
+@csrf_exempt
+def public_node_endpoint(request, endpoint):
+    """Public API endpoint for a node.
+
+    - ``GET`` returns information about the node.
+    - ``POST`` stores the request as a :class:`NodeMessage`.
+    """
+
+    node = get_object_or_404(
+        Node, public_endpoint=endpoint, enable_public_api=True
+    )
+
+    if request.method == "GET":
+        data = {
+            "hostname": node.hostname,
+            "address": node.address,
+            "port": node.port,
+            "badge_color": node.badge_color,
+            "last_seen": node.last_seen,
+        }
+        return JsonResponse(data)
+
+    if request.method == "POST":
+        NodeMessage.objects.create(
+            node=node,
+            method=request.method,
+            headers=dict(request.headers),
+            body=request.body.decode("utf-8") if request.body else "",
+        )
+        return JsonResponse({"status": "stored"})
+
+    return JsonResponse({"detail": "Method not allowed"}, status=405)

@@ -9,7 +9,16 @@ import os
 import pyperclip
 from pyperclip import PyperclipException
 
-from .models import Node, NodeScreenshot, NginxConfig, Recipe, Step, Sample, Pattern
+from .models import (
+    Node,
+    NodeScreenshot,
+    NodeMessage,
+    NginxConfig,
+    Recipe,
+    Step,
+    Sample,
+    Pattern,
+)
 
 
 class NodeAdminForm(forms.ModelForm):
@@ -23,7 +32,15 @@ class NodeAdminForm(forms.ModelForm):
 
 @admin.register(Node)
 class NodeAdmin(admin.ModelAdmin):
-    list_display = ("hostname", "address", "port", "badge_color", "last_seen")
+    list_display = (
+        "hostname",
+        "address",
+        "port",
+        "badge_color",
+        "enable_public_api",
+        "public_endpoint",
+        "last_seen",
+    )
     search_fields = ("hostname", "address")
     change_list_template = "admin/nodes/node/change_list.html"
     form = NodeAdminForm
@@ -62,6 +79,11 @@ class NodeAdmin(admin.ModelAdmin):
 @admin.register(NodeScreenshot)
 class NodeScreenshotAdmin(admin.ModelAdmin):
     list_display = ("path", "node", "created")
+
+
+@admin.register(NodeMessage)
+class NodeMessageAdmin(admin.ModelAdmin):
+    list_display = ("node", "method", "created")
 
 
 class StepInline(admin.TabularInline):
