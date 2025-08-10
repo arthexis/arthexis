@@ -3,7 +3,8 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("sites", "0002_alter_domain_unique"),
+        # Depend on the initial sites migration so this runs on any Django version
+        ("sites", "0001_initial"),
     ]
 
     operations = [
