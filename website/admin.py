@@ -9,7 +9,7 @@ import ipaddress
 from django.apps import apps as django_apps
 from django.conf import settings
 
-from .models import SiteBadge, Application, SiteProxy
+from .models import SiteBadge, Application, SiteProxy, SiteApplication
 
 
 def get_local_app_choices():
@@ -32,8 +32,13 @@ class SiteBadgeInline(admin.StackedInline):
     }
 
 
+class SiteApplicationInline(admin.TabularInline):
+    model = SiteApplication
+    extra = 0
+
+
 class SiteAdmin(DjangoSiteAdmin):
-    inlines = [SiteBadgeInline]
+    inlines = [SiteBadgeInline, SiteApplicationInline]
     change_list_template = "admin/sites/site/change_list.html"
     fields = ("domain", "name", "is_seed_data")
     list_display = ("domain", "name", "is_seed_data")
@@ -85,13 +90,25 @@ class ApplicationForm(forms.ModelForm):
         self.fields["name"].choices = get_local_app_choices()
 
 
+class ApplicationSiteInline(admin.TabularInline):
+    model = SiteApplication
+    fk_name = "application"
+    extra = 0
+
+
 @admin.register(Application)
 class ApplicationAdmin(admin.ModelAdmin):
     form = ApplicationForm
-    list_display = ("name", "site", "path", "is_default", "installed")
-    list_filter = ("site",)
+    list_display = ("name", "installed")
     readonly_fields = ("installed",)
+    inlines = [ApplicationSiteInline]
 
     @admin.display(boolean=True)
     def installed(self, obj):
         return obj.installed
+
+
+@admin.register(SiteApplication)
+class SiteApplicationAdmin(admin.ModelAdmin):
+    list_display = ("application", "site", "path", "is_default")
+    list_filter = ("site", "application")

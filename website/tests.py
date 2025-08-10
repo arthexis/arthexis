@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.contrib import admin
 import socket
-from website.models import Application
+from website.models import Application, SiteApplication
 from website.admin import ApplicationAdmin
 
 
@@ -171,8 +171,9 @@ class NavAppsTests(TestCase):
         site, _ = Site.objects.update_or_create(
             id=1, defaults={"domain": "127.0.0.1", "name": "localhost"}
         )
-        Application.objects.create(
-            site=site, name="Readme", path="/", is_default=True
+        app = Application.objects.create(name="Readme")
+        SiteApplication.objects.create(
+            site=site, application=app, path="/", is_default=True
         )
 
     def test_nav_pill_renders(self):
@@ -186,14 +187,12 @@ class ApplicationModelTests(TestCase):
         site, _ = Site.objects.update_or_create(
             id=1, defaults={"domain": "testserver", "name": "website"}
         )
-        app = Application.objects.create(site=site, name="accounts")
-        self.assertEqual(app.path, "/accounts/")
+        app = Application.objects.create(name="accounts")
+        site_app = SiteApplication.objects.create(site=site, application=app)
+        self.assertEqual(site_app.path, "/accounts/")
 
     def test_installed_flag_false_when_missing(self):
-        site, _ = Site.objects.update_or_create(
-            id=1, defaults={"domain": "testserver", "name": "website"}
-        )
-        app = Application.objects.create(site=site, name="missing")
+        app = Application.objects.create(name="missing")
         self.assertFalse(app.installed)
 
 

@@ -54,7 +54,7 @@
                 {% for app in nav_apps %}
                 <li class="nav-item">
                   <a class="nav-link" href="{{ app.path }}">
-                    <span class="badge rounded-pill text-bg-secondary">{{ app.name }}</span>
+                    <span class="badge rounded-pill text-bg-secondary">{{ app.application.name }}</span>
                   </a>
                 </li>
                 {% endfor %}

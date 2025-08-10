@@ -13,7 +13,11 @@ from website.utils import landing
 @landing("Home")
 def index(request):
     site = get_current_site(request)
-    app = site.applications.filter(is_default=True).first()
+    app = (
+        site.site_applications.filter(is_default=True)
+        .select_related("application")
+        .first()
+    )
     app_slug = app.path.strip("/") if app else ""
     readme_file = (
         Path(settings.BASE_DIR) / app_slug / "README.md"
@@ -37,7 +41,7 @@ def index(request):
 
 def sitemap(request):
     site = get_current_site(request)
-    applications = site.applications.all()
+    applications = site.site_applications.all()
     base = request.build_absolute_uri("/").rstrip("/")
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',

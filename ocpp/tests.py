@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.sites.models import Site
-from website.models import Application
+from website.models import Application, SiteApplication
 
 from config.asgi import application
 
@@ -115,7 +115,8 @@ class SimulatorLandingTests(TestCase):
         site, _ = Site.objects.update_or_create(
             id=1, defaults={"domain": "testserver", "name": "website"}
         )
-        Application.objects.create(site=site, name="Ocpp", path="/ocpp/")
+        app = Application.objects.create(name="Ocpp")
+        SiteApplication.objects.create(site=site, application=app, path="/ocpp/")
         client = Client()
         resp = client.get(reverse("website:index"))
         self.assertContains(resp, "/ocpp/")
