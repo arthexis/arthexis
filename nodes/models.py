@@ -1,6 +1,7 @@
 from django.db import models
 import socket
 import re
+from django.utils.text import slugify
 
 
 class Node(models.Model):
@@ -11,9 +12,16 @@ class Node(models.Model):
     port = models.PositiveIntegerField(default=8000)
     badge_color = models.CharField(max_length=7, default="#28a745")
     last_seen = models.DateTimeField(auto_now=True)
+    enable_public_api = models.BooleanField(default=False)
+    public_endpoint = models.SlugField(blank=True, unique=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.hostname}:{self.port}"
+
+    def save(self, *args, **kwargs):
+        if not self.public_endpoint:
+            self.public_endpoint = slugify(self.hostname)
+        super().save(*args, **kwargs)
 
 
 class NodeScreenshot(models.Model):
@@ -27,6 +35,21 @@ class NodeScreenshot(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.path
+
+
+class NodeMessage(models.Model):
+    """Message received via a node's public API."""
+
+    node = models.ForeignKey(
+        Node, related_name="messages", on_delete=models.CASCADE
+    )
+    method = models.CharField(max_length=10)
+    headers = models.JSONField(default=dict, blank=True)
+    body = models.TextField(blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.node} {self.method} {self.created}"
 
 
 class NginxConfig(models.Model):

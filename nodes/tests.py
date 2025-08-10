@@ -12,7 +12,16 @@ from django.contrib import admin
 
 from .admin import RecipeAdmin
 
-from .models import Node, NodeScreenshot, NginxConfig, Recipe, Step, Pattern, Sample
+from .models import (
+    Node,
+    NodeScreenshot,
+    NodeMessage,
+    NginxConfig,
+    Recipe,
+    Step,
+    Pattern,
+    Sample,
+)
 from .tasks import capture_node_screenshot, sample_clipboard
 
 
@@ -54,6 +63,33 @@ class NodeTests(TestCase):
         mock_capture.assert_called_once()
         self.assertEqual(NodeScreenshot.objects.count(), 1)
         self.assertEqual(NodeScreenshot.objects.first().node, node)
+
+    def test_public_api_get_and_post(self):
+        node = Node.objects.create(
+            hostname="public", address="127.0.0.1", port=8001, enable_public_api=True
+        )
+        url = reverse("node-public-endpoint", args=[node.public_endpoint])
+
+        get_resp = self.client.get(url)
+        self.assertEqual(get_resp.status_code, 200)
+        self.assertEqual(get_resp.json()["hostname"], "public")
+
+        post_resp = self.client.post(
+            url, data="hello", content_type="text/plain"
+        )
+        self.assertEqual(post_resp.status_code, 200)
+        self.assertEqual(NodeMessage.objects.count(), 1)
+        msg = NodeMessage.objects.first()
+        self.assertEqual(msg.body, "hello")
+        self.assertEqual(msg.node, node)
+
+    def test_public_api_disabled(self):
+        node = Node.objects.create(
+            hostname="nopublic", address="127.0.0.2", port=8002
+        )
+        url = reverse("node-public-endpoint", args=[node.public_endpoint])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 404)
 
 class NodeAdminTests(TestCase):
     def setUp(self):
