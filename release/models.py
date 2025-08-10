@@ -96,6 +96,8 @@ class SeedData(models.Model):
 
     class Meta:
         ordering = ["-created"]
+        verbose_name = "Seed Datum"
+        verbose_name_plural = "Seed Data"
 
     @property
     def path(self) -> Path:
