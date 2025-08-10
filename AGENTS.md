@@ -1,6 +1,6 @@
 # Agent Guidelines
 
-- The top-level `README.md` is auto-generated. **Never edit this file directly.**
-- For documentation updates, edit `README.base.md` or the `README.md` inside the relevant app's directory (e.g., `accounts/README.md`).
-- The combined `README.md` is regenerated only when creating a release using `python manage.py build_readme`. Do not rebuild it during normal development.
+- The top-level `README.md` is generated from `README.base.md`. **Do not edit either file unless explicitly instructed.**
+- Application documentation lives in Django's admindocs. Do not create or modify per-app README files.
+- Regenerate `README.md` with `python manage.py build_readme` only when directed.
 
