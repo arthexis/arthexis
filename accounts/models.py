@@ -267,6 +267,8 @@ class EVModel(models.Model):
 
     class Meta:
         unique_together = ("brand", "name")
+        verbose_name = _("EV Model")
+        verbose_name_plural = _("EV Models")
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.brand} {self.name}" if self.brand else self.name
