@@ -1,6 +1,8 @@
 from django.test import TestCase
+from unittest.mock import patch
 
 from .models import EmailPattern
+from .tasks import send_pending_emails
 
 
 class EmailPatternMatchTests(TestCase):
@@ -26,3 +28,10 @@ class EmailPatternMatchTests(TestCase):
         pattern = EmailPattern(name="greeting", subject="Hello [name]")
         message = {"subject": "No greeting"}
         self.assertEqual(pattern.matches(message), {})
+
+
+class SendPendingEmailsTaskTests(TestCase):
+    def test_task_calls_send_queued_mail_until_done(self):
+        with patch("emails.tasks.send_queued_mail_until_done") as mock_send:
+            send_pending_emails.run()
+            mock_send.assert_called_once_with()
