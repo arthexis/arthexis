@@ -42,3 +42,38 @@ class ConduitFill(models.Model):
 
     def __str__(self):  # pragma: no cover - simple representation
         return f"{self.trade_size} {self.conduit}"
+
+
+class CalculatorTemplate(models.Model):
+    """Template containing parameters for an AWG calculation."""
+
+    name = models.CharField(max_length=100)
+    meters = models.PositiveIntegerField()
+    amps = models.PositiveIntegerField(default=40)
+    volts = models.PositiveIntegerField(default=220)
+    material = models.CharField(max_length=2, default="cu")
+    max_awg = models.CharField(max_length=5, blank=True)
+    max_lines = models.PositiveIntegerField(default=1)
+    phases = models.PositiveIntegerField(default=2)
+    temperature = models.PositiveIntegerField(null=True, blank=True)
+    conduit = models.CharField(max_length=10, blank=True)
+    ground = models.PositiveIntegerField(default=1)
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return self.name
+
+    def run(self):
+        from .views import find_awg
+
+        return find_awg(
+            meters=self.meters,
+            amps=self.amps,
+            volts=self.volts,
+            material=self.material,
+            max_awg=self.max_awg or None,
+            max_lines=self.max_lines,
+            phases=self.phases,
+            temperature=self.temperature,
+            conduit=self.conduit or None,
+            ground=self.ground,
+        )
