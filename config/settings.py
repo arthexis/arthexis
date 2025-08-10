@@ -57,7 +57,6 @@ INSTALLED_APPS = [
     "crm",
     "crm.odoo",
     "post_office",
-    "todos",
     "website",
     "social.bsky",
     "social.meta",

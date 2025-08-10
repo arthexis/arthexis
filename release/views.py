@@ -1,4 +1,4 @@
-"""Views for the todos app."""
+"""Views for TODO functionality within the release app."""
 
 import json
 
@@ -51,4 +51,3 @@ def todo_toggle(request, pk: int):
     todo.completed = not todo.completed
     todo.save()
     return JsonResponse({"id": todo.id, "completed": todo.completed})
-

@@ -1,6 +1,6 @@
 from django.contrib import admin, messages
 
-from .models import PackageConfig, TestLog
+from .models import PackageConfig, TestLog, Todo
 from . import utils
 
 
@@ -32,3 +32,9 @@ class TestLogAdmin(admin.ModelAdmin):
         count = queryset.count()
         queryset.delete()
         self.message_user(request, f"Purged {count} logs", messages.SUCCESS)
+
+
+@admin.register(Todo)
+class TodoAdmin(admin.ModelAdmin):
+    list_display = ("text", "completed", "file_path", "line_number")
+    list_filter = ("completed",)
