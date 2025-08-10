@@ -17,8 +17,23 @@ class ConduitFillAdmin(admin.ModelAdmin):
 
 @admin.register(CalculatorTemplate)
 class CalculatorTemplateAdmin(admin.ModelAdmin):
-    list_display = ("name", "meters", "amps", "volts", "material")
+    list_display = ("name", "meters", "amps", "volts", "material", "calculator_link")
     actions = ["run_calculator"]
+    readonly_fields = ("calculator_link",)
+    fields = (
+        "name",
+        "meters",
+        "amps",
+        "volts",
+        "material",
+        "max_awg",
+        "max_lines",
+        "phases",
+        "temperature",
+        "conduit",
+        "ground",
+        "calculator_link",
+    )
 
     def run_calculator(self, request, queryset):
         for template in queryset:
@@ -27,3 +42,12 @@ class CalculatorTemplateAdmin(admin.ModelAdmin):
             self.message_user(request, f"{template.name}: {awg}")
 
     run_calculator.short_description = "Run calculation"
+
+    def calculator_link(self, obj):
+        from django.utils.html import format_html
+
+        return format_html(
+            '<a href="{}" target="_blank">open</a>', obj.get_absolute_url()
+        )
+
+    calculator_link.short_description = "Calculator"
