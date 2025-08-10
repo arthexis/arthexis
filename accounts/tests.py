@@ -2,6 +2,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.http import HttpRequest
 import json
+from unittest.mock import patch
 
 from django.utils import timezone
 from .models import (
@@ -15,7 +16,7 @@ from .models import (
     Brand,
     EVModel,
 )
-from accounts.models import RFID
+from accounts.models import RFID, RFIDSource
 from ocpp.models import Transaction
 
 from django.core.exceptions import ValidationError
@@ -139,6 +140,39 @@ class RFIDValidationTests(TestCase):
         acc.rfids.add(tag)
         found = RFID.get_account_by_rfid("abcd1234")
         self.assertEqual(found, acc)
+
+
+class RFIDSourceTests(TestCase):
+    def test_idempotent_setters(self):
+        src = RFIDSource.objects.create(name="local", endpoint="https://ex.com")
+        src.set_source()
+        src.set_source()
+        src.set_target()
+        src.set_target()
+        src.refresh_from_db()
+        self.assertTrue(src.is_source and src.is_target)
+
+    @patch("requests.get")
+    def test_test_fetch(self, mock_get):
+        mock_get.return_value.json.return_value = {"rfids": []}
+        mock_get.return_value.raise_for_status.return_value = None
+        src = RFIDSource.objects.create(name="fetcher", endpoint="https://ex.com")
+        data = src.test_fetch()
+        mock_get.assert_called_once_with("https://ex.com", params={"test": "true"})
+        self.assertEqual(data, {"rfids": []})
+        self.assertEqual(RFID.objects.count(), 0)
+
+    @patch("requests.post")
+    def test_test_serve(self, mock_post):
+        mock_post.return_value.json.return_value = {"ok": True}
+        mock_post.return_value.raise_for_status.return_value = None
+        src = RFIDSource.objects.create(name="poster", endpoint="https://ex.com")
+        data = src.test_serve(["AA11"])
+        mock_post.assert_called_once_with(
+            "https://ex.com", json={"rfids": ["AA11"], "test": True}
+        )
+        self.assertEqual(data, {"ok": True})
+        self.assertEqual(RFID.objects.count(), 0)
 
 
 class AccountTests(TestCase):

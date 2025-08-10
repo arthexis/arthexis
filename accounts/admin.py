@@ -18,6 +18,7 @@ from .models import (
     Brand,
     EVModel,
     RFID,
+    RFIDSource,
 )
 
 
@@ -238,3 +239,8 @@ class RFIDAdmin(ImportExportModelAdmin):
         return ", ".join(str(a) for a in obj.accounts.all())
 
     accounts_display.short_description = "Accounts"
+
+
+@admin.register(RFIDSource)
+class RFIDSourceAdmin(admin.ModelAdmin):
+    list_display = ("name", "endpoint", "is_source", "is_target")

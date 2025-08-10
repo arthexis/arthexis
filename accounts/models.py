@@ -214,6 +214,46 @@ class RFID(models.Model):
         db_table = "accounts_rfid"
 
 
+class RFIDSource(models.Model):
+    """Endpoint configuration for syncing RFIDs."""
+
+    name = models.CharField(max_length=100, unique=True)
+    endpoint = models.URLField()
+    is_source = models.BooleanField(default=False)
+    is_target = models.BooleanField(default=False)
+
+    def set_source(self, value: bool = True) -> None:
+        """Idempotently mark this endpoint as a source for RFIDs."""
+        if self.is_source != value:
+            self.is_source = value
+            self.save(update_fields=["is_source"])
+
+    def set_target(self, value: bool = True) -> None:
+        """Idempotently mark this endpoint as a target for RFIDs."""
+        if self.is_target != value:
+            self.is_target = value
+            self.save(update_fields=["is_target"])
+
+    def test_fetch(self):
+        """Fetch RFIDs from the endpoint without persisting them."""
+        import requests
+
+        resp = requests.get(self.endpoint, params={"test": "true"})
+        resp.raise_for_status()
+        return resp.json()
+
+    def test_serve(self, rfids=None):
+        """Send RFIDs to the endpoint without altering remote data."""
+        import requests
+
+        payload = {"test": True}
+        if rfids is not None:
+            payload["rfids"] = rfids
+        resp = requests.post(self.endpoint, json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+
 class Account(models.Model):
     """Track kWh credits for a user."""
 
