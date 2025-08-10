@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("sites", "0003_site_is_seed_data"),
+        ("sites", "0002_alter_domain_unique"),
         ("website", "0005_alter_application_path"),
     ]
 
