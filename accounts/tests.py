@@ -20,6 +20,7 @@ from accounts.models import RFID, RFIDSource
 from ocpp.models import Transaction
 
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
 from django.db import IntegrityError
 from .backends import LocalhostAdminBackend
 
@@ -306,3 +307,10 @@ class OnboardingWizardTests(TestCase):
         account = Account.objects.get(user=user)
         self.assertTrue(account.rfids.filter(rfid="ABCD1234").exists())
         self.assertTrue(account.vehicles.filter(vin="VIN12345678901234").exists())
+
+
+class EVBrandFixtureTests(TestCase):
+    def test_ev_brand_fixture_loads(self):
+        call_command("loaddata", "accounts/fixtures/ev_brands.json", verbosity=0)
+        self.assertTrue(Brand.objects.filter(name="Porsche").exists())
+        self.assertTrue(Brand.objects.filter(name="Audi").exists())
