@@ -13,9 +13,9 @@
         {
             "label": "Update requirements",
             "type": "shell",
-            "command": "${workspaceFolder}/install.sh && ${workspaceFolder}/.venv/bin/python -m pip freeze > requirements.txt",
+            "command": "${workspaceFolder}/install.sh && ${workspaceFolder}/.venv/bin/python ${workspaceFolder}/freeze_requirements.py",
             "windows": {
-                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe -m pip install -U -r requirements.txt; if ($?) { ${workspaceFolder}\\.venv\\Scripts\\python.exe -m pip freeze | Out-File -Encoding ascii requirements.txt }"
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe -m pip install -U -r requirements.txt; if ($?) { ${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\freeze_requirements.py }"
             },
             "problemMatcher": [],
             "detail": "Install updated dependencies and regenerate requirements.txt"
