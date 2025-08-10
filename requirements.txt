@@ -29,6 +29,7 @@ django-import-export==4.3.9
 django-post_office==3.10.1
 django-timezone-field==7.1
 dnspython==2.7.0
+docutils==0.22
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
