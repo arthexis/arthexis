@@ -8,6 +8,7 @@ import socket
 import os
 import pyperclip
 from pyperclip import PyperclipException
+from .utils import capture_screenshot
 
 from .models import (
     Node,
@@ -79,6 +80,31 @@ class NodeAdmin(admin.ModelAdmin):
 @admin.register(NodeScreenshot)
 class NodeScreenshotAdmin(admin.ModelAdmin):
     list_display = ("path", "node", "created")
+    change_list_template = "admin/nodes/nodescreenshot/change_list.html"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "capture/",
+                self.admin_site.admin_view(self.capture_now),
+                name="nodes_nodescreenshot_capture",
+            )
+        ]
+        return custom + urls
+
+    def capture_now(self, request):
+        url = request.build_absolute_uri("/")
+        path = capture_screenshot(url)
+        hostname = socket.gethostname()
+        node = Node.objects.filter(
+            hostname=hostname, port=request.get_port()
+        ).first()
+        NodeScreenshot.objects.create(node=node, path=str(path))
+        self.message_user(
+            request, f"Screenshot saved to {path}", messages.SUCCESS
+        )
+        return redirect("..")
 
 
 @admin.register(NodeMessage)

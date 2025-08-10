@@ -106,6 +106,24 @@ class NodeAdminTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Node.objects.count(), 1)
 
+    @patch("nodes.admin.capture_screenshot")
+    def test_capture_screenshot_from_admin(self, mock_capture):
+        mock_capture.return_value = Path("screenshots/test.png")
+        hostname = socket.gethostname()
+        node = Node.objects.create(
+            hostname=hostname, address="127.0.0.1", port=80
+        )
+        url = reverse("admin:nodes_nodescreenshot_capture")
+        response = self.client.get(url, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(NodeScreenshot.objects.count(), 1)
+        screenshot = NodeScreenshot.objects.first()
+        self.assertEqual(screenshot.node, node)
+        self.assertEqual(screenshot.path, "screenshots/test.png")
+        self.assertContains(
+            response, "Screenshot saved to screenshots/test.png"
+        )
+
 
 class NginxConfigTests(TestCase):
     def _run_server(self, port):
