@@ -1,12 +1,18 @@
+import os
+import django
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+django.setup()
+
 from django.test import TestCase
 from unittest.mock import patch
 
-from .services import post_to_page
+from .meta.services import post_to_page
 
 
 class MetaServiceTests(TestCase):
     def test_post_to_page(self):
-        with patch("social.meta.services.requests.post") as mock_post:
+        with patch("integrations.meta.services.requests.post") as mock_post:
             mock_resp = mock_post.return_value
             mock_resp.json.return_value = {"id": "1"}
             mock_resp.raise_for_status.return_value = None

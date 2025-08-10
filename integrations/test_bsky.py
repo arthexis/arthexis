@@ -1,3 +1,15 @@
+import os
+import django
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+django.setup()
+from django.core.management import call_command
+call_command("migrate", run_syncdb=True, verbosity=0)
+from django.conf import settings
+settings.ALLOWED_HOSTS=["testserver"]
+
+
+
 from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from unittest.mock import patch
