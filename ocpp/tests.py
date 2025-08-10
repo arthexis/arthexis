@@ -15,6 +15,9 @@ from accounts.models import Account, Credit
 from rfid.models import RFID
 from . import store
 from django.db.models.deletion import ProtectedError
+import json
+import websockets
+from .simulator import SimulatorConfig, ChargePointSimulator
 
 
 class SinkConsumerTests(TransactionTestCase):
@@ -347,3 +350,97 @@ class MeterReadingTests(TransactionTestCase):
         self.assertEqual(str(reading.value), "2.749")
 
         await communicator.disconnect()
+
+
+class ChargePointSimulatorTests(TransactionTestCase):
+    async def test_simulator_sends_messages(self):
+        received = []
+
+        async def handler(ws):
+            async for msg in ws:
+                data = json.loads(msg)
+                received.append(data)
+                action = data[2]
+                if action == "BootNotification":
+                    await ws.send(
+                        json.dumps(
+                            [
+                                3,
+                                data[1],
+                                {
+                                    "status": "Accepted",
+                                    "currentTime": "2024-01-01T00:00:00Z",
+                                    "interval": 300,
+                                },
+                            ]
+                        )
+                    )
+                elif action == "Authorize":
+                    await ws.send(
+                        json.dumps(
+                            [
+                                3,
+                                data[1],
+                                {"idTagInfo": {"status": "Accepted"}},
+                            ]
+                        )
+                    )
+                elif action == "StartTransaction":
+                    await ws.send(
+                        json.dumps(
+                            [
+                                3,
+                                data[1],
+                                {
+                                    "transactionId": 1,
+                                    "idTagInfo": {"status": "Accepted"},
+                                },
+                            ]
+                        )
+                    )
+                elif action == "MeterValues":
+                    await ws.send(json.dumps([3, data[1], {}]))
+                elif action == "StopTransaction":
+                    await ws.send(
+                        json.dumps(
+                            [
+                                3,
+                                data[1],
+                                {"idTagInfo": {"status": "Accepted"}},
+                            ]
+                        )
+                    )
+                    break
+
+        server = await websockets.serve(handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"])
+        port = server.sockets[0].getsockname()[1]
+
+        real_connect = websockets.connect
+
+        def patched_connect(*args, additional_headers=None, **kwargs):
+            if additional_headers is not None:
+                kwargs["extra_headers"] = additional_headers
+            return real_connect(*args, **kwargs)
+
+        websockets.connect = patched_connect
+        try:
+            cfg = SimulatorConfig(
+                host="127.0.0.1",
+                ws_port=port,
+                cp_path="SIM1/",
+                duration=0.2,
+                interval=0.05,
+                kwh_min=0.1,
+                kwh_max=0.2,
+            )
+            sim = ChargePointSimulator(cfg)
+            await sim._run_session()
+        finally:
+            websockets.connect = real_connect
+            server.close()
+            await server.wait_closed()
+
+        actions = [msg[2] for msg in received]
+        self.assertIn("BootNotification", actions)
+        self.assertIn("StartTransaction", actions)
+        self.assertIn("StopTransaction", actions)
