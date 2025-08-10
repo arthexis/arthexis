@@ -5,41 +5,10 @@
 <div class="row">
   {% if toc %}
   <div class="col-lg-3">
-    <nav class="toc" style="position: sticky; top: 1rem;">
+    <nav class="toc">
+      <h4>Contents</h4>
       {{ toc|safe }}
     </nav>
-    <script>
-      (function () {
-        function initToc() {
-          document.querySelectorAll('nav.toc ul ul').forEach(function (sub) {
-            sub.style.display = 'none';
-          });
-          document.querySelectorAll('nav.toc li').forEach(function (item) {
-            var sub = item.querySelector('ul');
-            if (!sub) {
-              return;
-            }
-            var link = item.querySelector('a');
-            var toggle = document.createElement('span');
-            toggle.textContent = '▸';
-            toggle.style.cursor = 'pointer';
-            toggle.style.marginRight = '4px';
-            toggle.addEventListener('click', function (e) {
-              e.stopPropagation();
-              var expanded = sub.style.display === 'block';
-              sub.style.display = expanded ? 'none' : 'block';
-              toggle.textContent = expanded ? '▸' : '▾';
-            });
-            link.parentNode.insertBefore(toggle, link);
-          });
-        }
-        if (document.readyState !== 'loading') {
-          initToc();
-        } else {
-          document.addEventListener('DOMContentLoaded', initToc);
-        }
-      })();
-    </script>
   </div>
   {% endif %}
   <div class="{% if toc %}col-lg-9{% else %}col-12{% endif %}">

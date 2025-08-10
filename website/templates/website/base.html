@@ -7,9 +7,36 @@
     <title>{% block title %}{% trans "Arthexis Constellation" %}{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
+      nav.toc {
+        position: sticky;
+        top: 1rem;
+        max-height: calc(100vh - 2rem);
+        overflow-y: auto;
+        font-size: 0.9rem;
+        border-left: 1px solid #dee2e6;
+        padding-left: 1rem;
+      }
+      nav.toc h4 {
+        font-size: 1rem;
+        margin-top: 0;
+        margin-bottom: 0.5rem;
+      }
       nav.toc ul {
         list-style: none;
         padding-left: 0;
+        margin-bottom: 0;
+      }
+      nav.toc li {
+        margin-bottom: 0.25rem;
+      }
+      nav.toc ul ul {
+        margin-left: 1rem;
+      }
+      nav.toc a {
+        text-decoration: none;
+      }
+      nav.toc a:hover {
+        text-decoration: underline;
       }
     </style>
   </head>
