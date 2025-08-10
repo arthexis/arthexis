@@ -5,6 +5,7 @@ from typing import Dict
 
 from django.conf import settings
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 
 class EmailPattern(models.Model):
@@ -17,6 +18,10 @@ class EmailPattern(models.Model):
     bcc = models.CharField(max_length=200, blank=True)
     subject = models.CharField(max_length=200, blank=True)
     body = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = _("Email Pattern")
+        verbose_name_plural = _("Email Patterns")
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name

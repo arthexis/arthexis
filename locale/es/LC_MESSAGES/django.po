@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-08-10 13:26+0000\n"
+"POT-Creation-Date: 2025-08-10 16:39+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -20,32 +20,44 @@ msgstr ""
 "1 : 2;\n"
 
 #: accounts/apps.py:8
-msgid "Accounts and Products"
-msgstr ""
+msgid "Business Models"
+msgstr "Modelos de negocio"
 
-#: accounts/models.py:133
+#: accounts/models.py:135
 msgid "Invalid municipality for the selected state"
 msgstr ""
 
-#: accounts/models.py:270
+#: accounts/models.py:315
 msgid "EV Model"
 msgstr ""
 
-#: accounts/models.py:271
+#: accounts/models.py:316
 msgid "EV Models"
 msgstr ""
 
-#: config/settings.py:167
+#: config/settings.py:162
 msgid "English"
 msgstr ""
 
-#: config/settings.py:168
+#: config/settings.py:163
 msgid "Spanish"
 msgstr ""
 
 #: config/urls.py:19 config/urls.py:20 website/templates/website/base.html:7
 msgid "Arthexis Constellation"
 msgstr "Arthexis Constellation"
+
+#: emails/apps.py:8
+msgid "Post Office"
+msgstr "Oficina de correos"
+
+#: emails/models.py:23
+msgid "Email Pattern"
+msgstr "Patrón de correo electrónico"
+
+#: emails/models.py:24
+msgid "Email Patterns"
+msgstr "Patrones de correo electrónico"
 
 #: emails/templates/admin/emails/emailpattern/change_form.html:5
 msgid "Test pattern"
