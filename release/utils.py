@@ -111,7 +111,6 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
                     "nodes",
                     "ocpp",
                     "references",
-                    "readme",
                     "website",
                     "release",
                     "integrations",
