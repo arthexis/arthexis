@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-07-29 03:19+0000\n"
+"POT-Creation-Date: 2025-08-10 13:26+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,27 +18,189 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? "
 "1 : 2;\n"
-#: config/settings.py:151
+
+#: accounts/apps.py:8
+msgid "Accounts and Products"
+msgstr ""
+
+#: accounts/models.py:133
+msgid "Invalid municipality for the selected state"
+msgstr ""
+
+#: accounts/models.py:270
+msgid "EV Model"
+msgstr ""
+
+#: accounts/models.py:271
+msgid "EV Models"
+msgstr ""
+
+#: config/settings.py:167
 msgid "English"
 msgstr ""
 
-#: config/settings.py:152
+#: config/settings.py:168
 msgid "Spanish"
+msgstr ""
+
+#: config/urls.py:19 config/urls.py:20 website/templates/website/base.html:7
+msgid "Arthexis Constellation"
+msgstr "Arthexis Constellation"
+
+#: emails/templates/admin/emails/emailpattern/change_form.html:5
+msgid "Test pattern"
 msgstr ""
 
 #: nodes/templates/admin/nodes/node/change_list.html:7
 msgid "Register current host"
-msgstr "Registrar anfitri\xC3\xB3n actual"
+msgstr "Registrar anfitrión actual"
 
-#: website/templates/website/base.html:7
-msgid "Arthexis Constellation"
-msgstr "Arthexis Constellation"
+#: nodes/templates/admin/nodes/sample/change_list.html:7
+msgid "Add from clipboard"
+msgstr ""
 
-#: website/templates/website/base.html:13
-#: website/templates/website/base.html:21
+#: ocpp/templates/ocpp/charger_page.html:13
+msgid "Total Energy"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:16
+msgid "Sessions"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:20
+msgid "ID"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:21
+msgid "Start"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:22
+msgid "Stop"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:23
+msgid "Energy (kWh)"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:35
+msgid "No sessions found."
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:5
+#: ocpp/templates/ocpp/dashboard.html:13
+msgid "Status"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:15
+msgid "Current Transaction"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:17
+msgid "Transaction ID"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:18
+msgid "Meter Start"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:19
+msgid "Start Time"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:22
+msgid "No active transaction"
+msgstr ""
+
+#: ocpp/templates/ocpp/dashboard.html:4 ocpp/templates/ocpp/dashboard.html:7
+msgid "Chargers"
+msgstr ""
+
+#: ocpp/templates/ocpp/dashboard.html:11
+msgid "Name"
+msgstr ""
+
+#: ocpp/templates/ocpp/dashboard.html:12
+msgid "Serial Number"
+msgstr ""
+
+#: ocpp/templates/ocpp/dashboard.html:24
+msgid "No chargers found."
+msgstr ""
+
+#: references/templates/references/landing.html:4
+#: references/templates/references/landing.html:7
+msgid "Reference Generator"
+msgstr ""
+
+#: references/templates/references/landing.html:11
+msgid "Generate"
+msgstr ""
+
+#: website/templates/admin/base_site.html:3
+msgid "Django site admin"
+msgstr ""
+
+#: website/templates/admin/base_site.html:55
+msgid "Django administration"
+msgstr ""
+
+#: website/templates/admin/index.html:39
+msgid "Recent actions"
+msgstr ""
+
+#: website/templates/admin/index.html:40
+msgid "My actions"
+msgstr ""
+
+#: website/templates/admin/index.html:44
+msgid "None available"
+msgstr ""
+
+#: website/templates/admin/index.html:49
+msgid "Added:"
+msgstr ""
+
+#: website/templates/admin/index.html:49
+msgid "Changed:"
+msgstr ""
+
+#: website/templates/admin/index.html:49
+msgid "Deleted:"
+msgstr ""
+
+#: website/templates/admin/index.html:59
+msgid "Unknown content"
+msgstr ""
+
+#: website/templates/admin/sites/site/change_list.html:7
+#, fuzzy
+#| msgid "Register current host"
+msgid "Register Current"
+msgstr "Registrar anfitrión actual"
+
+#: website/templates/website/base.html:66
+#: website/templates/website/base.html:78
 msgid "Dark Mode"
 msgstr "Modo Oscuro"
 
-#: website/templates/website/base.html:21
+#: website/templates/website/base.html:78
 msgid "Light Mode"
 msgstr "Modo Claro"
+
+#: website/templates/website/login.html:4
+#: website/templates/website/login.html:9
+msgid "Login"
+msgstr ""
+
+#: website/templates/website/login.html:14
+msgid "Username"
+msgstr ""
+
+#: website/templates/website/login.html:18
+msgid "Password"
+msgstr ""
+
+#: website/templates/website/login.html:22
+msgid "Log in"
+msgstr ""
