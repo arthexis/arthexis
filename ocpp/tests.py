@@ -102,12 +102,12 @@ class ChargerLandingTests(TestCase):
         self.assertContains(resp, "Offline")
 
     def test_log_page_renders_without_charger(self):
-        store.logs["LOG1"] = ["hello"]
+        store.add_log("LOG1", "hello")
         client = Client()
         resp = client.get(reverse("charger-log", args=["LOG1"]))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "hello")
-        store.logs.pop("LOG1", None)
+        store.clear_log("LOG1")
 
 
 class SimulatorLandingTests(TestCase):
@@ -157,7 +157,7 @@ class ChargerAdminTests(TestCase):
             timestamp=timezone.now(),
             value=1,
         )
-        store.logs["PURGE1"] = ["entry"]
+        store.add_log("PURGE1", "entry")
         url = reverse("admin:ocpp_charger_changelist")
         self.client.post(url, {"action": "purge_data", "_selected_action": [charger.pk]})
         self.assertFalse(Transaction.objects.filter(charger_id="PURGE1").exists())

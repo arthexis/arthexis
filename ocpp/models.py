@@ -61,7 +61,7 @@ class Charger(models.Model):
 
         Transaction.objects.filter(charger_id=self.charger_id).delete()
         self.meter_readings.all().delete()
-        store.logs.pop(self.charger_id, None)
+        store.clear_log(self.charger_id)
         store.transactions.pop(self.charger_id, None)
         store.history.pop(self.charger_id, None)
 
@@ -72,7 +72,7 @@ class Charger(models.Model):
         if (
             Transaction.objects.filter(charger_id=self.charger_id).exists()
             or self.meter_readings.exists()
-            or store.logs.get(self.charger_id)
+            or store.get_logs(self.charger_id)
             or store.transactions.get(self.charger_id)
             or store.history.get(self.charger_id)
         ):
