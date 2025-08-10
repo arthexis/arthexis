@@ -37,6 +37,16 @@ def _local_app_labels() -> list[str]:
     return labels
 
 
+def _fixture_files() -> list[str]:
+    """Return all JSON fixtures in the project."""
+    base_dir = Path(settings.BASE_DIR)
+    fixtures = [
+        str(path.relative_to(base_dir))
+        for path in base_dir.glob("**/fixtures/*.json")
+    ]
+    return sorted(fixtures)
+
+
 def run_database_tasks() -> None:
     """Run all database related maintenance steps."""
     default_db = settings.DATABASES["default"]
@@ -69,8 +79,8 @@ def run_database_tasks() -> None:
         else:  # pragma: no cover - unreachable in sqlite
             raise
 
-    call_command("loaddata", "ocpp_simulators")
-    call_command("loaddata", "localhost")
+    for fixture in _fixture_files():
+        call_command("loaddata", fixture)
 
 
 def run_git_tasks() -> None:
