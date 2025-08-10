@@ -77,3 +77,25 @@ class CalculatorTemplate(models.Model):
             conduit=self.conduit or None,
             ground=self.ground,
         )
+
+    def get_absolute_url(self):
+        from django.urls import reverse
+        from urllib.parse import urlencode
+
+        params: dict[str, object] = {
+            "meters": self.meters,
+            "amps": self.amps,
+            "volts": self.volts,
+            "material": self.material,
+            "max_lines": self.max_lines,
+            "phases": self.phases,
+            "ground": self.ground,
+        }
+        if self.max_awg:
+            params["max_awg"] = self.max_awg
+        if self.temperature is not None:
+            params["temperature"] = self.temperature
+        if self.conduit:
+            params["conduit"] = self.conduit
+
+        return f"{reverse('awg:calculator')}?{urlencode(params)}"

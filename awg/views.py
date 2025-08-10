@@ -227,7 +227,8 @@ def find_awg(
 @landing("AWG Calculator")
 def calculator(request):
     """Display the AWG calculator form and results using a template."""
-    context: dict[str, object] = {}
+    form = request.POST or request.GET
+    context: dict[str, object] = {"form": form}
     if request.method == "POST" and request.POST.get("meters"):
         max_awg = request.POST.get("max_awg") or None
         conduit_field = request.POST.get("conduit")

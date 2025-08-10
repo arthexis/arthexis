@@ -98,3 +98,22 @@ class CalculatorTemplateTests(TestCase):
         )
         result = tmpl.run()
         self.assertEqual(result["awg"], "8")
+
+    def test_get_absolute_url_prefills_form(self):
+        tmpl = CalculatorTemplate.objects.create(
+            name="test",
+            meters=10,
+            amps=40,
+            volts=220,
+            material="cu",
+            max_lines=1,
+            phases=2,
+            temperature=60,
+            conduit="emt",
+            ground=1,
+        )
+        url = tmpl.get_absolute_url()
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["form"]["meters"], "10")
+        self.assertIn("value=\"10\"", resp.content.decode())
