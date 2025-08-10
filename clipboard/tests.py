@@ -1,9 +1,14 @@
+from pathlib import Path
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
-from unittest.mock import patch
+
+from nodes.models import Node, NodeScreenshot
 
 from .models import Pattern, Sample
+from .tasks import capture_node_screenshot, sample_clipboard
 
 
 class PatternMatchTests(TestCase):
@@ -38,3 +43,24 @@ class SampleAdminTests(TestCase):
         self.assertEqual(Sample.objects.count(), 1)
         self.assertEqual(Sample.objects.first().content, "clip text")
         self.assertContains(response, "Sample added from clipboard")
+
+
+class ClipboardTaskTests(TestCase):
+    @patch("clipboard.tasks.pyperclip.paste")
+    def test_sample_clipboard_task_creates_sample(self, mock_paste):
+        mock_paste.return_value = "task text"
+        sample_clipboard()
+        self.assertEqual(Sample.objects.count(), 1)
+        self.assertEqual(Sample.objects.first().content, "task text")
+
+    @patch("clipboard.tasks.capture_screenshot")
+    @patch("clipboard.tasks.socket.gethostname")
+    def test_capture_node_screenshot_task(self, mock_hostname, mock_capture):
+        mock_hostname.return_value = "host"
+        node = Node.objects.create(hostname="host", address="127.0.0.1", port=8000)
+        mock_capture.return_value = Path("screenshots/test.png")
+        capture_node_screenshot("http://example.com")
+        self.assertEqual(NodeScreenshot.objects.count(), 1)
+        screenshot = NodeScreenshot.objects.first()
+        self.assertEqual(screenshot.node, node)
+        self.assertEqual(screenshot.path, "screenshots/test.png")
