@@ -7,7 +7,7 @@ from django.shortcuts import redirect
 from django.urls import path
 import ipaddress
 
-from .models import SiteBadge, App
+from .models import SiteBadge, App, SiteProxy
 
 
 class SiteBadgeInline(admin.StackedInline):
@@ -31,7 +31,7 @@ class SiteAdmin(DjangoSiteAdmin):
             path(
                 "register-current/",
                 self.admin_site.admin_view(self.register_current),
-                name="sites_site_register_current",
+                name="website_siteproxy_register_current",
             )
         ]
         return custom + urls
@@ -57,7 +57,7 @@ class SiteAdmin(DjangoSiteAdmin):
 
 
 admin.site.unregister(Site)
-admin.site.register(Site, SiteAdmin)
+admin.site.register(SiteProxy, SiteAdmin)
 
 
 @admin.register(App)
