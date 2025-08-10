@@ -13,6 +13,7 @@ from .models import (
     Address,
     Product,
     Subscription,
+    Brand,
 )
 from rfid.models import RFID
 
@@ -204,3 +205,4 @@ class CreditAdmin(admin.ModelAdmin):
 
 admin.site.register(Product)
 admin.site.register(Subscription)
+admin.site.register(Brand)
