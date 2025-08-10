@@ -13,6 +13,7 @@ from .models import (
     Product,
     Subscription,
     Brand,
+    EVModel,
 )
 from rfid.models import RFID
 from ocpp.models import Transaction
@@ -184,8 +185,10 @@ class VehicleTests(TestCase):
         acc = Account.objects.create(user=user)
         tesla = Brand.objects.create(name="Tesla")
         nissan = Brand.objects.create(name="Nissan")
-        Vehicle.objects.create(account=acc, brand=tesla, model="Model S", vin="VIN12345678901234")
-        Vehicle.objects.create(account=acc, brand=nissan, model="Leaf", vin="VIN23456789012345")
+        model_s = EVModel.objects.create(brand=tesla, name="Model S")
+        leaf = EVModel.objects.create(brand=nissan, name="Leaf")
+        Vehicle.objects.create(account=acc, brand=tesla, model=model_s, vin="VIN12345678901234")
+        Vehicle.objects.create(account=acc, brand=nissan, model=leaf, vin="VIN23456789012345")
         self.assertEqual(acc.vehicles.count(), 2)
 
 

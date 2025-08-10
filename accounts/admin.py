@@ -14,6 +14,7 @@ from .models import (
     Product,
     Subscription,
     Brand,
+    EVModel,
 )
 from rfid.models import RFID
 
@@ -203,6 +204,18 @@ class CreditAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+@admin.register(Brand)
+class BrandAdmin(admin.ModelAdmin):
+    fields = ("name", "is_seed_data")
+    list_display = ("name", "is_seed_data")
+
+
+@admin.register(EVModel)
+class EVModelAdmin(admin.ModelAdmin):
+    fields = ("brand", "name", "is_seed_data")
+    list_display = ("name", "brand", "is_seed_data")
+    list_filter = ("brand",)
+
+
 admin.site.register(Product)
 admin.site.register(Subscription)
-admin.site.register(Brand)

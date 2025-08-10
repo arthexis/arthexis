@@ -252,9 +252,24 @@ class Brand(models.Model):
     """Vehicle manufacturer or brand."""
 
     name = models.CharField(max_length=100, unique=True)
+    is_seed_data = models.BooleanField(default=False)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
+
+
+class EVModel(models.Model):
+    """Specific electric vehicle model for a brand."""
+
+    brand = models.ForeignKey(Brand, on_delete=models.CASCADE, related_name="ev_models")
+    name = models.CharField(max_length=100)
+    is_seed_data = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ("brand", "name")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.brand} {self.name}" if self.brand else self.name
 
 
 class Vehicle(models.Model):
@@ -270,12 +285,24 @@ class Vehicle(models.Model):
         blank=True,
         related_name="vehicles",
     )
-    model = models.CharField(max_length=100, blank=True)
+    model = models.ForeignKey(
+        EVModel,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="vehicles",
+    )
     vin = models.CharField(max_length=17, unique=True, verbose_name="VIN")
+
+    def save(self, *args, **kwargs):
+        if self.model and not self.brand:
+            self.brand = self.model.brand
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         brand_name = self.brand.name if self.brand else ""
-        parts = " ".join(p for p in [brand_name, self.model] if p)
+        model_name = self.model.name if self.model else ""
+        parts = " ".join(p for p in [brand_name, model_name] if p)
         return f"{parts} ({self.vin})" if parts else self.vin
 
 
