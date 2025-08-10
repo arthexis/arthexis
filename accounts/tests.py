@@ -4,7 +4,16 @@ from django.http import HttpRequest
 import json
 
 from django.utils import timezone
-from .models import User, Account, Vehicle, Credit, Address, Product, Subscription
+from .models import (
+    User,
+    Account,
+    Vehicle,
+    Credit,
+    Address,
+    Product,
+    Subscription,
+    Brand,
+)
 from rfid.models import RFID
 from ocpp.models import Transaction
 
@@ -173,8 +182,10 @@ class VehicleTests(TestCase):
     def test_account_can_have_multiple_vehicles(self):
         user = User.objects.create_user(username="cars", password="x")
         acc = Account.objects.create(user=user)
-        Vehicle.objects.create(account=acc, brand="Tesla", model="Model S", vin="VIN12345678901234")
-        Vehicle.objects.create(account=acc, brand="Nissan", model="Leaf", vin="VIN23456789012345")
+        tesla = Brand.objects.create(name="Tesla")
+        nissan = Brand.objects.create(name="Nissan")
+        Vehicle.objects.create(account=acc, brand=tesla, model="Model S", vin="VIN12345678901234")
+        Vehicle.objects.create(account=acc, brand=nissan, model="Leaf", vin="VIN23456789012345")
         self.assertEqual(acc.vehicles.count(), 2)
 
 

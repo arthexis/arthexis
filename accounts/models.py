@@ -248,18 +248,34 @@ class Credit(models.Model):
         return f"{self.amount_kwh} kWh for {user}"
 
 
+class Brand(models.Model):
+    """Vehicle manufacturer or brand."""
+
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+
 class Vehicle(models.Model):
     """Vehicle associated with an Account."""
 
     account = models.ForeignKey(
         Account, on_delete=models.CASCADE, related_name="vehicles"
     )
-    brand = models.CharField(max_length=100, blank=True)
+    brand = models.ForeignKey(
+        Brand,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="vehicles",
+    )
     model = models.CharField(max_length=100, blank=True)
     vin = models.CharField(max_length=17, unique=True, verbose_name="VIN")
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        parts = " ".join(p for p in [self.brand, self.model] if p)
+        brand_name = self.brand.name if self.brand else ""
+        parts = " ".join(p for p in [brand_name, self.model] if p)
         return f"{parts} ({self.vin})" if parts else self.vin
 
 
