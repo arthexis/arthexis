@@ -144,7 +144,9 @@ class RFIDValidationTests(TestCase):
 
 class RFIDSourceTests(TestCase):
     def test_idempotent_setters(self):
-        src = RFIDSource.objects.create(name="local", endpoint="https://ex.com")
+        src = RFIDSource.objects.create(
+            name="local", endpoint="https://ex.com/api/rfid/rfids/"
+        )
         src.set_source()
         src.set_source()
         src.set_target()
@@ -156,9 +158,13 @@ class RFIDSourceTests(TestCase):
     def test_test_fetch(self, mock_get):
         mock_get.return_value.json.return_value = {"rfids": []}
         mock_get.return_value.raise_for_status.return_value = None
-        src = RFIDSource.objects.create(name="fetcher", endpoint="https://ex.com")
+        src = RFIDSource.objects.create(
+            name="fetcher", endpoint="https://ex.com/api/rfid/rfids/"
+        )
         data = src.test_fetch()
-        mock_get.assert_called_once_with("https://ex.com", params={"test": "true"})
+        mock_get.assert_called_once_with(
+            "https://ex.com/api/rfid/rfids/", params={"test": "true"}
+        )
         self.assertEqual(data, {"rfids": []})
         self.assertEqual(RFID.objects.count(), 0)
 
@@ -166,10 +172,12 @@ class RFIDSourceTests(TestCase):
     def test_test_serve(self, mock_post):
         mock_post.return_value.json.return_value = {"ok": True}
         mock_post.return_value.raise_for_status.return_value = None
-        src = RFIDSource.objects.create(name="poster", endpoint="https://ex.com")
+        src = RFIDSource.objects.create(
+            name="poster", endpoint="https://ex.com/api/rfid/rfids/"
+        )
         data = src.test_serve(["AA11"])
         mock_post.assert_called_once_with(
-            "https://ex.com", json={"rfids": ["AA11"], "test": True}
+            "https://ex.com/api/rfid/rfids/", json={"rfids": ["AA11"], "test": True}
         )
         self.assertEqual(data, {"ok": True})
         self.assertEqual(RFID.objects.count(), 0)
