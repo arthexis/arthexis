@@ -6,9 +6,8 @@ import pyperclip
 from pyperclip import PyperclipException
 from celery import shared_task
 
-from .models import Sample
-from nodes.models import Node, NodeScreenshot
-from nodes.utils import capture_screenshot
+from .models import Sample, Node, NodeScreenshot
+from .utils import capture_screenshot
 
 logger = logging.getLogger(__name__)
 

@@ -3,7 +3,7 @@ from django.core.management.base import BaseCommand
 import pyperclip
 from pyperclip import PyperclipException
 
-from clipboard.models import Sample
+from nodes.models import Sample
 
 
 class Command(BaseCommand):
