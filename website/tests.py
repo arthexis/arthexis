@@ -181,12 +181,25 @@ class NavAppsTests(TestCase):
         self.assertContains(resp, "badge rounded-pill")
 
 
-class ApplicationAdminCheckTests(TestCase):
-    def test_error_when_app_not_installed(self):
+class ApplicationModelTests(TestCase):
+    def test_path_defaults_to_slugified_name(self):
         site, _ = Site.objects.update_or_create(
             id=1, defaults={"domain": "testserver", "name": "website"}
         )
-        Application.objects.create(site=site, name="not_installed", path="/ni/")
+        app = Application.objects.create(site=site, name="accounts")
+        self.assertEqual(app.path, "/accounts/")
+
+    def test_installed_flag_false_when_missing(self):
+        site, _ = Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": "website"}
+        )
+        app = Application.objects.create(site=site, name="missing")
+        self.assertFalse(app.installed)
+
+
+class ApplicationAdminFormTests(TestCase):
+    def test_name_field_uses_local_apps(self):
         admin_instance = ApplicationAdmin(Application, admin.site)
-        errors = admin_instance.check()
-        self.assertTrue(any(e.id == "website.E001" for e in errors))
+        form = admin_instance.get_form(request=None)()
+        choices = [choice[0] for choice in form.fields["name"].choices]
+        self.assertIn("accounts", choices)
