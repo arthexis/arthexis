@@ -16,8 +16,16 @@ def main() -> None:
             Command as DaphneRunserver,
         )
         from django.core.management.commands import runserver as core_runserver
+        try:
+            from django.contrib.staticfiles.management.commands import (
+                runserver as static_runserver,
+            )
+        except Exception:  # pragma: no cover - optional app
+            static_runserver = None
 
         core_runserver.Command = DaphneRunserver
+        if static_runserver is not None:
+            static_runserver.Command = DaphneRunserver
 
         def patched_on_bind(self, server_port):
             original_on_bind(self, server_port)
