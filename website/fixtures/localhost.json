@@ -8,7 +8,7 @@
     }
   },
   {
-    "model": "website.app",
+    "model": "website.application",
     "pk": 1,
     "fields": {
       "site": 1,

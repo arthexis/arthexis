@@ -5,8 +5,10 @@ if not hasattr(Site, "is_seed_data"):
     Site.add_to_class("is_seed_data", models.BooleanField(default=False))
 
 
-class App(models.Model):
-    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="apps")
+class Application(models.Model):
+    site = models.ForeignKey(
+        Site, on_delete=models.CASCADE, related_name="applications"
+    )
     name = models.CharField(max_length=100)
     path = models.CharField(
         max_length=100, help_text="Base path for the app, starting with /"
