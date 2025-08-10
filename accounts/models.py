@@ -6,6 +6,7 @@ from django.utils.translation import gettext_lazy as _
 from django.core.validators import RegexValidator
 from django.apps import apps
 from datetime import timedelta
+from urllib.parse import urljoin
 
 
 class Address(models.Model):
@@ -218,8 +219,9 @@ class RFIDSource(models.Model):
     """Endpoint configuration for syncing RFIDs."""
 
     name = models.CharField(max_length=100, unique=True)
-    endpoint = models.URLField(
-        help_text="Full URL to the RFID batch endpoint, including '/api/rfid/'"
+    endpoint = models.SlugField(
+        max_length=50,
+        help_text="Slug for the RFID batch endpoint; '/api/rfid/' is added automatically",
     )
     is_source = models.BooleanField(default=False)
     is_target = models.BooleanField(default=False)
@@ -240,22 +242,29 @@ class RFIDSource(models.Model):
             self.is_target = value
             self.save(update_fields=["is_target"])
 
-    def test_fetch(self):
+    def _build_url(self, base_url: str) -> str:
+        """Construct the full RFID endpoint URL from a base URL."""
+
+        return urljoin(base_url.rstrip("/") + "/", f"api/rfid/{self.endpoint.strip('/')}/")
+
+    def test_fetch(self, base_url: str):
         """Fetch RFIDs from the endpoint without persisting them."""
         import requests
 
-        resp = requests.get(self.endpoint, params={"test": "true"})
+        url = self._build_url(base_url)
+        resp = requests.get(url, params={"test": "true"})
         resp.raise_for_status()
         return resp.json()
 
-    def test_serve(self, rfids=None):
+    def test_serve(self, rfids=None, base_url: str = None):
         """Send RFIDs to the endpoint without altering remote data."""
         import requests
 
+        url = self._build_url(base_url)
         payload = {"test": True}
         if rfids is not None:
             payload["rfids"] = rfids
-        resp = requests.post(self.endpoint, json=payload)
+        resp = requests.post(url, json=payload)
         resp.raise_for_status()
         return resp.json()
 
