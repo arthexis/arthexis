@@ -35,6 +35,19 @@ ALLOWED_HOSTS = []
 
 # Application definition
 
+LOCAL_APPS = [
+    "nodes",
+    "accounts",
+    "ocpp",
+    "references",
+    "awg",
+    "release",
+    "integrations",
+    "website",
+    "emails",
+    "app",
+]
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.admindocs",
@@ -46,19 +59,9 @@ INSTALLED_APPS = [
     "import_export",
     "django.contrib.sites",
     "channels",
-    "nodes",
-    "accounts",
-    "ocpp",
-    "references",
-    "awg",
-    "release",
-    "integrations",
     "post_office",
-    "website",
-    "emails",
-    "app",
     "django_celery_beat",
-]
+] + LOCAL_APPS
 
 SITE_ID = 1
 

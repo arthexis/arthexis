@@ -7,10 +7,20 @@ from django.shortcuts import redirect
 from django.urls import path
 import ipaddress
 from django.apps import apps as django_apps
-from django.core import checks
-from django.db.utils import OperationalError, ProgrammingError
+from django.conf import settings
 
 from .models import SiteBadge, Application, SiteProxy
+
+
+def get_local_app_choices():
+    choices = []
+    for app_label in getattr(settings, "LOCAL_APPS", []):
+        try:
+            config = django_apps.get_app_config(app_label)
+        except LookupError:
+            continue
+        choices.append((config.label, config.verbose_name))
+    return choices
 
 
 class SiteBadgeInline(admin.StackedInline):
@@ -63,26 +73,25 @@ admin.site.unregister(Site)
 admin.site.register(SiteProxy, SiteAdmin)
 
 
+class ApplicationForm(forms.ModelForm):
+    name = forms.ChoiceField(choices=[])
+
+    class Meta:
+        model = Application
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["name"].choices = get_local_app_choices()
+
+
 @admin.register(Application)
 class ApplicationAdmin(admin.ModelAdmin):
-    list_display = ("name", "site", "path", "is_default")
+    form = ApplicationForm
+    list_display = ("name", "site", "path", "is_default", "installed")
     list_filter = ("site",)
+    readonly_fields = ("installed",)
 
-    def check(self, **kwargs):
-        errors = super().check(**kwargs)
-        try:
-            missing = [
-                app.name
-                for app in self.model.objects.all()
-                if not django_apps.is_installed(app.name)
-            ]
-        except (OperationalError, ProgrammingError):
-            return errors
-        if missing:
-            errors.append(
-                checks.Error(
-                    f"Applications not installed: {', '.join(missing)}",
-                    id="website.E001",
-                )
-            )
-        return errors
+    @admin.display(boolean=True)
+    def installed(self, obj):
+        return obj.installed
