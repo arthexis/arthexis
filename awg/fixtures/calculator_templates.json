@@ -1,0 +1,19 @@
+[
+  {
+    "model": "awg.calculatortemplate",
+    "pk": 1,
+    "fields": {
+      "name": "EV Charger",
+      "meters": 10,
+      "amps": 40,
+      "volts": 220,
+      "material": "cu",
+      "max_awg": "",
+      "max_lines": 1,
+      "phases": 2,
+      "temperature": 60,
+      "conduit": "emt",
+      "ground": 1
+    }
+  }
+]
