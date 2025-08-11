@@ -80,6 +80,18 @@ class PackageAdminTests(TestCase):
             self.assertEqual(response.status_code, 200)
             mock_build.assert_called_once()
 
+    def test_build_readme_action(self):
+        url = reverse("admin:release_packageconfig_changelist")
+        with patch("release.admin.call_command") as mock_cmd:
+            response = self.client.post(
+                url,
+                {"action": "build_readme", "_selected_action": [self.cfg.pk]},
+                follow=True,
+            )
+            self.assertEqual(response.status_code, 200)
+            mock_cmd.assert_called_once_with("build_readme")
+            self.assertContains(response, reverse("website:index"))
+
 
 class TestLogTests(TestCase):
     @patch("release.utils.subprocess.run")

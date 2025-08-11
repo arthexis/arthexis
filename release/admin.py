@@ -1,6 +1,8 @@
 from django.contrib import admin, messages
-from django.urls import path
+from django.urls import path, reverse
 from django.shortcuts import redirect
+from django.core.management import call_command
+from django.utils.html import format_html
 
 from .models import PackageConfig, TestLog, Todo, SeedData
 from . import utils
@@ -9,7 +11,7 @@ from . import utils
 @admin.register(PackageConfig)
 class PackageConfigAdmin(admin.ModelAdmin):
     list_display = ("name", "author", "repository_url")
-    actions = ["build_package"]
+    actions = ["build_package", "build_readme"]
 
     @admin.action(description="Build selected packages for PyPI")
     def build_package(self, request, queryset):
@@ -19,6 +21,18 @@ class PackageConfigAdmin(admin.ModelAdmin):
                 self.message_user(request, f"Built {cfg.name}", messages.SUCCESS)
             except utils.ReleaseError as exc:
                 self.message_user(request, str(exc), messages.ERROR)
+
+    @admin.action(description="Rebuild README")
+    def build_readme(self, request, queryset):  # pragma: no cover - queryset unused
+        call_command("build_readme")
+        url = reverse("website:index")
+        self.message_user(
+            request,
+            format_html(
+                'README rebuilt. <a href="{}" target="_blank">View README</a>', url
+            ),
+            messages.SUCCESS,
+        )
 
 
 @admin.register(TestLog)
