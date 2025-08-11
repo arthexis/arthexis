@@ -1,0 +1,22 @@
+{% extends "website/base.html" %}
+{% block title %}{{ app_label }}{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">{{ app_label }}</h1>
+<div class="row">
+  {% for entry in entries %}
+  <div class="col-md-4 mb-3">
+    <a href="{{ entry.url }}" class="text-decoration-none">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title">{{ entry.label }}</h5>
+        </div>
+      </div>
+    </a>
+  </div>
+  {% empty %}
+  <p>No views available.</p>
+  {% endfor %}
+</div>
+{% endblock %}
+

@@ -1,10 +1,13 @@
 from pathlib import Path
+from importlib import import_module
+import re
+
 from django.conf import settings
-from django.contrib.sites.shortcuts import get_current_site
-from django.shortcuts import render, redirect
-from django.http import HttpResponse
-from django.urls import reverse
 from django.contrib.auth.views import LoginView
+from django.contrib.sites.shortcuts import get_current_site
+from django.http import HttpResponse
+from django.shortcuts import redirect, render
+from django.urls import reverse
 
 import markdown
 from website.utils import landing
@@ -55,6 +58,39 @@ def sitemap(request):
             lines.append(f"  <url><loc>{loc}</loc></url>")
     lines.append("</urlset>")
     return HttpResponse("\n".join(lines), content_type="application/xml")
+
+
+def app_index(request, module):
+    """Render a simple index for an application's URL patterns.
+
+    Displays a card for each pattern in the module's ``urlpatterns`` so users can
+    easily navigate to available views. Dynamic routes are filled with placeholder
+    values to provide functional example links.
+    """
+
+    mod = import_module(module)
+    patterns = getattr(mod, "urlpatterns", [])
+    base = request.path if request.path.endswith("/") else f"{request.path}/"
+    entries = []
+
+    for pattern in patterns:
+        route = getattr(getattr(pattern, "pattern", None), "_route", "")
+        if not route:
+            continue
+        url_route = route
+        if "<" in url_route:
+            # Replace converters with placeholder values
+            url_route = re.sub(r"<int:[^>]+>", "1", url_route)
+            url_route = re.sub(r"<slug:[^>]+>", "example", url_route)
+            url_route = re.sub(r"<str:[^>]+>", "example", url_route)
+            url_route = re.sub(r"<[^>]+>", "example", url_route)
+        name = pattern.name or getattr(pattern.callback, "__name__", route)
+        label = name.replace("-", " ").replace("_", " ").title()
+        entries.append({"label": label, "url": f"{base}{url_route}"})
+
+    app_label = module.split(".")[-2].replace("_", " ").title()
+    context = {"entries": entries, "app_label": app_label}
+    return render(request, "website/app_index.html", context)
 
 
 class CustomLoginView(LoginView):
