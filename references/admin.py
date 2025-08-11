@@ -6,14 +6,13 @@ from .models import Reference
 
 @admin.register(Reference)
 class ReferenceAdmin(admin.ModelAdmin):
-    list_display = ("value", "include_in_footer", "is_seed_data")
+    list_display = ("value", "include_in_footer")
     readonly_fields = ("uses", "qr_code")
     fields = (
         "value",
         "alt_text",
         "method",
         "include_in_footer",
-        "is_seed_data",
         "uses",
         "qr_code",
     )

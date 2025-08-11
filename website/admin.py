@@ -40,8 +40,8 @@ class SiteApplicationInline(admin.TabularInline):
 class SiteAdmin(DjangoSiteAdmin):
     inlines = [SiteBadgeInline, SiteApplicationInline]
     change_list_template = "admin/sites/site/change_list.html"
-    fields = ("domain", "name", "is_seed_data")
-    list_display = ("domain", "name", "is_seed_data")
+    fields = ("domain", "name")
+    list_display = ("domain", "name")
 
     def get_urls(self):
         urls = super().get_urls()

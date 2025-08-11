@@ -186,7 +186,6 @@ class RFID(models.Model):
     )
     allowed = models.BooleanField(default=True)
     added_on = models.DateTimeField(auto_now_add=True)
-    is_seed_data = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         if self.rfid:
@@ -352,7 +351,6 @@ class Brand(models.Model):
     """Vehicle manufacturer or brand."""
 
     name = models.CharField(max_length=100, unique=True)
-    is_seed_data = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = _("EV Brand")
@@ -367,7 +365,6 @@ class EVModel(models.Model):
 
     brand = models.ForeignKey(Brand, on_delete=models.CASCADE, related_name="ev_models")
     name = models.CharField(max_length=100)
-    is_seed_data = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ("brand", "name")
