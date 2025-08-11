@@ -182,6 +182,13 @@ class NavAppsTests(TestCase):
         self.assertContains(resp, "Readme")
         self.assertContains(resp, "badge rounded-pill")
 
+    def test_app_without_root_url_excluded(self):
+        site = Site.objects.get(id=1)
+        app = Application.objects.create(name="accounts")
+        SiteApplication.objects.create(site=site, application=app, path="/accounts/")
+        resp = self.client.get(reverse("website:index"))
+        self.assertNotContains(resp, 'href="/accounts/"')
+
 
 class ApplicationModelTests(TestCase):
     def test_path_defaults_to_slugified_name(self):
