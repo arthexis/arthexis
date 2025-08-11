@@ -13,9 +13,32 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import os
 import sys
+import ipaddress
 from django.utils.translation import gettext_lazy as _
 from celery.schedules import crontab
+from django.http import request as http_request
 from .active_app import get_active_app
+
+
+_original_validate_host = http_request.validate_host
+
+
+def _validate_host_with_subnets(host, allowed_hosts):
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return _original_validate_host(host, allowed_hosts)
+    for pattern in allowed_hosts:
+        try:
+            network = ipaddress.ip_network(pattern)
+        except ValueError:
+            continue
+        if ip in network:
+            return True
+    return _original_validate_host(host, allowed_hosts)
+
+
+http_request.validate_host = _validate_host_with_subnets
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -30,7 +53,13 @@ SECRET_KEY = "django-insecure-16%ed9hv^gg!jj5ff6d4w=t$50k^abkq75+vwl44%^+qyq!m#w
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+    "testserver",
+    "10.42.0.0/16",
+    "192.168.0.0/16",
+]
 
 
 # Application definition
