@@ -6,8 +6,8 @@ import pyperclip
 from pyperclip import PyperclipException
 from celery import shared_task
 
-from .models import TextSample, Node, NodeScreenshot
-from .utils import capture_screenshot
+from .models import TextSample, Node
+from .utils import capture_screenshot, save_screenshot
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +30,14 @@ def sample_clipboard() -> None:
 
 
 @shared_task
-def capture_node_screenshot(url: str, port: int = 8000) -> str:
+def capture_node_screenshot(
+    url: str | None = None, port: int = 8000, method: str = "TASK"
+) -> str:
     """Capture a screenshot of ``url`` and record it as a :class:`NodeScreenshot`."""
+    if url is None:
+        url = f"http://localhost:{port}"
     path: Path = capture_screenshot(url)
     hostname = socket.gethostname()
     node = Node.objects.filter(hostname=hostname, port=port).first()
-    screenshot = NodeScreenshot.objects.create(node=node, path=str(path))
-    return screenshot.path
+    save_screenshot(path, node=node, method=method)
+    return str(path)

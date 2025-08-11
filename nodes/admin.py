@@ -11,7 +11,7 @@ import socket
 import os
 import pyperclip
 from pyperclip import PyperclipException
-from .utils import capture_screenshot
+from .utils import capture_screenshot, save_screenshot
 
 from .models import (
     Node,
@@ -44,6 +44,7 @@ class NodeAdmin(admin.ModelAdmin):
         "enable_public_api",
         "public_endpoint",
         "enable_clipboard_polling",
+        "enable_screenshot_polling",
         "last_seen",
     )
     search_fields = ("hostname", "address")
@@ -83,10 +84,10 @@ class NodeAdmin(admin.ModelAdmin):
 
 @admin.register(NodeScreenshot)
 class NodeScreenshotAdmin(admin.ModelAdmin):
-    list_display = ("path", "node", "created")
+    list_display = ("path", "node", "method", "created")
     change_list_template = "admin/nodes/nodescreenshot/change_list.html"
     readonly_fields = ("image_preview", "created")
-    fields = ("image_preview", "path", "node", "created")
+    fields = ("image_preview", "path", "node", "method", "created")
 
     def get_urls(self):
         urls = super().get_urls()
@@ -106,10 +107,15 @@ class NodeScreenshotAdmin(admin.ModelAdmin):
         node = Node.objects.filter(
             hostname=hostname, port=request.get_port()
         ).first()
-        NodeScreenshot.objects.create(node=node, path=str(path))
-        self.message_user(
-            request, f"Screenshot saved to {path}", messages.SUCCESS
-        )
+        screenshot = save_screenshot(path, node=node, method="ADMIN")
+        if screenshot:
+            self.message_user(
+                request, f"Screenshot saved to {path}", messages.SUCCESS
+            )
+        else:
+            self.message_user(
+                request, "Duplicate screenshot; not saved", messages.INFO
+            )
         return redirect("..")
 
     @admin.display(description="Screenshot")

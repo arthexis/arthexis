@@ -16,6 +16,7 @@ class Node(models.Model):
     enable_public_api = models.BooleanField(default=False)
     public_endpoint = models.SlugField(blank=True, unique=True)
     enable_clipboard_polling = models.BooleanField(default=False)
+    enable_screenshot_polling = models.BooleanField(default=False)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.hostname}:{self.port}"
@@ -23,12 +24,16 @@ class Node(models.Model):
     def save(self, *args, **kwargs):
         if not self.public_endpoint:
             self.public_endpoint = slugify(self.hostname)
-        previous = None
+        previous_clipboard = previous_screenshot = None
         if self.pk:
-            previous = Node.objects.get(pk=self.pk).enable_clipboard_polling
+            previous = Node.objects.get(pk=self.pk)
+            previous_clipboard = previous.enable_clipboard_polling
+            previous_screenshot = previous.enable_screenshot_polling
         super().save(*args, **kwargs)
-        if previous != self.enable_clipboard_polling:
+        if previous_clipboard != self.enable_clipboard_polling:
             self._sync_clipboard_task()
+        if previous_screenshot != self.enable_screenshot_polling:
+            self._sync_screenshot_task()
 
     def _sync_clipboard_task(self):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -48,6 +53,32 @@ class Node(models.Model):
         else:
             PeriodicTask.objects.filter(name=task_name).delete()
 
+    def _sync_screenshot_task(self):
+        from django_celery_beat.models import IntervalSchedule, PeriodicTask
+        import json
+
+        task_name = f"capture_screenshot_node_{self.pk}"
+        if self.enable_screenshot_polling:
+            schedule, _ = IntervalSchedule.objects.get_or_create(
+                every=1, period=IntervalSchedule.MINUTES
+            )
+            PeriodicTask.objects.update_or_create(
+                name=task_name,
+                defaults={
+                    "interval": schedule,
+                    "task": "nodes.tasks.capture_node_screenshot",
+                    "kwargs": json.dumps(
+                        {
+                            "url": f"http://localhost:{self.port}",
+                            "port": self.port,
+                            "method": "AUTO",
+                        }
+                    ),
+                },
+            )
+        else:
+            PeriodicTask.objects.filter(name=task_name).delete()
+
 
 class NodeScreenshot(models.Model):
     """Screenshot captured from a node."""
@@ -56,6 +87,8 @@ class NodeScreenshot(models.Model):
         Node, on_delete=models.SET_NULL, null=True, blank=True
     )
     path = models.CharField(max_length=255)
+    method = models.CharField(max_length=10, default="", blank=True)
+    hash = models.CharField(max_length=64, unique=True, null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation

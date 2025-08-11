@@ -6,7 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
 
 from .models import Node, NodeScreenshot, NodeMessage
-from .utils import capture_screenshot
+from .utils import capture_screenshot, save_screenshot
 
 
 def node_list(request):
@@ -55,13 +55,13 @@ def capture(request):
     node = Node.objects.filter(
         hostname=hostname, port=request.get_port()
     ).first()
-    screenshot = NodeScreenshot.objects.create(node=node, path=str(path))
-    return JsonResponse(
-        {
-            "screenshot": str(path),
-            "node": screenshot.node.id if screenshot.node else None,
-        }
-    )
+    screenshot = save_screenshot(path, node=node, method=request.method)
+    node_id = None
+    if screenshot and screenshot.node:
+        node_id = screenshot.node.id
+    elif node:
+        node_id = node.id
+    return JsonResponse({"screenshot": str(path), "node": node_id})
 
 
 @csrf_exempt
