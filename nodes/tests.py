@@ -5,6 +5,7 @@ import threading
 import http.server
 import socketserver
 import base64
+import os
 
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -290,19 +291,25 @@ class TextSampleAdminTests(TestCase):
         )
         self.client.login(username="clipboard_admin", password="pass")
 
+    @patch("nodes.admin.socket.gethostname")
     @patch("pyperclip.paste")
-    def test_add_from_clipboard_creates_sample(self, mock_paste):
+    def test_add_from_clipboard_creates_sample(self, mock_paste, mock_hostname):
         mock_paste.return_value = "clip text"
+        mock_hostname.return_value = "host"
         url = reverse("admin:nodes_textsample_from_clipboard")
         response = self.client.get(url, follow=True)
         self.assertEqual(TextSample.objects.count(), 1)
-        self.assertEqual(TextSample.objects.first().content, "clip text")
-        self.assertFalse(TextSample.objects.first().automated)
+        sample = TextSample.objects.first()
+        self.assertEqual(sample.content, "clip text")
+        self.assertFalse(sample.automated)
+        self.assertIsNone(sample.node)
         self.assertContains(response, "Text sample added from clipboard")
 
+    @patch("nodes.admin.socket.gethostname")
     @patch("pyperclip.paste")
-    def test_add_from_clipboard_skips_duplicate(self, mock_paste):
+    def test_add_from_clipboard_skips_duplicate(self, mock_paste, mock_hostname):
         mock_paste.return_value = "clip text"
+        mock_hostname.return_value = "host"
         url = reverse("admin:nodes_textsample_from_clipboard")
         self.client.get(url, follow=True)
         resp = self.client.get(url, follow=True)
@@ -311,15 +318,23 @@ class TextSampleAdminTests(TestCase):
 
 
 class ClipboardTaskTests(TestCase):
+    @patch("nodes.tasks.socket.gethostname")
     @patch("nodes.tasks.pyperclip.paste")
-    def test_sample_clipboard_task_creates_sample(self, mock_paste):
+    def test_sample_clipboard_task_creates_sample(self, mock_paste, mock_hostname):
         mock_paste.return_value = "task text"
-        sample_clipboard()
+        mock_hostname.return_value = "host"
+        Node.objects.create(hostname="host", address="127.0.0.1", port=8000)
+        with patch.dict("os.environ", {"PORT": "8000"}):
+            sample_clipboard()
         self.assertEqual(TextSample.objects.count(), 1)
-        self.assertEqual(TextSample.objects.first().content, "task text")
-        self.assertTrue(TextSample.objects.first().automated)
+        sample = TextSample.objects.first()
+        self.assertEqual(sample.content, "task text")
+        self.assertTrue(sample.automated)
+        self.assertIsNotNone(sample.node)
+        self.assertEqual(sample.node.hostname, "host")
         # Duplicate should not create another sample
-        sample_clipboard()
+        with patch.dict("os.environ", {"PORT": "8000"}):
+            sample_clipboard()
         self.assertEqual(TextSample.objects.count(), 1)
 
     @patch("nodes.tasks.capture_screenshot")

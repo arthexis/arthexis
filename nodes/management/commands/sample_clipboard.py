@@ -1,9 +1,11 @@
 from django.core.management.base import BaseCommand
 
+import os
+import socket
 import pyperclip
 from pyperclip import PyperclipException
 
-from nodes.models import TextSample
+from nodes.models import TextSample, Node
 
 
 class Command(BaseCommand):
@@ -21,5 +23,8 @@ class Command(BaseCommand):
         if TextSample.objects.filter(content=content).exists():
             self.stdout.write("Duplicate sample not created")
             return
-        sample = TextSample.objects.create(content=content)
+        hostname = socket.gethostname()
+        port = int(os.environ.get("PORT", 8000))
+        node = Node.objects.filter(hostname=hostname, port=port).first()
+        sample = TextSample.objects.create(content=content, node=node)
         self.stdout.write(self.style.SUCCESS(f"Saved sample at {sample.created_at}"))
