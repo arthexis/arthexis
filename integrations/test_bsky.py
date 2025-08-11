@@ -10,8 +10,9 @@ settings.ALLOWED_HOSTS=["testserver"]
 
 
 
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 from unittest.mock import patch
 
 from .admin import BskyAccountAdminForm
@@ -69,3 +70,31 @@ class BskyAdminFormTests(TestCase):
             MockClient.return_value.login.side_effect = Exception("bad creds")
             form = BskyAccountAdminForm(data=form_data)
             self.assertFalse(form.is_valid())
+
+
+class BskyAdminActionTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="bsky-admin",
+            password="secret",
+            email="admin@example.com",
+        )
+        self.client.force_login(self.admin)
+        self.account = BskyAccount.objects.create(
+            user=self.admin, handle="bsky-admin.bsky.social", app_password="pw"
+        )
+
+    @patch("atproto.Client")
+    def test_admin_action(self, MockClient):
+        MockClient.return_value.login.return_value = None
+        url = reverse("admin:integrations_bskyaccount_changelist")
+        resp = self.client.post(
+            url,
+            {"action": "test_credentials", "_selected_action": [self.account.pk]},
+        )
+        self.assertEqual(resp.status_code, 302)
+        MockClient.return_value.login.assert_called_once_with(
+            "bsky-admin.bsky.social", "pw"
+        )
