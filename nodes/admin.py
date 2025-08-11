@@ -4,6 +4,9 @@ from django.shortcuts import redirect
 from django.utils.html import format_html
 from django import forms
 from django.db import models
+from django.conf import settings
+from pathlib import Path
+import base64
 import socket
 import os
 import pyperclip
@@ -82,6 +85,8 @@ class NodeAdmin(admin.ModelAdmin):
 class NodeScreenshotAdmin(admin.ModelAdmin):
     list_display = ("path", "node", "created")
     change_list_template = "admin/nodes/nodescreenshot/change_list.html"
+    readonly_fields = ("image_preview", "created")
+    fields = ("image_preview", "path", "node", "created")
 
     def get_urls(self):
         urls = super().get_urls()
@@ -106,6 +111,22 @@ class NodeScreenshotAdmin(admin.ModelAdmin):
             request, f"Screenshot saved to {path}", messages.SUCCESS
         )
         return redirect("..")
+
+    @admin.display(description="Screenshot")
+    def image_preview(self, obj):
+        if not obj or not obj.path:
+            return ""
+        file_path = Path(obj.path)
+        if not file_path.is_absolute():
+            file_path = settings.LOG_DIR / file_path
+        if not file_path.exists():
+            return "File not found"
+        with file_path.open("rb") as f:
+            encoded = base64.b64encode(f.read()).decode("ascii")
+        return format_html(
+            '<img src="data:image/png;base64,{}" style="max-width:100%;" />',
+            encoded,
+        )
 
 
 @admin.register(NodeMessage)
