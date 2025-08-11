@@ -3,6 +3,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.contrib import admin
+from django.core.exceptions import DisallowedHost
 import socket
 from website.models import Application, SiteApplication
 from website.admin import ApplicationAdmin
@@ -202,3 +203,29 @@ class ApplicationAdminFormTests(TestCase):
         form = admin_instance.get_form(request=None)()
         choices = [choice[0] for choice in form.fields["name"].choices]
         self.assertIn("accounts", choices)
+
+
+class AllowedHostSubnetTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": "website"}
+        )
+
+    @override_settings(ALLOWED_HOSTS=["10.42.0.0/16", "192.168.0.0/16"])
+    def test_private_network_hosts_allowed(self):
+        resp = self.client.get(
+            reverse("website:index"), HTTP_HOST="10.42.1.5"
+        )
+        self.assertEqual(resp.status_code, 200)
+        resp = self.client.get(
+            reverse("website:index"), HTTP_HOST="192.168.2.3"
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    @override_settings(ALLOWED_HOSTS=["10.42.0.0/16"])
+    def test_host_outside_subnets_disallowed(self):
+        with self.assertRaises(DisallowedHost):
+            self.client.get(
+                reverse("website:index"), HTTP_HOST="11.0.0.1"
+            )
