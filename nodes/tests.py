@@ -57,6 +57,10 @@ class NodeTests(TestCase):
         node = Node.objects.create(
             hostname=hostname, address="127.0.0.1", port=80
         )
+        screenshot_dir = settings.LOG_DIR / "screenshots"
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        file_path = screenshot_dir / "test.png"
+        file_path.write_bytes(b"test")
         mock_capture.return_value = Path("screenshots/test.png")
         response = self.client.get(reverse("node-screenshot"))
         self.assertEqual(response.status_code, 200)
@@ -65,7 +69,22 @@ class NodeTests(TestCase):
         self.assertEqual(data["node"], node.id)
         mock_capture.assert_called_once()
         self.assertEqual(NodeScreenshot.objects.count(), 1)
-        self.assertEqual(NodeScreenshot.objects.first().node, node)
+        screenshot = NodeScreenshot.objects.first()
+        self.assertEqual(screenshot.node, node)
+        self.assertEqual(screenshot.method, "GET")
+
+    @patch("nodes.views.capture_screenshot")
+    def test_duplicate_screenshot_skipped(self, mock_capture):
+        hostname = socket.gethostname()
+        Node.objects.create(hostname=hostname, address="127.0.0.1", port=80)
+        screenshot_dir = settings.LOG_DIR / "screenshots"
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        file_path = screenshot_dir / "dup.png"
+        file_path.write_bytes(b"dup")
+        mock_capture.return_value = Path("screenshots/dup.png")
+        self.client.get(reverse("node-screenshot"))
+        self.client.get(reverse("node-screenshot"))
+        self.assertEqual(NodeScreenshot.objects.count(), 1)
 
     def test_public_api_get_and_post(self):
         node = Node.objects.create(
@@ -105,6 +124,17 @@ class NodeTests(TestCase):
         node.save()
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
 
+    def test_enable_screenshot_polling_creates_task(self):
+        node = Node.objects.create(hostname="shot", address="127.0.0.1", port=9100)
+        task_name = f"capture_screenshot_node_{node.pk}"
+        self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
+        node.enable_screenshot_polling = True
+        node.save()
+        self.assertTrue(PeriodicTask.objects.filter(name=task_name).exists())
+        node.enable_screenshot_polling = False
+        node.save()
+        self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
+
 class NodeAdminTests(TestCase):
     def setUp(self):
         self.client = Client()
@@ -122,6 +152,10 @@ class NodeAdminTests(TestCase):
 
     @patch("nodes.admin.capture_screenshot")
     def test_capture_screenshot_from_admin(self, mock_capture):
+        screenshot_dir = settings.LOG_DIR / "screenshots"
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        file_path = screenshot_dir / "test.png"
+        file_path.write_bytes(b"admin")
         mock_capture.return_value = Path("screenshots/test.png")
         hostname = socket.gethostname()
         node = Node.objects.create(
@@ -134,6 +168,7 @@ class NodeAdminTests(TestCase):
         screenshot = NodeScreenshot.objects.first()
         self.assertEqual(screenshot.node, node)
         self.assertEqual(screenshot.path, "screenshots/test.png")
+        self.assertEqual(screenshot.method, "ADMIN")
         self.assertContains(
             response, "Screenshot saved to screenshots/test.png"
         )
@@ -292,10 +327,15 @@ class ClipboardTaskTests(TestCase):
     def test_capture_node_screenshot_task(self, mock_hostname, mock_capture):
         mock_hostname.return_value = "host"
         node = Node.objects.create(hostname="host", address="127.0.0.1", port=8000)
+        screenshot_dir = settings.LOG_DIR / "screenshots"
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        file_path = screenshot_dir / "test.png"
+        file_path.write_bytes(b"task")
         mock_capture.return_value = Path("screenshots/test.png")
         capture_node_screenshot("http://example.com")
         self.assertEqual(NodeScreenshot.objects.count(), 1)
         screenshot = NodeScreenshot.objects.first()
         self.assertEqual(screenshot.node, node)
         self.assertEqual(screenshot.path, "screenshots/test.png")
+        self.assertEqual(screenshot.method, "TASK")
 
