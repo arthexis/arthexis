@@ -270,11 +270,11 @@ class RFIDAdmin(ImportExportModelAdmin):
 
     def scan_next(self, request):
         try:
-            import MFRC522
+            from mfrc522 import MFRC522
         except Exception as exc:  # pragma: no cover - hardware dependent
             return JsonResponse({"error": str(exc)}, status=500)
 
-        mfrc = MFRC522.MFRC522()
+        mfrc = MFRC522()
         while True:  # pragma: no cover - hardware loop
             (status, _TagType) = mfrc.MFRC522_Request(mfrc.PICC_REQIDL)
             if status == mfrc.MI_OK:
