@@ -72,11 +72,20 @@ class CalculatorTemplateForm(forms.ModelForm):
 @admin.register(CalculatorTemplate)
 class CalculatorTemplateAdmin(admin.ModelAdmin):
     form = CalculatorTemplateForm
-    list_display = ("name", "meters", "amps", "volts", "material", "calculator_link")
+    list_display = (
+        "name",
+        "show_in_website",
+        "meters",
+        "amps",
+        "volts",
+        "material",
+        "calculator_link",
+    )
     actions = ["run_calculator"]
     readonly_fields = ("calculator_link",)
     fields = (
         "name",
+        "show_in_website",
         "meters",
         "amps",
         "volts",

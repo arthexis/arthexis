@@ -254,4 +254,7 @@ def calculator(request):
                 context["no_cable"] = True
             else:
                 context["result"] = result
+    context["templates"] = (
+        CalculatorTemplate.objects.filter(show_in_website=True).order_by("name")
+    )
     return render(request, "awg/calculator.html", context)

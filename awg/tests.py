@@ -81,6 +81,24 @@ class AWGCalculatorTests(TestCase):
         self.assertIn('value="40"', resp.content.decode())
         self.assertIn('value="220"', resp.content.decode())
 
+    def test_template_links_displayed(self):
+        tmpl = CalculatorTemplate.objects.create(
+            name="Demo",
+            meters=10,
+            amps=40,
+            volts=220,
+            material="cu",
+            max_lines=1,
+            phases=2,
+            temperature=60,
+            conduit="emt",
+            ground=1,
+            show_in_website=True,
+        )
+        resp = self.client.get(reverse("awg:calculator"))
+        self.assertContains(resp, tmpl.name)
+        self.assertContains(resp, tmpl.get_absolute_url())
+
 
 class CalculatorTemplateTests(TestCase):
     def setUp(self):
