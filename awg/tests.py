@@ -28,9 +28,10 @@ class AWGCalculatorTests(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "<form")
-        self.assertIn('value="10"', resp.content.decode())
-        self.assertIn('value="40"', resp.content.decode())
-        self.assertIn('value="220"', resp.content.decode())
+        self.assertNotIn('value="10"', resp.content.decode())
+        self.assertNotIn('value="40"', resp.content.decode())
+        self.assertNotIn('value="220"', resp.content.decode())
+        self.assertIn("Calculate</button>", resp.content.decode())
 
         data = {
             "meters": "10",
@@ -50,6 +51,7 @@ class AWGCalculatorTests(TestCase):
         self.assertContains(resp, "8")
         self.assertContains(resp, "Voltage Drop")
         self.assertContains(resp, "EMT")
+        self.assertContains(resp, "Calculate Again")
 
     def test_no_cable_found(self):
         url = reverse("awg:calculator")
@@ -68,10 +70,10 @@ class AWGCalculatorTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "No Suitable Cable Found")
 
-    def test_none_query_params_use_defaults(self):
+    def test_query_params_prefill_form(self):
         url = (
             reverse("awg:calculator")
-            + "?meters=None&amps=None&volts=None&material=&max_lines=None&phases=None&ground=None"
+            + "?meters=10&amps=40&volts=220&material=cu&max_lines=1&phases=2&temperature=60&conduit=emt&ground=1"
         )
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)

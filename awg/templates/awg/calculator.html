@@ -22,6 +22,7 @@
       <div class="mb-3">
         <label class="form-label" for="material">Material:</label>
         <select id="material" name="material" class="form-select">
+          <option value="" {% if not form.material %}selected{% endif %}></option>
           <option value="cu" {% if form.material == "cu" %}selected{% endif %}>Copper (cu)</option>
           <option value="al" {% if form.material == "al" %}selected{% endif %}>Aluminum (al)</option>
         </select>
@@ -29,6 +30,7 @@
       <div class="mb-3">
         <label class="form-label" for="phases">Phases:</label>
         <select id="phases" name="phases" class="form-select">
+          <option value="" {% if not form.phases %}selected{% endif %}></option>
           <option value="2" {% if form.phases == "2" %}selected{% endif %}>AC Two Phases (2)</option>
           <option value="1" {% if form.phases == "1" %}selected{% endif %}>AC Single Phase (1)</option>
           <option value="3" {% if form.phases == "3" %}selected{% endif %}>AC Three Phases (3)</option>
@@ -39,6 +41,7 @@
       <div class="mb-3">
         <label class="form-label" for="temperature">Temperature:</label>
         <select id="temperature" name="temperature" class="form-select">
+          <option value="" {% if not form.temperature %}selected{% endif %}></option>
           <option value="60" {% if form.temperature == "60" %}selected{% endif %}>60C (140F)</option>
           <option value="75" {% if form.temperature == "75" %}selected{% endif %}>75C (167F)</option>
           <option value="90" {% if form.temperature == "90" %}selected{% endif %}>90C (194F)</option>
@@ -47,6 +50,7 @@
       <div class="mb-3">
         <label class="form-label" for="conduit">Conduit:</label>
         <select id="conduit" name="conduit" class="form-select">
+          <option value="" {% if not form.conduit %}selected{% endif %}></option>
           <option value="emt" {% if form.conduit == "emt" %}selected{% endif %}>EMT</option>
           <option value="imc" {% if form.conduit == "imc" %}selected{% endif %}>IMC</option>
           <option value="rmc" {% if form.conduit == "rmc" %}selected{% endif %}>RMC</option>
@@ -61,6 +65,7 @@
       <div class="mb-3">
         <label class="form-label" for="ground">Ground:</label>
         <select id="ground" name="ground" class="form-select">
+          <option value="" {% if not form.ground %}selected{% endif %}></option>
           <option value="1" {% if form.ground == "1" %}selected{% endif %}>1</option>
           <option value="0" {% if form.ground == "0" %}selected{% endif %}>0</option>
         </select>
@@ -68,6 +73,7 @@
       <div class="mb-3">
         <label class="form-label" for="max_lines">Max Lines:</label>
         <select id="max_lines" name="max_lines" class="form-select">
+          <option value="" {% if not form.max_lines %}selected{% endif %}></option>
           <option value="1" {% if form.max_lines == "1" %}selected{% endif %}>1</option>
           <option value="2" {% if form.max_lines == "2" %}selected{% endif %}>2</option>
           <option value="3" {% if form.max_lines == "3" %}selected{% endif %}>3</option>
@@ -104,7 +110,9 @@
       </div>
       {% endif %}
       <div class="mt-auto mb-3">
-        <button type="submit" class="btn btn-primary w-100">Calculate</button>
+        <button type="submit" class="btn btn-primary w-100">
+          {% if result or error or no_cable %}Calculate Again{% else %}Calculate{% endif %}
+        </button>
       </div>
     </div>
   </div>
