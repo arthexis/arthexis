@@ -82,6 +82,9 @@ def run_database_tasks() -> None:
     for fixture in _fixture_files():
         call_command("loaddata", fixture)
 
+    # Ensure Application and SiteApplication entries exist for local apps
+    call_command("register_site_apps")
+
 
 def run_git_tasks() -> None:
     """Commit and push auto-generated migrations."""
