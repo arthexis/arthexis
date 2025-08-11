@@ -21,6 +21,12 @@ LOG_DIR.mkdir(exist_ok=True)
 def register_log_name(cid: str, name: str) -> None:
     """Register a friendly name for the charger id used in log files."""
 
+    # Ensure lookups are case-insensitive by overwriting any existing entry
+    # that matches the provided cid regardless of case.
+    for key in list(log_names.keys()):
+        if key.lower() == cid.lower():
+            cid = key
+            break
     log_names[cid] = name
 
 
@@ -36,8 +42,11 @@ def _file_path(cid: str) -> Path:
 def add_log(cid: str, entry: str) -> None:
     """Append a log entry for the given charger id."""
 
-    logs.setdefault(cid, []).append(entry)
-    path = _file_path(cid)
+    # Store log entries under the cid as provided but allow retrieval using
+    # any casing by recording entries in a case-insensitive manner.
+    key = next((k for k in logs.keys() if k.lower() == cid.lower()), cid)
+    logs.setdefault(key, []).append(entry)
+    path = _file_path(key)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(entry + "\n")
 
@@ -45,25 +54,56 @@ def add_log(cid: str, entry: str) -> None:
 def get_logs(cid: str) -> list[str]:
     """Return all log entries for the given charger id."""
 
-    if cid not in log_names:
-        try:
-            from .models import Simulator
+    # Try to find a matching log name case-insensitively
+    name = log_names.get(cid)
+    if name is None:
+        for key, value in log_names.items():
+            if key.lower() == cid.lower():
+                cid = key
+                name = value
+                break
+        else:
+            try:
+                from .models import Simulator
 
-            sim = Simulator.objects.filter(cp_path=cid).first()
-            if sim:
-                log_names[cid] = sim.name
-        except Exception:  # pragma: no cover - best effort lookup
-            pass
+                sim = (
+                    Simulator.objects.filter(cp_path__iexact=cid).first()
+                )
+                if sim:
+                    cid = sim.cp_path
+                    name = sim.name
+                    log_names[cid] = name
+            except Exception:  # pragma: no cover - best effort lookup
+                pass
+
     path = _file_path(cid)
+    if not path.exists():
+        target = _safe_name(name or cid).lower()
+        for file in LOG_DIR.glob("*.log"):
+            if file.stem.lower() == target:
+                path = file
+                break
+
     if path.exists():
         return path.read_text(encoding="utf-8").splitlines()
-    return logs.get(cid, [])
+
+    for key, entries in logs.items():
+        if key.lower() == cid.lower():
+            return entries
+    return []
 
 
 def clear_log(cid: str) -> None:
     """Remove any stored logs for the charger id."""
 
-    logs.pop(cid, None)
-    path = _file_path(cid)
+    key = next((k for k in list(logs.keys()) if k.lower() == cid.lower()), cid)
+    logs.pop(key, None)
+    path = _file_path(key)
+    if not path.exists():
+        target = _safe_name(log_names.get(key, key)).lower()
+        for file in LOG_DIR.glob("*.log"):
+            if file.stem.lower() == target:
+                path = file
+                break
     if path.exists():
         path.unlink()

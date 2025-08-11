@@ -109,6 +109,14 @@ class ChargerLandingTests(TestCase):
         self.assertContains(resp, "hello")
         store.clear_log("LOG1")
 
+    def test_log_page_is_case_insensitive(self):
+        store.add_log("cp2", "entry")
+        client = Client()
+        resp = client.get(reverse("charger-log", args=["CP2"]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "entry")
+        store.clear_log("cp2")
+
 
 class SimulatorLandingTests(TestCase):
     def test_simulator_app_link_in_nav(self):
