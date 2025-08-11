@@ -4,12 +4,14 @@ import socket
 import threading
 import http.server
 import socketserver
+import base64
 
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
 from django_celery_beat.models import PeriodicTask
+from django.conf import settings
 
 from .admin import RecipeAdmin
 
@@ -135,6 +137,22 @@ class NodeAdminTests(TestCase):
         self.assertContains(
             response, "Screenshot saved to screenshots/test.png"
         )
+
+    def test_view_screenshot_in_change_admin(self):
+        screenshot_dir = settings.LOG_DIR / "screenshots"
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        file_path = screenshot_dir / "test.png"
+        with file_path.open("wb") as fh:
+            fh.write(
+                base64.b64decode(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR42mP8/5+hHgAFgwJ/lSdX6QAAAABJRU5ErkJggg=="
+                )
+            )
+        screenshot = NodeScreenshot.objects.create(path="screenshots/test.png")
+        url = reverse("admin:nodes_nodescreenshot_change", args=[screenshot.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data:image/png;base64")
 
 
 class NginxConfigTests(TestCase):
