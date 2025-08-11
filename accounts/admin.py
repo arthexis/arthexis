@@ -2,6 +2,7 @@ from django import forms
 from django.contrib import admin
 from django.urls import path
 from django.shortcuts import redirect, render
+from django.http import JsonResponse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from import_export import resources
@@ -232,13 +233,62 @@ class RFIDResource(resources.ModelResource):
 
 @admin.register(RFID)
 class RFIDAdmin(ImportExportModelAdmin):
+    change_list_template = "admin/accounts/rfid/change_list.html"
     resource_class = RFIDResource
     list_display = ("rfid", "accounts_display", "allowed", "added_on", "is_seed_data")
+    actions = ["scan_rfids"]
 
     def accounts_display(self, obj):
         return ", ".join(str(a) for a in obj.accounts.all())
 
     accounts_display.short_description = "Accounts"
+
+    def scan_rfids(self, request, queryset):
+        return redirect("admin:accounts_rfid_scan")
+
+    scan_rfids.short_description = "Scan new RFIDs"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "scan/",
+                self.admin_site.admin_view(self.scan_view),
+                name="accounts_rfid_scan",
+            ),
+            path(
+                "scan/next/",
+                self.admin_site.admin_view(self.scan_next),
+                name="accounts_rfid_scan_next",
+            ),
+        ]
+        return custom + urls
+
+    def scan_view(self, request):
+        context = self.admin_site.each_context(request)
+        return render(request, "admin/accounts/rfid/scan.html", context)
+
+    def scan_next(self, request):
+        try:
+            import MFRC522
+        except Exception as exc:  # pragma: no cover - hardware dependent
+            return JsonResponse({"error": str(exc)}, status=500)
+
+        mfrc = MFRC522.MFRC522()
+        while True:  # pragma: no cover - hardware loop
+            (status, _TagType) = mfrc.MFRC522_Request(mfrc.PICC_REQIDL)
+            if status == mfrc.MI_OK:
+                (status, uid) = mfrc.MFRC522_Anticoll()
+                if status == mfrc.MI_OK:
+                    rfid = "".join(f"{x:02X}" for x in uid[:5])
+                    tag, created = RFID.objects.get_or_create(rfid=rfid)
+                    return JsonResponse(
+                        {
+                            "rfid": rfid,
+                            "created": created,
+                            "message": "Registered" if created else "Already registered",
+                        }
+                    )
 
 
 @admin.register(RFIDSource)

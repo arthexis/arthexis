@@ -1,0 +1,28 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>RFID Scanner</h1>
+<p id="status">Scanner ready</p>
+<script>
+async function waitScan(){
+    try {
+        const resp = await fetch('{% url "admin:accounts_rfid_scan_next" %}');
+        const data = await resp.json();
+        const p = document.getElementById('status');
+        if(data.error){
+            p.textContent = data.error;
+            return;
+        }
+        if(data.created){
+            p.textContent = `Registered ${data.rfid}`;
+        } else {
+            p.textContent = `${data.rfid} already registered`;
+        }
+    } catch(err){
+        document.getElementById('status').textContent = err;
+        return;
+    }
+    waitScan();
+}
+waitScan();
+</script>
+{% endblock %}
