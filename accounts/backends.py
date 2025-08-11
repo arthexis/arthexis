@@ -32,12 +32,18 @@ class RFIDBackend:
 
 
 class LocalhostAdminBackend(ModelBackend):
-    """Deny default admin credentials unless the request is from localhost."""
+    """Allow default admin credentials only from local networks."""
 
     def authenticate(self, request, username=None, password=None, **kwargs):
         if username == "admin" and password == "admin" and request is not None:
-            remote = request.META.get("REMOTE_ADDR")
-            if remote not in {"127.0.0.1", "::1"}:
+            remote = request.META.get("REMOTE_ADDR", "")
+            allowed = (
+                remote == "::1"
+                or remote.startswith("127.")
+                or remote.startswith("192.168.")
+                or remote.startswith("10.42.")
+            )
+            if not allowed:
                 return None
         return super().authenticate(request, username, password, **kwargs)
 
