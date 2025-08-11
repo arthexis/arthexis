@@ -5,6 +5,7 @@ from .models import CableSize, ConduitFill, CalculatorTemplate
 
 
 class AWGCalculatorTests(TestCase):
+    fixtures = ["calculator_templates.json"]
     def setUp(self):
         CableSize.objects.create(
             awg_size="8",
@@ -27,6 +28,9 @@ class AWGCalculatorTests(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "<form")
+        self.assertIn('value="10"', resp.content.decode())
+        self.assertIn('value="40"', resp.content.decode())
+        self.assertIn('value="220"', resp.content.decode())
 
         data = {
             "meters": "10",

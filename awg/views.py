@@ -10,7 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from website.utils import landing
 
-from .models import CableSize, ConduitFill
+from .models import CableSize, ConduitFill, CalculatorTemplate
 
 
 class AWG(int):
@@ -228,23 +228,37 @@ def find_awg(
 def calculator(request):
     """Display the AWG calculator form and results using a template."""
     form = request.POST or request.GET
+    default = CalculatorTemplate.objects.filter(name="EV Charger").first()
+    if not form and default:
+        form = {
+            "meters": str(default.meters) if default.meters is not None else "",
+            "amps": str(default.amps),
+            "volts": str(default.volts),
+            "material": default.material,
+            "max_awg": default.max_awg or "",
+            "max_lines": str(default.max_lines),
+            "phases": str(default.phases),
+            "temperature": str(default.temperature) if default.temperature is not None else "",
+            "conduit": default.conduit or "",
+            "ground": str(default.ground),
+        }
     context: dict[str, object] = {"form": form}
     if request.method == "POST" and request.POST.get("meters"):
         max_awg = request.POST.get("max_awg") or None
-        conduit_field = request.POST.get("conduit")
+        conduit_field = request.POST.get("conduit") or (default.conduit if default else None)
         conduit_arg = None if conduit_field in (None, "", "none", "None") else conduit_field
         try:
             result = find_awg(
                 meters=request.POST.get("meters"),
-                amps=request.POST.get("amps", "40"),
-                volts=request.POST.get("volts", "220"),
-                material=request.POST.get("material", "cu"),
-                max_lines=request.POST.get("max_lines", "1"),
-                phases=request.POST.get("phases", "2"),
+                amps=request.POST.get("amps") or (str(default.amps) if default else None),
+                volts=request.POST.get("volts") or (str(default.volts) if default else None),
+                material=request.POST.get("material") or (default.material if default else None),
+                max_lines=request.POST.get("max_lines") or (str(default.max_lines) if default else None),
+                phases=request.POST.get("phases") or (str(default.phases) if default else None),
                 max_awg=max_awg,
-                temperature=request.POST.get("temperature"),
+                temperature=request.POST.get("temperature") or (str(default.temperature) if default and default.temperature is not None else None),
                 conduit=conduit_arg,
-                ground=request.POST.get("ground", "1"),
+                ground=request.POST.get("ground") or (str(default.ground) if default else None),
             )
         except Exception as exc:  # pragma: no cover - defensive
             context["error"] = str(exc)
