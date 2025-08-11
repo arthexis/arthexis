@@ -2,6 +2,13 @@
 {% load static %}
 {% block title %}AWG Calculator{% endblock %}
 {% block content %}
+{% if templates %}
+<nav class="awg-template-ribbon bg-body-secondary small py-1 px-2 mb-3 d-flex gap-2 flex-wrap">
+  {% for t in templates %}
+  <a href="{{ t.get_absolute_url }}" class="text-decoration-none">{{ t.name }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
 <h1>Cable & Conduit Calculator</h1>
 <form method="post">
   {% csrf_token %}
