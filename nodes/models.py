@@ -15,8 +15,8 @@ class Node(models.Model):
     last_seen = models.DateTimeField(auto_now=True)
     enable_public_api = models.BooleanField(default=False)
     public_endpoint = models.SlugField(blank=True, unique=True)
-    enable_clipboard_polling = models.BooleanField(default=False)
-    enable_screenshot_polling = models.BooleanField(default=False)
+    clipboard_polling = models.BooleanField(default=False)
+    screenshot_polling = models.BooleanField(default=False)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.hostname}:{self.port}"
@@ -27,19 +27,19 @@ class Node(models.Model):
         previous_clipboard = previous_screenshot = None
         if self.pk:
             previous = Node.objects.get(pk=self.pk)
-            previous_clipboard = previous.enable_clipboard_polling
-            previous_screenshot = previous.enable_screenshot_polling
+            previous_clipboard = previous.clipboard_polling
+            previous_screenshot = previous.screenshot_polling
         super().save(*args, **kwargs)
-        if previous_clipboard != self.enable_clipboard_polling:
+        if previous_clipboard != self.clipboard_polling:
             self._sync_clipboard_task()
-        if previous_screenshot != self.enable_screenshot_polling:
+        if previous_screenshot != self.screenshot_polling:
             self._sync_screenshot_task()
 
     def _sync_clipboard_task(self):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
         task_name = f"poll_clipboard_node_{self.pk}"
-        if self.enable_clipboard_polling:
+        if self.clipboard_polling:
             schedule, _ = IntervalSchedule.objects.get_or_create(
                 every=5, period=IntervalSchedule.SECONDS
             )
@@ -58,7 +58,7 @@ class Node(models.Model):
         import json
 
         task_name = f"capture_screenshot_node_{self.pk}"
-        if self.enable_screenshot_polling:
+        if self.screenshot_polling:
             schedule, _ = IntervalSchedule.objects.get_or_create(
                 every=1, period=IntervalSchedule.MINUTES
             )
