@@ -1,7 +1,9 @@
 from pathlib import Path
 
+from django.contrib.auth import get_user_model
 from django.template import Context, Template
-from django.test import RequestFactory, TestCase
+from django.test import Client, RequestFactory, TestCase
+from django.urls import reverse
 
 from .models import Reference
 
@@ -19,10 +21,6 @@ class ReferenceTests(TestCase):
         self.assertEqual(Reference.objects.filter(value='https://example.com').count(), 1)
         ref.refresh_from_db()
         self.assertEqual(ref.uses, 2)
-
-from django.urls import reverse
-from django.test import Client
-
 
 class ReferenceLandingPageTests(TestCase):
     def setUp(self):
@@ -57,3 +55,29 @@ class FooterTemplateTagTests(TestCase):
         self.assertIn("data:image/png;base64", html)
         rev = Path("REVISION").read_text().strip()[-8:]
         self.assertIn(f"rev {rev}", html)
+
+
+class ReferenceModelUpdateTests(TestCase):
+    def test_qr_image_regenerates_on_value_change(self):
+        ref = Reference.objects.create(value="https://old.com")
+        old_name = ref.image.name
+        ref.value = "https://new.com"
+        ref.save()
+        self.assertNotEqual(ref.image.name, old_name)
+
+
+class ReferenceAdminDisplayTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        user = get_user_model().objects.create_superuser(
+            "refadmin", "admin@example.com", "pass"
+        )
+        self.client.force_login(user)
+
+    def test_change_form_displays_qr_code(self):
+        ref = Reference.objects.create(value="https://example.com")
+        resp = self.client.get(
+            reverse("admin:references_reference_change", args=[ref.pk])
+        )
+        self.assertContains(resp, f'src="{ref.image.url}"')
+

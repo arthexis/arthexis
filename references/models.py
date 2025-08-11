@@ -18,7 +18,7 @@ class Reference(models.Model):
     is_seed_data = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
-        if self.method == "qr" and not self.image:
+        if self.method == "qr":
             qr = qrcode.QRCode(box_size=10, border=4)
             qr.add_data(self.value)
             qr.make(fit=True)
@@ -26,6 +26,8 @@ class Reference(models.Model):
             buffer = BytesIO()
             img.save(buffer, format="PNG")
             filename = hashlib.sha256(self.value.encode()).hexdigest()[:16] + ".png"
+            if self.image:
+                self.image.delete(save=False)
             self.image.save(filename, ContentFile(buffer.getvalue()), save=False)
         super().save(*args, **kwargs)
 
