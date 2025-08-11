@@ -22,7 +22,7 @@ from .models import (
     NginxConfig,
     Recipe,
     Step,
-    Pattern,
+    TextPattern,
     TextSample,
 )
 from .tasks import capture_node_screenshot, sample_clipboard
@@ -202,20 +202,49 @@ class RecipeTests(TestCase):
         self.assertEqual(steps, ["first", "second"])
 
 
-class PatternMatchTests(TestCase):
+class TextPatternMatchTests(TestCase):
     def test_match_with_sigil(self):
-        pattern = Pattern.objects.create(mask="This is [not] good", priority=1)
-        substitutions = pattern.match("Indeed, This is very good.")
-        self.assertEqual(substitutions, {"not": "very"})
+        pattern = TextPattern.objects.create(mask="This is [not] good", priority=1)
+        result = pattern.match("Indeed, This is very good.")
+        self.assertEqual(result, "This is very good")
 
     def test_match_without_sigil(self):
-        pattern = Pattern.objects.create(mask="simple", priority=1)
-        substitutions = pattern.match("a simple example")
-        self.assertEqual(substitutions, {})
+        pattern = TextPattern.objects.create(mask="simple", priority=1)
+        result = pattern.match("a simple example")
+        self.assertEqual(result, "simple")
 
     def test_no_match(self):
-        pattern = Pattern.objects.create(mask="missing", priority=1)
+        pattern = TextPattern.objects.create(mask="missing", priority=1)
         self.assertIsNone(pattern.match("nothing to see"))
+
+    def test_match_multiple_sigils(self):
+        pattern = TextPattern.objects.create(
+            mask="Hello [first] [last]", priority=1
+        )
+        result = pattern.match("Well, Hello John Doe!")
+        self.assertEqual(result, "Hello John Doe!")
+
+
+class TextPatternAdminActionTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            "pattern_admin", "admin@example.com", "pass"
+        )
+        self.client.login(username="pattern_admin", password="pass")
+
+    @patch("pyperclip.paste")
+    def test_test_clipboard_action(self, mock_paste):
+        mock_paste.return_value = "This is very good"
+        pattern = TextPattern.objects.create(mask="This is [not] good", priority=1)
+        url = reverse("admin:nodes_textpattern_changelist")
+        response = self.client.post(
+            url,
+            {"action": "test_clipboard", "_selected_action": [pattern.pk]},
+            follow=True,
+        )
+        msgs = [m.message for m in response.context["messages"]]
+        self.assertIn("Matched 'This is [not] good' -> 'This is very good'", msgs)
 
 
 class TextSampleAdminTests(TestCase):
