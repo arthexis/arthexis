@@ -233,6 +233,7 @@ class RFIDResource(resources.ModelResource):
 
 @admin.register(RFID)
 class RFIDAdmin(ImportExportModelAdmin):
+    change_list_template = "admin/accounts/rfid/change_list.html"
     resource_class = RFIDResource
     list_display = ("rfid", "accounts_display", "allowed", "added_on", "is_seed_data")
     actions = ["scan_rfids"]
