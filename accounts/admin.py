@@ -210,14 +210,14 @@ class CreditAdmin(admin.ModelAdmin):
 
 @admin.register(Brand)
 class BrandAdmin(admin.ModelAdmin):
-    fields = ("name", "is_seed_data")
-    list_display = ("name", "is_seed_data")
+    fields = ("name",)
+    list_display = ("name",)
 
 
 @admin.register(EVModel)
 class EVModelAdmin(admin.ModelAdmin):
-    fields = ("brand", "name", "is_seed_data")
-    list_display = ("name", "brand", "is_seed_data")
+    fields = ("brand", "name")
+    list_display = ("name", "brand")
     list_filter = ("brand",)
 
 
@@ -228,14 +228,14 @@ admin.site.register(Subscription)
 class RFIDResource(resources.ModelResource):
     class Meta:
         model = RFID
-        fields = ("rfid", "allowed", "is_seed_data")
+        fields = ("rfid", "allowed")
 
 
 @admin.register(RFID)
 class RFIDAdmin(ImportExportModelAdmin):
     change_list_template = "admin/accounts/rfid/change_list.html"
     resource_class = RFIDResource
-    list_display = ("rfid", "accounts_display", "allowed", "added_on", "is_seed_data")
+    list_display = ("rfid", "accounts_display", "allowed", "added_on")
     actions = ["scan_rfids"]
 
     def accounts_display(self, obj):

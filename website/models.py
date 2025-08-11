@@ -3,9 +3,6 @@ from django.contrib.sites.models import Site
 from django.apps import apps as django_apps
 from django.utils.text import slugify
 
-if not hasattr(Site, "is_seed_data"):
-    Site.add_to_class("is_seed_data", models.BooleanField(default=False))
-
 
 class Application(models.Model):
     name = models.CharField(max_length=100)

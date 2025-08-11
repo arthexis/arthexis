@@ -9,11 +9,9 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 from . import Credentials, DEFAULT_PACKAGE
-from .models import PackageConfig, TestLog, Todo, SeedData
+from .models import PackageConfig, TestLog, Todo
 from .utils import create_todos_from_comments
 from . import utils
-from accounts.models import RFID
-from pathlib import Path
 
 
 class CredentialsTests(SimpleTestCase):
@@ -162,20 +160,3 @@ class TodoImportTests(TestCase):
             self.assertEqual(Todo.objects.count(), 1)
 
 
-class SeedDataTests(TestCase):
-    def tearDown(self):
-        # Clean up generated files
-        seed_dir = Path('release/seed_data')
-        for p in seed_dir.glob('*.json'):
-            p.unlink()
-        Path('release/fixtures/seed_data.json').write_text('[]')
-
-    def test_snapshot_and_install(self):
-        RFID.objects.create(rfid='00aa11bb', is_seed_data=True)
-        seed = SeedData.create_snapshot()
-        self.assertTrue(seed.path.exists())
-        RFID.objects.all().delete()
-        self.assertEqual(RFID.objects.count(), 0)
-        seed.install()
-        self.assertEqual(RFID.objects.count(), 1)
-        seed.delete()

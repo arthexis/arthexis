@@ -41,7 +41,6 @@ class ChargerAdmin(admin.ModelAdmin):
         "last_heartbeat",
         "last_meter_values",
         "last_path",
-        "is_seed_data",
     )
     list_display = (
         "charger_id",
@@ -53,7 +52,6 @@ class ChargerAdmin(admin.ModelAdmin):
         "test_link",
         "log_link",
         "status_link",
-        "is_seed_data",
     )
     search_fields = ("charger_id", "name")
     actions = ["purge_data", "delete_selected"]
