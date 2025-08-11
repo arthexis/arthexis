@@ -87,14 +87,13 @@ def run_database_tasks() -> None:
 
 
 def run_git_tasks() -> None:
-    """Commit and push auto-generated migrations."""
+    """Commit auto-generated migrations without pushing."""
     proc = subprocess.run(
         ["git", "status", "--porcelain"], capture_output=True, text=True
     )
     if proc.stdout.strip():
         subprocess.run(["git", "add", "-A"], check=False)
         subprocess.run(["git", "commit", "-m", "Auto migrations"], check=False)
-        subprocess.run(["git", "push"], check=False)
 
 
 TASKS = {"database": run_database_tasks, "git": run_git_tasks}
