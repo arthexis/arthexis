@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
 from pathlib import Path
 
 import django
@@ -86,18 +85,7 @@ def run_database_tasks() -> None:
     call_command("register_site_apps")
 
 
-def run_git_tasks() -> None:
-    """Commit and push auto-generated migrations."""
-    proc = subprocess.run(
-        ["git", "status", "--porcelain"], capture_output=True, text=True
-    )
-    if proc.stdout.strip():
-        subprocess.run(["git", "add", "-A"], check=False)
-        subprocess.run(["git", "commit", "-m", "Auto migrations"], check=False)
-        subprocess.run(["git", "push"], check=False)
-
-
-TASKS = {"database": run_database_tasks, "git": run_git_tasks}
+TASKS = {"database": run_database_tasks}
 
 
 def main(selected: list[str] | None = None) -> None:

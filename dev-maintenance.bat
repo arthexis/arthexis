@@ -19,4 +19,4 @@ if exist requirements.txt (
         echo %REQ_HASH%>requirements.md5
     )
 )
-%VENV%\Scripts\python.exe dev_maintenance.py database git
+%VENV%\Scripts\python.exe dev_maintenance.py database
