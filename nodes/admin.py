@@ -21,7 +21,7 @@ from .models import (
     Recipe,
     Step,
     TextSample,
-    Pattern,
+    TextPattern,
 )
 
 
@@ -230,10 +230,10 @@ class TextSampleAdmin(admin.ModelAdmin):
     short_content.short_description = "Content"
 
 
-@admin.register(Pattern)
-class PatternAdmin(admin.ModelAdmin):
+@admin.register(TextPattern)
+class TextPatternAdmin(admin.ModelAdmin):
     list_display = ("mask", "priority")
-    actions = ["scan_latest_sample"]
+    actions = ["scan_latest_sample", "test_clipboard"]
 
     @admin.action(description="Scan latest sample")
     def scan_latest_sample(self, request, queryset):
@@ -241,16 +241,13 @@ class PatternAdmin(admin.ModelAdmin):
         if not sample:
             self.message_user(request, "No samples available.", level=messages.WARNING)
             return
-        for pattern in Pattern.objects.order_by("-priority", "id"):
-            substitutions = pattern.match(sample.content)
-            if substitutions is not None:
-                if substitutions:
-                    details = ", ".join(
-                        f"[{k}] -> '{v}'" for k, v in substitutions.items()
-                    )
-                    msg = f"Matched '{pattern.mask}' with substitutions: {details}"
+        for pattern in TextPattern.objects.order_by("-priority", "id"):
+            result = pattern.match(sample.content)
+            if result is not None:
+                if result != pattern.mask:
+                    msg = f"Matched '{pattern.mask}' -> '{result}'"
                 else:
-                    msg = f"Matched '{pattern.mask}' with no substitutions"
+                    msg = f"Matched '{pattern.mask}'"
                 self.message_user(request, msg, level=messages.SUCCESS)
                 return
         self.message_user(
@@ -258,3 +255,26 @@ class PatternAdmin(admin.ModelAdmin):
             "No pattern matched the latest sample.",
             level=messages.INFO,
         )
+
+    @admin.action(description="Test against clipboard")
+    def test_clipboard(self, request, queryset):
+        try:
+            content = pyperclip.paste()
+        except PyperclipException as exc:  # pragma: no cover - depends on OS clipboard
+            self.message_user(request, f"Clipboard error: {exc}", level=messages.ERROR)
+            return
+        if not content:
+            self.message_user(request, "Clipboard is empty.", level=messages.INFO)
+            return
+        for pattern in queryset:
+            result = pattern.match(content)
+            if result is not None:
+                if result != pattern.mask:
+                    msg = f"Matched '{pattern.mask}' -> '{result}'"
+                else:
+                    msg = f"Matched '{pattern.mask}'"
+                self.message_user(request, msg, level=messages.SUCCESS)
+            else:
+                self.message_user(
+                    request, f"No match for '{pattern.mask}'", level=messages.INFO
+                )

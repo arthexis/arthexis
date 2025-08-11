@@ -233,7 +233,7 @@ class TextSample(models.Model):
         return str(self.name)
 
 
-class Pattern(models.Model):
+class TextPattern(models.Model):
     """Text mask with optional sigils used to match against ``TextSample`` content."""
 
     mask = models.TextField()
@@ -248,19 +248,21 @@ class Pattern(models.Model):
         return self.mask
 
     def match(self, text: str):
-        """Return mapping of sigils to matched text if this pattern matches ``text``.
+        """Return the mask with sigils replaced if ``text`` matches it.
 
-        ``None`` is returned when no match is found. A ``dict`` mapping sigil names
-        to their substitutions is returned for successful matches. Sigils are
-        defined with square brackets, e.g. ``"Hello [world]"``.
+        ``None`` is returned when no match is found. When a match occurs, the
+        returned string is the original mask with each ``[sigil]`` replaced by the
+        corresponding text from ``text``. Multiple sigils are supported.
         """
 
         regex, names = self._compile_regex()
         match = re.search(regex, text, re.DOTALL)
         if not match:
             return None
-        groups = match.groups()
-        return {name: value for name, value in zip(names, groups)}
+        result = self.mask
+        for name, value in zip(names, match.groups()):
+            result = result.replace(f"[{name}]", value)
+        return result
 
     def _compile_regex(self):
         """Compile the mask into a regex pattern and return pattern and sigils."""
@@ -268,10 +270,12 @@ class Pattern(models.Model):
         pattern_parts = []
         sigil_names = []
         last_index = 0
-        for match in self.SIGIL_RE.finditer(self.mask):
+        matches = list(self.SIGIL_RE.finditer(self.mask))
+        for idx, match in enumerate(matches):
             pattern_parts.append(re.escape(self.mask[last_index : match.start()]))
             sigil_names.append(match.group(1))
-            pattern_parts.append("(.*?)")
+            part = "(.*)" if idx == len(matches) - 1 else "(.*?)"
+            pattern_parts.append(part)
             last_index = match.end()
         pattern_parts.append(re.escape(self.mask[last_index:]))
         regex = "".join(pattern_parts)
