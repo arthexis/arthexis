@@ -72,6 +72,10 @@ document.addEventListener('DOMContentLoaded', function () {
 #nav-sidebar .module.collapsed table {
     display: none;
 }
+.form-row > div:only-child input[type="text"],
+.form-row > div:only-child textarea {
+    width: 150% !important;
+}
 </style>
 {% endblock %}
 {% block branding %}
