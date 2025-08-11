@@ -43,8 +43,8 @@ class NodeAdmin(admin.ModelAdmin):
         "badge_color",
         "enable_public_api",
         "public_endpoint",
-        "enable_clipboard_polling",
-        "enable_screenshot_polling",
+        "clipboard_polling",
+        "screenshot_polling",
         "last_seen",
     )
     search_fields = ("hostname", "address")

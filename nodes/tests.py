@@ -114,25 +114,25 @@ class NodeTests(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 404)
 
-    def test_enable_clipboard_polling_creates_task(self):
+    def test_clipboard_polling_creates_task(self):
         node = Node.objects.create(hostname="clip", address="127.0.0.1", port=9000)
         task_name = f"poll_clipboard_node_{node.pk}"
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
-        node.enable_clipboard_polling = True
+        node.clipboard_polling = True
         node.save()
         self.assertTrue(PeriodicTask.objects.filter(name=task_name).exists())
-        node.enable_clipboard_polling = False
+        node.clipboard_polling = False
         node.save()
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
 
-    def test_enable_screenshot_polling_creates_task(self):
+    def test_screenshot_polling_creates_task(self):
         node = Node.objects.create(hostname="shot", address="127.0.0.1", port=9100)
         task_name = f"capture_screenshot_node_{node.pk}"
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
-        node.enable_screenshot_polling = True
+        node.screenshot_polling = True
         node.save()
         self.assertTrue(PeriodicTask.objects.filter(name=task_name).exists())
-        node.enable_screenshot_polling = False
+        node.screenshot_polling = False
         node.save()
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
 
