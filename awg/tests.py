@@ -117,3 +117,12 @@ class CalculatorTemplateTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["form"]["meters"], "10")
         self.assertIn("value=\"10\"", resp.content.decode())
+
+    def test_all_fields_optional(self):
+        from django.forms import modelform_factory
+
+        Form = modelform_factory(CalculatorTemplate, fields="__all__")
+        form = Form({})
+        self.assertTrue(form.is_valid(), form.errors)
+        tmpl = form.save()
+        self.assertIsNone(tmpl.meters)

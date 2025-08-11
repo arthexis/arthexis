@@ -47,17 +47,17 @@ class ConduitFill(models.Model):
 class CalculatorTemplate(models.Model):
     """Template containing parameters for an AWG calculation."""
 
-    name = models.CharField(max_length=100)
-    meters = models.PositiveIntegerField()
-    amps = models.PositiveIntegerField(default=40)
-    volts = models.PositiveIntegerField(default=220)
-    material = models.CharField(max_length=2, default="cu")
+    name = models.CharField(max_length=100, blank=True)
+    meters = models.PositiveIntegerField(null=True, blank=True)
+    amps = models.PositiveIntegerField(default=40, null=True, blank=True)
+    volts = models.PositiveIntegerField(default=220, null=True, blank=True)
+    material = models.CharField(max_length=2, default="cu", blank=True)
     max_awg = models.CharField(max_length=5, blank=True)
-    max_lines = models.PositiveIntegerField(default=1)
-    phases = models.PositiveIntegerField(default=2)
+    max_lines = models.PositiveIntegerField(default=1, null=True, blank=True)
+    phases = models.PositiveIntegerField(default=2, null=True, blank=True)
     temperature = models.PositiveIntegerField(null=True, blank=True)
     conduit = models.CharField(max_length=10, blank=True)
-    ground = models.PositiveIntegerField(default=1)
+    ground = models.PositiveIntegerField(default=1, null=True, blank=True)
 
     def __str__(self):  # pragma: no cover - simple representation
         return self.name
