@@ -24,4 +24,4 @@ if [ -f requirements.txt ]; then
   fi
 fi
 
-"$PYTHON" dev_maintenance.py database git
+"$PYTHON" dev_maintenance.py database
