@@ -1,7 +1,11 @@
-from django import forms
-from django.contrib import admin
+import xmlrpc.client
+from urllib.parse import urljoin
 
-from .models import BskyAccount
+from django import forms
+from django.contrib import admin, messages
+
+from config.offline import requires_network
+from .models import BskyAccount, Instance
 
 
 class BskyAccountAdminForm(forms.ModelForm):
@@ -37,14 +41,26 @@ class BskyAccountAdminForm(forms.ModelForm):
 class BskyAccountAdmin(admin.ModelAdmin):
     form = BskyAccountAdminForm
     list_display = ("user", "handle")
+    actions = ["test_credentials"]
 
-from django.contrib import messages
-import xmlrpc.client
-from urllib.parse import urljoin
+    @requires_network
+    def test_credentials(self, request, queryset):
+        for account in queryset:
+            from atproto import Client
 
-from .models import Instance
-from config.offline import requires_network
+            try:
+                client = Client()
+                client.login(account.handle, account.app_password)
+            except Exception as exc:  # pragma: no cover - relies on SDK errors
+                self.message_user(
+                    request,
+                    f"{account.handle}: {exc}",
+                    level=messages.ERROR,
+                )
+            else:
+                self.message_user(request, f"{account.handle}: success")
 
+    test_credentials.short_description = "Test credentials"
 
 @admin.register(Instance)
 class InstanceAdmin(admin.ModelAdmin):
