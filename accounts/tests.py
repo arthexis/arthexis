@@ -44,6 +44,24 @@ class DefaultAdminTests(TestCase):
             backend.authenticate(remote, username="admin", password="admin")
         )
 
+    def test_admin_respects_forwarded_for(self):
+        backend = LocalhostAdminBackend()
+
+        req = HttpRequest()
+        req.META["REMOTE_ADDR"] = "10.0.0.1"
+        req.META["HTTP_X_FORWARDED_FOR"] = "127.0.0.1"
+        self.assertIsNotNone(
+            backend.authenticate(req, username="admin", password="admin"),
+            "X-Forwarded-For should permit allowed IP",
+        )
+
+        blocked = HttpRequest()
+        blocked.META["REMOTE_ADDR"] = "10.0.0.1"
+        blocked.META["HTTP_X_FORWARDED_FOR"] = "8.8.8.8"
+        self.assertIsNone(
+            backend.authenticate(blocked, username="admin", password="admin")
+        )
+
 
 class RFIDLoginTests(TestCase):
     def setUp(self):
