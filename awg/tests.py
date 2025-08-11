@@ -68,6 +68,17 @@ class AWGCalculatorTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "No Suitable Cable Found")
 
+    def test_none_query_params_use_defaults(self):
+        url = (
+            reverse("awg:calculator")
+            + "?meters=None&amps=None&volts=None&material=&max_lines=None&phases=None&ground=None"
+        )
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('value="10"', resp.content.decode())
+        self.assertIn('value="40"', resp.content.decode())
+        self.assertIn('value="220"', resp.content.decode())
+
 
 class CalculatorTemplateTests(TestCase):
     def setUp(self):
@@ -121,6 +132,11 @@ class CalculatorTemplateTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["form"]["meters"], "10")
         self.assertIn("value=\"10\"", resp.content.decode())
+
+    def test_get_absolute_url_omits_none_values(self):
+        tmpl = CalculatorTemplate.objects.create(name="blank")
+        url = tmpl.get_absolute_url()
+        self.assertEqual(url, reverse("awg:calculator"))
 
     def test_all_fields_optional(self):
         from django.forms import modelform_factory

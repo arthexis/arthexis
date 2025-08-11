@@ -82,15 +82,19 @@ class CalculatorTemplate(models.Model):
         from django.urls import reverse
         from urllib.parse import urlencode
 
-        params: dict[str, object] = {
-            "meters": self.meters,
-            "amps": self.amps,
-            "volts": self.volts,
-            "material": self.material,
-            "max_lines": self.max_lines,
-            "phases": self.phases,
-            "ground": self.ground,
-        }
+        params: dict[str, object] = {}
+        for field in (
+            "meters",
+            "amps",
+            "volts",
+            "material",
+            "max_lines",
+            "phases",
+            "ground",
+        ):
+            value = getattr(self, field)
+            if value not in (None, ""):
+                params[field] = value
         if self.max_awg:
             params["max_awg"] = self.max_awg
         if self.temperature is not None:
@@ -98,4 +102,5 @@ class CalculatorTemplate(models.Model):
         if self.conduit:
             params["conduit"] = self.conduit
 
-        return f"{reverse('awg:calculator')}?{urlencode(params)}"
+        base = reverse("awg:calculator")
+        return f"{base}?{urlencode(params)}" if params else base
