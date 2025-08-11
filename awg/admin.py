@@ -6,7 +6,13 @@ from .models import CableSize, ConduitFill, CalculatorTemplate
 
 @admin.register(CableSize)
 class CableSizeAdmin(admin.ModelAdmin):
-    list_display = ("awg_size", "material", "line_num")
+    list_display = (
+        "awg_size",
+        "material",
+        "area_kcmil",
+        "amps_60c",
+        "line_num",
+    )
     search_fields = ("awg_size", "material")
 
 
