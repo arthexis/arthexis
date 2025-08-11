@@ -227,7 +227,8 @@ def find_awg(
 @landing("AWG Calculator")
 def calculator(request):
     """Display the AWG calculator form and results using a template."""
-    form = request.POST or request.GET
+    form_data = request.POST or request.GET
+    form = {k: v for k, v in form_data.items() if v not in (None, "", "None")}
     default = CalculatorTemplate.objects.filter(name="EV Charger").first()
     if not form and default:
         form = {
