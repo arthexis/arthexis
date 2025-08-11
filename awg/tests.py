@@ -146,3 +146,21 @@ class CalculatorTemplateTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
         tmpl = form.save()
         self.assertIsNone(tmpl.meters)
+
+    def test_admin_form_uses_dropdowns(self):
+        from django import forms as dj_forms
+        from awg.admin import CalculatorTemplateForm
+
+        form = CalculatorTemplateForm()
+        self.assertIsInstance(form.fields["material"], dj_forms.ChoiceField)
+        self.assertIsInstance(form.fields["material"].widget, dj_forms.Select)
+        self.assertIn(("cu", "Copper (cu)"), form.fields["material"].choices)
+
+        self.assertEqual(
+            form.fields["max_lines"].choices,
+            [(1, "1"), (2, "2"), (3, "3"), (4, "4")],
+        )
+        self.assertIsInstance(form.fields["max_lines"].widget, dj_forms.Select)
+
+        self.assertIn((2, "AC Two Phases (2)"), form.fields["phases"].choices)
+        self.assertEqual(form.fields["ground"].choices, [(1, "1"), (0, "0")])
