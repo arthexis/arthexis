@@ -36,14 +36,7 @@ source .venv/bin/activate
 pip install --upgrade pip
 
 REQ_FILE="requirements.txt"
-MD5_FILE="requirements.md5"
-NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
-if [ ! -f "$MD5_FILE" ] || [ "$NEW_HASH" != "$(cat "$MD5_FILE")" ]; then
-    pip install -r "$REQ_FILE"
-    echo "$NEW_HASH" > "$MD5_FILE"
-else
-    echo "Requirements unchanged. Skipping installation."
-fi
+pip install -r "$REQ_FILE"
 
 deactivate
 
