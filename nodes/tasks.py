@@ -1,5 +1,6 @@
 import logging
 import socket
+import os
 from pathlib import Path
 
 import pyperclip
@@ -26,7 +27,10 @@ def sample_clipboard() -> None:
     if TextSample.objects.filter(content=content).exists():
         logger.info("Duplicate clipboard content; sample not created")
         return
-    TextSample.objects.create(content=content, automated=True)
+    hostname = socket.gethostname()
+    port = int(os.environ.get("PORT", 8000))
+    node = Node.objects.filter(hostname=hostname, port=port).first()
+    TextSample.objects.create(content=content, node=node, automated=True)
 
 
 @shared_task

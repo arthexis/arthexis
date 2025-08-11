@@ -189,8 +189,8 @@ class NginxConfigAdmin(admin.ModelAdmin):
 
 @admin.register(TextSample)
 class TextSampleAdmin(admin.ModelAdmin):
-    list_display = ("name", "created_at", "short_content", "automated")
-    readonly_fields = ("created_at", "name")
+    list_display = ("name", "node", "created_at", "short_content", "automated")
+    readonly_fields = ("created_at", "name", "automated")
     change_list_template = "admin/nodes/textsample/change_list.html"
 
     def get_urls(self):
@@ -218,7 +218,10 @@ class TextSampleAdmin(admin.ModelAdmin):
                 request, "Duplicate sample not created.", level=messages.INFO
             )
             return redirect("..")
-        TextSample.objects.create(content=content)
+        hostname = socket.gethostname()
+        port = int(request.get_port())
+        node = Node.objects.filter(hostname=hostname, port=port).first()
+        TextSample.objects.create(content=content, node=node)
         self.message_user(
             request, "Text sample added from clipboard.", level=messages.SUCCESS
         )
