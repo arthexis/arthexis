@@ -26,15 +26,17 @@ from .backends import LocalhostAdminBackend
 
 
 class DefaultAdminTests(TestCase):
-    def test_admin_created_and_localhost_only(self):
+    def test_admin_created_and_local_only(self):
         self.assertTrue(User.objects.filter(username="admin").exists())
         backend = LocalhostAdminBackend()
 
-        local = HttpRequest()
-        local.META["REMOTE_ADDR"] = "127.0.0.1"
-        self.assertIsNotNone(
-            backend.authenticate(local, username="admin", password="admin")
-        )
+        for ip in ["127.0.0.1", "192.168.1.5", "10.42.0.8"]:
+            req = HttpRequest()
+            req.META["REMOTE_ADDR"] = ip
+            self.assertIsNotNone(
+                backend.authenticate(req, username="admin", password="admin"),
+                f"{ip} should allow admin login",
+            )
 
         remote = HttpRequest()
         remote.META["REMOTE_ADDR"] = "10.0.0.1"
