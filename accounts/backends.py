@@ -2,6 +2,7 @@
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
+import ipaddress
 
 from .models import Account
 
@@ -34,15 +35,25 @@ class RFIDBackend:
 class LocalhostAdminBackend(ModelBackend):
     """Allow default admin credentials only from local networks."""
 
+    _ALLOWED_NETWORKS = [
+        ipaddress.ip_network("::1/128"),
+        ipaddress.ip_network("127.0.0.0/8"),
+        ipaddress.ip_network("192.168.0.0/16"),
+        ipaddress.ip_network("10.42.0.0/16"),
+    ]
+
     def authenticate(self, request, username=None, password=None, **kwargs):
         if username == "admin" and password == "admin" and request is not None:
-            remote = request.META.get("REMOTE_ADDR", "")
-            allowed = (
-                remote == "::1"
-                or remote.startswith("127.")
-                or remote.startswith("192.168.")
-                or remote.startswith("10.42.")
-            )
+            forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
+            if forwarded:
+                remote = forwarded.split(",")[0].strip()
+            else:
+                remote = request.META.get("REMOTE_ADDR", "")
+            try:
+                ip = ipaddress.ip_address(remote)
+            except ValueError:
+                return None
+            allowed = any(ip in net for net in self._ALLOWED_NETWORKS)
             if not allowed:
                 return None
         return super().authenticate(request, username, password, **kwargs)
