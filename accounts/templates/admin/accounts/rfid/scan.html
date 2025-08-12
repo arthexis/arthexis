@@ -10,18 +10,13 @@ async function waitScan(){
         const p = document.getElementById('status');
         if(data.error){
             p.textContent = data.error;
-            return;
-        }
-        if(data.created){
-            p.textContent = `Registered ${data.rfid}`;
-        } else {
-            p.textContent = `${data.rfid} already registered`;
+        } else if(data.rfid){
+            p.textContent = `Scanned ${data.rfid}`;
         }
     } catch(err){
         document.getElementById('status').textContent = err;
-        return;
     }
-    waitScan();
+    setTimeout(waitScan, 200);
 }
 waitScan();
 </script>
