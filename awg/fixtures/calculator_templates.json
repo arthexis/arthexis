@@ -13,7 +13,8 @@
       "phases": 2,
       "temperature": 60,
       "conduit": "emt",
-      "ground": 1
+      "ground": 1,
+      "show_in_website": true
     }
   }
 ]

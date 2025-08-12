@@ -100,6 +100,16 @@ class AWGCalculatorTests(TestCase):
         self.assertContains(resp, tmpl.name)
         self.assertContains(resp, tmpl.get_absolute_url().replace("&", "&amp;"))
 
+    def test_template_url_defaults_dropdowns(self):
+        tmpl = CalculatorTemplate.objects.get(pk=1)
+        resp = self.client.get(tmpl.get_absolute_url())
+        self.assertEqual(resp.status_code, 200)
+        form = resp.context["form"]
+        self.assertEqual(form["material"], "cu")
+        self.assertEqual(form["max_lines"], "1")
+        self.assertEqual(form["phases"], "2")
+        self.assertEqual(form["ground"], "1")
+
 
 class CalculatorTemplateTests(TestCase):
     def setUp(self):

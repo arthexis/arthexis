@@ -10,6 +10,7 @@ from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
 from datetime import timedelta
 from urllib.parse import urljoin
+from django.contrib.contenttypes.models import ContentType
 
 
 class Address(models.Model):
@@ -470,6 +471,26 @@ class Subscription(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.account.user} -> {self.product}"
+
+
+class AdminHistory(models.Model):
+    """Record of recently visited admin changelists for a user."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="admin_history"
+    )
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    url = models.TextField()
+    visited_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-visited_at"]
+        unique_together = ("user", "url")
+
+    @property
+    def admin_label(self) -> str:  # pragma: no cover - simple representation
+        model = self.content_type.model_class()
+        return model._meta.verbose_name_plural if model else self.content_type.name
 
 
 # Ensure each RFID can only be linked to one account
