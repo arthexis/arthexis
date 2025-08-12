@@ -233,7 +233,7 @@ def calculator(request):
     if request.method == "POST" and request.POST.get("meters"):
         max_awg = request.POST.get("max_awg") or None
         conduit_field = request.POST.get("conduit")
-        conduit_arg = None if conduit_field in (None, "", "none", "None") else conduit_field
+        conduit_arg = None if conduit_field in (None, "") else conduit_field
         try:
             result = find_awg(
                 meters=request.POST.get("meters"),

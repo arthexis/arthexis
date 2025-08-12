@@ -5,7 +5,7 @@
 <h1>Cable & Conduit Calculator</h1>
 <form method="post">
   {% csrf_token %}
-  <div class="row g-3 mb-3">
+  <div class="row g-4 mb-3">
     <div class="col-lg-3">
       <div class="mb-3">
         <label class="form-label" for="meters">Meters:</label>
@@ -55,7 +55,6 @@
           <option value="imc" {% if form.conduit == "imc" %}selected{% endif %}>IMC</option>
           <option value="rmc" {% if form.conduit == "rmc" %}selected{% endif %}>RMC</option>
           <option value="fmc" {% if form.conduit == "fmc" %}selected{% endif %}>FMC</option>
-          <option value="none" {% if form.conduit == "none" %}selected{% endif %}>None</option>
         </select>
       </div>
       <div class="mb-3">
@@ -84,16 +83,19 @@
     <div class="col-lg-6 d-flex flex-column">
       {% if not result and not error and not no_cable %}
       <div class="mb-3">
-        <button type="submit" class="btn btn-primary w-100">Calculate</button>
+        <button type="submit" class="btn btn-primary w-100 fs-4">Calculate</button>
       </div>
       {% if templates %}
       <div class="mb-3">
         <p>Or try a pre-loaded template:</p>
-        <div class="d-flex flex-column">
+        <ul>
           {% for t in templates %}
-          <a href="{{ t.get_absolute_url }}" class="text-decoration-none">{{ t.name }}</a>
+          <li>
+            <a href="{{ t.get_absolute_url }}" class="text-decoration-none">{{ t.name }}</a>
+            {% if t.description %}- {{ t.description }}{% endif %}
+          </li>
           {% endfor %}
-        </div>
+        </ul>
       </div>
       {% endif %}
       {% else %}
@@ -125,7 +127,7 @@
       </div>
       {% endif %}
       <div class="mt-auto mb-3">
-        <button type="submit" class="btn btn-primary w-100">Calculate Again</button>
+        <button type="submit" class="btn btn-primary w-100 fs-4">Calculate Again</button>
       </div>
       {% endif %}
     </div>

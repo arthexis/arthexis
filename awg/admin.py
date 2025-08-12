@@ -54,7 +54,6 @@ class CalculatorTemplateForm(forms.ModelForm):
             ("imc", "IMC"),
             ("rmc", "RMC"),
             ("fmc", "FMC"),
-            ("none", "None"),
         ],
         required=False,
     )
@@ -74,6 +73,7 @@ class CalculatorTemplateAdmin(admin.ModelAdmin):
     form = CalculatorTemplateForm
     list_display = (
         "name",
+        "description",
         "show_in_website",
         "meters",
         "amps",
@@ -85,6 +85,7 @@ class CalculatorTemplateAdmin(admin.ModelAdmin):
     readonly_fields = ("calculator_link",)
     fields = (
         "name",
+        "description",
         "show_in_website",
         "meters",
         "amps",
