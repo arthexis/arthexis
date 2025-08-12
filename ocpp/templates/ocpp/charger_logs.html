@@ -2,10 +2,50 @@
 
 {% block title %}Log for {{ charger.name|default:charger.charger_id }}{% endblock %}
 
+{% block extra_head %}
+<style>
+  #log {
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <h1>Log for {{ charger.name|default:charger.charger_id }}</h1>
-<pre class="p-3 border rounded bg-body text-body">
+<div class="form-check mb-2">
+  <input class="form-check-input" type="checkbox" id="auto-reload">
+  <label class="form-check-label" for="auto-reload">Auto reload</label>
+</div>
+<pre id="log" class="p-3 border rounded bg-body text-body">
 {% for entry in log %}{{ entry }}
 {% endfor %}
 </pre>
+<script>
+  const logEl = document.getElementById('log');
+  function scrollToBottom() {
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function fetchLog() {
+    fetch(window.location.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(resp => resp.text())
+      .then(html => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const newLog = doc.getElementById('log');
+        if (newLog) {
+          logEl.textContent = newLog.textContent;
+          scrollToBottom();
+        }
+      });
+  }
+  scrollToBottom();
+  let reloadTimer;
+  document.getElementById('auto-reload').addEventListener('change', function() {
+    if (this.checked) {
+      reloadTimer = setInterval(fetchLog, 3000);
+    } else if (reloadTimer) {
+      clearInterval(reloadTimer);
+    }
+  });
+</script>
 {% endblock %}
