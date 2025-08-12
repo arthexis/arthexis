@@ -139,16 +139,16 @@ class SiteAdminRegisterCurrentTests(TestCase):
         self.assertEqual(site.name, "testserver")
 
     @override_settings(ALLOWED_HOSTS=["127.0.0.1", "testserver"])
-    def test_register_current_ip_sets_localhost_name(self):
+    def test_register_current_ip_sets_website_name(self):
         resp = self.client.get(
             reverse("admin:website_siteproxy_register_current"), HTTP_HOST="127.0.0.1"
         )
         self.assertRedirects(resp, reverse("admin:website_siteproxy_changelist"))
         site = Site.objects.get(domain="127.0.0.1")
-        self.assertEqual(site.name, "localhost")
+        self.assertEqual(site.name, "website")
 
 
-class AdminBadgesLocalhostTests(TestCase):
+class AdminBadgesWebsiteTests(TestCase):
     def setUp(self):
         self.client = Client()
         User = get_user_model()
@@ -157,20 +157,20 @@ class AdminBadgesLocalhostTests(TestCase):
         )
         self.client.force_login(self.admin)
         Site.objects.update_or_create(
-            id=1, defaults={"name": "localhost", "domain": "127.0.0.1"}
+            id=1, defaults={"name": "website", "domain": "127.0.0.1"}
         )
 
     @override_settings(ALLOWED_HOSTS=["127.0.0.1", "testserver"])
-    def test_badge_shows_localhost_for_ip_domain(self):
+    def test_badge_shows_website_for_ip_domain(self):
         resp = self.client.get(reverse("admin:index"), HTTP_HOST="127.0.0.1")
-        self.assertContains(resp, "SITE: localhost")
+        self.assertContains(resp, "SITE: website")
 
 
 class NavAppsTests(TestCase):
     def setUp(self):
         self.client = Client()
         site, _ = Site.objects.update_or_create(
-            id=1, defaults={"domain": "127.0.0.1", "name": "localhost"}
+            id=1, defaults={"domain": "127.0.0.1", "name": "website"}
         )
         app = Application.objects.create(name="Readme")
         SiteApplication.objects.create(
