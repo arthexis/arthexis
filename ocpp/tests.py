@@ -91,6 +91,56 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_transaction_created_from_meter_values(self):
+        communicator = WebsocketCommunicator(application, "/NOSTART/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [
+                2,
+                "1",
+                "MeterValues",
+                {
+                    "transactionId": 99,
+                    "meterValue": [
+                        {
+                            "timestamp": "2025-01-01T00:00:00Z",
+                            "sampledValue": [
+                                {
+                                    "value": "1000",
+                                    "measurand": "Energy.Active.Import.Register",
+                                    "unit": "Wh",
+                                }
+                            ],
+                        }
+                    ],
+                },
+            ]
+        )
+        await communicator.receive_json_from()
+
+        tx = await database_sync_to_async(Transaction.objects.get)(
+            pk=99, charger__charger_id="NOSTART"
+        )
+        self.assertEqual(tx.meter_start, 1000)
+        self.assertIsNone(tx.meter_stop)
+
+        await communicator.send_json_to(
+            [
+                2,
+                "2",
+                "StopTransaction",
+                {"transactionId": 99, "meterStop": 1500},
+            ]
+        )
+        await communicator.receive_json_from()
+        await database_sync_to_async(tx.refresh_from_db)()
+        self.assertEqual(tx.meter_stop, 1500)
+        self.assertIsNotNone(tx.stop_time)
+
+        await communicator.disconnect()
+
 
 class ChargerLandingTests(TestCase):
     def test_reference_created_and_page_renders(self):
@@ -411,8 +461,10 @@ class MeterReadingTests(TransactionTestCase):
         await communicator.receive_json_from()
 
         reading = await database_sync_to_async(MeterReading.objects.get)(charger__charger_id="MR1")
-        self.assertIsNone(reading.transaction)
+        self.assertEqual(reading.transaction_id, 100)
         self.assertEqual(str(reading.value), "2.749")
+        tx = await database_sync_to_async(Transaction.objects.get)(pk=100, charger__charger_id="MR1")
+        self.assertEqual(tx.meter_start, 2749)
 
         await communicator.disconnect()
 
