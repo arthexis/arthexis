@@ -216,11 +216,19 @@ class SimulatorAdminTests(TestCase):
         self.assertContains(resp, "ws://h:1111/SIMY/")
 
     def test_as_config_includes_custom_fields(self):
-        sim = Simulator.objects.create(name="SIM3", cp_path="S3", interval=3.5,
-                                      kwh_max=70)
+        sim = Simulator.objects.create(
+            name="SIM3",
+            cp_path="S3",
+            interval=3.5,
+            kwh_max=70,
+            duration=500,
+            pre_charge_delay=5,
+        )
         cfg = sim.as_config()
         self.assertEqual(cfg.interval, 3.5)
         self.assertEqual(cfg.kwh_max, 70)
+        self.assertEqual(cfg.duration, 500)
+        self.assertEqual(cfg.pre_charge_delay, 5)
 
     async def test_unknown_charger_auto_registered(self):
         communicator = WebsocketCommunicator(application, "/NEWCHG/")
@@ -437,6 +445,7 @@ class ChargePointSimulatorTests(TransactionTestCase):
                 interval=0.05,
                 kwh_min=0.1,
                 kwh_max=0.2,
+                pre_charge_delay=0.0,
             )
             sim = ChargePointSimulator(cfg)
             await sim._run_session()
@@ -507,6 +516,7 @@ class ChargePointSimulatorTests(TransactionTestCase):
             interval=0.05,
             kwh_min=0.1,
             kwh_max=0.2,
+            pre_charge_delay=0.0,
         )
         store.register_log_name(cfg.cp_path, "SimStart")
         try:
