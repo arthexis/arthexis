@@ -7,6 +7,7 @@ import socketserver
 import base64
 import os
 import tempfile
+import subprocess
 
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -236,6 +237,27 @@ class SystemdUnitTests(TestCase):
         parsed = SystemdUnit.parse_config("arthexis", text)
         self.assertEqual(parsed.exec_start, "/home/arthe/arthexis/start.sh")
 
+    def test_installed_and_enabled_flags(self):
+        unit = SystemdUnit.objects.create(
+            name="demo",
+            description="demo service",
+            exec_start="/bin/true",
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with override_settings(SYSTEMD_UNIT_ROOT=tmpdir):
+                self.assertFalse(unit.is_installed)
+                (Path(tmpdir) / "demo.service").write_text("test")
+                self.assertTrue(unit.is_installed)
+                with patch("nodes.models.subprocess.run") as mock_run:
+                    mock_run.return_value = subprocess.CompletedProcess(
+                        ["systemctl"], 0
+                    )
+                    self.assertTrue(unit.is_enabled)
+                    mock_run.side_effect = subprocess.CalledProcessError(
+                        1, ["systemctl"]
+                    )
+                    self.assertFalse(unit.is_enabled)
+
 
 class SystemdUnitInstallCommandTests(TestCase):
     def test_install_writes_file_and_calls_systemctl(self):
@@ -249,19 +271,18 @@ class SystemdUnitInstallCommandTests(TestCase):
             with override_settings(SYSTEMD_UNIT_ROOT=tmpdir):
                 with patch("subprocess.run") as mock_run:
                     call_command("install_systemd_unit", unit.name)
-
-        service_path = Path(tmpdir) / "demo.service"
-        self.assertTrue(service_path.exists())
-        content = service_path.read_text()
-        self.assertIn("ExecStart=/bin/true", content)
-        mock_run.assert_has_calls(
-            [
-                call(["systemctl", "daemon-reload"], check=True),
-                call(["systemctl", "enable", unit.name], check=True),
-                call(["systemctl", "restart", unit.name], check=True),
-            ]
-        )
-        self.assertEqual(mock_run.call_count, 3)
+                service_path = Path(tmpdir) / "demo.service"
+                self.assertTrue(service_path.exists())
+                content = service_path.read_text()
+                self.assertIn("ExecStart=/bin/true", content)
+                mock_run.assert_has_calls(
+                    [
+                        call(["systemctl", "daemon-reload"], check=True),
+                        call(["systemctl", "enable", unit.name], check=True),
+                        call(["systemctl", "restart", unit.name], check=True),
+                    ]
+                )
+                self.assertEqual(mock_run.call_count, 3)
 
 
 class RecipeTests(TestCase):

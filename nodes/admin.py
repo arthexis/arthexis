@@ -196,7 +196,7 @@ class NginxConfigAdmin(admin.ModelAdmin):
 
 @admin.register(SystemdUnit)
 class SystemdUnitAdmin(admin.ModelAdmin):
-    list_display = ("name", "description", "exec_start")
+    list_display = ("name", "description", "exec_start", "installed", "enabled")
     fields = (
         "name",
         "description",
@@ -204,9 +204,11 @@ class SystemdUnitAdmin(admin.ModelAdmin):
         "user",
         "exec_start",
         "wanted_by",
+        "installed",
+        "enabled",
         "rendered_unit",
     )
-    readonly_fields = ("rendered_unit",)
+    readonly_fields = ("installed", "enabled", "rendered_unit")
 
     @admin.display(description="Generated unit")
     def rendered_unit(self, obj):
@@ -214,6 +216,14 @@ class SystemdUnitAdmin(admin.ModelAdmin):
             '<textarea readonly style="width:100%" rows="15">{}</textarea>',
             obj.config_text,
         )
+
+    @admin.display(boolean=True, description="Installed")
+    def installed(self, obj):
+        return obj.is_installed
+
+    @admin.display(boolean=True, description="Enabled")
+    def enabled(self, obj):
+        return obj.is_enabled
 
 
 @admin.register(TextSample)
