@@ -21,6 +21,7 @@ from .models import (
     NodeScreenshot,
     NodeMessage,
     NginxConfig,
+    SystemdUnit,
     Recipe,
     Step,
     TextPattern,
@@ -216,6 +217,22 @@ class NginxConfigTests(TestCase):
         finally:
             server.shutdown()
             server.server_close()
+
+
+class SystemdUnitTests(TestCase):
+    def test_render_and_parse(self):
+        unit = SystemdUnit(
+            name="arthexis",
+            description="arthexis.com",
+            documentation="https://arthexis.com",
+            user="arthe",
+            exec_start="/home/arthe/arthexis/start.sh",
+            wanted_by="default.target",
+        )
+        text = unit.render_unit()
+        self.assertIn("Description=arthexis.com", text)
+        parsed = SystemdUnit.parse_config("arthexis", text)
+        self.assertEqual(parsed.exec_start, "/home/arthe/arthexis/start.sh")
 
 
 class RecipeTests(TestCase):

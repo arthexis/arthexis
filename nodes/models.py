@@ -1,6 +1,7 @@
 from django.db import models
 import socket
 import re
+import configparser
 from django.utils.text import slugify
 import uuid
 
@@ -207,6 +208,67 @@ class NginxConfig(models.Model):
             except OSError:
                 continue
         return False
+
+
+class SystemdUnit(models.Model):
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Identifier for this unit (e.g., 'myservice')",
+    )
+    description = models.CharField(max_length=255, blank=True)
+    documentation = models.URLField(blank=True)
+    user = models.CharField(max_length=100, blank=True)
+    exec_start = models.CharField(max_length=255)
+    wanted_by = models.CharField(max_length=100, default="default.target")
+    config_text = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Systemd Unit Template"
+        verbose_name_plural = "Systemd Unit Templates"
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return self.name
+
+    def render_unit(self):
+        lines = [
+            "[Unit]",
+            f"Description={self.description}",
+        ]
+        if self.documentation:
+            lines.append(f"Documentation={self.documentation}")
+        lines += [
+            "",
+            "[Service]",
+        ]
+        if self.user:
+            lines.append(f"User={self.user}")
+        lines.append(f"ExecStart={self.exec_start}")
+        lines += [
+            "",
+            "[Install]",
+            f"WantedBy={self.wanted_by}",
+            "",
+        ]
+        return "\n".join(lines)
+
+    def save(self, *args, **kwargs):
+        self.config_text = self.render_unit()
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def parse_config(cls, name, text):
+        parser = configparser.ConfigParser()
+        parser.read_string(text)
+        return cls(
+            name=name,
+            description=parser.get("Unit", "Description", fallback=""),
+            documentation=parser.get("Unit", "Documentation", fallback=""),
+            user=parser.get("Service", "User", fallback=""),
+            exec_start=parser.get("Service", "ExecStart", fallback=""),
+            wanted_by=parser.get("Install", "WantedBy", fallback="default.target"),
+            config_text=text,
+        )
 
 
 class Recipe(models.Model):
