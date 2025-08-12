@@ -223,6 +223,7 @@ class RFIDResource(resources.ModelResource):
     class Meta:
         model = RFID
         fields = ("rfid", "allowed")
+        import_id_fields = ("rfid",)
 
 
 @admin.register(RFID)
