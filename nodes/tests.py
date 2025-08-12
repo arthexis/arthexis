@@ -1,18 +1,20 @@
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, call
 import socket
 import threading
 import http.server
 import socketserver
 import base64
 import os
+import tempfile
 
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
 from django_celery_beat.models import PeriodicTask
 from django.conf import settings
+from django.core.management import call_command
 
 from .admin import RecipeAdmin
 
@@ -233,6 +235,33 @@ class SystemdUnitTests(TestCase):
         self.assertIn("Description=arthexis.com", text)
         parsed = SystemdUnit.parse_config("arthexis", text)
         self.assertEqual(parsed.exec_start, "/home/arthe/arthexis/start.sh")
+
+
+class SystemdUnitInstallCommandTests(TestCase):
+    def test_install_writes_file_and_calls_systemctl(self):
+        unit = SystemdUnit.objects.create(
+            name="demo",
+            description="demo service",
+            exec_start="/bin/true",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with override_settings(SYSTEMD_UNIT_ROOT=tmpdir):
+                with patch("subprocess.run") as mock_run:
+                    call_command("install_systemd_unit", unit.name)
+
+        service_path = Path(tmpdir) / "demo.service"
+        self.assertTrue(service_path.exists())
+        content = service_path.read_text()
+        self.assertIn("ExecStart=/bin/true", content)
+        mock_run.assert_has_calls(
+            [
+                call(["systemctl", "daemon-reload"], check=True),
+                call(["systemctl", "enable", unit.name], check=True),
+                call(["systemctl", "restart", unit.name], check=True),
+            ]
+        )
+        self.assertEqual(mock_run.call_count, 3)
 
 
 class RecipeTests(TestCase):
