@@ -10,6 +10,8 @@ import threading
 import websockets
 from config.offline import requires_network
 
+from . import store
+
 
 @dataclass
 class SimulatorConfig:
@@ -37,6 +39,9 @@ class ChargePointSimulator:
         self.config = config
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+        self.status = "stopped"
+        self._connected = threading.Event()
+        self._connect_error = ""
 
     @requires_network
     async def _run_session(self) -> None:
@@ -48,12 +53,21 @@ class ChargePointSimulator:
             b64 = base64.b64encode(userpass.encode()).decode()
             headers["Authorization"] = f"Basic {b64}"
 
-        async with websockets.connect(
-            uri, subprotocols=["ocpp1.6"], additional_headers=headers
-        ) as ws:
-            # handshake
-            await ws.send(
-                json.dumps(
+        try:
+            async with websockets.connect(
+                uri, subprotocols=["ocpp1.6"], additional_headers=headers
+            ) as ws:
+                async def send(msg: str) -> None:
+                    await ws.send(msg)
+                    store.add_log(cfg.cp_path, f"> {msg}")
+
+                async def recv() -> str:
+                    raw = await ws.recv()
+                    store.add_log(cfg.cp_path, f"< {raw}")
+                    return raw
+
+                # handshake
+                boot = json.dumps(
                     [
                         2,
                         "boot",
@@ -64,28 +78,39 @@ class ChargePointSimulator:
                         },
                     ]
                 )
-            )
-            await ws.recv()
-            await ws.send(json.dumps([2, "auth", "Authorize", {"idTag": cfg.rfid}]))
-            await ws.recv()
+                await send(boot)
+                resp = json.loads(await recv())
+                status = resp[2].get("status")
+                if status != "Accepted":
+                    if not self._connected.is_set():
+                        self._connect_error = f"Boot status {status}"
+                        self._connected.set()
+                    return
 
-            meter_start = random.randint(1000, 2000)
-            await ws.send(
-                json.dumps(
-                    [
-                        2,
-                        "start",
-                        "StartTransaction",
-                        {
-                            "connectorId": 1,
-                            "idTag": cfg.rfid,
-                            "meterStart": meter_start,
-                        },
-                    ]
+                await send(json.dumps([2, "auth", "Authorize", {"idTag": cfg.rfid}]))
+                await recv()
+                if not self._connected.is_set():
+                    self.status = "running"
+                    self._connect_error = "accepted"
+                    self._connected.set()
+
+                meter_start = random.randint(1000, 2000)
+                await send(
+                    json.dumps(
+                        [
+                            2,
+                            "start",
+                            "StartTransaction",
+                            {
+                                "connectorId": 1,
+                                "idTag": cfg.rfid,
+                                "meterStart": meter_start,
+                            },
+                        ]
+                    )
                 )
-            )
-            resp = await ws.recv()
-            tx_id = json.loads(resp)[2].get("transactionId")
+                resp = json.loads(await recv())
+                tx_id = resp[2].get("transactionId")
 
             meter = meter_start
             steps = max(1, int(cfg.duration / cfg.interval))
@@ -98,7 +123,7 @@ class ChargePointSimulator:
                     break
                 meter += random.randint(step_min, step_max)
                 meter_kwh = meter / 1000.0
-                await ws.send(
+                await send(
                     json.dumps(
                         [
                             2,
@@ -125,7 +150,7 @@ class ChargePointSimulator:
                 )
                 await asyncio.sleep(cfg.interval)
 
-            await ws.send(
+            await send(
                 json.dumps(
                     [
                         2,
@@ -139,7 +164,15 @@ class ChargePointSimulator:
                     ]
                 )
             )
-            await ws.recv()
+            await recv()
+        except Exception as exc:
+            if not self._connected.is_set():
+                self._connect_error = str(exc)
+                self._connected.set()
+            self._stop_event.set()
+            if isinstance(exc, websockets.exceptions.ConnectionClosed):
+                return
+            raise
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
@@ -154,11 +187,14 @@ class ChargePointSimulator:
             if not self.config.repeat:
                 break
 
-    def start(self) -> None:
+    def start(self) -> tuple[bool, str, str]:
         if self._thread and self._thread.is_alive():
-            return
+            return False, "already running", str(store._file_path(self.config.cp_path))
 
         self._stop_event.clear()
+        self.status = "starting"
+        self._connected.clear()
+        self._connect_error = ""
 
         def _runner() -> None:
             asyncio.run(self._run())
@@ -166,12 +202,23 @@ class ChargePointSimulator:
         self._thread = threading.Thread(target=_runner, daemon=True)
         self._thread.start()
 
+        log_file = str(store._file_path(self.config.cp_path))
+        if not self._connected.wait(15):
+            self.status = "error"
+            return False, "Connection timeout", log_file
+        if self._connect_error == "accepted":
+            self.status = "running"
+            return True, "Connection accepted", log_file
+        self.status = "error"
+        return False, f"Connection failed: {self._connect_error}", log_file
+
     async def stop(self) -> None:
         if self._thread and self._thread.is_alive():
             self._stop_event.set()
             await asyncio.to_thread(self._thread.join)
             self._thread = None
             self._stop_event = threading.Event()
+        self.status = "stopped"
 
 
 __all__ = ["SimulatorConfig", "ChargePointSimulator"]

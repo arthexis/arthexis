@@ -118,12 +118,16 @@ class SimulatorAdmin(admin.ModelAdmin):
     def start_simulator(self, request, queryset):
         for obj in queryset:
             if obj.pk in store.simulators:
+                self.message_user(request, f"{obj.name}: already running")
                 continue
             store.register_log_name(obj.cp_path, obj.name)
             sim = ChargePointSimulator(obj.as_config())
-            sim.start()
-            store.simulators[obj.pk] = sim
-        self.message_user(request, "Simulators started")
+            started, status, log_file = sim.start()
+            if started:
+                store.simulators[obj.pk] = sim
+            self.message_user(
+                request, f"{obj.name}: {status}. Log: {log_file}"
+            )
 
     start_simulator.short_description = "Start selected simulators"
 
