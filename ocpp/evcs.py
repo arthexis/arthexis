@@ -214,11 +214,11 @@ async def simulate_cp(
                 async def _send(payload):
                     text = json.dumps(payload)
                     await ws.send(text)
-                    store.add_log(cp_path, f"> {text}")
+                    store.add_log(cp_path, f"> {text}", log_type="simulator")
 
                 async def _recv():
                     raw = await ws.recv()
-                    store.add_log(cp_path, f"< {raw}")
+                    store.add_log(cp_path, f"< {raw}", log_type="simulator")
                     return raw
 
                 # listen for remote commands
@@ -661,7 +661,7 @@ def _start_simulator(
     cp_path = (params or {}).get(
         "cp_path", (state.params or {}).get("cp_path", f"CP{cp}")
     )
-    log_file = str(store._file_path(cp_path))
+    log_file = str(store._file_path(cp_path, log_type="simulator"))
 
     if state.running:
         return False, "already running", log_file

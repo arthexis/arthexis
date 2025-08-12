@@ -80,7 +80,7 @@ class ChargerAdmin(admin.ModelAdmin):
         from django.utils.html import format_html
         from django.urls import reverse
 
-        url = reverse("charger-log", args=[obj.charger_id])
+        url = reverse("charger-log", args=[obj.charger_id]) + "?type=charger"
         return format_html('<a href="{}" target="_blank">view</a>', url)
 
     log_link.short_description = "Log"
@@ -141,7 +141,7 @@ class SimulatorAdmin(admin.ModelAdmin):
             if obj.pk in store.simulators:
                 self.message_user(request, f"{obj.name}: already running")
                 continue
-            store.register_log_name(obj.cp_path, obj.name)
+            store.register_log_name(obj.cp_path, obj.name, log_type="simulator")
             sim = ChargePointSimulator(obj.as_config())
             started, status, log_file = sim.start()
             if started:
@@ -168,7 +168,7 @@ class SimulatorAdmin(admin.ModelAdmin):
         from django.utils.html import format_html
         from django.urls import reverse
 
-        url = reverse("charger-log", args=[obj.cp_path])
+        url = reverse("charger-log", args=[obj.cp_path]) + "?type=simulator"
         return format_html('<a href="{}" target="_blank">view</a>', url)
 
     log_link.short_description = "Log"

@@ -44,12 +44,15 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             subprotocol = "ocpp1.6"
         await self.accept(subprotocol=subprotocol)
         store.connections[self.charger_id] = self
-        store.logs.setdefault(self.charger_id, [])
+        store.logs["charger"].setdefault(self.charger_id, [])
         self.charger, _ = await database_sync_to_async(
             Charger.objects.update_or_create
         )(
             charger_id=self.charger_id,
             defaults={"last_path": self.scope.get("path", "")},
+        )
+        store.register_log_name(
+            self.charger_id, self.charger.name or self.charger_id, log_type="charger"
         )
 
     async def _get_account(self, id_tag: str) -> Account | None:
@@ -94,7 +97,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data=None, bytes_data=None):
         if text_data is None:
             return
-        store.add_log(self.charger_id, f"> {text_data}")
+        store.add_log(self.charger_id, f"> {text_data}", log_type="charger")
         try:
             msg = json.loads(text_data)
         except json.JSONDecodeError:
@@ -167,4 +170,6 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 reply_payload = {"idTagInfo": {"status": "Accepted"}}
             response = [3, msg_id, reply_payload]
             await self.send(json.dumps(response))
-            store.add_log(self.charger_id, f"< {json.dumps(response)}")
+            store.add_log(
+                self.charger_id, f"< {json.dumps(response)}", log_type="charger"
+            )

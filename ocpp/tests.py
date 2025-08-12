@@ -104,20 +104,20 @@ class ChargerLandingTests(TestCase):
         self.assertContains(resp, "Offline")
 
     def test_log_page_renders_without_charger(self):
-        store.add_log("LOG1", "hello")
+        store.add_log("LOG1", "hello", log_type="charger")
         client = Client()
-        resp = client.get(reverse("charger-log", args=["LOG1"]))
+        resp = client.get(reverse("charger-log", args=["LOG1"]) + "?type=charger")
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "hello")
-        store.clear_log("LOG1")
+        store.clear_log("LOG1", log_type="charger")
 
     def test_log_page_is_case_insensitive(self):
-        store.add_log("cp2", "entry")
+        store.add_log("cp2", "entry", log_type="charger")
         client = Client()
-        resp = client.get(reverse("charger-log", args=["CP2"]))
+        resp = client.get(reverse("charger-log", args=["CP2"]) + "?type=charger")
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "entry")
-        store.clear_log("cp2")
+        store.clear_log("cp2", log_type="charger")
 
 
 class SimulatorLandingTests(TestCase):
@@ -153,7 +153,7 @@ class ChargerAdminTests(TestCase):
         charger = Charger.objects.create(charger_id="LOG1")
         url = reverse("admin:ocpp_charger_changelist")
         resp = self.client.get(url)
-        log_url = reverse("charger-log", args=["LOG1"])
+        log_url = reverse("charger-log", args=["LOG1"]) + "?type=charger"
         self.assertContains(resp, log_url)
 
     def test_purge_action_removes_data(self):
@@ -168,12 +168,12 @@ class ChargerAdminTests(TestCase):
             timestamp=timezone.now(),
             value=1,
         )
-        store.add_log("PURGE1", "entry")
+        store.add_log("PURGE1", "entry", log_type="charger")
         url = reverse("admin:ocpp_charger_changelist")
         self.client.post(url, {"action": "purge_data", "_selected_action": [charger.pk]})
         self.assertFalse(Transaction.objects.filter(charger_id="PURGE1").exists())
         self.assertFalse(MeterReading.objects.filter(charger=charger).exists())
-        self.assertNotIn("PURGE1", store.logs)
+        self.assertNotIn("PURGE1", store.logs["charger"])
 
     def test_delete_requires_purge(self):
         charger = Charger.objects.create(charger_id="DEL1")
@@ -205,7 +205,7 @@ class SimulatorAdminTests(TestCase):
         sim = Simulator.objects.create(name="SIM", cp_path="SIMX")
         url = reverse("admin:ocpp_simulator_changelist")
         resp = self.client.get(url)
-        log_url = reverse("charger-log", args=["SIMX"])
+        log_url = reverse("charger-log", args=["SIMX"]) + "?type=simulator"
         self.assertContains(resp, log_url)
 
     def test_admin_shows_ws_url(self):
@@ -518,7 +518,7 @@ class ChargePointSimulatorTests(TransactionTestCase):
             kwh_max=0.2,
             pre_charge_delay=0.0,
         )
-        store.register_log_name(cfg.cp_path, "SimStart")
+        store.register_log_name(cfg.cp_path, "SimStart", log_type="simulator")
         try:
             sim = ChargePointSimulator(cfg)
             started, status, log_file = await asyncio.to_thread(sim.start)
@@ -528,6 +528,38 @@ class ChargePointSimulatorTests(TransactionTestCase):
             self.assertTrue(Path(log_file).exists())
         finally:
             await sim.stop()
-            store.clear_log(cfg.cp_path)
+            store.clear_log(cfg.cp_path, log_type="simulator")
+            server.close()
+            await server.wait_closed()
+
+    async def test_status_error_when_no_response(self):
+        async def handler(ws):
+            # Accept connection and close without proper responses
+            await ws.recv()
+            await ws.close()
+
+        server = await websockets.serve(handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"])
+        port = server.sockets[0].getsockname()[1]
+
+        cfg = SimulatorConfig(
+            host="127.0.0.1",
+            ws_port=port,
+            cp_path="SIMERR/",
+            duration=0.1,
+            interval=0.05,
+            kwh_min=0.1,
+            kwh_max=0.2,
+            pre_charge_delay=0.0,
+        )
+        store.register_log_name(cfg.cp_path, "SimErr", log_type="simulator")
+        sim = ChargePointSimulator(cfg)
+        try:
+            started, status, _ = await asyncio.to_thread(sim.start)
+            self.assertFalse(started)
+            self.assertEqual(sim.status, "error")
+            self.assertEqual(status.split(":")[0], "Connection failed")
+        finally:
+            await sim.stop()
+            store.clear_log(cfg.cp_path, log_type="simulator")
             server.close()
             await server.wait_closed()
