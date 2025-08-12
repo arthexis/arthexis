@@ -9,7 +9,12 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("accounts", "0012_auto_20250812_0229"),
-        ("contenttypes", "0002_remove_content_type_name"),
+        # Django 5.0+ no longer includes the `0002_remove_content_type_name`
+        # migration. Depending on it causes a `NodeNotFoundError` when building
+        # the migration graph. The AdminHistory model only requires the
+        # `contenttypes` app's initial migration to ensure the `ContentType`
+        # table exists, so we reference that instead.
+        ("contenttypes", "0001_initial"),
     ]
 
     operations = [
