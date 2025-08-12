@@ -94,7 +94,8 @@ class CalculatorTemplate(models.Model):
             "ground",
         ):
             value = getattr(self, field)
-            if value not in (None, ""):
+            default = self._meta.get_field(field).default
+            if value not in (None, "") and value != default:
                 params[field] = value
         if self.max_awg:
             params["max_awg"] = self.max_awg

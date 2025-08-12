@@ -2,13 +2,6 @@
 {% load static %}
 {% block title %}AWG Calculator{% endblock %}
 {% block content %}
-{% if templates %}
-<nav class="awg-template-ribbon bg-body-secondary small py-1 px-2 mb-3 d-flex gap-2 flex-wrap">
-  {% for t in templates %}
-  <a href="{{ t.get_absolute_url }}" class="text-decoration-none">{{ t.name }}</a>
-  {% endfor %}
-</nav>
-{% endif %}
 <h1>Cable & Conduit Calculator</h1>
 <form method="post">
   {% csrf_token %}
@@ -89,6 +82,21 @@
       </div>
     </div>
     <div class="col-lg-6 d-flex flex-column">
+      {% if not result and not error and not no_cable %}
+      <div class="mb-3">
+        <button type="submit" class="btn btn-primary w-100">Calculate</button>
+      </div>
+      {% if templates %}
+      <div class="mb-3">
+        <p>Or try a pre-loaded template:</p>
+        <div class="d-flex flex-column">
+          {% for t in templates %}
+          <a href="{{ t.get_absolute_url }}" class="text-decoration-none">{{ t.name }}</a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      {% else %}
       {% if error %}
       <p class="text-danger">Error: {{ error }}</p>
       {% elif no_cable %}
@@ -117,10 +125,9 @@
       </div>
       {% endif %}
       <div class="mt-auto mb-3">
-        <button type="submit" class="btn btn-primary w-100">
-          {% if result or error or no_cable %}Calculate Again{% else %}Calculate{% endif %}
-        </button>
+        <button type="submit" class="btn btn-primary w-100">Calculate Again</button>
       </div>
+      {% endif %}
     </div>
   </div>
 </form>
