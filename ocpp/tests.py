@@ -17,6 +17,8 @@ from . import store
 from django.db.models.deletion import ProtectedError
 import json
 import websockets
+import asyncio
+from pathlib import Path
 from .simulator import SimulatorConfig, ChargePointSimulator
 
 
@@ -454,4 +456,86 @@ class ChargePointSimulatorTests(TransactionTestCase):
         actions = [msg[2] for msg in received]
         self.assertIn("BootNotification", actions)
         self.assertIn("StartTransaction", actions)
-        self.assertIn("StopTransaction", actions)
+
+    async def test_start_returns_status_and_log(self):
+        async def handler(ws):
+            async for msg in ws:
+                data = json.loads(msg)
+                action = data[2]
+                if action == "BootNotification":
+                    await ws.send(
+                        json.dumps(
+                            [
+                                3,
+                                data[1],
+                                {
+                                    "status": "Accepted",
+                                    "currentTime": "2024-01-01T00:00:00Z",
+                                    "interval": 300,
+                                },
+                            ]
+                        )
+                    )
+                elif action == "Authorize":
+                    await ws.send(
+                        json.dumps(
+                            [3, data[1], {"idTagInfo": {"status": "Accepted"}}]
+                        )
+                    )
+                elif action == "StartTransaction":
+                    await ws.send(
+                        json.dumps(
+                            [
+                                3,
+                                data[1],
+                                {
+                                    "transactionId": 1,
+                                    "idTagInfo": {"status": "Accepted"},
+                                },
+                            ]
+                        )
+                    )
+                elif action == "StopTransaction":
+                    await ws.send(
+                        json.dumps(
+                            [3, data[1], {"idTagInfo": {"status": "Accepted"}}]
+                        )
+                    )
+                    break
+                else:
+                    await ws.send(json.dumps([3, data[1], {}]))
+
+        server = await websockets.serve(handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"])
+        port = server.sockets[0].getsockname()[1]
+
+        real_connect = websockets.connect
+
+        def patched_connect(*args, additional_headers=None, **kwargs):
+            if additional_headers is not None:
+                kwargs["extra_headers"] = additional_headers
+            return real_connect(*args, **kwargs)
+
+        websockets.connect = patched_connect
+        cfg = SimulatorConfig(
+            host="127.0.0.1",
+            ws_port=port,
+            cp_path="SIMSTART/",
+            duration=0.1,
+            interval=0.05,
+            kwh_min=0.1,
+            kwh_max=0.2,
+        )
+        store.register_log_name(cfg.cp_path, "SimStart")
+        try:
+            sim = ChargePointSimulator(cfg)
+            started, status, log_file = await asyncio.to_thread(sim.start)
+            self.assertTrue(started)
+            self.assertEqual(status, "Connection accepted")
+            self.assertEqual(sim.status, "running")
+            self.assertTrue(Path(log_file).exists())
+        finally:
+            websockets.connect = real_connect
+            await sim.stop()
+            store.clear_log(cfg.cp_path)
+            server.close()
+            await server.wait_closed()
