@@ -5,10 +5,13 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
 
+from utils.api import api_login_required
+
 from .models import Node, NodeScreenshot, NodeMessage
 from .utils import capture_screenshot, save_screenshot
 
 
+@api_login_required
 def node_list(request):
     """Return a JSON list of all known nodes."""
 
@@ -19,6 +22,7 @@ def node_list(request):
 
 
 @csrf_exempt
+@api_login_required
 def register_node(request):
     """Register or update a node from POSTed JSON data."""
 
@@ -46,6 +50,7 @@ def register_node(request):
     return JsonResponse({"id": node.id})
 
 
+@api_login_required
 def capture(request):
     """Capture a screenshot of the site's root URL and record it."""
 
@@ -65,6 +70,7 @@ def capture(request):
 
 
 @csrf_exempt
+@api_login_required
 def public_node_endpoint(request, endpoint):
     """Public API endpoint for a node.
 

@@ -6,6 +6,8 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
 
+from utils.api import api_login_required
+
 from website.utils import landing
 
 from . import store
@@ -30,6 +32,7 @@ def _charger_state(charger: Charger, tx_obj: Transaction | None):
 
 
 
+@api_login_required
 def charger_list(request):
     """Return a JSON list of known chargers and state."""
     data = []
@@ -68,6 +71,7 @@ def charger_list(request):
     return JsonResponse({"chargers": data})
 
 
+@api_login_required
 def charger_detail(request, cid):
     charger = Charger.objects.filter(charger_id=cid).first()
     if charger is None:
@@ -241,6 +245,7 @@ def charger_status(request, cid):
 
 
 @csrf_exempt
+@api_login_required
 def dispatch_action(request, cid):
     ws = store.connections.get(cid)
     if ws is None:

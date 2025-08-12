@@ -5,11 +5,14 @@ from django.contrib.auth import authenticate, login
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
+from utils.api import api_login_required
+
 from .models import Product, Subscription, Account
 from accounts.models import RFID
 
 
 @csrf_exempt
+@api_login_required
 def rfid_login(request):
     """Authenticate a user using an RFID."""
 
@@ -33,6 +36,7 @@ def rfid_login(request):
     return JsonResponse({"id": user.id, "username": user.username})
 
 
+@api_login_required
 def product_list(request):
     """Return a JSON list of products."""
 
@@ -43,6 +47,7 @@ def product_list(request):
 
 
 @csrf_exempt
+@api_login_required
 def add_subscription(request):
     """Create a subscription for an account from POSTed JSON."""
 
@@ -75,6 +80,7 @@ def add_subscription(request):
     return JsonResponse({"id": sub.id})
 
 
+@api_login_required
 def subscription_list(request):
     """Return subscriptions for the given account_id."""
 
@@ -95,6 +101,7 @@ def subscription_list(request):
 
 
 @csrf_exempt
+@api_login_required
 def rfid_batch(request):
     """Export or import RFID tags in batch."""
 

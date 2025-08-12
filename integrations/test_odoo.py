@@ -21,6 +21,9 @@ from .models import Instance
 class OdooTests(TestCase):
     def setUp(self):
         self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(username="tester", password="secret")
+        self.client.force_login(self.user)
         self.instance = Instance.objects.create(
             name="Local",
             url="http://odoo.local",
