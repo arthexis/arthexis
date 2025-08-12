@@ -159,12 +159,11 @@ def cp_simulator(request):
                 password=request.POST.get("password") or None,
             )
             try:
-                started = _start_simulator(sim_params, cp=cp_idx)
-                message = (
-                    f"CP{cp_idx} started."
-                    if started
-                    else f"CP{cp_idx} already running."
-                )
+                started, status, log_file = _start_simulator(sim_params, cp=cp_idx)
+                if started:
+                    message = f"CP{cp_idx} started: {status}. Logs: {log_file}"
+                else:
+                    message = f"CP{cp_idx} {status}. Logs: {log_file}"
             except Exception as exc:  # pragma: no cover - unexpected
                 message = f"Failed to start CP{cp_idx}: {exc}"
         elif action == "stop":
