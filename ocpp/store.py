@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import datetime
 import re
 
 connections = {}
@@ -41,7 +42,10 @@ def _file_path(cid: str, log_type: str = "charger") -> Path:
 
 
 def add_log(cid: str, entry: str, log_type: str = "charger") -> None:
-    """Append a log entry for the given id and log type."""
+    """Append a timestamped log entry for the given id and log type."""
+
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    entry = f"{timestamp} {entry}"
 
     store = logs[log_type]
     # Store log entries under the cid as provided but allow retrieval using
