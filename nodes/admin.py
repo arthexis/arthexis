@@ -18,6 +18,7 @@ from .models import (
     NodeScreenshot,
     NodeMessage,
     NginxConfig,
+    SystemdUnit,
     Recipe,
     Step,
     TextSample,
@@ -189,6 +190,28 @@ class NginxConfigAdmin(admin.ModelAdmin):
     def rendered_config(self, obj):
         return format_html(
             '<textarea readonly style="width:100%" rows="20">{}</textarea>',
+            obj.config_text,
+        )
+
+
+@admin.register(SystemdUnit)
+class SystemdUnitAdmin(admin.ModelAdmin):
+    list_display = ("name", "description", "exec_start")
+    fields = (
+        "name",
+        "description",
+        "documentation",
+        "user",
+        "exec_start",
+        "wanted_by",
+        "rendered_unit",
+    )
+    readonly_fields = ("rendered_unit",)
+
+    @admin.display(description="Generated unit")
+    def rendered_unit(self, obj):
+        return format_html(
+            '<textarea readonly style="width:100%" rows="15">{}</textarea>',
             obj.config_text,
         )
 
