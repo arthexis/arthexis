@@ -6,9 +6,12 @@
       return;
     }
 
-    var mapDiv = $('<div id="charger-map" style="height: 400px;" class="mb-3"></div>');
-    var $row = $lng.closest('.form-row');
-    $row.after(mapDiv);
+    var $mapDiv = $('#charger-map');
+    if (!$mapDiv.length) {
+      $mapDiv = $('<div id="charger-map" style="height: 400px;" class="mb-3"></div>');
+      var $row = $lng.closest('.form-row');
+      $row.after($mapDiv);
+    }
 
     var startLat = parseFloat($lat.val()) || 25.6866;
     var startLng = parseFloat($lng.val()) || -100.3161;
