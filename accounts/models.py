@@ -178,7 +178,7 @@ class RFID(models.Model):
 
     rfid = models.CharField(
         max_length=8,
-        unique=True,
+        primary_key=True,
         verbose_name="RFID",
         validators=[
             RegexValidator(
