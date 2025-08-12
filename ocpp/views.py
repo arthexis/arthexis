@@ -97,7 +97,7 @@ def charger_detail(request, cid):
         if tx_obj.stop_time is not None:
             tx_data["stopTime"] = tx_obj.stop_time.isoformat()
 
-    log = store.get_logs(cid)
+    log = store.get_logs(cid, log_type="charger")
     return JsonResponse(
         {
             "charger_id": cid,
@@ -219,12 +219,13 @@ def charger_page(request, cid):
 
 
 def charger_log_page(request, cid):
-    """Render a simple page with the log for the charger."""
+    """Render a simple page with the log for the charger or simulator."""
+    log_type = request.GET.get("type", "charger")
     try:
         charger = Charger.objects.get(charger_id=cid)
     except Charger.DoesNotExist:
         charger = Charger(charger_id=cid)
-    log = store.get_logs(cid)
+    log = store.get_logs(cid, log_type=log_type)
     return render(
         request,
         "ocpp/charger_logs.html",
@@ -270,5 +271,5 @@ def dispatch_action(request, cid):
         asyncio.get_event_loop().create_task(ws.send(msg))
     else:
         return JsonResponse({"detail": "unknown action"}, status=400)
-    store.add_log(cid, f"< {msg}")
+    store.add_log(cid, f"< {msg}", log_type="charger")
     return JsonResponse({"sent": msg})

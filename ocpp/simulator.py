@@ -58,12 +58,20 @@ class ChargePointSimulator:
                 uri, subprotocols=["ocpp1.6"], extra_headers=headers
             ) as ws:
                 async def send(msg: str) -> None:
-                    await ws.send(msg)
-                    store.add_log(cfg.cp_path, f"> {msg}")
+                    try:
+                        await ws.send(msg)
+                    except Exception:
+                        self.status = "error"
+                        raise
+                    store.add_log(cfg.cp_path, f"> {msg}", log_type="simulator")
 
                 async def recv() -> str:
-                    raw = await ws.recv()
-                    store.add_log(cfg.cp_path, f"< {raw}")
+                    try:
+                        raw = await ws.recv()
+                    except Exception:
+                        self.status = "error"
+                        raise
+                    store.add_log(cfg.cp_path, f"< {raw}", log_type="simulator")
                     return raw
 
                 # handshake
@@ -79,7 +87,11 @@ class ChargePointSimulator:
                     ]
                 )
                 await send(boot)
-                resp = json.loads(await recv())
+                try:
+                    resp = json.loads(await recv())
+                except Exception:
+                    self.status = "error"
+                    raise
                 status = resp[2].get("status")
                 if status != "Accepted":
                     if not self._connected.is_set():
@@ -127,7 +139,11 @@ class ChargePointSimulator:
                         ]
                     )
                 )
-                resp = json.loads(await recv())
+                try:
+                    resp = json.loads(await recv())
+                except Exception:
+                    self.status = "error"
+                    raise
                 tx_id = resp[2].get("transactionId")
 
             meter = meter_start
@@ -187,6 +203,7 @@ class ChargePointSimulator:
             if not self._connected.is_set():
                 self._connect_error = str(exc)
                 self._connected.set()
+            self.status = "error"
             self._stop_event.set()
             if isinstance(exc, websockets.exceptions.ConnectionClosed):
                 return
@@ -207,7 +224,11 @@ class ChargePointSimulator:
 
     def start(self) -> tuple[bool, str, str]:
         if self._thread and self._thread.is_alive():
-            return False, "already running", str(store._file_path(self.config.cp_path))
+            return (
+                False,
+                "already running",
+                str(store._file_path(self.config.cp_path, log_type="simulator")),
+            )
 
         self._stop_event.clear()
         self.status = "starting"
@@ -220,7 +241,7 @@ class ChargePointSimulator:
         self._thread = threading.Thread(target=_runner, daemon=True)
         self._thread.start()
 
-        log_file = str(store._file_path(self.config.cp_path))
+        log_file = str(store._file_path(self.config.cp_path, log_type="simulator"))
         if not self._connected.wait(15):
             self.status = "error"
             return False, "Connection timeout", log_file
