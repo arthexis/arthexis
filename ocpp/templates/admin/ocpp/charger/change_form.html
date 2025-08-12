@@ -4,10 +4,10 @@
 {% block extrahead %}
 {{ block.super }}
 <style>
-  .nav-tabs { list-style: none; padding-left: 0; border-bottom: 1px solid #ccc; margin-bottom: 1rem; }
+  .nav-tabs { list-style: none; padding-left: 0; border-bottom: 1px solid var(--border-color); margin-bottom: 1rem; }
   .nav-tabs li { display: inline-block; margin-right: .5rem; }
-  .nav-tabs a { text-decoration: none; padding: .5rem 1rem; display: inline-block; border: 1px solid #ccc; border-bottom: none; background: #f8f8f8; border-radius: 4px 4px 0 0; }
-  .nav-tabs a.active { background: #fff; font-weight: bold; }
+  .nav-tabs a { text-decoration: none; padding: .5rem 1rem; display: inline-block; border: 1px solid var(--border-color); border-bottom: none; background: var(--darkened-bg); color: var(--body-fg); border-radius: 4px 4px 0 0; }
+  .nav-tabs a.active { background: var(--body-bg); font-weight: bold; }
   .tab-content .tab-pane { display: none; }
   .tab-content .tab-pane.active { display: block; }
   .reference-wrapper { display: flex; gap: 1rem; align-items: flex-start; }
@@ -50,14 +50,18 @@
   </ul>
   <div class="tab-content" id="charger-tabs-content">
     <div id="tab-general" class="tab-pane active">
-      {% with adminform.fieldsets.0 as fieldset %}
-        {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=0 %}
-      {% endwith %}
+      {% for fieldset in adminform %}
+        {% if forloop.first %}
+          {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=0 %}
+        {% endif %}
+      {% endfor %}
     </div>
     <div id="tab-references" class="tab-pane">
-      {% with adminform.fieldsets.1 as fieldset %}
-        {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=1 %}
-      {% endwith %}
+      {% for fieldset in adminform %}
+        {% if forloop.counter0 == 1 %}
+          {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=1 %}
+        {% endif %}
+      {% endfor %}
       <div class="reference-wrapper">
         {% if original.reference and original.reference.image %}
         <div class="qr">
