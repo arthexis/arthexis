@@ -48,6 +48,7 @@ class CalculatorTemplate(models.Model):
     """Template containing parameters for an AWG calculation."""
 
     name = models.CharField(max_length=100, blank=True)
+    description = models.CharField(max_length=255, blank=True)
     meters = models.PositiveIntegerField(null=True, blank=True)
     amps = models.PositiveIntegerField(default=40, null=True, blank=True)
     volts = models.PositiveIntegerField(default=220, null=True, blank=True)
