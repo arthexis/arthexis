@@ -55,7 +55,7 @@ class ChargePointSimulator:
 
         try:
             async with websockets.connect(
-                uri, subprotocols=["ocpp1.6"], additional_headers=headers
+                uri, subprotocols=["ocpp1.6"], extra_headers=headers
             ) as ws:
                 async def send(msg: str) -> None:
                     await ws.send(msg)

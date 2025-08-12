@@ -206,7 +206,7 @@ async def simulate_cp(
     while loop_count < session_count and state.running:
         try:
             async with websockets.connect(
-                uri, subprotocols=["ocpp1.6"], additional_headers=headers
+                uri, subprotocols=["ocpp1.6"], extra_headers=headers
             ) as ws:
                 state.phase = "Connected"
                 state.last_message = ""

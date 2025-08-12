@@ -428,14 +428,6 @@ class ChargePointSimulatorTests(TransactionTestCase):
         server = await websockets.serve(handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"])
         port = server.sockets[0].getsockname()[1]
 
-        real_connect = websockets.connect
-
-        def patched_connect(*args, additional_headers=None, **kwargs):
-            if additional_headers is not None:
-                kwargs["extra_headers"] = additional_headers
-            return real_connect(*args, **kwargs)
-
-        websockets.connect = patched_connect
         try:
             cfg = SimulatorConfig(
                 host="127.0.0.1",
@@ -449,7 +441,6 @@ class ChargePointSimulatorTests(TransactionTestCase):
             sim = ChargePointSimulator(cfg)
             await sim._run_session()
         finally:
-            websockets.connect = real_connect
             server.close()
             await server.wait_closed()
 
@@ -508,14 +499,6 @@ class ChargePointSimulatorTests(TransactionTestCase):
         server = await websockets.serve(handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"])
         port = server.sockets[0].getsockname()[1]
 
-        real_connect = websockets.connect
-
-        def patched_connect(*args, additional_headers=None, **kwargs):
-            if additional_headers is not None:
-                kwargs["extra_headers"] = additional_headers
-            return real_connect(*args, **kwargs)
-
-        websockets.connect = patched_connect
         cfg = SimulatorConfig(
             host="127.0.0.1",
             ws_port=port,
@@ -534,7 +517,6 @@ class ChargePointSimulatorTests(TransactionTestCase):
             self.assertEqual(sim.status, "running")
             self.assertTrue(Path(log_file).exists())
         finally:
-            websockets.connect = real_connect
             await sim.stop()
             store.clear_log(cfg.cp_path)
             server.close()
