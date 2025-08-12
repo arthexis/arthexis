@@ -11,12 +11,12 @@
         gap: 1rem;
     }
     .dashboard-main {
-        flex: 2 1 300px;
+        flex: 1 1 300px;
         min-width: 300px;
     }
     .dashboard-side {
-        flex: 1 1 200px;
-        min-width: 200px;
+        flex: 1 1 300px;
+        min-width: 300px;
         background: var(--darkened-bg);
     }
     .dashboard-side .module {
@@ -62,7 +62,21 @@
   <div id="content-main" class="dashboard-main">
     {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
   </div>
-  <div class="dashboard-side" id="recent-actions">
+  <div class="dashboard-side" id="recent-boxes">
+    <div class="module" id="recent-history-module">
+        <h2>{% translate 'Recent admin lists' %}</h2>
+        {% with history=user.admin_history.all|slice:":10" %}
+            {% if history %}
+            <ul class="actionlist">
+                {% for item in history %}
+                <li class="changelink"><a href="{{ item.url }}">{{ item.admin_label }}</a></li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p>{% translate 'None available' %}</p>
+            {% endif %}
+        {% endwith %}
+    </div>
     <div class="module" id="recent-actions-module">
         <h2>{% translate 'Recent actions' %}</h2>
         <h3>{% translate 'My actions' %}</h3>
@@ -90,22 +104,6 @@
             {% endfor %}
             </ul>
             {% endif %}
-    </div>
-  </div>
-  <div class="dashboard-side" id="recent-history">
-    <div class="module" id="recent-history-module">
-        <h2>{% translate 'Recent admin lists' %}</h2>
-        {% with history=user.admin_history.all|slice:":10" %}
-            {% if history %}
-            <ul class="actionlist">
-                {% for item in history %}
-                <li class="changelink"><a href="{{ item.url }}">{{ item.admin_label }}</a></li>
-                {% endfor %}
-            </ul>
-            {% else %}
-            <p>{% translate 'None available' %}</p>
-            {% endif %}
-        {% endwith %}
     </div>
   </div>
 </div>
