@@ -31,16 +31,27 @@ class ChargerAdminForm(forms.ModelForm):
 @admin.register(Charger)
 class ChargerAdmin(admin.ModelAdmin):
     form = ChargerAdminForm
-    fields = (
-        "charger_id",
-        "name",
-        "config",
-        "require_rfid",
-        ("latitude", "longitude"),
-        "reference",
-        "last_heartbeat",
-        "last_meter_values",
-        "last_path",
+    fieldsets = (
+        (
+            "General",
+            {
+                "fields": (
+                    "charger_id",
+                    "name",
+                    "config",
+                    "require_rfid",
+                    "last_heartbeat",
+                    "last_meter_values",
+                    "last_path",
+                )
+            },
+        ),
+        (
+            "References",
+            {
+                "fields": (("latitude", "longitude"), "reference"),
+            },
+        ),
     )
     list_display = (
         "charger_id",
