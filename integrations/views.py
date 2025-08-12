@@ -1,13 +1,14 @@
 from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
+
+from utils.api import api_login_required
 
 from .services import post_from_domain, post_from_user, register_account
 
 
 @require_POST
-@login_required
+@api_login_required
 def register(request):
     handle = request.POST["handle"]
     password = request.POST["app_password"]
@@ -16,7 +17,7 @@ def register(request):
 
 
 @require_POST
-@login_required
+@api_login_required
 def post(request):
     text = request.POST["text"]
     post_from_user(request.user, text)
@@ -24,6 +25,7 @@ def post(request):
 
 
 @require_POST
+@api_login_required
 @staff_member_required
 def domain_post(request):
     text = request.POST["text"]
@@ -38,6 +40,7 @@ from config.offline import requires_network
 from .models import Instance
 
 
+@api_login_required
 @requires_network
 def test_connection(request, pk):
     instance = get_object_or_404(Instance, pk=pk)

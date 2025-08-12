@@ -5,10 +5,13 @@ import json
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
+from utils.api import api_login_required
+
 from .models import Todo
 
 
 @csrf_exempt
+@api_login_required
 def todo_list(request):
     """List existing todos or create a new one."""
 
@@ -37,6 +40,7 @@ def todo_list(request):
 
 
 @csrf_exempt
+@api_login_required
 def todo_toggle(request, pk: int):
     """Toggle the completion status of a todo."""
 
