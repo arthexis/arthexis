@@ -122,6 +122,7 @@ class ChargePointSimulator:
                                 ]
                             )
                         )
+                        await recv()
                         await asyncio.sleep(cfg.interval)
 
                 meter_start = random.randint(1000, 2000)
@@ -146,59 +147,60 @@ class ChargePointSimulator:
                     raise
                 tx_id = resp[2].get("transactionId")
 
-            meter = meter_start
-            steps = max(1, int(cfg.duration / cfg.interval))
-            step_min = max(1, int((cfg.kwh_min * 1000) / steps))
-            step_max = max(1, int((cfg.kwh_max * 1000) / steps))
+                meter = meter_start
+                steps = max(1, int(cfg.duration / cfg.interval))
+                step_min = max(1, int((cfg.kwh_min * 1000) / steps))
+                step_max = max(1, int((cfg.kwh_max * 1000) / steps))
 
-            start_time = time.monotonic()
-            while time.monotonic() - start_time < cfg.duration:
-                if self._stop_event.is_set():
-                    break
-                meter += random.randint(step_min, step_max)
-                meter_kwh = meter / 1000.0
+                start_time = time.monotonic()
+                while time.monotonic() - start_time < cfg.duration:
+                    if self._stop_event.is_set():
+                        break
+                    meter += random.randint(step_min, step_max)
+                    meter_kwh = meter / 1000.0
+                    await send(
+                        json.dumps(
+                            [
+                                2,
+                                "meter",
+                                "MeterValues",
+                                {
+                                    "connectorId": 1,
+                                    "transactionId": tx_id,
+                                    "meterValue": [
+                                        {
+                                            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                            "sampledValue": [
+                                                {
+                                                    "value": f"{meter_kwh:.3f}",
+                                                    "measurand": "Energy.Active.Import.Register",
+                                                    "unit": "kWh",
+                                                }
+                                            ],
+                                        }
+                                    ],
+                                },
+                            ]
+                        )
+                    )
+                    await recv()
+                    await asyncio.sleep(cfg.interval)
+
                 await send(
                     json.dumps(
                         [
                             2,
-                            "meter",
-                            "MeterValues",
+                            "stop",
+                            "StopTransaction",
                             {
-                                "connectorId": 1,
                                 "transactionId": tx_id,
-                                "meterValue": [
-                                    {
-                                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                                        "sampledValue": [
-                                            {
-                                                "value": f"{meter_kwh:.3f}",
-                                                "measurand": "Energy.Active.Import.Register",
-                                                "unit": "kWh",
-                                            }
-                                        ],
-                                    }
-                                ],
+                                "idTag": cfg.rfid,
+                                "meterStop": meter,
                             },
                         ]
                     )
                 )
-                await asyncio.sleep(cfg.interval)
-
-            await send(
-                json.dumps(
-                    [
-                        2,
-                        "stop",
-                        "StopTransaction",
-                        {
-                            "transactionId": tx_id,
-                            "idTag": cfg.rfid,
-                            "meterStop": meter,
-                        },
-                    ]
-                )
-            )
-            await recv()
+                await recv()
         except Exception as exc:
             if not self._connected.is_set():
                 self._connect_error = str(exc)
