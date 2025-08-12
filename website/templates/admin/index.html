@@ -17,6 +17,13 @@
     .app-grid table {
         width: 100%;
     }
+    #content-related {
+        display: flex;
+        gap: 1rem;
+    }
+    #content-related .module {
+        flex: 1;
+    }
   </style>
 {% endblock %}
 
@@ -62,6 +69,20 @@
             {% endfor %}
             </ul>
             {% endif %}
+    </div>
+    <div class="module" id="recent-history-module">
+        <h2>{% translate 'Recent admin lists' %}</h2>
+        {% with history=user.admin_history.all|slice:":10" %}
+            {% if history %}
+            <ul class="actionlist">
+                {% for item in history %}
+                <li class="changelink"><a href="{{ item.url }}">{{ item.admin_label }}</a></li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p>{% translate 'None available' %}</p>
+            {% endif %}
+        {% endwith %}
     </div>
 </div>
 {% endblock %}
