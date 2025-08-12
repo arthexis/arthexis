@@ -69,7 +69,7 @@ class RFIDLoginTests(TestCase):
         self.user = User.objects.create_user(
             username="alice", password="secret"
         )
-        self.account = Account.objects.create(user=self.user)
+        self.account = Account.objects.create(user=self.user, name="ALICE")
         tag = RFID.objects.create(rfid="CARD123")
         self.account.rfids.add(tag)
 
@@ -95,7 +95,7 @@ class RFIDBatchApiTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(username="bob", password="secret")
-        self.account = Account.objects.create(user=self.user)
+        self.account = Account.objects.create(user=self.user, name="BOB")
 
     def test_export_rfids(self):
         tag = RFID.objects.create(rfid="CARD999")
@@ -130,7 +130,7 @@ class AllowedRFIDTests(TestCase):
         self.user = User.objects.create_user(
             username="eve", password="secret"
         )
-        self.account = Account.objects.create(user=self.user)
+        self.account = Account.objects.create(user=self.user, name="EVE")
         self.rfid = RFID.objects.create(rfid="BAD123")
         self.account.rfids.add(self.rfid)
 
@@ -156,7 +156,7 @@ class RFIDValidationTests(TestCase):
 
     def test_find_user_by_rfid(self):
         user = User.objects.create_user(username="finder", password="pwd")
-        acc = Account.objects.create(user=user)
+        acc = Account.objects.create(user=user, name="FINDER")
         tag = RFID.objects.create(rfid="ABCD1234")
         acc.rfids.add(tag)
         found = RFID.get_account_by_rfid("abcd1234")
@@ -167,8 +167,8 @@ class RFIDAssignmentTests(TestCase):
     def setUp(self):
         self.user1 = User.objects.create_user(username="user1", password="x")
         self.user2 = User.objects.create_user(username="user2", password="x")
-        self.acc1 = Account.objects.create(user=self.user1)
-        self.acc2 = Account.objects.create(user=self.user2)
+        self.acc1 = Account.objects.create(user=self.user1, name="USER1")
+        self.acc2 = Account.objects.create(user=self.user2, name="USER2")
         self.tag = RFID.objects.create(rfid="ABCDEF12")
 
     def test_rfid_can_only_attach_to_one_account(self):
@@ -215,7 +215,7 @@ class RFIDSourceTests(TestCase):
 class AccountTests(TestCase):
     def test_balance_calculation(self):
         user = User.objects.create_user(username="balance", password="x")
-        acc = Account.objects.create(user=user)
+        acc = Account.objects.create(user=user, name="BALANCE")
         Credit.objects.create(account=acc, amount_kwh=50)
         Transaction.objects.create(
             charger_id="T1",
@@ -231,7 +231,7 @@ class AccountTests(TestCase):
 
     def test_authorization_requires_positive_balance(self):
         user = User.objects.create_user(username="auth", password="x")
-        acc = Account.objects.create(user=user)
+        acc = Account.objects.create(user=user, name="AUTH")
         self.assertFalse(acc.can_authorize())
 
         Credit.objects.create(account=acc, amount_kwh=5)
@@ -239,11 +239,11 @@ class AccountTests(TestCase):
 
     def test_service_account_ignores_balance(self):
         user = User.objects.create_user(username="service", password="x")
-        acc = Account.objects.create(user=user, service_account=True)
+        acc = Account.objects.create(user=user, service_account=True, name="SERVICE")
         self.assertTrue(acc.can_authorize())
 
     def test_account_without_user(self):
-        acc = Account.objects.create()
+        acc = Account.objects.create(name="NOUSER")
         tag = RFID.objects.create(rfid="NOUSER1")
         acc.rfids.add(tag)
         self.assertIsNone(acc.user)
@@ -253,7 +253,7 @@ class AccountTests(TestCase):
 class VehicleTests(TestCase):
     def test_account_can_have_multiple_vehicles(self):
         user = User.objects.create_user(username="cars", password="x")
-        acc = Account.objects.create(user=user)
+        acc = Account.objects.create(user=user, name="CARS")
         tesla = Brand.objects.create(name="Tesla")
         nissan = Brand.objects.create(name="Nissan")
         model_s = EVModel.objects.create(brand=tesla, name="Model S")
@@ -291,7 +291,7 @@ class SubscriptionTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(username="bob", password="pwd")
-        self.account = Account.objects.create(user=self.user)
+        self.account = Account.objects.create(user=self.user, name="SUBSCRIBER")
         self.product = Product.objects.create(name="Gold", renewal_period=30)
 
     def test_create_and_list_subscription(self):

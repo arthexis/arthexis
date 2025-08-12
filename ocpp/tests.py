@@ -268,7 +268,9 @@ class SimulatorAdminTests(TestCase):
         user = await database_sync_to_async(User.objects.create_user)(
             username="bob", password="pwd"
         )
-        acc = await database_sync_to_async(Account.objects.create)(user=user)
+        acc = await database_sync_to_async(Account.objects.create)(
+            user=user, name="BOB"
+        )
         await database_sync_to_async(Credit.objects.create)(
             account=acc, amount_kwh=10
         )
