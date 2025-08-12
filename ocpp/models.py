@@ -132,9 +132,11 @@ class Simulator(models.Model):
     name = models.CharField(max_length=100, unique=True)
     cp_path = models.CharField(max_length=100)
     host = models.CharField(max_length=100, default="127.0.0.1")
-    ws_port = models.IntegerField(default=8000)
+    ws_port = models.IntegerField("WS Port", default=8000)
     rfid = models.CharField(max_length=8, default="FFFFFFFF")
+    duration = models.IntegerField(default=600)
     interval = models.FloatField(default=5.0)
+    pre_charge_delay = models.FloatField("Delay", default=10.0)
     kwh_max = models.FloatField(default=60.0)
     repeat = models.BooleanField(default=False)
     username = models.CharField(max_length=100, blank=True)
@@ -151,7 +153,9 @@ class Simulator(models.Model):
             ws_port=self.ws_port,
             rfid=self.rfid,
             cp_path=self.cp_path,
+            duration=self.duration,
             interval=self.interval,
+            pre_charge_delay=self.pre_charge_delay,
             kwh_max=self.kwh_max,
             repeat=self.repeat,
             username=self.username or None,

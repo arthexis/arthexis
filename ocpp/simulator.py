@@ -26,7 +26,7 @@ class SimulatorConfig:
     kwh_min: float = 30.0
     kwh_max: float = 60.0
     interval: float = 5.0
-    pre_charge_delay: float = 0.0
+    pre_charge_delay: float = 10.0
     repeat: bool = False
     username: Optional[str] = None
     password: Optional[str] = None
@@ -93,6 +93,24 @@ class ChargePointSimulator:
                     self.status = "running"
                     self._connect_error = "accepted"
                     self._connected.set()
+                if cfg.pre_charge_delay > 0:
+                    idle_start = time.monotonic()
+                    while time.monotonic() - idle_start < cfg.pre_charge_delay:
+                        await send(
+                            json.dumps(
+                                [
+                                    2,
+                                    "status",
+                                    "StatusNotification",
+                                    {
+                                        "connectorId": 1,
+                                        "errorCode": "NoError",
+                                        "status": "Available",
+                                    },
+                                ]
+                            )
+                        )
+                        await asyncio.sleep(cfg.interval)
 
                 meter_start = random.randint(1000, 2000)
                 await send(

@@ -119,6 +119,16 @@ class SimulatorAdmin(admin.ModelAdmin):
         "running",
         "log_link",
     )
+    fields = (
+        "name",
+        "cp_path",
+        ("host", "ws_port"),
+        "rfid",
+        ("duration", "interval", "pre_charge_delay"),
+        "kwh_max",
+        "repeat",
+        ("username", "password"),
+    )
     actions = ("start_simulator", "stop_simulator")
 
     def running(self, obj):

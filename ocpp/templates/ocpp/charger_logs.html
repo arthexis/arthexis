@@ -4,7 +4,7 @@
 
 {% block content %}
 <h1>Log for {{ charger.name|default:charger.charger_id }}</h1>
-<pre class="bg-light p-3">
+<pre class="p-3 border rounded bg-body text-body">
 {% for entry in log %}{{ entry }}
 {% endfor %}
 </pre>
