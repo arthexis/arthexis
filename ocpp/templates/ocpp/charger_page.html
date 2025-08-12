@@ -11,6 +11,9 @@
   <strong>{{ state }}</strong>
 </div>
 <p>{% trans "Total Energy" %}: {{ charger.total_kwh|floatformat:2 }} kWh</p>
+{% if active_tx %}
+<p>{% trans "Current Session" %}: {% if active_tx.kwh %}{{ active_tx.kwh|floatformat:2 }}{% else %}-{% endif %} kWh</p>
+{% endif %}
 <p>{% ref_img charger.get_absolute_url 200 %}</p>
 
 <h2>{% trans "Sessions" %}</h2>
@@ -26,7 +29,7 @@
   <tbody>
     {% for tx in transactions %}
     <tr>
-      <td>{{ tx.transaction_id }}</td>
+      <td>{{ tx.id }}</td>
       <td>{{ tx.start_time }}</td>
       <td>{{ tx.stop_time|default:"-" }}</td>
       <td>{% if tx.kwh %}{{ tx.kwh|floatformat:2 }}{% else %}-{% endif %}</td>

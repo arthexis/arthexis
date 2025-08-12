@@ -17,7 +17,7 @@ from .models import (
     EVModel,
 )
 from accounts.models import RFID, RFIDSource
-from ocpp.models import Transaction
+from ocpp.models import Transaction, Charger
 
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
@@ -217,9 +217,9 @@ class AccountTests(TestCase):
         user = User.objects.create_user(username="balance", password="x")
         acc = Account.objects.create(user=user, name="BALANCE")
         Credit.objects.create(account=acc, amount_kwh=50)
+        charger = Charger.objects.create(charger_id="T1")
         Transaction.objects.create(
-            charger_id="T1",
-            transaction_id=1,
+            charger=charger,
             account=acc,
             meter_start=0,
             meter_stop=20,

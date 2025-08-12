@@ -45,20 +45,16 @@ class Charger(models.Model):
     def total_kwh(self) -> float:
         """Return total energy delivered by this charger in kWh."""
         total = 0.0
-        for tx in Transaction.objects.filter(
-            charger_id=self.charger_id,
-            meter_start__isnull=False,
-            meter_stop__isnull=False,
-        ):
-            diff = tx.meter_stop - tx.meter_start
-            if diff > 0:
-                total += diff / 1000.0
+        for tx in self.transactions.all():
+            kwh = tx.kwh
+            if kwh:
+                total += kwh
         return total
 
     def purge(self):
         from . import store
 
-        Transaction.objects.filter(charger_id=self.charger_id).delete()
+        self.transactions.all().delete()
         self.meter_readings.all().delete()
         store.clear_log(self.charger_id, log_type="charger")
         store.transactions.pop(self.charger_id, None)
@@ -69,7 +65,7 @@ class Charger(models.Model):
         from . import store
 
         if (
-            Transaction.objects.filter(charger_id=self.charger_id).exists()
+            self.transactions.exists()
             or self.meter_readings.exists()
             or store.get_logs(self.charger_id, log_type="charger")
             or store.transactions.get(self.charger_id)
@@ -82,28 +78,37 @@ class Charger(models.Model):
 class Transaction(models.Model):
     """Charging session data stored for each charger."""
 
-    charger_id = models.CharField(max_length=100)
-    transaction_id = models.BigIntegerField()
+    charger = models.ForeignKey(
+        Charger, on_delete=models.CASCADE, related_name="transactions", null=True
+    )
     account = models.ForeignKey(
         Account, on_delete=models.PROTECT, related_name="transactions", null=True
     )
+    rfid = models.CharField(max_length=20, blank=True)
     meter_start = models.IntegerField(null=True, blank=True)
     meter_stop = models.IntegerField(null=True, blank=True)
     start_time = models.DateTimeField()
     stop_time = models.DateTimeField(null=True, blank=True)
 
-    class Meta:
-        unique_together = ("charger_id", "transaction_id")
-
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.charger_id}:{self.transaction_id}"
+        return f"{self.charger}:{self.pk}"
 
     @property
     def kwh(self) -> float | None:
         """Return consumed energy in kWh for this session."""
-        if self.meter_start is None or self.meter_stop is None:
+        if self.meter_start is None:
             return None
-        diff = self.meter_stop - self.meter_start
+        end = self.meter_stop
+        if end is None:
+            last = self.meter_readings.order_by("-timestamp").first()
+            if last is not None:
+                try:
+                    end = int(last.value)
+                except Exception:  # pragma: no cover - unexpected
+                    end = None
+        if end is None:
+            return None
+        diff = end - self.meter_start
         if diff < 0:
             return 0.0
         return diff / 1000.0
@@ -116,7 +121,13 @@ class MeterReading(models.Model):
         Charger, on_delete=models.CASCADE, related_name="meter_readings"
     )
     connector_id = models.IntegerField(null=True, blank=True)
-    transaction_id = models.BigIntegerField(null=True, blank=True)
+    transaction = models.ForeignKey(
+        Transaction,
+        on_delete=models.CASCADE,
+        related_name="meter_readings",
+        null=True,
+        blank=True,
+    )
     timestamp = models.DateTimeField()
     measurand = models.CharField(max_length=100, blank=True)
     value = models.DecimalField(max_digits=12, decimal_places=3)

@@ -60,6 +60,8 @@ class ChargerAdmin(admin.ModelAdmin):
         "latitude",
         "longitude",
         "last_heartbeat",
+        "session_kwh",
+        "total_kwh_display",
         "test_link",
         "log_link",
         "status_link",
@@ -104,6 +106,21 @@ class ChargerAdmin(admin.ModelAdmin):
     def delete_queryset(self, request, queryset):
         for obj in queryset:
             obj.delete()
+
+    def total_kwh_display(self, obj):
+        return round(obj.total_kwh, 2)
+
+    total_kwh_display.short_description = "Total kWh"
+
+    def session_kwh(self, obj):
+        tx = store.transactions.get(obj.charger_id)
+        if tx:
+            val = tx.kwh
+            if val:
+                return round(val, 2)
+        return 0.0
+
+    session_kwh.short_description = "Session kWh"
 
 
 @admin.register(Simulator)
@@ -183,7 +200,7 @@ class MeterReadingAdmin(admin.ModelAdmin):
         "measurand",
         "unit",
         "connector_id",
-        "transaction_id",
+        "transaction",
     )
     list_filter = ("charger", "measurand")
 
