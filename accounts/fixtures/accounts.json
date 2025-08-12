@@ -1,0 +1,11 @@
+[
+  {
+    "model": "accounts.account",
+    "pk": 1,
+    "fields": {
+      "name": "GELECTRIIC",
+      "user": ["admin"],
+      "service_account": true
+    }
+  }
+]

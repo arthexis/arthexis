@@ -300,6 +300,7 @@ class RFIDSource(models.Model):
 class Account(models.Model):
     """Track kWh credits for a user."""
 
+    name = models.CharField(max_length=100, unique=True)
     user = models.OneToOneField(
         get_user_model(),
         on_delete=models.CASCADE,
@@ -351,8 +352,13 @@ class Account(models.Model):
         """Remaining kWh available for the account."""
         return self.credits_kwh - self.total_kwh_spent
 
+    def save(self, *args, **kwargs):
+        if self.name:
+            self.name = self.name.upper()
+        super().save(*args, **kwargs)
+
     def __str__(self):  # pragma: no cover - simple representation
-        return str(self.user) if self.user else f"Account {self.pk}"
+        return self.name
 
 
 class Credit(models.Model):

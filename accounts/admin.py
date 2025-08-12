@@ -75,6 +75,7 @@ class CreditInline(admin.TabularInline):
 class AccountAdmin(admin.ModelAdmin):
     change_list_template = "admin/accounts/account/change_list.html"
     list_display = (
+        "name",
         "user",
         "credits_kwh",
         "total_kwh_spent",
@@ -83,6 +84,7 @@ class AccountAdmin(admin.ModelAdmin):
         "authorized",
     )
     search_fields = (
+        "name",
         "user__username",
         "user__email",
         "user__first_name",
@@ -101,6 +103,7 @@ class AccountAdmin(admin.ModelAdmin):
             None,
             {
                 "fields": (
+                    "name",
                     "user",
                     ("service_account", "authorized"),
                     ("credits_kwh", "total_kwh_spent", "balance_kwh"),
@@ -168,7 +171,7 @@ class AccountAdmin(admin.ModelAdmin):
                     last_name=last,
                     is_active=allow,
                 )
-                account = Account.objects.create(user=user)
+                account = Account.objects.create(user=user, name=username.upper())
                 rfid_val = form.cleaned_data["rfid"].upper()
                 if rfid_val:
                     tag, _ = RFID.objects.get_or_create(rfid=rfid_val)
