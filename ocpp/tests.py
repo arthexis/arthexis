@@ -21,6 +21,7 @@ import asyncio
 from pathlib import Path
 from .simulator import SimulatorConfig, ChargePointSimulator
 import re
+from decimal import Decimal
 
 
 class SinkConsumerTests(TransactionTestCase):
@@ -209,6 +210,30 @@ class ChargerAdminTests(TestCase):
         self.client.post(url, {"action": "purge_data", "_selected_action": [charger.pk]})
         self.client.post(delete_url, {"post": "yes"})
         self.assertFalse(Charger.objects.filter(pk=charger.pk).exists())
+
+
+class TransactionAdminTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="tx-admin", password="secret", email="tx@example.com"
+        )
+        self.client.force_login(self.admin)
+
+    def test_meter_readings_inline_displayed(self):
+        charger = Charger.objects.create(charger_id="T1")
+        tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
+        reading = MeterReading.objects.create(
+            charger=charger,
+            transaction=tx,
+            timestamp=timezone.now(),
+            value=Decimal("2.123"),
+            unit="kWh",
+        )
+        url = reverse("admin:ocpp_transaction_change", args=[tx.pk])
+        resp = self.client.get(url)
+        self.assertContains(resp, str(reading.value))
 
 
 class SimulatorAdminTests(TestCase):

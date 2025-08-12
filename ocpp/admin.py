@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from .models import Charger, Simulator, MeterReading
+from .models import Charger, Simulator, MeterReading, Transaction
 from .simulator import ChargePointSimulator
 from . import store
 
@@ -192,6 +192,32 @@ class SimulatorAdmin(admin.ModelAdmin):
         return format_html('<a href="{}" target="_blank">view</a>', url)
 
     log_link.short_description = "Log"
+
+
+class MeterReadingInline(admin.TabularInline):
+    model = MeterReading
+    extra = 0
+    fields = ("timestamp", "value", "unit", "measurand", "connector_id")
+    readonly_fields = fields
+    can_delete = False
+
+
+@admin.register(Transaction)
+class TransactionAdmin(admin.ModelAdmin):
+    list_display = (
+        "charger",
+        "account",
+        "rfid",
+        "meter_start",
+        "meter_stop",
+        "start_time",
+        "stop_time",
+        "kwh",
+    )
+    readonly_fields = ("kwh",)
+    list_filter = ("charger", "account")
+    date_hierarchy = "start_time"
+    inlines = [MeterReadingInline]
 
 
 class MeterReadingDateFilter(admin.SimpleListFilter):
