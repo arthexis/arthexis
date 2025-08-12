@@ -229,6 +229,17 @@ def calculator(request):
     """Display the AWG calculator form and results using a template."""
     form_data = request.POST or request.GET
     form = {k: v for k, v in form_data.items() if v not in (None, "", "None")}
+    if request.GET:
+        defaults = {
+            "amps": "40",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "ground": "1",
+        }
+        for key, value in defaults.items():
+            form.setdefault(key, value)
     context: dict[str, object] = {"form": form}
     if request.method == "POST" and request.POST.get("meters"):
         max_awg = request.POST.get("max_awg") or None
