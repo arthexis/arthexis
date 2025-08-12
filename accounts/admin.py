@@ -1,10 +1,11 @@
 from django import forms
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, reverse
 from django.shortcuts import redirect, render
 from django.http import JsonResponse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.utils.html import format_html
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 
@@ -227,8 +228,9 @@ class RFIDResource(resources.ModelResource):
 @admin.register(RFID)
 class RFIDAdmin(ImportExportModelAdmin):
     change_list_template = "admin/accounts/rfid/change_list.html"
+    change_form_template = "admin/accounts/rfid/change_form.html"
     resource_class = RFIDResource
-    list_display = ("rfid", "accounts_display", "allowed", "added_on")
+    list_display = ("rfid", "accounts_display", "allowed", "added_on", "write_link")
     search_fields = ("rfid",)
     autocomplete_fields = ["accounts"]
     actions = ["scan_rfids"]
@@ -255,6 +257,16 @@ class RFIDAdmin(ImportExportModelAdmin):
                 "scan/next/",
                 self.admin_site.admin_view(self.scan_next),
                 name="accounts_rfid_scan_next",
+            ),
+            path(
+                "<int:pk>/write/",
+                self.admin_site.admin_view(self.write_view),
+                name="accounts_rfid_write",
+            ),
+            path(
+                "<int:pk>/write/next/",
+                self.admin_site.admin_view(self.write_next),
+                name="accounts_rfid_write_next",
             ),
         ]
         return custom + urls
@@ -286,6 +298,93 @@ class RFIDAdmin(ImportExportModelAdmin):
                         rfid = "".join(f"{x:02X}" for x in uid[:5])
                         tag, created = RFID.objects.get_or_create(rfid=rfid)
                         return JsonResponse({"rfid": rfid, "created": created})
+                time.sleep(0.2)
+            return JsonResponse({"rfid": None})
+        finally:  # pragma: no cover - cleanup hardware
+            if GPIO:
+                try:
+                    GPIO.cleanup()
+                except Exception:
+                    pass
+
+    def write_link(self, obj):
+        url = reverse("admin:accounts_rfid_write", args=[obj.pk])
+        return format_html('<a href="{}">Write</a>', url)
+
+    write_link.short_description = "Write"
+
+    def write_view(self, request, pk):
+        tag = RFID.objects.get(pk=pk)
+        context = self.admin_site.each_context(request)
+        context.update({"rfid": tag})
+        return render(request, "admin/accounts/rfid/write.html", context)
+
+    def write_next(self, request, pk):
+        try:
+            from mfrc522 import MFRC522
+        except Exception as exc:  # pragma: no cover - hardware dependent
+            return JsonResponse({"error": str(exc)}, status=500)
+
+        import time
+        try:
+            import RPi.GPIO as GPIO  # pragma: no cover - hardware dependent
+        except Exception:  # pragma: no cover - hardware dependent
+            GPIO = None
+
+        tag = RFID.objects.get(pk=pk)
+        mfrc = MFRC522()
+        timeout = time.time() + 1
+        try:
+            while time.time() < timeout:  # pragma: no cover - hardware loop
+                (status, _TagType) = mfrc.MFRC522_Request(mfrc.PICC_REQIDL)
+                if status == mfrc.MI_OK:
+                    (status, uid) = mfrc.MFRC522_Anticoll()
+                    if status == mfrc.MI_OK:
+                        rfid = "".join(f"{x:02X}" for x in uid[:5])
+                        if rfid != tag.rfid:
+                            return JsonResponse({"rfid": rfid, "match": False})
+                        try:
+                            mfrc.MFRC522_SelectTag(uid)
+                            # Default auth with factory keys, sector 1 trailer block
+                            default_key = [0xFF] * 6
+                            block = 7
+                            if (
+                                mfrc.MFRC522_Auth(
+                                    mfrc.PICC_AUTHENT1A, block, default_key, uid
+                                )
+                                == mfrc.MI_OK
+                            ):
+                                key_a = [
+                                    int(tag.key_a[i : i + 2], 16)
+                                    for i in range(0, 12, 2)
+                                ]
+                                key_b = [
+                                    int(tag.key_b[i : i + 2], 16)
+                                    for i in range(0, 12, 2)
+                                ]
+                                data = key_a + [0xFF, 0x07, 0x80, 0x69] + key_b
+                                mfrc.MFRC522_Write(block, data)
+                                mfrc.MFRC522_StopCrypto1()
+                                return JsonResponse(
+                                    {"rfid": rfid, "match": True, "written": True}
+                                )
+                            return JsonResponse(
+                                {
+                                    "rfid": rfid,
+                                    "match": True,
+                                    "written": False,
+                                    "error": "auth failed",
+                                }
+                            )
+                        except Exception as exc:  # pragma: no cover - hardware dependent
+                            return JsonResponse(
+                                {
+                                    "rfid": rfid,
+                                    "match": True,
+                                    "written": False,
+                                    "error": str(exc),
+                                }
+                            )
                 time.sleep(0.2)
             return JsonResponse({"rfid": None})
         finally:  # pragma: no cover - cleanup hardware
