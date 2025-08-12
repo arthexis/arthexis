@@ -187,12 +187,38 @@ class RFID(models.Model):
             )
         ],
     )
+    key_a = models.CharField(
+        max_length=12,
+        default="FFFFFFFFFFFF",
+        validators=[
+            RegexValidator(
+                r"^[0-9A-Fa-f]{12}$",
+                message="Key must be 12 hexadecimal digits",
+            )
+        ],
+        verbose_name="Key A",
+    )
+    key_b = models.CharField(
+        max_length=12,
+        default="FFFFFFFFFFFF",
+        validators=[
+            RegexValidator(
+                r"^[0-9A-Fa-f]{12}$",
+                message="Key must be 12 hexadecimal digits",
+            )
+        ],
+        verbose_name="Key B",
+    )
     allowed = models.BooleanField(default=True)
     added_on = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
         if self.rfid:
             self.rfid = self.rfid.upper()
+        if self.key_a:
+            self.key_a = self.key_a.upper()
+        if self.key_b:
+            self.key_b = self.key_b.upper()
         super().save(*args, **kwargs)
         if not self.allowed:
             self.accounts.clear()

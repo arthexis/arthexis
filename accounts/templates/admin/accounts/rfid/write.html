@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>RFID Writer</h1>
+<p>Expected RFID: {{ rfid.rfid }}</p>
+<p>Key A: {{ rfid.key_a }}<br>Key B: {{ rfid.key_b }}</p>
+<p id="status">Waiting for card...</p>
+<script>
+async function waitWrite(){
+    try{
+        const resp = await fetch('{% url "admin:accounts_rfid_write_next" rfid.pk %}');
+        const data = await resp.json();
+        const p = document.getElementById('status');
+        if(data.error){
+            p.textContent = data.error;
+        } else if(data.rfid){
+            if(data.match){
+                p.textContent = data.written ? `Wrote to ${data.rfid}` : `Failed to write ${data.rfid}: ${data.error || ''}`;
+            } else {
+                p.textContent = `Scanned ${data.rfid} but expected {{ rfid.rfid }}`;
+            }
+        }
+    }catch(err){
+        document.getElementById('status').textContent = err;
+    }
+    setTimeout(waitWrite, 200);
+}
+waitWrite();
+</script>
+{% endblock %}
