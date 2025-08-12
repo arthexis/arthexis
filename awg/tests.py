@@ -96,8 +96,9 @@ class AWGCalculatorTests(TestCase):
             show_in_website=True,
         )
         resp = self.client.get(reverse("awg:calculator"))
+        self.assertContains(resp, "Or try a pre-loaded template:")
         self.assertContains(resp, tmpl.name)
-        self.assertContains(resp, tmpl.get_absolute_url())
+        self.assertContains(resp, tmpl.get_absolute_url().replace("&", "&amp;"))
 
 
 class CalculatorTemplateTests(TestCase):
