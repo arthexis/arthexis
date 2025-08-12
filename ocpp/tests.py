@@ -173,6 +173,27 @@ class ChargerLandingTests(TestCase):
         self.assertContains(resp, "2.00")
         self.assertContains(resp, "Offline")
 
+    def test_total_includes_ongoing_transaction(self):
+        charger = Charger.objects.create(charger_id="ONGOING")
+        tx = Transaction.objects.create(
+            charger=charger,
+            meter_start=1000,
+            start_time=timezone.now(),
+        )
+        store.transactions[charger.charger_id] = tx
+        MeterReading.objects.create(
+            charger=charger,
+            transaction=tx,
+            timestamp=timezone.now(),
+            measurand="Energy.Active.Import.Register",
+            value=Decimal("2500"),
+            unit="Wh",
+        )
+        client = Client()
+        resp = client.get(reverse("charger-status", args=["ONGOING"]))
+        self.assertContains(resp, "Total Energy: 1.50 kWh")
+        store.transactions.pop(charger.charger_id, None)
+
     def test_log_page_renders_without_charger(self):
         store.add_log("LOG1", "hello", log_type="charger")
         entry = store.get_logs("LOG1", log_type="charger")[0]
