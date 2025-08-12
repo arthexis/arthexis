@@ -4,6 +4,9 @@ import re
 import configparser
 from django.utils.text import slugify
 import uuid
+import subprocess
+from pathlib import Path
+from django.conf import settings
 
 
 class Node(models.Model):
@@ -255,6 +258,21 @@ class SystemdUnit(models.Model):
     def save(self, *args, **kwargs):
         self.config_text = self.render_unit()
         super().save(*args, **kwargs)
+
+    def is_installed(self):
+        root = getattr(settings, "SYSTEMD_UNIT_ROOT", "/etc/systemd/system")
+        return (Path(root) / f"{self.name}.service").exists()
+
+    def is_running(self):
+        try:
+            subprocess.run(
+                ["systemctl", "is-active", f"{self.name}.service"],
+                check=True,
+            )
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            return False
+        else:
+            return True
 
     @classmethod
     def parse_config(cls, name, text):
