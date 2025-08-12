@@ -1,0 +1,50 @@
+[
+  {
+    "model": "release.readmesection",
+    "pk": 1,
+    "fields": {
+      "order": 1,
+      "content": "# Arthexis Constellation"
+    }
+  },
+  {
+    "model": "release.readmesection",
+    "pk": 2,
+    "fields": {
+      "order": 2,
+      "content": "## Purpose\nArthexis Constellation is a Django-based suite that centralizes tools for managing charging infrastructure and related services."
+    }
+  },
+  {
+    "model": "release.readmesection",
+    "pk": 3,
+    "fields": {
+      "order": 3,
+      "content": "## Setup\n1. `pip install -r requirements.txt`\n2. `python manage.py migrate`\n3. `python manage.py runserver`\n4. Run management commands with `python manage.py <command>`"
+    }
+  },
+  {
+    "model": "release.readmesection",
+    "pk": 4,
+    "fields": {
+      "order": 4,
+      "content": "## Included Apps\n| App | Purpose |\n| --- | --- |\n| accounts | User accounts, RFID login, and credit management |\n| app | Core utilities and site model tweaks |\n| awg | American Wire Gauge references and calculator |\n| clipboard | Store and scan clipboard text samples |\n| crm | Customer relationship management with Odoo support |\n| emails | Email templates and messaging |\n| nodes | Register project nodes and manage NGINX templates |\n| ocpp | OCPP 1.6 charge point management |\n| references | Reusable references and QR codes |\n| release | Packaging and PyPI release helpers |\n| rfid | RFID tag model and helpers |\n| social.bsky | Bluesky integration |\n| social.meta | Facebook page integration |\n| todos | Track project tasks from code TODOs |\n| website | Default site and README renderer |\n| readme | Build project README and expose docs |"
+    }
+  },
+  {
+    "model": "release.readmesection",
+    "pk": 5,
+    "fields": {
+      "order": 5,
+      "content": "## External Links\n- [Python 3.12](https://www.python.org/downloads/release/python-31210/)\n- [MIT License](LICENSE)\n- [Django](https://www.djangoproject.com/)\n- [Channels](https://channels.readthedocs.io/)\n- [Celery](https://docs.celeryq.dev/)\n- [Bootstrap](https://getbootstrap.com/)"
+    }
+  },
+  {
+    "model": "release.readmesection",
+    "pk": 6,
+    "fields": {
+      "order": 6,
+      "content": "---\n\n*Note: do not modify this README unless directed. Use Django's admindocs for app documentation.*"
+    }
+  }
+]

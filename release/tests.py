@@ -1,15 +1,17 @@
 import json
 import os
 import tempfile
+from pathlib import Path
 
-from django.test import SimpleTestCase, TestCase, Client
+from django.test import SimpleTestCase, TestCase, Client, override_settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from django.core.management import call_command
 from unittest.mock import patch
 from types import SimpleNamespace
 
 from . import Credentials, DEFAULT_PACKAGE
-from .models import PackageConfig, TestLog, Todo
+from .models import PackageConfig, TestLog, Todo, ReadmeSection
 from .utils import create_todos_from_comments
 from . import utils
 
@@ -89,6 +91,18 @@ class PackageAdminTests(TestCase):
             self.assertEqual(response.status_code, 200)
             mock_cmd.assert_called_once_with("build_readme")
             self.assertContains(response, reverse("website:index"))
+
+
+class BuildReadmeCommandTests(TestCase):
+    def test_builds_from_sections(self):
+        ReadmeSection.objects.create(order=1, content="First")
+        ReadmeSection.objects.create(order=2, content="Second")
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(BASE_DIR=tmp):
+                call_command("build_readme")
+                readme = Path(tmp) / "README.md"
+                self.assertTrue(readme.exists())
+                self.assertEqual(readme.read_text(), "First\n\nSecond")
 
 
 class TestLogTests(TestCase):

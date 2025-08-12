@@ -3,7 +3,7 @@ from django.urls import reverse
 from django.core.management import call_command
 from django.utils.html import format_html
 
-from .models import PackageConfig, TestLog, Todo
+from .models import PackageConfig, TestLog, Todo, ReadmeSection
 from . import utils
 
 
@@ -53,5 +53,13 @@ class TestLogAdmin(admin.ModelAdmin):
 class TodoAdmin(admin.ModelAdmin):
     list_display = ("text", "completed", "file_path", "line_number")
     list_filter = ("completed",)
+
+
+@admin.register(ReadmeSection)
+class ReadmeSectionAdmin(admin.ModelAdmin):
+    list_display = ("order", "short_content")
+
+    def short_content(self, obj):
+        return (obj.content[:50] + "...") if len(obj.content) > 50 else obj.content
 
 
