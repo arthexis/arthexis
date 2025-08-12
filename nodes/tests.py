@@ -7,6 +7,7 @@ import socketserver
 import base64
 import os
 import tempfile
+import subprocess
 
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -249,19 +250,42 @@ class SystemdUnitInstallCommandTests(TestCase):
             with override_settings(SYSTEMD_UNIT_ROOT=tmpdir):
                 with patch("subprocess.run") as mock_run:
                     call_command("install_systemd_unit", unit.name)
+                service_path = Path(tmpdir) / "demo.service"
+                self.assertTrue(service_path.exists())
+                content = service_path.read_text()
+                self.assertIn("ExecStart=/bin/true", content)
+                mock_run.assert_has_calls(
+                    [
+                        call(["systemctl", "daemon-reload"], check=True),
+                        call(["systemctl", "enable", unit.name], check=True),
+                        call(["systemctl", "restart", unit.name], check=True),
+                    ]
+                )
+                self.assertEqual(mock_run.call_count, 3)
 
-        service_path = Path(tmpdir) / "demo.service"
-        self.assertTrue(service_path.exists())
-        content = service_path.read_text()
-        self.assertIn("ExecStart=/bin/true", content)
-        mock_run.assert_has_calls(
-            [
-                call(["systemctl", "daemon-reload"], check=True),
-                call(["systemctl", "enable", unit.name], check=True),
-                call(["systemctl", "restart", unit.name], check=True),
-            ]
-        )
-        self.assertEqual(mock_run.call_count, 3)
+
+class SystemdUnitStatusTests(TestCase):
+    def test_installed_flag(self):
+        unit = SystemdUnit(name="demo", description="demo", exec_start="/bin/true")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with override_settings(SYSTEMD_UNIT_ROOT=tmpdir):
+                self.assertFalse(unit.is_installed())
+                path = Path(tmpdir) / "demo.service"
+                path.write_text("")
+                self.assertTrue(unit.is_installed())
+
+    def test_running_flag(self):
+        unit = SystemdUnit(name="demo", description="demo", exec_start="/bin/true")
+        with patch("subprocess.run") as mock_run:
+            self.assertTrue(unit.is_running())
+            mock_run.assert_called_with(
+                ["systemctl", "is-active", "demo.service"], check=True
+            )
+        with patch(
+            "subprocess.run",
+            side_effect=subprocess.CalledProcessError(3, ["systemctl"]),
+        ):
+            self.assertFalse(unit.is_running())
 
 
 class RecipeTests(TestCase):
