@@ -9,14 +9,16 @@
         display: flex;
         flex-wrap: wrap;
         gap: 1rem;
+        box-sizing: border-box;
     }
-    .dashboard-main {
-        flex: 1 1 300px;
+    .dashboard-main,
+    .dashboard-side {
+        flex: 1 1 calc(50% - 0.5rem);
         min-width: 300px;
+        max-width: 100%;
+        box-sizing: border-box;
     }
     .dashboard-side {
-        flex: 1 1 300px;
-        min-width: 300px;
         background: var(--darkened-bg);
     }
     .dashboard-side .module {
