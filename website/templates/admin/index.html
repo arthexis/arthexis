@@ -47,6 +47,15 @@
         margin-bottom: 10px;
         padding-left: 18px;
     }
+    /* Override Django's dashboard defaults so the flex layout works */
+    .dashboard #content {
+        width: 100%;
+    }
+    #content-main,
+    #recent-boxes {
+        float: none;
+        width: auto;
+    }
   </style>
 {% endblock %}
 
