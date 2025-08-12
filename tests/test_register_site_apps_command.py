@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+import socket
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -15,6 +16,7 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from website.models import Application, SiteApplication
+from nodes.models import Node
 
 
 class RegisterSiteAppsCommandTests(TestCase):
@@ -26,7 +28,12 @@ class RegisterSiteAppsCommandTests(TestCase):
         call_command("register_site_apps")
 
         site = Site.objects.get(domain="127.0.0.1")
-        self.assertEqual(site.name, "localhost")
+        self.assertEqual(site.name, "website")
+
+        node = Node.objects.get(hostname=socket.gethostname())
+        self.assertFalse(node.enable_public_api)
+        self.assertFalse(node.clipboard_polling)
+        self.assertFalse(node.screenshot_polling)
 
         for label in settings.LOCAL_APPS:
             try:

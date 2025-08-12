@@ -14,10 +14,10 @@ from pathlib import Path
 import os
 import sys
 import ipaddress
+import socket
 from django.utils.translation import gettext_lazy as _
 from celery.schedules import crontab
 from django.http import request as http_request
-from .active_app import get_active_app
 
 
 _original_validate_host = http_request.validate_host
@@ -223,7 +223,7 @@ BSKY_APP_PASSWORD = os.environ.get("BSKY_APP_PASSWORD")
 # Logging configuration
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
-LOG_FILE_NAME = "tests.log" if "test" in sys.argv else "website.log"
+LOG_FILE_NAME = "tests.log" if "test" in sys.argv else f"{socket.gethostname()}.log"
 
 LOGGING = {
     "version": 1,
