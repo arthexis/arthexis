@@ -3,6 +3,7 @@ from django.urls import path
 from django.shortcuts import redirect
 from django.utils.html import format_html
 from django import forms
+from app.widgets import CopyColorWidget
 from django.db import models
 from django.conf import settings
 from pathlib import Path
@@ -30,9 +31,7 @@ class NodeAdminForm(forms.ModelForm):
     class Meta:
         model = Node
         fields = "__all__"
-        widgets = {
-            "badge_color": forms.TextInput(attrs={"type": "color"})
-        }
+        widgets = {"badge_color": CopyColorWidget()}
 
 
 @admin.register(Node)

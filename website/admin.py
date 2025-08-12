@@ -3,6 +3,7 @@ from django.contrib.sites.admin import SiteAdmin as DjangoSiteAdmin
 from django.contrib.sites.models import Site
 from django import forms
 from django.db import models
+from app.widgets import CopyColorWidget
 from django.shortcuts import redirect
 from django.urls import path
 import ipaddress
@@ -27,9 +28,7 @@ class SiteBadgeInline(admin.StackedInline):
     model = SiteBadge
     can_delete = False
     extra = 0
-    formfield_overrides = {
-        models.CharField: {"widget": forms.TextInput(attrs={"type": "color"})}
-    }
+    formfield_overrides = {models.CharField: {"widget": CopyColorWidget}}
 
 
 class SiteApplicationInline(admin.TabularInline):
