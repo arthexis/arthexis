@@ -163,6 +163,20 @@ class RFIDValidationTests(TestCase):
         self.assertEqual(found, acc)
 
 
+class RFIDAssignmentTests(TestCase):
+    def setUp(self):
+        self.user1 = User.objects.create_user(username="user1", password="x")
+        self.user2 = User.objects.create_user(username="user2", password="x")
+        self.acc1 = Account.objects.create(user=self.user1)
+        self.acc2 = Account.objects.create(user=self.user2)
+        self.tag = RFID.objects.create(rfid="ABCDEF12")
+
+    def test_rfid_can_only_attach_to_one_account(self):
+        self.acc1.rfids.add(self.tag)
+        with self.assertRaises(ValidationError):
+            self.acc2.rfids.add(self.tag)
+
+
 class RFIDSourceTests(TestCase):
     def test_idempotent_setters(self):
         src = RFIDSource.objects.create(name="local", endpoint="rfids")

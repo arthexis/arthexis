@@ -4,7 +4,10 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import RegexValidator
+from django.core.exceptions import ValidationError
 from django.apps import apps
+from django.db.models.signals import m2m_changed
+from django.dispatch import receiver
 from datetime import timedelta
 from urllib.parse import urljoin
 
@@ -171,7 +174,7 @@ class UserProxy(User):
 
 
 class RFID(models.Model):
-    """RFID tag that may be assigned to one or more accounts."""
+    """RFID tag that may be assigned to one account."""
 
     rfid = models.CharField(
         max_length=8,
@@ -435,3 +438,19 @@ class Subscription(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.account.user} -> {self.product}"
+
+
+# Ensure each RFID can only be linked to one account
+@receiver(m2m_changed, sender=Account.rfids.through)
+def _rfid_unique_account(sender, instance, action, reverse, model, pk_set, **kwargs):
+    """Prevent associating an RFID with more than one account."""
+    if action == "pre_add":
+        if reverse:  # adding accounts to an RFID
+            if instance.accounts.exclude(pk__in=pk_set).exists():
+                raise ValidationError("RFID tags may only be assigned to one account.")
+        else:  # adding RFIDs to an account
+            conflict = model.objects.filter(pk__in=pk_set, accounts__isnull=False).exclude(
+                accounts=instance
+            )
+            if conflict.exists():
+                raise ValidationError("RFID tags may only be assigned to one account.")
