@@ -96,6 +96,7 @@ class RFIDBatchApiTests(TestCase):
         self.client = Client()
         self.user = User.objects.create_user(username="bob", password="secret")
         self.account = Account.objects.create(user=self.user, name="BOB")
+        self.client.force_login(self.user)
 
     def test_export_rfids(self):
         tag = RFID.objects.create(rfid="CARD999")
