@@ -24,35 +24,23 @@ from .models import (
 
 
 class AccountRFIDForm(forms.ModelForm):
-    """Simple text input for assigning RFIDs to an account."""
-
-    rfid = forms.CharField(max_length=8, label="RFID")
+    """Form for assigning existing RFIDs to an account."""
 
     class Meta:
         model = Account.rfids.through
-        fields = []
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance.pk and getattr(self.instance, "rfid_id", None):
-            self.fields["rfid"].initial = self.instance.rfid.rfid
+        fields = ["rfid"]
 
     def clean_rfid(self):
-        value = self.cleaned_data["rfid"].strip().upper()
-        if not RFID._meta.get_field("rfid").validators[0].regex.match(value):
-            raise forms.ValidationError("RFID must be 8 hexadecimal digits")
-        return value
-
-    def save(self, commit=True):
-        value = self.cleaned_data["rfid"]
-        rfid_obj, _ = RFID.objects.get_or_create(rfid=value)
-        self.instance.rfid = rfid_obj
-        return super().save(commit)
+        rfid = self.cleaned_data["rfid"]
+        if rfid.accounts.exclude(pk=self.instance.account_id).exists():
+            raise forms.ValidationError("RFID is already assigned to another account")
+        return rfid
 
 
 class AccountRFIDInline(admin.TabularInline):
     model = Account.rfids.through
     form = AccountRFIDForm
+    autocomplete_fields = ["rfid"]
     extra = 0
     verbose_name = "RFID"
     verbose_name_plural = "RFIDs"
@@ -93,7 +81,12 @@ class AccountAdmin(admin.ModelAdmin):
         "service_account",
         "authorized",
     )
-    filter_horizontal = ("rfids",)
+    search_fields = (
+        "user__username",
+        "user__email",
+        "user__first_name",
+        "user__last_name",
+    )
     readonly_fields = (
         "credits_kwh",
         "total_kwh_spent",
@@ -236,6 +229,8 @@ class RFIDAdmin(ImportExportModelAdmin):
     change_list_template = "admin/accounts/rfid/change_list.html"
     resource_class = RFIDResource
     list_display = ("rfid", "accounts_display", "allowed", "added_on")
+    search_fields = ("rfid",)
+    autocomplete_fields = ["accounts"]
     actions = ["scan_rfids"]
 
     def accounts_display(self, obj):
