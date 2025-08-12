@@ -52,7 +52,7 @@ class CSMSConsumerTests(TransactionTestCase):
         tx_id = response[2]["transactionId"]
 
         tx = await database_sync_to_async(Transaction.objects.get)(
-            transaction_id=tx_id, charger_id="TEST"
+            pk=tx_id, charger__charger_id="TEST"
         )
         self.assertEqual(tx.meter_start, 10)
         self.assertIsNone(tx.stop_time)
@@ -68,6 +68,25 @@ class CSMSConsumerTests(TransactionTestCase):
         await database_sync_to_async(tx.refresh_from_db)()
         self.assertEqual(tx.meter_stop, 20)
         self.assertIsNotNone(tx.stop_time)
+
+        await communicator.disconnect()
+
+    async def test_rfid_recorded(self):
+        await database_sync_to_async(Charger.objects.create)(charger_id="RFIDREC")
+        communicator = WebsocketCommunicator(application, "/RFIDREC/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [2, "1", "StartTransaction", {"meterStart": 1, "idTag": "TAG123"}]
+        )
+        response = await communicator.receive_json_from()
+        tx_id = response[2]["transactionId"]
+
+        tx = await database_sync_to_async(Transaction.objects.get)(
+            pk=tx_id, charger__charger_id="RFIDREC"
+        )
+        self.assertEqual(tx.rfid, "TAG123")
 
         await communicator.disconnect()
 
@@ -92,8 +111,7 @@ class ChargerLandingTests(TestCase):
     def test_charger_page_shows_stats(self):
         charger = Charger.objects.create(charger_id="STATS")
         Transaction.objects.create(
-            charger_id="STATS",
-            transaction_id=1,
+            charger=charger,
             meter_start=1000,
             meter_stop=3000,
             start_time=timezone.now(),
@@ -162,8 +180,7 @@ class ChargerAdminTests(TestCase):
     def test_purge_action_removes_data(self):
         charger = Charger.objects.create(charger_id="PURGE1")
         Transaction.objects.create(
-            charger_id="PURGE1",
-            transaction_id=1,
+            charger=charger,
             start_time=timezone.now(),
         )
         MeterReading.objects.create(
@@ -174,15 +191,14 @@ class ChargerAdminTests(TestCase):
         store.add_log("PURGE1", "entry", log_type="charger")
         url = reverse("admin:ocpp_charger_changelist")
         self.client.post(url, {"action": "purge_data", "_selected_action": [charger.pk]})
-        self.assertFalse(Transaction.objects.filter(charger_id="PURGE1").exists())
+        self.assertFalse(Transaction.objects.filter(charger=charger).exists())
         self.assertFalse(MeterReading.objects.filter(charger=charger).exists())
         self.assertNotIn("PURGE1", store.logs["charger"])
 
     def test_delete_requires_purge(self):
         charger = Charger.objects.create(charger_id="DEL1")
         Transaction.objects.create(
-            charger_id="DEL1",
-            transaction_id=1,
+            charger=charger,
             start_time=timezone.now(),
         )
         delete_url = reverse("admin:ocpp_charger_delete", args=[charger.pk])
@@ -271,7 +287,7 @@ class SimulatorAdminTests(TestCase):
         response = await communicator.receive_json_from()
         self.assertEqual(response[2]["idTagInfo"]["status"], "Invalid")
 
-        exists = await database_sync_to_async(Transaction.objects.filter(charger_id="RFID").exists)()
+        exists = await database_sync_to_async(Transaction.objects.filter(charger__charger_id="RFID").exists)()
         self.assertFalse(exists)
 
         await communicator.disconnect()
@@ -304,7 +320,7 @@ class SimulatorAdminTests(TestCase):
         self.assertEqual(response[2]["idTagInfo"]["status"], "Accepted")
         tx_id = response[2]["transactionId"]
 
-        tx = await database_sync_to_async(Transaction.objects.get)(transaction_id=tx_id, charger_id="RFIDOK")
+        tx = await database_sync_to_async(Transaction.objects.get)(pk=tx_id, charger__charger_id="RFIDOK")
         self.assertEqual(tx.account_id, user.account.id)
 
     async def test_status_fields_updated(self):
@@ -370,7 +386,7 @@ class MeterReadingTests(TransactionTestCase):
         await communicator.receive_json_from()
 
         reading = await database_sync_to_async(MeterReading.objects.get)(charger__charger_id="MR1")
-        self.assertEqual(reading.transaction_id, 100)
+        self.assertIsNone(reading.transaction)
         self.assertEqual(str(reading.value), "2.749")
 
         await communicator.disconnect()

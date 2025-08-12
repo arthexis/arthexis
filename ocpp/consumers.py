@@ -69,6 +69,13 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         """Parse a MeterValues payload into MeterReading rows."""
         connector = payload.get("connectorId")
         tx_id = payload.get("transactionId")
+        tx_obj = None
+        if tx_id is not None:
+            tx_obj = store.transactions.get(self.charger_id)
+            if not tx_obj or tx_obj.pk != int(tx_id):
+                tx_obj = await database_sync_to_async(
+                    Transaction.objects.filter(pk=tx_id, charger=self.charger).first
+                )()
         readings = []
         for mv in payload.get("meterValue", []):
             ts = parse_datetime(mv.get("timestamp"))
@@ -81,7 +88,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     MeterReading(
                         charger=self.charger,
                         connector_id=connector,
-                        transaction_id=tx_id,
+                        transaction=tx_obj,
                         timestamp=ts,
                         measurand=sv.get("measurand", ""),
                         value=val,
@@ -146,17 +153,16 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 else:
                     authorized = True
                 if authorized:
-                    tx_id = int(datetime.utcnow().timestamp())
                     tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                        charger_id=self.charger_id,
-                        transaction_id=tx_id,
+                        charger=self.charger,
                         account=account,
+                        rfid=(payload.get("idTag") or ""),
                         meter_start=payload.get("meterStart"),
                         start_time=timezone.now(),
                     )
                     store.transactions[self.charger_id] = tx_obj
                     reply_payload = {
-                        "transactionId": tx_id,
+                        "transactionId": tx_obj.pk,
                         "idTagInfo": {"status": "Accepted"},
                     }
                 else:

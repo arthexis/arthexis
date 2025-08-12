@@ -41,14 +41,14 @@ def charger_list(request):
         tx_obj = store.transactions.get(cid)
         if not tx_obj:
             tx_obj = (
-                Transaction.objects.filter(charger_id=cid)
+                Transaction.objects.filter(charger__charger_id=cid)
                 .order_by("-start_time")
                 .first()
             )
         tx_data = None
         if tx_obj:
             tx_data = {
-                "transactionId": tx_obj.transaction_id,
+                "transactionId": tx_obj.pk,
                 "meterStart": tx_obj.meter_start,
                 "startTime": tx_obj.start_time.isoformat(),
             }
@@ -80,7 +80,7 @@ def charger_detail(request, cid):
     tx_obj = store.transactions.get(cid)
     if not tx_obj:
         tx_obj = (
-            Transaction.objects.filter(charger_id=cid)
+            Transaction.objects.filter(charger__charger_id=cid)
             .order_by("-start_time")
             .first()
         )
@@ -88,7 +88,7 @@ def charger_detail(request, cid):
     tx_data = None
     if tx_obj:
         tx_data = {
-            "transactionId": tx_obj.transaction_id,
+            "transactionId": tx_obj.pk,
             "meterStart": tx_obj.meter_start,
             "startTime": tx_obj.start_time.isoformat(),
         }
@@ -120,7 +120,7 @@ def dashboard(request):
         tx_obj = store.transactions.get(charger.charger_id)
         if not tx_obj:
             tx_obj = (
-                Transaction.objects.filter(charger_id=charger.charger_id)
+                Transaction.objects.filter(charger=charger)
                 .order_by("-start_time")
                 .first()
             )
@@ -203,9 +203,7 @@ def charger_page(request, cid):
     charger = get_object_or_404(Charger, charger_id=cid)
     tx_active = store.transactions.get(cid)
     state, color = _charger_state(charger, tx_active)
-    transactions = (
-        Transaction.objects.filter(charger_id=cid).order_by("-start_time")
-    )
+    transactions = Transaction.objects.filter(charger=charger).order_by("-start_time")
     return render(
         request,
         "ocpp/charger_page.html",
@@ -214,6 +212,7 @@ def charger_page(request, cid):
             "state": state,
             "color": color,
             "transactions": transactions,
+            "active_tx": tx_active,
         },
     )
 
@@ -263,7 +262,7 @@ def dispatch_action(request, cid):
             2,
             str(datetime.utcnow().timestamp()),
             "RemoteStopTransaction",
-            {"transactionId": tx_obj.transaction_id},
+            {"transactionId": tx_obj.pk},
         ])
         asyncio.get_event_loop().create_task(ws.send(msg))
     elif action == "reset":
