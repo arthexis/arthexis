@@ -204,6 +204,23 @@ def charger_page(request, cid):
     tx_obj = store.transactions.get(cid)
     state, color = _charger_state(charger, tx_obj)
     transactions = Transaction.objects.filter(charger=charger).order_by("-start_time")
+    chart_data = {"labels": [], "values": []}
+    if tx_obj:
+        total = 0.0
+        readings = tx_obj.meter_readings.filter(
+            measurand__in=["", "Energy.Active.Import.Register"]
+        ).order_by("timestamp")
+        for reading in readings:
+            try:
+                val = float(reading.value)
+            except (TypeError, ValueError):
+                continue
+            if reading.unit == "kWh":
+                total += val
+            else:
+                total += val / 1000.0
+            chart_data["labels"].append(reading.timestamp.isoformat())
+            chart_data["values"].append(total)
     return render(
         request,
         "ocpp/charger_status.html",
@@ -213,6 +230,7 @@ def charger_page(request, cid):
             "state": state,
             "color": color,
             "transactions": transactions,
+            "chart_data": json.dumps(chart_data),
         },
     )
 
@@ -233,21 +251,7 @@ def charger_log_page(request, cid):
 
 def charger_status(request, cid):
     """Display current transaction and charger state."""
-    charger = get_object_or_404(Charger, charger_id=cid)
-    tx_obj = store.transactions.get(cid)
-    state, color = _charger_state(charger, tx_obj)
-    transactions = Transaction.objects.filter(charger=charger).order_by("-start_time")
-    return render(
-        request,
-        "ocpp/charger_status.html",
-        {
-            "charger": charger,
-            "tx": tx_obj,
-            "state": state,
-            "color": color,
-            "transactions": transactions,
-        },
-    )
+    return charger_page(request, cid)
 
 
 @csrf_exempt

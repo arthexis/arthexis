@@ -85,6 +85,10 @@
     }]
   };
 
+  const initialChart = {{ chart_data|safe }};
+  chartData.labels = initialChart.labels.map(ts => new Date(ts).toLocaleTimeString());
+  chartData.datasets[0].data = initialChart.values;
+
   function setupChart() {
     const canvas = document.getElementById('kwh-chart');
     if (!canvas) return;
@@ -159,9 +163,11 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    const kwhElem = document.getElementById('session-kwh');
-    if (kwhElem) {
-      addDataPoint(parseFloat(kwhElem.textContent));
+    if (chartData.datasets[0].data.length === 0) {
+      const kwhElem = document.getElementById('session-kwh');
+      if (kwhElem) {
+        addDataPoint(parseFloat(kwhElem.textContent));
+      }
     }
     setupChart();
     setInterval(reloadStatus, 5000);
