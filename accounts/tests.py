@@ -1,4 +1,4 @@
-from django.test import Client, TestCase
+from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.http import HttpRequest
 import json
@@ -23,6 +23,8 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import IntegrityError
 from .backends import LocalhostAdminBackend
+from channels.testing import WebsocketCommunicator
+from config.asgi import application
 
 
 class DefaultAdminTests(TestCase):
@@ -380,4 +382,12 @@ class RFIDFixtureTests(TestCase):
         tag = RFID.objects.get(rfid="FFFFFFFF")
         self.assertIn(account, tag.accounts.all())
         self.assertEqual(tag.accounts.count(), 1)
+
+
+class RFIDConsumerTests(TransactionTestCase):
+    async def test_websocket_connects(self):
+        communicator = WebsocketCommunicator(application, "/ws/rfid/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        await communicator.disconnect()
 

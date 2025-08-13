@@ -70,6 +70,15 @@
       {% endfor %}
     </tbody>
   </table>
+  <div class="d-flex justify-content-between">
+    {% if page_obj.has_previous %}
+    <a href="?page={{ page_obj.previous_page_number }}">{% trans "Previous 10" %}</a>
+    {% endif %}
+    <a href="{% url 'charger-session-search' charger.charger_id %}">{% trans "Search" %}</a>
+    {% if page_obj.has_next %}
+    <a href="?page={{ page_obj.next_page_number }}">{% trans "Next 10" %}</a>
+    {% endif %}
+  </div>
  </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>

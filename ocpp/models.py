@@ -110,15 +110,22 @@ class Transaction(models.Model):
         qs = self.meter_readings.filter(
             measurand__in=["", "Energy.Active.Import.Register"]
         ).order_by("timestamp")
+        first = True
         for reading in qs:
             try:
                 val = float(reading.value)
             except (TypeError, ValueError):  # pragma: no cover - unexpected
                 continue
-            if reading.unit == "kWh":
-                total += val
+            if reading.unit != "kWh":
+                val = val / 1000.0
+            if first and self.meter_start is not None:
+                total += val - (self.meter_start / 1000.0)
+                first = False
             else:
-                total += val / 1000.0
+                total += val
+                first = False
+        if total == 0 and self.meter_start is not None and self.meter_stop is not None:
+            total = (self.meter_stop - self.meter_start) / 1000.0
         if total < 0:
             return 0.0
         return total

@@ -750,3 +750,29 @@ class ChargerStatusViewTests(TestCase):
         self.assertAlmostEqual(chart["values"][0], 1.0)
         self.assertAlmostEqual(chart["values"][1], 1.5)
         store.transactions.pop(charger.charger_id, None)
+
+
+class ChargerSessionPaginationTests(TestCase):
+    def setUp(self):
+        self.charger = Charger.objects.create(charger_id="PAGETEST")
+        for i in range(15):
+            Transaction.objects.create(
+                charger=self.charger,
+                start_time=timezone.now() - timedelta(minutes=i),
+                meter_start=0,
+            )
+
+    def test_only_ten_transactions_shown(self):
+        resp = self.client.get(reverse("charger-page", args=[self.charger.charger_id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.context["transactions"]), 10)
+        self.assertTrue(resp.context["page_obj"].has_next())
+
+    def test_session_search_by_date(self):
+        date_str = timezone.now().date().isoformat()
+        resp = self.client.get(
+            reverse("charger-session-search", args=[self.charger.charger_id]),
+            {"date": date_str},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.context["transactions"]), 15)

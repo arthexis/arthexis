@@ -246,3 +246,15 @@ class AllowedHostSubnetTests(TestCase):
             reverse("website:index"), HTTP_HOST="11.0.0.1"
         )
         self.assertEqual(resp.status_code, 400)
+
+
+class RFIDPageTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": "website"}
+        )
+
+    def test_page_renders(self):
+        resp = self.client.get(reverse("website:rfid-reader"))
+        self.assertContains(resp, "Start Scan")
