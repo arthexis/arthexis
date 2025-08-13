@@ -194,7 +194,7 @@ class ChargerLandingTests(TestCase):
         )
         client = Client()
         resp = client.get(reverse("charger-status", args=["ONGOING"]))
-        self.assertContains(resp, "Total Energy: 1.50 kWh")
+        self.assertContains(resp, "Total Energy: 1.50 kW")
         store.transactions.pop(charger.charger_id, None)
 
     def test_log_page_renders_without_charger(self):

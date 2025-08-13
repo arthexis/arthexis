@@ -113,7 +113,7 @@ class ChargerAdmin(admin.ModelAdmin):
     def total_kwh_display(self, obj):
         return round(obj.total_kwh, 2)
 
-    total_kwh_display.short_description = "Total kWh"
+    total_kwh_display.short_description = "Total kW"
 
     def session_kwh(self, obj):
         tx = store.transactions.get(obj.charger_id)
@@ -121,7 +121,7 @@ class ChargerAdmin(admin.ModelAdmin):
             return round(tx.kwh, 2)
         return 0.0
 
-    session_kwh.short_description = "Session kWh"
+    session_kwh.short_description = "Session kW"
 
 
 @admin.register(Simulator)

@@ -100,7 +100,7 @@ msgid "Stop"
 msgstr ""
 
 #: ocpp/templates/ocpp/charger_page.html:23
-msgid "Energy (kWh)"
+msgid "Energy (kW)"
 msgstr ""
 
 #: ocpp/templates/ocpp/charger_page.html:35
