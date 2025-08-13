@@ -294,6 +294,7 @@ class SubscriptionTests(TestCase):
         self.user = User.objects.create_user(username="bob", password="pwd")
         self.account = Account.objects.create(user=self.user, name="SUBSCRIBER")
         self.product = Product.objects.create(name="Gold", renewal_period=30)
+        self.client.force_login(self.user)
 
     def test_create_and_list_subscription(self):
         response = self.client.post(
@@ -348,9 +349,23 @@ class OnboardingWizardTests(TestCase):
 
 class EVBrandFixtureTests(TestCase):
     def test_ev_brand_fixture_loads(self):
-        call_command("loaddata", "accounts/fixtures/ev_brands.json", verbosity=0)
-        self.assertTrue(Brand.objects.filter(name="Porsche").exists())
-        self.assertTrue(Brand.objects.filter(name="Audi").exists())
+        call_command(
+            "loaddata",
+            "accounts/fixtures/ev_brands.json",
+            "accounts/fixtures/ev_models.json",
+            verbosity=0,
+        )
+        porsche = Brand.objects.get(name="Porsche")
+        audi = Brand.objects.get(name="Audi")
+        self.assertTrue(porsche.wmi_codes.filter(code="WP0").exists())
+        self.assertTrue(
+            set(audi.wmi_codes.values_list("code", flat=True))
+            >= {"WAU", "TRU"}
+        )
+        self.assertTrue(EVModel.objects.filter(brand=porsche, name="Taycan").exists())
+        self.assertTrue(
+            EVModel.objects.filter(brand=audi, name="e-tron GT").exists()
+        )
 
 
 class RFIDFixtureTests(TestCase):

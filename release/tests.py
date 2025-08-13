@@ -145,6 +145,11 @@ class TestLogAdminTests(TestCase):
 class TodoAPITests(TestCase):
     def setUp(self):
         self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="todo", password="pwd"
+        )
+        self.client.force_login(self.user)
 
     def test_create_and_toggle(self):
         resp = self.client.post(

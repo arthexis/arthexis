@@ -396,6 +396,22 @@ class Brand(models.Model):
         return self.name
 
 
+class WMICode(models.Model):
+    """World Manufacturer Identifier code for a brand."""
+
+    brand = models.ForeignKey(
+        Brand, on_delete=models.CASCADE, related_name="wmi_codes"
+    )
+    code = models.CharField(max_length=3, unique=True)
+
+    class Meta:
+        verbose_name = _("WMI code")
+        verbose_name_plural = _("WMI codes")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.code
+
+
 class EVModel(models.Model):
     """Specific electric vehicle model for a brand."""
 

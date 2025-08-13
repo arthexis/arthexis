@@ -232,7 +232,7 @@ class AllowedHostSubnetTests(TestCase):
 
     @override_settings(ALLOWED_HOSTS=["10.42.0.0/16"])
     def test_host_outside_subnets_disallowed(self):
-        with self.assertRaises(DisallowedHost):
-            self.client.get(
-                reverse("website:index"), HTTP_HOST="11.0.0.1"
-            )
+        resp = self.client.get(
+            reverse("website:index"), HTTP_HOST="11.0.0.1"
+        )
+        self.assertEqual(resp.status_code, 400)

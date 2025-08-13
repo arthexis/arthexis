@@ -12,7 +12,6 @@ from accounts.models import RFID
 
 
 @csrf_exempt
-@api_login_required
 def rfid_login(request):
     """Authenticate a user using an RFID."""
 
