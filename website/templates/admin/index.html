@@ -142,54 +142,114 @@
 document.addEventListener('DOMContentLoaded', function () {
   const link = document.getElementById('switch-console');
   if (!link) return;
-  link.addEventListener('click', function (e) {
-    e.preventDefault();
-    const dashboard = document.getElementById('admin-dashboard');
-    const sidebar = document.getElementById('nav-sidebar');
-    if (dashboard) dashboard.style.display = 'none';
-    if (sidebar) sidebar.style.display = 'none';
 
-    const content = document.getElementById('content');
-    const header = document.getElementById('admin-home-header');
-    const consoleWrapper = document.createElement('div');
+  const dashboard = document.getElementById('admin-dashboard');
+  const sidebar = document.getElementById('nav-sidebar');
+  const content = document.getElementById('content');
+  const header = document.getElementById('admin-home-header');
+
+  let consoleWrapper = null;
+  let editor = null;
+  let output = null;
+  let history = [];
+  let historyIndex = 0;
+  let consoleVisible = false;
+
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+  }
+
+  function executeSource() {
+    const source = editor.getValue();
+    if (!source.trim()) return;
+    const csrfToken = getCookie('csrftoken');
+    fetch('/webshell/execute/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({source, csrfmiddlewaretoken: csrfToken})
+    }).then(r => r.text()).then(t => {
+      output.textContent += `>>> ${source}\n${t}`;
+      output.scrollTop = output.scrollHeight;
+    });
+    history.push(source);
+    historyIndex = history.length;
+    editor.setValue('');
+  }
+
+  function initConsole() {
+    consoleWrapper = document.createElement('div');
     consoleWrapper.id = 'admin-console-wrapper';
-    const height = window.innerHeight - header.getBoundingClientRect().bottom;
+    const height = (window.innerHeight - header.getBoundingClientRect().bottom) * 1.5;
     consoleWrapper.style.height = height + 'px';
     consoleWrapper.style.boxSizing = 'border-box';
     consoleWrapper.style.display = 'flex';
     consoleWrapper.style.flexDirection = 'column';
+    consoleWrapper.style.display = 'none';
     consoleWrapper.innerHTML = '<textarea id="id_source"></textarea><pre id="id_output" style="flex:1; overflow:auto; margin-top:1rem;"></pre>';
     content.appendChild(consoleWrapper);
 
-    const editor = CodeMirror.fromTextArea(document.getElementById('id_source'), {
-        mode: {name: "python", version: 3},
-        lineNumbers: true,
-        indentUnit: 4,
-        matchBrackets: true
+    editor = CodeMirror.fromTextArea(document.getElementById('id_source'), {
+      mode: {name: "python", version: 3},
+      lineNumbers: false,
+      indentUnit: 4,
+      matchBrackets: true
     });
     editor.setSize(null, Math.round(height * 0.4) + 'px');
-    const output = document.getElementById('id_output');
+    output = document.getElementById('id_output');
     output.style.height = Math.round(height * 0.6 - 16) + 'px';
-    function getCookie(name) {
-      const value = `; ${document.cookie}`;
-      const parts = value.split(`; ${name}=`);
-      if (parts.length === 2) return parts.pop().split(';').shift();
-    }
 
-    function executeSource(){
-      const csrfToken = getCookie('csrftoken');
-      fetch('/webshell/execute/', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: new URLSearchParams({source: editor.getValue(), csrfmiddlewaretoken: csrfToken})
-      }).then(r => r.text()).then(t => {output.textContent = t;});
-    }
-    editor.on('keydown', function(cm, event){
-      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter'){
+    editor.on('keydown', function(cm, event) {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
         executeSource();
+      } else if (event.key === 'ArrowUp') {
+        if (historyIndex > 0) {
+          historyIndex -= 1;
+          cm.setValue(history[historyIndex]);
+          cm.setCursor(cm.lineCount(), 0);
+        }
+        event.preventDefault();
+      } else if (event.key === 'ArrowDown') {
+        if (historyIndex < history.length - 1) {
+          historyIndex += 1;
+          cm.setValue(history[historyIndex]);
+        } else {
+          historyIndex = history.length;
+          cm.setValue('');
+        }
+        cm.setCursor(cm.lineCount(), 0);
         event.preventDefault();
       }
     });
+  }
+
+  function showConsole() {
+    if (!consoleWrapper) {
+      initConsole();
+    }
+    if (dashboard) dashboard.style.display = 'none';
+    if (sidebar) sidebar.style.display = 'none';
+    consoleWrapper.style.display = 'flex';
+    link.textContent = 'Switch to browse mode';
+  }
+
+  function showDashboard() {
+    consoleWrapper.style.display = 'none';
+    if (dashboard) dashboard.style.display = '';
+    if (sidebar) sidebar.style.display = '';
+    link.textContent = 'Switch to console mode';
+  }
+
+  link.addEventListener('click', function (e) {
+    e.preventDefault();
+    if (consoleVisible) {
+      showDashboard();
+    } else {
+      showConsole();
+    }
+    consoleVisible = !consoleVisible;
   });
 });
 </script>
