@@ -92,6 +92,7 @@ INSTALLED_APPS = [
     "channels",
     "post_office",
     "django_celery_beat",
+    "webshell",
 ] + LOCAL_APPS
 
 SITE_ID = 1
