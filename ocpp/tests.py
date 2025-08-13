@@ -721,3 +721,32 @@ class TransactionKwhTests(TestCase):
         charger = Charger.objects.create(charger_id="SUM2")
         tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
         self.assertEqual(tx.kwh, 0.0)
+
+
+class ChargerStatusViewTests(TestCase):
+    def test_chart_data_populated_from_existing_readings(self):
+        charger = Charger.objects.create(charger_id="VIEW1")
+        tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
+        t0 = timezone.now()
+        MeterReading.objects.create(
+            charger=charger,
+            transaction=tx,
+            timestamp=t0,
+            value=Decimal("1000"),
+            unit="Wh",
+        )
+        MeterReading.objects.create(
+            charger=charger,
+            transaction=tx,
+            timestamp=t0 + timedelta(seconds=10),
+            value=Decimal("500"),
+            unit="Wh",
+        )
+        store.transactions[charger.charger_id] = tx
+        resp = self.client.get(reverse("charger-page", args=[charger.charger_id]))
+        self.assertEqual(resp.status_code, 200)
+        chart = json.loads(resp.context["chart_data"])
+        self.assertEqual(len(chart["labels"]), 2)
+        self.assertAlmostEqual(chart["values"][0], 1.0)
+        self.assertAlmostEqual(chart["values"][1], 1.5)
+        store.transactions.pop(charger.charger_id, None)
