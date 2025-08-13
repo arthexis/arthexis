@@ -66,15 +66,16 @@ class CustomLoginView(LoginView):
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated:
-            if request.user.is_staff:
-                return redirect("admin:index")
             return redirect(self.get_success_url())
         return super().dispatch(request, *args, **kwargs)
 
     def get_success_url(self):
+        redirect_url = self.get_redirect_url()
+        if redirect_url:
+            return redirect_url
         if self.request.user.is_staff:
             return reverse("admin:index")
-        return self.get_redirect_url() or "/"
+        return "/"
 
 
 login_view = CustomLoginView.as_view()

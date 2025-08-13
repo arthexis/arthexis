@@ -15,4 +15,5 @@ def api_login_required(view_func):
             return JsonResponse({"detail": "authentication required"}, status=401)
         return view_func(request, *args, **kwargs)
 
+    _wrapped.login_required = True
     return _wrapped

@@ -13,8 +13,14 @@ def nav_links(request):
     valid_apps = []
     for app in applications:
         try:
-            resolve(app.path)
+            match = resolve(app.path)
         except Resolver404:
+            continue
+        view_func = match.func
+        requires_login = getattr(view_func, "login_required", False) or hasattr(
+            view_func, "login_url"
+        )
+        if requires_login and not request.user.is_authenticated:
             continue
         valid_apps.append(app)
 

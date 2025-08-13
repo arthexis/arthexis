@@ -42,6 +42,13 @@ class LoginViewTests(TestCase):
         )
         self.assertRedirects(resp, "/nodes/list/")
 
+    def test_staff_redirects_next_when_specified(self):
+        resp = self.client.post(
+            reverse("website:login") + "?next=/nodes/list/",
+            {"username": "staff", "password": "pwd"},
+        )
+        self.assertRedirects(resp, "/nodes/list/")
+
 
 class AdminBadgesTests(TestCase):
     def setUp(self):
@@ -256,5 +263,5 @@ class RFIDPageTests(TestCase):
         )
 
     def test_page_renders(self):
-        resp = self.client.get(reverse("website:rfid-reader"))
+        resp = self.client.get(reverse("rfid-reader"))
         self.assertContains(resp, "Start Scan")

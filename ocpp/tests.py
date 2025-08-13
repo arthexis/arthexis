@@ -146,19 +146,23 @@ class CSMSConsumerTests(TransactionTestCase):
 
 
 class ChargerLandingTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(username="u", password="pwd")
+        self.client.force_login(self.user)
+
     def test_reference_created_and_page_renders(self):
         charger = Charger.objects.create(charger_id="PAGE1")
         self.assertIsNotNone(charger.reference)
 
-        client = Client()
-        response = client.get(reverse("charger-page", args=["PAGE1"]))
+        response = self.client.get(reverse("charger-page", args=["PAGE1"]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "PAGE1")
 
     def test_status_page_renders(self):
         charger = Charger.objects.create(charger_id="PAGE2")
-        client = Client()
-        resp = client.get(reverse("charger-status", args=["PAGE2"]))
+        resp = self.client.get(reverse("charger-status", args=["PAGE2"]))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "PAGE2")
 
@@ -171,8 +175,7 @@ class ChargerLandingTests(TestCase):
             start_time=timezone.now(),
             stop_time=timezone.now(),
         )
-        client = Client()
-        resp = client.get(reverse("charger-page", args=["STATS"]))
+        resp = self.client.get(reverse("charger-page", args=["STATS"]))
         self.assertContains(resp, "2.00")
         self.assertContains(resp, "Offline")
 
@@ -192,8 +195,7 @@ class ChargerLandingTests(TestCase):
             value=Decimal("2500"),
             unit="W",
         )
-        client = Client()
-        resp = client.get(reverse("charger-status", args=["ONGOING"]))
+        resp = self.client.get(reverse("charger-status", args=["ONGOING"]))
         self.assertContains(
             resp, 'Total Energy: <span id="total-kw">1.50</span> kW'
         )
@@ -203,30 +205,35 @@ class ChargerLandingTests(TestCase):
         store.add_log("LOG1", "hello", log_type="charger")
         entry = store.get_logs("LOG1", log_type="charger")[0]
         self.assertRegex(entry, r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} hello$")
-        client = Client()
-        resp = client.get(reverse("charger-log", args=["LOG1"]) + "?type=charger")
+        resp = self.client.get(reverse("charger-log", args=["LOG1"]) + "?type=charger")
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "hello")
         store.clear_log("LOG1", log_type="charger")
 
     def test_log_page_is_case_insensitive(self):
         store.add_log("cp2", "entry", log_type="charger")
-        client = Client()
-        resp = client.get(reverse("charger-log", args=["CP2"]) + "?type=charger")
+        resp = self.client.get(reverse("charger-log", args=["CP2"]) + "?type=charger")
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "entry")
         store.clear_log("cp2", log_type="charger")
 
 
 class SimulatorLandingTests(TestCase):
-    def test_simulator_app_link_in_nav(self):
+    def setUp(self):
         site, _ = Site.objects.update_or_create(
             id=1, defaults={"domain": "testserver", "name": "website"}
         )
         app = Application.objects.create(name="Ocpp")
         SiteApplication.objects.create(site=site, application=app, path="/ocpp/")
-        client = Client()
-        resp = client.get(reverse("website:index"))
+        User = get_user_model()
+        self.user = User.objects.create_user(username="nav", password="pwd")
+        self.client = Client()
+
+    def test_simulator_app_link_in_nav(self):
+        resp = self.client.get(reverse("website:index"))
+        self.assertNotContains(resp, "/ocpp/")
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("website:index"))
         self.assertContains(resp, "/ocpp/")
 
 
@@ -726,6 +733,11 @@ class TransactionKwTests(TestCase):
 
 
 class ChargerStatusViewTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(username="status", password="pwd")
+        self.client.force_login(self.user)
     def test_chart_data_populated_from_existing_readings(self):
         charger = Charger.objects.create(charger_id="VIEW1")
         tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
@@ -756,6 +768,10 @@ class ChargerStatusViewTests(TestCase):
 
 class ChargerSessionPaginationTests(TestCase):
     def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(username="page", password="pwd")
+        self.client.force_login(self.user)
         self.charger = Charger.objects.create(charger_id="PAGETEST")
         for i in range(15):
             Transaction.objects.create(
