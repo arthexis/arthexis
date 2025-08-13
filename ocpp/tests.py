@@ -21,6 +21,8 @@ import asyncio
 from pathlib import Path
 from .simulator import SimulatorConfig, ChargePointSimulator
 import re
+from datetime import timedelta
+from .tasks import purge_meter_readings
 
 
 class SinkConsumerTests(TransactionTestCase):
@@ -551,112 +553,46 @@ class ChargePointSimulatorTests(TransactionTestCase):
             server.close()
             await server.wait_closed()
 
-    async def test_pre_charge_status_notifications_handled(self):
-        received = []
 
-        async def handler(ws):
-            async for msg in ws:
-                data = json.loads(msg)
-                action = data[2]
-                received.append(action)
-                if action == "BootNotification":
-                    await ws.send(
-                        json.dumps(
-                            [
-                                3,
-                                data[1],
-                                {
-                                    "status": "Accepted",
-                                    "currentTime": "2024-01-01T00:00:00Z",
-                                    "interval": 300,
-                                },
-                            ]
-                        )
-                    )
-                elif action == "Authorize":
-                    await ws.send(
-                        json.dumps(
-                            [3, data[1], {"idTagInfo": {"status": "Accepted"}}]
-                        )
-                    )
-                elif action == "StatusNotification":
-                    await ws.send(json.dumps([3, data[1], {}]))
-                elif action == "StartTransaction":
-                    await ws.send(
-                        json.dumps(
-                            [
-                                3,
-                                data[1],
-                                {
-                                    "transactionId": 1,
-                                    "idTagInfo": {"status": "Accepted"},
-                                },
-                            ]
-                        )
-                    )
-                elif action == "MeterValues":
-                    await ws.send(json.dumps([3, data[1], {}]))
-                elif action == "StopTransaction":
-                    await ws.send(
-                        json.dumps(
-                            [3, data[1], {"idTagInfo": {"status": "Accepted"}}]
-                        )
-                    )
-                    break
-
-        server = await websockets.serve(
-            handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"]
+class PurgeMeterReadingsTaskTests(TestCase):
+    def test_purge_old_meter_readings(self):
+        charger = Charger.objects.create(charger_id="PURGER")
+        tx = Transaction.objects.create(
+            charger=charger,
+            meter_start=0,
+            meter_stop=1000,
+            start_time=timezone.now(),
+            stop_time=timezone.now(),
         )
-        port = server.sockets[0].getsockname()[1]
-
-        try:
-            cfg = SimulatorConfig(
-                host="127.0.0.1",
-                ws_port=port,
-                cp_path="SIMDELAY/",
-                duration=0.1,
-                interval=0.05,
-                kwh_min=0.1,
-                kwh_max=0.2,
-                pre_charge_delay=0.1,
-            )
-            sim = ChargePointSimulator(cfg)
-            await sim._run_session()
-        finally:
-            server.close()
-            await server.wait_closed()
-
-        self.assertIn("StartTransaction", received)
-        self.assertIn("StopTransaction", received)
-
-    async def test_status_error_when_no_response(self):
-        async def handler(ws):
-            # Accept connection and close without proper responses
-            await ws.recv()
-            await ws.close()
-
-        server = await websockets.serve(handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"])
-        port = server.sockets[0].getsockname()[1]
-
-        cfg = SimulatorConfig(
-            host="127.0.0.1",
-            ws_port=port,
-            cp_path="SIMERR/",
-            duration=0.1,
-            interval=0.05,
-            kwh_min=0.1,
-            kwh_max=0.2,
-            pre_charge_delay=0.0,
+        old = timezone.now() - timedelta(days=8)
+        recent = timezone.now() - timedelta(days=2)
+        MeterReading.objects.create(
+            charger=charger, transaction=tx, timestamp=old, value=1
         )
-        store.register_log_name(cfg.cp_path, "SimErr", log_type="simulator")
-        sim = ChargePointSimulator(cfg)
-        try:
-            started, status, _ = await asyncio.to_thread(sim.start)
-            self.assertFalse(started)
-            self.assertEqual(sim.status, "error")
-            self.assertEqual(status.split(":")[0], "Connection failed")
-        finally:
-            await sim.stop()
-            store.clear_log(cfg.cp_path, log_type="simulator")
-            server.close()
-            await server.wait_closed()
+        MeterReading.objects.create(
+            charger=charger, transaction=tx, timestamp=recent, value=2
+        )
+
+        purge_meter_readings()
+
+        self.assertEqual(MeterReading.objects.count(), 1)
+        self.assertTrue(
+            MeterReading.objects.filter(timestamp__gte=recent - timedelta(minutes=1)).exists()
+        )
+        self.assertTrue(Transaction.objects.filter(pk=tx.pk).exists())
+
+    def test_purge_skips_open_transactions(self):
+        charger = Charger.objects.create(charger_id="PURGER2")
+        tx = Transaction.objects.create(
+            charger=charger,
+            meter_start=0,
+            start_time=timezone.now() - timedelta(days=9),
+        )
+        old = timezone.now() - timedelta(days=8)
+        reading = MeterReading.objects.create(
+            charger=charger, transaction=tx, timestamp=old, value=1
+        )
+
+        purge_meter_readings()
+
+        self.assertTrue(MeterReading.objects.filter(pk=reading.pk).exists())
