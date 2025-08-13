@@ -120,6 +120,7 @@
 
   function reloadStatus() {
     const current = document.getElementById('status-content');
+    const oldCanvas = current.querySelector('#kwh-chart');
     fetch(window.location.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
       .then(resp => resp.text())
       .then(html => {
@@ -138,7 +139,15 @@
             addDataPoint(parseFloat(kwhElem.textContent));
           }
           current.innerHTML = newContent.innerHTML;
-          setupChart();
+          if (oldCanvas) {
+            const placeholder = current.querySelector('#kwh-chart');
+            if (placeholder) {
+              placeholder.replaceWith(oldCanvas);
+            }
+          }
+          if (kwhElem && kwhChart) {
+            kwhChart.update();
+          }
           changedIds.forEach(id => {
             const el = current.querySelector(`#${id}`);
             if (el) {
