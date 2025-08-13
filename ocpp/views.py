@@ -201,18 +201,18 @@ def cp_simulator(request):
 
 def charger_page(request, cid):
     charger = get_object_or_404(Charger, charger_id=cid)
-    tx_active = store.transactions.get(cid)
-    state, color = _charger_state(charger, tx_active)
+    tx_obj = store.transactions.get(cid)
+    state, color = _charger_state(charger, tx_obj)
     transactions = Transaction.objects.filter(charger=charger).order_by("-start_time")
     return render(
         request,
-        "ocpp/charger_page.html",
+        "ocpp/charger_status.html",
         {
             "charger": charger,
+            "tx": tx_obj,
             "state": state,
             "color": color,
             "transactions": transactions,
-            "active_tx": tx_active,
         },
     )
 
@@ -236,10 +236,17 @@ def charger_status(request, cid):
     charger = get_object_or_404(Charger, charger_id=cid)
     tx_obj = store.transactions.get(cid)
     state, color = _charger_state(charger, tx_obj)
+    transactions = Transaction.objects.filter(charger=charger).order_by("-start_time")
     return render(
         request,
         "ocpp/charger_status.html",
-        {"charger": charger, "tx": tx_obj, "state": state, "color": color},
+        {
+            "charger": charger,
+            "tx": tx_obj,
+            "state": state,
+            "color": color,
+            "transactions": transactions,
+        },
     )
 
 
