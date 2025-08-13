@@ -61,6 +61,19 @@ class RFIDConsumer(AsyncWebsocketConsumer):
         except json.JSONDecodeError:
             data = {}
         if data.get("action") == "start" and not self.scanning:
+            try:
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(read_rfid), timeout=10
+                )
+            except asyncio.TimeoutError:
+                await self.send(json.dumps({"error": "RFID reader timeout"}))
+                return
+            if result.get("error"):
+                await self.send(json.dumps({"error": result["error"]}))
+                return
+            await self.send(json.dumps({"status": "started"}))
+            if result.get("rfid"):
+                await self.send(json.dumps({"rfid": result["rfid"]}))
             self.scanning = True
             self.scan_task = asyncio.create_task(self._scan_loop())
 

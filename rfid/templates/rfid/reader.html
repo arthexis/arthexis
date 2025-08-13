@@ -2,23 +2,35 @@
 {% block content %}
 <h1>RFID Reader</h1>
 <button id="start-scan" class="btn btn-primary mb-3">Start Scan</button>
+<p id="scan-status" class="text-muted"></p>
 <p>Scanned RFID: <span id="rfid-value"></span></p>
 <a href="#" id="clear-rfid" class="btn btn-link">Clear</a>
 <script>
 let socket;
 const valueEl = document.getElementById('rfid-value');
+const statusEl = document.getElementById('scan-status');
 const clearEl = document.getElementById('clear-rfid');
 
 document.getElementById('start-scan').addEventListener('click', () => {
+    statusEl.textContent = 'Starting…';
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
     socket = new WebSocket(`${proto}://${window.location.host}/ws/rfid/`);
+    const timeoutId = setTimeout(() => {
+        statusEl.textContent = 'Error: reader not responding';
+        socket.close();
+    }, 10000);
     socket.onopen = () => socket.send(JSON.stringify({action: 'start'}));
     socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        if (data.rfid) {
+        if (data.status === 'started') {
+            statusEl.textContent = 'Reader started';
+            clearTimeout(timeoutId);
+        } else if (data.rfid) {
             valueEl.textContent = data.rfid;
         } else if (data.error) {
-            valueEl.textContent = data.error;
+            statusEl.textContent = data.error;
+            clearTimeout(timeoutId);
+            socket.close();
         }
     };
 });
