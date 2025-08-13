@@ -7,18 +7,29 @@ from references.models import Reference
 from accounts.models import Account
 
 
+class Location(models.Model):
+    """Physical location shared by chargers."""
+
+    name = models.CharField(max_length=200)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+
 class Charger(models.Model):
     """Known charge point with optional configuration."""
 
     charger_id = models.CharField("Serial Number", max_length=100, unique=True)
-    name = models.CharField("Location Name", max_length=200, blank=True)
     config = models.JSONField(default=dict, blank=True)
     require_rfid = models.BooleanField("Require RFID", default=False)
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_meter_values = models.JSONField(default=dict, blank=True)
     reference = models.OneToOneField(Reference, null=True, blank=True, on_delete=models.SET_NULL)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    location = models.ForeignKey(
+        Location, null=True, blank=True, on_delete=models.SET_NULL, related_name="chargers"
+    )
     last_path = models.CharField(max_length=255, blank=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
@@ -40,6 +51,18 @@ class Charger(models.Model):
             ref, _ = Reference.objects.get_or_create(value=ref_value)
             self.reference = ref
             super().save(update_fields=["reference"])
+
+    @property
+    def name(self) -> str:
+        return self.location.name if self.location else ""
+
+    @property
+    def latitude(self):
+        return self.location.latitude if self.location else None
+
+    @property
+    def longitude(self):
+        return self.location.longitude if self.location else None
 
     @property
     def total_kw(self) -> float:

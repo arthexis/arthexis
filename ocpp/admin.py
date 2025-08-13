@@ -6,14 +6,14 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from .models import Charger, Simulator, MeterReading, Transaction
+from .models import Charger, Simulator, MeterReading, Transaction, Location
 from .simulator import ChargePointSimulator
 from . import store
 
 
-class ChargerAdminForm(forms.ModelForm):
+class LocationAdminForm(forms.ModelForm):
     class Meta:
-        model = Charger
+        model = Location
         fields = "__all__"
 
         widgets = {
@@ -31,34 +31,39 @@ class ChargerAdminForm(forms.ModelForm):
         )
 
 
+@admin.register(Location)
+class LocationAdmin(admin.ModelAdmin):
+    form = LocationAdminForm
+    list_display = ("name", "latitude", "longitude")
+
+
 @admin.register(Charger)
 class ChargerAdmin(admin.ModelAdmin):
-    form = ChargerAdminForm
     fieldsets = (
         (
             "General",
             {
                 "fields": (
                     "charger_id",
-                    "name",
                     "config",
                     "require_rfid",
                     "last_heartbeat",
                     "last_meter_values",
                     "last_path",
+                    "location",
                 )
             },
         ),
         (
             "References",
             {
-                "fields": (("latitude", "longitude"), "reference"),
+                "fields": ("reference",),
             },
         ),
     )
     list_display = (
         "charger_id",
-        "name",
+        "location_name",
         "require_rfid",
         "latitude",
         "longitude",
@@ -69,7 +74,7 @@ class ChargerAdmin(admin.ModelAdmin):
         "log_link",
         "status_link",
     )
-    search_fields = ("charger_id", "name")
+    search_fields = ("charger_id", "location__name")
     actions = ["purge_data", "delete_selected"]
 
     def test_link(self, obj):
@@ -98,6 +103,11 @@ class ChargerAdmin(admin.ModelAdmin):
         return format_html('<a href="{}" target="_blank">status</a>', url)
 
     status_link.short_description = "Status Page"
+
+    def location_name(self, obj):
+        return obj.location.name if obj.location else ""
+
+    location_name.short_description = "Location"
 
     def purge_data(self, request, queryset):
         for charger in queryset:
