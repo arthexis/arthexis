@@ -67,7 +67,7 @@ class AddressAdmin(admin.ModelAdmin):
 
 class CreditInline(admin.TabularInline):
     model = Credit
-    fields = ("amount_kwh", "created_by", "created_on")
+    fields = ("amount_kw", "created_by", "created_on")
     readonly_fields = ("created_by", "created_on")
     extra = 0
 
@@ -78,9 +78,9 @@ class AccountAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "user",
-        "credits_kwh",
-        "total_kwh_spent",
-        "balance_kwh",
+        "credits_kw",
+        "total_kw_spent",
+        "balance_kw",
         "service_account",
         "authorized",
     )
@@ -92,9 +92,9 @@ class AccountAdmin(admin.ModelAdmin):
         "user__last_name",
     )
     readonly_fields = (
-        "credits_kwh",
-        "total_kwh_spent",
-        "balance_kwh",
+        "credits_kw",
+        "total_kw_spent",
+        "balance_kw",
         "authorized",
     )
     inlines = [AccountRFIDInline, CreditInline]
@@ -107,7 +107,7 @@ class AccountAdmin(admin.ModelAdmin):
                     "name",
                     "user",
                     ("service_account", "authorized"),
-                    ("credits_kwh", "total_kwh_spent", "balance_kwh"),
+                    ("credits_kw", "total_kw_spent", "balance_kw"),
                 )
             },
         ),
@@ -197,7 +197,7 @@ class VehicleAdmin(admin.ModelAdmin):
 
 @admin.register(Credit)
 class CreditAdmin(admin.ModelAdmin):
-    list_display = ("account", "amount_kwh", "created_by", "created_on")
+    list_display = ("account", "amount_kw", "created_by", "created_on")
     readonly_fields = ("created_by", "created_on")
 
     def save_model(self, request, obj, form, change):

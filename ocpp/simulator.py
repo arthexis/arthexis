@@ -23,8 +23,8 @@ class SimulatorConfig:
     # WebSocket path for the charge point. Defaults to just the charger ID at the root.
     cp_path: str = "CPX/"
     duration: int = 600
-    kwh_min: float = 30.0
-    kwh_max: float = 60.0
+    kw_min: float = 30.0
+    kw_max: float = 60.0
     interval: float = 5.0
     pre_charge_delay: float = 10.0
     repeat: bool = False
@@ -149,15 +149,15 @@ class ChargePointSimulator:
 
                 meter = meter_start
                 steps = max(1, int(cfg.duration / cfg.interval))
-                step_min = max(1, int((cfg.kwh_min * 1000) / steps))
-                step_max = max(1, int((cfg.kwh_max * 1000) / steps))
+                step_min = max(1, int((cfg.kw_min * 1000) / steps))
+                step_max = max(1, int((cfg.kw_max * 1000) / steps))
 
                 start_time = time.monotonic()
                 while time.monotonic() - start_time < cfg.duration:
                     if self._stop_event.is_set():
                         break
                     meter += random.randint(step_min, step_max)
-                    meter_kwh = meter / 1000.0
+                    meter_kw = meter / 1000.0
                     await send(
                         json.dumps(
                             [
@@ -172,9 +172,9 @@ class ChargePointSimulator:
                                             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
                                             "sampledValue": [
                                                 {
-                                                    "value": f"{meter_kwh:.3f}",
+                                                    "value": f"{meter_kw:.3f}",
                                                     "measurand": "Energy.Active.Import.Register",
-                                                    "unit": "kWh",
+                                                    "unit": "kW",
                                                 }
                                             ],
                                         }

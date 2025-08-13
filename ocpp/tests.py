@@ -113,7 +113,7 @@ class CSMSConsumerTests(TransactionTestCase):
                                 {
                                     "value": "1000",
                                     "measurand": "Energy.Active.Import.Register",
-                                    "unit": "Wh",
+                                    "unit": "W",
                                 }
                             ],
                         }
@@ -190,11 +190,13 @@ class ChargerLandingTests(TestCase):
             timestamp=timezone.now(),
             measurand="Energy.Active.Import.Register",
             value=Decimal("2500"),
-            unit="Wh",
+            unit="W",
         )
         client = Client()
         resp = client.get(reverse("charger-status", args=["ONGOING"]))
-        self.assertContains(resp, "Total Energy: 1.50 kW")
+        self.assertContains(
+            resp, 'Total Energy: <span id="total-kw">1.50</span> kW'
+        )
         store.transactions.pop(charger.charger_id, None)
 
     def test_log_page_renders_without_charger(self):
@@ -303,7 +305,7 @@ class TransactionAdminTests(TestCase):
             transaction=tx,
             timestamp=timezone.now(),
             value=Decimal("2.123"),
-            unit="kWh",
+            unit="kW",
         )
         url = reverse("admin:ocpp_transaction_change", args=[tx.pk])
         resp = self.client.get(url)
@@ -338,13 +340,13 @@ class SimulatorAdminTests(TestCase):
             name="SIM3",
             cp_path="S3",
             interval=3.5,
-            kwh_max=70,
+            kw_max=70,
             duration=500,
             pre_charge_delay=5,
         )
         cfg = sim.as_config()
         self.assertEqual(cfg.interval, 3.5)
-        self.assertEqual(cfg.kwh_max, 70)
+        self.assertEqual(cfg.kw_max, 70)
         self.assertEqual(cfg.duration, 500)
         self.assertEqual(cfg.pre_charge_delay, 5)
 
@@ -400,7 +402,7 @@ class SimulatorAdminTests(TestCase):
             user=user, name="BOB"
         )
         await database_sync_to_async(Credit.objects.create)(
-            account=acc, amount_kwh=10
+            account=acc, amount_kw=10
         )
         tag = await database_sync_to_async(RFID.objects.create)(rfid="CARDX")
         await database_sync_to_async(acc.rfids.add)(tag)
@@ -475,7 +477,7 @@ class MeterReadingTests(TransactionTestCase):
                         {
                             "value": "2.749",
                             "measurand": "Energy.Active.Import.Register",
-                            "unit": "kWh",
+                            "unit": "kW",
                         }
                     ],
                 }
@@ -563,8 +565,8 @@ class ChargePointSimulatorTests(TransactionTestCase):
                 cp_path="SIM1/",
                 duration=0.2,
                 interval=0.05,
-                kwh_min=0.1,
-                kwh_max=0.2,
+                kw_min=0.1,
+                kw_max=0.2,
                 pre_charge_delay=0.0,
             )
             sim = ChargePointSimulator(cfg)
@@ -634,8 +636,8 @@ class ChargePointSimulatorTests(TransactionTestCase):
             cp_path="SIMSTART/",
             duration=0.1,
             interval=0.05,
-            kwh_min=0.1,
-            kwh_max=0.2,
+            kw_min=0.1,
+            kw_max=0.2,
             pre_charge_delay=0.0,
         )
         store.register_log_name(cfg.cp_path, "SimStart", log_type="simulator")
@@ -697,8 +699,8 @@ class PurgeMeterReadingsTaskTests(TestCase):
         self.assertTrue(MeterReading.objects.filter(pk=reading.pk).exists())
 
 
-class TransactionKwhTests(TestCase):
-    def test_kwh_sums_meter_readings(self):
+class TransactionKwTests(TestCase):
+    def test_kw_sums_meter_readings(self):
         charger = Charger.objects.create(charger_id="SUM1")
         tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
         MeterReading.objects.create(
@@ -706,21 +708,21 @@ class TransactionKwhTests(TestCase):
             transaction=tx,
             timestamp=timezone.now(),
             value=Decimal("1.0"),
-            unit="kWh",
+            unit="kW",
         )
         MeterReading.objects.create(
             charger=charger,
             transaction=tx,
             timestamp=timezone.now(),
             value=Decimal("500"),
-            unit="Wh",
+            unit="W",
         )
-        self.assertAlmostEqual(tx.kwh, 1.5)
+        self.assertAlmostEqual(tx.kw, 1.5)
 
-    def test_kwh_defaults_to_zero(self):
+    def test_kw_defaults_to_zero(self):
         charger = Charger.objects.create(charger_id="SUM2")
         tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
-        self.assertEqual(tx.kwh, 0.0)
+        self.assertEqual(tx.kw, 0.0)
 
 
 class ChargerStatusViewTests(TestCase):
@@ -733,14 +735,14 @@ class ChargerStatusViewTests(TestCase):
             transaction=tx,
             timestamp=t0,
             value=Decimal("1000"),
-            unit="Wh",
+            unit="W",
         )
         MeterReading.objects.create(
             charger=charger,
             transaction=tx,
             timestamp=t0 + timedelta(seconds=10),
             value=Decimal("500"),
-            unit="Wh",
+            unit="W",
         )
         store.transactions[charger.charger_id] = tx
         resp = self.client.get(reverse("charger-page", args=[charger.charger_id]))

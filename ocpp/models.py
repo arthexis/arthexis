@@ -42,8 +42,8 @@ class Charger(models.Model):
             super().save(update_fields=["reference"])
 
     @property
-    def total_kwh(self) -> float:
-        """Return total energy delivered by this charger in kWh."""
+    def total_kw(self) -> float:
+        """Return total energy delivered by this charger in kW."""
         from . import store
 
         total = 0.0
@@ -52,13 +52,13 @@ class Charger(models.Model):
         if tx_active and tx_active.pk is not None:
             qs = qs.exclude(pk=tx_active.pk)
         for tx in qs:
-            kwh = tx.kwh
-            if kwh:
-                total += kwh
+            kw = tx.kw
+            if kw:
+                total += kw
         if tx_active:
-            kwh = tx_active.kwh
-            if kwh:
-                total += kwh
+            kw = tx_active.kw
+            if kw:
+                total += kw
         return total
 
     def purge(self):
@@ -104,8 +104,8 @@ class Transaction(models.Model):
         return f"{self.charger}:{self.pk}"
 
     @property
-    def kwh(self) -> float:
-        """Return consumed energy in kWh for this session."""
+    def kw(self) -> float:
+        """Return consumed energy in kW for this session."""
         total = 0.0
         qs = self.meter_readings.filter(
             measurand__in=["", "Energy.Active.Import.Register"]
@@ -116,7 +116,7 @@ class Transaction(models.Model):
                 val = float(reading.value)
             except (TypeError, ValueError):  # pragma: no cover - unexpected
                 continue
-            if reading.unit != "kWh":
+            if reading.unit != "kW":
                 val = val / 1000.0
             if first and self.meter_start is not None:
                 total += val - (self.meter_start / 1000.0)
@@ -165,7 +165,7 @@ class Simulator(models.Model):
     duration = models.IntegerField(default=600)
     interval = models.FloatField(default=5.0)
     pre_charge_delay = models.FloatField("Delay", default=10.0)
-    kwh_max = models.FloatField(default=60.0)
+    kw_max = models.FloatField(default=60.0)
     repeat = models.BooleanField(default=False)
     username = models.CharField(max_length=100, blank=True)
     password = models.CharField(max_length=100, blank=True)
@@ -184,7 +184,7 @@ class Simulator(models.Model):
             duration=self.duration,
             interval=self.interval,
             pre_charge_delay=self.pre_charge_delay,
-            kwh_max=self.kwh_max,
+            kw_max=self.kw_max,
             repeat=self.repeat,
             username=self.username or None,
             password=self.password or None,

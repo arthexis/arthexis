@@ -102,7 +102,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     and sv.get("measurand", "") in ("", "Energy.Active.Import.Register")
                 ):
                     try:
-                        mult = 1000 if sv.get("unit") == "kWh" else 1
+                        mult = 1000 if sv.get("unit") == "kW" else 1
                         tx_obj.meter_start = int(val * mult)
                         start_updated = True
                     except Exception:

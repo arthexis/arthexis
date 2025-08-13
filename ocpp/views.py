@@ -151,8 +151,8 @@ def cp_simulator(request):
                 rfid=request.POST.get("rfid") or default_rfid,
                 duration=int(request.POST.get("duration") or 600),
                 interval=float(request.POST.get("interval") or 5),
-                kwh_min=float(request.POST.get("kwh_min") or 30),
-                kwh_max=float(request.POST.get("kwh_max") or 60),
+                kw_min=float(request.POST.get("kw_min") or 30),
+                kw_max=float(request.POST.get("kw_max") or 60),
                 pre_charge_delay=float(request.POST.get("pre_charge_delay") or 0),
                 repeat=request.POST.get("repeat") or False,
                 daemon=True,
@@ -219,7 +219,7 @@ def charger_page(request, cid):
                 val = float(reading.value)
             except (TypeError, ValueError):
                 continue
-            if reading.unit == "kWh":
+            if reading.unit == "kW":
                 total += val
             else:
                 total += val / 1000.0

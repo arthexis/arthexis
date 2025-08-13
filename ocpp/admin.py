@@ -63,8 +63,8 @@ class ChargerAdmin(admin.ModelAdmin):
         "latitude",
         "longitude",
         "last_heartbeat",
-        "session_kwh",
-        "total_kwh_display",
+        "session_kw",
+        "total_kw_display",
         "test_link",
         "log_link",
         "status_link",
@@ -110,18 +110,18 @@ class ChargerAdmin(admin.ModelAdmin):
         for obj in queryset:
             obj.delete()
 
-    def total_kwh_display(self, obj):
-        return round(obj.total_kwh, 2)
+    def total_kw_display(self, obj):
+        return round(obj.total_kw, 2)
 
-    total_kwh_display.short_description = "Total kW"
+    total_kw_display.short_description = "Total kW"
 
-    def session_kwh(self, obj):
+    def session_kw(self, obj):
         tx = store.transactions.get(obj.charger_id)
         if tx:
-            return round(tx.kwh, 2)
+            return round(tx.kw, 2)
         return 0.0
 
-    session_kwh.short_description = "Session kW"
+    session_kw.short_description = "Session kW"
 
 
 @admin.register(Simulator)
@@ -133,7 +133,7 @@ class SimulatorAdmin(admin.ModelAdmin):
         "ws_port",
         "ws_url",
         "interval",
-        "kwh_max",
+        "kw_max",
         "running",
         "log_link",
     )
@@ -143,7 +143,7 @@ class SimulatorAdmin(admin.ModelAdmin):
         ("host", "ws_port"),
         "rfid",
         ("duration", "interval", "pre_charge_delay"),
-        "kwh_max",
+        "kw_max",
         "repeat",
         ("username", "password"),
     )
@@ -210,9 +210,9 @@ class TransactionAdmin(admin.ModelAdmin):
         "meter_stop",
         "start_time",
         "stop_time",
-        "kwh",
+        "kw",
     )
-    readonly_fields = ("kwh",)
+    readonly_fields = ("kw",)
     list_filter = ("charger", "account")
     date_hierarchy = "start_time"
     inlines = [MeterReadingInline]

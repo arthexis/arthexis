@@ -176,8 +176,8 @@ async def simulate_cp(
     rfid: str,
     cp_path: str,
     duration: int,
-    kwh_min: float,
-    kwh_max: float,
+    kw_min: float,
+    kw_max: float,
     pre_charge_delay: float,
     session_count: float,
     interval: float = 5.0,
@@ -270,8 +270,8 @@ async def simulate_cp(
                 meter_start = random.randint(1000, 2000)
                 actual_duration = random.uniform(duration * 0.75, duration * 1.25)
                 steps = max(1, int(actual_duration / interval))
-                step_min = max(1, int((kwh_min * 1000) / steps))
-                step_max = max(1, int((kwh_max * 1000) / steps))
+                step_min = max(1, int((kw_min * 1000) / steps))
+                step_max = max(1, int((kw_max * 1000) / steps))
 
                 # optional pre‑charge delay while still sending heartbeats
                 if pre_charge_delay > 0:
@@ -286,7 +286,7 @@ async def simulate_cp(
                         if time.monotonic() - last_mv >= 30:
                             idle_step = max(2, int(step_max / 100))
                             next_meter += random.randint(0, idle_step)
-                            next_kwh = next_meter / 1000.0
+                            next_kw = next_meter / 1000.0
                             await _send(
                                 [
                                     2,
@@ -302,9 +302,9 @@ async def simulate_cp(
                                                 + "Z",
                                                 "sampledValue": [
                                                     {
-                                                        "value": f"{next_kwh:.3f}",
+                                                        "value": f"{next_kw:.3f}",
                                                         "measurand": "Energy.Active.Import.Register",
-                                                        "unit": "kWh",
+                                                        "unit": "kW",
                                                         "context": "Sample.Clock",
                                                     }
                                                 ],
@@ -343,7 +343,7 @@ async def simulate_cp(
                     if stop_event.is_set():
                         break
                     meter += random.randint(step_min, step_max)
-                    meter_kwh = meter / 1000.0
+                    meter_kw = meter / 1000.0
                     await _send(
                         [
                             2,
@@ -360,9 +360,9 @@ async def simulate_cp(
                                         + "Z",
                                         "sampledValue": [
                                             {
-                                                "value": f"{meter_kwh:.3f}",
+                                                "value": f"{meter_kw:.3f}",
                                                 "measurand": "Energy.Active.Import.Register",
-                                                "unit": "kWh",
+                                                "unit": "kW",
                                                 "context": "Sample.Periodic",
                                             }
                                         ],
@@ -410,7 +410,7 @@ async def simulate_cp(
                     if time.monotonic() - last_mv >= 30:
                         idle_step = max(2, int(step_max / 100))
                         next_meter += random.randint(0, idle_step)
-                        next_kwh = next_meter / 1000.0
+                        next_kw = next_meter / 1000.0
                         await _send(
                             [
                                 2,
@@ -426,9 +426,9 @@ async def simulate_cp(
                                             + "Z",
                                             "sampledValue": [
                                                 {
-                                                    "value": f"{next_kwh:.3f}",
+                                                    "value": f"{next_kw:.3f}",
                                                     "measurand": "Energy.Active.Import.Register",
-                                                    "unit": "kWh",
+                                                    "unit": "kW",
                                                     "context": "Sample.Clock",
                                                 }
                                             ],
@@ -471,8 +471,8 @@ def simulate(
     rfid: str = "FFFFFFFF",
     cp_path: str = "CPX",
     duration: int = 600,
-    kwh_min: float = 30.0,
-    kwh_max: float = 60.0,
+    kw_min: float = 30.0,
+    kw_max: float = 60.0,
     pre_charge_delay: float = 0.0,
     repeat: object = False,
     threads: Optional[int] = None,
@@ -502,8 +502,8 @@ def simulate(
         "rfid": rfid,
         "cp_path": cp_path,
         "duration": duration,
-        "kwh_min": kwh_min,
-        "kwh_max": kwh_max,
+        "kw_min": kw_min,
+        "kw_max": kw_max,
         "pre_charge_delay": pre_charge_delay,
         "repeat": repeat,
         "threads": threads,
@@ -529,8 +529,8 @@ def simulate(
                 rfid,
                 this_cp_path,
                 duration,
-                kwh_min,
-                kwh_max,
+                kw_min,
+                kw_max,
                 pre_charge_delay,
                 session_count,
                 interval,
@@ -548,8 +548,8 @@ def simulate(
                     rfid,
                     this_cp_path,
                     duration,
-                    kwh_min,
-                    kwh_max,
+                    kw_min,
+                    kw_max,
                     pre_charge_delay,
                     session_count,
                     interval,
@@ -597,8 +597,8 @@ def simulate(
                 rfid,
                 cp_path,
                 duration,
-                kwh_min,
-                kwh_max,
+                kw_min,
+                kw_max,
                 pre_charge_delay,
                 session_count,
                 interval,
@@ -620,8 +620,8 @@ def simulate(
                     rfid,
                     this_cp_path,
                     duration,
-                    kwh_min,
-                    kwh_max,
+                    kw_min,
+                    kw_max,
                     pre_charge_delay,
                     session_count,
                     interval,
