@@ -1,0 +1,9 @@
+[
+  {"model": "nodes.noderole", "pk": 1, "fields": {"name": "Dev"}},
+  {"model": "nodes.noderole", "pk": 2, "fields": {"name": "Test"}},
+  {"model": "nodes.noderole", "pk": 3, "fields": {"name": "Prod"}},
+  {"model": "nodes.noderole", "pk": 4, "fields": {"name": "Satellite"}},
+  {"model": "nodes.noderole", "pk": 5, "fields": {"name": "Central"}},
+  {"model": "nodes.noderole", "pk": 6, "fields": {"name": "Proxy"}},
+  {"model": "nodes.noderole", "pk": 7, "fields": {"name": "Agent"}}
+]

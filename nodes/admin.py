@@ -16,6 +16,7 @@ from .utils import capture_screenshot, save_screenshot
 
 from .models import (
     Node,
+    NodeRole,
     NodeScreenshot,
     NodeMessage,
     NginxConfig,
@@ -50,6 +51,7 @@ class NodeAdmin(admin.ModelAdmin):
     search_fields = ("hostname", "address")
     change_list_template = "admin/nodes/node/change_list.html"
     form = NodeAdminForm
+    filter_horizontal = ("roles",)
 
     def get_urls(self):
         urls = super().get_urls()
@@ -80,6 +82,11 @@ class NodeAdmin(admin.ModelAdmin):
         else:
             self.message_user(request, "Current host already registered", messages.INFO)
         return redirect("..")
+
+
+@admin.register(NodeRole)
+class NodeRoleAdmin(admin.ModelAdmin):
+    list_display = ("name",)
 
 
 @admin.register(NodeScreenshot)
