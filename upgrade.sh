@@ -6,8 +6,9 @@ cd "$BASE_DIR"
 
 # Stash local changes if any
 STASHED=0
-if ! git diff --quiet || ! git diff --cached --quiet; then
-    git stash push -u -m "auto-upgrade $(date -Is)" || true
+if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+    echo "Warning: stashing local changes before upgrade" >&2
+    git stash push -u -m "auto-upgrade $(date -Is)" >/dev/null || true
     STASHED=1
 fi
 
