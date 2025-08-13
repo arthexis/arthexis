@@ -4,7 +4,6 @@
     "pk": 1,
     "fields": {
       "name": "CP1",
-      "location_name": "Simulator",
       "cp_path": "CP1"
     }
   },
@@ -13,7 +12,6 @@
     "pk": 2,
     "fields": {
       "name": "CP2",
-      "location_name": "Simulator",
       "cp_path": "CP2"
     }
   }
