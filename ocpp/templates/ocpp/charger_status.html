@@ -6,15 +6,30 @@
 
 {% block content %}
 <div id="status-content">
+  <style>
+    @keyframes text-update-fade {
+      0% {
+        color: #FFD700;
+        text-shadow: 0 0 8px rgba(255,215,0,0.8);
+      }
+      100% {
+        color: inherit;
+        text-shadow: none;
+      }
+    }
+    .text-update {
+      animation: text-update-fade 1s ease-out;
+    }
+  </style>
   <h1>{{ charger.name|default:charger.charger_id }}</h1>
   <div class="row mb-4">
     <div class="col-md-4">
       <p>Serial Number: {{ charger.charger_id }}</p>
       <div class="mb-3 d-flex align-items-center">
         <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
-        <strong>{{ state }}</strong>
+        <strong id="charger-state">{{ state }}</strong>
       </div>
-      <p>{% trans "Total Energy" %}: {{ charger.total_kwh|floatformat:2 }} kWh</p>
+      <p>{% trans "Total Energy" %}: <span id="total-kwh">{{ charger.total_kwh|floatformat:2 }}</span> kWh</p>
       {% if tx %}
       <h2>{% trans "Current Transaction" %}</h2>
       <ul>
@@ -98,19 +113,38 @@
     chartData.datasets[0].data.push(kwh);
   }
 
+  function highlightChange(el) {
+    el.classList.add('text-update');
+    setTimeout(() => el.classList.remove('text-update'), 1000);
+  }
+
   function reloadStatus() {
+    const current = document.getElementById('status-content');
     fetch(window.location.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
       .then(resp => resp.text())
       .then(html => {
         const doc = new DOMParser().parseFromString(html, 'text/html');
         const newContent = doc.getElementById('status-content');
         if (newContent) {
+          const changedIds = [];
+          newContent.querySelectorAll('[id]').forEach(el => {
+            const oldEl = current.querySelector(`#${el.id}`);
+            if (oldEl && oldEl.textContent !== el.textContent) {
+              changedIds.push(el.id);
+            }
+          });
           const kwhElem = newContent.querySelector('#session-kwh');
           if (kwhElem) {
             addDataPoint(parseFloat(kwhElem.textContent));
           }
-          document.getElementById('status-content').innerHTML = newContent.innerHTML;
+          current.innerHTML = newContent.innerHTML;
           setupChart();
+          changedIds.forEach(id => {
+            const el = current.querySelector(`#${id}`);
+            if (el) {
+              highlightChange(el);
+            }
+          });
         }
       });
   }
