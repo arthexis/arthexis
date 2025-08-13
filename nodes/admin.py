@@ -10,6 +10,7 @@ from pathlib import Path
 import base64
 import socket
 import os
+import subprocess
 import pyperclip
 from pyperclip import PyperclipException
 from .utils import capture_screenshot, save_screenshot
@@ -20,6 +21,7 @@ from .models import (
     NodeScreenshot,
     NodeMessage,
     NginxConfig,
+    NMCLITemplate,
     SystemdUnit,
     Recipe,
     Step,
@@ -145,6 +147,94 @@ class NodeScreenshotAdmin(admin.ModelAdmin):
 @admin.register(NodeMessage)
 class NodeMessageAdmin(admin.ModelAdmin):
     list_display = ("node", "method", "created")
+
+
+@admin.register(NMCLITemplate)
+class NMCLITemplateAdmin(admin.ModelAdmin):
+    list_display = (
+        "connection_name",
+        "assigned_device",
+        "priority",
+        "autoconnect",
+    )
+    actions = ["import_active", "apply_connections"]
+    filter_horizontal = ("required_nodes",)
+
+    @admin.action(description="Import active nmcli connections")
+    def import_active(self, request, queryset):
+        if os.name == "nt":
+            self.message_user(request, "NMCLI unsupported on Windows", messages.WARNING)
+            return
+        try:
+            result = subprocess.run(
+                ["nmcli", "-t", "-f", "NAME", "connection", "show", "--active"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            self.message_user(request, "nmcli not found", messages.ERROR)
+            return
+        names = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        for name in names:
+            if NMCLITemplate.objects.filter(connection_name=name).exists():
+                continue
+            tpl = NMCLITemplate(connection_name=name)
+            try:
+                details = subprocess.run(
+                    [
+                        "nmcli",
+                        "-t",
+                        "-f",
+                        "GENERAL.DEVICE,GENERAL.AUTOCONNECT-PRIORITY,GENERAL.AUTOCONNECT,IP4.ADDRESS[1],IP4.GATEWAY,IP4.NEVER_DEFAULT,802-11-WIRELESS.BAND,802-11-WIRELESS.SSID,802-11-WIRELESS-SECURITY.KEY-MGMT,802-11-WIRELESS-SECURITY.PSK",
+                        "connection",
+                        "show",
+                        name,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                info = {}
+                for line in details.stdout.splitlines():
+                    if ":" not in line:
+                        continue
+                    key, value = line.split(":", 1)
+                    info[key] = value
+                tpl.assigned_device = info.get("GENERAL.DEVICE", "")
+                tpl.priority = int(info.get("GENERAL.AUTOCONNECT-PRIORITY", "0") or 0)
+                tpl.autoconnect = info.get("GENERAL.AUTOCONNECT", "").lower() == "yes"
+                addr = info.get("IP4.ADDRESS[1]", "")
+                if "/" in addr:
+                    ip, mask = addr.split("/", 1)
+                    tpl.static_ip = ip
+                    tpl.static_mask = mask
+                tpl.static_gateway = info.get("IP4.GATEWAY", "") or None
+                tpl.allow_outbound = info.get("IP4.NEVER_DEFAULT", "no").lower() != "yes"
+                tpl.security_type = info.get("802-11-WIRELESS-SECURITY.KEY-MGMT", "")
+                tpl.ssid = info.get("802-11-WIRELESS.SSID", "")
+                tpl.password = info.get("802-11-WIRELESS-SECURITY.PSK", "")
+                tpl.band = info.get("802-11-WIRELESS.BAND", "")
+            except FileNotFoundError:
+                pass
+            tpl.save()
+        self.message_user(request, "Connections imported", messages.INFO)
+
+    @admin.action(description="Apply selected connections")
+    def apply_connections(self, request, queryset):
+        if os.name == "nt":
+            self.message_user(request, "NMCLI unsupported on Windows", messages.WARNING)
+            return
+        for template in queryset:
+            try:
+                subprocess.run(
+                    ["nmcli", "connection", "up", template.connection_name],
+                    check=False,
+                )
+            except FileNotFoundError:
+                self.message_user(request, "nmcli not found", messages.ERROR)
+                return
+        self.message_user(request, "Applied connections", messages.SUCCESS)
 
 
 class StepInline(admin.TabularInline):

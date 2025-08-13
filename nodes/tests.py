@@ -24,6 +24,7 @@ from .models import (
     NodeScreenshot,
     NodeMessage,
     NginxConfig,
+    NMCLITemplate,
     SystemdUnit,
     Recipe,
     Step,
@@ -193,6 +194,17 @@ class NodeAdminTests(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data:image/png;base64")
+
+
+class NMCLITemplateTests(TestCase):
+    def test_required_node_creates_periodic_task(self):
+        node = Node.objects.create(hostname="nmcli", address="127.0.0.1", port=9700)
+        template = NMCLITemplate.objects.create(connection_name="demo")
+        template.required_nodes.add(node)
+        task_name = f"check_nmcli_node_{node.pk}"
+        self.assertTrue(PeriodicTask.objects.filter(name=task_name).exists())
+        template.required_nodes.remove(node)
+        self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
 
 
 class NginxConfigTests(TestCase):
