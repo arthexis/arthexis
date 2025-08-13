@@ -1,6 +1,13 @@
 {% extends "admin/base_site.html" %}
 {% load i18n static %}
 
+{% block extrahead %}
+  {{ block.super }}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/python/python.min.js"></script>
+{% endblock %}
+
 {% block extrastyle %}
   {{ block.super }}
   <link rel="stylesheet" href="{% static 'admin/css/dashboard.css' %}">
@@ -71,15 +78,22 @@
 
 {% block bodyclass %}{{ block.super }} dashboard{% endblock %}
 
+{% block content_title %}
+<div id="admin-home-header" style="display:flex; justify-content:space-between; align-items:center;">
+  <h1>Home</h1>
+  <a href="#" id="switch-console" class="button">Switch to console mode</a>
+ </div>
+{% endblock %}
+
 {% block nav-breadcrumbs %}{% endblock %}
 {% block nav-sidebar %}{% endblock %}
 
 {% block content %}
-<div class="dashboard">
+<div class="dashboard" id="admin-dashboard">
   <div id="content-main" class="dashboard-main">
     {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
-  </div>
-  <div class="dashboard-side" id="recent-boxes">
+</div>
+<div class="dashboard-side" id="recent-boxes">
     <div class="module" id="recent-history-module">
         <h2>{% translate 'Recent admin lists' %}</h2>
         {% with history=user.admin_history.all|slice:":10" %}
@@ -124,6 +138,61 @@
     </div>
   </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const link = document.getElementById('switch-console');
+  if (!link) return;
+  link.addEventListener('click', function (e) {
+    e.preventDefault();
+    const dashboard = document.getElementById('admin-dashboard');
+    const sidebar = document.getElementById('nav-sidebar');
+    if (dashboard) dashboard.style.display = 'none';
+    if (sidebar) sidebar.style.display = 'none';
+
+    const content = document.getElementById('content');
+    const header = document.getElementById('admin-home-header');
+    const consoleWrapper = document.createElement('div');
+    consoleWrapper.id = 'admin-console-wrapper';
+    const height = window.innerHeight - header.getBoundingClientRect().bottom;
+    consoleWrapper.style.height = height + 'px';
+    consoleWrapper.style.boxSizing = 'border-box';
+    consoleWrapper.style.display = 'flex';
+    consoleWrapper.style.flexDirection = 'column';
+    consoleWrapper.innerHTML = '<textarea id="id_source"></textarea><pre id="id_output" style="flex:1; overflow:auto; margin-top:1rem;"></pre>';
+    content.appendChild(consoleWrapper);
+
+    const editor = CodeMirror.fromTextArea(document.getElementById('id_source'), {
+        mode: {name: "python", version: 3},
+        lineNumbers: true,
+        indentUnit: 4,
+        matchBrackets: true
+    });
+    editor.setSize(null, Math.round(height * 0.4) + 'px');
+    const output = document.getElementById('id_output');
+    output.style.height = Math.round(height * 0.6 - 16) + 'px';
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+
+    function executeSource(){
+      const csrfToken = getCookie('csrftoken');
+      fetch('/webshell/execute/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: new URLSearchParams({source: editor.getValue(), csrfmiddlewaretoken: csrfToken})
+      }).then(r => r.text()).then(t => {output.textContent = t;});
+    }
+    editor.on('keydown', function(cm, event){
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter'){
+        executeSource();
+        event.preventDefault();
+      }
+    });
+  });
+});
+</script>
 {% endblock %}
 
 {% block sidebar %}{% endblock %}
