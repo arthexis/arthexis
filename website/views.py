@@ -58,11 +58,6 @@ def sitemap(request):
     return HttpResponse("\n".join(lines), content_type="application/xml")
 
 
-@landing("RFID Reader")
-def rfid_reader(request):
-    """Public page to read RFID tags."""
-    return render(request, "website/rfid.html")
-
 
 class CustomLoginView(LoginView):
     """Login view that redirects staff to the admin."""

@@ -1,0 +1,12 @@
+[
+  {
+    "model": "website.application",
+    "pk": 1,
+    "fields": {"name": "rfid"}
+  },
+  {
+    "model": "website.siteapplication",
+    "pk": 1,
+    "fields": {"site": 1, "application": 1, "path": "/rfid/", "is_default": false}
+  }
+]
