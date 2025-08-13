@@ -118,9 +118,7 @@ class ChargerAdmin(admin.ModelAdmin):
     def session_kwh(self, obj):
         tx = store.transactions.get(obj.charger_id)
         if tx:
-            val = tx.kwh
-            if val:
-                return round(val, 2)
+            return round(tx.kwh, 2)
         return 0.0
 
     session_kwh.short_description = "Session kWh"

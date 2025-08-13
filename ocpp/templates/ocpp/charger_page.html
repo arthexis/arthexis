@@ -12,7 +12,7 @@
 </div>
 <p>{% trans "Total Energy" %}: {{ charger.total_kwh|floatformat:2 }} kWh</p>
 {% if active_tx %}
-<p>{% trans "Current Session" %}: {% if active_tx.kwh %}{{ active_tx.kwh|floatformat:2 }}{% else %}-{% endif %} kWh</p>
+<p>{% trans "Current Session" %}: {{ active_tx.kwh|floatformat:2 }} kWh</p>
 {% endif %}
 <p>{% ref_img charger.get_absolute_url 200 %}</p>
 
@@ -32,7 +32,7 @@
       <td>{{ tx.id }}</td>
       <td>{{ tx.start_time }}</td>
       <td>{{ tx.stop_time|default:"-" }}</td>
-      <td>{% if tx.kwh %}{{ tx.kwh|floatformat:2 }}{% else %}-{% endif %}</td>
+      <td>{{ tx.kwh|floatformat:2 }}</td>
     </tr>
     {% empty %}
     <tr><td colspan="4">{% trans "No sessions found." %}</td></tr>
