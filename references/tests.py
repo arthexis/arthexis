@@ -3,7 +3,7 @@ from pathlib import Path
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
 from django.test import Client, RequestFactory, TestCase
-from django.urls import reverse
+from django.urls import resolve, reverse
 
 from .models import Reference
 
@@ -54,7 +54,23 @@ class FooterTemplateTagTests(TestCase):
         self.assertNotIn("https://ignored.com", html)
         self.assertIn("data:image/png;base64", html)
         rev = Path("REVISION").read_text().strip()[-8:]
+        ver = Path("VERSION").read_text().strip()
+        self.assertIn(f"ver {ver}", html)
         self.assertIn(f"rev {rev}", html)
+
+    def test_footer_shows_admin_links_for_staff(self):
+        Reference.objects.create(value="https://example.com", include_in_footer=True)
+        user = get_user_model().objects.create_user(
+            "staff", "staff@example.com", "pass", is_staff=True
+        )
+        request = self.factory.get("/ref/")
+        request.user = user
+        request.resolver_match = resolve("/ref/")
+        html = Template("{% load ref_tags %}{% render_footer %}").render(
+            Context({"request": request})
+        )
+        self.assertIn("References", html)
+        self.assertIn(reverse("admin:references_reference_changelist"), html)
 
 
 class ReferenceModelUpdateTests(TestCase):

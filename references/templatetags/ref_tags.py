@@ -1,6 +1,9 @@
 from pathlib import Path
 
 from django import template
+from django.apps import apps
+from django.contrib import admin
+from django.urls import reverse
 from django.utils.safestring import mark_safe
 
 from references.models import Reference
@@ -26,12 +29,41 @@ def ref_img(value, size=200, alt=None):
 def render_footer(context):
     """Render footer links for references marked to appear there."""
     revision = ""
-    path = Path("REVISION")
-    if path.exists():
-        revision = path.read_text().strip()[-8:]
+    version = ""
+    rev_path = Path("REVISION")
+    if rev_path.exists():
+        revision = rev_path.read_text().strip()[-8:]
+    ver_path = Path("VERSION")
+    if ver_path.exists():
+        version = ver_path.read_text().strip()
+
+    request = context.get("request")
+    admin_links = []
+    if request and getattr(request, "user", None) and request.user.is_staff:
+        match = getattr(request, "resolver_match", None)
+        if match and match.app_name:
+            try:
+                app_config = apps.get_app_config(match.app_name)
+            except LookupError:
+                app_config = None
+            if app_config:
+                for model in app_config.get_models():
+                    if admin.site.is_registered(model):
+                        name = model._meta.verbose_name_plural.title()
+                        admin_links.append(
+                            (
+                                name,
+                                reverse(
+                                    f"admin:{app_config.label}_{model._meta.model_name}_changelist"
+                                ),
+                            )
+                        )
+
     return {
         "footer_refs": Reference.objects.filter(include_in_footer=True),
         "revision": revision,
-        "request": context.get("request"),
+        "version": version,
+        "admin_links": admin_links,
+        "request": request,
     }
 
