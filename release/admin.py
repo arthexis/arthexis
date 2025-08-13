@@ -62,4 +62,28 @@ class ReadmeSectionAdmin(admin.ModelAdmin):
     def short_content(self, obj):
         return (obj.content[:50] + "...") if len(obj.content) > 50 else obj.content
 
+    # Ensure README reflects latest sections after any admin change
+    def _rebuild_readme(self, request) -> None:
+        call_command("build_readme")
+        url = reverse("website:index")
+        self.message_user(
+            request,
+            format_html(
+                'README rebuilt. <a href="{}" target="_blank">View README</a>', url
+            ),
+            messages.SUCCESS,
+        )
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        self._rebuild_readme(request)
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        self._rebuild_readme(request)
+
+    def delete_queryset(self, request, queryset):
+        super().delete_queryset(request, queryset)
+        self._rebuild_readme(request)
+
 

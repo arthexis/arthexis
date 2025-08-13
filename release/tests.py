@@ -93,6 +93,33 @@ class PackageAdminTests(TestCase):
             self.assertContains(response, reverse("website:index"))
 
 
+class ReadmeSectionAdminTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="readme_admin", password="pass", email="a@a.com"
+        )
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_save_triggers_build(self):
+        url = reverse("admin:release_readmesection_add")
+        with patch("release.admin.call_command") as mock_cmd:
+            response = self.client.post(
+                url, {"order": 1, "content": "Hello"}, follow=True
+            )
+            self.assertEqual(response.status_code, 200)
+            mock_cmd.assert_called_once_with("build_readme")
+
+    def test_delete_triggers_build(self):
+        section = ReadmeSection.objects.create(order=1, content="Hi")
+        url = reverse("admin:release_readmesection_delete", args=[section.pk])
+        with patch("release.admin.call_command") as mock_cmd:
+            response = self.client.post(url, {"post": "yes"}, follow=True)
+            self.assertEqual(response.status_code, 200)
+            mock_cmd.assert_called_once_with("build_readme")
+
+
 class BuildReadmeCommandTests(TestCase):
     def test_builds_from_sections(self):
         ReadmeSection.objects.create(order=1, content="First")
