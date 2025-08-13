@@ -5,6 +5,7 @@ from datetime import datetime
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
+from django.core.paginator import Paginator
 
 from utils.api import api_login_required
 
@@ -203,7 +204,10 @@ def charger_page(request, cid):
     charger = get_object_or_404(Charger, charger_id=cid)
     tx_obj = store.transactions.get(cid)
     state, color = _charger_state(charger, tx_obj)
-    transactions = Transaction.objects.filter(charger=charger).order_by("-start_time")
+    transactions_qs = Transaction.objects.filter(charger=charger).order_by("-start_time")
+    paginator = Paginator(transactions_qs, 10)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    transactions = page_obj.object_list
     chart_data = {"labels": [], "values": []}
     if tx_obj:
         total = 0.0
@@ -230,8 +234,29 @@ def charger_page(request, cid):
             "state": state,
             "color": color,
             "transactions": transactions,
+            "page_obj": page_obj,
             "chart_data": json.dumps(chart_data),
         },
+    )
+
+
+def charger_session_search(request, cid):
+    charger = get_object_or_404(Charger, charger_id=cid)
+    date_str = request.GET.get("date")
+    transactions = None
+    if date_str:
+        try:
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+            transactions = (
+                Transaction.objects.filter(charger=charger, start_time__date=date_obj)
+                .order_by("-start_time")
+            )
+        except ValueError:
+            transactions = []
+    return render(
+        request,
+        "ocpp/charger_session_search.html",
+        {"charger": charger, "transactions": transactions, "date": date_str},
     )
 
 

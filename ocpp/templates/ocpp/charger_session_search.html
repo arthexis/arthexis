@@ -1,0 +1,40 @@
+{% extends "website/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ charger.name|default:charger.charger_id }} - {% trans "Search Sessions" %}{% endblock %}
+
+{% block content %}
+<h1>{{ charger.name|default:charger.charger_id }}</h1>
+<form method="get" class="mb-3">
+  <label for="date">{% trans "Select date" %}</label>
+  <input type="date" id="date" name="date" value="{{ date|default:'' }}">
+  <button type="submit">{% trans "Search" %}</button>
+</form>
+{% if transactions is not None %}
+  {% if transactions %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>{% trans "ID" %}</th>
+        <th>{% trans "Start" %}</th>
+        <th>{% trans "Stop" %}</th>
+        <th>{% trans "Energy (kWh)" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tx in transactions %}
+      <tr>
+        <td>{{ tx.id }}</td>
+        <td>{{ tx.start_time }}</td>
+        <td>{{ tx.stop_time|default:"-" }}</td>
+        <td>{{ tx.kwh|floatformat:2 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>{% trans "No sessions found." %}</p>
+  {% endif %}
+{% endif %}
+<a href="{% url 'charger-page' charger.charger_id %}">{% trans "Back" %}</a>
+{% endblock %}
