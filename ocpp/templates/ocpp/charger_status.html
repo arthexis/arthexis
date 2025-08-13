@@ -7,23 +7,30 @@
 {% block content %}
 <div id="status-content">
   <h1>{{ charger.name|default:charger.charger_id }}</h1>
-  <p>Serial Number: {{ charger.charger_id }}</p>
-  <div class="mb-3 d-flex align-items-center">
-    <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
-    <strong>{{ state }}</strong>
+  <div class="row mb-4">
+    <div class="col-md-4">
+      <p>Serial Number: {{ charger.charger_id }}</p>
+      <div class="mb-3 d-flex align-items-center">
+        <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
+        <strong>{{ state }}</strong>
+      </div>
+      <p>{% trans "Total Energy" %}: {{ charger.total_kwh|floatformat:2 }} kWh</p>
+      {% if tx %}
+      <h2>{% trans "Current Transaction" %}</h2>
+      <ul>
+        <li>{% trans "Transaction ID" %}: {{ tx.id }}</li>
+        <li>{% trans "Meter Start" %}: {{ tx.meter_start }}</li>
+        <li>{% trans "Start Time" %}: {{ tx.start_time }}</li>
+        <li>{% trans "Session Energy" %}: <span id="session-kwh">{{ tx.kwh|floatformat:2 }}</span> kWh</li>
+      </ul>
+      {% else %}
+      <p>{% trans "No active transaction" %}</p>
+      {% endif %}
+    </div>
+    <div class="col-md-8">
+      <canvas id="kwh-chart" style="width:100%;height:300px;"></canvas>
+    </div>
   </div>
-  <p>{% trans "Total Energy" %}: {{ charger.total_kwh|floatformat:2 }} kWh</p>
-  {% if tx %}
-  <h2>{% trans "Current Transaction" %}</h2>
-  <ul>
-    <li>{% trans "Transaction ID" %}: {{ tx.id }}</li>
-    <li>{% trans "Meter Start" %}: {{ tx.meter_start }}</li>
-    <li>{% trans "Start Time" %}: {{ tx.start_time }}</li>
-    <li>{% trans "Session Energy" %}: {{ tx.kwh|floatformat:2 }} kWh</li>
-  </ul>
-  {% else %}
-  <p>{% trans "No active transaction" %}</p>
-  {% endif %}
 
   <h2>{% trans "Sessions" %}</h2>
   <table class="table">
@@ -48,8 +55,49 @@
       {% endfor %}
     </tbody>
   </table>
-</div>
+ </div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+  let kwhChart = null;
+  const chartData = {
+    labels: [],
+    datasets: [{
+      label: 'Energy (kWh)',
+      data: [],
+      fill: true,
+      borderColor: 'rgba(255,69,0,1)',
+      tension: 0.4
+    }]
+  };
+
+  function setupChart() {
+    const canvas = document.getElementById('kwh-chart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    gradient.addColorStop(0, 'rgba(255,0,0,0.5)');
+    gradient.addColorStop(1, 'rgba(255,165,0,0.5)');
+    chartData.datasets[0].backgroundColor = gradient;
+    if (kwhChart) {
+      kwhChart.destroy();
+    }
+    kwhChart = new Chart(ctx, {
+      type: 'line',
+      data: chartData,
+      options: {
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
+  }
+
+  function addDataPoint(kwh) {
+    const now = new Date();
+    chartData.labels.push(now.toLocaleTimeString());
+    chartData.datasets[0].data.push(kwh);
+  }
+
   function reloadStatus() {
     fetch(window.location.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
       .then(resp => resp.text())
@@ -57,10 +105,23 @@
         const doc = new DOMParser().parseFromString(html, 'text/html');
         const newContent = doc.getElementById('status-content');
         if (newContent) {
+          const kwhElem = newContent.querySelector('#session-kwh');
+          if (kwhElem) {
+            addDataPoint(parseFloat(kwhElem.textContent));
+          }
           document.getElementById('status-content').innerHTML = newContent.innerHTML;
+          setupChart();
         }
       });
   }
-  setInterval(reloadStatus, 5000);
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const kwhElem = document.getElementById('session-kwh');
+    if (kwhElem) {
+      addDataPoint(parseFloat(kwhElem.textContent));
+    }
+    setupChart();
+    setInterval(reloadStatus, 5000);
+  });
 </script>
 {% endblock %}
