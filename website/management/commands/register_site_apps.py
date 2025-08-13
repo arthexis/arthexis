@@ -2,6 +2,7 @@ from django.apps import apps as django_apps
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand
+from django.utils.text import slugify
 import socket
 
 from website.models import Application, SiteApplication
@@ -37,5 +38,7 @@ class Command(BaseCommand):
             except LookupError:
                 continue
             app, _ = Application.objects.get_or_create(name=config.label)
-            if not SiteApplication.objects.filter(site=site, application=app).exists():
-                SiteApplication.objects.create(site=site, application=app)
+            path = f"/{slugify(app.name)}/"
+            SiteApplication.objects.update_or_create(
+                site=site, path=path, defaults={"application": app}
+            )
