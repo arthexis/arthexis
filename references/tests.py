@@ -72,6 +72,13 @@ class FooterTemplateTagTests(TestCase):
         self.assertIn("References", html)
         self.assertIn(reverse("admin:references_reference_changelist"), html)
 
+    def test_current_page_qr_tag(self):
+        request = self.factory.get("/")
+        html = Template("{% load ref_tags %}{% current_page_qr 50 %}").render(
+            Context({"request": request})
+        )
+        self.assertIn("data:image/png;base64", html)
+
 
 class ReferenceModelUpdateTests(TestCase):
     def test_qr_image_regenerates_on_value_change(self):
