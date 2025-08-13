@@ -1,8 +1,9 @@
 [
   {
     "model": "accounts.rfid",
-    "pk": "FFFFFFFF",
+    "pk": 1,
     "fields": {
+      "rfid": "FFFFFFFF",
       "allowed": true,
       "added_on": "2024-01-01T00:00:00Z"
     }

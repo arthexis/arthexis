@@ -232,8 +232,8 @@ admin.site.register(Subscription)
 class RFIDResource(resources.ModelResource):
     class Meta:
         model = RFID
-        fields = ("rfid", "allowed")
-        import_id_fields = ("rfid",)
+        fields = ("label_id", "rfid", "allowed")
+        import_id_fields = ("label_id",)
 
 
 @admin.register(RFID)
@@ -241,8 +241,15 @@ class RFIDAdmin(ImportExportModelAdmin):
     change_list_template = "admin/accounts/rfid/change_list.html"
     change_form_template = "admin/accounts/rfid/change_form.html"
     resource_class = RFIDResource
-    list_display = ("rfid", "accounts_display", "allowed", "added_on", "write_link")
-    search_fields = ("rfid",)
+    list_display = (
+        "label_id",
+        "rfid",
+        "accounts_display",
+        "allowed",
+        "added_on",
+        "write_link",
+    )
+    search_fields = ("label_id", "rfid")
     autocomplete_fields = ["accounts"]
     actions = ["scan_rfids"]
 
@@ -270,12 +277,12 @@ class RFIDAdmin(ImportExportModelAdmin):
                 name="accounts_rfid_scan_next",
             ),
             path(
-                "<slug:pk>/write/",
+                "<int:pk>/write/",
                 self.admin_site.admin_view(self.write_view),
                 name="accounts_rfid_write",
             ),
             path(
-                "<slug:pk>/write/next/",
+                "<int:pk>/write/next/",
                 self.admin_site.admin_view(self.write_next),
                 name="accounts_rfid_write_next",
             ),
@@ -308,9 +315,15 @@ class RFIDAdmin(ImportExportModelAdmin):
                     if status == mfrc.MI_OK:
                         rfid = "".join(f"{x:02X}" for x in uid[:5])
                         tag, created = RFID.objects.get_or_create(rfid=rfid)
-                        return JsonResponse({"rfid": rfid, "created": created})
+                        return JsonResponse(
+                            {
+                                "rfid": rfid,
+                                "label_id": tag.pk,
+                                "created": created,
+                            }
+                        )
                 time.sleep(0.2)
-            return JsonResponse({"rfid": None})
+            return JsonResponse({"rfid": None, "label_id": None})
         finally:  # pragma: no cover - cleanup hardware
             if GPIO:
                 try:
@@ -353,7 +366,13 @@ class RFIDAdmin(ImportExportModelAdmin):
                     if status == mfrc.MI_OK:
                         rfid = "".join(f"{x:02X}" for x in uid[:5])
                         if rfid != tag.rfid:
-                            return JsonResponse({"rfid": rfid, "match": False})
+                            return JsonResponse(
+                                {
+                                    "rfid": rfid,
+                                    "label_id": tag.pk,
+                                    "match": False,
+                                }
+                            )
                         try:
                             mfrc.MFRC522_SelectTag(uid)
                             # Default auth with factory keys, sector 1 trailer block
@@ -377,11 +396,17 @@ class RFIDAdmin(ImportExportModelAdmin):
                                 mfrc.MFRC522_Write(block, data)
                                 mfrc.MFRC522_StopCrypto1()
                                 return JsonResponse(
-                                    {"rfid": rfid, "match": True, "written": True}
+                                    {
+                                        "rfid": rfid,
+                                        "label_id": tag.pk,
+                                        "match": True,
+                                        "written": True,
+                                    }
                                 )
                             return JsonResponse(
                                 {
                                     "rfid": rfid,
+                                    "label_id": tag.pk,
                                     "match": True,
                                     "written": False,
                                     "error": "auth failed",
@@ -391,13 +416,14 @@ class RFIDAdmin(ImportExportModelAdmin):
                             return JsonResponse(
                                 {
                                     "rfid": rfid,
+                                    "label_id": tag.pk,
                                     "match": True,
                                     "written": False,
                                     "error": str(exc),
                                 }
                             )
                 time.sleep(0.2)
-            return JsonResponse({"rfid": None})
+            return JsonResponse({"rfid": None, "label_id": None})
         finally:  # pragma: no cover - cleanup hardware
             if GPIO:
                 try:

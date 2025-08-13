@@ -177,9 +177,10 @@ class UserProxy(User):
 class RFID(models.Model):
     """RFID tag that may be assigned to one account."""
 
+    label_id = models.AutoField(primary_key=True, db_column="label_id")
     rfid = models.CharField(
         max_length=8,
-        primary_key=True,
+        unique=True,
         verbose_name="RFID",
         validators=[
             RegexValidator(
@@ -225,7 +226,7 @@ class RFID(models.Model):
             self.accounts.clear()
 
     def __str__(self):  # pragma: no cover - simple representation
-        return self.rfid
+        return str(self.label_id)
 
     @staticmethod
     def get_account_by_rfid(value):

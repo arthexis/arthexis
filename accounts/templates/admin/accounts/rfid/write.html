@@ -1,7 +1,7 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
 <h1>RFID Writer</h1>
-<p>Expected RFID: {{ rfid.rfid }}</p>
+<p>Label: {{ rfid.label_id }}<br>Expected RFID: {{ rfid.rfid }}</p>
 <p>Key A: {{ rfid.key_a }}<br>Key B: {{ rfid.key_b }}</p>
 <p id="status">Waiting for card...</p>
 <script>
@@ -14,9 +14,9 @@ async function waitWrite(){
             p.textContent = data.error;
         } else if(data.rfid){
             if(data.match){
-                p.textContent = data.written ? `Wrote to ${data.rfid}` : `Failed to write ${data.rfid}: ${data.error || ''}`;
+                p.textContent = data.written ? `Wrote to label ${data.label_id} (${data.rfid})` : `Failed to write label ${data.label_id} (${data.rfid}): ${data.error || ''}`;
             } else {
-                p.textContent = `Scanned ${data.rfid} but expected {{ rfid.rfid }}`;
+                p.textContent = `Scanned label ${data.label_id} (${data.rfid}) but expected {{ rfid.rfid }}`;
             }
         }
     }catch(err){
