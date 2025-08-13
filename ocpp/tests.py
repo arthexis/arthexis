@@ -10,7 +10,7 @@ from website.models import Application, SiteApplication
 
 from config.asgi import application
 
-from .models import Transaction, Charger, Simulator, MeterReading
+from .models import Transaction, Charger, Simulator, MeterReading, Location
 from accounts.models import Account, Credit
 from accounts.models import RFID
 from . import store
@@ -254,6 +254,13 @@ class ChargerAdminTests(TestCase):
         log_url = reverse("charger-log", args=["LOG1"]) + "?type=charger"
         self.assertContains(resp, log_url)
 
+    def test_admin_shows_location_name(self):
+        loc = Location.objects.create(name="AdminLoc")
+        Charger.objects.create(charger_id="ADMINLOC", location=loc)
+        url = reverse("admin:ocpp_charger_changelist")
+        resp = self.client.get(url)
+        self.assertContains(resp, "AdminLoc")
+
     def test_purge_action_removes_data(self):
         charger = Charger.objects.create(charger_id="PURGE1")
         Transaction.objects.create(
@@ -454,11 +461,13 @@ class SimulatorAdminTests(TestCase):
 
 class ChargerLocationTests(TestCase):
     def test_lat_lon_fields_saved(self):
-        charger = Charger.objects.create(
-            charger_id="LOC1", latitude=10.123456, longitude=-20.654321
+        loc = Location.objects.create(
+            name="Loc1", latitude=10.123456, longitude=-20.654321
         )
+        charger = Charger.objects.create(charger_id="LOC1", location=loc)
         self.assertAlmostEqual(float(charger.latitude), 10.123456)
         self.assertAlmostEqual(float(charger.longitude), -20.654321)
+        self.assertEqual(charger.name, "Loc1")
 
 
 class MeterReadingTests(TransactionTestCase):
