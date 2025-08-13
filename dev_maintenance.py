@@ -78,8 +78,9 @@ def run_database_tasks() -> None:
         else:  # pragma: no cover - unreachable in sqlite
             raise
 
-    for fixture in _fixture_files():
-        call_command("loaddata", fixture)
+    fixtures = _fixture_files()
+    if fixtures:
+        call_command("loaddata", *fixtures)
 
     # Ensure Application and SiteApplication entries exist for local apps
     call_command("register_site_apps")

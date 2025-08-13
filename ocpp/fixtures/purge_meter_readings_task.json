@@ -16,7 +16,8 @@
       "interval": 1,
       "args": "[]",
       "kwargs": "{}",
-      "enabled": true
+      "enabled": true,
+      "date_changed": "2024-01-01T00:00:00Z"
     }
   }
 ]
