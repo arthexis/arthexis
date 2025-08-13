@@ -20,6 +20,7 @@ class SimulatorConfig:
     host: str = "127.0.0.1"
     ws_port: int = 8000
     rfid: str = "FFFFFFFF"
+    vin: str = ""
     # WebSocket path for the charge point. Defaults to just the charger ID at the root.
     cp_path: str = "CPX/"
     duration: int = 600
@@ -132,13 +133,14 @@ class ChargePointSimulator:
                             2,
                             "start",
                             "StartTransaction",
-                            {
-                                "connectorId": 1,
-                                "idTag": cfg.rfid,
-                                "meterStart": meter_start,
-                            },
-                        ]
-                    )
+                                  {
+                                  "connectorId": 1,
+                                  "idTag": cfg.rfid,
+                                  "meterStart": meter_start,
+                                  "vin": cfg.vin,
+                              },
+                          ]
+                      )
                 )
                 try:
                     resp = json.loads(await recv())

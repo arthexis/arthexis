@@ -118,6 +118,7 @@ class Transaction(models.Model):
         Account, on_delete=models.PROTECT, related_name="transactions", null=True
     )
     rfid = models.CharField(max_length=20, blank=True)
+    vin = models.CharField(max_length=17, blank=True)
     meter_start = models.IntegerField(null=True, blank=True)
     meter_stop = models.IntegerField(null=True, blank=True)
     start_time = models.DateTimeField()
@@ -185,6 +186,7 @@ class Simulator(models.Model):
     host = models.CharField(max_length=100, default="127.0.0.1")
     ws_port = models.IntegerField("WS Port", default=8000)
     rfid = models.CharField(max_length=8, default="FFFFFFFF")
+    vin = models.CharField(max_length=17, blank=True)
     duration = models.IntegerField(default=600)
     interval = models.FloatField(default=5.0)
     pre_charge_delay = models.FloatField("Delay", default=10.0)
@@ -203,6 +205,7 @@ class Simulator(models.Model):
             host=self.host,
             ws_port=self.ws_port,
             rfid=self.rfid,
+            vin=self.vin,
             cp_path=self.cp_path,
             duration=self.duration,
             interval=self.interval,

@@ -214,8 +214,13 @@ class WMICodeInline(admin.TabularInline):
 @admin.register(Brand)
 class BrandAdmin(admin.ModelAdmin):
     fields = ("name",)
-    list_display = ("name",)
+    list_display = ("name", "wmi_codes_display")
     inlines = [WMICodeInline]
+
+    def wmi_codes_display(self, obj):
+        return ", ".join(obj.wmi_codes.values_list("code", flat=True))
+
+    wmi_codes_display.short_description = "WMI codes"
 
 
 @admin.register(EVModel)

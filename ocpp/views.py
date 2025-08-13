@@ -54,6 +54,8 @@ def charger_list(request):
                 "meterStart": tx_obj.meter_start,
                 "startTime": tx_obj.start_time.isoformat(),
             }
+            if tx_obj.vin:
+                tx_data["vin"] = tx_obj.vin
             if tx_obj.meter_stop is not None:
                 tx_data["meterStop"] = tx_obj.meter_stop
             if tx_obj.stop_time is not None:
@@ -94,6 +96,8 @@ def charger_detail(request, cid):
             "meterStart": tx_obj.meter_start,
             "startTime": tx_obj.start_time.isoformat(),
         }
+        if tx_obj.vin:
+            tx_data["vin"] = tx_obj.vin
         if tx_obj.meter_stop is not None:
             tx_data["meterStop"] = tx_obj.meter_stop
         if tx_obj.stop_time is not None:
@@ -140,6 +144,7 @@ def cp_simulator(request):
     default_ws_port = "9000"
     default_cp_paths = ["CP1", "CP2"]
     default_rfid = "FFFFFFFF"
+    default_vins = ["WP0ZZZ00000000000", "WAUZZZ00000000000"]
 
     message = ""
     if request.method == "POST":
@@ -151,8 +156,9 @@ def cp_simulator(request):
                 ws_port=int(request.POST.get("ws_port") or default_ws_port),
                 cp_path=request.POST.get("cp_path")
                 or default_cp_paths[cp_idx - 1],
-                rfid=request.POST.get("rfid") or default_rfid,
-                duration=int(request.POST.get("duration") or 600),
+                  rfid=request.POST.get("rfid") or default_rfid,
+                  vin=request.POST.get("vin") or default_vins[cp_idx - 1],
+                  duration=int(request.POST.get("duration") or 600),
                 interval=float(request.POST.get("interval") or 5),
                 kw_min=float(request.POST.get("kw_min") or 30),
                 kw_max=float(request.POST.get("kw_max") or 60),
@@ -197,6 +203,7 @@ def cp_simulator(request):
         "default_ws_port": default_ws_port,
         "default_cp_paths": default_cp_paths,
         "default_rfid": default_rfid,
+        "default_vins": default_vins,
         "params_jsons": params_jsons,
         "state_jsons": state_jsons,
     }

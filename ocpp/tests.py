@@ -94,6 +94,25 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_vin_recorded(self):
+        await database_sync_to_async(Charger.objects.create)(charger_id="VINREC")
+        communicator = WebsocketCommunicator(application, "/VINREC/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [2, "1", "StartTransaction", {"meterStart": 1, "vin": "WP0ZZZ11111111111"}]
+        )
+        response = await communicator.receive_json_from()
+        tx_id = response[2]["transactionId"]
+
+        tx = await database_sync_to_async(Transaction.objects.get)(
+            pk=tx_id, charger__charger_id="VINREC"
+        )
+        self.assertEqual(tx.vin, "WP0ZZZ11111111111")
+
+        await communicator.disconnect()
+
     async def test_transaction_created_from_meter_values(self):
         communicator = WebsocketCommunicator(application, "/NOSTART/")
         connected, _ = await communicator.connect()
@@ -357,12 +376,14 @@ class SimulatorAdminTests(TestCase):
             kw_max=70,
             duration=500,
             pre_charge_delay=5,
+            vin="WP0ZZZ99999999999",
         )
         cfg = sim.as_config()
         self.assertEqual(cfg.interval, 3.5)
         self.assertEqual(cfg.kw_max, 70)
         self.assertEqual(cfg.duration, 500)
         self.assertEqual(cfg.pre_charge_delay, 5)
+        self.assertEqual(cfg.vin, "WP0ZZZ99999999999")
 
     async def test_unknown_charger_auto_registered(self):
         communicator = WebsocketCommunicator(application, "/NEWCHG/")
@@ -579,6 +600,7 @@ class ChargePointSimulatorTests(TransactionTestCase):
                 host="127.0.0.1",
                 ws_port=port,
                 cp_path="SIM1/",
+                vin="WP0ZZZ12345678901",
                 duration=0.2,
                 interval=0.05,
                 kw_min=0.1,
@@ -594,6 +616,8 @@ class ChargePointSimulatorTests(TransactionTestCase):
         actions = [msg[2] for msg in received]
         self.assertIn("BootNotification", actions)
         self.assertIn("StartTransaction", actions)
+        start_msg = next(msg for msg in received if msg[2] == "StartTransaction")
+        self.assertEqual(start_msg[3].get("vin"), "WP0ZZZ12345678901")
 
     async def test_start_returns_status_and_log(self):
         async def handler(ws):

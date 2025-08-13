@@ -398,6 +398,14 @@ class Brand(models.Model):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
 
+    @classmethod
+    def from_vin(cls, vin: str) -> "Brand | None":
+        """Return the brand matching the VIN's WMI prefix."""
+        if not vin:
+            return None
+        prefix = vin[:3].upper()
+        return cls.objects.filter(wmi_codes__code=prefix).first()
+
 
 class WMICode(models.Model):
     """World Manufacturer Identifier code for a brand."""
