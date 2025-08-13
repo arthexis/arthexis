@@ -4,7 +4,7 @@
     "pk": 1,
     "fields": {
       "name": "EV Charger",
-      "description": "Typical home charging for 1 full EV.",
+      "description": "Typical home charging for 1 fully-electric vehicle.",
       "amps": 40,
       "volts": 220,
       "material": "cu",
