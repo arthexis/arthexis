@@ -21,7 +21,7 @@ class LoginViewTests(TestCase):
 
     def test_login_link_in_navbar(self):
         resp = self.client.get(reverse("website:index"))
-        self.assertContains(resp, 'href="/login/?next=/"')
+        self.assertContains(resp, 'href="/login/"')
 
     def test_staff_login_redirects_admin(self):
         resp = self.client.post(
