@@ -52,8 +52,8 @@ msgid "Spanish"
 msgstr ""
 
 #: config/urls.py:19 config/urls.py:20 website/templates/website/base.html:7
-msgid "Arthexis Constellation"
-msgstr "Arthexis Constellation"
+msgid "Constellation"
+msgstr "Constellation"
 
 #: emails/apps.py:8
 msgid "Post Office"

@@ -1,4 +1,4 @@
-# Arthexis Constellation
+# The Constellation
 
 ## Purpose
 Arthexis Constellation is a Django-based suite that centralizes tools for managing charging infrastructure and related services.
