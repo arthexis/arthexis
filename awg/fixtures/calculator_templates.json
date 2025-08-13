@@ -4,7 +4,6 @@
     "pk": 1,
     "fields": {
       "name": "EV Charger",
-      "meters": 10,
       "amps": 40,
       "volts": 220,
       "material": "cu",
