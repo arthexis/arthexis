@@ -104,24 +104,24 @@ class Transaction(models.Model):
         return f"{self.charger}:{self.pk}"
 
     @property
-    def kwh(self) -> float | None:
+    def kwh(self) -> float:
         """Return consumed energy in kWh for this session."""
-        if self.meter_start is None:
-            return None
-        end = self.meter_stop
-        if end is None:
-            last = self.meter_readings.order_by("-timestamp").first()
-            if last is not None:
-                try:
-                    end = int(last.value)
-                except Exception:  # pragma: no cover - unexpected
-                    end = None
-        if end is None:
-            return None
-        diff = end - self.meter_start
-        if diff < 0:
+        total = 0.0
+        qs = self.meter_readings.filter(
+            measurand__in=["", "Energy.Active.Import.Register"]
+        ).order_by("timestamp")
+        for reading in qs:
+            try:
+                val = float(reading.value)
+            except (TypeError, ValueError):  # pragma: no cover - unexpected
+                continue
+            if reading.unit == "kWh":
+                total += val
+            else:
+                total += val / 1000.0
+        if total < 0:
             return 0.0
-        return diff / 1000.0
+        return total
 
 
 class MeterReading(models.Model):

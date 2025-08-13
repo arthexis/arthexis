@@ -15,6 +15,7 @@ from accounts.models import Account, Credit
 from accounts.models import RFID
 from . import store
 from django.db.models.deletion import ProtectedError
+from decimal import Decimal
 import json
 import websockets
 import asyncio
@@ -694,3 +695,29 @@ class PurgeMeterReadingsTaskTests(TestCase):
         purge_meter_readings()
 
         self.assertTrue(MeterReading.objects.filter(pk=reading.pk).exists())
+
+
+class TransactionKwhTests(TestCase):
+    def test_kwh_sums_meter_readings(self):
+        charger = Charger.objects.create(charger_id="SUM1")
+        tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
+        MeterReading.objects.create(
+            charger=charger,
+            transaction=tx,
+            timestamp=timezone.now(),
+            value=Decimal("1.0"),
+            unit="kWh",
+        )
+        MeterReading.objects.create(
+            charger=charger,
+            transaction=tx,
+            timestamp=timezone.now(),
+            value=Decimal("500"),
+            unit="Wh",
+        )
+        self.assertAlmostEqual(tx.kwh, 1.5)
+
+    def test_kwh_defaults_to_zero(self):
+        charger = Charger.objects.create(charger_id="SUM2")
+        tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
+        self.assertEqual(tx.kwh, 0.0)

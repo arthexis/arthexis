@@ -19,7 +19,7 @@
     <li>{% trans "Transaction ID" %}: {{ tx.id }}</li>
     <li>{% trans "Meter Start" %}: {{ tx.meter_start }}</li>
     <li>{% trans "Start Time" %}: {{ tx.start_time }}</li>
-    <li>{% trans "Session Energy" %}: {% if tx.kwh %}{{ tx.kwh|floatformat:2 }}{% else %}-{% endif %} kWh</li>
+    <li>{% trans "Session Energy" %}: {{ tx.kwh|floatformat:2 }} kWh</li>
   </ul>
   {% else %}
   <p>{% trans "No active transaction" %}</p>
