@@ -13,6 +13,6 @@ from django.urls import reverse
 
 
 class RFIDAdminURLTests(SimpleTestCase):
-    def test_reverse_write_accepts_hex_pk(self):
-        url = reverse("admin:accounts_rfid_write", args=["ABCDEF12"])
-        self.assertEqual(url, "/admin/accounts/rfid/ABCDEF12/write/")
+    def test_reverse_write_accepts_numeric_pk(self):
+        url = reverse("admin:accounts_rfid_write", args=[1])
+        self.assertEqual(url, "/admin/accounts/rfid/1/write/")

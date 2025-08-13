@@ -4,6 +4,8 @@ import json
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 
+from accounts.models import RFID
+
 
 def read_rfid() -> dict:
     """Read a single RFID tag using the MFRC522 reader."""
@@ -26,9 +28,10 @@ def read_rfid() -> dict:
                 (status, uid) = mfrc.MFRC522_Anticoll()
                 if status == mfrc.MI_OK:
                     rfid = "".join(f"{x:02X}" for x in uid[:5])
-                    return {"rfid": rfid}
+                    tag, _ = RFID.objects.get_or_create(rfid=rfid)
+                    return {"rfid": rfid, "label_id": tag.pk}
             time.sleep(0.2)
-        return {"rfid": None}
+        return {"rfid": None, "label_id": None}
     except Exception as exc:  # pragma: no cover - hardware dependent
         return {"error": str(exc)}
     finally:  # pragma: no cover - cleanup hardware
@@ -77,7 +80,11 @@ class RFIDConsumer(AsyncWebsocketConsumer):
                 return
             await self.send(json.dumps({"status": "started"}))
             if result.get("rfid"):
-                await self.send(json.dumps({"rfid": result["rfid"]}))
+                await self.send(
+                    json.dumps(
+                        {"rfid": result["rfid"], "label_id": result.get("label_id")}
+                    )
+                )
             self.scanning = True
             self.scan_task = asyncio.create_task(self._scan_loop())
 
@@ -90,7 +97,11 @@ class RFIDConsumer(AsyncWebsocketConsumer):
                 self.scanning = False
                 break
             if result.get("rfid"):
-                await self.send(json.dumps({"rfid": result["rfid"]}))
+                await self.send(
+                    json.dumps(
+                        {"rfid": result["rfid"], "label_id": result.get("label_id")}
+                    )
+                )
             elif result.get("error"):
                 await self.send(json.dumps({"error": result["error"]}))
                 self.scanning = False

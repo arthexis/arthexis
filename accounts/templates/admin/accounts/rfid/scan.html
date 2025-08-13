@@ -11,7 +11,7 @@ async function waitScan(){
         if(data.error){
             p.textContent = data.error;
         } else if(data.rfid){
-            p.textContent = `Scanned ${data.rfid}`;
+            p.textContent = `Scanned label ${data.label_id} (${data.rfid})`;
         }
     } catch(err){
         document.getElementById('status').textContent = err;
