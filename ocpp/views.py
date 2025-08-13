@@ -6,6 +6,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
 from django.core.paginator import Paginator
+from django.contrib.auth.decorators import login_required
 
 from utils.api import api_login_required
 
@@ -113,6 +114,7 @@ def charger_detail(request, cid):
     )
 
 
+@login_required
 @landing("Dashboard")
 def dashboard(request):
     """Landing page listing all known chargers and their status."""
@@ -130,6 +132,7 @@ def dashboard(request):
     return render(request, "ocpp/dashboard.html", {"chargers": chargers})
 
 
+@login_required
 @landing("Simulator")
 def cp_simulator(request):
     """Public landing page to control the OCPP charge point simulator."""
@@ -200,6 +203,7 @@ def cp_simulator(request):
     return render(request, "ocpp/cp_simulator.html", context)
 
 
+@login_required
 def charger_page(request, cid):
     charger = get_object_or_404(Charger, charger_id=cid)
     tx_obj = store.transactions.get(cid)
@@ -240,6 +244,7 @@ def charger_page(request, cid):
     )
 
 
+@login_required
 def charger_session_search(request, cid):
     charger = get_object_or_404(Charger, charger_id=cid)
     date_str = request.GET.get("date")
@@ -260,6 +265,7 @@ def charger_session_search(request, cid):
     )
 
 
+@login_required
 def charger_log_page(request, cid):
     """Render a simple page with the log for the charger or simulator."""
     log_type = request.GET.get("type", "charger")
@@ -274,6 +280,7 @@ def charger_log_page(request, cid):
         {"charger": charger, "log": log},
     )
 
+@login_required
 def charger_status(request, cid):
     """Display current transaction and charger state."""
     return charger_page(request, cid)
