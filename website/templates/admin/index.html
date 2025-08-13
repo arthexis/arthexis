@@ -3,9 +3,6 @@
 
 {% block extrahead %}
   {{ block.super }}
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/python/python.min.js"></script>
 {% endblock %}
 
 {% block extrastyle %}
@@ -70,6 +67,32 @@
     #recent-boxes {
         float: none;
         width: auto;
+    }
+    #admin-console-wrapper {
+        background: var(--darkened-bg);
+        padding: 1rem;
+    }
+    #admin-console-wrapper #input-area {
+        display: flex;
+        align-items: center;
+    }
+    #admin-console-wrapper .blinking-indicator {
+        margin-right: 8px;
+        animation: blink 1s steps(1, start) infinite;
+        color: var(--body-fg);
+    }
+    #admin-console-wrapper input[type="text"] {
+        flex: 1;
+        background: var(--darkened-bg);
+        color: var(--body-fg);
+        border: 1px solid var(--hairline-color);
+        padding: 4px 8px;
+    }
+    #admin-console-wrapper input[type="text"]:focus {
+        outline: none;
+    }
+    @keyframes blink {
+        50% { opacity: 0; }
     }
   </style>
 {% endblock %}
@@ -149,7 +172,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const header = document.getElementById('admin-home-header');
 
   let consoleWrapper = null;
-  let editor = null;
+  let input = null;
   let output = null;
   let history = [];
   let historyIndex = 0;
@@ -162,7 +185,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function executeSource() {
-    const source = editor.getValue();
+    const source = input.value;
     if (!source.trim()) return;
     const csrfToken = getCookie('csrftoken');
     fetch('/webshell/execute/', {
@@ -175,7 +198,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     history.push(source);
     historyIndex = history.length;
-    editor.setValue('');
+    input.value = '';
   }
 
   function initConsole() {
@@ -187,39 +210,30 @@ document.addEventListener('DOMContentLoaded', function () {
     consoleWrapper.style.display = 'flex';
     consoleWrapper.style.flexDirection = 'column';
     consoleWrapper.style.display = 'none';
-    consoleWrapper.innerHTML = '<textarea id="id_source"></textarea><pre id="id_output" style="flex:1; overflow:auto; margin-top:1rem;"></pre>';
+    consoleWrapper.innerHTML = '<div id="input-area" style="display:flex; align-items:center;"><span class="blinking-indicator">&gt;</span><input type="text" id="id_source" style="flex:1;"></div><pre id="id_output" style="flex:1; overflow:auto; margin-top:1rem;"></pre>';
     content.appendChild(consoleWrapper);
 
-    editor = CodeMirror.fromTextArea(document.getElementById('id_source'), {
-      mode: {name: "python", version: 3},
-      lineNumbers: false,
-      indentUnit: 4,
-      matchBrackets: true
-    });
-    editor.setSize(null, Math.round(height * 0.4) + 'px');
+    input = document.getElementById('id_source');
     output = document.getElementById('id_output');
-    output.style.height = Math.round(height * 0.6 - 16) + 'px';
 
-    editor.on('keydown', function(cm, event) {
-      if (event.key === 'Enter' && !event.shiftKey) {
+    input.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter') {
         event.preventDefault();
         executeSource();
       } else if (event.key === 'ArrowUp') {
         if (historyIndex > 0) {
           historyIndex -= 1;
-          cm.setValue(history[historyIndex]);
-          cm.setCursor(cm.lineCount(), 0);
+          input.value = history[historyIndex];
         }
         event.preventDefault();
       } else if (event.key === 'ArrowDown') {
         if (historyIndex < history.length - 1) {
           historyIndex += 1;
-          cm.setValue(history[historyIndex]);
+          input.value = history[historyIndex];
         } else {
           historyIndex = history.length;
-          cm.setValue('');
+          input.value = '';
         }
-        cm.setCursor(cm.lineCount(), 0);
         event.preventDefault();
       }
     });
@@ -233,6 +247,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (sidebar) sidebar.style.display = 'none';
     consoleWrapper.style.display = 'flex';
     link.textContent = 'Switch to browse mode';
+    if (input) input.focus();
   }
 
   function showDashboard() {
