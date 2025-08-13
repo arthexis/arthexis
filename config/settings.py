@@ -68,6 +68,7 @@ ALLOWED_HOSTS = [
 LOCAL_APPS = [
     "nodes",
     "accounts",
+    "rfid",
     "ocpp",
     "references",
     "awg",
