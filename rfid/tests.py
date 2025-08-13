@@ -15,7 +15,10 @@ class RFIDConsumerTests(TransactionTestCase):
         await communicator.disconnect()
 
     async def test_start_returns_status(self):
-        with patch("rfid.consumers.read_rfid", return_value={"rfid": None}):
+        with patch(
+            "rfid.consumers.asyncio.wait_for",
+            new=AsyncMock(return_value={"rfid": None}),
+        ):
             communicator = WebsocketCommunicator(application, "/ws/rfid/")
             connected, _ = await communicator.connect()
             self.assertTrue(connected)
@@ -25,7 +28,23 @@ class RFIDConsumerTests(TransactionTestCase):
             await communicator.disconnect()
 
     async def test_start_handles_error(self):
-        with patch("rfid.consumers.read_rfid", return_value={"error": "boom"}):
+        with patch(
+            "rfid.consumers.asyncio.wait_for",
+            new=AsyncMock(return_value={"error": "boom"}),
+        ):
+            communicator = WebsocketCommunicator(application, "/ws/rfid/")
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+            await communicator.send_json_to({"action": "start"})
+            resp = await communicator.receive_json_from()
+            self.assertEqual(resp, {"error": "boom"})
+            await communicator.disconnect()
+
+    async def test_start_handles_exception(self):
+        with patch(
+            "rfid.consumers.asyncio.wait_for",
+            new=AsyncMock(side_effect=RuntimeError("boom")),
+        ):
             communicator = WebsocketCommunicator(application, "/ws/rfid/")
             connected, _ = await communicator.connect()
             self.assertTrue(connected)
@@ -45,4 +64,22 @@ class RFIDConsumerTests(TransactionTestCase):
             await communicator.send_json_to({"action": "start"})
             resp = await communicator.receive_json_from()
             self.assertEqual(resp, {"error": "RFID reader timeout"})
+            await communicator.disconnect()
+
+    async def test_scan_loop_handles_exception(self):
+        with patch(
+            "rfid.consumers.asyncio.wait_for",
+            new=AsyncMock(return_value={"rfid": None}),
+        ), patch(
+            "rfid.consumers.asyncio.to_thread",
+            new=AsyncMock(side_effect=RuntimeError("boom")),
+        ):
+            communicator = WebsocketCommunicator(application, "/ws/rfid/")
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+            await communicator.send_json_to({"action": "start"})
+            resp = await communicator.receive_json_from()
+            self.assertEqual(resp, {"status": "started"})
+            resp = await communicator.receive_json_from()
+            self.assertEqual(resp, {"error": "boom"})
             await communicator.disconnect()

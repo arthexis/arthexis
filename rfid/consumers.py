@@ -17,10 +17,9 @@ def read_rfid() -> dict:
         import RPi.GPIO as GPIO  # pragma: no cover - hardware dependent
     except Exception:  # pragma: no cover - hardware dependent
         GPIO = None
-
-    mfrc = MFRC522()
-    timeout = time.time() + 1
     try:
+        mfrc = MFRC522()
+        timeout = time.time() + 1
         while time.time() < timeout:  # pragma: no cover - hardware loop
             (status, _tag_type) = mfrc.MFRC522_Request(mfrc.PICC_REQIDL)
             if status == mfrc.MI_OK:
@@ -30,6 +29,8 @@ def read_rfid() -> dict:
                     return {"rfid": rfid}
             time.sleep(0.2)
         return {"rfid": None}
+    except Exception as exc:  # pragma: no cover - hardware dependent
+        return {"error": str(exc)}
     finally:  # pragma: no cover - cleanup hardware
         if GPIO:
             try:
@@ -68,6 +69,9 @@ class RFIDConsumer(AsyncWebsocketConsumer):
             except asyncio.TimeoutError:
                 await self.send(json.dumps({"error": "RFID reader timeout"}))
                 return
+            except Exception as exc:  # pragma: no cover - unexpected
+                await self.send(json.dumps({"error": str(exc)}))
+                return
             if result.get("error"):
                 await self.send(json.dumps({"error": result["error"]}))
                 return
@@ -79,7 +83,12 @@ class RFIDConsumer(AsyncWebsocketConsumer):
 
     async def _scan_loop(self):
         while self.scanning:
-            result = await asyncio.to_thread(read_rfid)
+            try:
+                result = await asyncio.to_thread(read_rfid)
+            except Exception as exc:  # pragma: no cover - unexpected
+                await self.send(json.dumps({"error": str(exc)}))
+                self.scanning = False
+                break
             if result.get("rfid"):
                 await self.send(json.dumps({"rfid": result["rfid"]}))
             elif result.get("error"):
