@@ -70,13 +70,33 @@ def run_database_tasks() -> None:
     except InconsistentMigrationHistory:
         call_command("reset_ocpp_migrations")
         call_command("migrate", interactive=False)
-    except OperationalError:
+    except OperationalError as exc:
         if using_sqlite:
             connections.close_all()
             Path(default_db["NAME"]).unlink(missing_ok=True)
             call_command("migrate", interactive=False)
         else:  # pragma: no cover - unreachable in sqlite
-            raise
+            try:
+                import psycopg
+                from psycopg import sql
+
+                params = {
+                    "dbname": "postgres",
+                    "user": default_db.get("USER", ""),
+                    "password": default_db.get("PASSWORD", ""),
+                    "host": default_db.get("HOST", ""),
+                    "port": default_db.get("PORT", ""),
+                }
+                with psycopg.connect(**params, autocommit=True) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            sql.SQL("CREATE DATABASE {}" ).format(
+                                sql.Identifier(default_db["NAME"])
+                            )
+                        )
+                call_command("migrate", interactive=False)
+            except Exception:
+                raise exc
 
     fixtures = _fixture_files()
     if fixtures:
