@@ -270,12 +270,12 @@ class RFIDAdmin(ImportExportModelAdmin):
                 name="accounts_rfid_scan_next",
             ),
             path(
-                "<int:pk>/write/",
+                "<slug:pk>/write/",
                 self.admin_site.admin_view(self.write_view),
                 name="accounts_rfid_write",
             ),
             path(
-                "<int:pk>/write/next/",
+                "<slug:pk>/write/next/",
                 self.admin_site.admin_view(self.write_next),
                 name="accounts_rfid_write_next",
             ),
