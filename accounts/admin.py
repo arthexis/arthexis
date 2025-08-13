@@ -18,6 +18,7 @@ from .models import (
     Product,
     Subscription,
     Brand,
+    WMICode,
     EVModel,
     RFID,
     RFIDSource,
@@ -205,10 +206,16 @@ class CreditAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+class WMICodeInline(admin.TabularInline):
+    model = WMICode
+    extra = 0
+
+
 @admin.register(Brand)
 class BrandAdmin(admin.ModelAdmin):
     fields = ("name",)
     list_display = ("name",)
+    inlines = [WMICodeInline]
 
 
 @admin.register(EVModel)
