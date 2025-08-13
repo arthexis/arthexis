@@ -5,8 +5,11 @@ import configparser
 from django.utils.text import slugify
 import uuid
 import subprocess
+import os
 from pathlib import Path
 from django.conf import settings
+from django.db.models.signals import m2m_changed
+from django.dispatch import receiver
 
 
 class Node(models.Model):
@@ -38,6 +41,7 @@ class Node(models.Model):
             self._sync_clipboard_task()
         if previous_screenshot != self.screenshot_polling:
             self._sync_screenshot_task()
+        self._sync_nmcli_task()
 
     def _sync_clipboard_task(self):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -78,6 +82,26 @@ class Node(models.Model):
                             "method": "AUTO",
                         }
                     ),
+                },
+            )
+        else:
+            PeriodicTask.objects.filter(name=task_name).delete()
+
+    def _sync_nmcli_task(self):
+        from django_celery_beat.models import IntervalSchedule, PeriodicTask
+
+        if os.name == "nt":
+            return
+        task_name = f"check_nmcli_node_{self.pk}"
+        if self.required_nmcli_templates.exists():
+            schedule, _ = IntervalSchedule.objects.get_or_create(
+                every=2, period=IntervalSchedule.MINUTES
+            )
+            PeriodicTask.objects.update_or_create(
+                name=task_name,
+                defaults={
+                    "interval": schedule,
+                    "task": "nodes.tasks.check_required_connections",
                 },
             )
         else:
@@ -211,6 +235,31 @@ class NginxConfig(models.Model):
             except OSError:
                 continue
         return False
+
+
+class NMCLITemplate(models.Model):
+    connection_name = models.CharField(max_length=100, unique=True)
+    assigned_device = models.CharField(max_length=100, blank=True)
+    priority = models.IntegerField(default=0)
+    autoconnect = models.BooleanField(default=True)
+    static_ip = models.GenericIPAddressField(blank=True, null=True)
+    static_mask = models.CharField(max_length=15, blank=True)
+    static_gateway = models.GenericIPAddressField(blank=True, null=True)
+    allow_outbound = models.BooleanField(default=True)
+    security_type = models.CharField(max_length=50, blank=True)
+    ssid = models.CharField(max_length=100, blank=True)
+    password = models.CharField(max_length=100, blank=True)
+    band = models.CharField(max_length=10, blank=True)
+    required_nodes = models.ManyToManyField(
+        Node, related_name="required_nmcli_templates", blank=True
+    )
+
+    class Meta:
+        verbose_name = "NMCLI Template"
+        verbose_name_plural = "NMCLI Templates"
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return self.connection_name
 
 
 class SystemdUnit(models.Model):
@@ -399,3 +448,15 @@ class TextPattern(models.Model):
         pattern_parts.append(re.escape(self.mask[last_index:]))
         regex = "".join(pattern_parts)
         return regex, sigil_names
+
+
+@receiver(m2m_changed, sender=NMCLITemplate.required_nodes.through)
+def _nmcli_required_nodes_changed(sender, instance, action, pk_set, **kwargs):
+    if action in {"post_add", "post_remove"}:
+        node_ids = set(pk_set or [])
+        node_ids.update(instance.required_nodes.values_list("pk", flat=True))
+        for node in Node.objects.filter(pk__in=node_ids):
+            node._sync_nmcli_task()
+    elif action == "post_clear":
+        for node in Node.objects.all():
+            node._sync_nmcli_task()
