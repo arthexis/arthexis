@@ -299,7 +299,7 @@ class RFIDSource(models.Model):
 
 
 class Account(models.Model):
-    """Track kWh credits for a user."""
+    """Track kW credits for a user."""
 
     name = models.CharField(max_length=100, unique=True)
     user = models.OneToOneField(
@@ -319,20 +319,20 @@ class Account(models.Model):
 
     def can_authorize(self) -> bool:
         """Return True if this account should be authorized for charging."""
-        return self.service_account or self.balance_kwh > 0
+        return self.service_account or self.balance_kw > 0
 
     @property
-    def credits_kwh(self):
-        """Total kWh credits added to the account."""
+    def credits_kw(self):
+        """Total kW credits added to the account."""
         from django.db.models import Sum
         from decimal import Decimal
 
-        total = self.credits.aggregate(total=Sum("amount_kwh"))["total"]
+        total = self.credits.aggregate(total=Sum("amount_kw"))["total"]
         return total if total is not None else Decimal("0")
 
     @property
-    def total_kwh_spent(self):
-        """Total kWh consumed across all transactions."""
+    def total_kw_spent(self):
+        """Total kW consumed across all transactions."""
         from django.db.models import F, Sum, ExpressionWrapper, FloatField
         from decimal import Decimal
 
@@ -349,9 +349,9 @@ class Account(models.Model):
         return Decimal(str(total))
 
     @property
-    def balance_kwh(self):
-        """Remaining kWh available for the account."""
-        return self.credits_kwh - self.total_kwh_spent
+    def balance_kw(self):
+        """Remaining kW available for the account."""
+        return self.credits_kw - self.total_kw_spent
 
     def save(self, *args, **kwargs):
         if self.name:
@@ -368,7 +368,9 @@ class Credit(models.Model):
     account = models.ForeignKey(
         Account, on_delete=models.CASCADE, related_name="credits"
     )
-    amount_kwh = models.DecimalField(max_digits=10, decimal_places=2)
+    amount_kw = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name="Energy (kW)"
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -380,7 +382,7 @@ class Credit(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         user = self.account.user if self.account.user else f"Account {self.account_id}"
-        return f"{self.amount_kwh} kWh for {user}"
+        return f"{self.amount_kw} kW for {user}"
 
 
 class Brand(models.Model):

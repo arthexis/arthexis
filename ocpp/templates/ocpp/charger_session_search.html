@@ -18,7 +18,7 @@
         <th>{% trans "ID" %}</th>
         <th>{% trans "Start" %}</th>
         <th>{% trans "Stop" %}</th>
-        <th>{% trans "Energy (kWh)" %}</th>
+        <th>{% trans "Energy (kW)" %}</th>
       </tr>
     </thead>
     <tbody>
@@ -27,7 +27,7 @@
         <td>{{ tx.id }}</td>
         <td>{{ tx.start_time }}</td>
         <td>{{ tx.stop_time|default:"-" }}</td>
-        <td>{{ tx.kwh|floatformat:2 }}</td>
+        <td>{{ tx.kw|floatformat:2 }}</td>
       </tr>
       {% endfor %}
     </tbody>

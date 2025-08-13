@@ -217,7 +217,7 @@ class AccountTests(TestCase):
     def test_balance_calculation(self):
         user = User.objects.create_user(username="balance", password="x")
         acc = Account.objects.create(user=user, name="BALANCE")
-        Credit.objects.create(account=acc, amount_kwh=50)
+        Credit.objects.create(account=acc, amount_kw=50)
         charger = Charger.objects.create(charger_id="T1")
         Transaction.objects.create(
             charger=charger,
@@ -227,15 +227,15 @@ class AccountTests(TestCase):
             start_time=timezone.now(),
             stop_time=timezone.now(),
         )
-        self.assertEqual(acc.total_kwh_spent, 20)
-        self.assertEqual(acc.balance_kwh, 30)
+        self.assertEqual(acc.total_kw_spent, 20)
+        self.assertEqual(acc.balance_kw, 30)
 
     def test_authorization_requires_positive_balance(self):
         user = User.objects.create_user(username="auth", password="x")
         acc = Account.objects.create(user=user, name="AUTH")
         self.assertFalse(acc.can_authorize())
 
-        Credit.objects.create(account=acc, amount_kwh=5)
+        Credit.objects.create(account=acc, amount_kw=5)
         self.assertTrue(acc.can_authorize())
 
     def test_service_account_ignores_balance(self):
