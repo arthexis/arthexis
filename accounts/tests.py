@@ -294,6 +294,7 @@ class SubscriptionTests(TestCase):
         self.user = User.objects.create_user(username="bob", password="pwd")
         self.account = Account.objects.create(user=self.user, name="SUBSCRIBER")
         self.product = Product.objects.create(name="Gold", renewal_period=30)
+        self.client.force_login(self.user)
 
     def test_create_and_list_subscription(self):
         response = self.client.post(

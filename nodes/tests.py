@@ -37,6 +37,11 @@ from .tasks import capture_node_screenshot, sample_clipboard
 class NodeTests(TestCase):
     def setUp(self):
         self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="nodeuser", password="pwd"
+        )
+        self.client.force_login(self.user)
 
     def test_register_and_list_node(self):
         response = self.client.post(
