@@ -5,6 +5,7 @@
     "fields": {
       "name": "GELECTRIIC",
       "user": ["admin"],
+      "rfids": ["FFFFFFFF"],
       "service_account": true
     }
   }

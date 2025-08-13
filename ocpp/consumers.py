@@ -71,12 +71,24 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         tx_id = payload.get("transactionId")
         tx_obj = None
         if tx_id is not None:
+            # Look up an existing transaction, first in the in-memory store
+            # then in the database.  If none exists create one so that meter
+            # readings can be linked to it.
             tx_obj = store.transactions.get(self.charger_id)
             if not tx_obj or tx_obj.pk != int(tx_id):
                 tx_obj = await database_sync_to_async(
                     Transaction.objects.filter(pk=tx_id, charger=self.charger).first
                 )()
+            if tx_obj is None:
+                tx_obj = await database_sync_to_async(Transaction.objects.create)(
+                    pk=tx_id, charger=self.charger, start_time=timezone.now()
+                )
+            store.transactions[self.charger_id] = tx_obj
+        else:
+            tx_obj = store.transactions.get(self.charger_id)
+
         readings = []
+        start_updated = False
         for mv in payload.get("meterValue", []):
             ts = parse_datetime(mv.get("timestamp"))
             for sv in mv.get("sampledValue", []):
@@ -84,6 +96,17 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     val = Decimal(str(sv.get("value")))
                 except Exception:
                     continue
+                if (
+                    tx_obj
+                    and tx_obj.meter_start is None
+                    and sv.get("measurand", "") in ("", "Energy.Active.Import.Register")
+                ):
+                    try:
+                        mult = 1000 if sv.get("unit") == "kWh" else 1
+                        tx_obj.meter_start = int(val * mult)
+                        start_updated = True
+                    except Exception:
+                        pass
                 readings.append(
                     MeterReading(
                         charger=self.charger,
@@ -97,6 +120,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 )
         if readings:
             await database_sync_to_async(MeterReading.objects.bulk_create)(readings)
+            if tx_obj and start_updated:
+                await database_sync_to_async(tx_obj.save)(update_fields=["meter_start"])
 
     async def disconnect(self, close_code):
         store.connections.pop(self.charger_id, None)
@@ -168,7 +193,19 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 else:
                     reply_payload = {"idTagInfo": {"status": "Invalid"}}
             elif action == "StopTransaction":
+                tx_id = payload.get("transactionId")
                 tx_obj = store.transactions.pop(self.charger_id, None)
+                if not tx_obj and tx_id is not None:
+                    tx_obj = await database_sync_to_async(
+                        Transaction.objects.filter(pk=tx_id, charger=self.charger).first
+                    )()
+                if not tx_obj and tx_id is not None:
+                    tx_obj = await database_sync_to_async(Transaction.objects.create)(
+                        pk=tx_id,
+                        charger=self.charger,
+                        start_time=timezone.now(),
+                        meter_start=payload.get("meterStart") or payload.get("meterStop"),
+                    )
                 if tx_obj:
                     tx_obj.meter_stop = payload.get("meterStop")
                     tx_obj.stop_time = timezone.now()

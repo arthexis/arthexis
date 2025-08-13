@@ -1,0 +1,10 @@
+[
+  {
+    "model": "accounts.rfid",
+    "pk": "FFFFFFFF",
+    "fields": {
+      "allowed": true,
+      "added_on": "2024-01-01T00:00:00Z"
+    }
+  }
+]

@@ -25,6 +25,7 @@ from datetime import timedelta
 from .tasks import purge_meter_readings
 
 
+
 class SinkConsumerTests(TransactionTestCase):
     async def test_sink_replies(self):
         communicator = WebsocketCommunicator(application, "/ws/sink/")
@@ -92,6 +93,56 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_transaction_created_from_meter_values(self):
+        communicator = WebsocketCommunicator(application, "/NOSTART/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [
+                2,
+                "1",
+                "MeterValues",
+                {
+                    "transactionId": 99,
+                    "meterValue": [
+                        {
+                            "timestamp": "2025-01-01T00:00:00Z",
+                            "sampledValue": [
+                                {
+                                    "value": "1000",
+                                    "measurand": "Energy.Active.Import.Register",
+                                    "unit": "Wh",
+                                }
+                            ],
+                        }
+                    ],
+                },
+            ]
+        )
+        await communicator.receive_json_from()
+
+        tx = await database_sync_to_async(Transaction.objects.get)(
+            pk=99, charger__charger_id="NOSTART"
+        )
+        self.assertEqual(tx.meter_start, 1000)
+        self.assertIsNone(tx.meter_stop)
+
+        await communicator.send_json_to(
+            [
+                2,
+                "2",
+                "StopTransaction",
+                {"transactionId": 99, "meterStop": 1500},
+            ]
+        )
+        await communicator.receive_json_from()
+        await database_sync_to_async(tx.refresh_from_db)()
+        self.assertEqual(tx.meter_stop, 1500)
+        self.assertIsNotNone(tx.stop_time)
+
+        await communicator.disconnect()
+
 
 class ChargerLandingTests(TestCase):
     def test_reference_created_and_page_renders(self):
@@ -123,6 +174,27 @@ class ChargerLandingTests(TestCase):
         resp = client.get(reverse("charger-page", args=["STATS"]))
         self.assertContains(resp, "2.00")
         self.assertContains(resp, "Offline")
+
+    def test_total_includes_ongoing_transaction(self):
+        charger = Charger.objects.create(charger_id="ONGOING")
+        tx = Transaction.objects.create(
+            charger=charger,
+            meter_start=1000,
+            start_time=timezone.now(),
+        )
+        store.transactions[charger.charger_id] = tx
+        MeterReading.objects.create(
+            charger=charger,
+            transaction=tx,
+            timestamp=timezone.now(),
+            measurand="Energy.Active.Import.Register",
+            value=Decimal("2500"),
+            unit="Wh",
+        )
+        client = Client()
+        resp = client.get(reverse("charger-status", args=["ONGOING"]))
+        self.assertContains(resp, "Total Energy: 1.50 kWh")
+        store.transactions.pop(charger.charger_id, None)
 
     def test_log_page_renders_without_charger(self):
         store.add_log("LOG1", "hello", log_type="charger")
@@ -211,6 +283,30 @@ class ChargerAdminTests(TestCase):
         self.client.post(url, {"action": "purge_data", "_selected_action": [charger.pk]})
         self.client.post(delete_url, {"post": "yes"})
         self.assertFalse(Charger.objects.filter(pk=charger.pk).exists())
+
+
+class TransactionAdminTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="tx-admin", password="secret", email="tx@example.com"
+        )
+        self.client.force_login(self.admin)
+
+    def test_meter_readings_inline_displayed(self):
+        charger = Charger.objects.create(charger_id="T1")
+        tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
+        reading = MeterReading.objects.create(
+            charger=charger,
+            transaction=tx,
+            timestamp=timezone.now(),
+            value=Decimal("2.123"),
+            unit="kWh",
+        )
+        url = reverse("admin:ocpp_transaction_change", args=[tx.pk])
+        resp = self.client.get(url)
+        self.assertContains(resp, str(reading.value))
 
 
 class SimulatorAdminTests(TestCase):
@@ -388,8 +484,10 @@ class MeterReadingTests(TransactionTestCase):
         await communicator.receive_json_from()
 
         reading = await database_sync_to_async(MeterReading.objects.get)(charger__charger_id="MR1")
-        self.assertIsNone(reading.transaction)
+        self.assertEqual(reading.transaction_id, 100)
         self.assertEqual(str(reading.value), "2.749")
+        tx = await database_sync_to_async(Transaction.objects.get)(pk=100, charger__charger_id="MR1")
+        self.assertEqual(tx.meter_start, 2749)
 
         await communicator.disconnect()
 

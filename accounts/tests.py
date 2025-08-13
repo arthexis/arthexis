@@ -30,7 +30,7 @@ class DefaultAdminTests(TestCase):
         self.assertTrue(User.objects.filter(username="admin").exists())
         backend = LocalhostAdminBackend()
 
-        for ip in ["127.0.0.1", "192.168.1.5", "10.42.0.8"]:
+        for ip in ["127.0.0.1", "192.168.1.5", "10.42.0.8", "172.16.0.1"]:
             req = HttpRequest()
             req.META["REMOTE_ADDR"] = ip
             self.assertIsNotNone(
@@ -351,3 +351,18 @@ class EVBrandFixtureTests(TestCase):
         call_command("loaddata", "accounts/fixtures/ev_brands.json", verbosity=0)
         self.assertTrue(Brand.objects.filter(name="Porsche").exists())
         self.assertTrue(Brand.objects.filter(name="Audi").exists())
+
+
+class RFIDFixtureTests(TestCase):
+    def test_fixture_assigns_gelectriic_rfid(self):
+        call_command(
+            "loaddata",
+            "accounts/fixtures/accounts.json",
+            "accounts/fixtures/rfids.json",
+            verbosity=0,
+        )
+        account = Account.objects.get(name="GELECTRIIC")
+        tag = RFID.objects.get(rfid="FFFFFFFF")
+        self.assertIn(account, tag.accounts.all())
+        self.assertEqual(tag.accounts.count(), 1)
+

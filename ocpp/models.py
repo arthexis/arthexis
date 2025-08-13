@@ -44,9 +44,19 @@ class Charger(models.Model):
     @property
     def total_kwh(self) -> float:
         """Return total energy delivered by this charger in kWh."""
+        from . import store
+
         total = 0.0
-        for tx in self.transactions.all():
+        tx_active = store.transactions.get(self.charger_id)
+        qs = self.transactions.all()
+        if tx_active and tx_active.pk is not None:
+            qs = qs.exclude(pk=tx_active.pk)
+        for tx in qs:
             kwh = tx.kwh
+            if kwh:
+                total += kwh
+        if tx_active:
+            kwh = tx_active.kwh
             if kwh:
                 total += kwh
         return total

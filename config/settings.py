@@ -155,6 +155,7 @@ if os.environ.get("POSTGRES_DB"):
             "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
             "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
             "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+            "OPTIONS": {"options": "-c timezone=UTC"},
         }
     }
 else:
@@ -197,7 +198,7 @@ LANGUAGES = [
 
 LOCALE_PATHS = [BASE_DIR / "locale"]
 
-TIME_ZONE = "UTC"
+TIME_ZONE = "America/Monterrey"
 
 USE_I18N = True
 

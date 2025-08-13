@@ -9,14 +9,19 @@
         display: flex;
         flex-wrap: wrap;
         gap: 1rem;
+        box-sizing: border-box;
     }
     .dashboard-main {
-        flex: 1 1 300px;
+        flex: 1 1 calc(70% - 0.5rem);
         min-width: 300px;
+        max-width: 100%;
+        box-sizing: border-box;
     }
     .dashboard-side {
-        flex: 1 1 300px;
+        flex: 1 1 calc(30% - 0.5rem);
         min-width: 300px;
+        max-width: 100%;
+        box-sizing: border-box;
         background: var(--darkened-bg);
     }
     .dashboard-side .module {
@@ -46,6 +51,15 @@
         line-height: 1.2;
         margin-bottom: 10px;
         padding-left: 18px;
+    }
+    /* Override Django's dashboard defaults so the flex layout works */
+    .dashboard #content {
+        width: 100%;
+    }
+    #content-main,
+    #recent-boxes {
+        float: none;
+        width: auto;
     }
   </style>
 {% endblock %}
