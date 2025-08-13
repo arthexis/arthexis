@@ -9,6 +9,18 @@ from pathlib import Path
 from django.conf import settings
 
 
+class NodeRole(models.Model):
+    """Assignable role for a :class:`Node`."""
+
+    name = models.CharField(max_length=50, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+
 class Node(models.Model):
     """Information about a running node in the network."""
 
@@ -16,6 +28,7 @@ class Node(models.Model):
     address = models.GenericIPAddressField()
     port = models.PositiveIntegerField(default=8000)
     badge_color = models.CharField(max_length=7, default="#28a745")
+    roles = models.ManyToManyField(NodeRole, blank=True)
     last_seen = models.DateTimeField(auto_now=True)
     enable_public_api = models.BooleanField(default=False)
     public_endpoint = models.SlugField(blank=True, unique=True)
