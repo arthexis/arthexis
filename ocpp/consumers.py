@@ -182,6 +182,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         charger=self.charger,
                         account=account,
                         rfid=(payload.get("idTag") or ""),
+                        vin=(payload.get("vin") or ""),
                         meter_start=payload.get("meterStart"),
                         start_time=timezone.now(),
                     )
@@ -205,6 +206,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         charger=self.charger,
                         start_time=timezone.now(),
                         meter_start=payload.get("meterStart") or payload.get("meterStop"),
+                        vin=(payload.get("vin") or ""),
                     )
                 if tx_obj:
                     tx_obj.meter_stop = payload.get("meterStop")

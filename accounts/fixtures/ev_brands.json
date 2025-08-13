@@ -23,6 +23,14 @@
   },
   {
     "model": "accounts.wmicode",
+    "pk": 4,
+    "fields": {
+      "brand": 1,
+      "code": "WP1"
+    }
+  },
+  {
+    "model": "accounts.wmicode",
     "pk": 2,
     "fields": {
       "brand": 2,

@@ -4,8 +4,9 @@
   <div><label>Host:</label><input name="host" value="{{ cp.params.host|default:default_host }}"></div>
   <div><label>Port:</label><input name="ws_port" value="{{ cp.params.ws_port|default:default_ws_port }}"></div>
   <div><label>ChargePoint Path:</label><input name="cp_path" value="{{ cp.params.cp_path|default:default_cp_path }}"></div>
-  <div><label>RFID:</label><input name="rfid" value="{{ cp.params.rfid|default:default_rfid }}"></div>
-  <div><label>Duration (s):</label><input name="duration" value="{{ cp.params.duration|default:600 }}"></div>
+    <div><label>RFID:</label><input name="rfid" value="{{ cp.params.rfid|default:default_rfid }}"></div>
+    <div><label>VIN:</label><input name="vin" value="{{ cp.params.vin|default:default_vin }}"></div>
+    <div><label>Duration (s):</label><input name="duration" value="{{ cp.params.duration|default:600 }}"></div>
   <div><label>Interval (s):</label><input name="interval" value="{{ cp.params.interval|default:5 }}"></div>
   <div><label>Pre-charge Delay (s):</label><input name="pre_charge_delay" value="{{ cp.params.pre_charge_delay|default:0 }}"></div>
   <div><label>Energy Min (kW):</label><input name="kw_min" value="{{ cp.params.kw_min|default:30 }}"></div>

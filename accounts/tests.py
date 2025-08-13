@@ -357,7 +357,10 @@ class EVBrandFixtureTests(TestCase):
         )
         porsche = Brand.objects.get(name="Porsche")
         audi = Brand.objects.get(name="Audi")
-        self.assertTrue(porsche.wmi_codes.filter(code="WP0").exists())
+        self.assertTrue(
+            {"WP0", "WP1"}
+            <= set(porsche.wmi_codes.values_list("code", flat=True))
+        )
         self.assertTrue(
             set(audi.wmi_codes.values_list("code", flat=True))
             >= {"WAU", "TRU"}
@@ -366,6 +369,20 @@ class EVBrandFixtureTests(TestCase):
         self.assertTrue(
             EVModel.objects.filter(brand=audi, name="e-tron GT").exists()
         )
+
+    def test_brand_from_vin(self):
+        call_command(
+            "loaddata",
+            "accounts/fixtures/ev_brands.json",
+            verbosity=0,
+        )
+        self.assertEqual(
+            Brand.from_vin("WP0ZZZ12345678901").name, "Porsche"
+        )
+        self.assertEqual(
+            Brand.from_vin("WAUZZZ12345678901").name, "Audi"
+        )
+        self.assertIsNone(Brand.from_vin("XYZ12345678901234"))
 
 
 class RFIDFixtureTests(TestCase):

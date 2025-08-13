@@ -4,7 +4,8 @@
     "pk": 1,
     "fields": {
       "name": "CP1",
-      "cp_path": "CP1"
+      "cp_path": "CP1",
+      "vin": "WP0ZZZ00000000000"
     }
   },
   {
@@ -12,7 +13,8 @@
     "pk": 2,
     "fields": {
       "name": "CP2",
-      "cp_path": "CP2"
+      "cp_path": "CP2",
+      "vin": "WAUZZZ00000000000"
     }
   }
 ]
