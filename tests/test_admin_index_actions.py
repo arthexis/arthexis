@@ -33,9 +33,11 @@ class AdminIndexActionLinkTests(TestCase):
         )
         self.assertIsNotNone(row_match)
         row_html = row_match.group(1)
-        # Links should appear in order and action links should be in their own cell
+        # Custom action links should come before the Add and Change links
         pattern = re.compile(
-            r'class="addlink".*class="changelink"[^<]*</a>\s*</td>\s*<td>\s*<a[^>]*class="actionlink"',
+            r'(?:<td>\s*<a[^>]*class="actionlink"[^<]*</a>\s*</td>\s*)+'
+            r'<td>\s*<a[^>]*class="addlink"[^<]*</a>\s*</td>\s*'
+            r'<td>\s*<a[^>]*class="changelink"',
             re.DOTALL,
         )
         self.assertRegex(row_html, pattern)

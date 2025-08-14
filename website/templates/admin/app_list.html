@@ -10,6 +10,7 @@
         <thead class="visually-hidden">
           <tr>
             <th scope="col">{% translate 'Model name' %}</th>
+            <th scope="col">{% translate 'Model actions' %}</th>
             <th scope="col">{% translate 'Add link' %}</th>
             <th scope="col">{% translate 'Change or view list link' %}</th>
           </tr>
@@ -25,6 +26,20 @@
                 {% endif %}
               </th>
 
+              {% if model.admin_url and show_changelinks %}
+                {% model_admin_actions app.app_label model.object_name as extra_actions %}
+                {% for action in extra_actions %}
+                  <td>
+                    <a href="{{ action.url }}" class="actionlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{{ action.label }}</a>
+                  </td>
+                {% endfor %}
+                {% if not extra_actions %}
+                  <td></td>
+                {% endif %}
+              {% else %}
+                <td></td>
+              {% endif %}
+
               {% if model.add_url %}
                 <td><a href="{{ model.add_url }}" class="addlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'Add' %}</a></td>
               {% else %}
@@ -39,12 +54,6 @@
                     <a href="{{ model.admin_url }}" class="changelink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'Change' %}</a>
                   {% endif %}
                 </td>
-                {% model_admin_actions app.app_label model.object_name as extra_actions %}
-                {% for action in extra_actions %}
-                  <td>
-                    <a href="{{ action.url }}" class="actionlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{{ action.label }}</a>
-                  </td>
-                {% endfor %}
               {% elif show_changelinks %}
                 <td></td>
               {% endif %}
