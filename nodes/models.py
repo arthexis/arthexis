@@ -37,9 +37,25 @@ class Node(models.Model):
     public_endpoint = models.SlugField(blank=True, unique=True)
     clipboard_polling = models.BooleanField(default=False)
     screenshot_polling = models.BooleanField(default=False)
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    public_key = models.TextField(blank=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.hostname}:{self.port}"
+
+    @classmethod
+    def get_local(cls):
+        """Return the node representing the current host if it exists."""
+        hostname = socket.gethostname()
+        port = int(os.environ.get("PORT", 8000))
+        return cls.objects.filter(hostname=hostname, port=port).first()
+
+    @property
+    def is_local(self):
+        """Determine if this node represents the current host."""
+        hostname = socket.gethostname()
+        port = int(os.environ.get("PORT", 8000))
+        return self.hostname == hostname and self.port == port
 
     def save(self, *args, **kwargs):
         if not self.public_endpoint:

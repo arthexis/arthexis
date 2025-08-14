@@ -1,5 +1,5 @@
 from django.contrib import admin, messages
-from django.urls import path
+from django.urls import path, reverse
 from django.shortcuts import redirect
 from django.utils.html import format_html
 from django import forms
@@ -16,6 +16,7 @@ from pyperclip import PyperclipException
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 from .utils import capture_screenshot, save_screenshot
+from .actions import NodeAction
 
 from .models import (
     Node,
@@ -54,6 +55,7 @@ class NodeAdmin(admin.ModelAdmin):
     )
     search_fields = ("hostname", "address")
     change_list_template = "admin/nodes/node/change_list.html"
+    change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
     filter_horizontal = ("roles",)
 
@@ -64,7 +66,12 @@ class NodeAdmin(admin.ModelAdmin):
                 "register-current/",
                 self.admin_site.admin_view(self.register_current),
                 name="nodes_node_register_current",
-            )
+            ),
+            path(
+                "<int:node_id>/action/<str:action>/",
+                self.admin_site.admin_view(self.action_view),
+                name="nodes_node_action",
+            ),
         ]
         return custom + urls
 
@@ -86,6 +93,36 @@ class NodeAdmin(admin.ModelAdmin):
         else:
             self.message_user(request, "Current host already registered", messages.INFO)
         return redirect("..")
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        extra_context["node_actions"] = NodeAction.get_actions()
+        return super().changeform_view(
+            request, object_id, form_url, extra_context=extra_context
+        )
+
+    def action_view(self, request, node_id, action):
+        node = self.get_object(request, node_id)
+        action_cls = NodeAction.registry.get(action)
+        if not node or not action_cls:
+            self.message_user(request, "Unknown node action", messages.ERROR)
+            return redirect("..")
+        try:
+            action_cls.run(node)
+            self.message_user(
+                request,
+                f"{action_cls.display_name} executed successfully",
+                messages.SUCCESS,
+            )
+        except NotImplementedError:
+            self.message_user(
+                request,
+                "Remote node actions are not yet implemented",
+                messages.WARNING,
+            )
+        except Exception as exc:  # pragma: no cover - unexpected errors
+            self.message_user(request, str(exc), messages.ERROR)
+        return redirect(reverse("admin:nodes_node_change", args=[node_id]))
 
 
 @admin.register(NodeRole)

@@ -1,0 +1,13 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    {% for action in node_actions %}
+        <li>
+            <a href="{% url 'admin:nodes_node_action' object_id action.slug %}">
+                {{ action.display_name }}
+            </a>
+        </li>
+    {% endfor %}
+    {{ block.super }}
+{% endblock %}
