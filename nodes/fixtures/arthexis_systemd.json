@@ -7,9 +7,9 @@
       "description": "arthexis.com",
       "documentation": "https://arthexis.com",
       "user": "arthe",
-      "exec_start": "/home/arthe/arthexis/start.sh",
+        "exec_start": "/home/arthe/arthexis/start.sh",
       "wanted_by": "default.target",
-      "config_text": "[Unit]\nDescription=arthexis.com\nDocumentation=https://arthexis.com\n\n[Service]\nUser=arthe\nExecStart=/home/arthe/arthexis/start.sh\n\n[Install]\nWantedBy=default.target\n"
+        "config_text": "[Unit]\nDescription=arthexis.com\nDocumentation=https://arthexis.com\n\n[Service]\nUser=arthe\nExecStart=/home/arthe/arthexis/start.sh\n\n[Install]\nWantedBy=default.target\n"
     }
   }
 ]
