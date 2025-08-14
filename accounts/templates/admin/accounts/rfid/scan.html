@@ -1,23 +1,5 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
 <h1>RFID Scanner</h1>
-<p id="status">Scanner ready</p>
-<script>
-async function waitScan(){
-    try {
-        const resp = await fetch('{% url "admin:accounts_rfid_scan_next" %}');
-        const data = await resp.json();
-        const p = document.getElementById('status');
-        if(data.error){
-            p.textContent = data.error;
-        } else if(data.rfid){
-            p.textContent = `Scanned label ${data.label_id} (${data.rfid})`;
-        }
-    } catch(err){
-        document.getElementById('status').textContent = err;
-    }
-    setTimeout(waitScan, 200);
-}
-waitScan();
-</script>
+{% include "rfid/scanner.html" with scan_url=scan_url prefix="admin" %}
 {% endblock %}

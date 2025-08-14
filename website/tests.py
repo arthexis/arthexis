@@ -264,4 +264,4 @@ class RFIDPageTests(TestCase):
 
     def test_page_renders(self):
         resp = self.client.get(reverse("rfid-reader"))
-        self.assertContains(resp, "Start Scan")
+        self.assertContains(resp, "Scanner ready")

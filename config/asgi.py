@@ -13,17 +13,13 @@ from channels.auth import AuthMiddlewareStack
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
 import ocpp.routing
-import rfid.routing
 
 loadenv()
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 django_asgi_app = get_asgi_application()
 
-websocket_patterns = (
-    ocpp.routing.websocket_urlpatterns
-    + rfid.routing.websocket_urlpatterns
-)
+websocket_patterns = ocpp.routing.websocket_urlpatterns
 
 application = ProtocolTypeRouter(
     {
