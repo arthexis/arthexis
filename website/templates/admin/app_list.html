@@ -28,16 +28,13 @@
 
               {% if model.admin_url and show_changelinks %}
                 {% model_admin_actions app.app_label model.object_name as extra_actions %}
-                {% for action in extra_actions %}
-                  <td>
+                <td class="actions">
+                  {% for action in extra_actions %}
                     <a href="{{ action.url }}" class="actionlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{{ action.label }}</a>
-                  </td>
-                {% endfor %}
-                {% if not extra_actions %}
-                  <td></td>
-                {% endif %}
+                  {% endfor %}
+                </td>
               {% else %}
-                <td></td>
+                <td class="actions"></td>
               {% endif %}
 
               {% if model.add_url %}
