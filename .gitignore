@@ -218,3 +218,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+ 
+# Hash file used by upgrade scripts to track dependency changes
+requirements.md5
