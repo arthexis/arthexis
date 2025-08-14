@@ -38,11 +38,13 @@
                   {% else %}
                     <a href="{{ model.admin_url }}" class="changelink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'Change' %}</a>
                   {% endif %}
-                  {% model_admin_actions app.app_label model.object_name as extra_actions %}
-                  {% for action in extra_actions %}
-                    <a href="{{ action.url }}" class="actionlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{{ action.label }}</a>
-                  {% endfor %}
                 </td>
+                {% model_admin_actions app.app_label model.object_name as extra_actions %}
+                {% for action in extra_actions %}
+                  <td>
+                    <a href="{{ action.url }}" class="actionlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{{ action.label }}</a>
+                  </td>
+                {% endfor %}
               {% elif show_changelinks %}
                 <td></td>
               {% endif %}

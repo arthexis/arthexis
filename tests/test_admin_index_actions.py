@@ -11,6 +11,7 @@ django.setup()
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+import re
 
 
 class AdminIndexActionLinkTests(TestCase):
@@ -26,3 +27,15 @@ class AdminIndexActionLinkTests(TestCase):
         self.assertContains(response, "Rebuild README")
         action_url = reverse("admin:release_packageconfig_changelist") + "?action=build_readme"
         self.assertContains(response, action_url)
+        content = response.content.decode()
+        row_match = re.search(
+            r'<tr class="model-packageconfig[^>]*>(.*?)</tr>', content, re.DOTALL
+        )
+        self.assertIsNotNone(row_match)
+        row_html = row_match.group(1)
+        # Links should appear in order and action links should be in their own cell
+        pattern = re.compile(
+            r'class="addlink".*class="changelink"[^<]*</a>\s*</td>\s*<td>\s*<a[^>]*class="actionlink"',
+            re.DOTALL,
+        )
+        self.assertRegex(row_html, pattern)
