@@ -1,0 +1,31 @@
+{% with prefix=prefix|default:"rfid" %}
+<div id="{{ prefix }}-scanner">
+  <p id="{{ prefix }}-status">Scanner ready</p>
+  <p>Label: <span id="{{ prefix }}-label"></span></p>
+  <p>RFID: <span id="{{ prefix }}-rfid"></span></p>
+</div>
+<script>
+(function(){
+  const statusEl = document.getElementById('{{ prefix }}-status');
+  const labelEl = document.getElementById('{{ prefix }}-label');
+  const rfidEl = document.getElementById('{{ prefix }}-rfid');
+  async function poll(){
+    try {
+      const resp = await fetch('{{ scan_url }}');
+      const data = await resp.json();
+      if(data.error){
+        statusEl.textContent = data.error;
+      } else if(data.rfid){
+        labelEl.textContent = data.label_id;
+        rfidEl.textContent = data.rfid;
+        statusEl.textContent = data.created ? `Created label ${data.label_id}` : `Detected label ${data.label_id}`;
+      }
+    } catch(err){
+      statusEl.textContent = err;
+    }
+    setTimeout(poll, 200);
+  }
+  poll();
+})();
+</script>
+{% endwith %}
