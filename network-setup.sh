@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # setup-network.sh
 # Prepare Pi networking:
-# - wlan0 AP "Gelectriic-HS" (password "s0luti0ns") with NAT (ipv4.shared)
+# - wlan0 AP "Gelectriic-HS" (password requested at runtime) with NAT (ipv4.shared)
 # - wlan1 preferred upstream gateway (low metric) if present, or enforce later via dispatcher
 # - eth0 static 192.168.129.10/24, no gateway, never default
 
@@ -20,7 +20,8 @@ need_cmd sed
 need_cmd awk
 
 SSID="Gelectriic-HS"
-PSK="s0luti0ns"
+read -rsp "Enter password for AP '${SSID}': " PSK
+echo
 AP_CON="AP ${SSID}"
 ETH_CON="eth0-static-129"
 WLAN1_METRIC="100"
