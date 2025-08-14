@@ -13,6 +13,8 @@ import os
 import subprocess
 import pyperclip
 from pyperclip import PyperclipException
+from import_export import resources
+from import_export.admin import ImportExportModelAdmin
 from .utils import capture_screenshot, save_screenshot
 
 from .models import (
@@ -149,8 +151,29 @@ class NodeMessageAdmin(admin.ModelAdmin):
     list_display = ("node", "method", "created")
 
 
+class NMCLITemplateResource(resources.ModelResource):
+    class Meta:
+        model = NMCLITemplate
+        fields = (
+            "connection_name",
+            "assigned_device",
+            "priority",
+            "autoconnect",
+            "static_ip",
+            "static_mask",
+            "static_gateway",
+            "allow_outbound",
+            "security_type",
+            "ssid",
+            "password",
+            "band",
+        )
+        import_id_fields = ("connection_name",)
+
+
 @admin.register(NMCLITemplate)
-class NMCLITemplateAdmin(admin.ModelAdmin):
+class NMCLITemplateAdmin(ImportExportModelAdmin):
+    resource_class = NMCLITemplateResource
     list_display = (
         "connection_name",
         "assigned_device",
@@ -172,6 +195,38 @@ class NMCLITemplateAdmin(admin.ModelAdmin):
         ]
         return custom + urls
 
+    def _get_connection_info(self, name):
+        fields = [
+            "GENERAL.DEVICE",
+            "GENERAL.AUTOCONNECT-PRIORITY",
+            "GENERAL.AUTOCONNECT",
+            "IP4.ADDRESS[1]",
+            "IP4.GATEWAY",
+            "IP4.NEVER_DEFAULT",
+            "802-11-WIRELESS.BAND",
+            "802-11-WIRELESS.SSID",
+            "802-11-WIRELESS-SECURITY.KEY-MGMT",
+            "802-11-WIRELESS-SECURITY.PSK",
+        ]
+        info = {}
+        for field in fields:
+            try:
+                details = subprocess.run(
+                    ["nmcli", "-t", "-f", field, "connection", "show", name],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            except FileNotFoundError:
+                continue
+            for line in details.stdout.splitlines():
+                if ":" not in line:
+                    continue
+                key, value = line.split(":", 1)
+                if value:
+                    info[key] = value
+        return info
+
     @admin.action(description="Import active nmcli connections")
     def import_active(self, request, queryset):
         if os.name == "nt":
@@ -192,43 +247,21 @@ class NMCLITemplateAdmin(admin.ModelAdmin):
             if NMCLITemplate.objects.filter(connection_name=name).exists():
                 continue
             tpl = NMCLITemplate(connection_name=name)
-            try:
-                details = subprocess.run(
-                    [
-                        "nmcli",
-                        "-t",
-                        "-f",
-                        "GENERAL.DEVICE,GENERAL.AUTOCONNECT-PRIORITY,GENERAL.AUTOCONNECT,IP4.ADDRESS[1],IP4.GATEWAY,IP4.NEVER_DEFAULT,802-11-WIRELESS.BAND,802-11-WIRELESS.SSID,802-11-WIRELESS-SECURITY.KEY-MGMT,802-11-WIRELESS-SECURITY.PSK",
-                        "connection",
-                        "show",
-                        name,
-                    ],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                info = {}
-                for line in details.stdout.splitlines():
-                    if ":" not in line:
-                        continue
-                    key, value = line.split(":", 1)
-                    info[key] = value
-                tpl.assigned_device = info.get("GENERAL.DEVICE", "")
-                tpl.priority = int(info.get("GENERAL.AUTOCONNECT-PRIORITY", "0") or 0)
-                tpl.autoconnect = info.get("GENERAL.AUTOCONNECT", "").lower() == "yes"
-                addr = info.get("IP4.ADDRESS[1]", "")
-                if "/" in addr:
-                    ip, mask = addr.split("/", 1)
-                    tpl.static_ip = ip
-                    tpl.static_mask = mask
-                tpl.static_gateway = info.get("IP4.GATEWAY", "") or None
-                tpl.allow_outbound = info.get("IP4.NEVER_DEFAULT", "no").lower() != "yes"
-                tpl.security_type = info.get("802-11-WIRELESS-SECURITY.KEY-MGMT", "")
-                tpl.ssid = info.get("802-11-WIRELESS.SSID", "")
-                tpl.password = info.get("802-11-WIRELESS-SECURITY.PSK", "")
-                tpl.band = info.get("802-11-WIRELESS.BAND", "")
-            except FileNotFoundError:
-                pass
+            info = self._get_connection_info(name)
+            tpl.assigned_device = info.get("GENERAL.DEVICE", "")
+            tpl.priority = int(info.get("GENERAL.AUTOCONNECT-PRIORITY", "0") or 0)
+            tpl.autoconnect = info.get("GENERAL.AUTOCONNECT", "").lower() == "yes"
+            addr = info.get("IP4.ADDRESS[1]", "")
+            if "/" in addr:
+                ip, mask = addr.split("/", 1)
+                tpl.static_ip = ip
+                tpl.static_mask = mask
+            tpl.static_gateway = info.get("IP4.GATEWAY", "") or None
+            tpl.allow_outbound = info.get("IP4.NEVER_DEFAULT", "no").lower() != "yes"
+            tpl.security_type = info.get("802-11-WIRELESS-SECURITY.KEY-MGMT", "")
+            tpl.ssid = info.get("802-11-WIRELESS.SSID", "")
+            tpl.password = info.get("802-11-WIRELESS-SECURITY.PSK", "")
+            tpl.band = info.get("802-11-WIRELESS.BAND", "")
             tpl.save()
         self.message_user(request, "Connections imported", messages.INFO)
 
@@ -263,43 +296,21 @@ class NMCLITemplateAdmin(admin.ModelAdmin):
             if NMCLITemplate.objects.filter(connection_name=name).exists():
                 continue
             tpl = NMCLITemplate(connection_name=name)
-            try:
-                details = subprocess.run(
-                    [
-                        "nmcli",
-                        "-t",
-                        "-f",
-                        "GENERAL.DEVICE,GENERAL.AUTOCONNECT-PRIORITY,GENERAL.AUTOCONNECT,IP4.ADDRESS[1],IP4.GATEWAY,IP4.NEVER_DEFAULT,802-11-WIRELESS.BAND,802-11-WIRELESS.SSID,802-11-WIRELESS-SECURITY.KEY-MGMT,802-11-WIRELESS-SECURITY.PSK",
-                        "connection",
-                        "show",
-                        name,
-                    ],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                info = {}
-                for line in details.stdout.splitlines():
-                    if ":" not in line:
-                        continue
-                    key, value = line.split(":", 1)
-                    info[key] = value
-                tpl.assigned_device = info.get("GENERAL.DEVICE", "")
-                tpl.priority = int(info.get("GENERAL.AUTOCONNECT-PRIORITY", "0") or 0)
-                tpl.autoconnect = info.get("GENERAL.AUTOCONNECT", "").lower() == "yes"
-                addr = info.get("IP4.ADDRESS[1]", "")
-                if "/" in addr:
-                    ip, mask = addr.split("/", 1)
-                    tpl.static_ip = ip
-                    tpl.static_mask = mask
-                tpl.static_gateway = info.get("IP4.GATEWAY", "") or None
-                tpl.allow_outbound = info.get("IP4.NEVER_DEFAULT", "no").lower() != "yes"
-                tpl.security_type = info.get("802-11-WIRELESS-SECURITY.KEY-MGMT", "")
-                tpl.ssid = info.get("802-11-WIRELESS.SSID", "")
-                tpl.password = info.get("802-11-WIRELESS-SECURITY.PSK", "")
-                tpl.band = info.get("802-11-WIRELESS.BAND", "")
-            except FileNotFoundError:
-                pass
+            info = self._get_connection_info(name)
+            tpl.assigned_device = info.get("GENERAL.DEVICE", "")
+            tpl.priority = int(info.get("GENERAL.AUTOCONNECT-PRIORITY", "0") or 0)
+            tpl.autoconnect = info.get("GENERAL.AUTOCONNECT", "").lower() == "yes"
+            addr = info.get("IP4.ADDRESS[1]", "")
+            if "/" in addr:
+                ip, mask = addr.split("/", 1)
+                tpl.static_ip = ip
+                tpl.static_mask = mask
+            tpl.static_gateway = info.get("IP4.GATEWAY", "") or None
+            tpl.allow_outbound = info.get("IP4.NEVER_DEFAULT", "no").lower() != "yes"
+            tpl.security_type = info.get("802-11-WIRELESS-SECURITY.KEY-MGMT", "")
+            tpl.ssid = info.get("802-11-WIRELESS.SSID", "")
+            tpl.password = info.get("802-11-WIRELESS-SECURITY.PSK", "")
+            tpl.band = info.get("802-11-WIRELESS.BAND", "")
             tpl.save()
             tpl.required_nodes.add(node)
         self.message_user(request, "Connections imported", messages.INFO)
