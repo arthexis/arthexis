@@ -252,13 +252,13 @@ class SystemdUnitTests(TestCase):
             description="arthexis.com",
             documentation="https://arthexis.com",
             user="arthe",
-            exec_start="/home/arthe/arthexis/dev-start.sh",
+            exec_start="/home/arthe/arthexis/start.sh",
             wanted_by="default.target",
         )
         text = unit.render_unit()
         self.assertIn("Description=arthexis.com", text)
         parsed = SystemdUnit.parse_config("arthexis", text)
-        self.assertEqual(parsed.exec_start, "/home/arthe/arthexis/dev-start.sh")
+        self.assertEqual(parsed.exec_start, "/home/arthe/arthexis/start.sh")
 
 
 class SystemdUnitInstallCommandTests(TestCase):
