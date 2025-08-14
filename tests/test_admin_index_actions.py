@@ -35,7 +35,7 @@ class AdminIndexActionLinkTests(TestCase):
         row_html = row_match.group(1)
         # Custom action links should come before the Add and Change links
         pattern = re.compile(
-            r'(?:<td>\s*<a[^>]*class="actionlink"[^<]*</a>\s*</td>\s*)+'
+            r'<td class="actions">\s*(?:<a[^>]*class="actionlink"[^<]*</a>\s*)+</td>\s*'
             r'<td>\s*<a[^>]*class="addlink"[^<]*</a>\s*</td>\s*'
             r'<td>\s*<a[^>]*class="changelink"',
             re.DOTALL,
