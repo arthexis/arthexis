@@ -24,6 +24,7 @@ from django.conf import settings
 from django.core.management import call_command
 
 from .admin import RecipeAdmin, NMCLITemplateAdmin
+from .actions import NodeAction
 
 from .models import (
     Node,
@@ -205,6 +206,64 @@ class NodeAdminTests(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data:image/png;base64")
+
+
+class NodeActionTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="action-admin", password="adminpass", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+
+    def test_registry_and_local_execution(self):
+        hostname = socket.gethostname()
+        node = Node.objects.create(hostname=hostname, address="127.0.0.1", port=8000)
+
+        class DummyAction(NodeAction):
+            display_name = "Dummy Action"
+
+            def execute(self, node, **kwargs):
+                DummyAction.executed = node
+
+        try:
+            DummyAction.executed = None
+            DummyAction.run()
+            self.assertEqual(DummyAction.executed, node)
+            self.assertIn("dummyaction", NodeAction.registry)
+        finally:
+            NodeAction.registry.pop("dummyaction", None)
+
+    def test_remote_not_supported(self):
+        node = Node.objects.create(hostname="remote", address="10.0.0.1", port=8000)
+
+        class DummyAction(NodeAction):
+            def execute(self, node, **kwargs):
+                pass
+
+        try:
+            with self.assertRaises(NotImplementedError):
+                DummyAction.run(node)
+        finally:
+            NodeAction.registry.pop("dummyaction", None)
+
+    def test_admin_change_view_lists_actions(self):
+        hostname = socket.gethostname()
+        node = Node.objects.create(hostname=hostname, address="127.0.0.1", port=8000)
+
+        class DummyAction(NodeAction):
+            display_name = "Dummy Action"
+
+            def execute(self, node, **kwargs):
+                pass
+
+        try:
+            url = reverse("admin:nodes_node_change", args=[node.pk])
+            response = self.client.get(url)
+            self.assertContains(response, "Dummy Action")
+        finally:
+            NodeAction.registry.pop("dummyaction", None)
 
 
 class NMCLITemplateTests(TestCase):
