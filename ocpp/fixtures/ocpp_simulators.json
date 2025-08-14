@@ -3,7 +3,7 @@
     "model": "ocpp.simulator",
     "pk": 1,
     "fields": {
-      "name": "CP1",
+      "name": "Local CP1",
       "cp_path": "CP1",
       "vin": "WP0ZZZ00000000000"
     }
@@ -12,8 +12,30 @@
     "model": "ocpp.simulator",
     "pk": 2,
     "fields": {
-      "name": "CP2",
+      "name": "Local CP2",
       "cp_path": "CP2",
+      "vin": "WAUZZZ00000000000"
+    }
+  },
+  {
+    "model": "ocpp.simulator",
+    "pk": 3,
+    "fields": {
+      "name": "Ethernet CP1",
+      "cp_path": "CP1",
+      "host": "192.168.129.10",
+      "ws_port": 8888,
+      "vin": "WP0ZZZ00000000000"
+    }
+  },
+  {
+    "model": "ocpp.simulator",
+    "pk": 4,
+    "fields": {
+      "name": "Ethernet CP2",
+      "cp_path": "CP2",
+      "host": "192.168.129.10",
+      "ws_port": 8888,
       "vin": "WAUZZZ00000000000"
     }
   }
