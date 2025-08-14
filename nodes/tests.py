@@ -1,3 +1,10 @@
+import os
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+import django
+
+django.setup()
+
 from pathlib import Path
 from unittest.mock import patch, call
 import socket
@@ -5,11 +12,10 @@ import threading
 import http.server
 import socketserver
 import base64
-import os
 import tempfile
 import subprocess
 
-from django.test import Client, TestCase, override_settings
+from django.test import Client, TestCase, override_settings, RequestFactory
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
@@ -17,7 +23,7 @@ from django_celery_beat.models import PeriodicTask
 from django.conf import settings
 from django.core.management import call_command
 
-from .admin import RecipeAdmin
+from .admin import RecipeAdmin, NMCLITemplateAdmin
 
 from .models import (
     Node,
@@ -440,4 +446,53 @@ class ClipboardTaskTests(TestCase):
         self.assertEqual(screenshot.node, node)
         self.assertEqual(screenshot.path, "screenshots/test.png")
         self.assertEqual(screenshot.method, "TASK")
+
+
+class NMCLITemplateAdminTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_superuser("nmcli", "nm@example.com", "pass")
+        self.factory = RequestFactory()
+        self.admin = NMCLITemplateAdmin(NMCLITemplate, admin.site)
+        self.admin.message_user = lambda *args, **kwargs: None
+
+    @patch("nodes.admin.subprocess.run")
+    def test_import_active_populates_fields(self, mock_run):
+        def side_effect(args, capture_output, text, check):
+            if args == ["nmcli", "-t", "-f", "NAME", "connection", "show", "--active"]:
+                return subprocess.CompletedProcess(args, 0, stdout="wifi1\n", stderr="")
+            field = args[3]
+            mapping = {
+                "GENERAL.DEVICE": "GENERAL.DEVICE:wlan0\n",
+                "GENERAL.AUTOCONNECT-PRIORITY": "GENERAL.AUTOCONNECT-PRIORITY:5\n",
+                "GENERAL.AUTOCONNECT": "GENERAL.AUTOCONNECT:yes\n",
+                "IP4.ADDRESS[1]": "IP4.ADDRESS[1]:192.168.1.10/24\n",
+                "IP4.GATEWAY": "IP4.GATEWAY:192.168.1.1\n",
+                "IP4.NEVER_DEFAULT": "IP4.NEVER_DEFAULT:no\n",
+                "802-11-WIRELESS-SECURITY.KEY-MGMT": "802-11-WIRELESS-SECURITY.KEY-MGMT:wpa-psk\n",
+                "802-11-WIRELESS.SSID": "802-11-WIRELESS.SSID:MyWifi\n",
+                "802-11-WIRELESS-SECURITY.PSK": "802-11-WIRELESS-SECURITY.PSK:pass\n",
+                "802-11-WIRELESS.BAND": "802-11-WIRELESS.BAND:a\n",
+            }
+            stdout = mapping.get(field, f"{field}:\n")
+            return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
+
+        mock_run.side_effect = side_effect
+        request = self.factory.post("/")
+        request.user = self.user
+        with patch("nodes.admin.os.name", "posix"):
+            self.admin.import_active(request, NMCLITemplate.objects.none())
+
+        tpl = NMCLITemplate.objects.get(connection_name="wifi1")
+        self.assertEqual(tpl.assigned_device, "wlan0")
+        self.assertEqual(tpl.priority, 5)
+        self.assertTrue(tpl.autoconnect)
+        self.assertEqual(tpl.static_ip, "192.168.1.10")
+        self.assertEqual(tpl.static_mask, "24")
+        self.assertEqual(tpl.static_gateway, "192.168.1.1")
+        self.assertTrue(tpl.allow_outbound)
+        self.assertEqual(tpl.security_type, "wpa-psk")
+        self.assertEqual(tpl.ssid, "MyWifi")
+        self.assertEqual(tpl.password, "pass")
+        self.assertEqual(tpl.band, "a")
 
