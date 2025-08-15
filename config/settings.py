@@ -288,5 +288,3 @@ CELERY_BEAT_SCHEDULE = {
     }
 }
 
-NGINX_CONFIG_ROOT = os.environ.get("NGINX_CONFIG_ROOT", "/etc/nginx/conf.d")
-
