@@ -1,0 +1,5 @@
+[
+  {"model": "nodes.nodecommand", "pk": 1, "fields": {"command": "nmcli con show"}},
+  {"model": "nodes.nodecommand", "pk": 2, "fields": {"command": "ifconfig"}}
+]
+

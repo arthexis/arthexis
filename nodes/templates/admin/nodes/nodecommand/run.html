@@ -1,0 +1,15 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>Run saved command</h1>
+<p><strong>Command:</strong> {{ command_obj.command }}</p>
+<form method="post">{% csrf_token %}
+    <input type="hidden" name="action" value="execute">
+    <input type="hidden" name="_selected_action" value="{{ command_obj.pk }}">
+    <p>Select nodes:</p>
+    {% for node in nodes %}
+    <label><input type="checkbox" name="nodes" value="{{ node.pk }}"> {{ node }}</label><br>
+    {% endfor %}
+    <p><input type="submit" name="apply" value="Run"></p>
+</form>
+{% endblock %}
+
