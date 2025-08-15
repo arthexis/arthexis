@@ -43,6 +43,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         if "ocpp1.6" in offered:
             subprotocol = "ocpp1.6"
         await self.accept(subprotocol=subprotocol)
+        store.add_log(
+            self.charger_id,
+            f"Connected (subprotocol={subprotocol or 'none'})",
+            log_type="charger",
+        )
         store.connections[self.charger_id] = self
         store.logs["charger"].setdefault(self.charger_id, [])
         self.charger, _ = await database_sync_to_async(
@@ -125,6 +130,9 @@ class CSMSConsumer(AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         store.connections.pop(self.charger_id, None)
+        store.add_log(
+            self.charger_id, f"Closed (code={close_code})", log_type="charger"
+        )
 
     async def receive(self, text_data=None, bytes_data=None):
         if text_data is None:

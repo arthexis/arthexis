@@ -54,133 +54,87 @@ class ChargePointSimulator:
             b64 = base64.b64encode(userpass.encode()).decode()
             headers["Authorization"] = f"Basic {b64}"
 
+        ws = None
         try:
-            async with websockets.connect(
-                uri, subprotocols=["ocpp1.6"], extra_headers=headers
-            ) as ws:
-                async def send(msg: str) -> None:
-                    try:
-                        await ws.send(msg)
-                    except Exception:
-                        self.status = "error"
-                        raise
-                    store.add_log(cfg.cp_path, f"> {msg}", log_type="simulator")
-
-                async def recv() -> str:
-                    try:
-                        raw = await ws.recv()
-                    except Exception:
-                        self.status = "error"
-                        raise
-                    store.add_log(cfg.cp_path, f"< {raw}", log_type="simulator")
-                    return raw
-
-                # handshake
-                boot = json.dumps(
-                    [
-                        2,
-                        "boot",
-                        "BootNotification",
-                        {
-                            "chargePointModel": "Simulator",
-                            "chargePointVendor": "SimVendor",
-                        },
-                    ]
+            try:
+                ws = await websockets.connect(
+                    uri, subprotocols=["ocpp1.6"], extra_headers=headers
                 )
-                await send(boot)
+            except Exception as exc:
+                store.add_log(
+                    cfg.cp_path,
+                    f"Connection with subprotocol failed: {exc}",
+                    log_type="simulator",
+                )
+                ws = await websockets.connect(uri, extra_headers=headers)
+
+            store.add_log(
+                cfg.cp_path,
+                f"Connected (subprotocol={ws.subprotocol or 'none'})",
+                log_type="simulator",
+            )
+
+            async def send(msg: str) -> None:
                 try:
-                    resp = json.loads(await recv())
+                    await ws.send(msg)
                 except Exception:
                     self.status = "error"
                     raise
-                status = resp[2].get("status")
-                if status != "Accepted":
-                    if not self._connected.is_set():
-                        self._connect_error = f"Boot status {status}"
-                        self._connected.set()
-                    return
+                store.add_log(cfg.cp_path, f"> {msg}", log_type="simulator")
 
-                await send(json.dumps([2, "auth", "Authorize", {"idTag": cfg.rfid}]))
-                await recv()
+            async def recv() -> str:
+                try:
+                    raw = await ws.recv()
+                except Exception:
+                    self.status = "error"
+                    raise
+                store.add_log(cfg.cp_path, f"< {raw}", log_type="simulator")
+                return raw
+
+            # handshake
+            boot = json.dumps(
+                [
+                    2,
+                    "boot",
+                    "BootNotification",
+                    {
+                        "chargePointModel": "Simulator",
+                        "chargePointVendor": "SimVendor",
+                    },
+                ]
+            )
+            await send(boot)
+            try:
+                resp = json.loads(await recv())
+            except Exception:
+                self.status = "error"
+                raise
+            status = resp[2].get("status")
+            if status != "Accepted":
                 if not self._connected.is_set():
-                    self.status = "running"
-                    self._connect_error = "accepted"
+                    self._connect_error = f"Boot status {status}"
                     self._connected.set()
-                if cfg.pre_charge_delay > 0:
-                    idle_start = time.monotonic()
-                    while time.monotonic() - idle_start < cfg.pre_charge_delay:
-                        await send(
-                            json.dumps(
-                                [
-                                    2,
-                                    "status",
-                                    "StatusNotification",
-                                    {
-                                        "connectorId": 1,
-                                        "errorCode": "NoError",
-                                        "status": "Available",
-                                    },
-                                ]
-                            )
-                        )
-                        await recv()
-                        await asyncio.sleep(cfg.interval)
+                return
 
-                meter_start = random.randint(1000, 2000)
-                await send(
-                    json.dumps(
-                        [
-                            2,
-                            "start",
-                            "StartTransaction",
-                                  {
-                                  "connectorId": 1,
-                                  "idTag": cfg.rfid,
-                                  "meterStart": meter_start,
-                                  "vin": cfg.vin,
-                              },
-                          ]
-                      )
-                )
-                try:
-                    resp = json.loads(await recv())
-                except Exception:
-                    self.status = "error"
-                    raise
-                tx_id = resp[2].get("transactionId")
-
-                meter = meter_start
-                steps = max(1, int(cfg.duration / cfg.interval))
-                step_min = max(1, int((cfg.kw_min * 1000) / steps))
-                step_max = max(1, int((cfg.kw_max * 1000) / steps))
-
-                start_time = time.monotonic()
-                while time.monotonic() - start_time < cfg.duration:
-                    if self._stop_event.is_set():
-                        break
-                    meter += random.randint(step_min, step_max)
-                    meter_kw = meter / 1000.0
+            await send(json.dumps([2, "auth", "Authorize", {"idTag": cfg.rfid}]))
+            await recv()
+            if not self._connected.is_set():
+                self.status = "running"
+                self._connect_error = "accepted"
+                self._connected.set()
+            if cfg.pre_charge_delay > 0:
+                idle_start = time.monotonic()
+                while time.monotonic() - idle_start < cfg.pre_charge_delay:
                     await send(
                         json.dumps(
                             [
                                 2,
-                                "meter",
-                                "MeterValues",
+                                "status",
+                                "StatusNotification",
                                 {
                                     "connectorId": 1,
-                                    "transactionId": tx_id,
-                                    "meterValue": [
-                                        {
-                                            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                                            "sampledValue": [
-                                                {
-                                                    "value": f"{meter_kw:.3f}",
-                                                    "measurand": "Energy.Active.Import.Register",
-                                                    "unit": "kW",
-                                                }
-                                            ],
-                                        }
-                                    ],
+                                    "errorCode": "NoError",
+                                    "status": "Available",
                                 },
                             ]
                         )
@@ -188,21 +142,83 @@ class ChargePointSimulator:
                     await recv()
                     await asyncio.sleep(cfg.interval)
 
+            meter_start = random.randint(1000, 2000)
+            await send(
+                json.dumps(
+                    [
+                        2,
+                        "start",
+                        "StartTransaction",
+                        {
+                            "connectorId": 1,
+                            "idTag": cfg.rfid,
+                            "meterStart": meter_start,
+                            "vin": cfg.vin,
+                        },
+                    ]
+                )
+            )
+            try:
+                resp = json.loads(await recv())
+            except Exception:
+                self.status = "error"
+                raise
+            tx_id = resp[2].get("transactionId")
+
+            meter = meter_start
+            steps = max(1, int(cfg.duration / cfg.interval))
+            step_min = max(1, int((cfg.kw_min * 1000) / steps))
+            step_max = max(1, int((cfg.kw_max * 1000) / steps))
+
+            start_time = time.monotonic()
+            while time.monotonic() - start_time < cfg.duration:
+                if self._stop_event.is_set():
+                    break
+                meter += random.randint(step_min, step_max)
+                meter_kw = meter / 1000.0
                 await send(
                     json.dumps(
                         [
                             2,
-                            "stop",
-                            "StopTransaction",
+                            "meter",
+                            "MeterValues",
                             {
+                                "connectorId": 1,
                                 "transactionId": tx_id,
-                                "idTag": cfg.rfid,
-                                "meterStop": meter,
+                                "meterValue": [
+                                    {
+                                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                        "sampledValue": [
+                                            {
+                                                "value": f"{meter_kw:.3f}",
+                                                "measurand": "Energy.Active.Import.Register",
+                                                "unit": "kW",
+                                            }
+                                        ],
+                                    }
+                                ],
                             },
                         ]
                     )
                 )
                 await recv()
+                await asyncio.sleep(cfg.interval)
+
+            await send(
+                json.dumps(
+                    [
+                        2,
+                        "stop",
+                        "StopTransaction",
+                        {
+                            "transactionId": tx_id,
+                            "idTag": cfg.rfid,
+                            "meterStop": meter,
+                        },
+                    ]
+                )
+            )
+            await recv()
         except Exception as exc:
             if not self._connected.is_set():
                 self._connect_error = str(exc)
@@ -212,6 +228,14 @@ class ChargePointSimulator:
             if isinstance(exc, websockets.exceptions.ConnectionClosed):
                 return
             raise
+        finally:
+            if ws is not None:
+                await ws.close()
+                store.add_log(
+                    cfg.cp_path,
+                    f"Closed (code={ws.close_code}, reason={getattr(ws, 'close_reason', '')})",
+                    log_type="simulator",
+                )
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
