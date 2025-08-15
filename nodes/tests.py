@@ -346,6 +346,48 @@ class SystemdUnitInstallCommandTests(TestCase):
                 self.assertEqual(mock_run.call_count, 3)
 
 
+class SystemdUnitSystemctlCommandTests(TestCase):
+    def test_run_systemctl_for_named_unit(self):
+        unit = SystemdUnit.objects.create(
+            name="demo",
+            description="demo service",
+            exec_start="/bin/true",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with override_settings(SYSTEMD_UNIT_ROOT=tmpdir):
+                service_path = Path(tmpdir) / "demo.service"
+                service_path.write_text("")
+                with patch("subprocess.run") as mock_run:
+                    call_command("systemctl_unit", "restart", unit.name)
+                mock_run.assert_called_once_with(
+                    ["systemctl", "restart", "demo.service"], check=True
+                )
+
+    def test_run_systemctl_for_all_units(self):
+        u1 = SystemdUnit.objects.create(
+            name="svc1", description="s1", exec_start="/bin/true"
+        )
+        u2 = SystemdUnit.objects.create(
+            name="svc2", description="s2", exec_start="/bin/true"
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with override_settings(SYSTEMD_UNIT_ROOT=tmpdir):
+                (Path(tmpdir) / "svc1.service").write_text("")
+                (Path(tmpdir) / "svc2.service").write_text("")
+                with patch("subprocess.run") as mock_run:
+                    call_command("systemctl_unit", "restart")
+                mock_run.assert_has_calls(
+                    [
+                        call(["systemctl", "restart", "svc1.service"], check=True),
+                        call(["systemctl", "restart", "svc2.service"], check=True),
+                    ],
+                    any_order=True,
+                )
+                self.assertEqual(mock_run.call_count, 2)
+
+
 class SystemdUnitStatusTests(TestCase):
     def test_installed_flag(self):
         unit = SystemdUnit(name="demo", description="demo", exec_start="/bin/true")
