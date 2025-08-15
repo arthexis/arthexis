@@ -1,3 +1,5 @@
+import os
+
 from django.test import TestCase
 from unittest.mock import patch
 
@@ -28,6 +30,15 @@ class EmailPatternMatchTests(TestCase):
         pattern = EmailPattern(name="greeting", subject="Hello [name]")
         message = {"subject": "No greeting"}
         self.assertEqual(pattern.matches(message), {})
+
+    def test_environment_sigils_are_resolved(self):
+        pattern = EmailPattern(
+            name="inv",
+            subject="Invoice [number] for [CLIENT]",
+        )
+        with patch.dict(os.environ, {"CLIENT": "Acme"}):
+            message = {"subject": "Invoice 42 for Acme"}
+            self.assertEqual(pattern.matches(message), {"number": "42"})
 
 
 class SendPendingEmailsTaskTests(TestCase):
