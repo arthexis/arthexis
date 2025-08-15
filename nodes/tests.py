@@ -6,33 +6,23 @@ import django
 django.setup()
 
 from pathlib import Path
-from unittest.mock import patch, call
+from unittest.mock import patch
 import socket
-import threading
-import http.server
-import socketserver
 import base64
-import tempfile
-import subprocess
 
-from django.test import Client, TestCase, override_settings, RequestFactory
+from django.test import Client, TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
 from django_celery_beat.models import PeriodicTask
 from django.conf import settings
-from django.core.management import call_command
-
-from .admin import RecipeAdmin, NMCLITemplateAdmin
+from .admin import RecipeAdmin
 from .actions import NodeAction
 
 from .models import (
     Node,
     NodeScreenshot,
     NodeMessage,
-    NginxConfig,
-    NMCLITemplate,
-    SystemdUnit,
     Recipe,
     Step,
     TextPattern,
@@ -266,150 +256,6 @@ class NodeActionTests(TestCase):
             NodeAction.registry.pop("dummyaction", None)
 
 
-class NMCLITemplateTests(TestCase):
-    def test_required_node_creates_periodic_task(self):
-        node = Node.objects.create(hostname="nmcli", address="127.0.0.1", port=9700)
-        template = NMCLITemplate.objects.create(connection_name="demo")
-        template.required_nodes.add(node)
-        task_name = f"check_nmcli_node_{node.pk}"
-        self.assertTrue(PeriodicTask.objects.filter(name=task_name).exists())
-        template.required_nodes.remove(node)
-        self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
-
-
-class NginxConfigTests(TestCase):
-    def _run_server(self, port):
-        handler = http.server.SimpleHTTPRequestHandler
-        httpd = socketserver.TCPServer(("", port), handler)
-        thread = threading.Thread(target=httpd.serve_forever)
-        thread.daemon = True
-        thread.start()
-        return httpd
-
-    def test_render_config_contains_backup(self):
-        cfg = NginxConfig(name='test', server_name='example.com', primary_upstream='remote:8000', backup_upstream='127.0.0.1:8000')
-        text = cfg.render_config()
-        self.assertIn('backup', text)
-        self.assertIn('proxy_set_header Upgrade $http_upgrade;', text)
-
-    def test_connection(self):
-        server = self._run_server(8123)
-        try:
-            cfg = NginxConfig(name='test', server_name='example.com', primary_upstream='127.0.0.1:8123')
-            self.assertTrue(cfg.test_connection())
-            cfg.primary_upstream = '127.0.0.1:8999'
-            self.assertFalse(cfg.test_connection())
-        finally:
-            server.shutdown()
-            server.server_close()
-
-
-class SystemdUnitTests(TestCase):
-    def test_render_and_parse(self):
-        unit = SystemdUnit(
-            name="arthexis",
-            description="arthexis.com",
-            documentation="https://arthexis.com",
-            user="arthe",
-            exec_start="/home/arthe/arthexis/start.sh",
-            wanted_by="default.target",
-        )
-        text = unit.render_unit()
-        self.assertIn("Description=arthexis.com", text)
-        parsed = SystemdUnit.parse_config("arthexis", text)
-        self.assertEqual(parsed.exec_start, "/home/arthe/arthexis/start.sh")
-
-
-class SystemdUnitInstallCommandTests(TestCase):
-    def test_install_writes_file_and_calls_systemctl(self):
-        unit = SystemdUnit.objects.create(
-            name="demo",
-            description="demo service",
-            exec_start="/bin/true",
-        )
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with override_settings(SYSTEMD_UNIT_ROOT=tmpdir):
-                with patch("subprocess.run") as mock_run:
-                    call_command("install_systemd_unit", unit.name)
-                service_path = Path(tmpdir) / "demo.service"
-                self.assertTrue(service_path.exists())
-                content = service_path.read_text()
-                self.assertIn("ExecStart=/bin/true", content)
-                mock_run.assert_has_calls(
-                    [
-                        call(["systemctl", "daemon-reload"], check=True),
-                        call(["systemctl", "enable", unit.name], check=True),
-                        call(["systemctl", "restart", unit.name], check=True),
-                    ]
-                )
-                self.assertEqual(mock_run.call_count, 3)
-
-
-class SystemdUnitSystemctlCommandTests(TestCase):
-    def test_run_systemctl_for_named_unit(self):
-        unit = SystemdUnit.objects.create(
-            name="demo",
-            description="demo service",
-            exec_start="/bin/true",
-        )
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with override_settings(SYSTEMD_UNIT_ROOT=tmpdir):
-                service_path = Path(tmpdir) / "demo.service"
-                service_path.write_text("")
-                with patch("subprocess.run") as mock_run:
-                    call_command("systemctl_unit", "restart", unit.name)
-                mock_run.assert_called_once_with(
-                    ["systemctl", "restart", "demo.service"], check=True
-                )
-
-    def test_run_systemctl_for_all_units(self):
-        u1 = SystemdUnit.objects.create(
-            name="svc1", description="s1", exec_start="/bin/true"
-        )
-        u2 = SystemdUnit.objects.create(
-            name="svc2", description="s2", exec_start="/bin/true"
-        )
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with override_settings(SYSTEMD_UNIT_ROOT=tmpdir):
-                (Path(tmpdir) / "svc1.service").write_text("")
-                (Path(tmpdir) / "svc2.service").write_text("")
-                with patch("subprocess.run") as mock_run:
-                    call_command("systemctl_unit", "restart")
-                mock_run.assert_has_calls(
-                    [
-                        call(["systemctl", "restart", "svc1.service"], check=True),
-                        call(["systemctl", "restart", "svc2.service"], check=True),
-                    ],
-                    any_order=True,
-                )
-                self.assertEqual(mock_run.call_count, 2)
-
-
-class SystemdUnitStatusTests(TestCase):
-    def test_installed_flag(self):
-        unit = SystemdUnit(name="demo", description="demo", exec_start="/bin/true")
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with override_settings(SYSTEMD_UNIT_ROOT=tmpdir):
-                self.assertFalse(unit.is_installed())
-                path = Path(tmpdir) / "demo.service"
-                path.write_text("")
-                self.assertTrue(unit.is_installed())
-
-    def test_running_flag(self):
-        unit = SystemdUnit(name="demo", description="demo", exec_start="/bin/true")
-        with patch("subprocess.run") as mock_run:
-            self.assertTrue(unit.is_running())
-            mock_run.assert_called_with(
-                ["systemctl", "is-active", "demo.service"], check=True
-            )
-        with patch(
-            "subprocess.run",
-            side_effect=subprocess.CalledProcessError(3, ["systemctl"]),
-        ):
-            self.assertFalse(unit.is_running())
 
 
 class RecipeTests(TestCase):
@@ -548,66 +394,4 @@ class ClipboardTaskTests(TestCase):
         self.assertEqual(screenshot.path, "screenshots/test.png")
         self.assertEqual(screenshot.method, "TASK")
 
-
-class NMCLITemplateAdminTests(TestCase):
-    def setUp(self):
-        User = get_user_model()
-        self.user = User.objects.create_superuser("nmcli", "nm@example.com", "pass")
-        self.factory = RequestFactory()
-        self.admin = NMCLITemplateAdmin(NMCLITemplate, admin.site)
-        self.admin.message_user = lambda *args, **kwargs: None
-
-    @patch("nodes.admin.subprocess.run")
-    def test_import_active_populates_fields(self, mock_run):
-        def side_effect(args, capture_output, text, check):
-            if args == ["nmcli", "-t", "-f", "NAME", "connection", "show", "--active"]:
-                return subprocess.CompletedProcess(args, 0, stdout="wifi1\n", stderr="")
-            field = args[3]
-            mapping = {
-                "GENERAL.DEVICE": "GENERAL.DEVICE:wlan0\n",
-                "GENERAL.AUTOCONNECT-PRIORITY": "GENERAL.AUTOCONNECT-PRIORITY:5\n",
-                "GENERAL.AUTOCONNECT": "GENERAL.AUTOCONNECT:yes\n",
-                "IP4.ADDRESS[1]": "IP4.ADDRESS[1]:192.168.1.10/24\n",
-                "IP4.GATEWAY": "IP4.GATEWAY:192.168.1.1\n",
-                "IP4.NEVER_DEFAULT": "IP4.NEVER_DEFAULT:no\n",
-                "IP4.DNS[1]": "IP4.DNS[1]:8.8.8.8\n",
-                "IP4.DNS[2]": "IP4.DNS[2]:8.8.4.4\n",
-                "802-11-WIRELESS-SECURITY.KEY-MGMT": "802-11-WIRELESS-SECURITY.KEY-MGMT:wpa-psk\n",
-                "802-11-WIRELESS.SSID": "802-11-WIRELESS.SSID:MyWifi\n",
-                "802-11-WIRELESS-SECURITY.PSK": "802-11-WIRELESS-SECURITY.PSK:pass\n",
-                "802-11-WIRELESS.BAND": "802-11-WIRELESS.BAND:a\n",
-                "IP6.ADDRESS[1]": "IP6.ADDRESS[1]:2001:db8::1/64\n",
-                "IP6.GATEWAY": "IP6.GATEWAY:2001:db8::ffff\n",
-                "IP6.DNS[1]": "IP6.DNS[1]:2001:4860:4860::8888\n",
-                "IP6.DNS[2]": "IP6.DNS[2]:2001:4860:4860::8844\n",
-            }
-            stdout = mapping.get(field, f"{field}:\n")
-            return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
-
-        mock_run.side_effect = side_effect
-        request = self.factory.post("/")
-        request.user = self.user
-        with patch("nodes.admin.os.name", "posix"):
-            self.admin.import_active(request, NMCLITemplate.objects.none())
-
-        tpl = NMCLITemplate.objects.get(connection_name="wifi1")
-        self.assertEqual(tpl.assigned_device, "wlan0")
-        self.assertEqual(tpl.priority, 5)
-        self.assertTrue(tpl.autoconnect)
-        self.assertEqual(tpl.static_ip, "192.168.1.10")
-        self.assertEqual(tpl.static_mask, "24")
-        self.assertEqual(tpl.static_gateway, "192.168.1.1")
-        self.assertTrue(tpl.allow_outbound)
-        self.assertEqual(tpl.security_type, "wpa-psk")
-        self.assertEqual(tpl.ssid, "MyWifi")
-        self.assertEqual(tpl.password, "pass")
-        self.assertEqual(tpl.band, "a")
-        self.assertEqual(tpl.dns_servers, "8.8.8.8,8.8.4.4")
-        self.assertEqual(tpl.ipv6_address, "2001:db8::1")
-        self.assertEqual(tpl.ipv6_prefix, 64)
-        self.assertEqual(tpl.ipv6_gateway, "2001:db8::ffff")
-        self.assertEqual(
-            tpl.ipv6_dns_servers,
-            "2001:4860:4860::8888,2001:4860:4860::8844",
-        )
 

@@ -1,15 +1,9 @@
 from django.db import models
 import socket
 import re
-import configparser
 from django.utils.text import slugify
 import uuid
-import subprocess
 import os
-from pathlib import Path
-from django.conf import settings
-from django.db.models.signals import m2m_changed
-from django.dispatch import receiver
 
 
 class NodeRole(models.Model):
@@ -70,7 +64,6 @@ class Node(models.Model):
             self._sync_clipboard_task()
         if previous_screenshot != self.screenshot_polling:
             self._sync_screenshot_task()
-        self._sync_nmcli_task()
 
     def _sync_clipboard_task(self):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -116,26 +109,6 @@ class Node(models.Model):
         else:
             PeriodicTask.objects.filter(name=task_name).delete()
 
-    def _sync_nmcli_task(self):
-        from django_celery_beat.models import IntervalSchedule, PeriodicTask
-
-        if os.name == "nt":
-            return
-        task_name = f"check_nmcli_node_{self.pk}"
-        if self.required_nmcli_templates.exists():
-            schedule, _ = IntervalSchedule.objects.get_or_create(
-                every=2, period=IntervalSchedule.MINUTES
-            )
-            PeriodicTask.objects.update_or_create(
-                name=task_name,
-                defaults={
-                    "interval": schedule,
-                    "task": "nodes.tasks.check_required_connections",
-                },
-            )
-        else:
-            PeriodicTask.objects.filter(name=task_name).delete()
-
 
 class NodeScreenshot(models.Model):
     """Screenshot captured from a node."""
@@ -165,215 +138,6 @@ class NodeMessage(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.node} {self.method} {self.created}"
-
-
-class NginxConfig(models.Model):
-    name = models.CharField(
-        max_length=100,
-        unique=True,
-        help_text="Identifier for this configuration (e.g., 'myapp')",
-    )
-    server_name = models.CharField(
-        max_length=255,
-        help_text="Host name(s) for the server block (e.g., example.com)",
-    )
-    primary_upstream = models.CharField(
-        max_length=255,
-        help_text="Primary upstream in host:port form (e.g., 10.0.0.1:8000)",
-    )
-    backup_upstream = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="Backup upstream in host:port form (e.g., 127.0.0.1:9000)",
-    )
-    listen_port = models.PositiveIntegerField(
-        default=80,
-        help_text="Port nginx listens on (e.g., 80 or 443)",
-    )
-    ssl_certificate = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="Path to SSL certificate (e.g., /etc/ssl/certs/example.crt)",
-    )
-    ssl_certificate_key = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="Path to SSL certificate key (e.g., /etc/ssl/private/example.key)",
-    )
-    config_text = models.TextField(blank=True)
-
-    class Meta:
-        verbose_name = "NGINX Template"
-        verbose_name_plural = "NGINX Templates"
-
-    def __str__(self):  # pragma: no cover - simple representation
-        return self.name
-
-    def render_config(self):
-        """Generate an NGINX template with websocket support and optional SSL."""
-        upstream_name = f"{self.name}_upstream"
-        lines = [
-            f"upstream {upstream_name} {{",
-            f"    server {self.primary_upstream};",
-        ]
-        if self.backup_upstream:
-            lines.append(f"    server {self.backup_upstream} backup;")
-        lines.append("}")
-
-        if self.ssl_certificate and self.ssl_certificate_key:
-            listen_line = f"    listen {self.listen_port} ssl;"
-            ssl_lines = [
-                f"    ssl_certificate {self.ssl_certificate};",
-                f"    ssl_certificate_key {self.ssl_certificate_key};",
-            ]
-        else:
-            listen_line = f"    listen {self.listen_port};"
-            ssl_lines = []
-
-        server_lines = [
-            "server {",
-            listen_line,
-            f"    server_name {self.server_name};",
-        ] + ssl_lines + [
-            "    location / {",
-            f"        proxy_pass http://{upstream_name};",
-            "        proxy_http_version 1.1;",
-            "        proxy_set_header Upgrade $http_upgrade;",
-            "        proxy_set_header Connection \"upgrade\";",
-            "        proxy_set_header Host $host;",
-            "        proxy_set_header X-Real-IP $remote_addr;",
-            "    }",
-            "}",
-        ]
-        return "\n".join(lines + ["", *server_lines, ""]) + "\n"
-
-    def save(self, *args, **kwargs):
-        self.config_text = self.render_config()
-        super().save(*args, **kwargs)
-
-    def test_connection(self, timeout=3):
-        """Try to resolve a connection to the primary or backup upstream."""
-        for target in [self.primary_upstream, self.backup_upstream]:
-            if not target:
-                continue
-            host, _, port = target.partition(":")
-            port = int(port or 80)
-            try:
-                with socket.create_connection((host, port), timeout=timeout):
-                    return True
-            except OSError:
-                continue
-        return False
-
-
-class NMCLITemplate(models.Model):
-    connection_name = models.CharField(max_length=100, unique=True)
-    assigned_device = models.CharField(max_length=100, blank=True)
-    priority = models.IntegerField(default=0)
-    autoconnect = models.BooleanField(default=True)
-    static_ip = models.GenericIPAddressField(blank=True, null=True)
-    static_mask = models.CharField(max_length=15, blank=True)
-    static_gateway = models.GenericIPAddressField(blank=True, null=True)
-    allow_outbound = models.BooleanField(default=True)
-    security_type = models.CharField(max_length=50, blank=True)
-    ssid = models.CharField(max_length=100, blank=True)
-    password = models.CharField(max_length=100, blank=True)
-    band = models.CharField(max_length=10, blank=True)
-    dns_servers = models.CharField(max_length=255, blank=True)
-    ipv6_address = models.GenericIPAddressField(
-        blank=True, null=True, protocol="IPv6"
-    )
-    ipv6_prefix = models.PositiveSmallIntegerField(blank=True, null=True)
-    ipv6_gateway = models.GenericIPAddressField(
-        blank=True, null=True, protocol="IPv6"
-    )
-    ipv6_dns_servers = models.CharField(max_length=255, blank=True)
-    required_nodes = models.ManyToManyField(
-        Node, related_name="required_nmcli_templates", blank=True
-    )
-
-    class Meta:
-        verbose_name = "NMCLI Template"
-        verbose_name_plural = "NMCLI Templates"
-
-    def __str__(self):  # pragma: no cover - simple representation
-        return self.connection_name
-
-
-class SystemdUnit(models.Model):
-    name = models.CharField(
-        max_length=100,
-        unique=True,
-        help_text="Identifier for this unit (e.g., 'myservice')",
-    )
-    description = models.CharField(max_length=255, blank=True)
-    documentation = models.URLField(blank=True)
-    user = models.CharField(max_length=100, blank=True)
-    exec_start = models.CharField(max_length=255)
-    wanted_by = models.CharField(max_length=100, default="default.target")
-    config_text = models.TextField(blank=True)
-
-    class Meta:
-        verbose_name = "Systemd Unit Template"
-        verbose_name_plural = "Systemd Unit Templates"
-
-    def __str__(self):  # pragma: no cover - simple representation
-        return self.name
-
-    def render_unit(self):
-        lines = [
-            "[Unit]",
-            f"Description={self.description}",
-        ]
-        if self.documentation:
-            lines.append(f"Documentation={self.documentation}")
-        lines += [
-            "",
-            "[Service]",
-        ]
-        if self.user:
-            lines.append(f"User={self.user}")
-        lines.append(f"ExecStart={self.exec_start}")
-        lines += [
-            "",
-            "[Install]",
-            f"WantedBy={self.wanted_by}",
-            "",
-        ]
-        return "\n".join(lines)
-
-    def save(self, *args, **kwargs):
-        self.config_text = self.render_unit()
-        super().save(*args, **kwargs)
-
-    def is_installed(self):
-        root = getattr(settings, "SYSTEMD_UNIT_ROOT", "/etc/systemd/system")
-        return (Path(root) / f"{self.name}.service").exists()
-
-    def is_running(self):
-        try:
-            subprocess.run(
-                ["systemctl", "is-active", f"{self.name}.service"],
-                check=True,
-            )
-        except (FileNotFoundError, subprocess.CalledProcessError):
-            return False
-        else:
-            return True
-
-    @classmethod
-    def parse_config(cls, name, text):
-        parser = configparser.ConfigParser()
-        parser.read_string(text)
-        return cls(
-            name=name,
-            description=parser.get("Unit", "Description", fallback=""),
-            documentation=parser.get("Unit", "Documentation", fallback=""),
-            user=parser.get("Service", "User", fallback=""),
-            exec_start=parser.get("Service", "ExecStart", fallback=""),
-            wanted_by=parser.get("Install", "WantedBy", fallback="default.target"),
-            config_text=text,
-        )
 
 
 class Recipe(models.Model):
@@ -488,13 +252,3 @@ class TextPattern(models.Model):
         return regex, sigil_names
 
 
-@receiver(m2m_changed, sender=NMCLITemplate.required_nodes.through)
-def _nmcli_required_nodes_changed(sender, instance, action, pk_set, **kwargs):
-    if action in {"post_add", "post_remove"}:
-        node_ids = set(pk_set or [])
-        node_ids.update(instance.required_nodes.values_list("pk", flat=True))
-        for node in Node.objects.filter(pk__in=node_ids):
-            node._sync_nmcli_task()
-    elif action == "post_clear":
-        for node in Node.objects.all():
-            node._sync_nmcli_task()

@@ -1,14 +1,13 @@
 import logging
 import socket
 import os
-import subprocess
 from pathlib import Path
 
 import pyperclip
 from pyperclip import PyperclipException
 from celery import shared_task
 
-from .models import TextSample, Node, NMCLITemplate
+from .models import TextSample, Node
 from .utils import capture_screenshot, save_screenshot
 
 logger = logging.getLogger(__name__)
@@ -48,29 +47,3 @@ def capture_node_screenshot(
     return str(path)
 
 
-@shared_task
-def check_required_connections() -> None:
-    """Ensure required NMCLI connections are active for this node."""
-    if os.name == "nt":
-        return
-    hostname = socket.gethostname()
-    port = int(os.environ.get("PORT", 8000))
-    node = Node.objects.filter(hostname=hostname, port=port).first()
-    if not node:
-        return
-    required = NMCLITemplate.objects.filter(required_nodes=node)
-    if not required.exists():
-        return
-    result = subprocess.run(
-        ["nmcli", "-t", "-f", "NAME", "connection", "show", "--active"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    active = {line.strip() for line in result.stdout.splitlines() if line.strip()}
-    for template in required:
-        if template.connection_name not in active:
-            subprocess.run(
-                ["nmcli", "connection", "up", template.connection_name],
-                check=False,
-            )
