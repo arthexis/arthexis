@@ -204,6 +204,11 @@ class NMCLITemplateResource(resources.ModelResource):
             "ssid",
             "password",
             "band",
+            "dns_servers",
+            "ipv6_address",
+            "ipv6_prefix",
+            "ipv6_gateway",
+            "ipv6_dns_servers",
         )
         import_id_fields = ("connection_name",)
 
@@ -216,6 +221,8 @@ class NMCLITemplateAdmin(ImportExportModelAdmin):
         "assigned_device",
         "priority",
         "autoconnect",
+        "dns_servers",
+        "ipv6_address",
     )
     actions = ["import_active", "apply_connections"]
     filter_horizontal = ("required_nodes",)
@@ -240,10 +247,16 @@ class NMCLITemplateAdmin(ImportExportModelAdmin):
             "IP4.ADDRESS[1]",
             "IP4.GATEWAY",
             "IP4.NEVER_DEFAULT",
+            "IP4.DNS[1]",
+            "IP4.DNS[2]",
             "802-11-WIRELESS.BAND",
             "802-11-WIRELESS.SSID",
             "802-11-WIRELESS-SECURITY.KEY-MGMT",
             "802-11-WIRELESS-SECURITY.PSK",
+            "IP6.ADDRESS[1]",
+            "IP6.GATEWAY",
+            "IP6.DNS[1]",
+            "IP6.DNS[2]",
         ]
         info = {}
         for field in fields:
@@ -299,6 +312,27 @@ class NMCLITemplateAdmin(ImportExportModelAdmin):
             tpl.ssid = info.get("802-11-WIRELESS.SSID", "")
             tpl.password = info.get("802-11-WIRELESS-SECURITY.PSK", "")
             tpl.band = info.get("802-11-WIRELESS.BAND", "")
+            tpl.dns_servers = ",".join(
+                filter(
+                    None,
+                    [info.get("IP4.DNS[1]", ""), info.get("IP4.DNS[2]", "")],
+                )
+            )
+            addr6 = info.get("IP6.ADDRESS[1]", "")
+            if "/" in addr6:
+                ip6, prefix6 = addr6.split("/", 1)
+                tpl.ipv6_address = ip6
+                try:
+                    tpl.ipv6_prefix = int(prefix6)
+                except ValueError:
+                    tpl.ipv6_prefix = None
+            tpl.ipv6_gateway = info.get("IP6.GATEWAY", "") or None
+            tpl.ipv6_dns_servers = ",".join(
+                filter(
+                    None,
+                    [info.get("IP6.DNS[1]", ""), info.get("IP6.DNS[2]", "")],
+                )
+            )
             tpl.save()
         self.message_user(request, "Connections imported", messages.INFO)
 
@@ -348,6 +382,27 @@ class NMCLITemplateAdmin(ImportExportModelAdmin):
             tpl.ssid = info.get("802-11-WIRELESS.SSID", "")
             tpl.password = info.get("802-11-WIRELESS-SECURITY.PSK", "")
             tpl.band = info.get("802-11-WIRELESS.BAND", "")
+            tpl.dns_servers = ",".join(
+                filter(
+                    None,
+                    [info.get("IP4.DNS[1]", ""), info.get("IP4.DNS[2]", "")],
+                )
+            )
+            addr6 = info.get("IP6.ADDRESS[1]", "")
+            if "/" in addr6:
+                ip6, prefix6 = addr6.split("/", 1)
+                tpl.ipv6_address = ip6
+                try:
+                    tpl.ipv6_prefix = int(prefix6)
+                except ValueError:
+                    tpl.ipv6_prefix = None
+            tpl.ipv6_gateway = info.get("IP6.GATEWAY", "") or None
+            tpl.ipv6_dns_servers = ",".join(
+                filter(
+                    None,
+                    [info.get("IP6.DNS[1]", ""), info.get("IP6.DNS[2]", "")],
+                )
+            )
             tpl.save()
             tpl.required_nodes.add(node)
         self.message_user(request, "Connections imported", messages.INFO)

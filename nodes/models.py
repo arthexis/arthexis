@@ -279,6 +279,15 @@ class NMCLITemplate(models.Model):
     ssid = models.CharField(max_length=100, blank=True)
     password = models.CharField(max_length=100, blank=True)
     band = models.CharField(max_length=10, blank=True)
+    dns_servers = models.CharField(max_length=255, blank=True)
+    ipv6_address = models.GenericIPAddressField(
+        blank=True, null=True, protocol="IPv6"
+    )
+    ipv6_prefix = models.PositiveSmallIntegerField(blank=True, null=True)
+    ipv6_gateway = models.GenericIPAddressField(
+        blank=True, null=True, protocol="IPv6"
+    )
+    ipv6_dns_servers = models.CharField(max_length=255, blank=True)
     required_nodes = models.ManyToManyField(
         Node, related_name="required_nmcli_templates", blank=True
     )

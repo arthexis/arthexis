@@ -528,10 +528,16 @@ class NMCLITemplateAdminTests(TestCase):
                 "IP4.ADDRESS[1]": "IP4.ADDRESS[1]:192.168.1.10/24\n",
                 "IP4.GATEWAY": "IP4.GATEWAY:192.168.1.1\n",
                 "IP4.NEVER_DEFAULT": "IP4.NEVER_DEFAULT:no\n",
+                "IP4.DNS[1]": "IP4.DNS[1]:8.8.8.8\n",
+                "IP4.DNS[2]": "IP4.DNS[2]:8.8.4.4\n",
                 "802-11-WIRELESS-SECURITY.KEY-MGMT": "802-11-WIRELESS-SECURITY.KEY-MGMT:wpa-psk\n",
                 "802-11-WIRELESS.SSID": "802-11-WIRELESS.SSID:MyWifi\n",
                 "802-11-WIRELESS-SECURITY.PSK": "802-11-WIRELESS-SECURITY.PSK:pass\n",
                 "802-11-WIRELESS.BAND": "802-11-WIRELESS.BAND:a\n",
+                "IP6.ADDRESS[1]": "IP6.ADDRESS[1]:2001:db8::1/64\n",
+                "IP6.GATEWAY": "IP6.GATEWAY:2001:db8::ffff\n",
+                "IP6.DNS[1]": "IP6.DNS[1]:2001:4860:4860::8888\n",
+                "IP6.DNS[2]": "IP6.DNS[2]:2001:4860:4860::8844\n",
             }
             stdout = mapping.get(field, f"{field}:\n")
             return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
@@ -554,4 +560,12 @@ class NMCLITemplateAdminTests(TestCase):
         self.assertEqual(tpl.ssid, "MyWifi")
         self.assertEqual(tpl.password, "pass")
         self.assertEqual(tpl.band, "a")
+        self.assertEqual(tpl.dns_servers, "8.8.8.8,8.8.4.4")
+        self.assertEqual(tpl.ipv6_address, "2001:db8::1")
+        self.assertEqual(tpl.ipv6_prefix, 64)
+        self.assertEqual(tpl.ipv6_gateway, "2001:db8::ffff")
+        self.assertEqual(
+            tpl.ipv6_dns_servers,
+            "2001:4860:4860::8888,2001:4860:4860::8844",
+        )
 
