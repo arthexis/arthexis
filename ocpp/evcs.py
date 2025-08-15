@@ -205,48 +205,64 @@ async def simulate_cp(
 
     loop_count = 0
     while loop_count < session_count and state.running:
+        ws = None
+        reset_event: asyncio.Event | None = None
         try:
-            async with websockets.connect(
-                uri, subprotocols=["ocpp1.6"], extra_headers=headers
-            ) as ws:
-                state.phase = "Connected"
-                state.last_message = ""
+            try:
+                ws = await websockets.connect(
+                    uri, subprotocols=["ocpp1.6"], extra_headers=headers
+                )
+            except Exception as exc:
+                store.add_log(
+                    cp_path,
+                    f"Connection with subprotocol failed: {exc}",
+                    log_type="simulator",
+                )
+                ws = await websockets.connect(uri, extra_headers=headers)
 
-                async def _send(payload):
-                    text = json.dumps(payload)
-                    await ws.send(text)
-                    store.add_log(cp_path, f"> {text}", log_type="simulator")
+            state.phase = "Connected"
+            state.last_message = ""
+            store.add_log(
+                cp_path,
+                f"Connected (subprotocol={ws.subprotocol or 'none'})",
+                log_type="simulator",
+            )
 
-                async def _recv():
-                    raw = await ws.recv()
-                    store.add_log(cp_path, f"< {raw}", log_type="simulator")
-                    return raw
+            async def _send(payload):
+                text = json.dumps(payload)
+                await ws.send(text)
+                store.add_log(cp_path, f"> {text}", log_type="simulator")
 
-                # listen for remote commands
-                stop_event = asyncio.Event()
-                reset_event = asyncio.Event()
+            async def _recv():
+                raw = await ws.recv()
+                store.add_log(cp_path, f"< {raw}", log_type="simulator")
+                return raw
 
-                async def listen():
-                    try:
-                        while True:
-                            raw = await _recv()
-                            try:
-                                msg = json.loads(raw)
-                            except json.JSONDecodeError:
-                                continue
+            # listen for remote commands
+            stop_event = asyncio.Event()
+            reset_event = asyncio.Event()
 
-                            if isinstance(msg, list) and msg and msg[0] == 2:
-                                msg_id, action = msg[1], msg[2]
-                                await _send([3, msg_id, {}])
-                                if action == "RemoteStopTransaction":
-                                    state.last_message = "RemoteStopTransaction"
-                                    stop_event.set()
-                                elif action == "Reset":
-                                    state.last_message = "Reset"
-                                    reset_event.set()
-                                    stop_event.set()
-                    except websockets.ConnectionClosed:
-                        stop_event.set()
+            async def listen():
+                try:
+                    while True:
+                        raw = await _recv()
+                        try:
+                            msg = json.loads(raw)
+                        except json.JSONDecodeError:
+                            continue
+
+                        if isinstance(msg, list) and msg and msg[0] == 2:
+                            msg_id, action = msg[1], msg[2]
+                            await _send([3, msg_id, {}])
+                            if action == "RemoteStopTransaction":
+                                state.last_message = "RemoteStopTransaction"
+                                stop_event.set()
+                            elif action == "Reset":
+                                state.last_message = "Reset"
+                                reset_event.set()
+                                stop_event.set()
+                except websockets.ConnectionClosed:
+                    stop_event.set()
 
                 # boot notification / authorise
                 await _send(
@@ -318,96 +334,62 @@ async def simulate_cp(
                             await _recv()
                             last_mv = time.monotonic()
 
-                await _send(
-                    [
-                        2,
-                        "start",
-                        "StartTransaction",
-                        {
-                            "connectorId": 1,
-                            "idTag": rfid,
-                            "meterStart": meter_start,
-                            "vin": vin,
-                        },
-                    ]
-                )
-                state.last_message = "StartTransaction"
-                resp = await _recv()
-                tx_id = json.loads(resp)[2].get("transactionId")
-
-                state.last_status = "Running"
-                state.phase = "Charging"
-
-                listener = asyncio.create_task(listen())
-
-                meter = meter_start
-                for _ in range(steps):
-                    if stop_event.is_set():
-                        break
-                    meter += random.randint(step_min, step_max)
-                    meter_kw = meter / 1000.0
-                    await _send(
-                        [
-                            2,
-                            "meter",
-                            "MeterValues",
-                            {
-                                "connectorId": 1,
-                                "transactionId": tx_id,
-                                "meterValue": [
-                                    {
-                                        "timestamp": time.strftime(
-                                            "%Y-%m-%dT%H:%M:%S"
-                                        )
-                                        + "Z",
-                                        "sampledValue": [
-                                            {
-                                                "value": f"{meter_kw:.3f}",
-                                                "measurand": "Energy.Active.Import.Register",
-                                                "unit": "kW",
-                                                "context": "Sample.Periodic",
-                                            }
-                                        ],
-                                    }
-                                ],
-                            },
-                        ]
-                    )
-                    state.last_message = "MeterValues"
-                    await asyncio.sleep(interval)
-
-                listener.cancel()
+            async def listen():
                 try:
-                    await listener
-                except asyncio.CancelledError:
-                    pass
+                    while True:
+                        raw = await _recv()
+                        try:
+                            msg = json.loads(raw)
+                        except json.JSONDecodeError:
+                            continue
 
-                await _send(
-                    [
-                        2,
-                        "stop",
-                        "StopTransaction",
-                        {
-                            "transactionId": tx_id,
-                            "idTag": rfid,
-                            "meterStop": meter,
-                        },
-                    ]
-                )
-                state.last_message = "StopTransaction"
-                state.phase = "Available"
-                await _recv()
+                        if isinstance(msg, list) and msg and msg[0] == 2:
+                            msg_id, action = msg[1], msg[2]
+                            await _send([3, msg_id, {}])
+                            if action == "RemoteStopTransaction":
+                                state.last_message = "RemoteStopTransaction"
+                                stop_event.set()
+                            elif action == "Reset":
+                                state.last_message = "Reset"
+                                reset_event.set()
+                                stop_event.set()
+                except websockets.ConnectionClosed:
+                    stop_event.set()
 
-                # Idle phase: heartbeats and idle meter values
-                idle_time = 20 if session_count == 1 else 60
-                next_meter = meter
+            await _send(
+                [
+                    2,
+                    "boot",
+                    "BootNotification",
+                    {
+                        "chargePointModel": "Simulator",
+                        "chargePointVendor": "SimVendor",
+                    },
+                ]
+            )
+            state.last_message = "BootNotification"
+            await _recv()
+            await _send([2, "auth", "Authorize", {"idTag": rfid}])
+            state.last_message = "Authorize"
+            await _recv()
+
+            state.phase = "Available"
+
+            meter_start = random.randint(1000, 2000)
+            actual_duration = random.uniform(duration * 0.75, duration * 1.25)
+            steps = max(1, int(actual_duration / interval))
+            step_min = max(1, int((kw_min * 1000) / steps))
+            step_max = max(1, int((kw_max * 1000) / steps))
+
+            # optional pre‑charge delay while still sending heartbeats
+            if pre_charge_delay > 0:
+                start_delay = time.monotonic()
+                next_meter = meter_start
                 last_mv = time.monotonic()
-                start_idle = time.monotonic()
-                while (
-                    time.monotonic() - start_idle < idle_time and not stop_event.is_set()
-                ):
+                while time.monotonic() - start_delay < pre_charge_delay:
                     await _send([2, "hb", "Heartbeat", {}])
                     state.last_message = "Heartbeat"
+                    await _recv()
                     await asyncio.sleep(5)
                     if time.monotonic() - last_mv >= 30:
                         idle_step = max(2, int(step_max / 100))
@@ -443,12 +425,124 @@ async def simulate_cp(
                         await _recv()
                         last_mv = time.monotonic()
 
-                if reset_event.is_set():
-                    continue
+            await _send(
+                [
+                    2,
+                    "start",
+                    "StartTransaction",
+                    {
+                        "connectorId": 1,
+                        "idTag": rfid,
+                        "meterStart": meter_start,
+                        "vin": vin,
+                    },
+                ]
+            )
+            state.last_message = "StartTransaction"
+            resp = await _recv()
+            tx_id = json.loads(resp)[2].get("transactionId")
 
-                loop_count += 1
-                if session_count == float("inf"):
-                    continue
+            state.last_status = "Running"
+            state.phase = "Charging"
+
+            listener = asyncio.create_task(listen())
+
+            meter = meter_start
+            for _ in range(steps):
+                if stop_event.is_set():
+                    break
+                meter += random.randint(step_min, step_max)
+                meter_kw = meter / 1000.0
+                await _send(
+                    [
+                        2,
+                        "meter",
+                        "MeterValues",
+                        {
+                            "connectorId": 1,
+                            "transactionId": tx_id,
+                            "meterValue": [
+                                {
+                                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
+                                    + "Z",
+                                    "sampledValue": [
+                                        {
+                                            "value": f"{meter_kw:.3f}",
+                                            "measurand": "Energy.Active.Import.Register",
+                                            "unit": "kW",
+                                            "context": "Sample.Periodic",
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                    ]
+                )
+                state.last_message = "MeterValues"
+                await asyncio.sleep(interval)
+
+            listener.cancel()
+            try:
+                await listener
+            except asyncio.CancelledError:
+                pass
+
+            await _send(
+                [
+                    2,
+                    "stop",
+                    "StopTransaction",
+                    {
+                        "transactionId": tx_id,
+                        "idTag": rfid,
+                        "meterStop": meter,
+                    },
+                ]
+            )
+            state.last_message = "StopTransaction"
+            state.phase = "Available"
+            await _recv()
+
+            # Idle phase: heartbeats and idle meter values
+            idle_time = 20 if session_count == 1 else 60
+            next_meter = meter
+            last_mv = time.monotonic()
+            start_idle = time.monotonic()
+            while time.monotonic() - start_idle < idle_time and not stop_event.is_set():
+                await _send([2, "hb", "Heartbeat", {}])
+                state.last_message = "Heartbeat"
+                await asyncio.sleep(5)
+                if time.monotonic() - last_mv >= 30:
+                    idle_step = max(2, int(step_max / 100))
+                    next_meter += random.randint(0, idle_step)
+                    next_kw = next_meter / 1000.0
+                    await _send(
+                        [
+                            2,
+                            "meter",
+                            "MeterValues",
+                            {
+                                "connectorId": 1,
+                                "meterValue": [
+                                    {
+                                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
+                                        + "Z",
+                                        "sampledValue": [
+                                            {
+                                                "value": f"{next_kw:.3f}",
+                                                "measurand": "Energy.Active.Import.Register",
+                                                "unit": "kW",
+                                                "context": "Sample.Clock",
+                                            }
+                                        ],
+                                    }
+                                ],
+                            },
+                        ]
+                    )
+                    state.last_message = "MeterValues"
+                    await _recv()
+                    last_mv = time.monotonic()
 
         except websockets.ConnectionClosedError:
             state.last_status = "Reconnecting"
@@ -458,6 +552,21 @@ async def simulate_cp(
         except Exception as exc:  # pragma: no cover - defensive programming
             state.last_error = str(exc)
             break
+        finally:
+            if ws is not None:
+                await ws.close()
+                store.add_log(
+                    cp_path,
+                    f"Closed (code={ws.close_code}, reason={getattr(ws, 'close_reason', '')})",
+                    log_type="simulator",
+                )
+
+        if reset_event and reset_event.is_set():
+            continue
+
+        loop_count += 1
+        if session_count == float("inf"):
+            continue
 
     state.last_status = "Stopped"
     state.running = False
