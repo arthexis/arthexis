@@ -22,7 +22,7 @@ need_cmd awk
 SSID="Gelectriic-HS"
 read -rsp "Enter password for AP '${SSID}': " PSK
 echo
-AP_CON="AP ${SSID}"
+AP_CON="AP ${SSID}" 
 ETH_CON="eth0-static-129"
 WLAN1_METRIC="100"
 ETH_METRIC="700"
