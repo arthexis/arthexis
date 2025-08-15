@@ -1,0 +1,19 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>Run command on selected nodes</h1>
+<form method="post">{% csrf_token %}
+    <input type="hidden" name="action" value="run_command">
+    {% for node in nodes %}
+    <input type="hidden" name="_selected_action" value="{{ node.pk }}">
+    {% endfor %}
+    <p>Selected nodes:</p>
+    <ul>
+        {% for node in nodes %}
+        <li>{{ node }}</li>
+        {% endfor %}
+    </ul>
+    <textarea name="command" rows="4" style="width:100%"></textarea>
+    <p><input type="submit" name="apply" value="Run"></p>
+</form>
+{% endblock %}
+

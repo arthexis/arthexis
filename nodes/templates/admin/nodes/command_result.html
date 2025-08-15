@@ -1,0 +1,10 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>Command output</h1>
+<p><strong>Command:</strong> {{ command }}</p>
+{% for node, output in results %}
+<h2>{{ node }}</h2>
+<pre>{{ output }}</pre>
+{% endfor %}
+{% endblock %}
+

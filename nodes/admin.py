@@ -1,6 +1,6 @@
 from django.contrib import admin, messages
 from django.urls import path, reverse
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.utils.html import format_html
 from django import forms
 from app.widgets import CopyColorWidget
@@ -20,6 +20,7 @@ from .models import (
     NodeRole,
     NodeScreenshot,
     NodeMessage,
+    NodeCommand,
     Recipe,
     Step,
     TextSample,
@@ -52,6 +53,7 @@ class NodeAdmin(admin.ModelAdmin):
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
     filter_horizontal = ("roles",)
+    actions = ["run_command"]
 
     def get_urls(self):
         urls = super().get_urls()
@@ -87,6 +89,24 @@ class NodeAdmin(admin.ModelAdmin):
         else:
             self.message_user(request, "Current host already registered", messages.INFO)
         return redirect("..")
+
+    def run_command(self, request, queryset):
+        if "apply" in request.POST:
+            command_text = request.POST.get("command", "")
+            cmd_obj, _ = NodeCommand.objects.get_or_create(command=command_text)
+            results = []
+            for node in queryset:
+                try:
+                    output = cmd_obj.run(node)
+                except Exception as exc:
+                    output = str(exc)
+                results.append((node, output))
+            context = {"command": command_text, "results": results}
+            return render(request, "admin/nodes/command_result.html", context)
+        context = {"nodes": queryset}
+        return render(request, "admin/nodes/node/run_command.html", context)
+
+    run_command.short_description = "Run shell command"
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}
@@ -180,6 +200,37 @@ class NodeScreenshotAdmin(admin.ModelAdmin):
 @admin.register(NodeMessage)
 class NodeMessageAdmin(admin.ModelAdmin):
     list_display = ("node", "method", "created")
+
+
+@admin.register(NodeCommand)
+class NodeCommandAdmin(admin.ModelAdmin):
+    list_display = ("command", "created")
+    actions = ["execute"]
+
+    def execute(self, request, queryset):
+        if queryset.count() != 1:
+            self.message_user(
+                request, "Please select exactly one command", messages.ERROR
+            )
+            return
+        command_obj = queryset.first()
+        if "apply" in request.POST:
+            node_ids = request.POST.getlist("nodes")
+            nodes_qs = Node.objects.filter(pk__in=node_ids)
+            results = []
+            for node in nodes_qs:
+                try:
+                    output = command_obj.run(node)
+                except Exception as exc:
+                    output = str(exc)
+                results.append((node, output))
+            context = {"command": command_obj.command, "results": results}
+            return render(request, "admin/nodes/command_result.html", context)
+        nodes = Node.objects.all()
+        context = {"nodes": nodes, "command_obj": command_obj}
+        return render(request, "admin/nodes/nodecommand/run.html", context)
+
+    execute.short_description = "Run command on nodes"
 
 
 class StepInline(admin.TabularInline):

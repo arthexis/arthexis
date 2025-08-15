@@ -140,6 +140,30 @@ class NodeMessage(models.Model):
         return f"{self.node} {self.method} {self.created}"
 
 
+class NodeCommand(models.Model):
+    """Shell command that can be executed on nodes."""
+
+    command = models.TextField()
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created"]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.command
+
+    def run(self, node: Node):
+        """Execute this command on ``node`` and return its output."""
+        if not node.is_local:
+            raise NotImplementedError("Remote node execution is not implemented")
+        import subprocess
+
+        result = subprocess.run(
+            self.command, shell=True, capture_output=True, text=True
+        )
+        return result.stdout + result.stderr
+
+
 class Recipe(models.Model):
     """A collection of script steps that can be executed by nodes."""
 
