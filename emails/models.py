@@ -3,6 +3,8 @@ import imaplib
 import re
 from typing import Dict
 
+from utils.sigils import resolve_env_sigils
+
 from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -28,8 +30,14 @@ class EmailPattern(models.Model):
 
     @staticmethod
     def _regex_from_pattern(pattern: str) -> re.Pattern:
-        """Convert a pattern with [sigils] into a regex."""
+        """Convert a pattern with [sigils] into a regex.
 
+        ``[SIGILS]`` within ``pattern`` are first resolved using environment
+        variables via :func:`utils.sigils.resolve_env_sigils` before being
+        converted into capturing groups.
+        """
+
+        pattern = resolve_env_sigils(pattern)
         escaped = re.escape(pattern)
         regex = re.sub(r"\\\[([^\\\]]+)\\\]", r"(?P<\1>.+)", escaped)
         return re.compile(regex, re.IGNORECASE)
