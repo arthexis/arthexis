@@ -5,7 +5,7 @@ from django import forms
 from django.contrib import admin, messages
 
 from config.offline import requires_network
-from .models import BskyAccount, Instance
+from .models import BskyAccount, OdooInstance
 
 
 class BskyAccountAdminForm(forms.ModelForm):
@@ -62,8 +62,8 @@ class BskyAccountAdmin(admin.ModelAdmin):
 
     test_credentials.short_description = "Test credentials"
 
-@admin.register(Instance)
-class InstanceAdmin(admin.ModelAdmin):
+@admin.register(OdooInstance)
+class OdooInstanceAdmin(admin.ModelAdmin):
     list_display = ("name", "url", "database", "username")
     actions = ["test_connection"]
 
@@ -97,4 +97,4 @@ class InstanceAdmin(admin.ModelAdmin):
                     level=messages.ERROR,
                 )
 
-    test_connection.short_description = "Test connection"
+    test_connection.short_description = "Test API connection"
