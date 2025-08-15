@@ -17,7 +17,7 @@ class BskyAccount(models.Model):
         return self.handle
 
 
-class Instance(models.Model):
+class OdooInstance(models.Model):
     """Connection details for an Odoo server."""
 
     name = models.CharField(max_length=100)

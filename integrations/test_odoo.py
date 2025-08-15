@@ -15,7 +15,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from unittest.mock import patch
 
-from .models import Instance
+from .models import OdooInstance
 
 
 class OdooTests(TestCase):
@@ -24,7 +24,7 @@ class OdooTests(TestCase):
         User = get_user_model()
         self.user = User.objects.create_user(username="tester", password="secret")
         self.client.force_login(self.user)
-        self.instance = Instance.objects.create(
+        self.instance = OdooInstance.objects.create(
             name="Local",
             url="http://odoo.local",
             database="db",
@@ -58,7 +58,7 @@ class OdooAdminTests(TestCase):
             email="admin@example.com",
         )
         self.client.force_login(self.admin)
-        self.instance = Instance.objects.create(
+        self.instance = OdooInstance.objects.create(
             name="Local",
             url="http://odoo.local",
             database="db",
@@ -70,7 +70,7 @@ class OdooAdminTests(TestCase):
     def test_admin_action(self, mock_proxy):
         mock_srv = mock_proxy.return_value
         mock_srv.authenticate.return_value = 1
-        url = reverse("admin:integrations_instance_changelist")
+        url = reverse("admin:integrations_odooinstance_changelist")
         resp = self.client.post(
             url,
             {

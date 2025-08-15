@@ -37,13 +37,13 @@ from urllib.parse import urljoin
 from django.shortcuts import get_object_or_404
 
 from config.offline import requires_network
-from .models import Instance
+from .models import OdooInstance
 
 
 @api_login_required
 @requires_network
 def test_connection(request, pk):
-    instance = get_object_or_404(Instance, pk=pk)
+    instance = get_object_or_404(OdooInstance, pk=pk)
     server = xmlrpc.client.ServerProxy(urljoin(instance.url, "/xmlrpc/2/common"))
     try:
         uid = server.authenticate(instance.database, instance.username, instance.password, {})
