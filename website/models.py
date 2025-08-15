@@ -4,8 +4,18 @@ from django.apps import apps as django_apps
 from django.utils.text import slugify
 
 
+class ApplicationManager(models.Manager):
+    def get_by_natural_key(self, name: str):
+        return self.get(name=name)
+
+
 class Application(models.Model):
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, unique=True)
+
+    objects = ApplicationManager()
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        return (self.name,)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
@@ -13,6 +23,11 @@ class Application(models.Model):
     @property
     def installed(self) -> bool:
         return django_apps.is_installed(self.name)
+
+
+class SiteApplicationManager(models.Manager):
+    def get_by_natural_key(self, domain: str, path: str):
+        return self.get(site__domain=domain, path=path)
 
 
 class SiteApplication(models.Model):
@@ -29,8 +44,15 @@ class SiteApplication(models.Model):
     )
     is_default = models.BooleanField(default=False)
 
+    objects = SiteApplicationManager()
+
     class Meta:
         unique_together = ("site", "path")
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        return (self.site.domain, self.path)
+
+    natural_key.dependencies = ["sites.Site"]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.application.name} ({self.path})"
