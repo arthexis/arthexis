@@ -6,6 +6,7 @@ from accounts.models import Account
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
+from asgiref.sync import sync_to_async
 from config.offline import requires_network
 
 from . import store
@@ -56,8 +57,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             charger_id=self.charger_id,
             defaults={"last_path": self.scope.get("path", "")},
         )
+        location_name = await sync_to_async(
+            lambda: self.charger.location.name if self.charger.location else ""
+        )()
         store.register_log_name(
-            self.charger_id, self.charger.name or self.charger_id, log_type="charger"
+            self.charger_id, location_name or self.charger_id, log_type="charger"
         )
 
     async def _get_account(self, id_tag: str) -> Account | None:
