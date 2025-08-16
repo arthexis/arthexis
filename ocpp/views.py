@@ -213,8 +213,15 @@ def cp_simulator(request):
 @login_required
 def charger_page(request, cid):
     charger = get_object_or_404(Charger, charger_id=cid)
-    tx_obj = store.transactions.get(cid)
-    state, color = _charger_state(charger, tx_obj)
+    session_id = request.GET.get("session")
+    live_tx = store.transactions.get(cid)
+    tx_obj = live_tx
+    past_session = False
+    if session_id:
+        if not (live_tx and str(live_tx.pk) == session_id):
+            tx_obj = get_object_or_404(Transaction, pk=session_id, charger=charger)
+            past_session = True
+    state, color = _charger_state(charger, live_tx)
     transactions_qs = Transaction.objects.filter(charger=charger).order_by("-start_time")
     paginator = Paginator(transactions_qs, 10)
     page_obj = paginator.get_page(request.GET.get("page"))
@@ -247,6 +254,7 @@ def charger_page(request, cid):
             "transactions": transactions,
             "page_obj": page_obj,
             "chart_data": json.dumps(chart_data),
+            "past_session": past_session,
         },
     )
 

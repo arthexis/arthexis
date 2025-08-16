@@ -798,6 +798,38 @@ class ChargerStatusViewTests(TestCase):
         self.assertAlmostEqual(chart["values"][1], 1.5)
         store.transactions.pop(charger.charger_id, None)
 
+    def test_sessions_are_linked(self):
+        charger = Charger.objects.create(charger_id="LINK1")
+        tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
+        resp = self.client.get(reverse("charger-page", args=[charger.charger_id]))
+        self.assertContains(resp, f"?session={tx.id}")
+
+    def test_past_session_chart(self):
+        charger = Charger.objects.create(charger_id="PAST1")
+        tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
+        t0 = timezone.now()
+        MeterReading.objects.create(
+            charger=charger,
+            transaction=tx,
+            timestamp=t0,
+            value=Decimal("1000"),
+            unit="W",
+        )
+        MeterReading.objects.create(
+            charger=charger,
+            transaction=tx,
+            timestamp=t0 + timedelta(seconds=10),
+            value=Decimal("1000"),
+            unit="W",
+        )
+        resp = self.client.get(
+            reverse("charger-page", args=[charger.charger_id]) + f"?session={tx.id}"
+        )
+        self.assertContains(resp, "Back to live")
+        chart = json.loads(resp.context["chart_data"])
+        self.assertEqual(len(chart["labels"]), 2)
+        self.assertTrue(resp.context["past_session"])
+
 
 class ChargerSessionPaginationTests(TestCase):
     def setUp(self):
