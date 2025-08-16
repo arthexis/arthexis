@@ -19,6 +19,12 @@ import socket
 from django.utils.translation import gettext_lazy as _
 from celery.schedules import crontab
 from django.http import request as http_request
+import django.utils.encoding as encoding
+
+if not hasattr(encoding, "force_text"):  # pragma: no cover - Django>=5 compatibility
+    from django.utils.encoding import force_str
+
+    encoding.force_text = force_str
 
 
 _original_validate_host = http_request.validate_host
@@ -90,6 +96,7 @@ INSTALLED_APPS = [
     "import_export",
     "django.contrib.sites",
     "channels",
+    "fernet_fields",
     "post_office",
     "django_celery_beat",
     "webshell",

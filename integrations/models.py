@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 
+from fernet_fields import EncryptedCharField
 from utils.sigils import SigilCharField, SigilURLField
 
 
@@ -26,7 +27,7 @@ class OdooInstance(models.Model):
     url = SigilURLField()
     database = SigilCharField(max_length=100)
     username = SigilCharField(max_length=100)
-    password = SigilCharField(max_length=100)
+    password = EncryptedCharField(max_length=100)
 
     def __str__(self) -> str:  # pragma: no cover - simple repr
         return self.name
