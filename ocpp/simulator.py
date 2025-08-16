@@ -167,14 +167,15 @@ class ChargePointSimulator:
 
             meter = meter_start
             steps = max(1, int(cfg.duration / cfg.interval))
-            step_min = max(1, int((cfg.kw_min * 1000) / steps))
-            step_max = max(1, int((cfg.kw_max * 1000) / steps))
+            target_kwh = cfg.kw_max * random.uniform(0.9, 1.1)
+            step_avg = (target_kwh * 1000) / steps
 
             start_time = time.monotonic()
             while time.monotonic() - start_time < cfg.duration:
                 if self._stop_event.is_set():
                     break
-                meter += random.randint(step_min, step_max)
+                inc = random.gauss(step_avg, step_avg * 0.05)
+                meter += max(1, int(inc))
                 meter_kw = meter / 1000.0
                 await send(
                     json.dumps(

@@ -5,7 +5,8 @@
     "fields": {
       "name": "Local CP1",
       "cp_path": "CP1",
-      "vin": "WP0ZZZ00000000000"
+      "vin": "WP0ZZZ00000000000",
+      "kw_max": 60.0
     }
   },
   {
@@ -14,7 +15,8 @@
     "fields": {
       "name": "Local CP2",
       "cp_path": "CP2",
-      "vin": "WAUZZZ00000000000"
+      "vin": "WAUZZZ00000000000",
+      "kw_max": 120.0
     }
   },
   {
@@ -25,7 +27,8 @@
       "cp_path": "CP1",
       "host": "192.168.129.10",
       "ws_port": 8888,
-      "vin": "WP0ZZZ00000000000"
+      "vin": "WP0ZZZ00000000000",
+      "kw_max": 60.0
     }
   },
   {
@@ -36,7 +39,8 @@
       "cp_path": "CP2",
       "host": "192.168.129.10",
       "ws_port": 8888,
-      "vin": "WAUZZZ00000000000"
+      "vin": "WAUZZZ00000000000",
+      "kw_max": 120.0
     }
   }
 ]
