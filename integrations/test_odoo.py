@@ -29,7 +29,6 @@ class OdooTests(TestCase):
                 "ODOO_URL": "http://odoo.local",
                 "ODOO_DATABASE": "db",
                 "ODOO_USERNAME": "user",
-                "ODOO_PASSWORD": "pwd",
             }
         )
         self.instance = OdooInstance.objects.create(
@@ -37,7 +36,7 @@ class OdooTests(TestCase):
             url="[ODOO_URL]",
             database="[ODOO_DATABASE]",
             username="[ODOO_USERNAME]",
-            password="[ODOO_PASSWORD]",
+            password="pwd",
         )
 
     def test_fields_resolve_sigils(self):
@@ -45,6 +44,15 @@ class OdooTests(TestCase):
         self.assertEqual(self.instance.database, "db")
         self.assertEqual(self.instance.username, "user")
         self.assertEqual(self.instance.password, "pwd")
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT password FROM integrations_odooinstance WHERE id = %s",
+                [self.instance.pk],
+            )
+            raw = cursor.fetchone()[0]
+        self.assertNotEqual(raw, "pwd")
 
     @patch("xmlrpc.client.ServerProxy")
     def test_connection_success(self, mock_proxy):
@@ -77,7 +85,6 @@ class OdooAdminTests(TestCase):
                 "ODOO_URL": "http://odoo.local",
                 "ODOO_DATABASE": "db",
                 "ODOO_USERNAME": "user",
-                "ODOO_PASSWORD": "pwd",
             }
         )
         self.instance = OdooInstance.objects.create(
@@ -85,7 +92,7 @@ class OdooAdminTests(TestCase):
             url="[ODOO_URL]",
             database="[ODOO_DATABASE]",
             username="[ODOO_USERNAME]",
-            password="[ODOO_PASSWORD]",
+            password="pwd",
         )
 
     @patch("xmlrpc.client.ServerProxy")
