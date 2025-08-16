@@ -22,6 +22,11 @@
     }
   </style>
   <h1>{{ charger.name|default:charger.charger_id }}</h1>
+  {% if past_session %}
+  <div class="alert alert-info" role="alert">
+    {% trans "Viewing past session" %} {{ tx.id }}. <a href="{% url 'charger-page' charger.charger_id %}">{% trans "Back to live" %}</a>
+  </div>
+  {% endif %}
   <div class="row mb-4">
     <div class="col-md-4">
       <p>Serial Number: {{ charger.charger_id }}</p>
@@ -31,14 +36,14 @@
       </div>
       <p>{% trans "Total Energy" %}: <span id="total-kw">{{ charger.total_kw|floatformat:2 }}</span> kW</p>
       {% if tx %}
-      <h2>{% trans "Current Transaction" %}</h2>
+      <h2>{% if past_session %}{% trans "Session" %}{% else %}{% trans "Current Transaction" %}{% endif %}</h2>
       <ul>
         <li>{% trans "Transaction ID" %}: {{ tx.id }}</li>
         <li>{% trans "Meter Start" %}: {{ tx.meter_start }}</li>
         <li>{% trans "Start Time" %}: {{ tx.start_time }}</li>
         <li>{% trans "Session Energy" %}: <span id="session-kw">{{ tx.kw|floatformat:2 }}</span> kW</li>
       </ul>
-      {% else %}
+      {% elif not past_session %}
       <p>{% trans "No active transaction" %}</p>
       {% endif %}
     </div>
@@ -60,7 +65,7 @@
     <tbody>
       {% for tx in transactions %}
       <tr>
-        <td>{{ tx.id }}</td>
+        <td><a href="?session={{ tx.id }}">{{ tx.id }}</a></td>
         <td>{{ tx.start_time }}</td>
         <td>{{ tx.stop_time|default:"-" }}</td>
         <td>{{ tx.kw|floatformat:2 }}</td>
