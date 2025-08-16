@@ -153,7 +153,9 @@
             }
           });
           const kwElem = newContent.querySelector('#session-kw');
-          if (kwElem) {
+          const stateElem = newContent.querySelector('#charger-state');
+          const isCharging = stateElem && stateElem.textContent.trim() === 'Charging';
+          if (kwElem && isCharging) {
             addDataPoint(parseFloat(kwElem.textContent));
           }
           current.innerHTML = newContent.innerHTML;
@@ -163,7 +165,7 @@
               placeholder.replaceWith(oldCanvas);
             }
           }
-          if (kwElem && kwChart) {
+          if (kwElem && kwChart && isCharging) {
             kwChart.update();
           }
           changedIds.forEach(id => {
@@ -179,7 +181,9 @@
   document.addEventListener('DOMContentLoaded', () => {
     if (chartData.datasets[0].data.length === 0) {
       const kwElem = document.getElementById('session-kw');
-      if (kwElem) {
+      const stateElem = document.getElementById('charger-state');
+      const isCharging = stateElem && stateElem.textContent.trim() === 'Charging';
+      if (kwElem && isCharging) {
         addDataPoint(parseFloat(kwElem.textContent));
       }
     }
