@@ -23,6 +23,7 @@ import os
 import re
 from typing import Mapping, Optional
 
+from django.db import models
 from sigils import Sigil
 
 # Regular expression used to detect ``[SIGIL]`` style placeholders.
@@ -59,3 +60,38 @@ def resolve_env_sigils(text: str, env: Optional[Mapping[str, str]] = None) -> st
     env = dict(os.environ if env is None else env)
     template = _convert_to_sigils(text)
     return Sigil(template).interpolate(env, handle_errors="ignore")
+
+
+class _SigilDescriptor:
+    """Descriptor that resolves env sigils on attribute access."""
+
+    def __init__(self, field: models.Field):
+        self.field = field
+
+    def __get__(self, instance, owner=None):
+        if instance is None:
+            return self.field
+        value = instance.__dict__.get(self.field.name)
+        if isinstance(value, str):
+            return resolve_env_sigils(value)
+        return value
+
+    def __set__(self, instance, value):
+        instance.__dict__[self.field.name] = value
+
+
+class _SigilFieldMixin:
+    """Mixin for model fields that support [SIGILS]."""
+
+    def contribute_to_class(self, cls, name, **kwargs):
+        super().contribute_to_class(cls, name, **kwargs)
+        setattr(cls, name, _SigilDescriptor(self))
+
+
+class SigilCharField(_SigilFieldMixin, models.CharField):
+    """``CharField`` that resolves ``[SIGILS]`` from the environment."""
+
+
+class SigilURLField(_SigilFieldMixin, models.URLField):
+    """``URLField`` that resolves ``[SIGILS]`` from the environment."""
+
