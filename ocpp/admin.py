@@ -61,6 +61,7 @@ class ChargerAdmin(admin.ModelAdmin):
             },
         ),
     )
+    readonly_fields = ("last_heartbeat", "last_meter_values")
     list_display = (
         "charger_id",
         "location_name",

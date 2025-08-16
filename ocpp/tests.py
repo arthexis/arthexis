@@ -287,6 +287,20 @@ class ChargerAdminTests(TestCase):
         resp = self.client.get(url)
         self.assertContains(resp, "AdminLoc")
 
+    def test_last_fields_are_read_only(self):
+        now = timezone.now()
+        charger = Charger.objects.create(
+            charger_id="ADMINRO",
+            last_heartbeat=now,
+            last_meter_values={"a": 1},
+        )
+        url = reverse("admin:ocpp_charger_change", args=[charger.pk])
+        resp = self.client.get(url)
+        self.assertContains(resp, "Last heartbeat")
+        self.assertContains(resp, "Last meter values")
+        self.assertNotContains(resp, 'name="last_heartbeat"')
+        self.assertNotContains(resp, 'name="last_meter_values"')
+
     def test_purge_action_removes_data(self):
         charger = Charger.objects.create(charger_id="PURGE1")
         Transaction.objects.create(
