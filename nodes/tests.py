@@ -27,6 +27,7 @@ from .models import (
     Step,
     TextPattern,
     TextSample,
+    Backup,
 )
 from .tasks import capture_node_screenshot, sample_clipboard
 
@@ -142,6 +143,14 @@ class NodeTests(TestCase):
         node.screenshot_polling = False
         node.save()
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
+
+    def test_backup_creation(self):
+        backup = Backup.objects.create(
+            location="backups/test.json", size=1234, report={"objects": 5}
+        )
+        self.assertEqual(Backup.objects.count(), 1)
+        self.assertEqual(backup.size, 1234)
+        self.assertEqual(backup.report["objects"], 5)
 
 class NodeAdminTests(TestCase):
     def setUp(self):
@@ -319,7 +328,7 @@ class TextPatternAdminActionTests(TestCase):
             {"action": "test_clipboard", "_selected_action": [pattern.pk]},
             follow=True,
         )
-        msgs = [m.message for m in response.context["messages"]]
+        msgs = [m.message for m in response.wsgi_request._messages]
         self.assertIn("Matched 'This is [not] good' -> 'This is very good'", msgs)
 
 

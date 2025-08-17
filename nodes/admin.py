@@ -25,6 +25,7 @@ from .models import (
     Step,
     TextSample,
     TextPattern,
+    Backup,
 )
 
 
@@ -231,6 +232,12 @@ class NodeCommandAdmin(admin.ModelAdmin):
         return render(request, "admin/nodes/nodecommand/run.html", context)
 
     execute.short_description = "Run command on nodes"
+
+
+@admin.register(Backup)
+class BackupAdmin(admin.ModelAdmin):
+    list_display = ("location", "created_at", "size")
+    readonly_fields = ("created_at",)
 
 
 class StepInline(admin.TabularInline):
