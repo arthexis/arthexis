@@ -276,3 +276,30 @@ class TextPattern(models.Model):
         return regex, sigil_names
 
 
+class Backup(models.Model):
+    """Database backup metadata.
+
+    Stores the location of the exported data, creation date, size and a
+    report of the exported objects.  The actual backup process is left to
+    the view or task that creates the model instance, keeping the model
+    backend agnostic.
+    """
+
+    location = models.CharField(
+        max_length=255, help_text="Location or link to the backup file"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    size = models.BigIntegerField(help_text="Size of the backup in bytes")
+    report = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Report of exported objects",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.location
+
+
