@@ -110,11 +110,33 @@ class Node(models.Model):
             PeriodicTask.objects.filter(name=task_name).delete()
 
 
+class ScreenSource(models.Model):
+    """Configured source for taking screenshots."""
+
+    SCREEN = "SCREEN"
+    URL = "URL"
+    KIND_CHOICES = [(SCREEN, "Screen"), (URL, "URL")]
+
+    name = models.CharField(max_length=50, unique=True)
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES)
+    parameter = models.CharField(max_length=200, blank=True)
+    priority = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["priority", "id"]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+
 class NodeScreenshot(models.Model):
     """Screenshot captured from a node."""
 
     node = models.ForeignKey(
         Node, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    origin = models.ForeignKey(
+        ScreenSource, on_delete=models.SET_NULL, null=True, blank=True
     )
     path = models.CharField(max_length=255)
     method = models.CharField(max_length=10, default="", blank=True)

@@ -6,7 +6,7 @@ import django
 django.setup()
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, call
 import socket
 import base64
 
@@ -24,6 +24,7 @@ from .models import (
     NodeScreenshot,
     NodeMessage,
     Recipe,
+    ScreenSource,
     Step,
     TextPattern,
     TextSample,
@@ -153,6 +154,8 @@ class NodeTests(TestCase):
         self.assertEqual(backup.report["objects"], 5)
 
 class NodeAdminTests(TestCase):
+    fixtures = ["screen_sources"]
+
     def setUp(self):
         self.client = Client()
         User = get_user_model()
@@ -168,12 +171,16 @@ class NodeAdminTests(TestCase):
         self.assertEqual(Node.objects.count(), 1)
 
     @patch("nodes.admin.capture_screenshot")
-    def test_capture_screenshot_from_admin(self, mock_capture):
+    @patch("nodes.admin.capture_screen")
+    def test_capture_screenshot_from_admin(
+        self, mock_capture_screen, mock_capture_screenshot
+    ):
         screenshot_dir = settings.LOG_DIR / "screenshots"
         screenshot_dir.mkdir(parents=True, exist_ok=True)
         file_path = screenshot_dir / "test.png"
         file_path.write_bytes(b"admin")
-        mock_capture.return_value = Path("screenshots/test.png")
+        mock_capture_screen.side_effect = Exception("no screen")
+        mock_capture_screenshot.return_value = Path("screenshots/test.png")
         hostname = socket.gethostname()
         node = Node.objects.create(
             hostname=hostname, address="127.0.0.1", port=80
@@ -186,6 +193,9 @@ class NodeAdminTests(TestCase):
         self.assertEqual(screenshot.node, node)
         self.assertEqual(screenshot.path, "screenshots/test.png")
         self.assertEqual(screenshot.method, "ADMIN")
+        self.assertEqual(screenshot.origin.name, "Homepage")
+        mock_capture_screen.assert_has_calls([call(1), call(2)])
+        mock_capture_screenshot.assert_called_once_with("http://testserver/")
         self.assertContains(
             response, "Screenshot saved to screenshots/test.png"
         )
