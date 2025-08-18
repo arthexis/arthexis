@@ -62,6 +62,7 @@ urlpatterns = [
     path("admin/doc/", include("django.contrib.admindocs.urls")),
     path("admin/", admin.site.urls),
     path("webshell/", include("webshell.urls")),
+    path("i18n/", include("django.conf.urls.i18n")),
     path("", include("website.urls")),
 ]
 
