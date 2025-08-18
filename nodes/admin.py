@@ -12,7 +12,7 @@ import socket
 import os
 import pyperclip
 from pyperclip import PyperclipException
-from .utils import capture_screenshot, save_screenshot
+from .utils import capture_screenshot, capture_screen, save_screenshot
 from .actions import NodeAction
 
 from .models import (
@@ -22,6 +22,7 @@ from .models import (
     NodeMessage,
     NodeCommand,
     Recipe,
+    ScreenSource,
     Step,
     TextSample,
     TextPattern,
@@ -145,12 +146,17 @@ class NodeRoleAdmin(admin.ModelAdmin):
     list_display = ("name",)
 
 
+@admin.register(ScreenSource)
+class ScreenSourceAdmin(admin.ModelAdmin):
+    list_display = ("name", "kind", "parameter", "priority")
+
+
 @admin.register(NodeScreenshot)
 class NodeScreenshotAdmin(admin.ModelAdmin):
-    list_display = ("path", "node", "method", "created")
+    list_display = ("path", "node", "origin", "method", "created")
     change_list_template = "admin/nodes/nodescreenshot/change_list.html"
     readonly_fields = ("image_preview", "created")
-    fields = ("image_preview", "path", "node", "method", "created")
+    fields = ("image_preview", "path", "node", "origin", "method", "created")
 
     def get_urls(self):
         urls = super().get_urls()
@@ -164,20 +170,39 @@ class NodeScreenshotAdmin(admin.ModelAdmin):
         return custom + urls
 
     def capture_now(self, request):
-        url = request.build_absolute_uri("/")
-        path = capture_screenshot(url)
         hostname = socket.gethostname()
         node = Node.objects.filter(
             hostname=hostname, port=request.get_port()
         ).first()
-        screenshot = save_screenshot(path, node=node, method="ADMIN")
-        if screenshot:
-            self.message_user(
-                request, f"Screenshot saved to {path}", messages.SUCCESS
+        source_id = request.GET.get("source")
+        if source_id:
+            sources = ScreenSource.objects.filter(pk=source_id)
+        else:
+            sources = ScreenSource.objects.order_by("priority")
+        for source in sources:
+            try:
+                if source.kind == ScreenSource.URL:
+                    url = request.build_absolute_uri(source.parameter)
+                    path = capture_screenshot(url)
+                else:
+                    path = capture_screen(int(source.parameter or 0))
+            except Exception:
+                continue
+            screenshot = save_screenshot(
+                path, node=node, method="ADMIN", origin=source
             )
+            if screenshot:
+                self.message_user(
+                    request, f"Screenshot saved to {path}", messages.SUCCESS
+                )
+            else:
+                self.message_user(
+                    request, "Duplicate screenshot; not saved", messages.INFO
+                )
+            break
         else:
             self.message_user(
-                request, "Duplicate screenshot; not saved", messages.INFO
+                request, "No screenshot source succeeded", messages.WARNING
             )
         return redirect("..")
 

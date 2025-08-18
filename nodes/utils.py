@@ -7,7 +7,7 @@ from django.conf import settings
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 
-from .models import NodeScreenshot
+from .models import NodeScreenshot, ScreenSource
 
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
 logger = logging.getLogger(__name__)
@@ -26,7 +26,23 @@ def capture_screenshot(url: str) -> Path:
     return filename
 
 
-def save_screenshot(path: Path, node=None, method: str = ""):
+def capture_screen(screen: int) -> Path:
+    """Capture a screenshot of a given ``screen`` number.
+
+    This placeholder raises :class:`NotImplementedError` and should be
+    replaced with an implementation appropriate for the deployment
+    environment.
+    """
+
+    raise NotImplementedError("Screen capture not implemented")
+
+
+def save_screenshot(
+    path: Path,
+    node=None,
+    method: str = "",
+    origin: ScreenSource | None = None,
+):
     """Save screenshot file info if not already recorded.
 
     Returns the created :class:`NodeScreenshot` or ``None`` if duplicate.
@@ -42,5 +58,5 @@ def save_screenshot(path: Path, node=None, method: str = ""):
         return None
     stored_path = str(original if not original.is_absolute() else path)
     return NodeScreenshot.objects.create(
-        node=node, path=stored_path, method=method, hash=digest
+        node=node, path=stored_path, method=method, hash=digest, origin=origin
     )

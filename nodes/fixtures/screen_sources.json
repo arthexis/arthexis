@@ -1,0 +1,42 @@
+[
+  {
+    "model": "nodes.screensource",
+    "pk": 1,
+    "fields": {
+      "name": "Screen 1",
+      "kind": "SCREEN",
+      "parameter": "1",
+      "priority": 1
+    }
+  },
+  {
+    "model": "nodes.screensource",
+    "pk": 2,
+    "fields": {
+      "name": "Screen 2",
+      "kind": "SCREEN",
+      "parameter": "2",
+      "priority": 2
+    }
+  },
+  {
+    "model": "nodes.screensource",
+    "pk": 3,
+    "fields": {
+      "name": "Homepage",
+      "kind": "URL",
+      "parameter": "/",
+      "priority": 3
+    }
+  },
+  {
+    "model": "nodes.screensource",
+    "pk": 4,
+    "fields": {
+      "name": "AWG Calculator",
+      "kind": "URL",
+      "parameter": "/awg/",
+      "priority": 4
+    }
+  }
+]
