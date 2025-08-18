@@ -74,6 +74,14 @@
                   <use href="#icon-moon"></use>
                 </svg>
               </button>
+              <form action="{% url 'set_language' %}" method="post" class="d-inline ms-2">
+                {% csrf_token %}
+                <input name="next" type="hidden" value="{{ request.get_full_path }}">
+                <input name="language" type="hidden" value="{% if LANGUAGE_CODE|slice:":2" == 'en' %}es{% else %}en{% endif %}">
+                <button class="btn btn-sm btn-outline-light" type="submit" aria-label="{% if LANGUAGE_CODE|slice:":2" == 'en' %}{% trans 'Spanish' %}{% else %}{% trans 'English' %}{% endif %}">
+                  {% if LANGUAGE_CODE|slice:":2" == 'en' %}ES{% else %}EN{% endif %}
+                </button>
+              </form>
             </div>
           </div>
         </div>
