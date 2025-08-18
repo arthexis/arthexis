@@ -15,19 +15,14 @@ Arthexis Constellation is a Django-based suite that centralizes tools for managi
 | accounts | User accounts, RFID login, and credit management |
 | app | Core utilities and site model tweaks |
 | awg | American Wire Gauge references and calculator |
-| clipboard | Store and scan clipboard text samples |
-| crm | Customer relationship management with Odoo support |
 | emails | Email templates and messaging |
+| integrations | Integrations with external services like Bluesky, Facebook, and Odoo |
 | nodes | Register project nodes and manage NGINX templates |
 | ocpp | OCPP 1.6 charge point management |
 | references | Reusable references and QR codes |
 | release | Packaging and PyPI release helpers |
 | rfid | RFID tag model and helpers |
-| social.bsky | Bluesky integration |
-| social.meta | Facebook page integration |
-| todos | Track project tasks from code TODOs |
 | website | Default site and README renderer |
-| readme | Build project README and expose docs |
 
 ## External Links
 - [Python 3.12](https://www.python.org/downloads/release/python-31210/)
