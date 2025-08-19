@@ -43,11 +43,12 @@ class NodeAdmin(admin.ModelAdmin):
         "hostname",
         "address",
         "port",
-        "badge_color",
-        "enable_public_api",
+        "api",
         "public_endpoint",
-        "clipboard_polling",
-        "screenshot_polling",
+        "clipboard",
+        "screenshot",
+        "installed_version",
+        "roles_list",
         "last_seen",
     )
     search_fields = ("hostname", "address")
@@ -56,6 +57,29 @@ class NodeAdmin(admin.ModelAdmin):
     form = NodeAdminForm
     filter_horizontal = ("roles",)
     actions = ["run_command"]
+
+    def api(self, obj):
+        return obj.enable_public_api
+
+    api.boolean = True
+    api.short_description = "API"
+
+    def clipboard(self, obj):
+        return obj.clipboard_polling
+
+    clipboard.boolean = True
+    clipboard.short_description = "Clipboard"
+
+    def screenshot(self, obj):
+        return obj.screenshot_polling
+
+    screenshot.boolean = True
+    screenshot.short_description = "Screenshot"
+
+    def roles_list(self, obj):
+        return ", ".join(obj.roles.values_list("name", flat=True))
+
+    roles_list.short_description = "Roles"
 
     def get_urls(self):
         urls = super().get_urls()
