@@ -27,6 +27,18 @@ from .tasks import purge_meter_readings
 
 
 
+class ChargerFixtureTests(TestCase):
+    fixtures = ["initial_data.json"]
+
+    def test_cp2_requires_rfid(self):
+        cp2 = Charger.objects.get(charger_id="CP2")
+        self.assertTrue(cp2.require_rfid)
+
+    def test_cp1_does_not_require_rfid(self):
+        cp1 = Charger.objects.get(charger_id="CP1")
+        self.assertFalse(cp1.require_rfid)
+
+
 class SinkConsumerTests(TransactionTestCase):
     async def test_sink_replies(self):
         communicator = WebsocketCommunicator(application, "/ws/sink/")

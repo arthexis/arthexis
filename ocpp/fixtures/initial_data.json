@@ -28,7 +28,7 @@
     "fields": {
       "charger_id": "CP2",
       "config": {},
-      "require_rfid": false,
+      "require_rfid": true,
       "last_heartbeat": null,
       "last_meter_values": {},
       "reference": null,
