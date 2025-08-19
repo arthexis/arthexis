@@ -6,6 +6,7 @@ from django.contrib.sites.shortcuts import get_current_site
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils import translation
 
 import markdown
 from website.utils import landing
@@ -20,11 +21,16 @@ def index(request):
         .first()
     )
     app_slug = app.path.strip("/") if app else ""
-    readme_file = (
-        Path(settings.BASE_DIR) / app_slug / "README.md"
-        if app_slug
-        else Path(settings.BASE_DIR) / "README.md"
-    )
+    readme_base = Path(settings.BASE_DIR) / app_slug if app_slug else Path(settings.BASE_DIR)
+    lang = translation.get_language() or ""
+    readme_file = readme_base / "README.md"
+    if lang:
+        localized = readme_base / f"README.{lang}.md"
+        if not localized.exists():
+            short = lang.split("-")[0]
+            localized = readme_base / f"README.{short}.md"
+        if localized.exists():
+            readme_file = localized
     if not readme_file.exists():
         readme_file = Path(settings.BASE_DIR) / "README.md"
     text = readme_file.read_text(encoding="utf-8")
@@ -36,7 +42,8 @@ def index(request):
         if toc_html.endswith("</div>"):
             toc_html = toc_html[: -len("</div>")]
         toc_html = toc_html.strip()
-    context = {"content": html, "title": readme_file.stem, "toc": toc_html}
+    title = "README" if readme_file.name.startswith("README") else readme_file.stem
+    context = {"content": html, "title": title, "toc": toc_html}
     return render(request, "website/readme.html", context)
 
 
