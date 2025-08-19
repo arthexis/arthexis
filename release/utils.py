@@ -113,7 +113,7 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
                     "references",
                     "website",
                     "release",
-                    "integrations",
+                    "integrator",
                 ]
             }
         },
