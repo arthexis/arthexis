@@ -3,11 +3,16 @@
 ## Purpose
 Arthexis Constellation is a Django-based suite that centralizes tools for managing charging infrastructure and related services.
 
+## Installation
+1. Clone the repository: `git clone <repository_url>`
+2. Change into the project directory: `cd arthexis`
+3. *(Optional)* Create and activate a virtual environment: `python -m venv .venv` and `source .venv/bin/activate`
+4. Install dependencies: `pip install -r requirements.txt`
+
 ## Setup
-1. `pip install -r requirements.txt`
-2. `python manage.py migrate`
-3. `python manage.py runserver`
-4. Run management commands with `python manage.py <command>`
+1. `python manage.py migrate`
+2. `python manage.py runserver`
+3. Run management commands with `python manage.py <command>`
 
 ## Included Apps
 | App | Purpose |
