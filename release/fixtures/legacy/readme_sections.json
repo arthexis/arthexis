@@ -38,13 +38,5 @@
       "order": 5,
       "content": "## External Links\n- [Python 3.12](https://www.python.org/downloads/release/python-31210/)\n- [MIT License](LICENSE)\n- [Django](https://www.djangoproject.com/)\n- [Channels](https://channels.readthedocs.io/)\n- [Celery](https://docs.celeryq.dev/)\n- [Bootstrap](https://getbootstrap.com/)"
     }
-  },
-  {
-    "model": "release.readmesection",
-    "pk": 6,
-    "fields": {
-      "order": 6,
-      "content": "---\n\n*Note: do not modify this README unless directed. Use Django's admindocs for app documentation.*"
-    }
   }
 ]
