@@ -79,7 +79,7 @@ LOCAL_APPS = [
     "references",
     "awg",
     "release",
-    "integrations",
+    "integrator",
     "website",
     "emails",
     "app",

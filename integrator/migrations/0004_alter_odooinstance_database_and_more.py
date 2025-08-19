@@ -7,7 +7,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("integrations", "0003_rename_instance_odooinstance"),
+        ("integrator", "0003_rename_instance_odooinstance"),
     ]
 
     operations = [
