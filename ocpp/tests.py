@@ -163,6 +163,43 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_temperature_recorded(self):
+        charger = await database_sync_to_async(Charger.objects.create)(
+            charger_id="TEMP1"
+        )
+        communicator = WebsocketCommunicator(application, "/TEMP1/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [
+                2,
+                "1",
+                "MeterValues",
+                {
+                    "meterValue": [
+                        {
+                            "timestamp": "2025-01-01T00:00:00Z",
+                            "sampledValue": [
+                                {
+                                    "value": "42",
+                                    "measurand": "Temperature",
+                                    "unit": "Celsius",
+                                }
+                            ],
+                        }
+                    ]
+                },
+            ]
+        )
+        await communicator.receive_json_from()
+
+        await database_sync_to_async(charger.refresh_from_db)()
+        self.assertEqual(charger.temperature, Decimal("42"))
+        self.assertEqual(charger.temperature_unit, "Celsius")
+
+        await communicator.disconnect()
+
 
 class ChargerLandingTests(TestCase):
     def setUp(self):
@@ -219,6 +256,14 @@ class ChargerLandingTests(TestCase):
             resp, 'Total Energy: <span id="total-kw">1.50</span> kW'
         )
         store.transactions.pop(charger.charger_id, None)
+
+    def test_temperature_displayed(self):
+        charger = Charger.objects.create(
+            charger_id="TEMP2", temperature=Decimal("21.5"), temperature_unit="Celsius"
+        )
+        resp = self.client.get(reverse("charger-status", args=["TEMP2"]))
+        self.assertContains(resp, "Temperature")
+        self.assertContains(resp, "21.5")
 
     def test_log_page_renders_without_charger(self):
         store.add_log("LOG1", "hello", log_type="charger")

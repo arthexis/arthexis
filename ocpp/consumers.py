@@ -98,6 +98,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
 
         readings = []
         start_updated = False
+        temperature = None
+        temp_unit = ""
         for mv in payload.get("meterValue", []):
             ts = parse_datetime(mv.get("timestamp"))
             for sv in mv.get("sampledValue", []):
@@ -116,21 +118,32 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         start_updated = True
                     except Exception:
                         pass
+                measurand = sv.get("measurand", "")
+                unit = sv.get("unit", "")
+                if measurand == "Temperature":
+                    temperature = val
+                    temp_unit = unit
                 readings.append(
                     MeterReading(
                         charger=self.charger,
                         connector_id=connector,
                         transaction=tx_obj,
                         timestamp=ts,
-                        measurand=sv.get("measurand", ""),
+                        measurand=measurand,
                         value=val,
-                        unit=sv.get("unit", ""),
+                        unit=unit,
                     )
                 )
         if readings:
             await database_sync_to_async(MeterReading.objects.bulk_create)(readings)
             if tx_obj and start_updated:
                 await database_sync_to_async(tx_obj.save)(update_fields=["meter_start"])
+        if temperature is not None:
+            self.charger.temperature = temperature
+            self.charger.temperature_unit = temp_unit
+            await database_sync_to_async(self.charger.save)(
+                update_fields=["temperature", "temperature_unit"]
+            )
 
     async def disconnect(self, close_code):
         store.connections.pop(self.charger_id, None)
