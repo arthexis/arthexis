@@ -28,5 +28,35 @@
       "method": "link",
       "include_in_footer": true
     }
+  },
+  {
+    "model": "references.reference",
+    "pk": 4,
+    "fields": {
+      "value": "https://www.python.org/",
+      "alt_text": "Python",
+      "method": "link",
+      "include_in_footer": true
+    }
+  },
+  {
+    "model": "references.reference",
+    "pk": 5,
+    "fields": {
+      "value": "https://www.djangoproject.com/",
+      "alt_text": "Django",
+      "method": "link",
+      "include_in_footer": true
+    }
+  },
+  {
+    "model": "references.reference",
+    "pk": 6,
+    "fields": {
+      "value": "https://openchargealliance.org/protocols/open-charge-point-protocol/",
+      "alt_text": "OCPP",
+      "method": "link",
+      "include_in_footer": true
+    }
   }
 ]
