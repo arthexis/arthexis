@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-08-10 16:39+0000\n"
+"POT-Creation-Date: 2025-08-19 07:06-0600\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -23,35 +23,247 @@ msgstr ""
 msgid "Business Models"
 msgstr "Modelos de negocio"
 
-#: accounts/models.py:135
+#: accounts/models.py:140
 msgid "Invalid municipality for the selected state"
 msgstr ""
 
-#: accounts/models.py:315
-msgid "EV Model"
-msgstr ""
-
-#: accounts/models.py:316
-msgid "EV Models"
-msgstr ""
-
-#: accounts/models.py:303
+#: accounts/models.py:395
 msgid "EV Brand"
 msgstr ""
 
-#: accounts/models.py:304
+#: accounts/models.py:396
 msgid "EV Brands"
 msgstr ""
 
-#: config/settings.py:167
+#: accounts/models.py:419
+msgid "WMI code"
+msgstr ""
+
+#: accounts/models.py:420
+msgid "WMI codes"
+msgstr ""
+
+#: accounts/models.py:434
+msgid "EV Model"
+msgstr ""
+
+#: accounts/models.py:435
+msgid "EV Models"
+msgstr ""
+
+#: awg/templates/awg/calculator.html:3
+msgid "AWG Calculator"
+msgstr "Calculadora AWG"
+
+#: awg/templates/awg/calculator.html:5
+msgid "Cable & Conduit Calculator"
+msgstr "Calculadora de Cable y Conducto"
+
+#: awg/templates/awg/calculator.html:11
+msgid "Meters:"
+msgstr "Metros:"
+
+#: awg/templates/awg/calculator.html:15
+msgid "Amps:"
+msgstr "Amperios:"
+
+#: awg/templates/awg/calculator.html:19
+msgid "Volts:"
+msgstr "Voltios:"
+
+#: awg/templates/awg/calculator.html:23
+msgid "Material:"
+msgstr "Material:"
+
+#: awg/templates/awg/calculator.html:26
+msgid "Copper (cu)"
+msgstr "Cobre (cu)"
+
+#: awg/templates/awg/calculator.html:27
+msgid "Aluminum (al)"
+msgstr "Aluminio (al)"
+
+#: awg/templates/awg/calculator.html:31
+msgid "Phases:"
+msgstr "Fases:"
+
+#: awg/templates/awg/calculator.html:34
+msgid "AC Two Phases (2)"
+msgstr "CA Dos Fases (2)"
+
+#: awg/templates/awg/calculator.html:35
+msgid "AC Single Phase (1)"
+msgstr "CA Fase Única (1)"
+
+#: awg/templates/awg/calculator.html:36
+msgid "AC Three Phases (3)"
+msgstr "CA Tres Fases (3)"
+
+#: awg/templates/awg/calculator.html:42
+msgid "Temperature:"
+msgstr "Temperatura:"
+
+#: awg/templates/awg/calculator.html:45
+msgid "60C (140F)"
+msgstr "60C (140F)"
+
+#: awg/templates/awg/calculator.html:46
+msgid "75C (167F)"
+msgstr "75C (167F)"
+
+#: awg/templates/awg/calculator.html:47
+msgid "90C (194F)"
+msgstr "90C (194F)"
+
+#: awg/templates/awg/calculator.html:51
+msgid "Conduit:"
+msgstr "Conducto:"
+
+#: awg/templates/awg/calculator.html:54
+msgid "EMT"
+msgstr "EMT"
+
+#: awg/templates/awg/calculator.html:55
+msgid "IMC"
+msgstr "IMC"
+
+#: awg/templates/awg/calculator.html:56
+msgid "RMC"
+msgstr "RMC"
+
+#: awg/templates/awg/calculator.html:57
+msgid "FMC"
+msgstr "FMC"
+
+#: awg/templates/awg/calculator.html:61
+msgid "Max AWG:"
+msgstr "AWG Máximo:"
+
+#: awg/templates/awg/calculator.html:65
+msgid "Ground:"
+msgstr "Tierra:"
+
+#: awg/templates/awg/calculator.html:73
+msgid "Max Lines:"
+msgstr "Máximo de Líneas:"
+
+#: awg/templates/awg/calculator.html:86
+msgid "Calculate"
+msgstr "Calcular"
+
+#: awg/templates/awg/calculator.html:90
+msgid "Or try a pre-loaded template:"
+msgstr "O pruebe una plantilla precargada:"
+
+#: awg/templates/awg/calculator.html:103
+#, python-format
+msgid "Error: %(error)s"
+msgstr "Error: %(error)s"
+
+#: awg/templates/awg/calculator.html:105
+msgid "No Suitable Cable Found"
+msgstr "No se encontró un cable adecuado"
+
+#: awg/templates/awg/calculator.html:106
+#, python-format
+msgid ""
+"No cable was found that meets the requirements within a 3%% voltage drop."
+"<br>Try adjusting the <b>cable size, amps, length, or material</b> and try "
+"again."
+msgstr ""
+"No se encontró un cable que cumpla los requisitos con una caída de voltaje del 3%%."
+"<br>Intente ajustar el <b>calibre del cable, los amperios, la longitud o el material</b> y vuelva a intentarlo."
+
+#: awg/templates/awg/calculator.html:109
+msgid "Calculator Results"
+msgstr "Resultados de la Calculadora"
+
+#: awg/templates/awg/calculator.html:112
+msgid "AWG Size"
+msgstr "Tamaño AWG"
+
+#: awg/templates/awg/calculator.html:113
+msgid "Lines"
+msgstr "Líneas"
+
+#: awg/templates/awg/calculator.html:114
+msgid "Total Cables"
+msgstr "Total de Cables"
+
+#: awg/templates/awg/calculator.html:115
+msgid "Total Length (m)"
+msgstr "Longitud Total (m)"
+
+#: awg/templates/awg/calculator.html:116
+msgid "Voltage Drop"
+msgstr "Caída de Voltaje"
+
+#: awg/templates/awg/calculator.html:117
+msgid "Voltage at End"
+msgstr "Voltaje al Final"
+
+#: awg/templates/awg/calculator.html:118
+msgid "Temperature Rating"
+msgstr "Clasificación de Temperatura"
+
+#: awg/templates/awg/calculator.html:120
+msgid "Conduit"
+msgstr "Conducto"
+
+#: awg/templates/awg/calculator.html:130
+msgid "Calculate Again"
+msgstr "Calcular de Nuevo"
+
+#: awg/views.py:100
+#, python-format
+msgid "Minimum load for this calculator is 15 Amps.  Yours: amps=%(amps)s."
+msgstr "La carga mínima para esta calculadora es de 15 amperios. Su valor: amperios=%(amps)s."
+
+#: awg/views.py:103
+#, python-format
+msgid ""
+"Max. load allowed is 546 A (cu) or 430 A (al). Yours: amps=%(amps)s "
+"material=%(material)s"
+msgstr "La carga máxima permitida es 546 A (cu) o 430 A (al). Su valor: amperios=%(amps)s material=%(material)s"
+
+#: awg/views.py:105
+msgid "Consider at least 1 meter of cable."
+msgstr "Considere al menos 1 metro de cable."
+
+#: awg/views.py:107
+#, python-format
+msgid "Volt range supported must be between 110-460. Yours: volts=%(volts)s"
+msgstr "El rango de voltaje admitido debe estar entre 110-460. El suyo: voltios=%(volts)s"
+
+#: awg/views.py:110
+msgid "Material must be 'cu' (copper) or 'al' (aluminum)."
+msgstr "El material debe ser 'cu' (cobre) o 'al' (aluminio)."
+
+#: awg/views.py:113
+msgid "AC phases 1, 2 or 3 to calculate for. DC not supported."
+msgstr "Fases de CA 1, 2 o 3 para calcular. CC no soportada."
+
+#: awg/views.py:117
+msgid "Temperature must be 60, 75 or 90"
+msgstr "La temperatura debe ser 60, 75 o 90"
+
+#: awg/views.py:212
+msgid "Voltage drop may exceed 3% with chosen parameters"
+msgstr "La caída de voltaje puede exceder el 3% con los parámetros elegidos"
+
+#: awg/views.py:216
+msgid "Voltage drop exceeds 3% with given max_awg"
+msgstr "La caída de voltaje supera el 3% con el AWG máximo dado"
+
+#: config/settings.py:227 website/templates/website/base.html:81
 msgid "English"
 msgstr "Inglés"
 
-#: config/settings.py:163
+#: config/settings.py:228 website/templates/website/base.html:81
 msgid "Spanish"
 msgstr "Español"
 
-#: config/urls.py:19 config/urls.py:20 website/templates/website/base.html:7
+#: config/urls.py:19 config/urls.py:20
 msgid "Constellation"
 msgstr "Constellation"
 
@@ -59,11 +271,11 @@ msgstr "Constellation"
 msgid "Post Office"
 msgstr "Oficina de correos"
 
-#: emails/models.py:23
+#: emails/models.py:25
 msgid "Email Pattern"
 msgstr "Patrón de correo electrónico"
 
-#: emails/models.py:24
+#: emails/models.py:26
 msgid "Email Patterns"
 msgstr "Patrones de correo electrónico"
 
@@ -71,40 +283,62 @@ msgstr "Patrones de correo electrónico"
 msgid "Test pattern"
 msgstr ""
 
+#: nodes/templates/admin/nodes/nmclitemplate/change_list.html:7
+msgid "Import active connections"
+msgstr ""
+
 #: nodes/templates/admin/nodes/node/change_list.html:7
 msgid "Register current host"
 msgstr "Registrar anfitrión actual"
 
-#: nodes/templates/admin/nodes/sample/change_list.html:7
+#: nodes/templates/admin/nodes/nodescreenshot/change_list.html:7
+msgid "Capture screenshot"
+msgstr ""
+
+#: nodes/templates/admin/nodes/textsample/change_list.html:7
 msgid "Add from clipboard"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_page.html:13
-msgid "Total Energy"
+#: ocpp/templates/ocpp/charger_session_search.html:4
+msgid "Search Sessions"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_page.html:16
-msgid "Sessions"
+#: ocpp/templates/ocpp/charger_session_search.html:9
+msgid "Select date"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_page.html:20
+#: ocpp/templates/ocpp/charger_session_search.html:11
+#: ocpp/templates/ocpp/charger_status.html:82
+msgid "Search"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_session_search.html:18
+#: ocpp/templates/ocpp/charger_status.html:59
 msgid "ID"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_page.html:21
+#: ocpp/templates/ocpp/charger_session_search.html:19
+#: ocpp/templates/ocpp/charger_status.html:60
 msgid "Start"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_page.html:22
+#: ocpp/templates/ocpp/charger_session_search.html:20
+#: ocpp/templates/ocpp/charger_status.html:61
 msgid "Stop"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_page.html:23
+#: ocpp/templates/ocpp/charger_session_search.html:21
+#: ocpp/templates/ocpp/charger_status.html:62
 msgid "Energy (kW)"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_page.html:35
+#: ocpp/templates/ocpp/charger_session_search.html:36
+#: ocpp/templates/ocpp/charger_status.html:74
 msgid "No sessions found."
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_session_search.html:39
+msgid "Back"
 msgstr ""
 
 #: ocpp/templates/ocpp/charger_status.html:5
@@ -112,24 +346,56 @@ msgstr ""
 msgid "Status"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:15
+#: ocpp/templates/ocpp/charger_status.html:27
+msgid "Viewing past session"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:27
+msgid "Back to live"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:37
+msgid "Total Energy"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:39
+msgid "Session"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:39
 msgid "Current Transaction"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:17
+#: ocpp/templates/ocpp/charger_status.html:41
 msgid "Transaction ID"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:18
+#: ocpp/templates/ocpp/charger_status.html:42
 msgid "Meter Start"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:19
+#: ocpp/templates/ocpp/charger_status.html:43
 msgid "Start Time"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:22
+#: ocpp/templates/ocpp/charger_status.html:44
+msgid "Session Energy"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:47
 msgid "No active transaction"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:55
+msgid "Sessions"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:80
+msgid "Previous 10"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:84
+msgid "Next 10"
 msgstr ""
 
 #: ocpp/templates/ocpp/dashboard.html:4 ocpp/templates/ocpp/dashboard.html:7
@@ -157,39 +423,83 @@ msgstr ""
 msgid "Generate"
 msgstr ""
 
+#: website/templates/admin/app_list.html:8
+#, python-format
+msgid "Models in the %(name)s application"
+msgstr ""
+
+#: website/templates/admin/app_list.html:12
+msgid "Model name"
+msgstr ""
+
+#: website/templates/admin/app_list.html:13
+#, fuzzy
+#| msgid "Constellation"
+msgid "Model actions"
+msgstr "Constellation"
+
+#: website/templates/admin/app_list.html:14
+msgid "Add link"
+msgstr ""
+
+#: website/templates/admin/app_list.html:15
+msgid "Change or view list link"
+msgstr ""
+
+#: website/templates/admin/app_list.html:41
+msgid "Add"
+msgstr ""
+
+#: website/templates/admin/app_list.html:49
+msgid "View"
+msgstr ""
+
+#: website/templates/admin/app_list.html:51
+msgid "Change"
+msgstr ""
+
+#: website/templates/admin/app_list.html:64
+msgid "You don’t have permission to view or edit anything."
+msgstr ""
+
 #: website/templates/admin/base_site.html:3
 msgid "Django site admin"
 msgstr ""
 
-#: website/templates/admin/base_site.html:55
+#: website/templates/admin/base_site.html:83
 msgid "Django administration"
 msgstr ""
 
-#: website/templates/admin/index.html:39
-msgid "Recent actions"
+#: website/templates/admin/index.html:131
+msgid "Recent admin lists"
 msgstr ""
 
-#: website/templates/admin/index.html:40
-msgid "My actions"
-msgstr ""
-
-#: website/templates/admin/index.html:44
+#: website/templates/admin/index.html:140
+#: website/templates/admin/index.html:150
 msgid "None available"
 msgstr ""
 
-#: website/templates/admin/index.html:49
+#: website/templates/admin/index.html:145
+msgid "Recent actions"
+msgstr ""
+
+#: website/templates/admin/index.html:146
+msgid "My actions"
+msgstr ""
+
+#: website/templates/admin/index.html:155
 msgid "Added:"
 msgstr ""
 
-#: website/templates/admin/index.html:49
+#: website/templates/admin/index.html:155
 msgid "Changed:"
 msgstr ""
 
-#: website/templates/admin/index.html:49
+#: website/templates/admin/index.html:155
 msgid "Deleted:"
 msgstr ""
 
-#: website/templates/admin/index.html:59
+#: website/templates/admin/index.html:165
 msgid "Unknown content"
 msgstr ""
 
@@ -199,19 +509,26 @@ msgstr ""
 msgid "Register Current"
 msgstr "Registrar anfitrión actual"
 
-#: website/templates/website/base.html:66
-#: website/templates/website/base.html:78
-msgid "Dark Mode"
-msgstr "Modo Oscuro"
+#: website/templates/website/base.html:7
+#, fuzzy
+#| msgid "Constellation"
+msgid "Arthexis Constellation"
+msgstr "Constellation"
 
-#: website/templates/website/base.html:78
-msgid "Light Mode"
-msgstr "Modo Claro"
-
+#: website/templates/website/base.html:67
 #: website/templates/website/login.html:4
 #: website/templates/website/login.html:9
 msgid "Login"
 msgstr ""
+
+#: website/templates/website/base.html:72
+#: website/templates/website/base.html:99
+msgid "Dark Mode"
+msgstr "Modo Oscuro"
+
+#: website/templates/website/base.html:99
+msgid "Light Mode"
+msgstr "Modo Claro"
 
 #: website/templates/website/login.html:14
 msgid "Username"

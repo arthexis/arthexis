@@ -7,6 +7,7 @@ from typing import Literal, Optional, Union
 
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
+from django.utils.translation import gettext as _, gettext_lazy as _lazy
 
 from website.utils import landing
 
@@ -95,18 +96,26 @@ def find_awg(
     temperature = None if temperature in (None, "", "auto") else int(temperature)
     ground = int(ground)
 
-    assert amps >= 10, (
-        f"Minimum load for this calculator is 15 Amps.  Yours: {amps=}."
+    assert amps >= 10, _(
+        "Minimum load for this calculator is 15 Amps.  Yours: amps=%(amps)s."
+    ) % {"amps": amps}
+    assert (amps <= 546) if material == "cu" else (amps <= 430), _(
+        "Max. load allowed is 546 A (cu) or 430 A (al). Yours: amps=%(amps)s material=%(material)s"
+    ) % {"amps": amps, "material": material}
+    assert meters >= 1, _("Consider at least 1 meter of cable.")
+    assert 110 <= volts <= 460, _(
+        "Volt range supported must be between 110-460. Yours: volts=%(volts)s"
+    ) % {"volts": volts}
+    assert material in ("cu", "al"), _(
+        "Material must be 'cu' (copper) or 'al' (aluminum)."
     )
-    assert (amps <= 546) if material == "cu" else (amps <= 430), (
-        f"Max. load allowed is 546 A (cu) or 430 A (al). Yours: {amps=} {material=}"
+    assert phases in (1, 2, 3), _(
+        "AC phases 1, 2 or 3 to calculate for. DC not supported."
     )
-    assert meters >= 1, "Consider at least 1 meter of cable."
-    assert 110 <= volts <= 460, f"Volt range supported must be between 110-460. Yours: {volts=}"
-    assert material in ("cu", "al"), "Material must be 'cu' (copper) or 'al' (aluminum)."
-    assert phases in (1, 2, 3), "AC phases 1, 2 or 3 to calculate for. DC not supported."
     if temperature is not None:
-        assert temperature in (60, 75, 90), "Temperature must be 60, 75 or 90"
+        assert temperature in (60, 75, 90), _(
+            "Temperature must be 60, 75 or 90"
+        )
 
     def _calc(*, force_awg=None, limit_awg=None):
         qs = CableSize.objects.filter(material=material, line_num__lte=max_lines)
@@ -199,9 +208,13 @@ def find_awg(
 
         if best and (force_awg is not None or limit_awg is not None):
             if force_awg is not None:
-                best["warning"] = "Voltage drop may exceed 3% with chosen parameters"
+                best["warning"] = _(
+                    "Voltage drop may exceed 3% with chosen parameters"
+                )
             else:
-                best["warning"] = "Voltage drop exceeds 3% with given max_awg"
+                best["warning"] = _(
+                    "Voltage drop exceeds 3% with given max_awg"
+                )
             if conduit:
                 c = "emt" if conduit is True else conduit
                 fill = find_conduit(AWG(best["awg"]), best["lines"] * (phases + ground), conduit=c)
@@ -224,7 +237,7 @@ def find_awg(
 
 
 @csrf_exempt
-@landing("AWG Calculator")
+@landing(_lazy("AWG Calculator"))
 def calculator(request):
     """Display the AWG calculator form and results using a template."""
     form_data = request.POST or request.GET
