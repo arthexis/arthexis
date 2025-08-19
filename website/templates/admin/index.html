@@ -68,32 +68,6 @@
         float: none;
         width: auto;
     }
-    #admin-console-wrapper {
-        background: var(--darkened-bg);
-        padding: 1rem;
-    }
-    #admin-console-wrapper #input-area {
-        display: flex;
-        align-items: center;
-    }
-    #admin-console-wrapper .blinking-indicator {
-        margin-right: 8px;
-        animation: blink 1s steps(1, start) infinite;
-        color: var(--body-fg);
-    }
-    #admin-console-wrapper input[type="text"] {
-        flex: 1;
-        background: var(--darkened-bg);
-        color: var(--body-fg);
-        border: 1px solid var(--hairline-color);
-        padding: 4px 8px;
-    }
-    #admin-console-wrapper input[type="text"]:focus {
-        outline: none;
-    }
-    @keyframes blink {
-        50% { opacity: 0; }
-    }
     .dashboard-main td.actions {
         text-align: right;
         white-space: nowrap;
@@ -114,7 +88,7 @@
 {% block content_title %}
 <div id="admin-home-header" style="display:flex; justify-content:space-between; align-items:center;">
   <h1>Home</h1>
-  <a href="#" id="switch-console" class="button">Switch to console mode</a>
+  <a href="#" id="open-console" class="button">Open console</a>
  </div>
 {% endblock %}
 
@@ -173,108 +147,12 @@
 </div>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-  const link = document.getElementById('switch-console');
+  const link = document.getElementById('open-console');
   if (!link) return;
-
-  const dashboard = document.getElementById('admin-dashboard');
-  const sidebar = document.getElementById('nav-sidebar');
-  const content = document.getElementById('content');
-  const header = document.getElementById('admin-home-header');
-
-  let consoleWrapper = null;
-  let input = null;
-  let output = null;
-  let history = [];
-  let historyIndex = 0;
-  let consoleVisible = false;
-
-  function getCookie(name) {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop().split(';').shift();
-  }
-
-  function executeSource() {
-    const source = input.value;
-    if (!source.trim()) return;
-    const csrfToken = getCookie('csrftoken');
-    fetch('/webshell/execute/', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: new URLSearchParams({source, csrfmiddlewaretoken: csrfToken})
-    }).then(r => r.text()).then(t => {
-      output.textContent += `>>> ${source}\n${t}`;
-      output.scrollTop = output.scrollHeight;
-    });
-    history.push(source);
-    historyIndex = history.length;
-    input.value = '';
-  }
-
-  function initConsole() {
-    consoleWrapper = document.createElement('div');
-    consoleWrapper.id = 'admin-console-wrapper';
-    const height = (window.innerHeight - header.getBoundingClientRect().bottom) * 1.5;
-    consoleWrapper.style.height = height + 'px';
-    consoleWrapper.style.boxSizing = 'border-box';
-    consoleWrapper.style.display = 'flex';
-    consoleWrapper.style.flexDirection = 'column';
-    consoleWrapper.style.display = 'none';
-    consoleWrapper.innerHTML = '<div id="input-area" style="display:flex; align-items:center;"><span class="blinking-indicator">&gt;</span><input type="text" id="id_source" style="flex:1;"></div><pre id="id_output" style="flex:1; overflow:auto; margin-top:1rem;"></pre>';
-    content.appendChild(consoleWrapper);
-
-    input = document.getElementById('id_source');
-    output = document.getElementById('id_output');
-
-    input.addEventListener('keydown', function(event) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        executeSource();
-      } else if (event.key === 'ArrowUp') {
-        if (historyIndex > 0) {
-          historyIndex -= 1;
-          input.value = history[historyIndex];
-        }
-        event.preventDefault();
-      } else if (event.key === 'ArrowDown') {
-        if (historyIndex < history.length - 1) {
-          historyIndex += 1;
-          input.value = history[historyIndex];
-        } else {
-          historyIndex = history.length;
-          input.value = '';
-        }
-        event.preventDefault();
-      }
-    });
-  }
-
-  function showConsole() {
-    if (!consoleWrapper) {
-      initConsole();
-    }
-    if (dashboard) dashboard.style.display = 'none';
-    if (sidebar) sidebar.style.display = 'none';
-    consoleWrapper.style.display = 'flex';
-    link.textContent = 'Switch to browse mode';
-    if (input) input.focus();
-  }
-
-  function showDashboard() {
-    consoleWrapper.style.display = 'none';
-    if (dashboard) dashboard.style.display = '';
-    if (sidebar) sidebar.style.display = '';
-    link.textContent = 'Switch to console mode';
-  }
 
   link.addEventListener('click', function (e) {
     e.preventDefault();
-    if (consoleVisible) {
-      showDashboard();
-    } else {
-      showConsole();
-    }
-    consoleVisible = !consoleVisible;
+    window.open('/webshell/', 'admin-console', 'width=800,height=600');
   });
 });
 </script>
