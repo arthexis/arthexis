@@ -7,6 +7,7 @@ from django.core.exceptions import DisallowedHost
 import socket
 from website.models import Application, SiteApplication
 from website.admin import ApplicationAdmin
+from unittest.mock import patch
 
 
 class LoginViewTests(TestCase):
@@ -163,6 +164,47 @@ class SiteAdminRegisterCurrentTests(TestCase):
         self.assertRedirects(resp, reverse("admin:website_siteproxy_changelist"))
         site = Site.objects.get(domain="127.0.0.1")
         self.assertEqual(site.name, "website")
+
+
+class SiteAdminSiteLinkTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="site-link-admin", password="pwd", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "example", "domain": "example.com"}
+        )
+
+    def test_list_includes_url_link(self):
+        resp = self.client.get(reverse("admin:website_siteproxy_changelist"))
+        self.assertContains(resp, 'href="http://example.com"')
+
+    def test_change_includes_url_link(self):
+        site = Site.objects.get(id=1)
+        resp = self.client.get(
+            reverse("admin:website_siteproxy_change", args=[site.pk])
+        )
+        self.assertContains(resp, 'href="http://example.com"')
+
+    @patch("website.admin.requests.get")
+    def test_check_site_status_action(self, mock_get):
+        mock_resp = mock_get.return_value
+        mock_resp.status_code = 200
+        mock_resp.ok = True
+        site = Site.objects.get(id=1)
+        resp = self.client.post(
+            reverse("admin:website_siteproxy_changelist"),
+            {"action": "check_site_status", "_selected_action": [site.pk]},
+            follow=True,
+        )
+        messages_list = list(resp.context["messages"])
+        self.assertTrue(
+            any("example.com is up" in m.message for m in messages_list)
+        )
+        mock_get.assert_called_once_with("http://example.com", timeout=5)
 
 
 class AdminBadgesWebsiteTests(TestCase):

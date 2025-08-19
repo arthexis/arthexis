@@ -6,9 +6,11 @@ from django.db import models
 from app.widgets import CopyColorWidget
 from django.shortcuts import redirect
 from django.urls import path
+from django.utils.html import format_html
 import ipaddress
 from django.apps import apps as django_apps
 from django.conf import settings
+import requests
 
 from .models import SiteBadge, Application, SiteProxy, SiteApplication
 
@@ -39,8 +41,41 @@ class SiteApplicationInline(admin.TabularInline):
 class SiteAdmin(DjangoSiteAdmin):
     inlines = [SiteBadgeInline, SiteApplicationInline]
     change_list_template = "admin/sites/site/change_list.html"
-    fields = ("domain", "name")
-    list_display = ("domain", "name")
+    fields = ("domain", "name", "site_url")
+    readonly_fields = ("site_url",)
+    list_display = ("domain", "name", "site_url")
+    actions = ["check_site_status"]
+
+    @admin.display(description="URL")
+    def site_url(self, obj):
+        if obj is None:
+            return ""
+        url = f"http://{obj.domain}"
+        return format_html('<a href="{0}" target="_blank">{0}</a>', url)
+
+    def check_site_status(self, request, queryset):
+        for site in queryset:
+            url = f"http://{site.domain}"
+            try:
+                resp = requests.get(url, timeout=5)
+            except requests.RequestException as exc:
+                self.message_user(
+                    request,
+                    f"{site.domain} is down: {exc}",
+                    level=messages.ERROR,
+                )
+                continue
+            if resp.status_code == 200:
+                self.message_user(
+                    request, f"{site.domain} is up", level=messages.SUCCESS
+                )
+            else:
+                self.message_user(
+                    request,
+                    f"{site.domain} returned {resp.status_code}",
+                    level=messages.WARNING,
+                )
+    check_site_status.short_description = "Test selected sites"
 
     def get_urls(self):
         urls = super().get_urls()
