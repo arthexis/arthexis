@@ -79,18 +79,28 @@ class NodeAdmin(admin.ModelAdmin):
         try:
             address = socket.gethostbyname(hostname)
         except OSError:
-            address = "127.0.0.1"
-        port = int(os.environ.get("PORT", 8000))
+            address = '127.0.0.1'
+        port = int(os.environ.get('PORT', 8000))
+        base_path = str(settings.BASE_DIR)
+        ver_path = Path(settings.BASE_DIR) / 'VERSION'
+        rev_path = Path(settings.BASE_DIR) / 'REVISION'
+        installed_version = ver_path.read_text().strip() if ver_path.exists() else ''
+        installed_revision = rev_path.read_text().strip() if rev_path.exists() else ''
 
         node, created = Node.objects.get_or_create(
             hostname=hostname,
-            defaults={"address": address, "port": port},
+            defaults={'address': address, 'port': port, 'base_path': base_path, 'installed_version': installed_version, 'installed_revision': installed_revision},
         )
+        if not created:
+            node.base_path = base_path
+            node.installed_version = installed_version
+            node.installed_revision = installed_revision
+            node.save(update_fields=['base_path', 'installed_version', 'installed_revision'])
         if created:
-            self.message_user(request, "Current host registered", messages.SUCCESS)
+            self.message_user(request, 'Current host registered', messages.SUCCESS)
         else:
-            self.message_user(request, "Current host already registered", messages.INFO)
-        return redirect("..")
+            self.message_user(request, 'Current host already registered', messages.INFO)
+        return redirect('..')
 
     def run_command(self, request, queryset):
         if "apply" in request.POST:

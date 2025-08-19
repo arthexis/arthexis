@@ -169,6 +169,12 @@ class NodeAdminTests(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Node.objects.count(), 1)
+        node = Node.objects.first()
+        ver = Path('VERSION').read_text().strip()
+        rev = Path('REVISION').read_text().strip()
+        self.assertEqual(node.base_path, str(settings.BASE_DIR))
+        self.assertEqual(node.installed_version, ver)
+        self.assertEqual(node.installed_revision, rev)
 
     @patch("nodes.admin.capture_screenshot")
     @patch("nodes.admin.capture_screen")
