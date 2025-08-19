@@ -2,6 +2,7 @@ from django.db import models
 from django.urls import reverse
 from django.contrib.sites.models import Site
 from django.conf import settings
+from django.utils.translation import gettext_lazy as _
 
 from references.models import Reference
 from accounts.models import Account
@@ -17,13 +18,17 @@ class Location(models.Model):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
 
+    class Meta:
+        verbose_name = _("Location")
+        verbose_name_plural = _("Locations")
+
 
 class Charger(models.Model):
     """Known charge point with optional configuration."""
 
-    charger_id = models.CharField("Serial Number", max_length=100, unique=True)
+    charger_id = models.CharField(_("Serial Number"), max_length=100, unique=True)
     config = models.JSONField(default=dict, blank=True)
-    require_rfid = models.BooleanField("Require RFID", default=False)
+    require_rfid = models.BooleanField(_("Require RFID"), default=False)
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_meter_values = models.JSONField(default=dict, blank=True)
     reference = models.OneToOneField(Reference, null=True, blank=True, on_delete=models.SET_NULL)
@@ -34,6 +39,10 @@ class Charger(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.charger_id
+
+    class Meta:
+        verbose_name = _("Charger")
+        verbose_name_plural = _("Chargers")
 
     def get_absolute_url(self):
         return reverse("charger-page", args=[self.charger_id])
@@ -127,6 +136,10 @@ class Transaction(models.Model):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.charger}:{self.pk}"
 
+    class Meta:
+        verbose_name = _("Transaction")
+        verbose_name_plural = _("Transactions")
+
     @property
     def kw(self) -> float:
         """Return consumed energy in kW for this session."""
@@ -177,6 +190,10 @@ class MeterReading(models.Model):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.charger} {self.measurand} {self.value}{self.unit}".strip()
 
+    class Meta:
+        verbose_name = _("Meter Reading")
+        verbose_name_plural = _("Meter Readings")
+
 
 class Simulator(models.Model):
     """Preconfigured simulator that can be started from the admin."""
@@ -184,12 +201,12 @@ class Simulator(models.Model):
     name = models.CharField(max_length=100, unique=True)
     cp_path = models.CharField(max_length=100)
     host = models.CharField(max_length=100, default="127.0.0.1")
-    ws_port = models.IntegerField("WS Port", default=8000)
+    ws_port = models.IntegerField(_("WS Port"), default=8000)
     rfid = models.CharField(max_length=8, default="FFFFFFFF")
     vin = models.CharField(max_length=17, blank=True)
     duration = models.IntegerField(default=600)
     interval = models.FloatField(default=5.0)
-    pre_charge_delay = models.FloatField("Delay", default=10.0)
+    pre_charge_delay = models.FloatField(_("Delay"), default=10.0)
     kw_max = models.FloatField(default=60.0)
     repeat = models.BooleanField(default=False)
     username = models.CharField(max_length=100, blank=True)
@@ -197,6 +214,10 @@ class Simulator(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
+
+    class Meta:
+        verbose_name = _("Simulator")
+        verbose_name_plural = _("Simulators")
 
     def as_config(self):
         from .simulator import SimulatorConfig

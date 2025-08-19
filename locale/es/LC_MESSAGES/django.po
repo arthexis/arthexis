@@ -398,9 +398,9 @@ msgstr ""
 msgid "Next 10"
 msgstr ""
 
-#: ocpp/templates/ocpp/dashboard.html:4 ocpp/templates/ocpp/dashboard.html:7
+#: ocpp/templates/ocpp/dashboard.html:4 ocpp/templates/ocpp/dashboard.html:7 ocpp/models.py:45
 msgid "Chargers"
-msgstr ""
+msgstr "Cargadores"
 
 #: ocpp/templates/ocpp/dashboard.html:11
 msgid "Name"
@@ -408,7 +408,7 @@ msgstr ""
 
 #: ocpp/templates/ocpp/dashboard.html:12
 msgid "Serial Number"
-msgstr ""
+msgstr "Número de serie"
 
 #: ocpp/templates/ocpp/dashboard.html:24
 msgid "No chargers found."
@@ -541,3 +541,75 @@ msgstr ""
 #: website/templates/website/login.html:22
 msgid "Log in"
 msgstr ""
+
+#: awg/models.py:24
+msgid "Cable Size"
+msgstr "Tamaño de cable"
+
+#: awg/models.py:25
+msgid "Cable Sizes"
+msgstr "Tamaños de cable"
+
+#: awg/models.py:52
+msgid "Conduit Fill"
+msgstr "Llenado de conducto"
+
+#: awg/models.py:53
+msgid "Conduit Fills"
+msgstr "Llenados de conducto"
+
+#: awg/models.py:77
+msgid "Calculator Template"
+msgstr "Plantilla de calculadora"
+
+#: awg/models.py:78
+msgid "Calculator Templates"
+msgstr "Plantillas de calculadora"
+
+#: ocpp/models.py:22
+msgid "Location"
+msgstr "Ubicación"
+
+#: ocpp/models.py:23
+msgid "Locations"
+msgstr "Ubicaciones"
+
+#: ocpp/models.py:44
+msgid "Charger"
+msgstr "Cargador"
+
+#: ocpp/models.py:31
+msgid "Require RFID"
+msgstr "Requiere RFID"
+
+#: ocpp/models.py:140
+msgid "Transaction"
+msgstr "Transacción"
+
+#: ocpp/models.py:141
+msgid "Transactions"
+msgstr "Transacciones"
+
+#: ocpp/models.py:194
+msgid "Meter Reading"
+msgstr "Lectura de medidor"
+
+#: ocpp/models.py:195
+msgid "Meter Readings"
+msgstr "Lecturas de medidor"
+
+#: ocpp/models.py:204
+msgid "WS Port"
+msgstr "Puerto WS"
+
+#: ocpp/models.py:209
+msgid "Delay"
+msgstr "Retardo"
+
+#: ocpp/models.py:219
+msgid "Simulator"
+msgstr "Simulador"
+
+#: ocpp/models.py:220
+msgid "Simulators"
+msgstr "Simuladores"
