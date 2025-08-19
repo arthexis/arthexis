@@ -33,6 +33,9 @@ class Node(models.Model):
     screenshot_polling = models.BooleanField(default=False)
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     public_key = models.TextField(blank=True)
+    base_path = models.CharField(max_length=255, blank=True)
+    installed_version = models.CharField(max_length=20, blank=True)
+    installed_revision = models.CharField(max_length=40, blank=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.hostname}:{self.port}"
