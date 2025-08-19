@@ -74,7 +74,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             ).first
         )()
 
-    async def _store_meter_values(self, payload: dict) -> None:
+    async def _store_meter_values(self, payload: dict, raw_message: str) -> None:
         """Parse a MeterValues payload into MeterReading rows."""
         connector = payload.get("connectorId")
         tx_id = payload.get("transactionId")
@@ -92,6 +92,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 tx_obj = await database_sync_to_async(Transaction.objects.create)(
                     pk=tx_id, charger=self.charger, start_time=timezone.now()
                 )
+                store.start_session_log(self.charger_id, tx_obj.pk)
+                store.add_session_message(self.charger_id, raw_message)
             store.transactions[self.charger_id] = tx_obj
         else:
             tx_obj = store.transactions.get(self.charger_id)
@@ -147,6 +149,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         store.connections.pop(self.charger_id, None)
+        store.end_session_log(self.charger_id)
         store.add_log(
             self.charger_id, f"Closed (code={close_code})", log_type="charger"
         )
@@ -154,7 +157,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data=None, bytes_data=None):
         if text_data is None:
             return
-        store.add_log(self.charger_id, f"> {text_data}", log_type="charger")
+        store.add_log(self.charger_id, text_data, log_type="charger")
+        store.add_session_message(self.charger_id, text_data)
         try:
             msg = json.loads(text_data)
         except json.JSONDecodeError:
@@ -188,7 +192,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     status = "Accepted"
                 reply_payload = {"idTagInfo": {"status": status}}
             elif action == "MeterValues":
-                await self._store_meter_values(payload)
+                await self._store_meter_values(payload, text_data)
                 await database_sync_to_async(
                     Charger.objects.filter(charger_id=self.charger_id).update
                 )(last_meter_values=payload)
@@ -212,6 +216,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         start_time=timezone.now(),
                     )
                     store.transactions[self.charger_id] = tx_obj
+                    store.start_session_log(self.charger_id, tx_obj.pk)
+                    store.add_session_message(self.charger_id, text_data)
                     reply_payload = {
                         "transactionId": tx_obj.pk,
                         "idTagInfo": {"status": "Accepted"},
@@ -238,6 +244,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     tx_obj.stop_time = timezone.now()
                     await database_sync_to_async(tx_obj.save)()
                 reply_payload = {"idTagInfo": {"status": "Accepted"}}
+                store.end_session_log(self.charger_id)
             response = [3, msg_id, reply_payload]
             await self.send(json.dumps(response))
             store.add_log(

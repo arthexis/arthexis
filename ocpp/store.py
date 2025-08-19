@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 from datetime import datetime
+import json
 import re
 
 connections = {}
 transactions = {}
 logs: dict[str, dict[str, list[str]]] = {"charger": {}, "simulator": {}}
-history = {}
+# store per charger session logs before they are flushed to disk
+history: dict[str, dict[str, object]] = {}
 simulators = {}
 
 # mapping of charger id / cp_path to friendly names used for log files
@@ -17,6 +19,8 @@ log_names: dict[str, dict[str, str]] = {"charger": {}, "simulator": {}}
 
 LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
+SESSION_DIR = LOG_DIR / "sessions"
+SESSION_DIR.mkdir(exist_ok=True)
 
 
 def register_log_name(cid: str, name: str, log_type: str = "charger") -> None:
@@ -55,6 +59,52 @@ def add_log(cid: str, entry: str, log_type: str = "charger") -> None:
     path = _file_path(key, log_type)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(entry + "\n")
+
+
+def _session_folder(cid: str) -> Path:
+    """Return the folder path for session logs for the given charger."""
+
+    name = log_names["charger"].get(cid, cid)
+    folder = SESSION_DIR / _safe_name(name)
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def start_session_log(cid: str, tx_id: int) -> None:
+    """Begin logging a session for the given charger and transaction id."""
+
+    history[cid] = {
+        "transaction": tx_id,
+        "start": datetime.utcnow(),
+        "messages": [],
+    }
+
+
+def add_session_message(cid: str, message: str) -> None:
+    """Record a raw message for the current session if one is active."""
+
+    sess = history.get(cid)
+    if not sess:
+        return
+    sess["messages"].append({
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "message": message,
+    })
+
+
+def end_session_log(cid: str) -> None:
+    """Write any recorded session log to disk for the given charger."""
+
+    sess = history.pop(cid, None)
+    if not sess:
+        return
+    folder = _session_folder(cid)
+    date = sess["start"].strftime("%Y%m%d")
+    tx_id = sess.get("transaction")
+    filename = f"{date}_{tx_id}.json"
+    path = folder / filename
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(sess["messages"], handle, ensure_ascii=False, indent=2)
 
 
 def get_logs(cid: str, log_type: str = "charger") -> list[str]:
