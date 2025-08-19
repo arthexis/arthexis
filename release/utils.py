@@ -235,8 +235,6 @@ def build(
         if line.strip() and not line.startswith("#")
     ]
 
-    _run([sys.executable, "manage.py", "build_readme"])
-
     if tests:
         log = run_tests()
         if log.status != "success":

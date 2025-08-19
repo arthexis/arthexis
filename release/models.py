@@ -2,19 +2,6 @@ from django.db import models
 from . import Package, Credentials, DEFAULT_PACKAGE
 
 
-class ReadmeSection(models.Model):
-    """A single section of the README composed in order."""
-
-    order = models.PositiveIntegerField(unique=True)
-    content = models.TextField()
-
-    class Meta:
-        ordering = ["order"]
-
-    def __str__(self) -> str:  # pragma: no cover - trivial
-        return f"Section {self.order}"
-
-
 class Todo(models.Model):
     """A simple task item extracted from code or created by users."""
 

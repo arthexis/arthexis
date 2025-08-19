@@ -24,9 +24,6 @@ class AdminIndexActionLinkTests(TestCase):
 
     def test_custom_action_links_display(self):
         response = self.client.get(reverse("admin:index"))
-        self.assertContains(response, "Rebuild README")
-        action_url = reverse("admin:release_packageconfig_changelist") + "?action=build_readme"
-        self.assertContains(response, action_url)
         self.assertContains(response, "Scan new RFIDs")
         self.assertNotContains(response, "Build selected packages for PyPI")
         self.assertNotContains(response, "Purge selected logs")
@@ -36,9 +33,9 @@ class AdminIndexActionLinkTests(TestCase):
         )
         self.assertIsNotNone(row_match)
         row_html = row_match.group(1)
-        # Custom action links should come before the Add and Change links
+        # Actions column should still precede the Add and Change links
         pattern = re.compile(
-            r'<td class="actions">\s*(?:<a[^>]*class="actionlink"[^<]*</a>\s*)+</td>\s*'
+            r'<td class="actions">\s*</td>\s*'
             r'<td>\s*<a[^>]*class="addlink"[^<]*</a>\s*</td>\s*'
             r'<td>\s*<a[^>]*class="changelink"',
             re.DOTALL,

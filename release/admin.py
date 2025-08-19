@@ -1,16 +1,13 @@
 from django.contrib import admin, messages
-from django.urls import reverse
-from django.core.management import call_command
-from django.utils.html import format_html
 
-from .models import PackageConfig, TestLog, Todo, ReadmeSection
+from .models import PackageConfig, TestLog, Todo
 from . import utils
 
 
 @admin.register(PackageConfig)
 class PackageConfigAdmin(admin.ModelAdmin):
     list_display = ("name", "author", "repository_url")
-    actions = ["build_package", "build_readme"]
+    actions = ["build_package"]
 
     @admin.action(description="Build selected packages for PyPI")
     def build_package(self, request, queryset):
@@ -20,19 +17,6 @@ class PackageConfigAdmin(admin.ModelAdmin):
                 self.message_user(request, f"Built {cfg.name}", messages.SUCCESS)
             except utils.ReleaseError as exc:
                 self.message_user(request, str(exc), messages.ERROR)
-
-    @admin.action(description="Rebuild README")
-    def build_readme(self, request, queryset):  # pragma: no cover - queryset unused
-        call_command("build_readme")
-        url = reverse("website:index")
-        self.message_user(
-            request,
-            format_html(
-                'README rebuilt. <a href="{}" target="_blank">View README</a>', url
-            ),
-            messages.SUCCESS,
-        )
-
 
 @admin.register(TestLog)
 class TestLogAdmin(admin.ModelAdmin):
@@ -55,35 +39,5 @@ class TodoAdmin(admin.ModelAdmin):
     list_filter = ("completed",)
 
 
-@admin.register(ReadmeSection)
-class ReadmeSectionAdmin(admin.ModelAdmin):
-    list_display = ("order", "short_content")
-
-    def short_content(self, obj):
-        return (obj.content[:50] + "...") if len(obj.content) > 50 else obj.content
-
-    # Ensure README reflects latest sections after any admin change
-    def _rebuild_readme(self, request) -> None:
-        call_command("build_readme")
-        url = reverse("website:index")
-        self.message_user(
-            request,
-            format_html(
-                'README rebuilt. <a href="{}" target="_blank">View README</a>', url
-            ),
-            messages.SUCCESS,
-        )
-
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        self._rebuild_readme(request)
-
-    def delete_model(self, request, obj):
-        super().delete_model(request, obj)
-        self._rebuild_readme(request)
-
-    def delete_queryset(self, request, queryset):
-        super().delete_queryset(request, queryset)
-        self._rebuild_readme(request)
 
 
