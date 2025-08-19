@@ -36,7 +36,3 @@ Arthexis Constellation is a Django-based suite that centralizes tools for managi
 - [Channels](https://channels.readthedocs.io/)
 - [Celery](https://docs.celeryq.dev/)
 - [Bootstrap](https://getbootstrap.com/)
-
----
-
-*Note: do not modify this README unless directed. Use Django's admindocs for app documentation.*
