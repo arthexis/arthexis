@@ -35,6 +35,9 @@
         <strong id="charger-state">{{ state }}</strong>
       </div>
       <p>{% trans "Total Energy" %}: <span id="total-kw">{{ charger.total_kw|floatformat:2 }}</span> kW</p>
+      {% if charger.temperature is not None %}
+      <p>{% trans "Temperature" %}: <span id="temperature">{{ charger.temperature }}</span> {{ charger.temperature_unit }}</p>
+      {% endif %}
       {% if tx %}
       <h2>{% if past_session %}{% trans "Session" %}{% else %}{% trans "Current Transaction" %}{% endif %}</h2>
       <ul>

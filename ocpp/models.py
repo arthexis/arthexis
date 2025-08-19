@@ -31,6 +31,8 @@ class Charger(models.Model):
     require_rfid = models.BooleanField(_("Require RFID"), default=False)
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_meter_values = models.JSONField(default=dict, blank=True)
+    temperature = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
+    temperature_unit = models.CharField(max_length=16, blank=True)
     reference = models.OneToOneField(Reference, null=True, blank=True, on_delete=models.SET_NULL)
     location = models.ForeignKey(
         Location, null=True, blank=True, on_delete=models.SET_NULL, related_name="chargers"
