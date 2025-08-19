@@ -137,6 +137,34 @@ document.addEventListener('DOMContentLoaded', function () {
   {% endif %}
 </h1>
 {% endblock %}
+{% block userlinks %}
+  {% if site_url %}
+    <a href="{{ site_url }}">{% trans 'View site' %}</a> /
+  {% endif %}
+  {% if user.is_active and user.is_staff %}
+    {% url 'django-admindocs-docroot' as docsroot %}
+    {% if docsroot %}
+      <a href="{{ docsroot }}">{% trans 'Documentation' %}</a> /
+    {% endif %}
+  {% endif %}
+  {% if user.has_usable_password %}
+    <a href="{% url 'admin:password_change' %}">{% trans 'Change password' %}</a> /
+  {% endif %}
+  <form id="logout-form" method="post" action="{% url 'admin:logout' %}" style="display: inline;">
+    {% csrf_token %}
+    <button type="submit">{% trans 'Log out' %}</button>
+  </form>
+  /
+  <form action="{% url 'set_language' %}" method="post" style="display: inline;">
+    {% csrf_token %}
+    <input name="next" type="hidden" value="{{ request.get_full_path }}">
+    <input name="language" type="hidden" value="{% if LANGUAGE_CODE|slice:':2' == 'en' %}es{% else %}en{% endif %}">
+    <button type="submit" style="background: none; border: none; color: var(--header-link-color); cursor: pointer;">
+      {% if LANGUAGE_CODE|slice:':2' == 'en' %}{% trans 'Spanish' %}{% else %}{% trans 'English' %}{% endif %}
+    </button>
+  </form>
+  {% include "admin/color_theme_toggle.html" %}
+{% endblock %}
 {% block nav-global %}{% endblock %}
 {% block messages %}
   {% include "admin/includes/messages.html" %}
