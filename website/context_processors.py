@@ -1,10 +1,10 @@
-from django.contrib.sites.shortcuts import get_current_site
+from utils.sites import get_site
 from django.urls import Resolver404, resolve
 
 
 def nav_links(request):
     """Provide navigation links for the current site."""
-    site = get_current_site(request)
+    site = get_site(request)
     try:
         applications = site.site_applications.select_related("application").all()
     except Exception:

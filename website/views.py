@@ -2,7 +2,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth.views import LoginView
-from django.contrib.sites.shortcuts import get_current_site
+from utils.sites import get_site
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -14,7 +14,7 @@ from website.utils import landing
 
 @landing("Home")
 def index(request):
-    site = get_current_site(request)
+    site = get_site(request)
     app = (
         site.site_applications.filter(is_default=True)
         .select_related("application")
@@ -48,7 +48,7 @@ def index(request):
 
 
 def sitemap(request):
-    site = get_current_site(request)
+    site = get_site(request)
     applications = site.site_applications.all()
     base = request.build_absolute_uri("/").rstrip("/")
     lines = [
