@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 
 class CableSize(models.Model):
@@ -19,6 +20,10 @@ class CableSize(models.Model):
 
     def __str__(self):  # pragma: no cover - simple representation
         return f"{self.awg_size} {self.material}"
+
+    class Meta:
+        verbose_name = _("Cable Size")
+        verbose_name_plural = _("Cable Sizes")
 
 
 class ConduitFill(models.Model):
@@ -43,6 +48,10 @@ class ConduitFill(models.Model):
     def __str__(self):  # pragma: no cover - simple representation
         return f"{self.trade_size} {self.conduit}"
 
+    class Meta:
+        verbose_name = _("Conduit Fill")
+        verbose_name_plural = _("Conduit Fills")
+
 
 class CalculatorTemplate(models.Model):
     """Template containing parameters for an AWG calculation."""
@@ -63,6 +72,10 @@ class CalculatorTemplate(models.Model):
 
     def __str__(self):  # pragma: no cover - simple representation
         return self.name
+
+    class Meta:
+        verbose_name = _("Calculator Template")
+        verbose_name_plural = _("Calculator Templates")
 
     def run(self):
         from .views import find_awg
