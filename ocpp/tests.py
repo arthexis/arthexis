@@ -200,6 +200,75 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_message_logged_and_session_file_created(self):
+        cid = "LOGTEST1"
+        log_path = Path("logs") / f"charger.{cid}.log"
+        if log_path.exists():
+            log_path.unlink()
+        session_dir = Path("logs") / "sessions" / cid
+        if session_dir.exists():
+            for f in session_dir.glob("*.json"):
+                f.unlink()
+        communicator = WebsocketCommunicator(application, f"/{cid}/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to([
+            2,
+            "1",
+            "StartTransaction",
+            {"meterStart": 1},
+        ])
+        response = await communicator.receive_json_from()
+        tx_id = response[2]["transactionId"]
+
+        await communicator.send_json_to([
+            2,
+            "2",
+            "StopTransaction",
+            {"transactionId": tx_id, "meterStop": 2},
+        ])
+        await communicator.receive_json_from()
+        await communicator.disconnect()
+
+        content = log_path.read_text()
+        self.assertIn("StartTransaction", content)
+        self.assertNotIn(">", content)
+
+        files = list(session_dir.glob(f"*_{tx_id}.json"))
+        self.assertEqual(len(files), 1)
+        data = json.loads(files[0].read_text())
+        self.assertTrue(any("StartTransaction" in m["message"] for m in data))
+
+    async def test_session_file_written_on_disconnect(self):
+        cid = "LOGTEST2"
+        log_path = Path("logs") / f"charger.{cid}.log"
+        if log_path.exists():
+            log_path.unlink()
+        session_dir = Path("logs") / "sessions" / cid
+        if session_dir.exists():
+            for f in session_dir.glob("*.json"):
+                f.unlink()
+        communicator = WebsocketCommunicator(application, f"/{cid}/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to([
+            2,
+            "1",
+            "StartTransaction",
+            {"meterStart": 5},
+        ])
+        await communicator.receive_json_from()
+
+        await communicator.disconnect()
+
+        session_dir = Path("logs") / "sessions" / cid
+        files = list(session_dir.glob("*.json"))
+        self.assertEqual(len(files), 1)
+        data = json.loads(files[0].read_text())
+        self.assertTrue(any("StartTransaction" in m["message"] for m in data))
+
 
 class ChargerLandingTests(TestCase):
     def setUp(self):
