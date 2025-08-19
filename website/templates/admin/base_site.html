@@ -6,13 +6,18 @@
 <script id="admin-collapsible-apps">
 document.addEventListener('DOMContentLoaded', function () {
     const modules = document.querySelectorAll('#nav-sidebar .module');
-    modules.forEach(function (module) {
+    modules.forEach(function (module, index) {
         const header = module.querySelector('h2');
         const content = module.querySelector('ul, table');
         if (header && content) {
             header.addEventListener('click', function () {
                 module.classList.toggle('collapsed');
             });
+        }
+
+        // Collapse all groups by default except for the last one.
+        if (index !== modules.length - 1) {
+            module.classList.add('collapsed');
         }
     });
 });
@@ -25,13 +30,39 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
     }
 
+    const modules = Array.from(sidebar.querySelectorAll('.module'));
+
     function toggleEmptyGroups() {
-        sidebar.querySelectorAll('.module').forEach(function (module) {
+        const query = nav.value.trim().toLowerCase();
+        const visibleModules = [];
+
+        modules.forEach(function (module) {
             const hasVisibleRows = Array.from(module.querySelectorAll('tr')).some(function (row) {
                 return row.style.display !== 'none' && row.querySelector('th[scope="row"]');
             });
-            module.style.display = hasVisibleRows ? '' : 'none';
+
+            if (hasVisibleRows) {
+                module.style.display = '';
+                visibleModules.push(module);
+            } else {
+                module.style.display = 'none';
+            }
         });
+
+        // If searching, expand groups with matches. Otherwise collapse all but last visible group.
+        if (query) {
+            visibleModules.forEach(function (module) {
+                module.classList.remove('collapsed');
+            });
+        } else {
+            visibleModules.forEach(function (module, index) {
+                if (index === visibleModules.length - 1) {
+                    module.classList.remove('collapsed');
+                } else {
+                    module.classList.add('collapsed');
+                }
+            });
+        }
     }
 
     nav.addEventListener('change', toggleEmptyGroups);
