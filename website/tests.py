@@ -199,6 +199,10 @@ class NavAppsTests(TestCase):
         self.assertContains(resp, "Readme")
         self.assertContains(resp, "badge rounded-pill")
 
+    def test_nav_pill_renders_with_port(self):
+        resp = self.client.get(reverse("website:index"), HTTP_HOST="127.0.0.1:8000")
+        self.assertContains(resp, "Readme")
+
     def test_app_without_root_url_excluded(self):
         site = Site.objects.get(id=1)
         app = Application.objects.create(name="accounts")

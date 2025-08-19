@@ -1,4 +1,4 @@
-from django.contrib.sites.shortcuts import get_current_site
+from utils.sites import get_site
 import socket
 
 from .active_app import set_active_app
@@ -11,7 +11,7 @@ class ActiveAppMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        site = get_current_site(request)
+        site = get_site(request)
         active = site.name or "website"
         set_active_app(active)
         request.active_app = active
