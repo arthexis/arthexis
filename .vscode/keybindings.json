@@ -1,0 +1,8 @@
+[
+    {
+        "key": "ctrl+alt+r",
+        "command": "workbench.action.tasks.runTask",
+        "mac": "cmd+alt+r",
+        "description": "Run Task"
+    }
+]
