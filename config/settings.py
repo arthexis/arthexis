@@ -76,7 +76,7 @@ LOCAL_APPS = [
     "accounts",
     "rfid",
     "ocpp",
-    "references",
+    "refs",
     "awg",
     "release",
     "integrator",

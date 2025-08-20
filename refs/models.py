@@ -11,10 +11,13 @@ class Reference(models.Model):
 
     value = models.CharField(max_length=2000, unique=True)
     alt_text = models.CharField(max_length=500, blank=True)
-    image = models.ImageField(upload_to="references/", blank=True)
+    image = models.ImageField(upload_to="refs/", blank=True)
     uses = models.PositiveIntegerField(default=0)
     method = models.CharField(max_length=50, default="qr")
-    include_in_footer = models.BooleanField(default=False, verbose_name="Include in Footer")
+    include_in_footer = models.BooleanField(
+        default=False, verbose_name="Include in Footer"
+    )
+    created = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
         if self.method == "qr":
@@ -32,4 +35,5 @@ class Reference(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.value
+
 

@@ -15,6 +15,10 @@
     "fields": {"name": "rfid"}
   },
   {
+    "model": "website.application",
+    "fields": {"name": "refs"}
+  },
+  {
     "model": "website.siteapplication",
     "fields": {
       "site": ["192.168.129.10"],
@@ -29,6 +33,15 @@
       "site": ["192.168.129.10"],
       "application": ["rfid"],
       "path": "/rfid/",
+      "is_default": false
+    }
+  },
+  {
+    "model": "website.siteapplication",
+    "fields": {
+      "site": ["192.168.129.10"],
+      "application": ["refs"],
+      "path": "/refs/",
       "is_default": false
     }
   }

@@ -22,7 +22,7 @@ admin.site.site_title = _("Constellation")
 
 
 # Apps that require a custom prefix for their URLs
-URL_PREFIX_OVERRIDES = {"references": "ref", "accounts": "api/rfid"}
+URL_PREFIX_OVERRIDES = {"accounts": "api/rfid"}
 
 
 def autodiscovered_urlpatterns():
