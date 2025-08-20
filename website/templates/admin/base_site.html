@@ -72,6 +72,27 @@ document.addEventListener('DOMContentLoaded', function () {
     toggleEmptyGroups();
 });
 </script>
+{% now "c" as current_time %}
+<script id="admin-server-clock">
+document.addEventListener('DOMContentLoaded', function () {
+    const clock = document.getElementById('server-clock');
+    if (!clock) {
+        return;
+    }
+    const serverStart = Date.parse("{{ current_time|escapejs }}");
+    const clientStart = Date.now();
+    function pad(n) {
+        return String(n).padStart(2, '0');
+    }
+    function update() {
+        const now = new Date(serverStart + (Date.now() - clientStart));
+        const formatted = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        clock.textContent = formatted;
+    }
+    update();
+    setInterval(update, 1000);
+});
+</script>
 {% endblock %}
 {% block extrastyle %}
 {{ block.super }}
@@ -111,7 +132,7 @@ document.addEventListener('DOMContentLoaded', function () {
 {% endblock %}
 {% block branding %}
 <h1 id="site-name">
-  <a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a>
+  <a href="{% url 'admin:index' %}"><span id="server-clock"></span></a>
     {% if badge_site %}
       <span class="badge" style="background-color: {{ badge_site_color }};">
         <a href="{% url 'admin:website_siteproxy_changelist' %}">SITE:</a> <a href="{% url 'admin:website_siteproxy_change' badge_site.id %}">{{ badge_site.name }}</a>
