@@ -12,7 +12,7 @@ class ActiveAppMiddleware:
 
     def __call__(self, request):
         site = get_site(request)
-        active = site.name or "website"
+        active = site.name or "Terminal"
         set_active_app(active)
         request.active_app = active
         try:

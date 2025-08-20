@@ -17,7 +17,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         site, _ = Site.objects.get_or_create(
-            domain="127.0.0.1", defaults={"name": "website"}
+            domain="127.0.0.1", defaults={"name": "Terminal"}
         )
 
         hostname = socket.gethostname()

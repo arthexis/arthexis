@@ -518,12 +518,6 @@ msgstr ""
 msgid "Register Current"
 msgstr "Registrar anfitrión actual"
 
-#: website/templates/website/base.html:7
-#, fuzzy
-#| msgid "Constellation"
-msgid "Arthexis Constellation"
-msgstr "Constellation"
-
 #: website/templates/website/base.html:67
 #: website/templates/website/login.html:4
 #: website/templates/website/login.html:9
