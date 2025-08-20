@@ -60,7 +60,7 @@ class SiteAdmin(DjangoSiteAdmin):
         except ValueError:
             name = domain
         else:
-            name = "website"
+            name = "Terminal"
         site, created = Site.objects.get_or_create(
             domain=domain, defaults={"name": name}
         )

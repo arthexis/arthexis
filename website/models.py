@@ -1,4 +1,5 @@
 from django.db import models
+from integrator.models import Entity
 from django.contrib.sites.models import Site
 from django.apps import apps as django_apps
 from django.utils.text import slugify
@@ -9,7 +10,7 @@ class ApplicationManager(models.Manager):
         return self.get(name=name)
 
 
-class Application(models.Model):
+class Application(Entity):
     name = models.CharField(max_length=100, unique=True)
 
     objects = ApplicationManager()
@@ -30,7 +31,7 @@ class SiteApplicationManager(models.Manager):
         return self.get(site__domain=domain, path=path)
 
 
-class SiteApplication(models.Model):
+class SiteApplication(Entity):
     site = models.ForeignKey(
         Site, on_delete=models.CASCADE, related_name="site_applications"
     )
@@ -63,7 +64,7 @@ class SiteApplication(models.Model):
         super().save(*args, **kwargs)
 
 
-class SiteBadge(models.Model):
+class SiteBadge(Entity):
     site = models.OneToOneField(Site, on_delete=models.CASCADE, related_name="badge")
     badge_color = models.CharField(max_length=7, default="#28a745")
 

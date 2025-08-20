@@ -1,4 +1,5 @@
 from django.db import models
+from integrator.models import Entity
 from django.urls import reverse
 from django.contrib.sites.models import Site
 from django.conf import settings
@@ -8,7 +9,7 @@ from refs.models import Reference
 from accounts.models import Account
 
 
-class Location(models.Model):
+class Location(Entity):
     """Physical location shared by chargers."""
 
     name = models.CharField(max_length=200)
@@ -23,7 +24,7 @@ class Location(models.Model):
         verbose_name_plural = _("Locations")
 
 
-class Charger(models.Model):
+class Charger(Entity):
     """Known charge point with optional configuration."""
 
     charger_id = models.CharField(_("Serial Number"), max_length=100, unique=True)
@@ -119,7 +120,7 @@ class Charger(models.Model):
         super().delete(*args, **kwargs)
 
 
-class Transaction(models.Model):
+class Transaction(Entity):
     """Charging session data stored for each charger."""
 
     charger = models.ForeignKey(
@@ -170,7 +171,7 @@ class Transaction(models.Model):
         return total
 
 
-class MeterReading(models.Model):
+class MeterReading(Entity):
     """Parsed meter values reported by chargers."""
 
     charger = models.ForeignKey(
@@ -197,7 +198,7 @@ class MeterReading(models.Model):
         verbose_name_plural = _("Meter Readings")
 
 
-class Simulator(models.Model):
+class Simulator(Entity):
     """Preconfigured simulator that can be started from the admin."""
 
     name = models.CharField(max_length=100, unique=True)

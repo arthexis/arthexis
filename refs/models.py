@@ -3,6 +3,7 @@ from io import BytesIO
 
 from django.core.files.base import ContentFile
 from django.db import models
+from integrator.models import Entity
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.utils.text import slugify
@@ -10,7 +11,7 @@ from django.utils.translation import gettext_lazy as _
 import qrcode
 
 
-class Reference(models.Model):
+class Reference(Entity):
     """Store a piece of reference content which can be text or an image."""
 
     TEXT = "text"
@@ -51,7 +52,7 @@ class Reference(models.Model):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.alt_text
 
-class Tag(models.Model):
+class Tag(Entity):
     """A label that can be applied to any model instance."""
 
     name = models.CharField(max_length=50, unique=True)
@@ -71,7 +72,7 @@ class Tag(models.Model):
         return self.name
 
 
-class TaggedItem(models.Model):
+class TaggedItem(Entity):
     """Link a Tag to any model instance."""
 
     tag = models.ForeignKey(Tag, on_delete=models.CASCADE, related_name="tagged_items")
