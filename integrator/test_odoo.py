@@ -3,9 +3,6 @@ import django
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
-from django.conf import settings
-settings.ALLOWED_HOSTS=["testserver"]
-
 from django.core.management import call_command
 call_command("migrate", run_syncdb=True, verbosity=0)
 

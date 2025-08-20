@@ -59,7 +59,10 @@ def resolve_env_sigils(text: str, env: Optional[Mapping[str, str]] = None) -> st
 
     env = dict(os.environ if env is None else env)
     template = _convert_to_sigils(text)
-    return Sigil(template).interpolate(env, handle_errors="ignore")
+    resolved = Sigil(template).interpolate(env, handle_errors="ignore")
+    # Convert any unresolved placeholders back to ``[NAME]`` so callers can
+    # still detect them (e.g. to create regex capture groups).
+    return resolved.replace("%[", "[")
 
 
 class _SigilDescriptor:

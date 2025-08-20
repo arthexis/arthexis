@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -267,9 +267,12 @@ def charger_session_search(request, cid):
     if date_str:
         try:
             date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+            start = datetime.combine(date_obj, datetime.min.time(), tzinfo=dt_timezone.utc)
+            end = start + timedelta(days=1)
             transactions = (
-                Transaction.objects.filter(charger=charger, start_time__date=date_obj)
-                .order_by("-start_time")
+                Transaction.objects.filter(
+                    charger=charger, start_time__gte=start, start_time__lt=end
+                ).order_by("-start_time")
             )
         except ValueError:
             transactions = []
