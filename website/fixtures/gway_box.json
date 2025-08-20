@@ -2,8 +2,8 @@
   {
     "model": "sites.site",
     "fields": {
-      "domain": "192.168.129.10",
-      "name": "GWAY-BOX"
+      "domain": "Gateway",
+      "name": "Gateway"
     }
   },
   {
@@ -17,7 +17,7 @@
   {
     "model": "website.siteapplication",
     "fields": {
-      "site": ["192.168.129.10"],
+      "site": ["Gateway"],
       "application": ["ocpp"],
       "path": "/ocpp/",
       "is_default": false
@@ -26,7 +26,7 @@
   {
     "model": "website.siteapplication",
     "fields": {
-      "site": ["192.168.129.10"],
+      "site": ["Gateway"],
       "application": ["rfid"],
       "path": "/rfid/",
       "is_default": false

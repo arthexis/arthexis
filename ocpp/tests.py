@@ -387,7 +387,7 @@ class ChargerAdminTests(TestCase):
         self.client = Client()
         User = get_user_model()
         self.admin = User.objects.create_superuser(
-            username="ocpp-admin", password="secret", email="admin@example.com"
+            username="ocpp-admin", password="secret", email="admin@arthexis.com"
         )
         self.client.force_login(self.admin)
 
@@ -466,7 +466,7 @@ class TransactionAdminTests(TestCase):
         self.client = Client()
         User = get_user_model()
         self.admin = User.objects.create_superuser(
-            username="tx-admin", password="secret", email="tx@example.com"
+            username="tx-admin", password="secret", email="tx@arthexis.com"
         )
         self.client.force_login(self.admin)
 
@@ -490,7 +490,7 @@ class SimulatorAdminTests(TestCase):
         self.client = Client()
         User = get_user_model()
         self.admin = User.objects.create_superuser(
-            username="admin2", password="secret", email="admin2@example.com"
+            username="admin2", password="secret", email="admin2@arthexis.com"
         )
         self.client.force_login(self.admin)
 

@@ -18,7 +18,7 @@ class AdminIndexActionLinkTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_superuser(
-            username="indexadmin", email="indexadmin@example.com", password="password"
+            username="indexadmin", email="indexadmin@arthexis.com", password="password"
         )
         self.client.force_login(self.user)
 

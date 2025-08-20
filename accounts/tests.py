@@ -324,7 +324,7 @@ class SubscriptionTests(TestCase):
 class OnboardingWizardTests(TestCase):
     def setUp(self):
         self.client = Client()
-        User.objects.create_superuser("super", "super@example.com", "pwd")
+        User.objects.create_superuser("super", "super@arthexis.com", "pwd")
         self.client.force_login(User.objects.get(username="super"))
 
     def test_onboarding_flow_creates_account(self):

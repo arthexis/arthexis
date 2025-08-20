@@ -18,7 +18,7 @@ class AdminHistoryTests(TestCase):
     def test_admin_history_records_filters(self):
         User = get_user_model()
         user = User.objects.create_superuser(
-            username="histadmin", email="histadmin@example.com", password="password"
+            username="histadmin", email="histadmin@arthexis.com", password="password"
         )
         self.client.force_login(user)
         url = reverse("admin:accounts_account_changelist") + "?q=test"

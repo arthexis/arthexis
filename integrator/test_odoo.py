@@ -77,7 +77,7 @@ class OdooAdminTests(TestCase):
         self.admin = User.objects.create_superuser(
             username="odoo-admin",
             password="secret",
-            email="admin@example.com",
+            email="admin@arthexis.com",
         )
         self.client.force_login(self.admin)
         os.environ.update(

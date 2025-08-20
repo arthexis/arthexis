@@ -25,7 +25,7 @@
     "fields": {
       "name": "Ethernet CP1",
       "cp_path": "CP1",
-      "host": "192.168.129.10",
+      "host": "Gateway",
       "ws_port": 8888,
       "vin": "WP0ZZZ00000000000",
       "kw_max": 60.0
@@ -37,7 +37,7 @@
     "fields": {
       "name": "Ethernet CP2",
       "cp_path": "CP2",
-      "host": "192.168.129.10",
+      "host": "Gateway",
       "ws_port": 8888,
       "vin": "WAUZZZ00000000000",
       "kw_max": 120.0
