@@ -9,7 +9,7 @@ from django.contrib import admin
 from django.urls import reverse
 from django.utils.safestring import mark_safe
 
-from references.models import Reference
+from refs.models import Reference
 
 register = template.Library()
 
@@ -47,7 +47,7 @@ def current_page_qr(context, size=200):
     )
 
 
-@register.inclusion_tag("references/footer.html", takes_context=True)
+@register.inclusion_tag("refs/footer.html", takes_context=True)
 def render_footer(context):
     """Render footer links for references marked to appear there."""
     revision = ""

@@ -1,6 +1,6 @@
 [
   {
-    "model": "references.reference",
+    "model": "refs.reference",
     "pk": 1,
     "fields": {
       "value": "https://arthexis.com",
@@ -10,7 +10,7 @@
     }
   },
   {
-    "model": "references.reference",
+    "model": "refs.reference",
     "pk": 2,
     "fields": {
       "value": "https://pypi.org/project/arthexis/",
@@ -20,7 +20,7 @@
     }
   },
   {
-    "model": "references.reference",
+    "model": "refs.reference",
     "pk": 3,
     "fields": {
       "value": "https://www.gelectriic.com",
@@ -30,7 +30,7 @@
     }
   },
   {
-    "model": "references.reference",
+    "model": "refs.reference",
     "pk": 4,
     "fields": {
       "value": "https://www.python.org/",
@@ -40,7 +40,7 @@
     }
   },
   {
-    "model": "references.reference",
+    "model": "refs.reference",
     "pk": 5,
     "fields": {
       "value": "https://www.djangoproject.com/",
@@ -50,7 +50,7 @@
     }
   },
   {
-    "model": "references.reference",
+    "model": "refs.reference",
     "pk": 6,
     "fields": {
       "value": "https://openchargealliance.org/protocols/open-charge-point-protocol/",

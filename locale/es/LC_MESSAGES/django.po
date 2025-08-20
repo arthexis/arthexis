@@ -414,13 +414,22 @@ msgstr "Número de serie"
 msgid "No chargers found."
 msgstr ""
 
-#: references/templates/references/landing.html:4
-#: references/templates/references/landing.html:7
+#: refs/templates/refs/landing.html:4
+#: refs/templates/refs/landing.html:7
 msgid "Reference Generator"
 msgstr ""
 
-#: references/templates/references/landing.html:11
+#: refs/templates/refs/landing.html:11
 msgid "Generate"
+msgstr ""
+
+#: refs/templates/refs/recent.html:1
+#: refs/templates/refs/recent.html:4
+msgid "Recent References"
+msgstr ""
+
+#: refs/templates/refs/recent.html:12
+msgid "No references found."
 msgstr ""
 
 #: website/templates/admin/app_list.html:8

@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
@@ -27,13 +28,27 @@ class ReferenceLandingPageTests(TestCase):
         self.client = Client()
 
     def test_page_renders_and_generates(self):
-        resp = self.client.get(reverse('references:generator'))
+        resp = self.client.get(reverse('refs:generator'))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, '<form')
-        resp = self.client.get(reverse('references:generator'), {'data': 'hello'})
+        resp = self.client.get(reverse('refs:generator'), {'data': 'hello'})
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'data:image/png;base64')
         self.assertEqual(Reference.objects.count(), 0)
+
+
+class RecentReferencesTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+
+    def test_only_recent_references_are_listed(self):
+        old_ref = Reference.objects.create(value="https://old.com")
+        old_ref.created -= timedelta(hours=80)
+        old_ref.save()
+        recent_ref = Reference.objects.create(value="https://new.com")
+        resp = self.client.get(reverse('refs:recent'))
+        self.assertContains(resp, "https://new.com")
+        self.assertNotContains(resp, "https://old.com")
 
 
 class FooterTemplateTagTests(TestCase):
@@ -63,14 +78,14 @@ class FooterTemplateTagTests(TestCase):
         user = get_user_model().objects.create_user(
             "staff", "staff@example.com", "pass", is_staff=True
         )
-        request = self.factory.get("/ref/")
+        request = self.factory.get("/refs/")
         request.user = user
-        request.resolver_match = resolve("/ref/")
+        request.resolver_match = resolve("/refs/")
         html = Template("{% load ref_tags %}{% render_footer %}").render(
             Context({"request": request})
         )
         self.assertIn("References", html)
-        self.assertIn(reverse("admin:references_reference_changelist"), html)
+        self.assertIn(reverse("admin:refs_reference_changelist"), html)
 
     def test_current_page_qr_tag(self):
         request = self.factory.get("/")
@@ -100,7 +115,7 @@ class ReferenceAdminDisplayTests(TestCase):
     def test_change_form_displays_qr_code(self):
         ref = Reference.objects.create(value="https://example.com")
         resp = self.client.get(
-            reverse("admin:references_reference_change", args=[ref.pk])
+            reverse("admin:refs_reference_change", args=[ref.pk])
         )
         self.assertContains(resp, f'src="{ref.image.url}"')
 

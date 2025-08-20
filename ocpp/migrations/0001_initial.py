@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('accounts', '0001_initial'),
-        ('references', '0001_initial'),
+        ('refs', '0001_initial'),
     ]
 
     operations = [
@@ -44,7 +44,7 @@ class Migration(migrations.Migration):
                 ('longitude', models.DecimalField(blank=True, decimal_places=6, max_digits=9, null=True)),
                 ('last_path', models.CharField(blank=True, max_length=255)),
                 ('is_seed_data', models.BooleanField(default=False)),
-                ('reference', models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='references.reference')),
+                ('reference', models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='refs.reference')),
             ],
         ),
         migrations.CreateModel(

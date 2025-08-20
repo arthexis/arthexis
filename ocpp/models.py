@@ -4,7 +4,7 @@ from django.contrib.sites.models import Site
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 
-from references.models import Reference
+from refs.models import Reference
 from accounts.models import Account
 
 
