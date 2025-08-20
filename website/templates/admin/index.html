@@ -88,7 +88,10 @@
 {% block content_title %}
 <div id="admin-home-header" style="display:flex; justify-content:space-between; align-items:center;">
   <h1>Home</h1>
-  <a href="#" id="open-console" class="button">Open console</a>
+  <div>
+    <a href="{% url 'admin:seed-data' %}" class="button">Seed data</a>
+    <a href="#" id="open-console" class="button">Open console</a>
+  </div>
  </div>
 {% endblock %}
 

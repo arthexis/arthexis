@@ -1,8 +1,9 @@
 from django.db import models
+from integrator.models import Entity
 from . import Package, Credentials, DEFAULT_PACKAGE
 
 
-class Todo(models.Model):
+class Todo(Entity):
     """A simple task item extracted from code or created by users."""
 
     text = models.CharField(max_length=255)
@@ -17,7 +18,7 @@ class Todo(models.Model):
         return self.text
 
 
-class TestLog(models.Model):
+class TestLog(Entity):
     """Store output of test runs for release builds."""
 
     created = models.DateTimeField(auto_now_add=True)
@@ -33,7 +34,7 @@ class TestLog(models.Model):
         return f"{self.created:%Y-%m-%d %H:%M:%S} - {self.status}"
 
 
-class PackageConfig(models.Model):
+class PackageConfig(Entity):
     """Store metadata and credentials for building a PyPI release."""
 
     name = models.CharField(max_length=100, default=DEFAULT_PACKAGE.name)

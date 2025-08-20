@@ -1,12 +1,64 @@
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from django.contrib.auth.models import UserManager as DjangoUserManager
 
 from fernet_fields import EncryptedCharField
 from utils.sigils import SigilCharField, SigilURLField
 
 
-class BskyAccount(models.Model):
+class EntityQuerySet(models.QuerySet):
+    def delete(self):  # pragma: no cover - delegates to instance delete
+        deleted = 0
+        for obj in self:
+            obj.delete()
+            deleted += 1
+        return deleted, {}
+
+
+class EntityManager(models.Manager):
+    def get_queryset(self):
+        return EntityQuerySet(self.model, using=self._db).filter(is_deleted=False)
+
+
+class EntityUserManager(DjangoUserManager):
+    def get_queryset(self):
+        return EntityQuerySet(self.model, using=self._db).filter(is_deleted=False)
+
+
+class Entity(models.Model):
+    """Base model providing seed data tracking and soft deletion."""
+
+    is_seed_data = models.BooleanField(default=False, editable=False)
+    is_deleted = models.BooleanField(default=False, editable=False)
+
+    objects = EntityManager()
+    all_objects = models.Manager()
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            try:
+                old = type(self).all_objects.get(pk=self.pk)
+            except type(self).DoesNotExist:
+                self.is_seed_data = False
+            else:
+                self.is_seed_data = old.is_seed_data
+        else:
+            self.is_seed_data = False
+        super().save(*args, **kwargs)
+
+    def delete(self, using=None, keep_parents=False):
+        if self.is_seed_data:
+            self.is_deleted = True
+            self.save(update_fields=["is_deleted"])
+        else:
+            super().delete(using=using, keep_parents=keep_parents)
+
+
+class BskyAccount(Entity):
     """Bluesky account linked to a user."""
 
     user = models.OneToOneField(
@@ -21,7 +73,7 @@ class BskyAccount(models.Model):
         return self.handle
 
 
-class OdooInstance(models.Model):
+class OdooInstance(Entity):
     """Connection details for an Odoo server."""
 
     name = models.CharField(max_length=100)
@@ -34,7 +86,7 @@ class OdooInstance(models.Model):
         return self.name
 
 
-class RequestType(models.Model):
+class RequestType(Entity):
     """Types of requests with a unique three-letter code."""
 
     code = models.CharField(max_length=3, unique=True)
@@ -51,7 +103,7 @@ class RequestType(models.Model):
         return number
 
 
-class Request(models.Model):
+class Request(Entity):
     """Request sent from one user to another requiring approval."""
 
     class Status(models.TextChoices):

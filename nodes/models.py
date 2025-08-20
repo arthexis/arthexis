@@ -1,10 +1,11 @@
 from django.db import models
+from integrator.models import Entity
 import re
 from django.utils.text import slugify
 import uuid
 
 
-class NodeRole(models.Model):
+class NodeRole(Entity):
     """Assignable role for a :class:`Node`."""
 
     name = models.CharField(max_length=50, unique=True)
@@ -16,7 +17,7 @@ class NodeRole(models.Model):
         return self.name
 
 
-class Node(models.Model):
+class Node(Entity):
     """Information about a running node in the network."""
 
     hostname = models.CharField(max_length=100)
@@ -118,7 +119,7 @@ class Node(models.Model):
             PeriodicTask.objects.filter(name=task_name).delete()
 
 
-class ScreenSource(models.Model):
+class ScreenSource(Entity):
     """Configured source for taking screenshots."""
 
     SCREEN = "SCREEN"
@@ -137,7 +138,7 @@ class ScreenSource(models.Model):
         return self.name
 
 
-class NodeScreenshot(models.Model):
+class NodeScreenshot(Entity):
     """Screenshot captured from a node."""
 
     node = models.ForeignKey(
@@ -155,7 +156,7 @@ class NodeScreenshot(models.Model):
         return self.path
 
 
-class NodeMessage(models.Model):
+class NodeMessage(Entity):
     """Message received via a node's public API."""
 
     node = models.ForeignKey(
@@ -170,7 +171,7 @@ class NodeMessage(models.Model):
         return f"{self.node} {self.method} {self.created}"
 
 
-class NodeCommand(models.Model):
+class NodeCommand(Entity):
     """Shell command that can be executed on nodes."""
 
     command = models.TextField()
@@ -194,7 +195,7 @@ class NodeCommand(models.Model):
         return result.stdout + result.stderr
 
 
-class Recipe(models.Model):
+class Recipe(Entity):
     """A collection of script steps that can be executed by nodes."""
 
     name = models.CharField(max_length=100)
@@ -210,7 +211,7 @@ class Recipe(models.Model):
         super().save(update_fields=["full_script"])
 
 
-class Step(models.Model):
+class Step(Entity):
     """Individual step belonging to a :class:`Recipe`."""
 
     recipe = models.ForeignKey(
@@ -234,7 +235,7 @@ class Step(models.Model):
         self.recipe.sync_full_script()
 
 
-class TextSample(models.Model):
+class TextSample(Entity):
     """Clipboard text captured with timestamp."""
 
     name = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
@@ -257,7 +258,7 @@ class TextSample(models.Model):
         return str(self.name)
 
 
-class TextPattern(models.Model):
+class TextPattern(Entity):
     """Text mask with optional sigils used to match against ``TextSample`` content."""
 
     mask = models.TextField()
@@ -306,7 +307,7 @@ class TextPattern(models.Model):
         return regex, sigil_names
 
 
-class Backup(models.Model):
+class Backup(Entity):
     """Database backup metadata.
 
     Stores the location of the exported data, creation date, size and a

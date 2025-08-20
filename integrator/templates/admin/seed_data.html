@@ -1,0 +1,35 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>Seed data</h1>
+<table class="adminlist">
+  <thead>
+    <tr>
+      <th>Model</th>
+      <th>Object</th>
+      <th>Status</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for model, obj in seed_items %}
+    <tr>
+      <td>{{ model._meta.verbose_name }}</td>
+      <td>{{ obj }}</td>
+      <td>{% if obj.is_deleted %}Deleted{% else %}Active{% endif %}</td>
+      <td>
+        {% if obj.is_deleted %}
+        <form method="post" style="display:inline">{% csrf_token %}
+          <input type="hidden" name="app" value="{{ model._meta.app_label }}">
+          <input type="hidden" name="model" value="{{ model._meta.model_name }}">
+          <input type="hidden" name="pk" value="{{ obj.pk }}">
+          <button type="submit" class="button">Reinstall</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

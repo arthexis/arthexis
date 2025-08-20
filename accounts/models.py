@@ -1,4 +1,4 @@
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.db import models
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -11,9 +11,10 @@ from django.dispatch import receiver
 from datetime import timedelta
 from urllib.parse import urljoin
 from django.contrib.contenttypes.models import ContentType
+from integrator.models import Entity, EntityUserManager
 
 
-class Address(models.Model):
+class Address(Entity):
     """Physical location information for a user."""
 
     class State(models.TextChoices):
@@ -143,7 +144,9 @@ class Address(models.Model):
         return f"{self.street} {self.number}, {self.municipality}, {self.state}"
 
 
-class User(AbstractUser):
+class User(Entity, AbstractUser):
+    objects = EntityUserManager()
+    all_objects = DjangoUserManager()
     """Custom user model."""
 
     phone_number = models.CharField(
@@ -173,7 +176,7 @@ class UserProxy(User):
         verbose_name_plural = User._meta.verbose_name_plural
 
 
-class RFID(models.Model):
+class RFID(Entity):
     """RFID tag that may be assigned to one account."""
 
     label_id = models.AutoField(primary_key=True, db_column="label_id")
@@ -250,7 +253,7 @@ class RFID(models.Model):
         db_table = "accounts_rfid"
 
 
-class RFIDSource(models.Model):
+class RFIDSource(Entity):
     """Endpoint configuration for syncing RFIDs."""
 
     name = models.CharField(max_length=100, unique=True)
@@ -306,7 +309,7 @@ class RFIDSource(models.Model):
         return resp.json()
 
 
-class Account(models.Model):
+class Account(Entity):
     """Track kW credits for a user."""
 
     name = models.CharField(max_length=100, unique=True)
@@ -366,7 +369,7 @@ class Account(models.Model):
         return self.name
 
 
-class Credit(models.Model):
+class Credit(Entity):
     """Credits added to an account."""
 
     account = models.ForeignKey(
@@ -389,7 +392,7 @@ class Credit(models.Model):
         return f"{self.amount_kw} kW for {user}"
 
 
-class Brand(models.Model):
+class Brand(Entity):
     """Vehicle manufacturer or brand."""
 
     name = models.CharField(max_length=100, unique=True)
@@ -410,7 +413,7 @@ class Brand(models.Model):
         return cls.objects.filter(wmi_codes__code=prefix).first()
 
 
-class WMICode(models.Model):
+class WMICode(Entity):
     """World Manufacturer Identifier code for a brand."""
 
     brand = models.ForeignKey(Brand, on_delete=models.CASCADE, related_name="wmi_codes")
@@ -424,7 +427,7 @@ class WMICode(models.Model):
         return self.code
 
 
-class EVModel(models.Model):
+class EVModel(Entity):
     """Specific electric vehicle model for a brand."""
 
     brand = models.ForeignKey(Brand, on_delete=models.CASCADE, related_name="ev_models")
@@ -439,7 +442,7 @@ class EVModel(models.Model):
         return f"{self.brand} {self.name}" if self.brand else self.name
 
 
-class Vehicle(models.Model):
+class Vehicle(Entity):
     """Vehicle associated with an Account."""
 
     account = models.ForeignKey(
@@ -473,7 +476,7 @@ class Vehicle(models.Model):
         return f"{parts} ({self.vin})" if parts else self.vin
 
 
-class Product(models.Model):
+class Product(Entity):
     """A product that users can subscribe to."""
 
     name = models.CharField(max_length=100)
@@ -484,7 +487,7 @@ class Product(models.Model):
         return self.name
 
 
-class Subscription(models.Model):
+class Subscription(Entity):
     """An account's subscription to a product."""
 
     account = models.ForeignKey(Account, on_delete=models.CASCADE)
@@ -503,7 +506,7 @@ class Subscription(models.Model):
         return f"{self.account.user} -> {self.product}"
 
 
-class AdminHistory(models.Model):
+class AdminHistory(Entity):
     """Record of recently visited admin changelists for a user."""
 
     user = models.ForeignKey(

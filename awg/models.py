@@ -1,8 +1,9 @@
 from django.db import models
+from integrator.models import Entity
 from django.utils.translation import gettext_lazy as _
 
 
-class CableSize(models.Model):
+class CableSize(Entity):
     """AWG cable size specification."""
 
     awg_size = models.CharField(max_length=5)
@@ -26,7 +27,7 @@ class CableSize(models.Model):
         verbose_name_plural = _("Cable Sizes")
 
 
-class ConduitFill(models.Model):
+class ConduitFill(Entity):
     """Maximum wires allowed in a conduit."""
 
     trade_size = models.CharField(max_length=10)
@@ -53,7 +54,7 @@ class ConduitFill(models.Model):
         verbose_name_plural = _("Conduit Fills")
 
 
-class CalculatorTemplate(models.Model):
+class CalculatorTemplate(Entity):
     """Template containing parameters for an AWG calculation."""
 
     name = models.CharField(max_length=100, blank=True)

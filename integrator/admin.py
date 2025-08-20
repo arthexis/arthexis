@@ -6,6 +6,11 @@ from django.contrib import admin, messages
 
 from config.offline import requires_network
 from .models import BskyAccount, OdooInstance, RequestType, Request
+from django.apps import apps
+from django.shortcuts import render, redirect
+from django.urls import path
+
+from .models import Entity
 
 
 class BskyAccountAdminForm(forms.ModelForm):
@@ -116,3 +121,36 @@ class RequestAdmin(admin.ModelAdmin):
         "responded_at",
     )
     readonly_fields = ("number", "responded_at", "requester")
+
+
+def seed_data_view(request):
+    seed_items = []
+    for model in apps.get_models():
+        if issubclass(model, Entity):
+            for obj in model.all_objects.filter(is_seed_data=True):
+                seed_items.append((model, obj))
+    if request.method == "POST":
+        app_label = request.POST["app"]
+        model_name = request.POST["model"]
+        pk = request.POST["pk"]
+        model = apps.get_model(app_label, model_name)
+        obj = model.all_objects.get(pk=pk, is_seed_data=True)
+        obj.is_deleted = False
+        obj.save(update_fields=["is_deleted"])
+        return redirect("admin:seed-data")
+    context = dict(admin.site.each_context(request), seed_items=seed_items)
+    return render(request, "admin/seed_data.html", context)
+
+
+original_get_urls = admin.site.get_urls
+
+
+def get_urls():
+    urls = original_get_urls()
+    custom = [
+        path("seed-data/", admin.site.admin_view(seed_data_view), name="seed-data"),
+    ]
+    return custom + urls
+
+
+admin.site.get_urls = get_urls
