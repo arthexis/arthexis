@@ -52,7 +52,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$BASE_DIR
-ExecStart=$BASE_DIR/.venv/bin/python manage.py runserver 0.0.0.0:8000
+ExecStart=$BASE_DIR/.venv/bin/python manage.py runserver 0.0.0.0:8888
 Restart=always
 User=$(id -un)
 

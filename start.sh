@@ -18,8 +18,8 @@ if [ -d .venv ]; then
   source .venv/bin/activate
 fi
 
-# Default to port 8888 but allow override via first argument
-PORT=${1:-8888}
+# Default to port 8000 but allow override via first argument
+PORT=${1:-8000}
 
 # Start the Django development server
 python manage.py runserver 0.0.0.0:$PORT
