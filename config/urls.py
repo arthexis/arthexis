@@ -64,7 +64,9 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path(
         "webshell/",
-        RedirectView.as_view(pattern_name="execute-script", permanent=False),
+        RedirectView.as_view(
+            pattern_name="admin:webshell_script_add", permanent=False
+        ),
     ),
     path("webshell/", include("webshell.urls")),
     path("i18n/", include("django.conf.urls.i18n")),
