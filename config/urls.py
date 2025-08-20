@@ -15,7 +15,8 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from django.utils.translation import gettext_lazy as _
-from django.views.generic import RedirectView
+from webshell.views import execute_script_view
+from website.views import admin_console
 
 admin.site.site_header = _("Constellation")
 admin.site.site_title = _("Constellation")
@@ -62,13 +63,8 @@ def autodiscovered_urlpatterns():
 urlpatterns = [
     path("admin/doc/", include("django.contrib.admindocs.urls")),
     path("admin/", admin.site.urls),
-    path(
-        "webshell/",
-        RedirectView.as_view(
-            pattern_name="admin:webshell_script_add", permanent=False
-        ),
-    ),
-    path("webshell/", include("webshell.urls")),
+    path("webshell/", admin_console, name="admin-console"),
+    path("webshell/execute/", execute_script_view, name="webshell_execute"),
     path("i18n/", include("django.conf.urls.i18n")),
     path("", include("website.urls")),
 ]

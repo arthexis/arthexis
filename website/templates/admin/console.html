@@ -1,0 +1,25 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Django shell{% endblock %}
+
+{% block content %}
+<form id="console-form" method="post" action="/webshell/execute/">
+  {% csrf_token %}
+  <textarea id="id_source" name="source" rows="20" cols="80"></textarea><br>
+  <button type="submit" class="default">Run</button>
+</form>
+<pre id="output"></pre>
+<script>
+const form = document.getElementById('console-form');
+form.addEventListener('submit', function(e) {
+  e.preventDefault();
+  fetch(form.action, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: new URLSearchParams(new FormData(form))
+  }).then(r => r.text()).then(text => {
+    document.getElementById('output').textContent = text;
+  });
+});
+</script>
+{% endblock %}

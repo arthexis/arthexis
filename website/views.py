@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.views import LoginView
 from utils.sites import get_site
 from django.http import HttpResponse
@@ -86,3 +87,8 @@ class CustomLoginView(LoginView):
 
 
 login_view = CustomLoginView.as_view()
+
+
+@staff_member_required
+def admin_console(request):
+    return render(request, "admin/console.html")
