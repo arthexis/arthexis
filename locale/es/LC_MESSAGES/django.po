@@ -414,6 +414,14 @@ msgstr "Número de serie"
 msgid "No chargers found."
 msgstr ""
 
+#: refs/forms.py:14
+msgid "Value / URL"
+msgstr "Valor / URL"
+
+#: refs/forms.py:15
+msgid "Alt text"
+msgstr "Texto alternativo"
+
 #: refs/templates/refs/landing.html:4
 #: refs/templates/refs/landing.html:7
 msgid "Reference Generator"

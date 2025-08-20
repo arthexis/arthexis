@@ -22,8 +22,15 @@
     <h2>{% trans "New Reference" %}</h2>
     <form method="post" class="card card-body">
       {% csrf_token %}
-      {{ form.as_p }}
-      <button type="submit" class="btn btn-primary">{% trans "Create" %}</button>
+      <div class="mb-3">
+        <label for="{{ form.value.id_for_label }}" class="form-label">{{ form.value.label }}</label>
+        {{ form.value }}
+      </div>
+      <div class="mb-3">
+        <label for="{{ form.alt_text.id_for_label }}" class="form-label">{{ form.alt_text.label }}</label>
+        {{ form.alt_text }}
+      </div>
+      <button type="submit" class="btn btn-primary w-100">{% trans "Create" %}</button>
     </form>
   </div>
 </div>
