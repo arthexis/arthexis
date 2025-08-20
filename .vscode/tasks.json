@@ -19,6 +19,16 @@
             },
             "problemMatcher": [],
             "detail": "Install updated dependencies and regenerate requirements.txt"
+        },
+        {
+            "label": "Purge logs",
+            "type": "shell",
+            "command": "rm -rf ${workspaceFolder}/logs/*",
+            "windows": {
+                "command": "if exist \"${workspaceFolder}\\logs\" (rmdir /s /q \"${workspaceFolder}\\logs\" && mkdir \"${workspaceFolder}\\logs\")"
+            },
+            "problemMatcher": [],
+            "detail": "Remove all files from logs and its subdirectories"
         }
     ]
 }
