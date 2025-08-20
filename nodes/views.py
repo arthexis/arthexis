@@ -1,5 +1,4 @@
 import json
-import socket
 
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -37,15 +36,26 @@ def register_node(request):
     hostname = data.get("hostname")
     address = data.get("address")
     port = data.get("port", 8000)
+    mac_address = data.get("mac_address")
 
-    if not hostname or not address:
+    if not hostname or not address or not mac_address:
         return JsonResponse(
-            {"detail": "hostname and address required"}, status=400
+            {"detail": "hostname, address and mac_address required"}, status=400
         )
 
-    node, _ = Node.objects.update_or_create(
-        hostname=hostname, defaults={"address": address, "port": port}
+    mac_address = mac_address.lower()
+    node, created = Node.objects.get_or_create(
+        mac_address=mac_address,
+        defaults={"hostname": hostname, "address": address, "port": port},
     )
+    if not created:
+        node.hostname = hostname
+        node.address = address
+        node.port = port
+        node.save(update_fields=["hostname", "address", "port"])
+        return JsonResponse(
+            {"id": node.id, "detail": f"Node already exists (id: {node.id})"}
+        )
 
     return JsonResponse({"id": node.id})
 
@@ -56,16 +66,9 @@ def capture(request):
 
     url = request.build_absolute_uri("/")
     path = capture_screenshot(url)
-    hostname = socket.gethostname()
-    node = Node.objects.filter(
-        hostname=hostname, port=request.get_port()
-    ).first()
+    node = Node.get_local()
     screenshot = save_screenshot(path, node=node, method=request.method)
-    node_id = None
-    if screenshot and screenshot.node:
-        node_id = screenshot.node.id
-    elif node:
-        node_id = node.id
+    node_id = screenshot.node.id if screenshot and screenshot.node else None
     return JsonResponse({"screenshot": str(path), "node": node_id})
 
 

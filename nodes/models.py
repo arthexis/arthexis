@@ -1,9 +1,7 @@
 from django.db import models
-import socket
 import re
 from django.utils.text import slugify
 import uuid
-import os
 
 
 class NodeRole(models.Model):
@@ -23,6 +21,9 @@ class Node(models.Model):
 
     hostname = models.CharField(max_length=100)
     address = models.GenericIPAddressField()
+    mac_address = models.CharField(
+        max_length=17, unique=True, null=True, blank=True
+    )
     port = models.PositiveIntegerField(default=8000)
     badge_color = models.CharField(max_length=7, default="#28a745")
     roles = models.ManyToManyField(NodeRole, blank=True)
@@ -40,21 +41,25 @@ class Node(models.Model):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.hostname}:{self.port}"
 
+    @staticmethod
+    def get_current_mac() -> str:
+        """Return the MAC address of the current host."""
+        return ":".join(re.findall("..", f"{uuid.getnode():012x}"))
+
     @classmethod
     def get_local(cls):
         """Return the node representing the current host if it exists."""
-        hostname = socket.gethostname()
-        port = int(os.environ.get("PORT", 8000))
-        return cls.objects.filter(hostname=hostname, port=port).first()
+        mac = cls.get_current_mac()
+        return cls.objects.filter(mac_address=mac).first()
 
     @property
     def is_local(self):
         """Determine if this node represents the current host."""
-        hostname = socket.gethostname()
-        port = int(os.environ.get("PORT", 8000))
-        return self.hostname == hostname and self.port == port
+        return self.mac_address == self.get_current_mac()
 
     def save(self, *args, **kwargs):
+        if self.mac_address:
+            self.mac_address = self.mac_address.lower()
         if not self.public_endpoint:
             self.public_endpoint = slugify(self.hostname)
         previous_clipboard = previous_screenshot = None

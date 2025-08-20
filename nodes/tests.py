@@ -49,23 +49,56 @@ class NodeTests(TestCase):
                 "hostname": "local",
                 "address": "127.0.0.1",
                 "port": 8000,
+                "mac_address": "00:11:22:33:44:55",
             },
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Node.objects.count(), 1)
 
+        # allow same IP with different MAC
+        self.client.post(
+            reverse("register-node"),
+            data={
+                "hostname": "local2",
+                "address": "127.0.0.1",
+                "port": 8001,
+                "mac_address": "00:11:22:33:44:66",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(Node.objects.count(), 2)
+
+        # duplicate MAC should not create new node
+        dup = self.client.post(
+            reverse("register-node"),
+            data={
+                "hostname": "dup",
+                "address": "127.0.0.2",
+                "port": 8002,
+                "mac_address": "00:11:22:33:44:55",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(Node.objects.count(), 2)
+        self.assertIn("already exists", dup.json()["detail"])
+        self.assertEqual(dup.json()["id"], response.json()["id"])
+
         list_resp = self.client.get(reverse("node-list"))
         self.assertEqual(list_resp.status_code, 200)
         data = list_resp.json()
-        self.assertEqual(len(data["nodes"]), 1)
-        self.assertEqual(data["nodes"][0]["hostname"], "local")
+        self.assertEqual(len(data["nodes"]), 2)
+        hostnames = {n["hostname"] for n in data["nodes"]}
+        self.assertEqual(hostnames, {"dup", "local2"})
 
     @patch("nodes.views.capture_screenshot")
     def test_capture_screenshot(self, mock_capture):
         hostname = socket.gethostname()
         node = Node.objects.create(
-            hostname=hostname, address="127.0.0.1", port=80
+            hostname=hostname,
+            address="127.0.0.1",
+            port=80,
+            mac_address=Node.get_current_mac(),
         )
         screenshot_dir = settings.LOG_DIR / "screenshots"
         screenshot_dir.mkdir(parents=True, exist_ok=True)
@@ -86,7 +119,12 @@ class NodeTests(TestCase):
     @patch("nodes.views.capture_screenshot")
     def test_duplicate_screenshot_skipped(self, mock_capture):
         hostname = socket.gethostname()
-        Node.objects.create(hostname=hostname, address="127.0.0.1", port=80)
+        Node.objects.create(
+            hostname=hostname,
+            address="127.0.0.1",
+            port=80,
+            mac_address=Node.get_current_mac(),
+        )
         screenshot_dir = settings.LOG_DIR / "screenshots"
         screenshot_dir.mkdir(parents=True, exist_ok=True)
         file_path = screenshot_dir / "dup.png"
@@ -98,7 +136,11 @@ class NodeTests(TestCase):
 
     def test_public_api_get_and_post(self):
         node = Node.objects.create(
-            hostname="public", address="127.0.0.1", port=8001, enable_public_api=True
+            hostname="public",
+            address="127.0.0.1",
+            port=8001,
+            enable_public_api=True,
+            mac_address="00:11:22:33:44:77",
         )
         url = reverse("node-public-endpoint", args=[node.public_endpoint])
 
@@ -117,14 +159,22 @@ class NodeTests(TestCase):
 
     def test_public_api_disabled(self):
         node = Node.objects.create(
-            hostname="nopublic", address="127.0.0.2", port=8002
+            hostname="nopublic",
+            address="127.0.0.2",
+            port=8002,
+            mac_address="00:11:22:33:44:88",
         )
         url = reverse("node-public-endpoint", args=[node.public_endpoint])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 404)
 
     def test_clipboard_polling_creates_task(self):
-        node = Node.objects.create(hostname="clip", address="127.0.0.1", port=9000)
+        node = Node.objects.create(
+            hostname="clip",
+            address="127.0.0.1",
+            port=9000,
+            mac_address="00:11:22:33:44:99",
+        )
         task_name = f"poll_clipboard_node_{node.pk}"
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
         node.clipboard_polling = True
@@ -135,7 +185,12 @@ class NodeTests(TestCase):
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
 
     def test_screenshot_polling_creates_task(self):
-        node = Node.objects.create(hostname="shot", address="127.0.0.1", port=9100)
+        node = Node.objects.create(
+            hostname="shot",
+            address="127.0.0.1",
+            port=9100,
+            mac_address="00:11:22:33:44:aa",
+        )
         task_name = f"capture_screenshot_node_{node.pk}"
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
         node.screenshot_polling = True
@@ -175,6 +230,7 @@ class NodeAdminTests(TestCase):
         self.assertEqual(node.base_path, str(settings.BASE_DIR))
         self.assertEqual(node.installed_version, ver)
         self.assertEqual(node.installed_revision, rev)
+        self.assertEqual(node.mac_address, Node.get_current_mac())
 
     @patch("nodes.admin.capture_screenshot")
     @patch("nodes.admin.capture_screen")
@@ -189,7 +245,10 @@ class NodeAdminTests(TestCase):
         mock_capture_screenshot.return_value = Path("screenshots/test.png")
         hostname = socket.gethostname()
         node = Node.objects.create(
-            hostname=hostname, address="127.0.0.1", port=80
+            hostname=hostname,
+            address="127.0.0.1",
+            port=80,
+            mac_address=Node.get_current_mac(),
         )
         url = reverse("admin:nodes_nodescreenshot_capture")
         response = self.client.get(url, follow=True)
@@ -234,7 +293,12 @@ class NodeActionTests(TestCase):
 
     def test_registry_and_local_execution(self):
         hostname = socket.gethostname()
-        node = Node.objects.create(hostname=hostname, address="127.0.0.1", port=8000)
+        node = Node.objects.create(
+            hostname=hostname,
+            address="127.0.0.1",
+            port=8000,
+            mac_address=Node.get_current_mac(),
+        )
 
         class DummyAction(NodeAction):
             display_name = "Dummy Action"
@@ -251,7 +315,12 @@ class NodeActionTests(TestCase):
             NodeAction.registry.pop("dummyaction", None)
 
     def test_remote_not_supported(self):
-        node = Node.objects.create(hostname="remote", address="10.0.0.1", port=8000)
+        node = Node.objects.create(
+            hostname="remote",
+            address="10.0.0.1",
+            port=8000,
+            mac_address="00:11:22:33:44:bb",
+        )
 
         class DummyAction(NodeAction):
             def execute(self, node, **kwargs):
@@ -265,7 +334,12 @@ class NodeActionTests(TestCase):
 
     def test_admin_change_view_lists_actions(self):
         hostname = socket.gethostname()
-        node = Node.objects.create(hostname=hostname, address="127.0.0.1", port=8000)
+        node = Node.objects.create(
+            hostname=hostname,
+            address="127.0.0.1",
+            port=8000,
+            mac_address=Node.get_current_mac(),
+        )
 
         class DummyAction(NodeAction):
             display_name = "Dummy Action"
@@ -356,11 +430,9 @@ class TextSampleAdminTests(TestCase):
         )
         self.client.login(username="clipboard_admin", password="pass")
 
-    @patch("nodes.admin.socket.gethostname")
     @patch("pyperclip.paste")
-    def test_add_from_clipboard_creates_sample(self, mock_paste, mock_hostname):
+    def test_add_from_clipboard_creates_sample(self, mock_paste):
         mock_paste.return_value = "clip text"
-        mock_hostname.return_value = "host"
         url = reverse("admin:nodes_textsample_from_clipboard")
         response = self.client.get(url, follow=True)
         self.assertEqual(TextSample.objects.count(), 1)
@@ -370,11 +442,9 @@ class TextSampleAdminTests(TestCase):
         self.assertIsNone(sample.node)
         self.assertContains(response, "Text sample added from clipboard")
 
-    @patch("nodes.admin.socket.gethostname")
     @patch("pyperclip.paste")
-    def test_add_from_clipboard_skips_duplicate(self, mock_paste, mock_hostname):
+    def test_add_from_clipboard_skips_duplicate(self, mock_paste):
         mock_paste.return_value = "clip text"
-        mock_hostname.return_value = "host"
         url = reverse("admin:nodes_textsample_from_clipboard")
         self.client.get(url, follow=True)
         resp = self.client.get(url, follow=True)
@@ -383,14 +453,16 @@ class TextSampleAdminTests(TestCase):
 
 
 class ClipboardTaskTests(TestCase):
-    @patch("nodes.tasks.socket.gethostname")
     @patch("nodes.tasks.pyperclip.paste")
-    def test_sample_clipboard_task_creates_sample(self, mock_paste, mock_hostname):
+    def test_sample_clipboard_task_creates_sample(self, mock_paste):
         mock_paste.return_value = "task text"
-        mock_hostname.return_value = "host"
-        Node.objects.create(hostname="host", address="127.0.0.1", port=8000)
-        with patch.dict("os.environ", {"PORT": "8000"}):
-            sample_clipboard()
+        Node.objects.create(
+            hostname="host",
+            address="127.0.0.1",
+            port=8000,
+            mac_address=Node.get_current_mac(),
+        )
+        sample_clipboard()
         self.assertEqual(TextSample.objects.count(), 1)
         sample = TextSample.objects.first()
         self.assertEqual(sample.content, "task text")
@@ -398,15 +470,17 @@ class ClipboardTaskTests(TestCase):
         self.assertIsNotNone(sample.node)
         self.assertEqual(sample.node.hostname, "host")
         # Duplicate should not create another sample
-        with patch.dict("os.environ", {"PORT": "8000"}):
-            sample_clipboard()
+        sample_clipboard()
         self.assertEqual(TextSample.objects.count(), 1)
 
     @patch("nodes.tasks.capture_screenshot")
-    @patch("nodes.tasks.socket.gethostname")
-    def test_capture_node_screenshot_task(self, mock_hostname, mock_capture):
-        mock_hostname.return_value = "host"
-        node = Node.objects.create(hostname="host", address="127.0.0.1", port=8000)
+    def test_capture_node_screenshot_task(self, mock_capture):
+        node = Node.objects.create(
+            hostname="host",
+            address="127.0.0.1",
+            port=8000,
+            mac_address=Node.get_current_mac(),
+        )
         screenshot_dir = settings.LOG_DIR / "screenshots"
         screenshot_dir.mkdir(parents=True, exist_ok=True)
         file_path = screenshot_dir / "test.png"

@@ -41,6 +41,7 @@ class NodeAdminForm(forms.ModelForm):
 class NodeAdmin(admin.ModelAdmin):
     list_display = (
         "hostname",
+        "mac_address",
         "address",
         "port",
         "api",
@@ -51,7 +52,7 @@ class NodeAdmin(admin.ModelAdmin):
         "roles_list",
         "last_seen",
     )
-    search_fields = ("hostname", "address")
+    search_fields = ("hostname", "address", "mac_address")
     change_list_template = "admin/nodes/node/change_list.html"
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
@@ -111,19 +112,43 @@ class NodeAdmin(admin.ModelAdmin):
         installed_version = ver_path.read_text().strip() if ver_path.exists() else ''
         installed_revision = rev_path.read_text().strip() if rev_path.exists() else ''
 
+        mac = Node.get_current_mac()
         node, created = Node.objects.get_or_create(
-            hostname=hostname,
-            defaults={'address': address, 'port': port, 'base_path': base_path, 'installed_version': installed_version, 'installed_revision': installed_revision},
+            mac_address=mac,
+            defaults={
+                'hostname': hostname,
+                'address': address,
+                'port': port,
+                'base_path': base_path,
+                'installed_version': installed_version,
+                'installed_revision': installed_revision,
+            },
         )
         if not created:
+            node.hostname = hostname
+            node.address = address
+            node.port = port
             node.base_path = base_path
             node.installed_version = installed_version
             node.installed_revision = installed_revision
-            node.save(update_fields=['base_path', 'installed_version', 'installed_revision'])
+            node.save(
+                update_fields=[
+                    'hostname',
+                    'address',
+                    'port',
+                    'base_path',
+                    'installed_version',
+                    'installed_revision',
+                ]
+            )
         if created:
-            self.message_user(request, 'Current host registered', messages.SUCCESS)
+            self.message_user(request, f'Current host registered as {node}', messages.SUCCESS)
         else:
-            self.message_user(request, 'Current host already registered', messages.INFO)
+            self.message_user(
+                request,
+                f'Current host already registered as {node}',
+                messages.INFO,
+            )
         return redirect('..')
 
     def run_command(self, request, queryset):
@@ -204,10 +229,7 @@ class NodeScreenshotAdmin(admin.ModelAdmin):
         return custom + urls
 
     def capture_now(self, request):
-        hostname = socket.gethostname()
-        node = Node.objects.filter(
-            hostname=hostname, port=request.get_port()
-        ).first()
+        node = Node.get_local()
         source_id = request.GET.get("source")
         if source_id:
             sources = ScreenSource.objects.filter(pk=source_id)
@@ -351,9 +373,7 @@ class TextSampleAdmin(admin.ModelAdmin):
                 request, "Duplicate sample not created.", level=messages.INFO
             )
             return redirect("..")
-        hostname = socket.gethostname()
-        port = int(request.get_port())
-        node = Node.objects.filter(hostname=hostname, port=port).first()
+        node = Node.get_local()
         TextSample.objects.create(content=content, node=node)
         self.message_user(
             request, "Text sample added from clipboard.", level=messages.SUCCESS

@@ -19,23 +19,25 @@ def site_and_node(request: HttpRequest):
     try:
         from nodes.models import Node
 
-        hostname = socket.gethostname()
-        try:
-            addresses = socket.gethostbyname_ex(hostname)[2]
-        except socket.gaierror:
-            addresses = []
+        node = Node.get_local()
+        if not node:
+            hostname = socket.gethostname()
+            try:
+                addresses = socket.gethostbyname_ex(hostname)[2]
+            except socket.gaierror:
+                addresses = []
 
-        node = Node.objects.filter(hostname__iexact=hostname).first()
-        if not node:
-            for addr in addresses:
-                node = Node.objects.filter(address=addr).first()
-                if node:
-                    break
-        if not node:
-            node = (
-                Node.objects.filter(hostname__iexact=host).first()
-                or Node.objects.filter(address=host).first()
-            )
+            node = Node.objects.filter(hostname__iexact=hostname).first()
+            if not node:
+                for addr in addresses:
+                    node = Node.objects.filter(address=addr).first()
+                    if node:
+                        break
+            if not node:
+                node = (
+                    Node.objects.filter(hostname__iexact=host).first()
+                    or Node.objects.filter(address=host).first()
+                )
     except Exception:
         node = None
 

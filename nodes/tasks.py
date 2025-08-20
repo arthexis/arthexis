@@ -1,6 +1,4 @@
 import logging
-import socket
-import os
 from pathlib import Path
 
 import pyperclip
@@ -27,9 +25,7 @@ def sample_clipboard() -> None:
     if TextSample.objects.filter(content=content).exists():
         logger.info("Duplicate clipboard content; sample not created")
         return
-    hostname = socket.gethostname()
-    port = int(os.environ.get("PORT", 8000))
-    node = Node.objects.filter(hostname=hostname, port=port).first()
+    node = Node.get_local()
     TextSample.objects.create(content=content, node=node, automated=True)
 
 
@@ -41,8 +37,7 @@ def capture_node_screenshot(
     if url is None:
         url = f"http://localhost:{port}"
     path: Path = capture_screenshot(url)
-    hostname = socket.gethostname()
-    node = Node.objects.filter(hostname=hostname, port=port).first()
+    node = Node.get_local()
     save_screenshot(path, node=node, method=method)
     return str(path)
 
