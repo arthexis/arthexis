@@ -3,19 +3,33 @@ from io import BytesIO
 
 import base64
 import qrcode
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.utils import timezone
 
 from website.utils import landing
 from .models import Reference
+from .forms import ReferenceForm
 
 
 @landing("Recent References")
 def recent(request):
-    """Display references created in the last 72 hours."""
+    """Display recent references and allow creating new ones."""
     since = timezone.now() - timedelta(hours=72)
     refs_qs = Reference.objects.filter(created__gte=since).order_by("-created")
-    return render(request, "refs/recent.html", {"references": refs_qs})
+
+    if request.method == "POST":
+        form = ReferenceForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect("refs:recent")
+    else:
+        form = ReferenceForm()
+
+    return render(
+        request,
+        "refs/recent.html",
+        {"references": refs_qs, "form": form},
+    )
 
 
 @landing("Reference Generator")
