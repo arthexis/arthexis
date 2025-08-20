@@ -17,7 +17,10 @@ register = template.Library()
 @register.simple_tag
 def ref_img(value, size=200, alt=None):
     """Return an <img> tag with the stored reference image for the value."""
-    ref, _ = Reference.objects.get_or_create(value=value)
+    ref, _ = Reference.objects.get_or_create(
+        value=value,
+        defaults={"alt_text": alt or value, "content_type": Reference.TEXT},
+    )
     alt_text = alt or ref.alt_text or "reference"
     if ref.alt_text != alt_text:
         ref.alt_text = alt_text

@@ -7,11 +7,22 @@ import qrcode
 
 
 class Reference(models.Model):
-    """Store a reference value and optional generated QR image."""
+    """Store a piece of reference content which can be text or an image."""
 
-    value = models.CharField(max_length=2000, unique=True)
-    alt_text = models.CharField(max_length=500, blank=True)
-    image = models.ImageField(upload_to="refs/", blank=True)
+    TEXT = "text"
+    IMAGE = "image"
+    CONTENT_TYPE_CHOICES = [
+        (TEXT, "Text"),
+        (IMAGE, "Image"),
+    ]
+
+    content_type = models.CharField(
+        max_length=5, choices=CONTENT_TYPE_CHOICES, default=TEXT
+    )
+    alt_text = models.CharField("Title / Alt Text", max_length=500)
+    value = models.TextField(blank=True)
+    file = models.FileField(upload_to="refs/", blank=True)
+    image = models.ImageField(upload_to="refs/qr/", blank=True)
     uses = models.PositiveIntegerField(default=0)
     method = models.CharField(max_length=50, default="qr")
     include_in_footer = models.BooleanField(
@@ -20,7 +31,7 @@ class Reference(models.Model):
     created = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
-        if self.method == "qr":
+        if self.method == "qr" and self.value:
             qr = qrcode.QRCode(box_size=10, border=4)
             qr.add_data(self.value)
             qr.make(fit=True)
@@ -34,6 +45,5 @@ class Reference(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.value
-
+        return self.alt_text
 

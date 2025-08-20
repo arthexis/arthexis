@@ -6,11 +6,13 @@ from .models import Reference
 
 @admin.register(Reference)
 class ReferenceAdmin(admin.ModelAdmin):
-    list_display = ("value", "include_in_footer")
+    list_display = ("alt_text", "content_type", "include_in_footer")
     readonly_fields = ("uses", "qr_code")
     fields = (
-        "value",
         "alt_text",
+        "content_type",
+        "value",
+        "file",
         "method",
         "include_in_footer",
         "uses",
@@ -22,7 +24,7 @@ class ReferenceAdmin(admin.ModelAdmin):
             return format_html(
                 '<img src="{}" alt="{}" style="height:200px;"/>',
                 obj.image.url,
-                obj.alt_text or obj.value,
+                obj.alt_text,
             )
         return ""
 
