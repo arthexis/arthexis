@@ -93,6 +93,17 @@ class AdminBadgesTests(TestCase):
         self.assertContains(resp, "badge-unknown")
         self.assertContains(resp, "#6c757d")
 
+    def test_badges_link_to_admin(self):
+        resp = self.client.get(reverse("admin:index"))
+        site_list = reverse("admin:website_siteproxy_changelist")
+        site_change = reverse("admin:website_siteproxy_change", args=[1])
+        node_list = reverse("admin:nodes_node_changelist")
+        node_change = reverse("admin:nodes_node_change", args=[self.node.pk])
+        self.assertContains(resp, f'href="{site_list}"')
+        self.assertContains(resp, f'href="{site_change}"')
+        self.assertContains(resp, f'href="{node_list}"')
+        self.assertContains(resp, f'href="{node_change}"')
+
 
 class AdminSidebarTests(TestCase):
     def setUp(self):
