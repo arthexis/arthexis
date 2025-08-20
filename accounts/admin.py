@@ -64,7 +64,6 @@ class AddressAdmin(admin.ModelAdmin):
     search_fields = ("street", "municipality", "postal_code")
 
 
-
 class CreditInline(admin.TabularInline):
     model = Credit
     fields = ("amount_kw", "created_by", "created_on")
@@ -237,7 +236,7 @@ admin.site.register(Subscription)
 class RFIDResource(resources.ModelResource):
     class Meta:
         model = RFID
-        fields = ("label_id", "rfid", "allowed")
+        fields = ("label_id", "rfid", "allowed", "color", "released")
         import_id_fields = ("label_id",)
 
 
@@ -249,11 +248,14 @@ class RFIDAdmin(ImportExportModelAdmin):
     list_display = (
         "label_id",
         "rfid",
+        "color",
+        "released",
         "accounts_display",
         "allowed",
         "added_on",
         "write_link",
     )
+    list_filter = ("color", "released", "allowed")
     search_fields = ("label_id", "rfid")
     autocomplete_fields = ["accounts"]
     actions = ["scan_rfids"]
@@ -306,6 +308,7 @@ class RFIDAdmin(ImportExportModelAdmin):
             return JsonResponse({"error": str(exc)}, status=500)
 
         import time
+
         try:
             import RPi.GPIO as GPIO  # pragma: no cover - hardware dependent
         except Exception:  # pragma: no cover - hardware dependent
@@ -356,6 +359,7 @@ class RFIDAdmin(ImportExportModelAdmin):
             return JsonResponse({"error": str(exc)}, status=500)
 
         import time
+
         try:
             import RPi.GPIO as GPIO  # pragma: no cover - hardware dependent
         except Exception:  # pragma: no cover - hardware dependent
@@ -418,7 +422,9 @@ class RFIDAdmin(ImportExportModelAdmin):
                                     "error": "auth failed",
                                 }
                             )
-                        except Exception as exc:  # pragma: no cover - hardware dependent
+                        except (
+                            Exception
+                        ) as exc:  # pragma: no cover - hardware dependent
                             return JsonResponse(
                                 {
                                     "rfid": rfid,

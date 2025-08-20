@@ -121,8 +121,7 @@ class Address(models.Model):
     }
 
     MUNICIPALITY_CHOICES = [
-        (name, name)
-        for name in COAHUILA_MUNICIPALITIES + NUEVO_LEON_MUNICIPALITIES
+        (name, name) for name in COAHUILA_MUNICIPALITIES + NUEVO_LEON_MUNICIPALITIES
     ]
 
     street = models.CharField(max_length=255)
@@ -212,6 +211,15 @@ class RFID(models.Model):
         verbose_name="Key B",
     )
     allowed = models.BooleanField(default=True)
+    BLACK = "black"
+    WHITE = "white"
+    COLOR_CHOICES = [(BLACK, "Black"), (WHITE, "White")]
+    color = models.CharField(
+        max_length=5,
+        choices=COLOR_CHOICES,
+        default=BLACK,
+    )
+    released = models.BooleanField(default=False)
     added_on = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
@@ -232,12 +240,9 @@ class RFID(models.Model):
     def get_account_by_rfid(value):
         """Return the account associated with an RFID code if it exists."""
         Account = apps.get_model("accounts", "Account")
-        return (
-            Account.objects.filter(
-                rfids__rfid=value.upper(), rfids__allowed=True
-            )
-            .first()
-        )
+        return Account.objects.filter(
+            rfids__rfid=value.upper(), rfids__allowed=True
+        ).first()
 
     class Meta:
         verbose_name = "RFID"
@@ -275,7 +280,9 @@ class RFIDSource(models.Model):
     def _build_url(self, base_url: str) -> str:
         """Construct the full RFID endpoint URL from a base URL."""
 
-        return urljoin(base_url.rstrip("/") + "/", f"api/rfid/{self.endpoint.strip('/')}/")
+        return urljoin(
+            base_url.rstrip("/") + "/", f"api/rfid/{self.endpoint.strip('/')}/"
+        )
 
     def test_fetch(self, base_url: str):
         """Fetch RFIDs from the endpoint without persisting them."""
@@ -310,9 +317,7 @@ class Account(models.Model):
         null=True,
         blank=True,
     )
-    rfids = models.ManyToManyField(
-        "RFID", blank=True, related_name="accounts"
-    )
+    rfids = models.ManyToManyField("RFID", blank=True, related_name="accounts")
     service_account = models.BooleanField(
         default=False,
         help_text="Allow transactions even when the balance is zero or negative",
@@ -340,11 +345,9 @@ class Account(models.Model):
         expr = ExpressionWrapper(
             F("meter_stop") - F("meter_start"), output_field=FloatField()
         )
-        total = (
-            self.transactions.filter(
-                meter_start__isnull=False, meter_stop__isnull=False
-            ).aggregate(total=Sum(expr))["total"]
-        )
+        total = self.transactions.filter(
+            meter_start__isnull=False, meter_stop__isnull=False
+        ).aggregate(total=Sum(expr))["total"]
         if total is None:
             return Decimal("0")
         return Decimal(str(total))
@@ -410,9 +413,7 @@ class Brand(models.Model):
 class WMICode(models.Model):
     """World Manufacturer Identifier code for a brand."""
 
-    brand = models.ForeignKey(
-        Brand, on_delete=models.CASCADE, related_name="wmi_codes"
-    )
+    brand = models.ForeignKey(Brand, on_delete=models.CASCADE, related_name="wmi_codes")
     code = models.CharField(max_length=3, unique=True)
 
     class Meta:
@@ -493,7 +494,9 @@ class Subscription(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.next_renewal:
-            self.next_renewal = self.start_date + timedelta(days=self.product.renewal_period)
+            self.next_renewal = self.start_date + timedelta(
+                days=self.product.renewal_period
+            )
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
@@ -529,8 +532,8 @@ def _rfid_unique_account(sender, instance, action, reverse, model, pk_set, **kwa
             if instance.accounts.exclude(pk__in=pk_set).exists():
                 raise ValidationError("RFID tags may only be assigned to one account.")
         else:  # adding RFIDs to an account
-            conflict = model.objects.filter(pk__in=pk_set, accounts__isnull=False).exclude(
-                accounts=instance
-            )
+            conflict = model.objects.filter(
+                pk__in=pk_set, accounts__isnull=False
+            ).exclude(accounts=instance)
             if conflict.exists():
                 raise ValidationError("RFID tags may only be assigned to one account.")
