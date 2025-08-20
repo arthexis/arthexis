@@ -14,6 +14,21 @@ Arthexis Constellation is a Django-based suite that centralizes tools for managi
 2. `python manage.py runserver`
 3. Run management commands with `python manage.py <command>`
 
+## Shell Scripts
+The project includes helper shell scripts to streamline development:
+- `install.sh` – set up a virtual environment, install dependencies, and optionally configure a systemd service with `--service NAME`.
+- `start.sh [port]` – run the development server on the specified port (default `8888`).
+- `stop.sh [port|--all]` – stop the server on a given port or all running servers.
+- `manage.sh <args>` – execute Django management commands.
+- `command.sh <command> [args...]` – run management commands using hyphenated names (e.g., `./command.sh show-migrations`).
+- `dev-maintenance.sh` – install updated dependencies when requirements change and perform database maintenance tasks.
+- `upgrade.sh` – pull the latest code and reinstall dependencies when needed.
+
+## VS Code Tasks
+Two tasks are provided in `.vscode/tasks.json`:
+- **Dev: maintenance** – runs `dev-maintenance.sh` (or the Windows `.bat` equivalent).
+- **Update requirements** – installs updated dependencies via `install.sh` and regenerates `requirements.txt`.
+
 ## Included Apps
 | App | Purpose |
 | --- | --- |
