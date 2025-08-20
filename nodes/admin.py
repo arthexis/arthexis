@@ -183,7 +183,9 @@ class NodeAdmin(admin.ModelAdmin):
             self.message_user(request, "Unknown node action", messages.ERROR)
             return redirect("..")
         try:
-            action_cls.run(node)
+            result = action_cls.run(node)
+            if hasattr(result, "status_code"):
+                return result
             self.message_user(
                 request,
                 f"{action_cls.display_name} executed successfully",
