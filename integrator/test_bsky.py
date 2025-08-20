@@ -79,7 +79,7 @@ class BskyAdminActionTests(TestCase):
         self.admin = User.objects.create_superuser(
             username="bsky-admin",
             password="secret",
-            email="admin@example.com",
+            email="admin@arthexis.com",
         )
         self.client.force_login(self.admin)
         self.account = BskyAccount.objects.create(

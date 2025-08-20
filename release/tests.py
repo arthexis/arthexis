@@ -40,7 +40,7 @@ class PackageConfigTests(TestCase):
             name="pkg",
             description="desc",
             author="me",
-            email="me@example.com",
+            email="me@arthexis.com",
             python_requires=">=3.10",
             license="MIT",
         )
@@ -61,7 +61,7 @@ class PackageAdminTests(TestCase):
             name="pkg",
             description="desc",
             author="me",
-            email="me@example.com",
+            email="me@arthexis.com",
             python_requires=">=3.10",
             license="MIT",
             token="tok",

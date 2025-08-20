@@ -160,7 +160,7 @@ class NodeAdminTests(TestCase):
         self.client = Client()
         User = get_user_model()
         self.admin = User.objects.create_superuser(
-            username="nodes-admin", password="adminpass", email="admin@example.com"
+            username="nodes-admin", password="adminpass", email="admin@arthexis.com"
         )
         self.client.force_login(self.admin)
 
@@ -228,7 +228,7 @@ class NodeActionTests(TestCase):
         self.client = Client()
         User = get_user_model()
         self.admin = User.objects.create_superuser(
-            username="action-admin", password="adminpass", email="admin@example.com"
+            username="action-admin", password="adminpass", email="admin@arthexis.com"
         )
         self.client.force_login(self.admin)
 
@@ -330,7 +330,7 @@ class TextPatternAdminActionTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_superuser(
-            "pattern_admin", "admin@example.com", "pass"
+            "pattern_admin", "admin@arthexis.com", "pass"
         )
         self.client.login(username="pattern_admin", password="pass")
 
@@ -352,7 +352,7 @@ class TextSampleAdminTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_superuser(
-            "clipboard_admin", "admin@example.com", "pass"
+            "clipboard_admin", "admin@arthexis.com", "pass"
         )
         self.client.login(username="clipboard_admin", password="pass")
 
@@ -412,7 +412,7 @@ class ClipboardTaskTests(TestCase):
         file_path = screenshot_dir / "test.png"
         file_path.write_bytes(b"task")
         mock_capture.return_value = Path("screenshots/test.png")
-        capture_node_screenshot("http://example.com")
+        capture_node_screenshot("http://arthexis.com")
         self.assertEqual(NodeScreenshot.objects.count(), 1)
         screenshot = NodeScreenshot.objects.first()
         self.assertEqual(screenshot.node, node)

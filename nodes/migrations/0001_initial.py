@@ -17,12 +17,12 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('name', models.CharField(help_text="Identifier for this configuration (e.g., 'myapp')", max_length=100, unique=True)),
-                ('server_name', models.CharField(help_text='Host name(s) for the server block (e.g., example.com)', max_length=255)),
+                ('server_name', models.CharField(help_text='Host name(s) for the server block (e.g., arthexis.com)', max_length=255)),
                 ('primary_upstream', models.CharField(help_text='Primary upstream in host:port form (e.g., 10.0.0.1:8000)', max_length=255)),
                 ('backup_upstream', models.CharField(blank=True, help_text='Backup upstream in host:port form (e.g., 127.0.0.1:9000)', max_length=255)),
                 ('listen_port', models.PositiveIntegerField(default=80, help_text='Port nginx listens on (e.g., 80 or 443)')),
-                ('ssl_certificate', models.CharField(blank=True, help_text='Path to SSL certificate (e.g., /etc/ssl/certs/example.crt)', max_length=255)),
-                ('ssl_certificate_key', models.CharField(blank=True, help_text='Path to SSL certificate key (e.g., /etc/ssl/private/example.key)', max_length=255)),
+                ('ssl_certificate', models.CharField(blank=True, help_text='Path to SSL certificate (e.g., /etc/ssl/certs/arthexis.crt)', max_length=255)),
+                ('ssl_certificate_key', models.CharField(blank=True, help_text='Path to SSL certificate key (e.g., /etc/ssl/private/arthexis.key)', max_length=255)),
                 ('config_text', models.TextField(blank=True)),
             ],
             options={
