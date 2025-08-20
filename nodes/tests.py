@@ -354,6 +354,26 @@ class NodeActionTests(TestCase):
         finally:
             NodeAction.registry.pop("dummyaction", None)
 
+    def test_generate_backup_action_creates_backup(self):
+        hostname = socket.gethostname()
+        node = Node.objects.create(
+            hostname=hostname,
+            address="127.0.0.1",
+            port=8000,
+            mac_address=Node.get_current_mac(),
+        )
+        url = reverse(
+            "admin:nodes_node_action", args=[node.pk, "generate-db-backup"]
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment", response["Content-Disposition"])
+        self.assertEqual(Backup.objects.count(), 1)
+        backup = Backup.objects.first()
+        path = Path(settings.BASE_DIR) / backup.location
+        if path.exists():
+            path.unlink()
+
 
 
 
