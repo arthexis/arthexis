@@ -9,9 +9,20 @@
     <h1>{% trans "Recent References" %}</h1>
     <ul class="list-group mb-3">
       {% for ref in references %}
-      <li class="list-group-item d-flex justify-content-between align-items-center">
-        <a href="{{ ref.value }}">{{ ref.alt_text|default:ref.value }}</a>
-        <small class="text-muted">{{ ref.created|date:"Y-m-d H:i" }}</small>
+      <li class="list-group-item">
+        <div class="d-flex justify-content-between">
+          <h5 class="mb-1">{{ ref.alt_text }}</h5>
+          <small class="text-muted">{{ ref.created|date:"Y-m-d H:i" }}</small>
+        </div>
+        {% if ref.content_type == 'text' %}
+        <p class="mb-1">{{ ref.value|truncatechars:100 }}</p>
+        {% else %}
+          {% if ref.file %}
+          <img src="{{ ref.file.url }}" alt="{{ ref.alt_text }}" class="img-thumbnail" style="max-width:100px;">
+          {% elif ref.value %}
+          <img src="{{ ref.value }}" alt="{{ ref.alt_text }}" class="img-thumbnail" style="max-width:100px;">
+          {% endif %}
+        {% endif %}
       </li>
       {% empty %}
       <li class="list-group-item">{% trans "No references found." %}</li>
@@ -20,15 +31,23 @@
   </div>
   <div class="col-md-5">
     <h2>{% trans "New Reference" %}</h2>
-    <form method="post" class="card card-body">
+    <form method="post" enctype="multipart/form-data" class="card card-body">
       {% csrf_token %}
+      <div class="mb-3">
+        <label for="{{ form.alt_text.id_for_label }}" class="form-label">{{ form.alt_text.label }}</label>
+        {{ form.alt_text }}
+      </div>
+      <div class="mb-3">
+        <label for="{{ form.content_type.id_for_label }}" class="form-label">{{ form.content_type.label }}</label>
+        {{ form.content_type }}
+      </div>
       <div class="mb-3">
         <label for="{{ form.value.id_for_label }}" class="form-label">{{ form.value.label }}</label>
         {{ form.value }}
       </div>
       <div class="mb-3">
-        <label for="{{ form.alt_text.id_for_label }}" class="form-label">{{ form.alt_text.label }}</label>
-        {{ form.alt_text }}
+        <label for="{{ form.file.id_for_label }}" class="form-label">{{ form.file.label }}</label>
+        {{ form.file }}
       </div>
       <button type="submit" class="btn btn-primary w-100">{% trans "Create" %}</button>
     </form>

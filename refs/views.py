@@ -18,7 +18,7 @@ def recent(request):
     refs_qs = Reference.objects.filter(created__gte=since).order_by("-created")
 
     if request.method == "POST":
-        form = ReferenceForm(request.POST)
+        form = ReferenceForm(request.POST, request.FILES)
         if form.is_valid():
             form.save()
             return redirect("refs:recent")

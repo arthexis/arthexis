@@ -42,10 +42,10 @@ class RecentReferencesTests(TestCase):
         self.client = Client()
 
     def test_only_recent_references_are_listed(self):
-        old_ref = Reference.objects.create(value="https://old.com")
+        old_ref = Reference.objects.create(value="https://old.com", alt_text="Old")
         old_ref.created -= timedelta(hours=80)
         old_ref.save()
-        recent_ref = Reference.objects.create(value="https://new.com")
+        recent_ref = Reference.objects.create(value="https://new.com", alt_text="New")
         resp = self.client.get(reverse('refs:recent'))
         self.assertContains(resp, "https://new.com")
         self.assertNotContains(resp, "https://old.com")
@@ -53,10 +53,31 @@ class RecentReferencesTests(TestCase):
     def test_can_submit_new_reference(self):
         resp = self.client.post(
             reverse("refs:recent"),
-            {"value": "https://form.com", "alt_text": "Form"},
+            {"value": "https://form.com", "alt_text": "Form", "content_type": "text"},
         )
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(Reference.objects.filter(value="https://form.com").exists())
+
+    def test_long_text_shows_excerpt(self):
+        long_text = "x" * 150
+        Reference.objects.create(value=long_text, alt_text="Long", content_type="text")
+        resp = self.client.get(reverse("refs:recent"))
+        self.assertContains(resp, "Long")
+        self.assertContains(resp, "xxx")
+
+    def test_image_reference_shows_thumbnail(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+        import io
+
+        img_io = io.BytesIO()
+        Image.new("RGB", (10, 10)).save(img_io, format="PNG")
+        img = SimpleUploadedFile("test.png", img_io.getvalue(), content_type="image/png")
+        Reference.objects.create(
+            alt_text="Img", content_type="image", file=img
+        )
+        resp = self.client.get(reverse("refs:recent"))
+        self.assertContains(resp, "<img", html=False)
 
 
 class FooterTemplateTagTests(TestCase):
@@ -82,7 +103,9 @@ class FooterTemplateTagTests(TestCase):
         self.assertIn(f"rev {rev}", html)
 
     def test_footer_shows_admin_links_for_staff(self):
-        Reference.objects.create(value="https://example.com", include_in_footer=True)
+        Reference.objects.create(
+            value="https://example.com", alt_text="Example", include_in_footer=True
+        )
         user = get_user_model().objects.create_user(
             "staff", "staff@example.com", "pass", is_staff=True
         )
@@ -105,7 +128,7 @@ class FooterTemplateTagTests(TestCase):
 
 class ReferenceModelUpdateTests(TestCase):
     def test_qr_image_regenerates_on_value_change(self):
-        ref = Reference.objects.create(value="https://old.com")
+        ref = Reference.objects.create(value="https://old.com", alt_text="Old")
         old_name = ref.image.name
         ref.value = "https://new.com"
         ref.save()
@@ -121,7 +144,7 @@ class ReferenceAdminDisplayTests(TestCase):
         self.client.force_login(user)
 
     def test_change_form_displays_qr_code(self):
-        ref = Reference.objects.create(value="https://example.com")
+        ref = Reference.objects.create(value="https://example.com", alt_text="Example")
         resp = self.client.get(
             reverse("admin:refs_reference_change", args=[ref.pk])
         )
