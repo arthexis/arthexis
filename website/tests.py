@@ -17,7 +17,7 @@ class LoginViewTests(TestCase):
             username="staff", password="pwd", is_staff=True
         )
         self.user = User.objects.create_user(username="user", password="pwd")
-        Site.objects.update_or_create(id=1, defaults={"name": "website"})
+        Site.objects.update_or_create(id=1, defaults={"name": "Terminal"})
 
     def test_login_link_in_navbar(self):
         resp = self.client.get(reverse("website:index"))
@@ -118,7 +118,7 @@ class AdminSidebarTests(TestCase):
 class ReadmeSidebarTests(TestCase):
     def setUp(self):
         self.client = Client()
-        Site.objects.update_or_create(id=1, defaults={"name": "website"})
+        Site.objects.update_or_create(id=1, defaults={"name": "Terminal"})
 
     def test_table_of_contents_sidebar_present(self):
         resp = self.client.get(reverse("website:index"))
@@ -142,7 +142,7 @@ class SiteAdminRegisterCurrentTests(TestCase):
         )
         self.client.force_login(self.admin)
         Site.objects.update_or_create(
-            id=1, defaults={"name": "example", "domain": "example.com"}
+            id=1, defaults={"name": "Constellation", "domain": "arthexis.com"}
         )
 
     def test_register_current_creates_site(self):
@@ -162,7 +162,7 @@ class SiteAdminRegisterCurrentTests(TestCase):
         )
         self.assertRedirects(resp, reverse("admin:website_siteproxy_changelist"))
         site = Site.objects.get(domain="127.0.0.1")
-        self.assertEqual(site.name, "website")
+        self.assertEqual(site.name, "Terminal")
 
 
 class AdminBadgesWebsiteTests(TestCase):
@@ -174,20 +174,20 @@ class AdminBadgesWebsiteTests(TestCase):
         )
         self.client.force_login(self.admin)
         Site.objects.update_or_create(
-            id=1, defaults={"name": "website", "domain": "127.0.0.1"}
+            id=1, defaults={"name": "Terminal", "domain": "127.0.0.1"}
         )
 
     @override_settings(ALLOWED_HOSTS=["127.0.0.1", "testserver"])
     def test_badge_shows_website_for_ip_domain(self):
         resp = self.client.get(reverse("admin:index"), HTTP_HOST="127.0.0.1")
-        self.assertContains(resp, "SITE: website")
+        self.assertContains(resp, "SITE: Terminal")
 
 
 class NavAppsTests(TestCase):
     def setUp(self):
         self.client = Client()
         site, _ = Site.objects.update_or_create(
-            id=1, defaults={"domain": "127.0.0.1", "name": "website"}
+            id=1, defaults={"domain": "127.0.0.1", "name": "Terminal"}
         )
         app = Application.objects.create(name="Readme")
         SiteApplication.objects.create(

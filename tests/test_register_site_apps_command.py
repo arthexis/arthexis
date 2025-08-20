@@ -28,7 +28,7 @@ class RegisterSiteAppsCommandTests(TestCase):
         call_command("register_site_apps")
 
         site = Site.objects.get(domain="127.0.0.1")
-        self.assertEqual(site.name, "website")
+        self.assertEqual(site.name, "Terminal")
 
         node = Node.objects.get(hostname=socket.gethostname())
         self.assertFalse(node.enable_public_api)
