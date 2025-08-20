@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import Reference
+from .models import Reference, Tag, TaggedItem
 
 
 @admin.register(Reference)
@@ -29,3 +29,15 @@ class ReferenceAdmin(admin.ModelAdmin):
         return ""
 
     qr_code.short_description = "QR Code"
+
+
+@admin.register(Tag)
+class TagAdmin(admin.ModelAdmin):
+    prepopulated_fields = {"slug": ("name",)}
+    search_fields = ["name", "slug"]
+
+
+@admin.register(TaggedItem)
+class TaggedItemAdmin(admin.ModelAdmin):
+    list_display = ("tag", "content_type", "object_id")
+    list_filter = ("tag", "content_type")

@@ -7,6 +7,7 @@ from django.test import Client, RequestFactory, TestCase
 from django.urls import resolve, reverse
 
 from .models import Reference
+from .tagging import add_tag, get_tags
 
 
 class ReferenceTests(TestCase):
@@ -149,4 +150,16 @@ class ReferenceAdminDisplayTests(TestCase):
             reverse("admin:refs_reference_change", args=[ref.pk])
         )
         self.assertContains(resp, f'src="{ref.image.url}"')
+
+
+class TaggingTests(TestCase):
+    def test_add_and_get_tags(self):
+        user_model = get_user_model()
+        user = user_model.objects.create(username="tester")
+
+        add_tag(user, "alpha")
+        tags = list(get_tags(user))
+
+        self.assertEqual(len(tags), 1)
+        self.assertEqual(tags[0].name, "alpha")
 
