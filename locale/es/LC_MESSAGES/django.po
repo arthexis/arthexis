@@ -432,6 +432,14 @@ msgstr ""
 msgid "No references found."
 msgstr ""
 
+#: refs/templates/refs/recent.html:22
+msgid "New Reference"
+msgstr ""
+
+#: refs/templates/refs/recent.html:26
+msgid "Create"
+msgstr ""
+
 #: website/templates/admin/app_list.html:8
 #, python-format
 msgid "Models in the %(name)s application"

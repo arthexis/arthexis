@@ -50,6 +50,14 @@ class RecentReferencesTests(TestCase):
         self.assertContains(resp, "https://new.com")
         self.assertNotContains(resp, "https://old.com")
 
+    def test_can_submit_new_reference(self):
+        resp = self.client.post(
+            reverse("refs:recent"),
+            {"value": "https://form.com", "alt_text": "Form"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(Reference.objects.filter(value="https://form.com").exists())
+
 
 class FooterTemplateTagTests(TestCase):
     def setUp(self):

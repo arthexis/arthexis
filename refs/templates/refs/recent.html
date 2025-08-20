@@ -4,15 +4,27 @@
 {% block title %}{% trans "Recent References" %}{% endblock %}
 
 {% block content %}
-<h1>{% trans "Recent References" %}</h1>
-<ul class="list-group">
-  {% for ref in references %}
-  <li class="list-group-item d-flex justify-content-between align-items-center">
-    <a href="{{ ref.value }}">{{ ref.alt_text|default:ref.value }}</a>
-    <small class="text-muted">{{ ref.created|date:"Y-m-d H:i" }}</small>
-  </li>
-  {% empty %}
-  <li class="list-group-item">{% trans "No references found." %}</li>
-  {% endfor %}
-</ul>
+<div class="row">
+  <div class="col-md-7">
+    <h1>{% trans "Recent References" %}</h1>
+    <ul class="list-group mb-3">
+      {% for ref in references %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <a href="{{ ref.value }}">{{ ref.alt_text|default:ref.value }}</a>
+        <small class="text-muted">{{ ref.created|date:"Y-m-d H:i" }}</small>
+      </li>
+      {% empty %}
+      <li class="list-group-item">{% trans "No references found." %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="col-md-5">
+    <h2>{% trans "New Reference" %}</h2>
+    <form method="post" class="card card-body">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit" class="btn btn-primary">{% trans "Create" %}</button>
+    </form>
+  </div>
+</div>
 {% endblock %}
