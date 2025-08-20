@@ -50,6 +50,27 @@ class LoginViewTests(TestCase):
         self.assertRedirects(resp, "/nodes/list/")
 
 
+class NavbarBrandTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "Terminal", "domain": "testserver"}
+        )
+
+    def test_site_name_displayed_when_known(self):
+        resp = self.client.get(reverse("website:index"))
+        self.assertContains(
+            resp, '<a class="navbar-brand" href="/">Terminal</a>'
+        )
+
+    def test_default_brand_when_unknown(self):
+        Site.objects.filter(id=1).update(domain="example.com")
+        resp = self.client.get(reverse("website:index"))
+        self.assertContains(
+            resp, '<a class="navbar-brand" href="/">Arthexis</a>'
+        )
+
+
 class AdminBadgesTests(TestCase):
     def setUp(self):
         self.client = Client()
