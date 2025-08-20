@@ -66,9 +66,7 @@ class DefaultAdminTests(TestCase):
 class RFIDLoginTests(TestCase):
     def setUp(self):
         self.client = Client()
-        self.user = User.objects.create_user(
-            username="alice", password="secret"
-        )
+        self.user = User.objects.create_user(username="alice", password="secret")
         self.account = Account.objects.create(user=self.user, name="ALICE")
         tag = RFID.objects.create(rfid="CARD123")
         self.account.rfids.add(tag)
@@ -99,19 +97,73 @@ class RFIDBatchApiTests(TestCase):
         self.client.force_login(self.user)
 
     def test_export_rfids(self):
-        tag = RFID.objects.create(rfid="CARD999")
-        self.account.rfids.add(tag)
+        tag_black = RFID.objects.create(rfid="CARD999")
+        tag_white = RFID.objects.create(rfid="CARD998", color=RFID.WHITE)
+        self.account.rfids.add(tag_black, tag_white)
         response = self.client.get(reverse("rfid-batch"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
-            {"rfids": [{"rfid": "CARD999", "accounts": [self.account.id], "allowed": True}]},
+            {
+                "rfids": [
+                    {
+                        "rfid": "CARD999",
+                        "accounts": [self.account.id],
+                        "allowed": True,
+                        "color": "black",
+                        "released": False,
+                    }
+                ]
+            },
+        )
+
+    def test_export_rfids_color_filter(self):
+        RFID.objects.create(rfid="CARD111", color=RFID.WHITE)
+        response = self.client.get(reverse("rfid-batch"), {"color": "white"})
+        self.assertEqual(
+            response.json(),
+            {
+                "rfids": [
+                    {
+                        "rfid": "CARD111",
+                        "accounts": [],
+                        "allowed": True,
+                        "color": "white",
+                        "released": False,
+                    }
+                ]
+            },
+        )
+
+    def test_export_rfids_released_filter(self):
+        RFID.objects.create(rfid="CARD112", released=True)
+        RFID.objects.create(rfid="CARD113", released=False)
+        response = self.client.get(reverse("rfid-batch"), {"released": "true"})
+        self.assertEqual(
+            response.json(),
+            {
+                "rfids": [
+                    {
+                        "rfid": "CARD112",
+                        "accounts": [],
+                        "allowed": True,
+                        "color": "black",
+                        "released": True,
+                    }
+                ]
+            },
         )
 
     def test_import_rfids(self):
         data = {
             "rfids": [
-                {"rfid": "A1B2C3D4", "accounts": [self.account.id], "allowed": True}
+                {
+                    "rfid": "A1B2C3D4",
+                    "accounts": [self.account.id],
+                    "allowed": True,
+                    "color": "white",
+                    "released": True,
+                }
             ]
         }
         response = self.client.post(
@@ -122,15 +174,18 @@ class RFIDBatchApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["imported"], 1)
         self.assertTrue(
-            RFID.objects.filter(rfid="A1B2C3D4", accounts=self.account).exists()
+            RFID.objects.filter(
+                rfid="A1B2C3D4",
+                accounts=self.account,
+                color="white",
+                released=True,
+            ).exists()
         )
 
 
 class AllowedRFIDTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(
-            username="eve", password="secret"
-        )
+        self.user = User.objects.create_user(username="eve", password="secret")
         self.account = Account.objects.create(user=self.user, name="EVE")
         self.rfid = RFID.objects.create(rfid="BAD123")
         self.account.rfids.add(self.rfid)
@@ -259,8 +314,12 @@ class VehicleTests(TestCase):
         nissan = Brand.objects.create(name="Nissan")
         model_s = EVModel.objects.create(brand=tesla, name="Model S")
         leaf = EVModel.objects.create(brand=nissan, name="Leaf")
-        Vehicle.objects.create(account=acc, brand=tesla, model=model_s, vin="VIN12345678901234")
-        Vehicle.objects.create(account=acc, brand=nissan, model=leaf, vin="VIN23456789012345")
+        Vehicle.objects.create(
+            account=acc, brand=tesla, model=model_s, vin="VIN12345678901234"
+        )
+        Vehicle.objects.create(
+            account=acc, brand=nissan, model=leaf, vin="VIN23456789012345"
+        )
         self.assertEqual(acc.vehicles.count(), 2)
 
 
@@ -358,17 +417,13 @@ class EVBrandFixtureTests(TestCase):
         porsche = Brand.objects.get(name="Porsche")
         audi = Brand.objects.get(name="Audi")
         self.assertTrue(
-            {"WP0", "WP1"}
-            <= set(porsche.wmi_codes.values_list("code", flat=True))
+            {"WP0", "WP1"} <= set(porsche.wmi_codes.values_list("code", flat=True))
         )
         self.assertTrue(
-            set(audi.wmi_codes.values_list("code", flat=True))
-            >= {"WAU", "TRU"}
+            set(audi.wmi_codes.values_list("code", flat=True)) >= {"WAU", "TRU"}
         )
         self.assertTrue(EVModel.objects.filter(brand=porsche, name="Taycan").exists())
-        self.assertTrue(
-            EVModel.objects.filter(brand=audi, name="e-tron GT").exists()
-        )
+        self.assertTrue(EVModel.objects.filter(brand=audi, name="e-tron GT").exists())
 
     def test_brand_from_vin(self):
         call_command(
@@ -376,12 +431,8 @@ class EVBrandFixtureTests(TestCase):
             "accounts/fixtures/ev_brands.json",
             verbosity=0,
         )
-        self.assertEqual(
-            Brand.from_vin("WP0ZZZ12345678901").name, "Porsche"
-        )
-        self.assertEqual(
-            Brand.from_vin("WAUZZZ12345678901").name, "Audi"
-        )
+        self.assertEqual(Brand.from_vin("WP0ZZZ12345678901").name, "Porsche")
+        self.assertEqual(Brand.from_vin("WAUZZZ12345678901").name, "Audi")
         self.assertIsNone(Brand.from_vin("XYZ12345678901234"))
 
 
@@ -397,5 +448,3 @@ class RFIDFixtureTests(TestCase):
         tag = RFID.objects.get(rfid="FFFFFFFF")
         self.assertIn(account, tag.accounts.all())
         self.assertEqual(tag.accounts.count(), 1)
-
-

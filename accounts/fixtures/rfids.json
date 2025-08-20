@@ -5,6 +5,8 @@
     "fields": {
       "rfid": "FFFFFFFF",
       "allowed": true,
+      "color": "black",
+      "released": false,
       "added_on": "2024-01-01T00:00:00Z"
     }
   }

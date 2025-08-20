@@ -105,13 +105,24 @@ def rfid_batch(request):
     """Export or import RFID tags in batch."""
 
     if request.method == "GET":
+        color = request.GET.get("color", RFID.BLACK).lower()
+        released = request.GET.get("released")
+        if released is not None:
+            released = released.lower()
+        qs = RFID.objects.all()
+        if color != "all":
+            qs = qs.filter(color=color)
+        if released in ("true", "false"):
+            qs = qs.filter(released=(released == "true"))
         tags = [
             {
                 "rfid": t.rfid,
                 "accounts": list(t.accounts.values_list("id", flat=True)),
                 "allowed": t.allowed,
+                "color": t.color,
+                "released": t.released,
             }
-            for t in RFID.objects.all().order_by("rfid")
+            for t in qs.order_by("rfid")
         ]
         return JsonResponse({"rfids": tags})
 
@@ -132,9 +143,18 @@ def rfid_batch(request):
                 continue
             allowed = row.get("allowed", True)
             accounts = row.get("accounts") or []
+            color = (row.get("color") or RFID.BLACK).strip().lower() or RFID.BLACK
+            released = row.get("released", False)
+            if isinstance(released, str):
+                released = released.lower() == "true"
 
             tag, _ = RFID.objects.update_or_create(
-                rfid=rfid.upper(), defaults={"allowed": allowed}
+                rfid=rfid.upper(),
+                defaults={
+                    "allowed": allowed,
+                    "color": color,
+                    "released": released,
+                },
             )
             if accounts:
                 tag.accounts.set(Account.objects.filter(id__in=accounts))
