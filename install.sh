@@ -40,8 +40,10 @@ pip install -r "$REQ_FILE"
 
 deactivate
 
+# If a service name was provided, install a systemd unit and persist its name
 if [ -n "$SERVICE" ]; then
     SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
+    echo "$SERVICE" > envs/service
     sudo bash -c "cat > '$SERVICE_FILE'" <<SERVICEEOF
 [Unit]
 Description=Arthexis Constellation Django service
@@ -61,3 +63,4 @@ SERVICEEOF
     sudo systemctl enable "$SERVICE"
     sudo systemctl restart "$SERVICE"
 fi
+
