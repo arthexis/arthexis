@@ -5,7 +5,7 @@ from django import forms
 from django.contrib import admin, messages
 
 from config.offline import requires_network
-from .models import BskyAccount, OdooInstance
+from .models import BskyAccount, OdooInstance, RequestType, Request
 
 
 class BskyAccountAdminForm(forms.ModelForm):
@@ -98,3 +98,21 @@ class OdooInstanceAdmin(admin.ModelAdmin):
                 )
 
     test_connection.short_description = "Test API connection"
+
+
+@admin.register(RequestType)
+class RequestTypeAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "next_number")
+
+
+@admin.register(Request)
+class RequestAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "request_type",
+        "requester",
+        "approver",
+        "status",
+        "responded_at",
+    )
+    readonly_fields = ("number", "responded_at", "requester")
