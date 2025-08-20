@@ -72,6 +72,27 @@ document.addEventListener('DOMContentLoaded', function () {
     toggleEmptyGroups();
 });
 </script>
+{% now "c" as current_time %}
+<script id="admin-server-clock">
+document.addEventListener('DOMContentLoaded', function () {
+    const clock = document.getElementById('server-clock');
+    if (!clock) {
+        return;
+    }
+    const serverStart = Date.parse("{{ current_time|escapejs }}");
+    const clientStart = Date.now();
+    function pad(n) {
+        return String(n).padStart(2, '0');
+    }
+    function update() {
+        const now = new Date(serverStart + (Date.now() - clientStart));
+        const formatted = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        clock.textContent = formatted;
+    }
+    update();
+    setInterval(update, 1000);
+});
+</script>
 {% endblock %}
 {% block extrastyle %}
 {{ block.super }}
@@ -111,29 +132,19 @@ document.addEventListener('DOMContentLoaded', function () {
 {% endblock %}
 {% block branding %}
 <h1 id="site-name">
-  <a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a>
+  <a href="{% url 'admin:index' %}"><span id="server-clock"></span></a>
     {% if badge_site %}
-      <span class="badge" style="background-color: {{ badge_site_color }};">
-        <a href="{% url 'admin:website_siteproxy_changelist' %}">SITE:</a> <a href="{% url 'admin:website_siteproxy_change' badge_site.id %}">{{ badge_site.name }}</a>
-      </span>
+      <span class="badge" style="background-color: {{ badge_site_color }};">SITE: {{ badge_site.name }}</span>
     {% else %}
-      <span class="badge badge-unknown">
-        <a href="{% url 'admin:website_siteproxy_changelist' %}">SITE:</a> Unknown
-      </span>
+      <span class="badge badge-unknown">SITE: Unknown</span>
     {% endif %}
   {% if badge_node %}
-    <span class="badge" style="background-color: {{ badge_node_color }};">
-      <a href="{% url 'admin:nodes_node_changelist' %}">NODE:</a> <a href="{% url 'admin:nodes_node_change' badge_node.id %}">{{ badge_node.hostname }}</a>
-    </span>
+    <span class="badge" style="background-color: {{ badge_node_color }};">NODE: {{ badge_node.hostname }}</span>
     {% for role in badge_node.roles.all %}
-      <span class="badge" style="background-color: {{ badge_node_color }};">
-        <a href="{% url 'admin:nodes_noderole_change' role.id %}">ROLE: {{ role.name }}</a>
-      </span>
+      <span class="badge" style="background-color: {{ badge_node_color }};">ROLE: {{ role.name }}</span>
     {% endfor %}
   {% else %}
-    <span class="badge badge-unknown">
-      <a href="{% url 'admin:nodes_node_changelist' %}">NODE:</a> Unknown
-    </span>
+    <span class="badge badge-unknown">NODE: Unknown</span>
   {% endif %}
 </h1>
 {% endblock %}
