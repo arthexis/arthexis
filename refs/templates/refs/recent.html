@@ -1,5 +1,5 @@
 {% extends "website/base.html" %}
-{% load i18n %}
+{% load i18n ref_tags %}
 
 {% block title %}{% trans "Recent References" %}{% endblock %}
 
@@ -15,7 +15,11 @@
           <small class="text-muted">{{ ref.created|date:"Y-m-d H:i" }}</small>
         </div>
         {% if ref.content_type == 'text' %}
+        {% if ref.value|is_url %}
+        <p class="mb-1"><a href="{{ ref.value }}" target="_blank" rel="noopener noreferrer">{{ ref.value|truncatechars:100 }}</a></p>
+        {% else %}
         <p class="mb-1">{{ ref.value|truncatechars:100 }}</p>
+        {% endif %}
         {% else %}
           {% if ref.file %}
           <img src="{{ ref.file.url }}" alt="{{ ref.alt_text }}" class="img-thumbnail" style="max-width:100px;">

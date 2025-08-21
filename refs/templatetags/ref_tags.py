@@ -1,6 +1,7 @@
 import base64
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import urlparse
 
 import qrcode
 from django import template
@@ -12,6 +13,16 @@ from django.utils.safestring import mark_safe
 from refs.models import Reference
 
 register = template.Library()
+
+
+@register.filter
+def is_url(value):
+    """Return True if the given value looks like an HTTP/HTTPS URL."""
+    try:
+        result = urlparse(value)
+    except Exception:
+        return False
+    return result.scheme in {"http", "https"} and bool(result.netloc)
 
 
 @register.simple_tag
