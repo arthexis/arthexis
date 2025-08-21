@@ -8,6 +8,8 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import json
+import tempfile
 
 import django
 from django.apps import apps
@@ -100,7 +102,25 @@ def run_database_tasks() -> None:
 
     fixtures = _fixture_files()
     if fixtures:
-        call_command("loaddata", *fixtures)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            patched: list[str] = []
+            for name in fixtures:
+                source = Path(settings.BASE_DIR, name)
+                with source.open() as f:
+                    data = json.load(f)
+                for obj in data:
+                    model_label = obj.get("model", "")
+                    try:
+                        model = apps.get_model(model_label)
+                    except LookupError:
+                        continue
+                    if any(f.name == "is_seed_data" for f in model._meta.fields):
+                        obj.setdefault("fields", {})["is_seed_data"] = True
+                dest = Path(tmpdir, Path(name).name)
+                with dest.open("w") as f:
+                    json.dump(data, f)
+                patched.append(str(dest))
+            call_command("loaddata", *patched)
 
     # Ensure Application and SiteApplication entries exist for local apps
     call_command("register_site_apps")
