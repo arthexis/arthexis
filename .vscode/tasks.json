@@ -4,11 +4,52 @@
         {
             "label": "Dev: refresh",
             "type": "shell",
-            "command": "${workspaceFolder}/refresh.sh",
+            "command": "${workspaceFolder}/env-refresh.sh",
             "windows": {
-                "command": "${workspaceFolder}\\refresh.bat"
+                "command": "${workspaceFolder}\\env-refresh.bat"
             },
-            "problemMatcher": []
+            "problemMatcher": [],
+            "detail": "Refresh virtual environment and database"
+        },
+        {
+            "label": "Dev: start",
+            "type": "shell",
+            "command": "${workspaceFolder}/start.sh",
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\manage.py runserver 0.0.0.0:8000"
+            },
+            "problemMatcher": [],
+            "detail": "Start the Django development server"
+        },
+        {
+            "label": "Dev: stop",
+            "type": "shell",
+            "command": "${workspaceFolder}/stop.sh",
+            "windows": {
+                "command": "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'manage.py runserver' } | ForEach-Object { Stop-Process -Id $_.ProcessId }"
+            },
+            "problemMatcher": [],
+            "detail": "Stop Django development server processes"
+        },
+        {
+            "label": "Dev: manage",
+            "type": "shell",
+            "command": "${workspaceFolder}/manage.sh",
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\manage.py"
+            },
+            "problemMatcher": [],
+            "detail": "Run manage.py"
+        },
+        {
+            "label": "Dev: command",
+            "type": "shell",
+            "command": "${workspaceFolder}/command.sh",
+            "windows": {
+                "command": "${workspaceFolder}\\command.sh"
+            },
+            "problemMatcher": [],
+            "detail": "Run manage.py subcommands"
         },
         {
             "label": "Update requirements",
