@@ -109,7 +109,9 @@ class Request(Entity):
         APPROVED = "approved", "Approved"
         REJECTED = "rejected", "Rejected"
 
-    request_type = models.ForeignKey(RequestType, on_delete=models.PROTECT)
+    request_type = models.ForeignKey(
+        RequestType, on_delete=models.PROTECT, default=1
+    )
     number = models.CharField(max_length=8, unique=True, editable=False)
     description = models.TextField()
     requester = models.ForeignKey(
@@ -121,7 +123,10 @@ class Request(Entity):
         related_name="requests_to_approve",
     )
     status = models.CharField(
-        max_length=8, choices=Status.choices, default=Status.PENDING
+        max_length=8,
+        choices=Status.choices,
+        default=Status.PENDING,
+        editable=False,
     )
     responded_at = models.DateTimeField(null=True, blank=True, editable=False)
     response_comment = models.TextField(blank=True)
