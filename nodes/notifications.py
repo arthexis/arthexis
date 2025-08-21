@@ -54,7 +54,16 @@ class NotificationManager:
         return None
 
     def send(self, line1: str, line2: str = "", duration: float = 6.0) -> None:
-        """Queue a new notification."""
+        """Queue a new notification, adapting text to fit the screen."""
+
+        full = f"{line1}{line2}"
+        if not (len(line1) <= 16 and len(line2) <= 16 and len(full) <= 32):
+            if len(full) <= 16:
+                line1, line2 = full, ""
+            elif len(full) <= 32:
+                line1, line2 = full[:16], full[16:]
+            else:
+                line1, line2 = full[:16], full[16:]
 
         self.queue.put(Notification(line1=line1, line2=line2, duration=duration))
 
@@ -64,26 +73,50 @@ class NotificationManager:
             try:
                 self._display(note)
             finally:
-                time.sleep(max(note.duration, 6))
                 self.queue.task_done()
 
     # Display helpers -------------------------------------------------
     def _display(self, note: Notification) -> None:
+        duration = max(note.duration, 6)
         if self.lcd:
-            self._lcd_display(note)
+            self._lcd_display(note, duration)
         else:
             self._gui_display(note)
-
-    def _lcd_display(self, note: Notification) -> None:
+            time.sleep(duration)
+    def _lcd_display(self, note: Notification, duration: float) -> None:
         try:
-            self.lcd.clear()
-            self.lcd.write(0, 0, note.line1.ljust(16))
-            if note.line2:
-                self.lcd.write(0, 1, note.line2.ljust(16))
+            full = f"{note.line1}{note.line2}".strip()
+            if (
+                len(note.line1) <= 16
+                and len(note.line2) <= 16
+                and len(full) <= 32
+            ):
+                self.lcd.clear()
+                self.lcd.write(0, 0, note.line1.ljust(16))
+                if note.line2:
+                    self.lcd.write(0, 1, note.line2.ljust(16))
+                time.sleep(duration)
+            else:
+                top = full[:16]
+                bottom = full[16:]
+                scroll = bottom + " " * 4
+                self.lcd.clear()
+                self.lcd.write(0, 0, top.ljust(16))
+                if not scroll:
+                    time.sleep(duration)
+                else:
+                    end = time.time() + duration
+                    idx = 0
+                    while time.time() < end:
+                        seg = (scroll + scroll[:16])[idx: idx + 16]
+                        self.lcd.write(0, 1, seg.ljust(16))
+                        time.sleep(0.5)
+                        idx = (idx + 1) % len(scroll)
         except Exception as exc:  # pragma: no cover - hardware dependent
             logger.warning("LCD display failed: %s", exc)
             self.lcd = None
             self._gui_display(note)
+            time.sleep(duration)
 
     def _gui_display(self, note: Notification) -> None:
         if plyer_notify:
