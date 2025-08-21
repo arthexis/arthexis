@@ -29,7 +29,14 @@ def read_rfid() -> dict:
                 if status == mfrc.MI_OK:
                     rfid = "".join(f"{x:02X}" for x in uid[:5])
                     tag, created = RFID.objects.get_or_create(rfid=rfid)
-                    return {"rfid": rfid, "label_id": tag.pk, "created": created}
+                    return {
+                        "rfid": rfid,
+                        "label_id": tag.pk,
+                        "created": created,
+                        "color": tag.color,
+                        "allowed": tag.allowed,
+                        "released": tag.released,
+                    }
             time.sleep(0.2)
         return {"rfid": None, "label_id": None}
     except Exception as exc:  # pragma: no cover - hardware dependent

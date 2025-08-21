@@ -1,14 +1,38 @@
 {% with prefix=prefix|default:"rfid" %}
 <div id="{{ prefix }}-scanner">
   <p id="{{ prefix }}-status">Scanner ready</p>
-  <p>Label: <span id="{{ prefix }}-label"></span></p>
-  <p>RFID: <span id="{{ prefix }}-rfid"></span></p>
+  <div class="field"><span class="label">Label:</span><span class="value" id="{{ prefix }}-label"></span></div>
+  <div class="field"><span class="label">RFID:</span><span class="value" id="{{ prefix }}-rfid"></span></div>
+  <div class="field"><span class="label">Color:</span><span class="value" id="{{ prefix }}-color"></span></div>
+  <div class="field"><span class="label">Valid:</span><span class="value" id="{{ prefix }}-allowed"></span></div>
+  <div class="field"><span class="label">Released:</span><span class="value" id="{{ prefix }}-released"></span></div>
 </div>
+<style>
+#{{ prefix }}-scanner .field {
+  display: flex;
+  margin: 0.5em 0;
+  font-size: 1.2em;
+}
+#{{ prefix }}-scanner .label {
+  width: 7em;
+  font-weight: bold;
+}
+#{{ prefix }}-scanner .value {
+  flex: 1;
+}
+#{{ prefix }}-status {
+  font-size: 1.2em;
+  margin-bottom: 1em;
+}
+</style>
 <script>
 (function(){
   const statusEl = document.getElementById('{{ prefix }}-status');
   const labelEl = document.getElementById('{{ prefix }}-label');
   const rfidEl = document.getElementById('{{ prefix }}-rfid');
+  const colorEl = document.getElementById('{{ prefix }}-color');
+  const allowedEl = document.getElementById('{{ prefix }}-allowed');
+  const releasedEl = document.getElementById('{{ prefix }}-released');
   async function poll(){
     try {
       const resp = await fetch('{{ scan_url }}');
@@ -18,6 +42,9 @@
       } else if(data.rfid){
         labelEl.textContent = data.label_id;
         rfidEl.textContent = data.rfid;
+        colorEl.textContent = data.color || '';
+        allowedEl.textContent = data.allowed === undefined ? '' : (data.allowed ? 'Yes' : 'No');
+        releasedEl.textContent = data.released === undefined ? '' : (data.released ? 'Yes' : 'No');
         statusEl.textContent = data.created ? `Created label ${data.label_id}` : `Detected label ${data.label_id}`;
       }
     } catch(err){
