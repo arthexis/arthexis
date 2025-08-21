@@ -259,6 +259,7 @@ class RFIDAdmin(ImportExportModelAdmin):
     search_fields = ("label_id", "rfid")
     autocomplete_fields = ["accounts"]
     actions = ["scan_rfids", "swap_color"]
+    readonly_fields = ("source",)
 
     def accounts_display(self, obj):
         return ", ".join(str(a) for a in obj.accounts.all())
@@ -310,43 +311,11 @@ class RFIDAdmin(ImportExportModelAdmin):
         return render(request, "admin/accounts/rfid/scan.html", context)
 
     def scan_next(self, request):
-        try:
-            from mfrc522 import MFRC522
-        except Exception as exc:  # pragma: no cover - hardware dependent
-            return JsonResponse({"error": str(exc)}, status=500)
+        from rfid.scanner import scan_sources
 
-        import time
-
-        try:
-            import RPi.GPIO as GPIO  # pragma: no cover - hardware dependent
-        except Exception:  # pragma: no cover - hardware dependent
-            GPIO = None
-
-        mfrc = MFRC522()
-        timeout = time.time() + 1
-        try:
-            while time.time() < timeout:  # pragma: no cover - hardware loop
-                (status, _TagType) = mfrc.MFRC522_Request(mfrc.PICC_REQIDL)
-                if status == mfrc.MI_OK:
-                    (status, uid) = mfrc.MFRC522_Anticoll()
-                    if status == mfrc.MI_OK:
-                        rfid = "".join(f"{x:02X}" for x in uid[:5])
-                        tag, created = RFID.objects.get_or_create(rfid=rfid)
-                        return JsonResponse(
-                            {
-                                "rfid": rfid,
-                                "label_id": tag.pk,
-                                "created": created,
-                            }
-                        )
-                time.sleep(0.2)
-            return JsonResponse({"rfid": None, "label_id": None})
-        finally:  # pragma: no cover - cleanup hardware
-            if GPIO:
-                try:
-                    GPIO.cleanup()
-                except Exception:
-                    pass
+        result = scan_sources()
+        status = 500 if result.get("error") else 200
+        return JsonResponse(result, status=status)
 
     def write_link(self, obj):
         url = reverse("admin:accounts_rfid_write", args=[obj.pk])
@@ -454,4 +423,11 @@ class RFIDAdmin(ImportExportModelAdmin):
 
 @admin.register(RFIDSource)
 class RFIDSourceAdmin(admin.ModelAdmin):
-    list_display = ("name", "endpoint", "is_source", "is_target")
+    list_display = ("name", "endpoint", "default_order", "proxy_url", "uuid")
+    readonly_fields = ("uuid",)
+
+    def get_fields(self, request, obj=None):
+        fields = ["name", "endpoint", "proxy_url", "default_order"]
+        if obj and not obj.proxy_url:
+            fields.append("uuid")
+        return fields

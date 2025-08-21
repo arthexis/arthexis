@@ -4,25 +4,22 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 from website.utils import landing
 
-from .background_reader import get_next_tag, start, stop
+from .scanner import scan_sources, restart_sources
 
 
 def scan_next(_request):
     """Return the next scanned RFID tag."""
-    result = get_next_tag()
-    if result and result.get("error"):
-        return JsonResponse({"error": result["error"]}, status=500)
-    if not result:
-        result = {"rfid": None, "label_id": None}
-    return JsonResponse(result)
+    result = scan_sources()
+    status = 500 if result.get("error") else 200
+    return JsonResponse(result, status=status)
 
 
 @require_POST
 def scan_restart(_request):
-    """Restart the background RFID scanner."""
-    stop()
-    start()
-    return JsonResponse({"status": "restarted"})
+    """Restart the RFID scanner(s)."""
+    result = restart_sources()
+    status = 500 if result.get("error") else 200
+    return JsonResponse(result, status=status)
 
 
 @landing("RFID Reader")

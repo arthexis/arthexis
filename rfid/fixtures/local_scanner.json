@@ -1,0 +1,13 @@
+[
+  {
+    "model": "accounts.rfidsource",
+    "pk": 1,
+    "fields": {
+      "name": "Local Scanner",
+      "endpoint": "scanner",
+      "default_order": 0,
+      "proxy_url": null,
+      "uuid": "00000000-0000-0000-0000-000000000001"
+    }
+  }
+]
