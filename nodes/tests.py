@@ -6,7 +6,7 @@ import django
 django.setup()
 
 from pathlib import Path
-from unittest.mock import patch, call
+from unittest.mock import patch, call, MagicMock
 import socket
 import base64
 
@@ -512,5 +512,27 @@ class ClipboardTaskTests(TestCase):
         self.assertEqual(screenshot.node, node)
         self.assertEqual(screenshot.path, "screenshots/test.png")
         self.assertEqual(screenshot.method, "TASK")
+
+
+class NotificationTests(TestCase):
+    def test_gui_fallback_when_lcd_unavailable(self):
+        from .notifications import Notification, NotificationManager
+
+        manager = NotificationManager()
+        manager.lcd = None
+        with patch("nodes.notifications.plyer_notify") as mock_notify:
+            manager._display(Notification("hello", "world"))
+            mock_notify.notify.assert_called_once_with(title="hello", message="world")
+
+    def test_lcd_display_writes_lines(self):
+        from .notifications import Notification, NotificationManager
+
+        manager = NotificationManager()
+        mock_lcd = MagicMock()
+        manager.lcd = mock_lcd
+        manager._display(Notification("line1", "line2"))
+        mock_lcd.clear.assert_called_once()
+        mock_lcd.write.assert_any_call(0, 0, "line1".ljust(16))
+        mock_lcd.write.assert_any_call(0, 1, "line2".ljust(16))
 
 
