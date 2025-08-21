@@ -2,9 +2,7 @@
   <div id="{{ prefix }}-scanner">
   <p id="{{ prefix }}-status">Scanner ready</p>
   <p>
-    <button id="{{ prefix }}-retry" style="display: none;">Try Again</button>
-    <button id="{{ prefix }}-restart">Restart Scanner</button>
-    <button id="{{ prefix }}-test">Test Scanner</button>
+    <button id="{{ prefix }}-restart-test">Restart &amp; Test Scanner</button>
   </p>
   <div class="field"><span class="label">Label:</span><span class="value" id="{{ prefix }}-label"></span></div>
   <div class="field"><span class="label">RFID:</span><span class="value" id="{{ prefix }}-rfid"></span></div>
@@ -38,14 +36,11 @@
   const colorEl = document.getElementById('{{ prefix }}-color');
   const allowedEl = document.getElementById('{{ prefix }}-allowed');
   const releasedEl = document.getElementById('{{ prefix }}-released');
-  const retryBtn = document.getElementById('{{ prefix }}-retry');
-  const restartBtn = document.getElementById('{{ prefix }}-restart');
-  const testBtn = document.getElementById('{{ prefix }}-test');
+  const restartTestBtn = document.getElementById('{{ prefix }}-restart-test');
 
   function showError(message){
     console.error(message);
-    statusEl.textContent = 'RFID reader not detected. Please connect the reader and press Try Again.';
-    retryBtn.style.display = 'inline-block';
+    statusEl.textContent = 'RFID reader not detected. Please connect the reader and press Restart & Test Scanner.';
   }
 
   async function poll(){
@@ -69,27 +64,16 @@
     }
     setTimeout(poll, 200);
   }
-  retryBtn.addEventListener('click', () => {
-    retryBtn.style.display = 'none';
-    statusEl.textContent = 'Scanner ready';
-    poll();
-  });
-  restartBtn.addEventListener('click', async () => {
+  restartTestBtn.addEventListener('click', async () => {
     try {
       await fetch('{{ restart_url }}', {method: 'POST'});
-      statusEl.textContent = 'Scanner restarted';
-    } catch(err) {
-      console.error(err);
-    }
-  });
-  testBtn.addEventListener('click', async () => {
-    try {
       const resp = await fetch('{{ test_url }}');
       const data = await resp.json();
       if(data.error){
         statusEl.textContent = `Error: ${data.error}`;
       } else {
         statusEl.textContent = `IRQ pin ${data.irq_pin}`;
+        poll();
       }
     } catch(err) {
       statusEl.textContent = 'Test failed';
