@@ -120,7 +120,24 @@ class RequestAdmin(admin.ModelAdmin):
         "status",
         "responded_at",
     )
-    readonly_fields = ("number", "responded_at", "requester")
+    readonly_fields = ("number", "responded_at", "requester", "status")
+    actions = ["approve_requests", "reject_requests"]
+
+    @admin.action(description="Approve selected requests")
+    def approve_requests(self, request, queryset):
+        for req in queryset:
+            try:
+                req.approve()
+            except ValueError:
+                pass
+
+    @admin.action(description="Reject selected requests")
+    def reject_requests(self, request, queryset):
+        for req in queryset:
+            try:
+                req.reject()
+            except ValueError:
+                pass
 
 
 def seed_data_view(request):
