@@ -3,6 +3,7 @@
 {% block title %}{% if title %}{{ title }} | {% endif %}{{ site_title|default:_('Django site admin') }}{% endblock %}
 {% block extrahead %}
 {{ block.super }}
+<link rel="icon" href="data:image/png;base64,{% include 'admin/favicon.txt' %}">
 <script id="admin-collapsible-apps">
 document.addEventListener('DOMContentLoaded', function () {
     const modules = document.querySelectorAll('#nav-sidebar .module');
