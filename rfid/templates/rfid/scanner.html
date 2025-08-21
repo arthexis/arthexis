@@ -55,7 +55,7 @@
         return;
       } else if(data.rfid){
         labelEl.textContent = data.label_id;
-        rfidEl.textContent = data.rfid ? `${data.rfid} ${data.duration || 0}s` : '';
+        rfidEl.textContent = data.rfid || '';
         colorEl.textContent = data.color || '';
         allowedEl.textContent = data.allowed === undefined ? '' : (data.allowed ? 'Yes' : 'No');
         releasedEl.textContent = data.released === undefined ? '' : (data.released ? 'Yes' : 'No');
