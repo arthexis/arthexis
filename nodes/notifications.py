@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 class Notification:
     """Information about a notification to be displayed."""
 
-    line1: str
-    line2: str = ""
+    subject: str
+    body: str = ""
     duration: float = 6.0
 
 
@@ -53,19 +53,10 @@ class NotificationManager:
             logger.warning("Unexpected LCD error: %s", exc)
         return None
 
-    def send(self, line1: str, line2: str = "", duration: float = 6.0) -> None:
-        """Queue a new notification, adapting text to fit the screen."""
+    def send(self, subject: str, body: str = "", duration: float = 6.0) -> None:
+        """Queue a new notification."""
 
-        full = f"{line1}{line2}"
-        if not (len(line1) <= 16 and len(line2) <= 16 and len(full) <= 32):
-            if len(full) <= 16:
-                line1, line2 = full, ""
-            elif len(full) <= 32:
-                line1, line2 = full[:16], full[16:]
-            else:
-                line1, line2 = full[:16], full[16:]
-
-        self.queue.put(Notification(line1=line1, line2=line2, duration=duration))
+        self.queue.put(Notification(subject=subject, body=body, duration=duration))
 
     def _worker(self) -> None:  # pragma: no cover - background thread
         while True:
@@ -83,35 +74,39 @@ class NotificationManager:
         else:
             self._gui_display(note)
             time.sleep(duration)
+
     def _lcd_display(self, note: Notification, duration: float) -> None:
         try:
-            full = f"{note.line1}{note.line2}".strip()
-            if (
-                len(note.line1) <= 16
-                and len(note.line2) <= 16
-                and len(full) <= 32
-            ):
+            subj, body = note.subject, note.body
+            if len(subj) <= 16 and len(body) <= 16:
                 self.lcd.clear()
-                self.lcd.write(0, 0, note.line1.ljust(16))
-                if note.line2:
-                    self.lcd.write(0, 1, note.line2.ljust(16))
+                self.lcd.write(0, 0, subj.ljust(16))
+                self.lcd.write(0, 1, body.ljust(16))
                 time.sleep(duration)
             else:
-                top = full[:16]
-                bottom = full[16:]
-                scroll = bottom + " " * 4
+                top_scroll = subj + " " * 4 if len(subj) > 16 else subj
+                bottom_scroll = body + " " * 4 if len(body) > 16 else body
+                end = time.time() + duration
+                idx_top = idx_bottom = 0
                 self.lcd.clear()
-                self.lcd.write(0, 0, top.ljust(16))
-                if not scroll:
-                    time.sleep(duration)
-                else:
-                    end = time.time() + duration
-                    idx = 0
-                    while time.time() < end:
-                        seg = (scroll + scroll[:16])[idx: idx + 16]
-                        self.lcd.write(0, 1, seg.ljust(16))
-                        time.sleep(0.5)
-                        idx = (idx + 1) % len(scroll)
+                while time.time() < end:
+                    top_seg = (
+                        (top_scroll + top_scroll[:16])[idx_top: idx_top + 16]
+                        if len(subj) > 16
+                        else subj.ljust(16)
+                    )
+                    bottom_seg = (
+                        (bottom_scroll + bottom_scroll[:16])[idx_bottom: idx_bottom + 16]
+                        if len(body) > 16
+                        else body.ljust(16)
+                    )
+                    self.lcd.write(0, 0, top_seg.ljust(16))
+                    self.lcd.write(0, 1, bottom_seg.ljust(16))
+                    time.sleep(0.5)
+                    if len(subj) > 16:
+                        idx_top = (idx_top + 1) % len(top_scroll)
+                    if len(body) > 16:
+                        idx_bottom = (idx_bottom + 1) % len(bottom_scroll)
         except Exception as exc:  # pragma: no cover - hardware dependent
             logger.warning("LCD display failed: %s", exc)
             self.lcd = None
@@ -121,18 +116,18 @@ class NotificationManager:
     def _gui_display(self, note: Notification) -> None:
         if plyer_notify:
             try:  # pragma: no cover - depends on platform
-                plyer_notify.notify(title=note.line1, message=note.line2)
+                plyer_notify.notify(title=note.subject, message=note.body)
                 return
             except Exception as exc:  # pragma: no cover - depends on platform
                 logger.warning("GUI notification failed: %s", exc)
-        logger.info("%s %s", note.line1, note.line2)
+        logger.info("%s %s", note.subject, note.body)
 
 
 # Global manager used throughout the project
 manager = NotificationManager()
 
 
-def notify(line1: str, line2: str = "", duration: float = 6.0) -> None:
+def notify(subject: str, body: str = "", duration: float = 6.0) -> None:
     """Queue a notification using the global manager."""
 
-    manager.send(line1=line1, line2=line2, duration=duration)
+    manager.send(subject=subject, body=body, duration=duration)

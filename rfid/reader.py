@@ -52,9 +52,9 @@ def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
                         status_text = "OK" if tag.allowed else "Not OK"
                         privacy = "PUB" if tag.released else "PRIV"
                         color_word = (tag.color or "").upper()
-                        line1 = f"RFID {tag.label_id} {status_text} {privacy}".strip()
-                        line2 = f"{rfid} {color_word}".strip()
-                        notify(line1, line2)
+                        subject = f"RFID {tag.label_id} {status_text} {privacy}".strip()
+                        body = f"{rfid} {color_word}".strip()
+                        notify(subject, body)
                     except Exception:
                         pass
                     return result
