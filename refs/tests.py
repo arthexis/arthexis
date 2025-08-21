@@ -80,6 +80,12 @@ class RecentReferencesTests(TestCase):
         resp = self.client.get(reverse("refs:recent"))
         self.assertContains(resp, "<img", html=False)
 
+    def test_url_value_rendered_as_link(self):
+        Reference.objects.create(value="https://click.com", alt_text="Click")
+        resp = self.client.get(reverse("refs:recent"))
+        self.assertContains(resp, '<a href="https://click.com"', html=False)
+        self.assertContains(resp, 'target="_blank"', html=False)
+
 
 class FooterTemplateTagTests(TestCase):
     def setUp(self):
