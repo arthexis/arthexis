@@ -78,3 +78,21 @@ class RestartViewTests(SimpleTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), {"status": "restarted"})
         mock_restart.assert_called_once()
+
+
+class ScanTestViewTests(SimpleTestCase):
+    @patch("config.middleware.get_site")
+    @patch("rfid.irq_wiring_check.GPIO")
+    @patch("rfid.irq_wiring_check.IRQ_PIN", new=7)
+    @patch("rfid.irq_wiring_check._setup_hardware", return_value=True)
+    def test_scan_test_success(self, mock_setup, mock_gpio, mock_site):
+        resp = self.client.get(reverse("rfid-scan-test"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"irq_pin": 7})
+
+    @patch("config.middleware.get_site")
+    @patch("rfid.irq_wiring_check._setup_hardware", return_value=False)
+    def test_scan_test_error(self, mock_setup, mock_site):
+        resp = self.client.get(reverse("rfid-scan-test"))
+        self.assertEqual(resp.status_code, 500)
+        self.assertEqual(resp.json(), {"error": "no scanner detected"})
