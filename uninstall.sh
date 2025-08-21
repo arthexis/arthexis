@@ -24,8 +24,8 @@ done
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
 
-if [ -z "$SERVICE" ] && [ -f envs/service ]; then
-    SERVICE="$(cat envs/service)"
+if [ -z "$SERVICE" ] && [ -f SERVICE ]; then
+    SERVICE="$(cat SERVICE)"
 fi
 
 read -p "This will stop the Arthexis server. Continue? [y/N] " CONFIRM
@@ -42,7 +42,7 @@ if [ -n "$SERVICE" ] && systemctl list-unit-files | grep -Fq "${SERVICE}.service
         sudo rm "$SERVICE_FILE"
         sudo systemctl daemon-reload
     fi
-    rm -f envs/service
+    rm -f SERVICE
 else
     pkill -f "manage.py runserver" || true
 fi

@@ -5,10 +5,10 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
 
 # If a systemd service was installed, restart it instead of launching a new process
-if [ -f envs/service ]; then
-  SERVICE="$(cat envs/service)"
-  if systemctl list-unit-files | grep -Fq "${SERVICE}.service"; then
-    sudo systemctl restart "$SERVICE"
+if [ -f SERVICE ]; then
+  SERVICE_NAME="$(cat SERVICE)"
+  if systemctl list-unit-files | grep -Fq "${SERVICE_NAME}.service"; then
+    sudo systemctl restart "$SERVICE_NAME"
     exit 0
   fi
 fi

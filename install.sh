@@ -24,9 +24,6 @@ done
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
 
-# Ensure envs directory exists for environment files
-mkdir -p envs
-
 # Create virtual environment if missing
 if [ ! -d .venv ]; then
     python3 -m venv .venv
@@ -43,7 +40,7 @@ deactivate
 # If a service name was provided, install a systemd unit and persist its name
 if [ -n "$SERVICE" ]; then
     SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
-    echo "$SERVICE" > envs/service
+    echo "$SERVICE" > SERVICE
     sudo bash -c "cat > '$SERVICE_FILE'" <<SERVICEEOF
 [Unit]
 Description=Arthexis Constellation Django service
