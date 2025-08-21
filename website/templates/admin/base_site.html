@@ -156,9 +156,6 @@ document.addEventListener('DOMContentLoaded', function () {
       <a href="{% url 'admin:nodes_node_change' badge_node.pk %}">{{ badge_node.hostname }}</a>
       <span style="display:none">NODE: {{ badge_node.hostname }}</span>
     </span>
-    {% for role in badge_node.roles.all %}
-      <span class="badge" style="background-color: {{ badge_node_color }};">ROLE: {{ role.name }}</span>
-    {% endfor %}
   {% else %}
     <span class="badge badge-unknown">
       <a href="{% url 'admin:nodes_node_changelist' %}">NODE</a>: Unknown

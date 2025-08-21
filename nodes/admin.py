@@ -17,7 +17,6 @@ from .actions import NodeAction
 
 from .models import (
     Node,
-    NodeRole,
     NodeScreenshot,
     NodeMessage,
     NodeCommand,
@@ -49,14 +48,12 @@ class NodeAdmin(admin.ModelAdmin):
         "clipboard",
         "screenshot",
         "installed_version",
-        "roles_list",
         "last_seen",
     )
     search_fields = ("hostname", "address", "mac_address")
     change_list_template = "admin/nodes/node/change_list.html"
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
-    filter_horizontal = ("roles",)
     actions = ["run_command"]
 
     def api(self, obj):
@@ -76,11 +73,6 @@ class NodeAdmin(admin.ModelAdmin):
 
     screenshot.boolean = True
     screenshot.short_description = "Screenshot"
-
-    def roles_list(self, obj):
-        return ", ".join(obj.roles.values_list("name", flat=True))
-
-    roles_list.short_description = "Roles"
 
     def get_urls(self):
         urls = super().get_urls()
@@ -200,11 +192,6 @@ class NodeAdmin(admin.ModelAdmin):
         except Exception as exc:  # pragma: no cover - unexpected errors
             self.message_user(request, str(exc), messages.ERROR)
         return redirect(reverse("admin:nodes_node_change", args=[node_id]))
-
-
-@admin.register(NodeRole)
-class NodeRoleAdmin(admin.ModelAdmin):
-    list_display = ("name",)
 
 
 @admin.register(ScreenSource)

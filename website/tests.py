@@ -101,16 +101,6 @@ class AdminBadgesTests(TestCase):
         self.assertContains(resp, "SITE: test")
         self.assertContains(resp, f"NODE: {self.node_hostname}")
 
-    def test_badges_show_node_roles(self):
-        from nodes.models import NodeRole
-
-        role1 = NodeRole.objects.create(name="Dev")
-        role2 = NodeRole.objects.create(name="Proxy")
-        self.node.roles.add(role1, role2)
-        resp = self.client.get(reverse("admin:index"))
-        self.assertContains(resp, "ROLE: Dev")
-        self.assertContains(resp, "ROLE: Proxy")
-
     def test_badges_warn_when_node_missing(self):
         from nodes.models import Node
 
