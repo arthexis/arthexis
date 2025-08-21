@@ -1,5 +1,15 @@
 from utils.sites import get_site
 from django.urls import Resolver404, resolve
+from django.conf import settings
+from pathlib import Path
+
+_favicon_path = (
+    Path(settings.BASE_DIR) / "website" / "fixtures" / "data" / "favicon.txt"
+)
+try:
+    _DEFAULT_FAVICON = f"data:image/png;base64,{_favicon_path.read_text().strip()}"
+except OSError:
+    _DEFAULT_FAVICON = ""
 
 
 def nav_links(request):
@@ -11,6 +21,7 @@ def nav_links(request):
         applications = []
 
     valid_apps = []
+    current_app = None
     for app in applications:
         try:
             match = resolve(app.path)
@@ -23,5 +34,21 @@ def nav_links(request):
         if requires_login and not request.user.is_authenticated:
             continue
         valid_apps.append(app)
+        if request.path.startswith(app.path):
+            if current_app is None or len(app.path) > len(current_app.path):
+                current_app = app
 
-    return {"nav_apps": valid_apps}
+    if current_app and current_app.favicon:
+        favicon_url = current_app.favicon.url
+    else:
+        favicon_url = None
+        if site:
+            try:
+                if site.badge.favicon:
+                    favicon_url = site.badge.favicon.url
+            except Exception:
+                pass
+        if not favicon_url:
+            favicon_url = _DEFAULT_FAVICON
+
+    return {"nav_apps": valid_apps, "favicon_url": favicon_url}

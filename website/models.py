@@ -44,6 +44,7 @@ class SiteApplication(Entity):
         blank=True,
     )
     is_default = models.BooleanField(default=False)
+    favicon = models.ImageField(upload_to="site_applications/favicons/", blank=True)
 
     objects = SiteApplicationManager()
 
@@ -67,6 +68,7 @@ class SiteApplication(Entity):
 class SiteBadge(Entity):
     site = models.OneToOneField(Site, on_delete=models.CASCADE, related_name="badge")
     badge_color = models.CharField(max_length=7, default="#28a745")
+    favicon = models.ImageField(upload_to="sites/favicons/", blank=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"Badge for {self.site.domain}"

@@ -29,11 +29,13 @@ class SiteBadgeInline(admin.StackedInline):
     can_delete = False
     extra = 0
     formfield_overrides = {models.CharField: {"widget": CopyColorWidget}}
+    fields = ("badge_color", "favicon")
 
 
 class SiteApplicationInline(admin.TabularInline):
     model = SiteApplication
     extra = 0
+    fields = ("application", "path", "is_default", "favicon")
 
 
 class SiteAdmin(DjangoSiteAdmin):
@@ -111,3 +113,4 @@ class ApplicationAdmin(admin.ModelAdmin):
 class SiteApplicationAdmin(admin.ModelAdmin):
     list_display = ("application", "site", "path", "is_default")
     list_filter = ("site", "application")
+    fields = ("site", "application", "path", "is_default", "favicon")
