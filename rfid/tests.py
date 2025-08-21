@@ -1,13 +1,14 @@
+import os
 from unittest.mock import patch, MagicMock
 
-import os
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
 import django
+django.setup()
+
 from django.test import SimpleTestCase
 from django.urls import reverse
 from rfid.reader import read_rfid
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-django.setup()
 
 
 class ScanNextViewTests(SimpleTestCase):
@@ -43,18 +44,33 @@ class ReaderNotificationTests(SimpleTestCase):
     @patch("nodes.notifications.notify")
     @patch("accounts.models.RFID.objects.get_or_create")
     def test_notify_on_allowed_tag(self, mock_get, mock_notify):
-        tag = MagicMock(label_id=1, allowed=True, color="black", released=False)
+        tag = MagicMock(label_id=1, pk=1, allowed=True, color="black", released=False)
         mock_get.return_value = (tag, False)
 
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
         self.assertEqual(result["label_id"], 1)
-        mock_notify.assert_called_once_with("Label 1 Ok", result["rfid"])
+        mock_notify.assert_called_once_with(
+            "RFID 1 OK B", f"{result['rfid']} 0s"
+        )
 
     @patch("nodes.notifications.notify")
     @patch("accounts.models.RFID.objects.get_or_create")
     def test_notify_on_disallowed_tag(self, mock_get, mock_notify):
-        tag = MagicMock(label_id=2, allowed=False, color="black", released=False)
+        tag = MagicMock(label_id=2, pk=2, allowed=False, color="black", released=False)
         mock_get.return_value = (tag, False)
 
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
-        mock_notify.assert_called_once_with("Label 2 Not Ok", result["rfid"])
+        mock_notify.assert_called_once_with(
+            "RFID 2 Not OK B", f"{result['rfid']} 0s"
+        )
+
+
+class RestartViewTests(SimpleTestCase):
+    @patch("rfid.views.start")
+    @patch("rfid.views.stop")
+    def test_restart_endpoint(self, mock_stop, mock_start):
+        resp = self.client.post(reverse("rfid-scan-restart"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"status": "restarted"})
+        mock_stop.assert_called_once()
+        mock_start.assert_called_once()

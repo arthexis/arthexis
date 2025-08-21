@@ -1,7 +1,10 @@
 {% with prefix=prefix|default:"rfid" %}
   <div id="{{ prefix }}-scanner">
   <p id="{{ prefix }}-status">Scanner ready</p>
-  <p><button id="{{ prefix }}-retry" style="display: none;">Try Again</button></p>
+  <p>
+    <button id="{{ prefix }}-retry" style="display: none;">Try Again</button>
+    <button id="{{ prefix }}-restart">Restart Scanner</button>
+  </p>
   <div class="field"><span class="label">Label:</span><span class="value" id="{{ prefix }}-label"></span></div>
   <div class="field"><span class="label">RFID:</span><span class="value" id="{{ prefix }}-rfid"></span></div>
   <div class="field"><span class="label">Color:</span><span class="value" id="{{ prefix }}-color"></span></div>
@@ -35,6 +38,7 @@
   const allowedEl = document.getElementById('{{ prefix }}-allowed');
   const releasedEl = document.getElementById('{{ prefix }}-released');
   const retryBtn = document.getElementById('{{ prefix }}-retry');
+  const restartBtn = document.getElementById('{{ prefix }}-restart');
 
   function showError(message){
     console.error(message);
@@ -51,7 +55,7 @@
         return;
       } else if(data.rfid){
         labelEl.textContent = data.label_id;
-        rfidEl.textContent = data.rfid;
+        rfidEl.textContent = data.rfid ? `${data.rfid} ${data.duration || 0}s` : '';
         colorEl.textContent = data.color || '';
         allowedEl.textContent = data.allowed === undefined ? '' : (data.allowed ? 'Yes' : 'No');
         releasedEl.textContent = data.released === undefined ? '' : (data.released ? 'Yes' : 'No');
@@ -67,6 +71,14 @@
     retryBtn.style.display = 'none';
     statusEl.textContent = 'Scanner ready';
     poll();
+  });
+  restartBtn.addEventListener('click', async () => {
+    try {
+      await fetch('{{ restart_url }}', {method: 'POST'});
+      statusEl.textContent = 'Scanner restarted';
+    } catch(err) {
+      console.error(err);
+    }
   });
   poll();
 })();

@@ -2,7 +2,7 @@ import time
 from accounts.models import RFID
 
 
-def read_rfid(mfrc=None, cleanup=True) -> dict:
+def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
     """Read a single RFID tag using the MFRC522 reader."""
     try:
         if mfrc is None:
@@ -17,8 +17,8 @@ def read_rfid(mfrc=None, cleanup=True) -> dict:
         GPIO = None
 
     try:
-        timeout = time.time() + 1
-        while time.time() < timeout:  # pragma: no cover - hardware loop
+        end = time.time() + timeout
+        while time.time() < end:  # pragma: no cover - hardware loop
             (status, _tag_type) = mfrc.MFRC522_Request(mfrc.PICC_REQIDL)
             if status == mfrc.MI_OK:
                 (status, uid) = mfrc.MFRC522_Anticoll()
@@ -36,9 +36,11 @@ def read_rfid(mfrc=None, cleanup=True) -> dict:
                     try:
                         from nodes.notifications import notify
 
-                        status_text = "Ok" if tag.allowed else "Not Ok"
-                        line1 = f"Label {tag.label_id} {status_text}"
-                        notify(line1, rfid)
+                        status_text = "OK" if tag.allowed else "Not OK"
+                        color_char = (tag.color or "")[:1].upper()
+                        line1 = f"RFID {tag.label_id} {status_text} {color_char}".strip()
+                        line2 = f"{rfid} 0s"
+                        notify(line1, line2)
                     except Exception:
                         pass
                     return result
