@@ -414,11 +414,12 @@ class NotificationDisplayTests(TestCase):
     def test_long_message_scrolls(self, mock_init, mock_thread):
         mock_thread.return_value.start = lambda: None
         manager = NotificationManager()
-        note_text = "a" * 40
-        manager.send(note_text)
+        subject = "a" * 20
+        body = "b" * 30
+        manager.send(subject, body)
         note = manager.queue.get_nowait()
-        self.assertEqual(note.line1, "a" * 16)
-        self.assertEqual(note.line2, "a" * 24)
+        self.assertEqual(note.subject, subject)
+        self.assertEqual(note.body, body)
         fake_time, fake_sleep = _fake_time_factory()
         with patch("nodes.notifications.time.time", fake_time), patch(
             "nodes.notifications.time.sleep", fake_sleep
@@ -426,9 +427,10 @@ class NotificationDisplayTests(TestCase):
             manager.lcd.clear.reset_mock()
             manager.lcd.write.reset_mock()
             manager._lcd_display(note, duration=1)
-        manager.lcd.write.assert_any_call(0, 0, "a" * 16)
+        top_calls = [c for c in manager.lcd.write.call_args_list if c[0][1] == 0]
         bottom_calls = [c for c in manager.lcd.write.call_args_list if c[0][1] == 1]
-        self.assertTrue(bottom_calls)
+        self.assertTrue(len(top_calls) > 1)
+        self.assertTrue(len(bottom_calls) > 1)
 
 
 
