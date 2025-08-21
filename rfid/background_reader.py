@@ -38,18 +38,26 @@ def _setup_hardware():  # pragma: no cover - hardware dependent
         logger.warning("MFRC522 library not available: %s", exc)
         return False
 
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(IRQ_PIN, GPIO.IN)
-
-    _reader = MFRC522()
     try:
-        # Enable interrupts for card detection (best effort)
-        _reader.dev_write(_reader.ComIEnReg, 0xA0)  # enable IdleIrq
-        _reader.dev_write(_reader.ComIrqReg, 0x7F)
-    except Exception:
-        pass
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(IRQ_PIN, GPIO.IN)
 
-    GPIO.add_event_detect(IRQ_PIN, GPIO.FALLING, callback=_irq_callback)
+        _reader = MFRC522()
+        try:
+            # Enable interrupts for card detection (best effort)
+            _reader.dev_write(_reader.ComIEnReg, 0xA0)  # enable IdleIrq
+            _reader.dev_write(_reader.ComIrqReg, 0x7F)
+        except Exception:
+            pass
+
+        GPIO.add_event_detect(IRQ_PIN, GPIO.FALLING, callback=_irq_callback)
+    except Exception as exc:
+        logger.warning("Failed to initialize RFID hardware: %s", exc)
+        try:
+            GPIO.cleanup()
+        except Exception:
+            pass
+        return False
     return True
 
 
