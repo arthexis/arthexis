@@ -24,4 +24,4 @@ if [ -f requirements.txt ]; then
   fi
 fi
 
-"$PYTHON" refresh.py database
+"$PYTHON" env-refresh.py database

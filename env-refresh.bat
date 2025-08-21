@@ -19,4 +19,4 @@ if exist requirements.txt (
         echo %REQ_HASH%>requirements.md5
     )
 )
-%VENV%\Scripts\python.exe refresh.py database
+%VENV%\Scripts\python.exe env-refresh.py database
