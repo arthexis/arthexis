@@ -2,11 +2,11 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Dev: maintenance",
+            "label": "Dev: refresh DB",
             "type": "shell",
-            "command": "${workspaceFolder}/dev-maintenance.sh",
+            "command": "${workspaceFolder}/refresh-db.sh",
             "windows": {
-                "command": "${workspaceFolder}\\dev-maintenance.bat"
+                "command": "${workspaceFolder}\\refresh-db.bat"
             },
             "problemMatcher": []
         },
