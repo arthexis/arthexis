@@ -43,11 +43,9 @@ class Entity(models.Model):
             try:
                 old = type(self).all_objects.get(pk=self.pk)
             except type(self).DoesNotExist:
-                self.is_seed_data = False
+                pass
             else:
                 self.is_seed_data = old.is_seed_data
-        else:
-            self.is_seed_data = False
         super().save(*args, **kwargs)
 
     def delete(self, using=None, keep_parents=False):
