@@ -12,6 +12,7 @@ from datetime import timedelta
 from urllib.parse import urljoin
 from django.contrib.contenttypes.models import ContentType
 from integrator.models import Entity, EntityUserManager
+from uuid import uuid4
 
 
 class Address(Entity):
@@ -224,6 +225,7 @@ class RFID(Entity):
     )
     released = models.BooleanField(default=False)
     added_on = models.DateTimeField(auto_now_add=True)
+    source = models.UUIDField(null=True, blank=True, editable=False)
 
     def save(self, *args, **kwargs):
         if self.rfid:
@@ -254,31 +256,30 @@ class RFID(Entity):
 
 
 class RFIDSource(Entity):
-    """Endpoint configuration for syncing RFIDs."""
+    """Endpoint configuration for RFID scanners."""
 
     name = models.CharField(max_length=100, unique=True)
     endpoint = models.SlugField(
         max_length=50,
         help_text="Slug for the RFID batch endpoint; '/api/rfid/' is added automatically",
     )
-    is_source = models.BooleanField(default=False)
-    is_target = models.BooleanField(default=False)
+    default_order = models.PositiveIntegerField(default=0)
+    proxy_url = models.URLField(blank=True, null=True)
+    uuid = models.UUIDField(blank=True, null=True, editable=False, unique=True)
 
     class Meta:
         verbose_name = "RFID source"
         verbose_name_plural = "RFID sources"
+        ordering = ["default_order"]
 
-    def set_source(self, value: bool = True) -> None:
-        """Idempotently mark this endpoint as a source for RFIDs."""
-        if self.is_source != value:
-            self.is_source = value
-            self.save(update_fields=["is_source"])
-
-    def set_target(self, value: bool = True) -> None:
-        """Idempotently mark this endpoint as a target for RFIDs."""
-        if self.is_target != value:
-            self.is_target = value
-            self.save(update_fields=["is_target"])
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.default_order == 0:
+            self.default_order = RFIDSource.objects.count()
+        if self.proxy_url:
+            self.uuid = None
+        elif not self.uuid:
+            self.uuid = uuid4()
+        super().save(*args, **kwargs)
 
     def _build_url(self, base_url: str) -> str:
         """Construct the full RFID endpoint URL from a base URL."""

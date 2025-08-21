@@ -234,14 +234,18 @@ class RFIDAssignmentTests(TestCase):
 
 
 class RFIDSourceTests(TestCase):
-    def test_idempotent_setters(self):
-        src = RFIDSource.objects.create(name="local", endpoint="rfids")
-        src.set_source()
-        src.set_source()
-        src.set_target()
-        src.set_target()
-        src.refresh_from_db()
-        self.assertTrue(src.is_source and src.is_target)
+    def test_auto_fields(self):
+        RFIDSource.objects.all().delete()
+        first = RFIDSource.objects.create(name="local", endpoint="rfids")
+        second = RFIDSource.objects.create(
+            name="remote", endpoint="rfids", proxy_url="https://ex.com"
+        )
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertIsNotNone(first.uuid)
+        self.assertIsNone(second.uuid)
+        self.assertEqual(first.default_order, 0)
+        self.assertEqual(second.default_order, 1)
 
     @patch("requests.get")
     def test_test_fetch(self, mock_get):
