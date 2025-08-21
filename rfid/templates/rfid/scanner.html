@@ -4,6 +4,7 @@
   <p>
     <button id="{{ prefix }}-retry" style="display: none;">Try Again</button>
     <button id="{{ prefix }}-restart">Restart Scanner</button>
+    <button id="{{ prefix }}-test">Test Scanner</button>
   </p>
   <div class="field"><span class="label">Label:</span><span class="value" id="{{ prefix }}-label"></span></div>
   <div class="field"><span class="label">RFID:</span><span class="value" id="{{ prefix }}-rfid"></span></div>
@@ -39,6 +40,7 @@
   const releasedEl = document.getElementById('{{ prefix }}-released');
   const retryBtn = document.getElementById('{{ prefix }}-retry');
   const restartBtn = document.getElementById('{{ prefix }}-restart');
+  const testBtn = document.getElementById('{{ prefix }}-test');
 
   function showError(message){
     console.error(message);
@@ -78,6 +80,19 @@
       statusEl.textContent = 'Scanner restarted';
     } catch(err) {
       console.error(err);
+    }
+  });
+  testBtn.addEventListener('click', async () => {
+    try {
+      const resp = await fetch('{{ test_url }}');
+      const data = await resp.json();
+      if(data.error){
+        statusEl.textContent = `Error: ${data.error}`;
+      } else {
+        statusEl.textContent = `IRQ pin ${data.irq_pin}`;
+      }
+    } catch(err) {
+      statusEl.textContent = 'Test failed';
     }
   });
   poll();

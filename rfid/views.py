@@ -5,6 +5,7 @@ from django.views.decorators.http import require_POST
 from website.utils import landing
 
 from .scanner import scan_sources, restart_sources
+from .irq_wiring_check import check_irq_pin
 
 
 def scan_next(_request):
@@ -22,11 +23,19 @@ def scan_restart(_request):
     return JsonResponse(result, status=status)
 
 
+def scan_test(_request):
+    """Report wiring information for the RFID scanner."""
+    result = check_irq_pin()
+    status = 500 if result.get("error") else 200
+    return JsonResponse(result, status=status)
+
+
 @landing("RFID Reader")
 def reader(request):
     """Public page to read RFID tags."""
     context = {
         "scan_url": reverse("rfid-scan-next"),
         "restart_url": reverse("rfid-scan-restart"),
+        "test_url": reverse("rfid-scan-test"),
     }
     return render(request, "rfid/reader.html", context)
