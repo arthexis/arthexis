@@ -21,9 +21,14 @@ _reader = None
 
 
 def _irq_callback(channel):  # pragma: no cover - hardware dependent
+    logger.debug("IRQ callback triggered on channel %s", channel)
     from .reader import read_rfid
 
     result = read_rfid(mfrc=_reader, cleanup=False)
+    if result.get("error"):
+        logger.warning("RFID read error via IRQ: %s", result["error"])
+    elif result.get("rfid"):
+        logger.info("RFID tag detected via IRQ: %s", result.get("rfid"))
     _tag_queue.put(result)
 
 
@@ -40,7 +45,8 @@ def _setup_hardware():  # pragma: no cover - hardware dependent
 
     try:
         GPIO.setmode(GPIO.BCM)
-        GPIO.setup(IRQ_PIN, GPIO.IN)
+        GPIO.setup(IRQ_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        logger.debug("Initialized GPIO on IRQ pin %s", IRQ_PIN)
 
         _reader = MFRC522()
         try:
@@ -49,8 +55,8 @@ def _setup_hardware():  # pragma: no cover - hardware dependent
             _reader.dev_write(_reader.ComIrqReg, 0x7F)
         except Exception:
             pass
-
         GPIO.add_event_detect(IRQ_PIN, GPIO.FALLING, callback=_irq_callback)
+        logger.info("RFID IRQ listener active on pin %s", IRQ_PIN)
     except Exception as exc:
         logger.warning("Failed to initialize RFID hardware: %s", exc)
         try:
@@ -63,6 +69,7 @@ def _setup_hardware():  # pragma: no cover - hardware dependent
 
 def _worker():  # pragma: no cover - background thread
     if not _setup_hardware():
+        logger.error("RFID hardware setup failed; background reader not running")
         return
     while not _stop_event.is_set():
         _stop_event.wait(0.5)
@@ -82,6 +89,7 @@ def start():
     if _thread and _thread.is_alive():
         return
     _stop_event.clear()
+    logger.debug("Starting RFID background reader thread")
     _thread = threading.Thread(target=_worker, name="rfid-reader", daemon=True)
     _thread.start()
     atexit.register(stop)
@@ -101,8 +109,21 @@ def stop():
 
 
 def get_next_tag(timeout: float = 0) -> Optional[dict]:
-    """Retrieve the next tag read from the queue."""
+    """Retrieve the next tag read from the queue.
+
+    Falls back to direct polling if no IRQ events are queued.
+    """
     try:
         return _tag_queue.get(timeout=timeout)
     except queue.Empty:
+        logger.debug("IRQ queue empty; falling back to direct read")
+        try:
+            from .reader import read_rfid
+
+            result = read_rfid(mfrc=_reader, cleanup=False)
+            if result.get("rfid") or result.get("error"):
+                logger.debug("Polling read result: %s", result)
+                return result
+        except Exception as exc:  # pragma: no cover - hardware dependent
+            logger.debug("Polling read failed: %s", exc)
         return None
