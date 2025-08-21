@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch, call, MagicMock
 import socket
 import base64
+from tempfile import TemporaryDirectory
 
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -31,6 +32,7 @@ from .models import (
     Backup,
 )
 from .tasks import capture_node_screenshot, sample_clipboard
+from nodes.notifications import NotificationManager
 
 
 class NodeTests(TestCase):
@@ -374,6 +376,59 @@ class NodeActionTests(TestCase):
         if path.exists():
             path.unlink()
 
+
+
+class StartupNotificationTests(TestCase):
+    def test_startup_notification_uses_ip_and_revision(self):
+        from nodes.apps import _startup_notification
+
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            (tmp_path / "VERSION").write_text("1.2.3")
+            (tmp_path / "REVISION").write_text("abcdef123456")
+            with self.settings(BASE_DIR=tmp_path):
+                with patch("nodes.notifications.notify") as mock_notify:
+                    with patch("nodes.apps.socket.gethostname", return_value="host"):
+                        with patch("nodes.apps.socket.gethostbyname", return_value="1.2.3.4"):
+                            with patch.dict(os.environ, {"PORT": "9000"}):
+                                _startup_notification()
+
+        mock_notify.assert_called_once_with("1.2.3.4:9000", "v1.2.3 r3456")
+
+
+def _fake_time_factory():
+    current = [0]
+
+    def fake_time():
+        return current[0]
+
+    def fake_sleep(seconds):
+        current[0] += seconds
+
+    return fake_time, fake_sleep
+
+
+class NotificationDisplayTests(TestCase):
+    @patch("nodes.notifications.threading.Thread")
+    @patch("nodes.notifications.NotificationManager._init_lcd", return_value=MagicMock())
+    def test_long_message_scrolls(self, mock_init, mock_thread):
+        mock_thread.return_value.start = lambda: None
+        manager = NotificationManager()
+        note_text = "a" * 40
+        manager.send(note_text)
+        note = manager.queue.get_nowait()
+        self.assertEqual(note.line1, "a" * 16)
+        self.assertEqual(note.line2, "a" * 24)
+        fake_time, fake_sleep = _fake_time_factory()
+        with patch("nodes.notifications.time.time", fake_time), patch(
+            "nodes.notifications.time.sleep", fake_sleep
+        ):
+            manager.lcd.clear.reset_mock()
+            manager.lcd.write.reset_mock()
+            manager._lcd_display(note, duration=1)
+        manager.lcd.write.assert_any_call(0, 0, "a" * 16)
+        bottom_calls = [c for c in manager.lcd.write.call_args_list if c[0][1] == 1]
+        self.assertTrue(bottom_calls)
 
 
 
