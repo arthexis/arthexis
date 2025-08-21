@@ -94,7 +94,8 @@ def stop():
         _thread.join(timeout=1)
     if GPIO:
         try:
-            GPIO.cleanup()
+            if GPIO.getmode() is not None:  # Only cleanup if GPIO was initialized
+                GPIO.cleanup()
         except Exception:
             pass
 
