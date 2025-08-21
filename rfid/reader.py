@@ -25,7 +25,7 @@ def read_rfid(mfrc=None, cleanup=True) -> dict:
                 if status == mfrc.MI_OK:
                     rfid = "".join(f"{x:02X}" for x in uid[:5])
                     tag, created = RFID.objects.get_or_create(rfid=rfid)
-                    return {
+                    result = {
                         "rfid": rfid,
                         "label_id": tag.pk,
                         "created": created,
@@ -33,6 +33,15 @@ def read_rfid(mfrc=None, cleanup=True) -> dict:
                         "allowed": tag.allowed,
                         "released": tag.released,
                     }
+                    try:
+                        from nodes.notifications import notify
+
+                        status_text = "Ok" if tag.allowed else "Not Ok"
+                        line1 = f"Label {tag.label_id} {status_text}"
+                        notify(line1, rfid)
+                    except Exception:
+                        pass
+                    return result
             time.sleep(0.2)
         return {"rfid": None, "label_id": None}
     except Exception as exc:  # pragma: no cover - hardware dependent
