@@ -11,6 +11,14 @@
       html[data-bs-theme='light'] {
         --bs-body-bg: #f8f9fa;
       }
+      html {
+        font-size: clamp(16px, 1.2vw, 24px);
+      }
+      @media (min-width: 1600px) {
+        .container {
+          max-width: 90%;
+        }
+      }
       nav.toc {
         position: sticky;
         top: 1rem;
