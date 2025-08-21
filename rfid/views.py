@@ -29,6 +29,28 @@ def read_rfid() -> dict:
                 if status == mfrc.MI_OK:
                     rfid = "".join(f"{x:02X}" for x in uid[:5])
                     tag, created = RFID.objects.get_or_create(rfid=rfid)
+                    mfrc.MFRC522_SelectTag(uid)
+                    block = 8
+                    payload = None
+                    for key_hex, mode in (
+                        (tag.key_a, mfrc.PICC_AUTHENT1A),
+                        (tag.key_b, mfrc.PICC_AUTHENT1B),
+                    ):
+                        key = [int(key_hex[i : i + 2], 16) for i in range(0, 12, 2)]
+                        status = mfrc.MFRC522_Auth(mode, block, key, uid)
+                        if status == mfrc.MI_OK:
+                            data = mfrc.MFRC522_Read(block)
+                            raw = bytes(data)
+                            tag.block_data = raw
+                            tag.save(update_fields=["block_data"])
+                            decoded = raw.rstrip(b"\x00").decode(
+                                "ascii", errors="ignore"
+                            )
+                            if not decoded:
+                                decoded = raw.hex()
+                            payload = decoded
+                            break
+                    mfrc.MFRC522_StopCrypto1()
                     return {
                         "rfid": rfid,
                         "label_id": tag.pk,
@@ -36,6 +58,7 @@ def read_rfid() -> dict:
                         "color": tag.color,
                         "allowed": tag.allowed,
                         "released": tag.released,
+                        "block_data": payload,
                     }
             time.sleep(0.2)
         return {"rfid": None, "label_id": None}

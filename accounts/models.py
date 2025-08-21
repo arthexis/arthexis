@@ -213,6 +213,11 @@ class RFID(Entity):
         ],
         verbose_name="Key B",
     )
+    block_data = models.BinaryField(
+        null=True,
+        blank=True,
+        help_text="Raw data read from the configured block",
+    )
     allowed = models.BooleanField(default=True)
     BLACK = "black"
     WHITE = "white"

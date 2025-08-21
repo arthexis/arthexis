@@ -7,6 +7,7 @@
   <div class="field"><span class="label">Color:</span><span class="value" id="{{ prefix }}-color"></span></div>
   <div class="field"><span class="label">Valid:</span><span class="value" id="{{ prefix }}-allowed"></span></div>
   <div class="field"><span class="label">Released:</span><span class="value" id="{{ prefix }}-released"></span></div>
+  <div class="field"><span class="label">Data:</span><span class="value" id="{{ prefix }}-data"></span></div>
 </div>
 <style>
 #{{ prefix }}-scanner .field {
@@ -34,6 +35,7 @@
   const colorEl = document.getElementById('{{ prefix }}-color');
   const allowedEl = document.getElementById('{{ prefix }}-allowed');
   const releasedEl = document.getElementById('{{ prefix }}-released');
+  const dataEl = document.getElementById('{{ prefix }}-data');
   const retryBtn = document.getElementById('{{ prefix }}-retry');
 
   function showError(message){
@@ -55,6 +57,7 @@
         colorEl.textContent = data.color || '';
         allowedEl.textContent = data.allowed === undefined ? '' : (data.allowed ? 'Yes' : 'No');
         releasedEl.textContent = data.released === undefined ? '' : (data.released ? 'Yes' : 'No');
+        dataEl.textContent = data.block_data || '';
         statusEl.textContent = data.created ? `Created label ${data.label_id}` : `Detected label ${data.label_id}`;
       }
     } catch(err){

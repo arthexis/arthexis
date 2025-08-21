@@ -302,43 +302,12 @@ class RFIDAdmin(ImportExportModelAdmin):
         return render(request, "admin/accounts/rfid/scan.html", context)
 
     def scan_next(self, request):
-        try:
-            from mfrc522 import MFRC522
-        except Exception as exc:  # pragma: no cover - hardware dependent
-            return JsonResponse({"error": str(exc)}, status=500)
+        from rfid.views import read_rfid
 
-        import time
-
-        try:
-            import RPi.GPIO as GPIO  # pragma: no cover - hardware dependent
-        except Exception:  # pragma: no cover - hardware dependent
-            GPIO = None
-
-        mfrc = MFRC522()
-        timeout = time.time() + 1
-        try:
-            while time.time() < timeout:  # pragma: no cover - hardware loop
-                (status, _TagType) = mfrc.MFRC522_Request(mfrc.PICC_REQIDL)
-                if status == mfrc.MI_OK:
-                    (status, uid) = mfrc.MFRC522_Anticoll()
-                    if status == mfrc.MI_OK:
-                        rfid = "".join(f"{x:02X}" for x in uid[:5])
-                        tag, created = RFID.objects.get_or_create(rfid=rfid)
-                        return JsonResponse(
-                            {
-                                "rfid": rfid,
-                                "label_id": tag.pk,
-                                "created": created,
-                            }
-                        )
-                time.sleep(0.2)
-            return JsonResponse({"rfid": None, "label_id": None})
-        finally:  # pragma: no cover - cleanup hardware
-            if GPIO:
-                try:
-                    GPIO.cleanup()
-                except Exception:
-                    pass
+        result = read_rfid()
+        if result.get("error"):
+            return JsonResponse({"error": result["error"]}, status=500)
+        return JsonResponse(result)
 
     def write_link(self, obj):
         url = reverse("admin:accounts_rfid_write", args=[obj.pk])
