@@ -2,9 +2,10 @@
 set -e
 
 SERVICE=""
+SETUP_NGINX=false
 
 usage() {
-    echo "Usage: $0 [--service NAME]" >&2
+    echo "Usage: $0 [--service NAME] [--nginx]" >&2
     exit 1
 }
 
@@ -14,6 +15,10 @@ while [[ $# -gt 0 ]]; do
             [ -z "$2" ] && usage
             SERVICE="$2"
             shift 2
+            ;;
+        --nginx)
+            SETUP_NGINX=true
+            shift
             ;;
         *)
             usage
@@ -27,6 +32,43 @@ cd "$BASE_DIR"
 # Create virtual environment if missing
 if [ ! -d .venv ]; then
     python3 -m venv .venv
+fi
+
+# If requested, install nginx configuration and reload
+if [ "$SETUP_NGINX" = true ]; then
+    NGINX_CONF="/etc/nginx/conf.d/arthexis.conf"
+    sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
+# Redirect all HTTP traffic to HTTPS
+server {
+    listen 80;
+    server_name arthexis.com *.arthexis.com;
+    return 301 https://$host$request_uri;
+}
+
+# HTTPS Server
+server {
+    listen 443 ssl;
+    server_name arthexis.com *.arthexis.com;
+
+    ssl_certificate /etc/letsencrypt/live/arthexis.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/arthexis.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # Default proxy to web app
+    location / {
+        proxy_pass http://127.0.0.1:8888;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+NGINXCONF
+    sudo systemctl reload nginx
 fi
 
 source .venv/bin/activate
