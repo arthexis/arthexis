@@ -5,8 +5,14 @@ from django.contrib.sites.models import Site
 from django.contrib import admin
 from django.core.exceptions import DisallowedHost
 import socket
-from website.models import Application, SiteApplication
+from website.models import Application, SiteApplication, SiteBadge
 from website.admin import ApplicationAdmin
+from django.core.files.uploadedfile import SimpleUploadedFile
+import base64
+import tempfile
+import shutil
+from django.conf import settings
+from pathlib import Path
 
 
 class LoginViewTests(TestCase):
@@ -301,3 +307,64 @@ class RFIDPageTests(TestCase):
     def test_page_renders(self):
         resp = self.client.get(reverse("rfid-reader"))
         self.assertContains(resp, "Scanner ready")
+
+
+class FaviconTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmpdir)
+
+    def _png(self, name):
+        data = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
+        )
+        return SimpleUploadedFile(name, data, content_type="image/png")
+
+    def test_site_app_favicon_preferred_over_site(self):
+        with override_settings(MEDIA_ROOT=self.tmpdir):
+            site, _ = Site.objects.update_or_create(
+                id=1, defaults={"domain": "testserver", "name": "Terminal"}
+            )
+            SiteBadge.objects.create(
+                site=site, badge_color="#28a745", favicon=self._png("site.png")
+            )
+            app = Application.objects.create(name="readme")
+            SiteApplication.objects.create(
+                site=site,
+                application=app,
+                path="/",
+                is_default=True,
+                favicon=self._png("app.png"),
+            )
+            resp = self.client.get(reverse("website:index"))
+            self.assertContains(resp, "app.png")
+
+    def test_site_favicon_used_when_app_missing(self):
+        with override_settings(MEDIA_ROOT=self.tmpdir):
+            site, _ = Site.objects.update_or_create(
+                id=1, defaults={"domain": "testserver", "name": "Terminal"}
+            )
+            SiteBadge.objects.create(
+                site=site, badge_color="#28a745", favicon=self._png("site.png")
+            )
+            app = Application.objects.create(name="readme")
+            SiteApplication.objects.create(
+                site=site, application=app, path="/", is_default=True
+            )
+            resp = self.client.get(reverse("website:index"))
+            self.assertContains(resp, "site.png")
+
+    def test_default_favicon_used_when_none_defined(self):
+        with override_settings(MEDIA_ROOT=self.tmpdir):
+            Site.objects.update_or_create(
+                id=1, defaults={"domain": "testserver", "name": "Terminal"}
+            )
+            resp = self.client.get(reverse("website:index"))
+            b64 = (
+                Path(settings.BASE_DIR)
+                .joinpath("website", "fixtures", "data", "favicon.txt")
+                .read_text()
+                .strip()
+            )
+            self.assertContains(resp, b64)
