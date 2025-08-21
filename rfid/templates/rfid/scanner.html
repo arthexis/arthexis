@@ -1,6 +1,7 @@
 {% with prefix=prefix|default:"rfid" %}
-<div id="{{ prefix }}-scanner">
+  <div id="{{ prefix }}-scanner">
   <p id="{{ prefix }}-status">Scanner ready</p>
+  <p><button id="{{ prefix }}-retry" style="display: none;">Try Again</button></p>
   <div class="field"><span class="label">Label:</span><span class="value" id="{{ prefix }}-label"></span></div>
   <div class="field"><span class="label">RFID:</span><span class="value" id="{{ prefix }}-rfid"></span></div>
   <div class="field"><span class="label">Color:</span><span class="value" id="{{ prefix }}-color"></span></div>
@@ -33,12 +34,21 @@
   const colorEl = document.getElementById('{{ prefix }}-color');
   const allowedEl = document.getElementById('{{ prefix }}-allowed');
   const releasedEl = document.getElementById('{{ prefix }}-released');
+  const retryBtn = document.getElementById('{{ prefix }}-retry');
+
+  function showError(message){
+    console.error(message);
+    statusEl.textContent = 'RFID reader not detected. Please connect the reader and press Try Again.';
+    retryBtn.style.display = 'inline-block';
+  }
+
   async function poll(){
     try {
       const resp = await fetch('{{ scan_url }}');
       const data = await resp.json();
       if(data.error){
-        statusEl.textContent = data.error;
+        showError(data.error);
+        return;
       } else if(data.rfid){
         labelEl.textContent = data.label_id;
         rfidEl.textContent = data.rfid;
@@ -48,10 +58,16 @@
         statusEl.textContent = data.created ? `Created label ${data.label_id}` : `Detected label ${data.label_id}`;
       }
     } catch(err){
-      statusEl.textContent = err;
+      showError(err);
+      return;
     }
     setTimeout(poll, 200);
   }
+  retryBtn.addEventListener('click', () => {
+    retryBtn.style.display = 'none';
+    statusEl.textContent = 'Scanner ready';
+    poll();
+  });
   poll();
 })();
 </script>
