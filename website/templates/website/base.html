@@ -112,6 +112,24 @@
         toggle.setAttribute('aria-label', theme === 'dark' ? '{% trans "Light Mode" %}' : '{% trans "Dark Mode" %}');
         icon.setAttribute('href', theme === 'dark' ? '#icon-sun' : '#icon-moon');
         icon.setAttribute('xlink:href', theme === 'dark' ? '#icon-sun' : '#icon-moon');
+
+        const navbar = document.querySelector('nav.navbar');
+        const buttons = document.querySelectorAll('.toolbar .btn');
+        if (theme === 'light') {
+          navbar.classList.remove('navbar-dark', 'bg-dark');
+          navbar.classList.add('navbar-light', 'bg-white');
+          buttons.forEach(btn => {
+            btn.classList.remove('btn-outline-light');
+            btn.classList.add('btn-outline-dark');
+          });
+        } else {
+          navbar.classList.remove('navbar-light', 'bg-white');
+          navbar.classList.add('navbar-dark', 'bg-dark');
+          buttons.forEach(btn => {
+            btn.classList.remove('btn-outline-dark');
+            btn.classList.add('btn-outline-light');
+          });
+        }
       }
 
       function toggleTheme() {
