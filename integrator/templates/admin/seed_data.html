@@ -13,17 +13,17 @@
     </tr>
   </thead>
   <tbody>
-  {% for model, obj in seed_items %}
+  {% for item in seed_items %}
     <tr>
-      <td>{{ model._meta.verbose_name }}</td>
-      <td>{{ obj }}</td>
-      <td>{% if obj.is_deleted %}Deleted{% else %}Active{% endif %}</td>
+      <td>{{ item.model_verbose_name }}</td>
+      <td>{{ item.obj }}</td>
+      <td>{% if item.obj.is_deleted %}Deleted{% else %}Active{% endif %}</td>
       <td>
-        {% if obj.is_deleted %}
+        {% if item.obj.is_deleted %}
         <form method="post" style="display:inline">{% csrf_token %}
-          <input type="hidden" name="app" value="{{ model._meta.app_label }}">
-          <input type="hidden" name="model" value="{{ model._meta.model_name }}">
-          <input type="hidden" name="pk" value="{{ obj.pk }}">
+          <input type="hidden" name="app" value="{{ item.model_app_label }}">
+          <input type="hidden" name="model" value="{{ item.model_name }}">
+          <input type="hidden" name="pk" value="{{ item.obj.pk }}">
           <button type="submit" class="button">Reinstall</button>
         </form>
         {% endif %}

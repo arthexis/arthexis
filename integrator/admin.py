@@ -128,7 +128,14 @@ def seed_data_view(request):
     for model in apps.get_models():
         if issubclass(model, Entity):
             for obj in model.all_objects.filter(is_seed_data=True):
-                seed_items.append((model, obj))
+                seed_items.append(
+                    {
+                        "model_verbose_name": model._meta.verbose_name,
+                        "model_app_label": model._meta.app_label,
+                        "model_name": model._meta.model_name,
+                        "obj": obj,
+                    }
+                )
     if request.method == "POST":
         app_label = request.POST["app"]
         model_name = request.POST["model"]
