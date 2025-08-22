@@ -8,7 +8,8 @@ CERT_DIR="$LIVE_DIR/$DOMAIN"
 
 # Determine where the current certificate files live. Certbot may store
 # them in a suffixed directory (e.g. "$DOMAIN-0001") on renewal.
-EXISTING_DIR=$(sudo ls -1d "$LIVE_DIR/${DOMAIN}"* 2>/dev/null | sort | tail -n 1)
+# Use find under sudo so directory matching occurs with necessary permissions
+EXISTING_DIR=$(sudo find "$LIVE_DIR" -maxdepth 1 -type d -name "${DOMAIN}*" 2>/dev/null | sort | tail -n 1)
 
 if [ -n "$EXISTING_DIR" ]; then
     # Ensure the expected directory exists and contains the certificate.
@@ -51,7 +52,7 @@ fi
 
 echo "Checking for renewed certificate files…"
 # After renewal, determine the latest certificate directory for the domain.
-LATEST_DIR=$(sudo ls -1d "$LIVE_DIR/${DOMAIN}"* 2>/dev/null | sort | tail -n 1)
+LATEST_DIR=$(sudo find "$LIVE_DIR" -maxdepth 1 -type d -name "${DOMAIN}*" 2>/dev/null | sort | tail -n 1)
 
 # Warn when no directory was produced, which usually indicates a certbot
 # failure.
