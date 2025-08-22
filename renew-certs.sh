@@ -31,6 +31,13 @@ if [ -n "$EXISTING_DIR" ]; then
 
     if [ "$DAYS_LEFT" -gt 30 ]; then
         echo "Renewal skipped: certificate for $DOMAIN valid until $EXPIRATION"
+        # The certificate may have been copied from a suffixed directory. Reload
+        # nginx so it serves the latest certificate even when no renewal is
+        # performed.
+        if command -v systemctl >/dev/null && sudo systemctl is-active --quiet nginx; then
+            echo "Reloading nginx to apply the current certificate"
+            sudo systemctl reload nginx
+        fi
         exit 0
     fi
 else
