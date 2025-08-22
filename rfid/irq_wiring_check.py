@@ -2,6 +2,7 @@ from unittest import TestCase
 from unittest.mock import patch, MagicMock, ANY
 
 from rfid.background_reader import _setup_hardware, IRQ_PIN, GPIO
+from rfid.reader import read_rfid
 
 
 class IRQPinSetupManualTest(TestCase):
@@ -22,14 +23,16 @@ class IRQPinSetupManualTest(TestCase):
 
 def check_irq_pin():
     """Return the IRQ pin used by the reader or report if none is detected."""
-    if not _setup_hardware():
+    if _setup_hardware():
+        if GPIO:
+            try:  # pragma: no cover - hardware cleanup
+                GPIO.remove_event_detect(IRQ_PIN)
+                GPIO.cleanup()
+            except Exception:
+                pass
+        return {"irq_pin": IRQ_PIN}
+
+    result = read_rfid(timeout=0.1)
+    if result.get("error"):
         return {"error": "no scanner detected"}
-
-    if GPIO:
-        try:  # pragma: no cover - hardware cleanup
-            GPIO.remove_event_detect(IRQ_PIN)
-            GPIO.cleanup()
-        except Exception:
-            pass
-
-    return {"irq_pin": IRQ_PIN}
+    return {"irq_pin": None}
