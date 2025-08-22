@@ -2,24 +2,107 @@
 
 {% block title %}Django shell{% endblock %}
 
+{% block extrahead %}
+{{ block.super }}
+<style>
+  html, body {height:100%; margin:0;}
+  #container {display:flex; flex-direction:column; height:100%;}
+  #header {padding:4px 10px;}
+  #content {flex:1; padding:0; margin:0;}
+  #terminal {
+    flex:1;
+    background:#000;
+    color:#fff;
+    font-family:monospace;
+    padding:10px;
+    box-sizing:border-box;
+    display:flex;
+    flex-direction:column;
+    justify-content:flex-end;
+    overflow-y:auto;
+  }
+  .line {white-space:pre-wrap;}
+  .input-line {display:flex;}
+  .cursor {
+    display:inline-block;
+    width:7px;
+    background:#fff;
+    margin-left:2px;
+    animation:blink 1s steps(1) infinite;
+  }
+  @keyframes blink {50% {background:transparent;}}
+</style>
+{% endblock %}
+
+{% block userlinks %}{% endblock %}
+
 {% block content %}
-<form id="console-form" method="post" action="/webshell/execute/">
-  {% csrf_token %}
-  <textarea id="id_source" name="source" rows="20" cols="80"></textarea><br>
-  <button type="submit" class="default">Run</button>
-</form>
-<pre id="output"></pre>
+<form id="csrf-form">{% csrf_token %}</form>
+<div id="terminal"></div>
 <script>
-const form = document.getElementById('console-form');
-form.addEventListener('submit', function(e) {
-  e.preventDefault();
-  fetch(form.action, {
+const terminal = document.getElementById('terminal');
+const csrftoken = document.querySelector('#csrf-form input[name="csrfmiddlewaretoken"]').value;
+let current = '';
+const inputLine = document.createElement('div');
+inputLine.className = 'input-line';
+const prompt = document.createElement('span');
+prompt.textContent = '> ';
+const cmd = document.createElement('span');
+const cursor = document.createElement('span');
+cursor.className = 'cursor';
+cursor.textContent = ' ';
+inputLine.appendChild(prompt);
+inputLine.appendChild(cmd);
+inputLine.appendChild(cursor);
+terminal.appendChild(inputLine);
+
+function render() {
+  cmd.textContent = current;
+  terminal.scrollTop = terminal.scrollHeight;
+}
+
+function runCommand(command) {
+  const line = document.createElement('div');
+  line.className = 'line';
+  line.textContent = '> ' + command;
+  terminal.insertBefore(line, inputLine);
+  fetch('/webshell/execute/', {
     method: 'POST',
-    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-    body: new URLSearchParams(new FormData(form))
-  }).then(r => r.text()).then(text => {
-    document.getElementById('output').textContent = text;
-  });
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-CSRFToken': csrftoken
+    },
+    body: 'source=' + encodeURIComponent(command)
+  })
+    .then(r => r.text())
+    .then(text => {
+      const output = document.createElement('div');
+      output.className = 'line';
+      output.textContent = text.trim();
+      terminal.insertBefore(output, inputLine);
+      terminal.scrollTop = terminal.scrollHeight;
+    });
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (current.trim() !== '') {
+      runCommand(current);
+    }
+    current = '';
+    render();
+  } else if (e.key === 'Backspace') {
+    e.preventDefault();
+    current = current.slice(0, -1);
+    render();
+  } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    current += e.key;
+    render();
+  }
 });
+
+render();
 </script>
 {% endblock %}
