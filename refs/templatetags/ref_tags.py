@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 
 from refs.models import Reference
+from utils import revision
 
 register = template.Library()
 
@@ -64,11 +65,9 @@ def current_page_qr(context, size=200):
 @register.inclusion_tag("refs/footer.html", takes_context=True)
 def render_footer(context):
     """Render footer links for references marked to appear there."""
-    revision = ""
+    revision_value = revision.get_revision()
+    rev_short = revision_value[-6:] if revision_value else ""
     version = ""
-    rev_path = Path("REVISION")
-    if rev_path.exists():
-        revision = rev_path.read_text().strip()[-8:]
     ver_path = Path("VERSION")
     if ver_path.exists():
         version = ver_path.read_text().strip()
@@ -97,7 +96,7 @@ def render_footer(context):
 
     return {
         "footer_refs": Reference.objects.filter(include_in_footer=True),
-        "revision": revision,
+        "revision": rev_short,
         "version": version,
         "admin_links": admin_links,
         "request": request,
