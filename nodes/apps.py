@@ -15,7 +15,7 @@ def _startup_notification() -> None:
     """
 
     try:  # import here to avoid circular import during app loading
-        from .notifications import notify, manager
+        from .notifications import notify
     except Exception:  # pragma: no cover - failure shouldn't break startup
         return
 
@@ -36,10 +36,10 @@ def _startup_notification() -> None:
     revision = ""
     rev_path = Path(settings.BASE_DIR) / "REVISION"
     if rev_path.exists():
-        revision = rev_path.read_text().strip()[-6:]
+        revision = rev_path.read_text().strip()[-4:]
 
     body = f"v{version}"
-    if manager.lcd and revision:
+    if revision:
         body += f" r{revision}"
 
     notify(f"{address}:{port}", body)

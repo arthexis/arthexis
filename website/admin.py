@@ -5,10 +5,14 @@ from django import forms
 from django.db import models
 from app.widgets import CopyColorWidget
 from django.shortcuts import redirect
-from django.urls import path
+from django.urls import path, reverse
+from django.utils.html import format_html
 import ipaddress
 from django.apps import apps as django_apps
 from django.conf import settings
+
+from nodes.models import Node
+from nodes.utils import capture_screenshot, save_screenshot
 
 from .models import SiteBadge, Application, SiteProxy, SiteApplication
 
@@ -43,6 +47,38 @@ class SiteAdmin(DjangoSiteAdmin):
     change_list_template = "admin/sites/site/change_list.html"
     fields = ("domain", "name")
     list_display = ("domain", "name")
+    actions = ["capture_screenshot"]
+
+    @admin.action(description="Capture screenshot")
+    def capture_screenshot(self, request, queryset):
+        node = Node.get_local()
+        for site in queryset:
+            url = f"http://{site.domain}/"
+            try:
+                path = capture_screenshot(url)
+                screenshot = save_screenshot(path, node=node, method="ADMIN")
+            except Exception as exc:  # pragma: no cover - browser issues
+                self.message_user(request, f"{site.domain}: {exc}", messages.ERROR)
+                continue
+            if screenshot:
+                link = reverse(
+                    "admin:nodes_nodescreenshot_change", args=[screenshot.pk]
+                )
+                self.message_user(
+                    request,
+                    format_html(
+                        'Screenshot for {} saved. <a href="{}">View</a>',
+                        site.domain,
+                        link,
+                    ),
+                    messages.SUCCESS,
+                )
+            else:
+                self.message_user(
+                    request,
+                    f"{site.domain}: duplicate screenshot; not saved",
+                    messages.INFO,
+                )
 
     def get_urls(self):
         urls = super().get_urls()
