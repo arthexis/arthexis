@@ -1,5 +1,5 @@
 from django.db import models
-from integrator.models import Entity
+from integrate.models import Entity
 from django.contrib.sites.models import Site
 from django.apps import apps as django_apps
 from django.utils.text import slugify

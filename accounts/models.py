@@ -11,7 +11,7 @@ from django.dispatch import receiver
 from datetime import timedelta
 from urllib.parse import urljoin
 from django.contrib.contenttypes.models import ContentType
-from integrator.models import Entity, EntityUserManager
+from integrate.models import Entity, EntityUserManager
 from uuid import uuid4
 
 

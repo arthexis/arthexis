@@ -87,7 +87,7 @@ class BskyAdminActionTests(TestCase):
     @patch("atproto.Client")
     def test_admin_action(self, MockClient):
         MockClient.return_value.login.return_value = None
-        url = reverse("admin:integrator_bskyaccount_changelist")
+        url = reverse("admin:integrate_bskyaccount_changelist")
         resp = self.client.post(
             url,
             {"action": "test_credentials", "_selected_action": [self.account.pk]},

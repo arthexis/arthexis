@@ -13,7 +13,7 @@ django.setup()
 
 from django.test import TestCase
 from django.conf import settings
-from integrator.models import RequestType
+from integrate.models import RequestType
 
 
 class SeedDataEntityTests(TestCase):
@@ -33,7 +33,7 @@ class EnvRefreshFixtureTests(TestCase):
             json.dumps(
                 [
                     {
-                        "model": "integrator.requesttype",
+                        "model": "integrate.requesttype",
                         "pk": 999,
                         "fields": {"code": "FTR", "name": "Fixture"},
                     }

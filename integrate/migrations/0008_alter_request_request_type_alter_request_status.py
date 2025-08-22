@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("integrator", "0007_bskyaccount_is_deleted_bskyaccount_is_seed_data_and_more"),
+        ("integrate", "0007_bskyaccount_is_deleted_bskyaccount_is_seed_data_and_more"),
     ]
 
     operations = [
@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
             field=models.ForeignKey(
                 default=1,
                 on_delete=django.db.models.deletion.PROTECT,
-                to="integrator.requesttype",
+                to="integrate.requesttype",
             ),
         ),
         migrations.AlterField(

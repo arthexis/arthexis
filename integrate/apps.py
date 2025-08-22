@@ -1,7 +1,7 @@
 from django.apps import AppConfig
 
 
-class IntegratorConfig(AppConfig):
+class IntegrateConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "integrator"
-    verbose_name = "Integrator"
+    name = "integrate"
+    verbose_name = "Integrate"
