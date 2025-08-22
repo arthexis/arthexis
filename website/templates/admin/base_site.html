@@ -129,9 +129,14 @@ document.addEventListener('DOMContentLoaded', function () {
 #nav-sidebar .module.collapsed table {
     display: none;
 }
-.form-row > div:only-child input[type="text"],
+.form-row > div:only-child input[type="text"]:not(.vDateField):not(.vTimeField),
 .form-row > div:only-child textarea {
     width: 150% !important;
+}
+
+.form-row .datetime {
+    display: flex;
+    gap: 0.5em;
 }
 </style>
 {% endblock %}
