@@ -65,7 +65,10 @@ def capture(request):
     """Capture a screenshot of the site's root URL and record it."""
 
     url = request.build_absolute_uri("/")
-    path = capture_screenshot(url)
+    try:
+        path = capture_screenshot(url)
+    except Exception as exc:  # pragma: no cover - depends on selenium setup
+        return JsonResponse({"detail": str(exc)}, status=500)
     node = Node.get_local()
     screenshot = save_screenshot(path, node=node, method=request.method)
     node_id = screenshot.node.id if screenshot and screenshot.node else None
