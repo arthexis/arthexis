@@ -36,7 +36,11 @@ def capture_node_screenshot(
     """Capture a screenshot of ``url`` and record it as a :class:`NodeScreenshot`."""
     if url is None:
         url = f"http://localhost:{port}"
-    path: Path = capture_screenshot(url)
+    try:
+        path: Path = capture_screenshot(url)
+    except Exception as exc:  # pragma: no cover - depends on selenium setup
+        logger.error("Screenshot capture failed: %s", exc)
+        return ""
     node = Node.get_local()
     save_screenshot(path, node=node, method=method)
     return str(path)

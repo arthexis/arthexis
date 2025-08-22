@@ -136,6 +136,22 @@ class NodeTests(TestCase):
         self.client.get(reverse("node-screenshot"))
         self.assertEqual(NodeScreenshot.objects.count(), 1)
 
+    @patch("nodes.views.capture_screenshot")
+    def test_capture_screenshot_error(self, mock_capture):
+        hostname = socket.gethostname()
+        Node.objects.create(
+            hostname=hostname,
+            address="127.0.0.1",
+            port=80,
+            mac_address=Node.get_current_mac(),
+        )
+        mock_capture.side_effect = RuntimeError("fail")
+        response = self.client.get(reverse("node-screenshot"))
+        self.assertEqual(response.status_code, 500)
+        data = response.json()
+        self.assertEqual(data["detail"], "fail")
+        self.assertEqual(NodeScreenshot.objects.count(), 0)
+
     def test_public_api_get_and_post(self):
         node = Node.objects.create(
             hostname="public",
@@ -569,6 +585,19 @@ class ClipboardTaskTests(TestCase):
         self.assertEqual(screenshot.node, node)
         self.assertEqual(screenshot.path, "screenshots/test.png")
         self.assertEqual(screenshot.method, "TASK")
+
+    @patch("nodes.tasks.capture_screenshot")
+    def test_capture_node_screenshot_handles_error(self, mock_capture):
+        Node.objects.create(
+            hostname="host",
+            address="127.0.0.1",
+            port=8000,
+            mac_address=Node.get_current_mac(),
+        )
+        mock_capture.side_effect = RuntimeError("boom")
+        result = capture_node_screenshot("http://example.com")
+        self.assertEqual(result, "")
+        self.assertEqual(NodeScreenshot.objects.count(), 0)
 
 
 class NotificationTests(TestCase):
