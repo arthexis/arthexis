@@ -6,6 +6,13 @@ DOMAIN="arthexis.com"
 LIVE_DIR="/etc/letsencrypt/live"
 CERT_DIR="$LIVE_DIR/$DOMAIN"
 
+# Stop nginx if it's running to free up port 80 for the standalone server.
+NGINX_RUNNING=false
+if command -v systemctl >/dev/null && sudo systemctl is-active --quiet nginx; then
+    NGINX_RUNNING=true
+    sudo systemctl stop nginx
+fi
+
 # Request renewal if the certificate is close to expiring.
 # Using certonly to avoid modifying existing web server configuration.
 sudo certbot certonly --keep-until-expiring --quiet --standalone -d "$DOMAIN" --non-interactive || true
@@ -18,4 +25,9 @@ LATEST_DIR=$(sudo ls -1d "$LIVE_DIR/${DOMAIN}"* 2>/dev/null | sort | tail -n 1)
 if [ -n "$LATEST_DIR" ] && [ "$LATEST_DIR" != "$CERT_DIR" ]; then
     sudo cp "$LATEST_DIR/fullchain.pem" "$CERT_DIR/fullchain.pem"
     sudo cp "$LATEST_DIR/privkey.pem" "$CERT_DIR/privkey.pem"
+fi
+
+# Restart nginx if it was previously running.
+if [ "$NGINX_RUNNING" = true ]; then
+    sudo systemctl start nginx
 fi
