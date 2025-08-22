@@ -69,12 +69,20 @@
       await fetch('{{ restart_url }}', {method: 'POST'});
       const resp = await fetch('{{ test_url }}');
       const data = await resp.json();
-      if(data.error){
-        statusEl.textContent = `Error: ${data.error}`;
-      } else {
-        statusEl.textContent = `IRQ pin ${data.irq_pin}`;
-        poll();
+      let msg = '';
+      if(data.local){
+        if(data.local.error){
+          msg += 'No local scanner detected.';
+        } else if(data.local.irq_pin !== undefined){
+          msg += `IRQ pin ${data.local.irq_pin}.`;
+        }
       }
+      if(data.remote && data.remote.length){
+        const parts = data.remote.map(r => `${r.source}: ${r.error ? r.error : 'ok'}`);
+        msg += ` Checking remote scanner... ${parts.join('; ')}`;
+      }
+      statusEl.textContent = msg || 'Test completed';
+      poll();
     } catch(err) {
       statusEl.textContent = 'Test failed';
     }

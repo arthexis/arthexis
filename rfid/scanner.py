@@ -2,6 +2,16 @@ import requests
 from urllib.parse import urljoin
 from accounts.models import RFIDSource
 from .background_reader import get_next_tag, start, stop
+from .irq_wiring_check import check_irq_pin
+
+
+def _test_remote(src):
+    """Attempt to contact a remote RFID source and report status."""
+    try:
+        src.test_fetch(src.proxy_url)
+    except Exception as exc:  # pragma: no cover - network issues
+        return {"source": src.name, "error": str(exc)}
+    return {"source": src.name, "status": "ok"}
 
 
 def scan_sources():
@@ -45,3 +55,18 @@ def restart_sources():
             except Exception:
                 pass
     return {"error": "no scanner available"}
+
+
+def test_sources():
+    """Check local and remote RFID sources for availability."""
+
+    local_result = None
+    remote_results = []
+    for src in RFIDSource.objects.order_by("default_order"):
+        if src.proxy_url:
+            remote_results.append(_test_remote(src))
+        elif local_result is None:
+            local_result = check_irq_pin()
+    if local_result is None:
+        local_result = {"error": "no scanner detected"}
+    return {"local": local_result, "remote": remote_results}

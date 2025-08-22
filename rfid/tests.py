@@ -9,7 +9,7 @@ django.setup()
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from rfid.reader import read_rfid
-from rfid.scanner import scan_sources
+from rfid.scanner import scan_sources, test_sources
 from accounts.models import RFIDSource
 
 
@@ -83,29 +83,40 @@ class RestartViewTests(SimpleTestCase):
 
 class ScanTestViewTests(SimpleTestCase):
     @patch("config.middleware.get_site")
-    @patch("rfid.irq_wiring_check.GPIO")
-    @patch("rfid.irq_wiring_check.IRQ_PIN", new=7)
-    @patch("rfid.irq_wiring_check._setup_hardware", return_value=True)
-    def test_scan_test_success(self, mock_setup, mock_gpio, mock_site):
+    @patch("rfid.views.test_sources", return_value={"local": {"irq_pin": 7}, "remote": []})
+    def test_scan_test_success(self, mock_test, mock_site):
         resp = self.client.get(reverse("rfid-scan-test"))
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json(), {"irq_pin": 7})
+        self.assertEqual(resp.json(), {"local": {"irq_pin": 7}, "remote": []})
 
     @patch("config.middleware.get_site")
-    @patch("rfid.irq_wiring_check.read_rfid", return_value={"rfid": None, "label_id": None})
-    @patch("rfid.irq_wiring_check._setup_hardware", return_value=False)
-    def test_scan_test_success_without_irq(self, mock_setup, mock_read, mock_site):
+    @patch(
+        "rfid.views.test_sources",
+        return_value={
+            "local": {"error": "no scanner detected"},
+            "remote": [{"source": "remote", "status": "ok"}],
+        },
+    )
+    def test_scan_test_remote_only(self, mock_test, mock_site):
         resp = self.client.get(reverse("rfid-scan-test"))
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json(), {"irq_pin": None})
+        self.assertEqual(
+            resp.json(),
+            {
+                "local": {"error": "no scanner detected"},
+                "remote": [{"source": "remote", "status": "ok"}],
+            },
+        )
 
     @patch("config.middleware.get_site")
-    @patch("rfid.irq_wiring_check.read_rfid", return_value={"error": "boom"})
-    @patch("rfid.irq_wiring_check._setup_hardware", return_value=False)
-    def test_scan_test_error(self, mock_setup, mock_read, mock_site):
+    @patch(
+        "rfid.views.test_sources",
+        return_value={"local": {"error": "no scanner detected"}, "remote": []},
+    )
+    def test_scan_test_error(self, mock_test, mock_site):
         resp = self.client.get(reverse("rfid-scan-test"))
         self.assertEqual(resp.status_code, 500)
-        self.assertEqual(resp.json(), {"error": "no scanner detected"})
+        self.assertEqual(resp.json(), {"local": {"error": "no scanner detected"}, "remote": []})
 
 class ScannerSelectionTests(TestCase):
     def setUp(self):
@@ -147,3 +158,18 @@ class ScanNextFallbackTests(TestCase):
         resp = self.client.get(reverse("rfid-scan-next"))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), {"rfid": "REMOTE", "label_id": 7})
+
+
+class ScannerTestSourcesTests(TestCase):
+    def setUp(self):
+        RFIDSource.objects.create(name="local", endpoint="scanner", default_order=0)
+        RFIDSource.objects.create(
+            name="remote", endpoint="scanner", proxy_url="http://example.com", default_order=1
+        )
+
+    @patch("rfid.scanner.check_irq_pin", return_value={"irq_pin": 5})
+    @patch("rfid.scanner._test_remote", return_value={"source": "remote", "status": "ok"})
+    def test_test_sources(self, mock_remote, mock_local):
+        result = test_sources()
+        self.assertEqual(result["local"], {"irq_pin": 5})
+        self.assertEqual(result["remote"], [{"source": "remote", "status": "ok"}])
