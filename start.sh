@@ -9,6 +9,8 @@ if [ -f SERVICE ]; then
   SERVICE_NAME="$(cat SERVICE)"
   if systemctl list-unit-files | grep -Fq "${SERVICE_NAME}.service"; then
     sudo systemctl restart "$SERVICE_NAME"
+    # Show status information so the user can verify the service state
+    sudo systemctl status "$SERVICE_NAME" --no-pager
     exit 0
   fi
 fi
