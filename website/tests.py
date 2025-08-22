@@ -13,6 +13,9 @@ import tempfile
 import shutil
 from django.conf import settings
 from pathlib import Path
+from unittest.mock import patch
+
+from nodes.models import Node, NodeScreenshot
 
 
 class LoginViewTests(TestCase):
@@ -201,6 +204,48 @@ class SiteAdminRegisterCurrentTests(TestCase):
         self.assertRedirects(resp, reverse("admin:website_siteproxy_changelist"))
         site = Site.objects.get(domain="127.0.0.1")
         self.assertEqual(site.name, "Terminal")
+
+
+class SiteAdminScreenshotTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="screenshot-admin", password="pwd", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "Terminal", "domain": "testserver"}
+        )
+        self.node = Node.objects.create(
+            hostname="localhost",
+            address="127.0.0.1",
+            port=80,
+            mac_address=Node.get_current_mac(),
+        )
+
+    @patch("website.admin.capture_screenshot")
+    def test_capture_screenshot_action(self, mock_capture):
+        screenshot_dir = settings.LOG_DIR / "screenshots"
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        file_path = screenshot_dir / "test.png"
+        file_path.write_bytes(b"frontpage")
+        mock_capture.return_value = Path("screenshots/test.png")
+        url = reverse("admin:website_siteproxy_changelist")
+        response = self.client.post(
+            url,
+            {"action": "capture_screenshot", "_selected_action": [1]},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(NodeScreenshot.objects.count(), 1)
+        screenshot = NodeScreenshot.objects.first()
+        self.assertEqual(screenshot.node, self.node)
+        self.assertEqual(screenshot.path, "screenshots/test.png")
+        self.assertEqual(screenshot.method, "ADMIN")
+        link = reverse("admin:nodes_nodescreenshot_change", args=[screenshot.pk])
+        self.assertContains(response, link)
+        mock_capture.assert_called_once_with("http://testserver/")
 
 
 class AdminBadgesWebsiteTests(TestCase):
