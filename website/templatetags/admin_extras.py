@@ -5,7 +5,7 @@ import textwrap
 from django import template
 from django.apps import apps
 from django.contrib import admin
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 
 register = template.Library()
 
@@ -59,8 +59,16 @@ def model_admin_actions(context, app_label, model_name):
     for action_name, (func, _name, description) in model_admin.get_actions(request).items():
         if action_name == "delete_selected" or uses_queryset(func):
             continue
-        url = reverse(
-            f"admin:{model_admin.opts.app_label}_{model_admin.opts.model_name}_changelist"
-        ) + f"?action={action_name}"
+        url = None
+        base = f"admin:{model_admin.opts.app_label}_{model_admin.opts.model_name}_"
+        try:
+            url = reverse(base + action_name)
+        except NoReverseMatch:
+            try:
+                url = reverse(base + action_name.split("_")[0])
+            except NoReverseMatch:
+                url = (
+                    reverse(base + "changelist") + f"?action={action_name}"
+                )
         actions.append({"url": url, "label": description or _name.replace("_", " ")})
     return actions
