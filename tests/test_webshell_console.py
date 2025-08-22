@@ -23,7 +23,7 @@ class AdminConsoleTests(TestCase):
     def test_console_view_loads(self):
         response = self.client.get("/webshell/")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "<textarea")
+        self.assertContains(response, 'id="terminal"')
 
     def test_execute_endpoint(self):
         response = self.client.post("/webshell/execute/", {"source": "print(1+1)"})
