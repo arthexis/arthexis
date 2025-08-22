@@ -39,7 +39,7 @@ class SiteBadgeInline(admin.StackedInline):
 class SiteApplicationInline(admin.TabularInline):
     model = SiteApplication
     extra = 0
-    fields = ("application", "path", "is_default", "favicon")
+    fields = ("application", "path", "menu", "is_default", "favicon")
 
 
 class SiteAdmin(DjangoSiteAdmin):
@@ -147,6 +147,6 @@ class ApplicationAdmin(admin.ModelAdmin):
 
 @admin.register(SiteApplication)
 class SiteApplicationAdmin(admin.ModelAdmin):
-    list_display = ("application", "site", "path", "is_default")
+    list_display = ("application", "site", "path", "menu", "is_default")
     list_filter = ("site", "application")
-    fields = ("site", "application", "path", "is_default", "favicon")
+    fields = ("site", "application", "path", "menu", "is_default", "favicon")

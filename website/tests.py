@@ -286,6 +286,14 @@ class NavAppsTests(TestCase):
         resp = self.client.get(reverse("website:index"), HTTP_HOST="127.0.0.1:8000")
         self.assertContains(resp, "README")
 
+    def test_nav_pill_uses_menu_field(self):
+        site_app = SiteApplication.objects.get()
+        site_app.menu = "Docs"
+        site_app.save()
+        resp = self.client.get(reverse("website:index"))
+        self.assertContains(resp, 'badge rounded-pill text-bg-secondary">DOCS')
+        self.assertNotContains(resp, 'badge rounded-pill text-bg-secondary">README')
+
     def test_app_without_root_url_excluded(self):
         site = Site.objects.get(id=1)
         app = Application.objects.create(name="accounts")
