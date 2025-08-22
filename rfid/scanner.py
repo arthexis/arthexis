@@ -1,5 +1,5 @@
-from urllib.parse import urljoin
 import requests
+from urllib.parse import urljoin
 from accounts.models import RFIDSource
 from .background_reader import get_next_tag, start, stop
 
@@ -9,7 +9,7 @@ def scan_sources():
     for src in RFIDSource.objects.order_by("default_order"):
         if src.proxy_url:
             try:
-                url = urljoin(src.proxy_url.rstrip("/") + "/", src.endpoint.strip("/") + "/")
+                url = src._build_url(src.proxy_url)
                 resp = requests.get(url, timeout=5)
                 resp.raise_for_status()
                 return resp.json()
@@ -17,7 +17,7 @@ def scan_sources():
                 continue
         else:
             result = get_next_tag()
-            if result is not None:
+            if result and result.get("rfid"):
                 if src.uuid:
                     result.setdefault("source", str(src.uuid))
                 return result
@@ -29,14 +29,19 @@ def restart_sources():
     for src in RFIDSource.objects.order_by("default_order"):
         if src.proxy_url:
             try:
-                url = urljoin(src.proxy_url.rstrip("/") + "/", src.endpoint.strip("/") + "/restart/")
+                url = urljoin(src._build_url(src.proxy_url), "restart/")
                 resp = requests.post(url, timeout=5)
                 resp.raise_for_status()
                 return resp.json()
             except Exception:
                 continue
         else:
-            stop()
-            start()
-            return {"status": "restarted"}
+            try:
+                stop()
+                start()
+                test = get_next_tag()
+                if test is not None and not test.get("error"):
+                    return {"status": "restarted"}
+            except Exception:
+                pass
     return {"error": "no scanner available"}
