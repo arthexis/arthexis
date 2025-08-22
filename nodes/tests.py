@@ -250,6 +250,24 @@ class NodeAdminTests(TestCase):
         self.assertEqual(node.installed_revision, rev)
         self.assertEqual(node.mac_address, Node.get_current_mac())
 
+    def test_register_current_updates_existing_node(self):
+        hostname = socket.gethostname()
+        Node.objects.create(
+            hostname=hostname,
+            address="127.0.0.1",
+            port=8000,
+            mac_address=None,
+        )
+
+        response = self.client.get(
+            reverse("admin:nodes_node_register_current"), follow=False
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Node.objects.count(), 1)
+        node = Node.objects.first()
+        self.assertEqual(node.mac_address, Node.get_current_mac())
+        self.assertEqual(node.hostname, hostname)
+
     @patch("nodes.admin.capture_screenshot")
     @patch("nodes.admin.capture_screen")
     def test_capture_screenshot_from_admin(
