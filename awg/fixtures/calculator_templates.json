@@ -16,5 +16,23 @@
       "ground": 1,
       "show_in_website": true
     }
+  },
+  {
+    "model": "awg.calculatortemplate",
+    "pk": 2,
+    "fields": {
+      "name": "DC Fast Charger",
+      "description": "Commercial DC charging for 1 or 2 EVs.",
+      "amps": 120,
+      "volts": 400,
+      "material": "cu",
+      "max_awg": "",
+      "max_lines": 2,
+      "phases": 2,
+      "temperature": 75,
+      "conduit": "emt",
+      "ground": 1,
+      "show_in_website": true
+    }
   }
 ]
