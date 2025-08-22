@@ -27,6 +27,12 @@ if [ -n "$LATEST_DIR" ] && [ "$LATEST_DIR" != "$CERT_DIR" ]; then
     sudo cp "$LATEST_DIR/privkey.pem" "$CERT_DIR/privkey.pem"
 fi
 
+# Display the new certificate's expiration date.
+if [ -f "$CERT_DIR/fullchain.pem" ]; then
+    EXPIRATION=$(sudo openssl x509 -enddate -noout -in "$CERT_DIR/fullchain.pem" | cut -d= -f2)
+    echo "Certificate for $DOMAIN expires on: $EXPIRATION"
+fi
+
 # Restart nginx if it was previously running.
 if [ "$NGINX_RUNNING" = true ]; then
     sudo systemctl start nginx
