@@ -54,7 +54,7 @@ class ReaderNotificationTests(TestCase):
         self.assertEqual(result["label_id"], 1)
         self.assertTrue(result.get("source"))
         mock_notify.assert_called_once_with(
-            "RFID 1 OK PRIV", f"{result['rfid']} BLACK"
+            "RFID 1 OK INT", f"{result['rfid']} BLACK"
         )
 
     @patch("nodes.notifications.notify")
@@ -65,7 +65,7 @@ class ReaderNotificationTests(TestCase):
 
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
         mock_notify.assert_called_once_with(
-            "RFID 2 Not OK PRIV", f"{result['rfid']} BLACK"
+            "RFID 2 BAD INT", f"{result['rfid']} BLACK"
         )
         self.assertTrue(result.get("source"))
 
