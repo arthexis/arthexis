@@ -72,6 +72,7 @@ class ChargerAdmin(admin.ModelAdmin):
         "session_kw",
         "total_kw_display",
         "test_link",
+        "qr_link",
         "log_link",
         "status_link",
     )
@@ -82,10 +83,22 @@ class ChargerAdmin(admin.ModelAdmin):
         from django.utils.html import format_html
 
         return format_html(
-            '<a href="{}" target="_blank">open</a>', obj.get_absolute_url()
+            '<a href="{}" onclick="window.open(this.href,\'landing\',\'width=400,height=600\');return false;">open</a>',
+            obj.get_absolute_url(),
         )
 
     test_link.short_description = "Landing Page"
+
+    def qr_link(self, obj):
+        from django.utils.html import format_html
+
+        if obj.reference and obj.reference.image:
+            return format_html(
+                '<a href="{}" target="_blank">qr</a>', obj.reference.image.url
+            )
+        return ""
+
+    qr_link.short_description = "QR Code"
 
     def log_link(self, obj):
         from django.utils.html import format_html

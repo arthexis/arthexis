@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ charger.name|default:charger.charger_id }}</title>
+  <script>
+    setInterval(function(){ location.reload(); }, 5000);
+  </script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 1em; }
+    .progress { width: 100%; background: #eee; height: 20px; border-radius: 10px; overflow: hidden; margin-top: 1em; }
+    .progress-bar { height: 100%; background: #4caf50; transition: width 0.5s; }
+  </style>
+</head>
+<body>
+{% load i18n %}
+{% if tx %}
+  <h1>{% trans "Charging" %}</h1>
+  <div class="progress"><div class="progress-bar" style="width: {{ tx.kw|floatformat:0 }}%;"></div></div>
+  <p>{% trans "Energy" %}: {{ tx.kw|floatformat:2 }} kW</p>
+  <p>{% trans "Started" %}: {{ tx.start_time }}</p>
+{% else %}
+  <h1>{{ charger.name|default:charger.charger_id }}</h1>
+  <p>{% trans "Plug in your vehicle and slide your RFID card over the reader to begin charging." %}</p>
+{% endif %}
+</body>
+</html>

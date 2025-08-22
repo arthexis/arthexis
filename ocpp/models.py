@@ -60,7 +60,9 @@ class Charger(Entity):
         super().save(*args, **kwargs)
         ref_value = self._full_url()
         if not self.reference or self.reference.value != ref_value:
-            ref, _ = Reference.objects.get_or_create(value=ref_value)
+            ref, _ = Reference.objects.get_or_create(
+                value=ref_value, defaults={"alt_text": self.charger_id}
+            )
             self.reference = ref
             super().save(update_fields=["reference"])
 

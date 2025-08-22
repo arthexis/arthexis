@@ -295,7 +295,10 @@ class ChargerLandingTests(TestCase):
 
         response = self.client.get(reverse("charger-page", args=["PAGE1"]))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "PAGE1")
+        self.assertContains(
+            response,
+            "Plug in your vehicle and slide your RFID card over the reader to begin charging.",
+        )
 
     def test_status_page_renders(self):
         charger = Charger.objects.create(charger_id="PAGE2")
@@ -303,18 +306,17 @@ class ChargerLandingTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "PAGE2")
 
-    def test_charger_page_shows_stats(self):
+    def test_charger_page_shows_progress(self):
         charger = Charger.objects.create(charger_id="STATS")
-        Transaction.objects.create(
+        tx = Transaction.objects.create(
             charger=charger,
             meter_start=1000,
-            meter_stop=3000,
             start_time=timezone.now(),
-            stop_time=timezone.now(),
         )
+        store.transactions[charger.charger_id] = tx
         resp = self.client.get(reverse("charger-page", args=["STATS"]))
-        self.assertContains(resp, "2.00")
-        self.assertContains(resp, "Offline")
+        self.assertContains(resp, "progress")
+        store.transactions.pop(charger.charger_id, None)
 
     def test_total_includes_ongoing_transaction(self):
         charger = Charger.objects.create(charger_id="ONGOING")
@@ -398,6 +400,12 @@ class ChargerAdminTests(TestCase):
         self.assertContains(resp, charger.get_absolute_url())
         status_url = reverse("charger-status", args=["ADMIN1"])
         self.assertContains(resp, status_url)
+
+    def test_admin_lists_qr_link(self):
+        charger = Charger.objects.create(charger_id="QR1")
+        url = reverse("admin:ocpp_charger_changelist")
+        resp = self.client.get(url)
+        self.assertContains(resp, charger.reference.image.url)
 
     def test_admin_lists_log_link(self):
         charger = Charger.objects.create(charger_id="LOG1")
@@ -930,7 +938,7 @@ class ChargerStatusViewTests(TestCase):
             unit="W",
         )
         store.transactions[charger.charger_id] = tx
-        resp = self.client.get(reverse("charger-page", args=[charger.charger_id]))
+        resp = self.client.get(reverse("charger-status", args=[charger.charger_id]))
         self.assertEqual(resp.status_code, 200)
         chart = json.loads(resp.context["chart_data"])
         self.assertEqual(len(chart["labels"]), 2)
@@ -941,7 +949,7 @@ class ChargerStatusViewTests(TestCase):
     def test_sessions_are_linked(self):
         charger = Charger.objects.create(charger_id="LINK1")
         tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
-        resp = self.client.get(reverse("charger-page", args=[charger.charger_id]))
+        resp = self.client.get(reverse("charger-status", args=[charger.charger_id]))
         self.assertContains(resp, f"?session={tx.id}")
 
     def test_past_session_chart(self):
@@ -963,7 +971,7 @@ class ChargerStatusViewTests(TestCase):
             unit="W",
         )
         resp = self.client.get(
-            reverse("charger-page", args=[charger.charger_id]) + f"?session={tx.id}"
+            reverse("charger-status", args=[charger.charger_id]) + f"?session={tx.id}"
         )
         self.assertContains(resp, "Back to live")
         chart = json.loads(resp.context["chart_data"])
@@ -986,7 +994,7 @@ class ChargerSessionPaginationTests(TestCase):
             )
 
     def test_only_ten_transactions_shown(self):
-        resp = self.client.get(reverse("charger-page", args=[self.charger.charger_id]))
+        resp = self.client.get(reverse("charger-status", args=[self.charger.charger_id]))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(resp.context["transactions"]), 10)
         self.assertTrue(resp.context["page_obj"].has_next())
