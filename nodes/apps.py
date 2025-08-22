@@ -4,6 +4,7 @@ from pathlib import Path
 
 from django.apps import AppConfig
 from django.conf import settings
+from utils import revision
 
 
 def _startup_notification() -> None:
@@ -33,14 +34,12 @@ def _startup_notification() -> None:
     if ver_path.exists():
         version = ver_path.read_text().strip()
 
-    revision = ""
-    rev_path = Path(settings.BASE_DIR) / "REVISION"
-    if rev_path.exists():
-        revision = rev_path.read_text().strip()[-4:]
+    revision_value = revision.get_revision()
+    rev_short = revision_value[-6:] if revision_value else ""
 
     body = f"v{version}"
-    if revision:
-        body += f" r{revision}"
+    if rev_short:
+        body += f" r{rev_short}"
 
     notify(f"{address}:{port}", body)
 

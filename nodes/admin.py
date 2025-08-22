@@ -13,6 +13,7 @@ import socket
 import os
 import pyperclip
 from pyperclip import PyperclipException
+from utils import revision
 from .utils import capture_screenshot, capture_screen, save_screenshot
 from .actions import NodeAction
 
@@ -109,9 +110,9 @@ class NodeAdmin(admin.ModelAdmin):
         port = int(os.environ.get("PORT", 8000))
         base_path = str(settings.BASE_DIR)
         ver_path = Path(settings.BASE_DIR) / "VERSION"
-        rev_path = Path(settings.BASE_DIR) / "REVISION"
         installed_version = ver_path.read_text().strip() if ver_path.exists() else ""
-        installed_revision = rev_path.read_text().strip() if rev_path.exists() else ""
+        rev_value = revision.get_revision()
+        installed_revision = rev_value if rev_value else ""
 
         mac = Node.get_current_mac()
         slug = slugify(hostname)

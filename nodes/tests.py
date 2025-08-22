@@ -239,12 +239,13 @@ class NodeAdminTests(TestCase):
 
     def test_register_current_host(self):
         url = reverse("admin:nodes_node_register_current")
-        response = self.client.get(url)
+        with patch("utils.revision.get_revision", return_value="abcdef123456"):
+            response = self.client.get(url)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Node.objects.count(), 1)
         node = Node.objects.first()
         ver = Path('VERSION').read_text().strip()
-        rev = Path('REVISION').read_text().strip()
+        rev = "abcdef123456"
         self.assertEqual(node.base_path, str(settings.BASE_DIR))
         self.assertEqual(node.installed_version, ver)
         self.assertEqual(node.installed_revision, rev)
@@ -419,15 +420,15 @@ class StartupNotificationTests(TestCase):
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             (tmp_path / "VERSION").write_text("1.2.3")
-            (tmp_path / "REVISION").write_text("abcdef123456")
             with self.settings(BASE_DIR=tmp_path):
-                with patch("nodes.notifications.notify") as mock_notify:
-                    with patch("nodes.apps.socket.gethostname", return_value="host"):
-                        with patch("nodes.apps.socket.gethostbyname", return_value="1.2.3.4"):
-                            with patch.dict(os.environ, {"PORT": "9000"}):
-                                _startup_notification()
+                with patch("utils.revision.get_revision", return_value="abcdef123456"):
+                    with patch("nodes.notifications.notify") as mock_notify:
+                        with patch("nodes.apps.socket.gethostname", return_value="host"):
+                            with patch("nodes.apps.socket.gethostbyname", return_value="1.2.3.4"):
+                                with patch.dict(os.environ, {"PORT": "9000"}):
+                                    _startup_notification()
 
-        mock_notify.assert_called_once_with("1.2.3.4:9000", "v1.2.3 r3456")
+        mock_notify.assert_called_once_with("1.2.3.4:9000", "v1.2.3 r123456")
 
 
 def _fake_time_factory():
