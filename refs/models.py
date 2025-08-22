@@ -3,7 +3,7 @@ from io import BytesIO
 
 from django.core.files.base import ContentFile
 from django.db import models
-from integrator.models import Entity
+from integrate.models import Entity
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.utils.text import slugify

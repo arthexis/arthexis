@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("integrator", "0005_alter_odooinstance_password"),
+        ("integrate", "0005_alter_odooinstance_password"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -81,7 +81,7 @@ class Migration(migrations.Migration):
                     "request_type",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        to="integrator.requesttype",
+                        to="integrate.requesttype",
                     ),
                 ),
             ],
