@@ -36,20 +36,16 @@ The `.vscode/tasks.json` file provides two tasks:
 - **Dev: maintenance** – runs `dev-maintenance.sh` (or the Windows `.bat` equivalent).
 - **Update requirements** – installs updated dependencies via `install.sh` and regenerates `requirements.txt`.
 
-## Included Apps
-| App | Purpose |
+## Public Site Applications
+Only applications with site fixtures and public views are listed below.
+
+| App | Purpose and notable views |
 | --- | --- |
-| accounts | User accounts, RFID login, and credit management |
-| app | Core utilities and site model tweaks |
-| awg | American Wire Gauge references and calculator |
-| emails | Email templates and messaging |
-| integrator | Integrations with external services like Bluesky, Facebook, and Odoo |
-| nodes | Register project nodes and manage NGINX templates |
-| ocpp | OCPP 1.6 charge point management |
-| refs | Reusable references and QR codes |
-| release | Packaging and PyPI release helpers |
-| rfid | RFID tag model and helpers |
-| website | Default site and README renderer |
+| rfid | RFID tag reader with scan, restart and test endpoints |
+| ocpp | OCPP 1.6 charge point dashboard, charger status and log pages |
+| refs | Recent references list and on‑the‑fly QR generator |
+| awg | AWG wire gauge calculator and conduit fill references |
+| arts | Article viewer with calendar and navigation |
 
 ## External Links
 - [Python 3.12](https://www.python.org/downloads/release/python-31210/)
