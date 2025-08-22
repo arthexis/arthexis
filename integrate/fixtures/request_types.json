@@ -1,6 +1,6 @@
 [
   {
-    "model": "integrator.requesttype",
+    "model": "integrate.requesttype",
     "pk": 1,
     "fields": {
       "code": "GEN",

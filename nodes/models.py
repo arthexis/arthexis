@@ -1,5 +1,5 @@
 from django.db import models
-from integrator.models import Entity
+from integrate.models import Entity
 import re
 from django.utils.text import slugify
 import uuid

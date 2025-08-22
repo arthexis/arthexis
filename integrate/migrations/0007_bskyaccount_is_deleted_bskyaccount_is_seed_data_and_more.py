@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("integrator", "0006_requesttype_request"),
+        ("integrate", "0006_requesttype_request"),
     ]
 
     operations = [

@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("integrator", "0002_odoo_initial"),
+        ("integrate", "0002_odoo_initial"),
     ]
 
     operations = [

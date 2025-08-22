@@ -12,7 +12,7 @@ from .meta.services import post_to_page
 
 class MetaServiceTests(TestCase):
     def test_post_to_page(self):
-        with patch("integrator.meta.services.requests.post") as mock_post:
+        with patch("integrate.meta.services.requests.post") as mock_post:
             mock_resp = mock_post.return_value
             mock_resp.json.return_value = {"id": "1"}
             mock_resp.raise_for_status.return_value = None
