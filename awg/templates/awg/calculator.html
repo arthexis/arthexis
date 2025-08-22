@@ -2,8 +2,14 @@
 {% load static i18n %}
 {% block title %}{% trans "AWG Calculator" %}{% endblock %}
 {% block content %}
+<style>
+  /* Ensure input fields match select field height for uniform columns */
+  #awg-calculator input.form-control {
+    height: calc(2.25rem + 2px);
+  }
+</style>
 <h1>{% trans "Cable & Conduit Calculator" %}</h1>
-<form method="post">
+<form method="post" id="awg-calculator">
   {% csrf_token %}
   <div class="row g-4 mb-3">
     <div class="col-lg-3">
