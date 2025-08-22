@@ -5,5 +5,24 @@
       "domain": "127.0.0.1",
       "name": "Terminal"
     }
+  },
+  {
+    "model": "website.application",
+    "fields": {
+      "name": "arts"
+    }
+  },
+  {
+    "model": "website.siteapplication",
+    "fields": {
+      "site": [
+        "127.0.0.1"
+      ],
+      "application": [
+        "arts"
+      ],
+      "path": "/arts/",
+      "is_default": false
+    }
   }
 ]

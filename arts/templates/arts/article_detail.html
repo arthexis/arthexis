@@ -1,0 +1,38 @@
+{% extends "website/base.html" %}
+
+{% block content %}
+  {% if article %}
+  <article>
+    <h1>{{ article.title }}</h1>
+    <div class="article-body">{{ content|safe }}</div>
+  </article>
+  {% if article.references.exists %}
+  <h2>References</h2>
+  <ul>
+    {% for ref in article.references.all %}
+    <li>{{ ref.alt_text }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% else %}
+  <p>No articles available.</p>
+  {% endif %}
+  <aside>
+    <h3>Calendar</h3>
+    <ul>
+      {% for date in calendar %}
+      <li>{{ date|date:"F Y" }}</li>
+      {% empty %}
+      <li>No entries</li>
+      {% endfor %}
+    </ul>
+    <h3>Previous Articles</h3>
+    <ul>
+      {% for art in previous_articles %}
+      <li><a href="{{ art.get_absolute_url }}">{{ art.title }}</a></li>
+      {% empty %}
+      <li>No previous articles</li>
+      {% endfor %}
+    </ul>
+  </aside>
+{% endblock %}
