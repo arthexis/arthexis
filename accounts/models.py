@@ -309,6 +309,9 @@ class RFIDSource(Entity):
         resp.raise_for_status()
         return resp.json()
 
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
 
 class Account(Entity):
     """Track kW credits for a user."""
