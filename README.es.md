@@ -24,20 +24,16 @@ El archivo `.vscode/tasks.json` provee dos tareas:
 - **Dev: maintenance** – ejecuta `dev-maintenance.sh` (o el `.bat` equivalente en Windows).
 - **Update requirements** – instala dependencias actualizadas mediante `install.sh` y regenera `requirements.txt`.
 
-## Aplicaciones Incluidas
-| Aplicación | Propósito |
+## Aplicaciones públicas del sitio
+Solo se enumeran las aplicaciones con fixtures de sitio y vistas públicas.
+
+| Aplicación | Propósito y vistas destacadas |
 | --- | --- |
-| accounts | Cuentas de usuario, inicio de sesión con RFID y gestión de crédito |
-| app | Utilidades básicas y ajustes del modelo del sitio |
-| awg | Referencias y calculadora de calibre de alambre americano |
-| emails | Plantillas de correo electrónico y mensajería |
-| integrator | Integraciones con servicios externos como Bluesky, Facebook y Odoo |
-| nodes | Registrar nodos del proyecto y administrar plantillas de NGINX |
-| ocpp | Gestión de puntos de carga OCPP 1.6 |
-| refs | Referencias reutilizables y códigos QR |
-| release | Herramientas de empaquetado y publicación en PyPI |
-| rfid | Modelo de etiquetas RFID y utilidades |
-| website | Sitio predeterminado y generador de README |
+| rfid | Lector de etiquetas RFID con endpoints de escaneo, reinicio y pruebas |
+| ocpp | Panel OCPP 1.6 con vistas de estado y registros de cargadores |
+| refs | Listado reciente de referencias y generador de QR al vuelo |
+| awg | Calculadora de calibre AWG y referencias de ocupación de tubería |
+| arts | Visor de artículos con calendario y navegación |
 
 ## Enlaces Externos
 - [Python 3.12](https://www.python.org/downloads/release/python-31210/)
