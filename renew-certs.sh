@@ -6,6 +6,35 @@ DOMAIN="arthexis.com"
 LIVE_DIR="/etc/letsencrypt/live"
 CERT_DIR="$LIVE_DIR/$DOMAIN"
 
+CHECK_MODE=false
+if [[ "$1" == "--check" ]]; then
+    CHECK_MODE=true
+fi
+
+if [ "$CHECK_MODE" = true ]; then
+    echo "nginx certificate configuration:"
+    if command -v nginx >/dev/null; then
+        sudo nginx -T 2>/dev/null | grep -E 'ssl_certificate(_key)?' || true
+    else
+        echo "nginx not installed"
+    fi
+
+    if [ -f "$CERT_DIR/fullchain.pem" ]; then
+        echo
+        echo "On-disk certificate details:"
+        sudo openssl x509 -noout -subject -issuer -enddate -in "$CERT_DIR/fullchain.pem"
+    else
+        echo
+        echo "No certificate found at $CERT_DIR/fullchain.pem"
+    fi
+
+    echo
+    echo "Certificate served by $DOMAIN:"
+    echo | openssl s_client -servername "$DOMAIN" -connect "$DOMAIN:443" 2>/dev/null | \
+        openssl x509 -noout -subject -issuer -enddate || true
+    exit 0
+fi
+
 # Determine where the current certificate files live. Certbot may store
 # them in a suffixed directory (e.g. "$DOMAIN-0001") on renewal.
 # Use find under sudo so directory matching occurs with necessary permissions
@@ -31,6 +60,13 @@ if [ -n "$EXISTING_DIR" ]; then
 
     if [ "$DAYS_LEFT" -gt 30 ]; then
         echo "Renewal skipped: certificate for $DOMAIN valid until $EXPIRATION"
+        # The certificate may have been copied from a suffixed directory. Restart
+        # nginx so it serves the latest certificate even when no renewal is
+        # performed.
+        if command -v systemctl >/dev/null && sudo systemctl is-active --quiet nginx; then
+            echo "Restarting nginx to apply the current certificate"
+            sudo systemctl restart nginx
+        fi
         exit 0
     fi
 else
@@ -83,5 +119,5 @@ fi
 # Restart nginx if it was previously running.
 if [ "$NGINX_RUNNING" = true ]; then
     echo "Restarting nginx"
-    sudo systemctl start nginx
+    sudo systemctl restart nginx
 fi
