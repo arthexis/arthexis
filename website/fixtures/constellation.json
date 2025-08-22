@@ -8,17 +8,31 @@
   },
   {
     "model": "website.application",
-    "fields": {"name": "ocpp"}
+    "fields": {
+      "name": "ocpp"
+    }
   },
   {
     "model": "website.application",
-    "fields": {"name": "awg"}
+    "fields": {
+      "name": "awg"
+    }
+  },
+  {
+    "model": "website.application",
+    "fields": {
+      "name": "arts"
+    }
   },
   {
     "model": "website.siteapplication",
     "fields": {
-      "site": ["arthexis.com"],
-      "application": ["ocpp"],
+      "site": [
+        "arthexis.com"
+      ],
+      "application": [
+        "ocpp"
+      ],
       "path": "/ocpp/",
       "is_default": true
     }
@@ -26,9 +40,26 @@
   {
     "model": "website.siteapplication",
     "fields": {
-      "site": ["arthexis.com"],
-      "application": ["awg"],
+      "site": [
+        "arthexis.com"
+      ],
+      "application": [
+        "awg"
+      ],
       "path": "/awg/",
+      "is_default": false
+    }
+  },
+  {
+    "model": "website.siteapplication",
+    "fields": {
+      "site": [
+        "arthexis.com"
+      ],
+      "application": [
+        "arts"
+      ],
+      "path": "/arts/",
       "is_default": false
     }
   }
