@@ -4,8 +4,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 from website.utils import landing
 
-from .scanner import scan_sources, restart_sources
-from .irq_wiring_check import check_irq_pin
+from .scanner import scan_sources, restart_sources, test_sources
 
 
 def scan_next(_request):
@@ -24,9 +23,9 @@ def scan_restart(_request):
 
 
 def scan_test(_request):
-    """Report wiring information for the RFID scanner."""
-    result = check_irq_pin()
-    status = 500 if result.get("error") else 200
+    """Report wiring information for local and remote RFID scanners."""
+    result = test_sources()
+    status = 500 if result["local"].get("error") and not result["remote"] else 200
     return JsonResponse(result, status=status)
 
 
