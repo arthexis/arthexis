@@ -92,8 +92,17 @@ class ScanTestViewTests(SimpleTestCase):
         self.assertEqual(resp.json(), {"irq_pin": 7})
 
     @patch("config.middleware.get_site")
+    @patch("rfid.irq_wiring_check.read_rfid", return_value={"rfid": None, "label_id": None})
     @patch("rfid.irq_wiring_check._setup_hardware", return_value=False)
-    def test_scan_test_error(self, mock_setup, mock_site):
+    def test_scan_test_success_without_irq(self, mock_setup, mock_read, mock_site):
+        resp = self.client.get(reverse("rfid-scan-test"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"irq_pin": None})
+
+    @patch("config.middleware.get_site")
+    @patch("rfid.irq_wiring_check.read_rfid", return_value={"error": "boom"})
+    @patch("rfid.irq_wiring_check._setup_hardware", return_value=False)
+    def test_scan_test_error(self, mock_setup, mock_read, mock_site):
         resp = self.client.get(reverse("rfid-scan-test"))
         self.assertEqual(resp.status_code, 500)
         self.assertEqual(resp.json(), {"error": "no scanner detected"})
