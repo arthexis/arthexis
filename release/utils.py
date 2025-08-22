@@ -241,7 +241,6 @@ def build(
             raise ReleaseError("Tests failed")
 
     commit_hash = _current_commit()
-    Path("REVISION").write_text(commit_hash + "\n")
     prev_revision = _last_changelog_revision()
     update_changelog(version, commit_hash, prev_revision)
 
@@ -282,7 +281,7 @@ def build(
             _run(cmd)
 
     if git:
-        files = ["VERSION", "REVISION", "pyproject.toml", "CHANGELOG.rst"]
+        files = ["VERSION", "pyproject.toml", "CHANGELOG.rst"]
         _run(["git", "add"] + files)
         msg = f"PyPI Release v{version}" if twine else f"Release v{version}"
         _run(["git", "commit", "-m", msg])

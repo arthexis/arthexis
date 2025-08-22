@@ -1,6 +1,8 @@
 from pathlib import Path
 from datetime import timedelta
 
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
 from django.test import Client, RequestFactory, TestCase
@@ -97,17 +99,17 @@ class FooterTemplateTagTests(TestCase):
         )
         Reference.objects.create(value="https://ignored.com", alt_text="Ignore")
         request = self.factory.get("/")
-        html = Template("{% load ref_tags %}{% render_footer %}").render(
-            Context({"request": request})
-        )
+        with patch("utils.revision.get_revision", return_value="abcdef123456"):
+            html = Template("{% load ref_tags %}{% render_footer %}").render(
+                Context({"request": request})
+            )
         self.assertIn("https://example.com", html)
         self.assertIn("Example", html)
         self.assertNotIn("https://ignored.com", html)
         self.assertIn("data:image/png;base64", html)
-        rev = Path("REVISION").read_text().strip()[-8:]
         ver = Path("VERSION").read_text().strip()
         self.assertIn(f"ver {ver}", html)
-        self.assertIn(f"rev {rev}", html)
+        self.assertIn("rev 123456", html)
 
     def test_footer_shows_admin_links_for_staff(self):
         Reference.objects.create(
