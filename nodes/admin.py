@@ -2,6 +2,7 @@ from django.contrib import admin, messages
 from django.urls import path, reverse
 from django.shortcuts import redirect, render
 from django.utils.html import format_html
+from django.utils.text import slugify
 from django import forms
 from app.widgets import CopyColorWidget
 from django.db import models
@@ -99,57 +100,55 @@ class NodeAdmin(admin.ModelAdmin):
         return custom + urls
 
     def register_current(self, request):
-        """Create a Node entry for this host if it doesn't exist."""
+        """Create or update the Node entry for this host."""
         hostname = socket.gethostname()
         try:
             address = socket.gethostbyname(hostname)
         except OSError:
-            address = '127.0.0.1'
-        port = int(os.environ.get('PORT', 8000))
+            address = "127.0.0.1"
+        port = int(os.environ.get("PORT", 8000))
         base_path = str(settings.BASE_DIR)
-        ver_path = Path(settings.BASE_DIR) / 'VERSION'
-        rev_path = Path(settings.BASE_DIR) / 'REVISION'
-        installed_version = ver_path.read_text().strip() if ver_path.exists() else ''
-        installed_revision = rev_path.read_text().strip() if rev_path.exists() else ''
+        ver_path = Path(settings.BASE_DIR) / "VERSION"
+        rev_path = Path(settings.BASE_DIR) / "REVISION"
+        installed_version = ver_path.read_text().strip() if ver_path.exists() else ""
+        installed_revision = rev_path.read_text().strip() if rev_path.exists() else ""
 
         mac = Node.get_current_mac()
-        node, created = Node.objects.get_or_create(
-            mac_address=mac,
-            defaults={
-                'hostname': hostname,
-                'address': address,
-                'port': port,
-                'base_path': base_path,
-                'installed_version': installed_version,
-                'installed_revision': installed_revision,
-            },
-        )
-        if not created:
-            node.hostname = hostname
-            node.address = address
-            node.port = port
-            node.base_path = base_path
-            node.installed_version = installed_version
-            node.installed_revision = installed_revision
-            node.save(
-                update_fields=[
-                    'hostname',
-                    'address',
-                    'port',
-                    'base_path',
-                    'installed_version',
-                    'installed_revision',
-                ]
-            )
+        slug = slugify(hostname)
+
+        node = Node.objects.filter(mac_address=mac).first()
+        if not node:
+            node = Node.objects.filter(public_endpoint=slug).first()
+
+        defaults = {
+            "hostname": hostname,
+            "address": address,
+            "port": port,
+            "base_path": base_path,
+            "installed_version": installed_version,
+            "installed_revision": installed_revision,
+            "public_endpoint": slug,
+            "mac_address": mac,
+        }
+
+        if node:
+            for field, value in defaults.items():
+                setattr(node, field, value)
+            node.save(update_fields=list(defaults.keys()))
+            created = False
+        else:
+            node = Node.objects.create(**defaults)
+            created = True
+
         if created:
-            self.message_user(request, f'Current host registered as {node}', messages.SUCCESS)
+            self.message_user(request, f"Current host registered as {node}", messages.SUCCESS)
         else:
             self.message_user(
                 request,
-                f'Current host already registered as {node}',
+                f"Current host already registered as {node}",
                 messages.INFO,
             )
-        return redirect('..')
+        return redirect("..")
 
     def run_command(self, request, queryset):
         if "apply" in request.POST:
