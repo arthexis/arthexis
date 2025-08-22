@@ -92,3 +92,9 @@ login_view = CustomLoginView.as_view()
 @staff_member_required
 def admin_console(request):
     return render(request, "admin/console.html")
+
+
+def csrf_failure(request, reason=""):
+    """Custom CSRF failure view with a friendly message."""
+    return render(request, "website/csrf_failure.html", status=403)
+
