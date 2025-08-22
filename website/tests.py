@@ -14,6 +14,8 @@ import shutil
 from django.conf import settings
 from pathlib import Path
 from unittest.mock import patch
+from django.core import mail
+import re
 
 from nodes.models import Node, NodeScreenshot
 
@@ -57,6 +59,38 @@ class LoginViewTests(TestCase):
             {"username": "staff", "password": "pwd"},
         )
         self.assertRedirects(resp, "/nodes/list/")
+
+
+class InvitationTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="invited",
+            email="invite@example.com",
+            is_active=False,
+        )
+        self.user.set_unusable_password()
+        self.user.save()
+        Site.objects.update_or_create(id=1, defaults={"name": "Terminal"})
+
+    def test_login_page_has_request_link(self):
+        resp = self.client.get(reverse("website:login"))
+        self.assertContains(resp, reverse("website:request-invite"))
+
+    def test_invitation_flow(self):
+        resp = self.client.post(
+            reverse("website:request-invite"), {"email": "invite@example.com"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+        link = re.search(r"http://testserver[\S]+", mail.outbox[0].body).group(0)
+        resp = self.client.get(link)
+        self.assertEqual(resp.status_code, 200)
+        resp = self.client.post(link)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_active)
+        self.assertIn("_auth_user_id", self.client.session)
 
 
 class NavbarBrandTests(TestCase):

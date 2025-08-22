@@ -1,0 +1,27 @@
+{% extends "website/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Request invitation" %}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-center">
+  <div class="card p-4" style="max-width: 400px; width: 100%;">
+    <h1 class="text-center mb-4">{% trans "Request email invitation" %}</h1>
+    {% if sent %}
+      <div class="alert alert-info" role="alert">
+        {% trans "If the email exists, an invitation has been sent." %}
+      </div>
+    {% else %}
+    <form method="post">
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      <div class="mb-3">
+        <label for="id_email" class="form-label">{% trans "Email" %}</label>
+        <input type="email" name="email" class="form-control" id="id_email" required>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">{% trans "Send invitation" %}</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
