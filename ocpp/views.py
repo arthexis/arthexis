@@ -210,8 +210,15 @@ def cp_simulator(request):
     return render(request, "ocpp/cp_simulator.html", context)
 
 
-@login_required
 def charger_page(request, cid):
+    """Public landing page for a charger displaying usage guidance or progress."""
+    charger = get_object_or_404(Charger, charger_id=cid)
+    tx = store.transactions.get(cid)
+    return render(request, "ocpp/charger_page.html", {"charger": charger, "tx": tx})
+
+
+@login_required
+def charger_status(request, cid):
     charger = get_object_or_404(Charger, charger_id=cid)
     session_id = request.GET.get("session")
     live_tx = store.transactions.get(cid)
@@ -297,12 +304,6 @@ def charger_log_page(request, cid):
         "ocpp/charger_logs.html",
         {"charger": charger, "log": log},
     )
-
-@login_required
-def charger_status(request, cid):
-    """Display current transaction and charger state."""
-    return charger_page(request, cid)
-
 
 @csrf_exempt
 @api_login_required
