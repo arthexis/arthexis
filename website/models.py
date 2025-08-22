@@ -43,6 +43,11 @@ class SiteApplication(Entity):
         help_text="Base path for the app, starting with /",
         blank=True,
     )
+    menu = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Text used for the navbar pill; defaults to the application name.",
+    )
     is_default = models.BooleanField(default=False)
     favicon = models.ImageField(upload_to="site_applications/favicons/", blank=True)
 
@@ -58,6 +63,10 @@ class SiteApplication(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.application.name} ({self.path})"
+
+    @property
+    def menu_label(self) -> str:
+        return self.menu or self.application.name
 
     def save(self, *args, **kwargs):
         if not self.path:
