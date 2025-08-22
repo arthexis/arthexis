@@ -9,11 +9,6 @@ Arthexis Constellation is a Django-based suite that centralizes tools for managi
 3. *(Optional)* Create and activate a virtual environment: `python -m venv .venv` and `source .venv/bin/activate`
 4. Install dependencies: `pip install -r requirements.txt`
 
-## Setup
-1. `python manage.py migrate`
-2. `python manage.py runserver`
-3. Run management commands with `python manage.py <command>`
-
 ## Shell Scripts
 The project includes helper shell scripts to streamline development:
 
@@ -26,11 +21,8 @@ The project includes helper shell scripts to streamline development:
 - `stop.sh [port|--all]`  \
   Stop the server on a given port or all running servers.
 
-- `manage.sh <args>`  \
-  Execute Django management commands.
-
 - `command.sh <command> [args...]`  \
-  Run management commands using hyphenated names (e.g., `./command.sh show-migrations`).
+  Execute Django management commands using hyphenated names (e.g., `./command.sh show-migrations`).
 
 - `dev-maintenance.sh`  \
   Install updated dependencies when requirements change and perform database maintenance tasks.
@@ -39,7 +31,8 @@ The project includes helper shell scripts to streamline development:
   Pull the latest code and reinstall dependencies when needed.
 
 ## VS Code Tasks
-Two tasks are provided in `.vscode/tasks.json`:
+The `.vscode/tasks.json` file provides two tasks:
+
 - **Dev: maintenance** – runs `dev-maintenance.sh` (or the Windows `.bat` equivalent).
 - **Update requirements** – installs updated dependencies via `install.sh` and regenerates `requirements.txt`.
 
@@ -50,10 +43,10 @@ Two tasks are provided in `.vscode/tasks.json`:
 | app | Core utilities and site model tweaks |
 | awg | American Wire Gauge references and calculator |
 | emails | Email templates and messaging |
-| integrations | Integrations with external services like Bluesky, Facebook, and Odoo |
+| integrator | Integrations with external services like Bluesky, Facebook, and Odoo |
 | nodes | Register project nodes and manage NGINX templates |
 | ocpp | OCPP 1.6 charge point management |
-| references | Reusable references and QR codes |
+| refs | Reusable references and QR codes |
 | release | Packaging and PyPI release helpers |
 | rfid | RFID tag model and helpers |
 | website | Default site and README renderer |
