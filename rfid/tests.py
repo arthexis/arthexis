@@ -9,6 +9,7 @@ django.setup()
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from rfid.reader import read_rfid
+from rfid.scanner import scan_sources
 from accounts.models import RFIDSource
 
 
@@ -96,3 +97,44 @@ class ScanTestViewTests(SimpleTestCase):
         resp = self.client.get(reverse("rfid-scan-test"))
         self.assertEqual(resp.status_code, 500)
         self.assertEqual(resp.json(), {"error": "no scanner detected"})
+
+class ScannerSelectionTests(TestCase):
+    def setUp(self):
+        RFIDSource.objects.create(name="local", endpoint="scanner", default_order=0)
+        RFIDSource.objects.create(
+            name="remote", endpoint="scanner", proxy_url="http://example.com", default_order=1
+        )
+
+    @patch("rfid.scanner.requests.get")
+    @patch("rfid.scanner.get_next_tag", return_value=None)
+    def test_falls_back_to_remote(self, mock_get_next, mock_get):
+        mock_get.return_value = MagicMock(json=lambda: {"rfid": "REMOTE", "label_id": 42}, status_code=200)
+        result = scan_sources()
+        self.assertEqual(result, {"rfid": "REMOTE", "label_id": 42})
+        mock_get_next.assert_called_once()
+        mock_get.assert_called_once()
+
+    @patch("rfid.scanner.requests.get")
+    @patch("rfid.scanner.get_next_tag", return_value={"rfid": "LOCAL", "label_id": 1})
+    def test_local_preferred(self, mock_get_next, mock_get):
+        result = scan_sources()
+        self.assertEqual(result["rfid"], "LOCAL")
+        mock_get_next.assert_called_once()
+        mock_get.assert_not_called()
+
+
+class ScanNextFallbackTests(TestCase):
+    def setUp(self):
+        RFIDSource.objects.create(name="local", endpoint="scanner", default_order=0)
+        RFIDSource.objects.create(
+            name="remote", endpoint="scanner", proxy_url="http://example.com", default_order=1
+        )
+
+    @patch("config.middleware.get_site")
+    @patch("rfid.scanner.requests.get")
+    @patch("rfid.scanner.get_next_tag", return_value=None)
+    def test_view_uses_remote_when_local_missing(self, mock_get_next, mock_get, mock_site):
+        mock_get.return_value = MagicMock(json=lambda: {"rfid": "REMOTE", "label_id": 7}, status_code=200)
+        resp = self.client.get(reverse("rfid-scan-next"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"rfid": "REMOTE", "label_id": 7})

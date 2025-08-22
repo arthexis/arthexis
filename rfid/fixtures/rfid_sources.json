@@ -9,5 +9,16 @@
       "proxy_url": null,
       "uuid": "00000000-0000-0000-0000-000000000001"
     }
+  },
+  {
+    "model": "accounts.rfidsource",
+    "pk": 2,
+    "fields": {
+      "name": "gway-001",
+      "endpoint": "scanner",
+      "default_order": 1,
+      "proxy_url": "http://192.168.129.10:8888",
+      "uuid": null
+    }
   }
 ]
