@@ -66,7 +66,7 @@ class NodeAction:
 
 
 class CaptureScreenshotAction(NodeAction):
-    display_name = "Capture Screenshot"
+    display_name = "Take Site Screenshot"
     slug = "capture-screenshot"
 
     def execute(self, node: Node, **kwargs):  # pragma: no cover - uses selenium

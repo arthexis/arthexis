@@ -271,14 +271,13 @@ class NodeAdminTests(TestCase):
 
     @patch("nodes.admin.capture_screenshot")
     @patch("nodes.admin.capture_screen")
-    def test_capture_screenshot_from_admin(
+    def test_capture_site_screenshot_from_admin(
         self, mock_capture_screen, mock_capture_screenshot
     ):
         screenshot_dir = settings.LOG_DIR / "screenshots"
         screenshot_dir.mkdir(parents=True, exist_ok=True)
         file_path = screenshot_dir / "test.png"
         file_path.write_bytes(b"admin")
-        mock_capture_screen.side_effect = Exception("no screen")
         mock_capture_screenshot.return_value = Path("screenshots/test.png")
         hostname = socket.gethostname()
         node = Node.objects.create(
@@ -296,10 +295,42 @@ class NodeAdminTests(TestCase):
         self.assertEqual(screenshot.path, "screenshots/test.png")
         self.assertEqual(screenshot.method, "ADMIN")
         self.assertEqual(screenshot.origin.name, "Homepage")
-        mock_capture_screen.assert_has_calls([call(1), call(2)])
+        mock_capture_screen.assert_not_called()
         mock_capture_screenshot.assert_called_once_with("http://testserver/")
         self.assertContains(
             response, "Screenshot saved to screenshots/test.png"
+        )
+
+    @patch("nodes.admin.capture_screen")
+    @patch("nodes.admin.capture_screenshot")
+    def test_capture_desktop_screenshot_from_admin(
+        self, mock_capture_screenshot, mock_capture_screen
+    ):
+        screenshot_dir = settings.LOG_DIR / "screenshots"
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        file_path = screenshot_dir / "desktop.png"
+        file_path.write_bytes(b"admin")
+        mock_capture_screen.return_value = Path("screenshots/desktop.png")
+        hostname = socket.gethostname()
+        node = Node.objects.create(
+            hostname=hostname,
+            address="127.0.0.1",
+            port=80,
+            mac_address=Node.get_current_mac(),
+        )
+        url = reverse("admin:nodes_nodescreenshot_capture_desktop")
+        response = self.client.get(url, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(NodeScreenshot.objects.count(), 1)
+        screenshot = NodeScreenshot.objects.first()
+        self.assertEqual(screenshot.node, node)
+        self.assertEqual(screenshot.path, "screenshots/desktop.png")
+        self.assertEqual(screenshot.method, "ADMIN")
+        self.assertEqual(screenshot.origin.name, "Screen 1")
+        mock_capture_screen.assert_called_once_with(1)
+        mock_capture_screenshot.assert_not_called()
+        self.assertContains(
+            response, "Screenshot saved to screenshots/desktop.png"
         )
 
     def test_view_screenshot_in_change_admin(self):

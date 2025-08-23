@@ -12,6 +12,7 @@ import json
 import tempfile
 
 import django
+import importlib.util
 from django.apps import apps
 from django.conf import settings
 from django.core.management import call_command
@@ -48,12 +49,32 @@ def _fixture_files() -> list[str]:
     return sorted(fixtures)
 
 
+def _remove_integrator_from_auth_migration() -> None:
+    """Strip lingering integrator imports from Django's auth migration."""
+    spec = importlib.util.find_spec("django.contrib.auth.migrations.0013_userproxy")
+    if not spec or not spec.origin:
+        return
+    path = Path(spec.origin)
+    try:
+        content = path.read_text()
+    except OSError:
+        return
+    if "integrator" not in content:
+        return
+    patched = "\n".join(
+        line for line in content.splitlines() if "integrator" not in line
+    )
+    path.write_text(patched + ("\n" if not patched.endswith("\n") else ""))
+
+
 def run_database_tasks() -> None:
     """Run all database related maintenance steps."""
     default_db = settings.DATABASES["default"]
     using_sqlite = default_db["ENGINE"] == "django.db.backends.sqlite3"
 
     local_apps = _local_app_labels()
+
+    _remove_integrator_from_auth_migration()
 
     try:
         call_command("makemigrations", *local_apps, interactive=False)

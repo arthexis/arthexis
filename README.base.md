@@ -16,7 +16,7 @@ Arthexis Constellation is a Django-based suite that centralizes tools for managi
 | app | Core utilities and site model tweaks |
 | awg | American Wire Gauge references and calculator |
 | emails | Email templates and messaging |
-| integrator | Integrations with external services like Bluesky, Facebook, and Odoo |
+| integrate | Integrations with external services like Bluesky, Facebook, and Odoo |
 | nodes | Register project nodes and manage NGINX templates |
 | ocpp | OCPP 1.6 charge point management |
 | refs | Reusable references and QR codes |
