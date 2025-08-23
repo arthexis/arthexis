@@ -9,6 +9,7 @@
   <div class="field"><span class="label">Color:</span><span class="value" id="{{ prefix }}-color"></span></div>
   <div class="field"><span class="label">Valid:</span><span class="value" id="{{ prefix }}-allowed"></span></div>
   <div class="field"><span class="label">Released:</span><span class="value" id="{{ prefix }}-released"></span></div>
+  <div class="field"><span class="label">Reference:</span><span class="value" id="{{ prefix }}-reference"></span></div>
 </div>
 <style>
 #{{ prefix }}-scanner .field {
@@ -36,6 +37,7 @@
   const colorEl = document.getElementById('{{ prefix }}-color');
   const allowedEl = document.getElementById('{{ prefix }}-allowed');
   const releasedEl = document.getElementById('{{ prefix }}-released');
+  const referenceEl = document.getElementById('{{ prefix }}-reference');
   const restartTestBtn = document.getElementById('{{ prefix }}-restart-test');
 
   function showError(message){
@@ -56,6 +58,11 @@
         colorEl.textContent = data.color || '';
         allowedEl.textContent = data.allowed === undefined ? '' : (data.allowed ? 'Yes' : 'No');
         releasedEl.textContent = data.released === undefined ? '' : (data.released ? 'Yes' : 'No');
+        referenceEl.textContent = data.reference || '';
+        if(data.reference && /^https?:\/\//i.test(data.reference)){
+          const w = window.open(data.reference, '_blank');
+          if(w){ w.focus(); }
+        }
         statusEl.textContent = data.created ? `Created label ${data.label_id}` : `Detected label ${data.label_id}`;
       }
     } catch(err){
