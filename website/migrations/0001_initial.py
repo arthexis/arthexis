@@ -10,7 +10,10 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("sites", "0002_alter_domain_unique"),
+        # Use the initial migration so setups lacking newer Django
+        # migrations (e.g. ``sites.0002_alter_domain_unique``) don't
+        # raise NodeNotFoundError during graph building.
+        ("sites", "0001_initial"),
     ]
 
     operations = [
