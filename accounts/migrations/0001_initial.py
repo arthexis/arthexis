@@ -15,10 +15,10 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        # Depends on Django's built-in auth app.
-        # Use the latest stable migration to avoid NodeNotFoundError
-        # on environments where intermediate auth migrations were removed.
-        ("auth", "0012_alter_user_first_name_max_length"),
+        # Ensure built-in auth tables exist for User's M2M relations.
+        # Using the initial migration avoids NodeNotFoundError on setups
+        # that lack newer auth migrations.
+        ("auth", "0001_initial"),
         ("contenttypes", "0002_remove_content_type_name"),
     ]
 
