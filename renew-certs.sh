@@ -24,8 +24,15 @@ if [ "$CHECK_MODE" = true ]; then
         echo "On-disk certificate details:"
         sudo openssl x509 -noout -subject -issuer -enddate -in "$CERT_DIR/fullchain.pem"
     else
+        ALT_DIR=$(sudo find "$LIVE_DIR" -maxdepth 1 -type d -name "${DOMAIN}*" 2>/dev/null | sort | tail -n 1)
         echo
-        echo "No certificate found at $CERT_DIR/fullchain.pem"
+        if [ -n "$ALT_DIR" ] && [ -f "$ALT_DIR/fullchain.pem" ]; then
+            echo "No certificate found at $CERT_DIR/fullchain.pem"
+            echo "Certificate located at $ALT_DIR:"
+            sudo openssl x509 -noout -subject -issuer -enddate -in "$ALT_DIR/fullchain.pem"
+        else
+            echo "No certificate found for $DOMAIN"
+        fi
     fi
 
     echo
