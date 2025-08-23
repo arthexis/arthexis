@@ -15,11 +15,12 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        # Ensure built-in auth tables exist for User's M2M relations.
-        # Using the initial migration avoids NodeNotFoundError on setups
-        # that lack newer auth migrations.
+        # Ensure built-in auth and contenttypes tables exist for
+        # User's many-to-many relations. Using the initial migrations
+        # avoids NodeNotFoundError on setups lacking newer Django
+        # migrations such as ``contenttypes.0002``.
         ("auth", "0001_initial"),
-        ("contenttypes", "0002_remove_content_type_name"),
+        ("contenttypes", "0001_initial"),
     ]
 
     operations = [

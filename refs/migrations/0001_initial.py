@@ -9,7 +9,10 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("contenttypes", "0002_remove_content_type_name"),
+        # Depend on the base contenttypes migration so the app works even
+        # when later Django migrations (e.g. ``contenttypes.0002``) are
+        # absent.
+        ("contenttypes", "0001_initial"),
     ]
 
     operations = [
