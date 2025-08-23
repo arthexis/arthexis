@@ -5,16 +5,29 @@ import django.contrib.auth.validators
 import django.core.validators
 import django.db.models.deletion
 import django.utils.timezone
+import importlib
+from pathlib import Path
+
 import integrate.models
 from django.conf import settings
 from django.db import migrations, models
-from django import VERSION as DJANGO_VERSION
 
 
-if DJANGO_VERSION < (3, 0):
-    AUTH_DEPENDENCY = ("auth", "0011_update_proxy_permissions")
-else:
-    AUTH_DEPENDENCY = ("auth", "0012_alter_user_first_name_max_length")
+def get_latest_auth_dependency():
+    try:
+        migrations_module = importlib.import_module(
+            "django.contrib.auth.migrations"
+        )
+        migrations_path = Path(migrations_module.__file__).resolve().parent
+        migration_names = sorted(
+            f.stem for f in migrations_path.iterdir() if f.name[:4].isdigit()
+        )
+        return "auth", migration_names[-1]
+    except Exception:
+        return "auth", "0001_initial"
+
+
+AUTH_DEPENDENCY = get_latest_auth_dependency()
 
 
 class Migration(migrations.Migration):
