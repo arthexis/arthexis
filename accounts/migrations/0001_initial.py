@@ -24,7 +24,8 @@ def get_latest_auth_dependency():
         )
         return "auth", migration_names[-1]
     except Exception:
-        return "auth", "0001_initial"
+        # Fall back to the last known migration to avoid circular dependencies
+        return "auth", "0012_alter_user_first_name_max_length"
 
 
 AUTH_DEPENDENCY = get_latest_auth_dependency()
