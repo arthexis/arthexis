@@ -4,3 +4,608 @@ Changelog
 Unreleased
 ----------
 
+0.1.1 [revision 76f70b6a72c78fcdf143a19ddcc88a0fbd209b3d]
+---------------------------------------------------------
+
+- 4d9c2bd Revamp webshell terminal UI
+- a526f62 Prune site app fixtures and update README
+- f7d092c Add invitation templates and fixture
+- 008bb76 fix: ensure get_revision works outside repo
+- a771272 Align admin datetime inputs
+- cbb8924 Add arts app with article gallery
+- 511c84e Tweak admin clock banner size
+- f77f00e Rename integrator app to integrate
+- 0417c9e Add diagnostics mode for certificate renewal script
+- e52328c Use git commit ID for revision
+- d7b7d07 Reload nginx after copying certs
+- 1bee109 Fix admin index action links
+- 6bfcfd6 Handle duplicate node registration
+- f1bba30 Expand RFID test to include remote sources
+- c72970e Add public charger landing page and QR links
+- 82aeb74 fix: locate cert directories with sudo
+- 8534046 Handle screenshot capture errors
+- 2f2f13e Rename Fast Charger template to DC Fast Charger
+- fecf17e fix: handle suffixed cert directories
+- f63568f Add menu field migration
+- 427304f Fallback to polling when IRQ setup fails
+- 0f1e7e5 feat: show certificate renewal diagnostics
+- 5e7a1ab Improve certificate renewal feedback
+- 17dd735 Show systemd service status after restart
+- 2b75d6a Show renewed certificate expiration
+- 635a69e Remove manage script and refresh docs
+- bb699a5 Use name in RFIDSource str and generate local fixture UUID
+- 278f7fe Handle nginx during cert renewal
+- f264c43 Add certificate renewal script
+- a047061 Add friendly CSRF failure page
+- 834e719 Use INT and BAD in RFID notifications
+- d884558 Align AWG calculator input heights with select fields
+- 08e576a Add remote RFID source fallback
+- 85f252a Add site screenshot admin action
+- ef18b14 feat: unify RFID scanner buttons
+- 8375c1a Refactor notifications to support subject/body and independent scrolling
+- 4aef876 Add manual RFID wiring check and test button
+- ce0efa8 Add General request type and admin status actions
+- b68f54e Simplify RFID scan handling
+- ebf07f3 Add Constellation site fixture
+- 65fe48a Add ordered RFID scanners with proxy support
+- cf9f28d Make navbar icons follow current color
+- 5134089 Add restart view tests and update notifications
+- 9a97861 Update navbar styles for light mode
+- cf74d84 Add negative space star admin favicon
+- f94c870 Add admin action to swap RFID colors
+- ea15c77 feat: add VS Code tasks for new scripts
+- 258de77 Notify LCD on RFID scan
+- 2f44d9d Add tests for seed data handling
+- 4818b50 Improve RFID reader IRQ handling
+- ae6d224 Only clean up GPIO when initialized
+- 3287404 Handle RFID hardware setup failures
+- 4df1ef2 Improve LCD notifications
+- 6d991ab Use nmcli for network setup
+- 3a3dbaf Add network configuration script
+- 083262a Implement notification queue with LCD/GUI fallback
+- e056e79 Scale layout for large viewports
+- 64aadd0 feat: add nginx setup option
+- 993a660 Add background RFID reader using IRQ
+- 0ae492c Ignore all .env files
+- b248591 Allow arthexis.com hostnames
+- 2c755ac fix: allow env-refresh to use python3
+- a07084d Rename refresh scripts to env-refresh
+- 5e2f09e Stop RFID poll loop when reader missing
+- 3252002 Rename dev_maintenance script to refresh
+- ef4c396 Make refresh.sh executable
+- 402986d Rename refresh scripts
+- 32479c8 Normalize base64 favicon formatting
+- 755a021 Rename maintenance scripts to refresh-db
+- 68ef991 Fix navbar icon styles
+- fe5c9d4 Enhance RFID scanner display
+- 888707f Fix seed data admin template access to private model meta
+- 8f13db5 Make URL references clickable in recent view
+- 17b00da fix: ensure entity deletion return value and admin badge strings
+- 1d3f483 docs: clarify shell script usage
+- 1036db5 Add request model with approval workflow
+- e64488e Fix refs tag migration dependency and merge
+- 1588ce0 Add tagging helpers and migrations
+- 8112ccc feat(refs): support text and image references
+- 69888f1 Use service default port
+- ea977c5 Add service management scripts
+- c412b98 Improve new reference form layout
+- a36b0d7 Add color and released fields to RFIDs
+- 2976e40 feat(refs): add reference form
+- 596e1d9 Show site name in navbar
+- 40885bb Add tests and template?
+- f03d505 Use fixed-width font for admin clock
+- 182b132 feat(vscode): add purge logs task
+- 42b0859 Add admin task for database backup
+- d59a04e Fix admin header badge links and clock font
+- 3566489 Customize site title and rename default sites
+- efea244 Use all-caps for navbar pills
+- 2fbdef4 Add MAC address field to Node
+- 6006e7a Add created timestamps to footer reference fixtures
+- e684f10 fix tests for admin clock update
+- 562c1dd feat(admin): display real-time server clock in header
+- 2949426 Fix admin console redirect
+- a70c0e1 Add migration and template for refs
+- 774e58a docs: document helper scripts and VS Code tasks
+- f128696 Use port-agnostic Site lookup
+- b287038 Require RFID for CP2 in fixtures
+- 3f8894b Log OCPP charger sessions to persistent files
+- 04152b1 Add migration for charger temperature
+- 02e15bd Simplify node admin list columns
+- b199f76 docs: move README modification note to AGENTS
+- aeb0476 Redirect webshell root to script view
+- ecf53ef Rename integrations app to Integrator and rename Release admin group
+- 386e35d chore(release): move legacy fixture
+- 5a02568 db
+- dc80077 Add VSCode shortcut for running tasks
+- 8af9cc1 Open console in popup window
+- 27ed0b0 Add VSCode shortcut for running tasks
+- 82bd6bc Add Spanish translations for AWG and OCPP models
+- d211cfb Remove README build automation
+- b52d664 Add language switch to admin header
+- 9862866 Render localized README based on language
+- 6ec270d Make admin groups collapsible with search behavior
+- 0d4b535 Add Spanish README translation and installation guide
+- b86ae3b Add Spanish translations for AWG calculator
+- 37d8a4a Add Python, Django, and OCPP footer references
+- 2167c6a Capture installation metadata when registering local node
+- 7f7ec15 docs: update included apps
+- 5515588 Add configurable screen sources for screenshots
+- 466060a Add language switcher button
+- adfa901 Add migration for Backup model
+- 721a4d5 chore: migrate Odoo password field
+- 3d11c8c Split site/node badge labels
+- 081da21 Stop updating chart after charging session ends
+- 61464f2 Make heartbeat and meter values read-only in Charger admin
+- 5d2d68c Allow environment sigils in Odoo config
+- 3fc2c79 Enable viewing past sessions
+- 7dbe61f Tune simulator energy levels
+- 529e1a8 Remove obsolete node service fixtures
+- 772375f Use async-safe location name lookup in WebSocket handler
+- 3bd3b1a Add sigils-based environment interpolation
+- 9d071b0 Add migration for OdooInstance rename
+- fa8d10c Add NodeCommand for executing shell commands
+- 8cc2418 Remove legacy network and service reload scripts
+- d166638 Remove template models and related functionality
+- 308bc08 Add management command to control systemd units and reload script
+- ab1b605 sp
+- 4dca61b Use natural keys for site fixtures
+- 91a9fd3 Add GWAY-BOX site fixture
+- ff0c825 Extend NMCLITemplate with DNS and IPv6 settings
+- 3891b08 Add detailed WebSocket logging and optional subprotocol
+- 8503fb8 feat(nodes): introduce node action framework
+- 977c3de Prompt for AP password in network setup
+- a0d253d Add local and Ethernet fixture simulators
+- 884e514 Add stop script with optional all parameter
+- ec6e28f start
+- 1037f8b Rename start script and update references
+- a92e94c network
+- b4e5cb8 Add network setup script
+- 50555b0 Replace RFID scanner with reusable poll-based component
+- 7f330a4 Enhance NMCLI template import and add export
+- ec2050b Revert start script name to start.sh
+- 7a3efdc Rename start script to dev-start.sh
+- 903923c Exclude parameter-dependent admin actions
+- a0225d1 Consolidate admin action links into single column
+- 5ad2528 style(admin): show custom actions before add
+- ab63971 Add NMCLI scan action in admin
+- d21bddf Ignore requirements hash file
+- 3bf8d8c fix(admin): place actions beside change link
+- a5331be feat(admin): expose actions on dashboard
+- 5e00b1b Make admin console input single line
+- 49c60f4 Redirect toolbar login to admin when no next
+- e3d815c Add VIN tracking and WMI updates
+- e9ad766 Require auth for OCPP views and filter nav apps
+- 4b06ae8 Move QR template tag to references app
+- 53db3d3 Add RFID label_id migration
+- 4a3a91c Add initial Location fixture and migration
+- 4b95ed5 fix sim
+- 5792824 name sim
+- 98dcc81 Enhance admin console toggle
+- 187ec89 Replace login link with toolbar icons
+- f1e909a Rename energy fields migrations
+- 3a0fb63 Add admin console mode toggle with webshell
+- 78cc231 desc
+- 648aa42 fix: avoid duplicate site apps
+- 0c22615 desc
+- fa624a5 Handle untracked files in upgrade script
+- 6dfe0ba Handle untracked files in upgrade script
+- 4d9c03f Improve footer layout and admin links
+- eba62fc Propagate RFID reader errors
+- 24008e0 Add feedback and timeout for RFID scan
+- 62f746a feat: move RFID reader to dedicated app
+- ec9c6f8 Use kW units in charger status view
+- 12f3fa7 Add session pagination and date search for chargers
+- 41f4a89 Add websocket consumer and RFID template
+- 0b7d7d3 Preload charger status graph with historical data
+- ad14de0 Auto rebuild README after section changes
+- 23d535d Adjust light mode background
+- e67dd80 Style footer
+- f3b2954 fix: prevent charger graph bounce
+- b9168c2 Highlight updated charger status values
+- 7c745a1 Add live kWh chart to charger status view
+- 896ebc2 Allow string RFID primary keys in admin write URLs
+- c62b62d messaging
+- e6a9acb Use status template for charger public view
+- feb8a96 Merge nodes migrations
+- 4d0c28b Compute session energy from meter readings
+- 510b1a6 Remove unused import
+- 2c3ee4c Add padding to dashboard main
+- 751cd1b Fix failing tests
+- bc22584 Add NMCLI template migration
+- 211c2b2 Add node roles and display badges
+- 573b743 Load fixtures in single transaction
+- 0b6413f Add padding to admin dashboard sidebar
+- 214623d awg templates
+- 4dbf644 Allow multiple WMI codes per brand
+- b19bacd fix: adjust admin dashboard width
+- 95276f3 Add task to purge old meter readings
+- 1e3491f Use Monterrey as default timezone
+- 8e98f18 Make OCPP log view scrollable and auto-scroll
+- 4c13e92 Include ongoing transaction energy in totals
+- c2497b1 Add GELECTRIIC RFID fixture
+- 5f8d9d0 Shrink admin dashboard sidebar
+- 101d911 Allow admin login from docker networks
+- f5e376d Fix admin dashboard sidebar width
+- a60b6b1 Create transactions from meter values
+- ef7e534 Auto-refresh charger status page
+- b99b407 Fix admin dashboard sidebar layout
+- fa2db4e Add Transaction admin with meter readings
+- ecb2e81 Add date filters for meter readings admin
+- 6b624e9 Authenticate RFID batch API tests
+- 990dc78 Migrate to new transaction schema
+- f387cca Add copy button to admin messages
+- 8d063ab Stack admin history and actions
+- 425ff46 Style admin dashboard side modules
+- 142d3a8 Handle simulator message responses
+- 3060834 Add timestamps to OCPP logs
+- 957e323 Separate charger and simulator logs
+- bf887ef Add auto-reloading scrollable OCPP log
+- df4fb2d Refactor admin dashboard layout
+- 8658dc3 Fix charger admin tabs and theme
+- 963a280 Add duration and delay options to OCPP simulator
+- e4fa213 feat(admin): tabbed charger form with reference QR
+- aba1a9b fix: remove obsolete contenttypes migration dependency
+- f3546bb Separate node and site logging, default site name
+- d994419 bkp
+- 7c4001d Track admin changelist visits and expose in dashboard
+- 916ca57 Ensure AWG template defaults populate dropdowns
+- a3cca42 Rebuild account-RFID M2M for char primary key
+- 3f9d407 Fix websockets header argument
+- b534692 Add copy button for admin messages
+- 435f56f Add description field migration
+- 6d470ec Wait for simulator connection and log messages
+- 59dfa29 Log simulator traffic and wait for connection
+- d12fc5b Show systemd unit status in admin
+- a8bdc17 Add README sections model
+- 52355e7 Add unique name field to accounts
+- 592c8b3 feat(awg): show templates when no results
+- 19cc2c7 Add Django command wrapper script
+- 90c6448 Add color copy button to admin badge fields
+- d3cb99c Require authentication for API views
+- a907b02 Allow RFID import without id
+- 440aa09 feat: add manage wrapper script
+- 4881b37 Add RFID writer with key fields
+- be69a9e Add command to install systemd unit
+- 052d47e Add systemd unit template model and fixture
+- e42da19 feat: enforce unique RFID assignments
+- 37b2df5 Use admin sun and moon icons for theme toggle
+- d147dbb Handle RFID scan timeout
+- 3cdfbc1 Fix RFID scan view import
+- a244d9e feat(awg): set calculator as main view
+- f0e71c8 Remove generic app index view and routes
+- b0cb1dd Remove git maintenance tasks
+- 27fa5d1 Add show_in_website field migration
+- 45a62cd Remove git push from maintenance
+- 7d45f05 Improve app index view docs
+- 8361fd1 Remove MD5 check from install script
+- 51a833b Remove unused manage_vscode wrapper
+- dedea09 Fix RFID scan view import
+- 0d7d3d8 Add migrations removing seed data fields and models
+- 9217819 Hide apps without URLs from navbar
+- 0c63c8f Add command to register local apps with default site
+- 5974b11 deps: add MFRC522 for RFID scanning
+- bf1d67b Fix RFID scanner import
+- 8286816 Center footer links and shrink QR
+- fe99436 Resolve proxy client IP for admin override
+- 0ae6c97 Display area and amps in AWG cable admin
+- e34440a Allow admin login from local networks
+- 3dbfd7e Allow private network hosts
+- e9e0d73 feat: add readme rebuild admin action
+- dd27bb6 feat: default server port 8888
+- 2def83a Add RFID scan button in admin
+- 26a828e Add RFID scanning admin action
+- 8454bba Make AWG calculator defaults opt-in
+- 52e3c82 Add migration for renamed polling flags
+- 104b5fe feat(awg): add dropdowns to calculator template admin
+- bcea70d Add admin action to verify Bluesky credentials
+- e674a51 Clean calculator query params
+- ce5d5e8 Add QR preview to admin
+- 15994ca Add screenshot polling and deduplication
+- 536b89b Use fixture for default calculator template
+- f08a412 Add node field migration
+- 85ffe0f Expand single-field admin inputs
+- 11508bb Add migration for TextPattern rename
+- 1dee9c2 Handle charger log retrieval case-insensitively
+- 66e99dd Display node screenshots in admin
+- 93d1985 Make AWG calculator template fields optional
+- c4470f8 Generalize fixture loading
+- d39fd95 Fix website migration dependency
+- 347a3a7 Add configurable clipboard polling and text samples
+- 14b7730 Fix migration dependency for sites app
+- 55bc8c4 Add migration for slug-based RFID endpoint
+- 0f6f3ff Add migration for SiteApplication
+- ea5128b chore: update RFID source migration
+- 2fee27b Add Porsche and Audi EV brand fixtures
+- c4ca7df Add calculator template links
+- 5601cc3 Add initial AWG fixtures
+- 8934bca Add script to freeze requirements with markers
+- 0ede2ff deps: add gpiozero for Linux
+- fd2d1eb Add RFIDSource migration
+- a04af43 Fix EmailPattern admin link
+- 6cd2767 Refactor Application model for local app management
+- 65c0d61 Auto migrations
+- 38027d6 Add migration for SeedData names
+- 1a0e452 test: cover post office admin group
+- 8537e68 Add AWG calculator template model and register data tables
+- 1a02860 Add docutils to requirements
+- 42d6649 feat: add admin screenshot capture
+- 971dd11 Hide empty admin groups during model search
+- df19e5f fix: remove Readme app from localhost fixture
+- afdc4bf Fix daphne runserver nostatic conflict
+- b76488e Persist simulator logs to disk
+- 97493ec Remove obsolete readme app
+- 4239cf9 Add public API and message storage for nodes
+- c99d843 Add migration for email pattern rename
+- dc63040 Add migration for EV Brand options
+- f701aa3 Clean up admin imports
+- 5a97366 Add SeedData snapshot management
+- 731f8c7 Auto migrations
+- 74161ba test: update odoo tests
+- 0d77e30 Move RFID functionality to accounts app
+- 066c13d Move TODO features into release app
+- 124603e Capitalise EV Models in admin
+- 7ecaf69 Enable markdown tables
+- 4d69e97 Merge clipboard app into nodes
+- debad4d Handle is_seed_data column if it already exists
+- 2068204 Fix Site dependency and prevent maintenance reset
+- d09d9c1 Add Celery tasks for clipboard samples and node screenshots
+- 71e5195 Replace app READMEs with admindocs
+- c5f3bc6 Move Site admin to website app
+- 6d9e854 test: ensure simulator sends messages
+- 266e664 feat(admin): link site and node badges
+- 3872854 Style README sidebar like PEP pages
+- e2261c1 Add NGINX template fixture
+- 0294e74 Add task to send queued emails
+- 4fbc909 Add EVModel and seed data flags
+- 5428c44 Auto migrations
+- 4814657 fix: relax Site migration dependency
+- 4077e30 Add Brand model and link to vehicles
+- 3e6561e Add seed data flag and export command
+- ea8d1ac Auto migrations
+- 2cfae71 Add footer reference fixture
+- 6f2dc25 Add EmailPattern model and admin test action
+- 6f15719 Move page QR code into footer
+- 1995874 Auto migrations
+- b6ae5e8 Load localhost site fixture during dev maintenance
+- 4642673 Handle inconsistent history in dev maintenance
+- 2aa58b6 Move RFID to dedicated app and add QR sidebar
+- 898389b Remove duplicate website app migration
+- 540ca5a Remove automatic git sync and restart
+- 1aa2a16 Rename build to revision and show revision in footer
+- 9f3e7ac Fix App migration dependency
+- 1e968a6 Auto migrations
+- f37c90d Fix migration dependency on sites app
+- 8c2b33f Add App model and navigation pills
+- da0c623 Move README TOC sidebar to left
+- 73d8994 Move theme toggle into navbar
+- 044fd76 Move website navbar to left
+- 63811e6 chore: decouple dev maintenance from launchers
+- c79344b Auto migrations
+- bd20c9f Auto migrations
+- 25155c0 Add OCPP simulator fixtures and load during maintenance
+- 650a2fd Auto migrations
+- 5c6b1b7 Refactor dev maintenance tasks
+- 8ad2f01 Auto migrations
+- 6f050e1 fixed requirements
+- 1ce6a1c fix: avoid corrupted requirements on windows
+- 1e0fc27 chore: drop gpiozero and mfrc522 dependencies
+- 4d2259c fix: make update requirements task powershell-friendly
+- 7e24522 chore: add vscode update requirements task
+- 920b654 Auto migrations
+- 814d381 feat: add LED controller with gpiozero
+- 8dd5788 Add batch RFID import/export API
+- 615fe8e Integrate Celery with example periodic task
+- 3f7f892 Wrap navbar items with right-floated divs
+- 9efc94f Use localhost name for local IP sites
+- cbf355d Display longitude next to latitude in charger admin
+- 098d2e5 Auto migrations
+- e3d5894 style: add boxed layout to login page
+- e21dfe9 Add VSCode wrapper to bypass debugpy during git restart
+- 0fa852e Auto migrations
+- 831f2b5 Add VSCode wrapper to strip debugpy for git sync restarts
+- 7639580 Add Register Current button to Sites admin
+- fa46d43 test(website): isolate admin sidebar tests
+- 09907a2 Expand node detection to check server IPs
+- d259fbc Auto migrations
+- 03f1ed4 refine debugpy detection for git sync restart
+- 2fe0991 Align navbar text and arrow
+- a6964ce Auto migrations
+- aa52c27 Test restart server under debugpy
+- d92ebb1 Seed default OCPP simulator entries
+- 81429eb Enhance Bluesky admin with credential validation
+- b8a4525 Auto migrations
+- 9819db8 Close SQLite database before deleting
+- e6f9ae8 Skip initial onboarding start page
+- 22236ab fix toc layout and styling
+- 5c66a30 Only rebuild DB when new migrations exist
+- 325b8ed Auto migrations
+- cb63878 Auto migrations
+- 18a1616 feat: track requirements checksum
+- d86585a Make taskbar levels collapsible
+- e590c8c Use references for footer links
+- f550992 Reset migrations after applying
+- 79d217b req
+- a1d611a Add test logging option to release module
+- b0717df Add background git sync in debug mode
+- 1de01f1 Handle git fetch and enforce fast-forward pulls
+- 6396225 Open browser on dev reload
+- a88f4a9 Allow charger log view for unknown chargers
+- 74e1c7b feat: auto sync git during dev reload
+- 68d80b9 Add admin clipboard button to capture system clipboard
+- 0514b62 Add customer onboarding wizard to account admin
+- 9593914 Remove gway dependency from OCPP
+- 65de02d Add RC522 RFID reader interface
+- 55a4ef6 Restrict default admin login to localhost
+- caa8ba7 Add README sidebar table of contents
+- d3f78a3 remove migrations
+- 9b05f2c Reset database in dev maintenance script
+- 18d2d6e Handle SQLite OperationalError in dev maintenance
+- 19e43bd chore: streamline RFID migrations
+- 957c8e2 Add command to reset migrations
+- 0695cb3 docs: limit README generation to releases
+- 514190a Reset nodes migrations and fix NginxConfig table
+- e5c41f0 Use fake-initial for OCPP reset
+- 5738f09 Simplify OCPP migration reset
+- 9275440 Drop OCPP tables when resetting migrations
+- 0b8ac80 Refine OCPP migration reset command
+- dd1c39d Add OCPP migration reset command and docs
+- 520a6f4 chore: run maintenance scripts before debug
+- 5cbbb15 Refine dev server tasks
+- 8f651d2 Add documentation for new recipe model
+- 57cbba1 Reset ocpp migrations if history is inconsistent
+- d64135c Fix virtualenv handling for dev tasks
+- 7f38de9 Install requirements into .venv in debug
+- dc61ba2 fix(ocpp): adjust migration dependencies
+- 6e26a53 Add missing packaging dependency
+- bdbd902 Align Calculate button in AWG calculator
+- 1f4f9c8 Handle Windows venv paths in VS Code
+- ac3df83 Handle Windows venv paths in VS Code
+- 94850ac Support Windows venv interpreter path
+- 58796d5 Replace chat with sink consumer
+- 0801d30 Configure VS Code to use project venv
+- d832088 launch
+- 07ecf75 Add pattern matching to clipboard samples
+- 1d00e79 Organize social integrations
+- 742d722 Add clipboard app for clipboard snapshots
+- 832fd91 Handle non-interactive migrations
+- 1c2f079 Skip unnecessary requirement installs during debug reload
+- 7f7c2eb feat(awg): add three-column layout with results table
+- 53407ea feat(nodes): merge nginx templates into nodes
+- 74f8842 Add CRM app and move Odoo integration
+- 6ec2b4a Rename qrcodes app to references with usage tracking
+- 12eade4 ep
+- d6ce7f1 Add configurable badge colors for sites and nodes
+- b3e0cb1 feat(ocpp): expose simulator landing page
+- e308cc9 Add admin interface for PyPI release configuration
+- c91802d Merge subscriptions into accounts module
+- 46a678a Auto migrations
+- 49bce17 feat(ocpp): add advanced simulator features
+- 27dd2dc feat: add Bluesky integration
+- 8772ce2 feat(awg): unify calculator with site layout
+- fce92fb feat: require purge before deleting charger
+- 4598692 feat: open navbar dropdowns on hover
+- f456bc0 fix: auto create migrations in debug
+- 73e0774 Run dev maintenance tasks in debug
+- d98f03a feat: add full awg calculator
+- 58d6e48 test: verify automatic URL inclusion
+- e00b159 Add AWG calculator landing page
+- ac1f009 Add todos app with comment import
+- 5b9b8c2 Fix RFID inline admin field
+- 18b903c Remove legacy mailer app
+- a70eb1f Rename Nginx configurations to NGINX templates
+- 37d6c39 Auto migrations
+- 6f3ba1d Add VS Code task to update requirements
+- 5ec2d8b feat: improve nginx config admin UX
+- 56205dd fix: drop existing RFID table before recreating
+- d79a720 feat(admin): simplify RFID assignment
+- 9ff5f9b Integrate django-post-office for email queue
+- 661c142 Display site and node badges in admin
+- e51155b feat: add nginx configuration management
+- f5d87ad Add migration for account-linked RFIDs
+- 0f27b35 Add offline mode decorator
+- d5c4350 Accept optional ocpp1.6 subprotocol
+- 8e193d2 Display energy stats and status on charger page
+- 5479a80 style: make footer sticky
+- 75e8ccf merge
+- ce23995 Add QR code generator landing page
+- 23916b5 ocpp simulator controls
+- b71514e Add stable nav links via context processor
+- 6c314db Add footer app with link decorator
+- 8a175d6 Add footer app with link decorator
+- 9211732 Add Bootstrap JS for navbar dropdown
+- 8f47017 merge models
+- 362556d Fix migrations to preserve RFID model
+- 5d83467 Fix charger log view rendering
+- a7e940f Always show navbar with login link
+- 2bcf462 fix sitemap duplicates
+- cda94fa Remove landing decorators from charger views
+- 6f8824e Document automatic dev tasks
+- d9d9e1a Add login page with staff redirect
+- 6915cd0 release: add package and credentials models
+- 3bb254d Add login page with staff redirect
+- 216c08e Add dashboard landing and landing check
+- c52b193 skip dynamic routes in sitemap
+- 4bed06b Improve admin index layout
+- 22a27ff Add landing view support for navbar
+- fd9b559 Improve navigation bar styling and cleanup
+- fc5b127 Add loadenv support and envs directory
+- 1a8ae0c mig
+- 0fe368d Move RFID model under auth app
+- 5a39479 feat(website): add navigation bar and sitemap
+- 6304ad6 feat(website): add navigation bar and sitemap
+- 03843a7 Simplify Account string representation
+- ad20082 Add AWG reference app
+- 35db6d3 Improve charger labels and QR code
+- 904e0b0 Add Address model and link to User
+- 28b31d1 Fix QR code tag to render correctly
+- 9c439bf Add contact details to User
+- 4301fa4 Ensure common abbreviations use uppercase
+- c614efd Parse meter values
+- 0ec8c5f Customize Django admin title
+- 568cadb Move user admin under auth section
+- ac55923 Add mailer app with email queue
+- d1a7340 Add release app for PyPI publishing
+- fd39d01 Print admin URL at startup
+- 9185e88 Rename project branding to Arthexis Constellation
+- d6bc648 Add active app logging
+- b6d0f58 Use custom runserver from readme app
+- 45ff267 Serve ASGI app for all runserver commands
+- 5f15ea7 Use Daphne runserver for WebSockets
+- 3bde04b Add missing initial migration for odoo app
+- d88aa44 Add install and upgrade scripts
+- 3c791e2 Add admin interface for Odoo instances
+- 616c68c Add charger status view with admin link
+- dd7e878 Ignore additional log files
+- b5527eb Accept chargers at any path and record URL
+- d9462a5 Add rotating file logger
+- 0178a06 Add service account flag and balance authorization
+- 58fd862 merge db
+- 305b5c3 Add location fields with map selection
+- 7259355 Align simulator defaults with local CSMS
+- 2692ef5 Link subscriptions to accounts
+- 49b71e0 Show websocket URLs at server startup
+- c4ee526 Add admin interface for credit adjustments
+- d96c197 Add Spanish translation
+- 5afd184 Add charger log views and admin links
+- bf06121 merge db
+- 1ea7e88 Fix simulator start without running event loop
+- 0f16968 Rename qr_links app to qrcodes and add charger landing pages
+- ad02cdc Add credit tracking model and account transaction link
+- a9043ae Add dark mode toggle
+- 3fc9338 merge db
+- 2ed7363 Add simulator model with admin controls
+- b926662 Add admin CSV export with django-import-export
+- ff7e1a0 Add Odoo integration app
+- 97802b8 Add optional phone number field to user
+- 5391b8d Rename RFID blacklist to allowed and add CSV management commands
+- fe9a93b Enable autoreload in dev
+- fb68ff4 Replace UID with RFID field
+- fd7fbd5 Add Bootstrap styling for readme website
+- b50c748 Add WebSocket charge point simulator
+- 31238cd merge db
+- 266e60a Add vehicles linked to accounts
+- 44e618f merge
+- 527668b Add RFID model and support multiple tags
+- b01960c merge
+- f9c28db Create readme and website apps with site routing
+- cc93399 Add RFID enforcement option for chargers
+- 13116ce ocpp: record last heartbeat and metervalues
+- b984410 Add account model for tracking energy credits
+- 1727c49 Add Charger model and auto registration
+- 2f51f62 Persist OCPP transactions
+- 5259263 Remove OCPP refs from base README and update app docs
+- 2095d48 Improve README builder
+- 61fc4bc split README and add build command
+- 8a48a55 Document RFID blacklist
+- b8b0ad4 Add qr_links app with QR code generation
+- f329ee5 Add admin action to register current node
+- 7931464 Add subscriptions app
+- 88c7c2c Add RFID authentication support
+- b1b868c Add nodes app with simple API
+- 8c9a7d7 Add PostgreSQL support
+- 394ee8f launch
+- be879ab Add websocket support using Django Channels
+- 7278f66 Add VS Code launch configurations
+- c92e053 Initialize Django project
+- f5da493 Initial commit
+
