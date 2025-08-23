@@ -9,9 +9,9 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("accounts", "0001_initial"),
-        ("ocpp", "0001_initial"),
-        ("refs", "0001_initial"),
+        ("accounts", "0201_initial"),
+        ("ocpp", "0101_initial"),
+        ("refs", "0101_initial"),
     ]
 
     operations = [
