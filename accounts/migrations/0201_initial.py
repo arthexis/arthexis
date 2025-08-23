@@ -5,30 +5,10 @@ import django.contrib.auth.validators
 import django.core.validators
 import django.db.models.deletion
 import django.utils.timezone
-import importlib
-from pathlib import Path
 
 import integrate.models
 from django.conf import settings
 from django.db import migrations, models
-
-
-def get_latest_auth_dependency():
-    try:
-        migrations_module = importlib.import_module(
-            "django.contrib.auth.migrations"
-        )
-        migrations_path = Path(migrations_module.__file__).resolve().parent
-        migration_names = sorted(
-            f.stem for f in migrations_path.iterdir() if f.name[:4].isdigit()
-        )
-        return "auth", migration_names[-1]
-    except Exception:
-        # Fall back to the last known migration to avoid circular dependencies
-        return "auth", "0012_alter_user_first_name_max_length"
-
-
-AUTH_DEPENDENCY = get_latest_auth_dependency()
 
 
 class Migration(migrations.Migration):
@@ -38,7 +18,7 @@ class Migration(migrations.Migration):
     dependencies = [
         # Ensure built-in auth and contenttypes tables exist for
         # User's many-to-many relations.
-        AUTH_DEPENDENCY,
+        ("auth", "0001_initial"),
         ("contenttypes", "0001_initial"),
     ]
 

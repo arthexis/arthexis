@@ -10,8 +10,8 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("arts", "0001_initial"),
-        ("refs", "0001_initial"),
+        ("arts", "0301_initial"),
+        ("refs", "0101_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
