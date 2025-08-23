@@ -14,7 +14,12 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="UserProxy",
             fields=[],
-            options={"proxy": True, "indexes": []},
+            options={
+                "proxy": True,
+                "indexes": [],
+                "verbose_name": "user",
+                "verbose_name_plural": "users",
+            },
             bases=(settings.AUTH_USER_MODEL,),
         ),
     ]
