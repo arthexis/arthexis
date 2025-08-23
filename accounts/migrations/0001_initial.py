@@ -16,10 +16,8 @@ class Migration(migrations.Migration):
 
     dependencies = [
         # Ensure built-in auth and contenttypes tables exist for
-        # User's many-to-many relations. Using the initial migrations
-        # avoids NodeNotFoundError on setups lacking newer Django
-        # migrations such as ``contenttypes.0002``.
-        ("auth", "0001_initial"),
+        # User's many-to-many relations.
+        ("auth", "0012_alter_user_first_name_max_length"),
         ("contenttypes", "0001_initial"),
     ]
 
