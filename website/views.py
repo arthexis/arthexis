@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from django.conf import settings
@@ -18,6 +19,9 @@ from django.utils.translation import gettext as _
 
 import markdown
 from website.utils import landing
+
+
+logger = logging.getLogger(__name__)
 
 
 @landing("Home")
@@ -169,5 +173,6 @@ def admin_console(request):
 
 def csrf_failure(request, reason=""):
     """Custom CSRF failure view with a friendly message."""
+    logger.warning("CSRF failure on %s: %s", request.path, reason)
     return render(request, "website/csrf_failure.html", status=403)
 
