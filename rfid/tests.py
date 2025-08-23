@@ -48,11 +48,21 @@ class ReaderNotificationTests(TestCase):
     @patch("nodes.notifications.notify")
     @patch("accounts.models.RFID.objects.get_or_create")
     def test_notify_on_allowed_tag(self, mock_get, mock_notify):
-        tag = MagicMock(label_id=1, pk=1, allowed=True, color="black", released=False, source=None)
+        reference = MagicMock(value="https://example.com")
+        tag = MagicMock(
+            label_id=1,
+            pk=1,
+            allowed=True,
+            color="black",
+            released=False,
+            source=None,
+            reference=reference,
+        )
         mock_get.return_value = (tag, False)
 
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
         self.assertEqual(result["label_id"], 1)
+        self.assertEqual(result["reference"], "https://example.com")
         self.assertTrue(result.get("source"))
         mock_notify.assert_called_once_with(
             "RFID 1 OK INT", f"{result['rfid']} BLACK"
@@ -61,7 +71,15 @@ class ReaderNotificationTests(TestCase):
     @patch("nodes.notifications.notify")
     @patch("accounts.models.RFID.objects.get_or_create")
     def test_notify_on_disallowed_tag(self, mock_get, mock_notify):
-        tag = MagicMock(label_id=2, pk=2, allowed=False, color="black", released=False, source=None)
+        tag = MagicMock(
+            label_id=2,
+            pk=2,
+            allowed=False,
+            color="black",
+            released=False,
+            source=None,
+            reference=None,
+        )
         mock_get.return_value = (tag, False)
 
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)

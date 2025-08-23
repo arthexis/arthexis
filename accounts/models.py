@@ -212,6 +212,14 @@ class RFID(Entity):
         choices=COLOR_CHOICES,
         default=BLACK,
     )
+    reference = models.ForeignKey(
+        "refs.Reference",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="rfids",
+        help_text="Optional reference for this RFID.",
+    )
     released = models.BooleanField(default=False)
     added_on = models.DateTimeField(auto_now_add=True)
     source = models.UUIDField(null=True, blank=True, editable=False)

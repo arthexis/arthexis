@@ -6,8 +6,11 @@ from django.http import JsonResponse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.utils.html import format_html
-from import_export import resources
+from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
+from import_export.widgets import ForeignKeyWidget
+
+from refs.models import Reference
 
 from .models import (
     User,
@@ -234,9 +237,15 @@ admin.site.register(Subscription)
 
 
 class RFIDResource(resources.ModelResource):
+    reference = fields.Field(
+        column_name="reference",
+        attribute="reference",
+        widget=ForeignKeyWidget(Reference, "value"),
+    )
+
     class Meta:
         model = RFID
-        fields = ("label_id", "rfid", "allowed", "color", "released")
+        fields = ("label_id", "rfid", "reference", "allowed", "color", "released")
         import_id_fields = ("label_id",)
 
 

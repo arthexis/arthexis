@@ -43,6 +43,7 @@ def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
                         "color": tag.color,
                         "allowed": tag.allowed,
                         "released": tag.released,
+                        "reference": tag.reference.value if tag.reference else None,
                     }
                     if source_uuid:
                         result["source"] = str(source_uuid)
