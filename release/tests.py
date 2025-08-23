@@ -9,7 +9,7 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 from . import Credentials, DEFAULT_PACKAGE
-from .models import PackageConfig, TestLog, Todo
+from .models import PackageRelease, TestLog, Todo
 from .utils import create_todos_from_comments
 from . import utils
 
@@ -34,9 +34,9 @@ class PackageTests(SimpleTestCase):
         self.assertEqual(DEFAULT_PACKAGE.name, "arthexis")
 
 
-class PackageConfigTests(TestCase):
+class PackageReleaseTests(TestCase):
     def test_to_package_and_credentials(self):
-        cfg = PackageConfig.objects.create(
+        cfg = PackageRelease.objects.create(
             name="pkg",
             description="desc",
             author="me",
@@ -57,7 +57,7 @@ class PackageAdminTests(TestCase):
         )
         self.client = Client()
         self.client.force_login(self.admin)
-        self.cfg = PackageConfig.objects.create(
+        self.cfg = PackageRelease.objects.create(
             name="pkg",
             description="desc",
             author="me",
@@ -68,11 +68,23 @@ class PackageAdminTests(TestCase):
         )
 
     def test_build_action_calls_utils(self):
-        url = reverse("admin:release_packageconfig_changelist")
+        url = reverse("admin:release_packagerelease_changelist")
+        # initial request should render the form
+        response = self.client.post(
+            url,
+            {"action": "build_release", "_selected_action": [self.cfg.pk]},
+        )
+        self.assertEqual(response.status_code, 200)
         with patch("release.admin.utils.build") as mock_build:
             response = self.client.post(
                 url,
-                {"action": "build_package", "_selected_action": [self.cfg.pk]},
+                {
+                    "action": "build_release",
+                    "apply": "yes",
+                    "bump": "on",
+                    "tests": "on",
+                    "_selected_action": [self.cfg.pk],
+                },
                 follow=True,
             )
             self.assertEqual(response.status_code, 200)

@@ -14,6 +14,7 @@ class Command(BaseCommand):
         parser.add_argument("--test", action="store_true", help="Run tests before building")
         parser.add_argument("--all", action="store_true", help="Enable bump, dist, twine, git and tag")
         parser.add_argument("--force", action="store_true", help="Skip PyPI version check")
+        parser.add_argument("--stash", action="store_true", help="Auto stash changes before building")
 
     def handle(self, *args, **options):
         try:
@@ -26,6 +27,7 @@ class Command(BaseCommand):
                 tag=options["tag"],
                 all=options["all"],
                 force=options["force"],
+                stash=options["stash"],
             )
         except utils.ReleaseError as exc:
             self.stderr.write(self.style.ERROR(str(exc)))

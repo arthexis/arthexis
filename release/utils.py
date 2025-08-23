@@ -211,12 +211,20 @@ def build(
     force: bool = False,
     package: Package = DEFAULT_PACKAGE,
     creds: Optional[Credentials] = None,
+    stash: bool = False,
 ) -> None:
     if all:
         bump = dist = twine = git = tag = True
 
-    if git and not _git_clean():
-        raise ReleaseError("Git repository is not clean")
+    stashed = False
+    if not _git_clean():
+        if stash:
+            _run(["git", "stash", "--include-untracked"])
+            stashed = True
+        else:
+            raise ReleaseError(
+                "Git repository is not clean. Commit, stash, or enable auto stash before building."
+            )
 
     version_path = Path("VERSION")
     if not version_path.exists():
@@ -245,40 +253,12 @@ def build(
     update_changelog(version, commit_hash, prev_revision)
 
     _write_pyproject(package, version, requirements)
-
     if dist:
         if Path("dist").exists():
             for p in Path("dist").glob("*"):
                 p.unlink()
             Path("dist").rmdir()
         _run([sys.executable, "-m", "build"])
-        if twine:
-            if not force:
-                try:  # Lazy import so tests do not require requests
-                    import requests  # type: ignore
-                except Exception:  # pragma: no cover - requests optional
-                    requests = None  # type: ignore
-                if requests is not None:
-                    resp = requests.get(
-                        f"https://pypi.org/pypi/{package.name}/json"
-                    )
-                    if resp.ok:
-                        releases = resp.json().get("releases", {})
-                        if version in releases:
-                            raise ReleaseError(
-                                f"Version {version} already on PyPI"
-                            )
-            token = os.environ.get("PYPI_API_TOKEN") if creds is None else creds.token
-            user = os.environ.get("PYPI_USERNAME") if creds is None else creds.username
-            pwd = os.environ.get("PYPI_PASSWORD") if creds is None else creds.password
-            cmd = [sys.executable, "-m", "twine", "upload", "dist/*"]
-            if token:
-                cmd += ["--username", "__token__", "--password", token]
-            elif user and pwd:
-                cmd += ["--username", user, "--password", pwd]
-            else:
-                raise ReleaseError("Missing PyPI credentials")
-            _run(cmd)
 
     if git:
         files = ["VERSION", "pyproject.toml", "CHANGELOG.rst"]
@@ -286,7 +266,39 @@ def build(
         msg = f"PyPI Release v{version}" if twine else f"Release v{version}"
         _run(["git", "commit", "-m", msg])
         _run(["git", "push"])
+
     if tag:
         tag_name = f"v{version}"
         _run(["git", "tag", tag_name])
         _run(["git", "push", "origin", tag_name])
+
+    if dist and twine:
+        if not force:
+            try:  # Lazy import so tests do not require requests
+                import requests  # type: ignore
+            except Exception:  # pragma: no cover - requests optional
+                requests = None  # type: ignore
+            if requests is not None:
+                resp = requests.get(
+                    f"https://pypi.org/pypi/{package.name}/json"
+                )
+                if resp.ok:
+                    releases = resp.json().get("releases", {})
+                    if version in releases:
+                        raise ReleaseError(
+                            f"Version {version} already on PyPI"
+                        )
+        token = os.environ.get("PYPI_API_TOKEN") if creds is None else creds.token
+        user = os.environ.get("PYPI_USERNAME") if creds is None else creds.username
+        pwd = os.environ.get("PYPI_PASSWORD") if creds is None else creds.password
+        cmd = [sys.executable, "-m", "twine", "upload", "dist/*"]
+        if token:
+            cmd += ["--username", "__token__", "--password", token]
+        elif user and pwd:
+            cmd += ["--username", user, "--password", pwd]
+        else:
+            raise ReleaseError("Missing PyPI credentials")
+        _run(cmd)
+
+    if stashed:
+        _run(["git", "stash", "pop"], check=False)
