@@ -226,7 +226,12 @@ class NodeScreenshotAdmin(admin.ModelAdmin):
                 "capture/",
                 self.admin_site.admin_view(self.capture_now),
                 name="nodes_nodescreenshot_capture",
-            )
+            ),
+            path(
+                "capture-desktop/",
+                self.admin_site.admin_view(self.capture_desktop),
+                name="nodes_nodescreenshot_capture_desktop",
+            ),
         ]
         return custom + urls
 
@@ -234,16 +239,51 @@ class NodeScreenshotAdmin(admin.ModelAdmin):
         node = Node.get_local()
         source_id = request.GET.get("source")
         if source_id:
-            sources = ScreenSource.objects.filter(pk=source_id)
+            sources = ScreenSource.objects.filter(
+                pk=source_id, kind=ScreenSource.URL
+            )
         else:
-            sources = ScreenSource.objects.order_by("priority")
+            sources = ScreenSource.objects.filter(kind=ScreenSource.URL).order_by(
+                "priority"
+            )
         for source in sources:
             try:
-                if source.kind == ScreenSource.URL:
-                    url = request.build_absolute_uri(source.parameter)
-                    path = capture_screenshot(url)
-                else:
-                    path = capture_screen(int(source.parameter or 0))
+                url = request.build_absolute_uri(source.parameter)
+                path = capture_screenshot(url)
+            except Exception:
+                continue
+            screenshot = save_screenshot(
+                path, node=node, method="ADMIN", origin=source
+            )
+            if screenshot:
+                self.message_user(
+                    request, f"Screenshot saved to {path}", messages.SUCCESS
+                )
+            else:
+                self.message_user(
+                    request, "Duplicate screenshot; not saved", messages.INFO
+                )
+            break
+        else:
+            self.message_user(
+                request, "No screenshot source succeeded", messages.WARNING
+            )
+        return redirect("..")
+
+    def capture_desktop(self, request):
+        node = Node.get_local()
+        source_id = request.GET.get("source")
+        if source_id:
+            sources = ScreenSource.objects.filter(
+                pk=source_id, kind=ScreenSource.SCREEN
+            )
+        else:
+            sources = ScreenSource.objects.filter(
+                kind=ScreenSource.SCREEN
+            ).order_by("priority")
+        for source in sources:
+            try:
+                path = capture_screen(int(source.parameter or 0))
             except Exception:
                 continue
             screenshot = save_screenshot(
