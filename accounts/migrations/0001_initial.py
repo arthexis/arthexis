@@ -8,6 +8,13 @@ import django.utils.timezone
 import integrate.models
 from django.conf import settings
 from django.db import migrations, models
+from django import VERSION as DJANGO_VERSION
+
+
+if DJANGO_VERSION < (3, 0):
+    AUTH_DEPENDENCY = ("auth", "0011_update_proxy_permissions")
+else:
+    AUTH_DEPENDENCY = ("auth", "0012_alter_user_first_name_max_length")
 
 
 class Migration(migrations.Migration):
@@ -17,7 +24,7 @@ class Migration(migrations.Migration):
     dependencies = [
         # Ensure built-in auth and contenttypes tables exist for
         # User's many-to-many relations.
-        ("auth", "0012_alter_user_first_name_max_length"),
+        AUTH_DEPENDENCY,
         ("contenttypes", "0001_initial"),
     ]
 
