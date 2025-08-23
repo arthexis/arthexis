@@ -34,7 +34,7 @@ class TestLog(Entity):
         return f"{self.created:%Y-%m-%d %H:%M:%S} - {self.status}"
 
 
-class PackageConfig(Entity):
+class PackageRelease(Entity):
     """Store metadata and credentials for building a PyPI release."""
 
     name = models.CharField(max_length=100, default=DEFAULT_PACKAGE.name)
@@ -50,8 +50,8 @@ class PackageConfig(Entity):
     token = models.CharField(max_length=200, blank=True)
 
     class Meta:
-        verbose_name = "Package Configuration"
-        verbose_name_plural = "Package Configuration"
+        verbose_name = "Package Release"
+        verbose_name_plural = "Package Releases"
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name

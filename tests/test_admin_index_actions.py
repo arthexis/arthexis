@@ -28,11 +28,11 @@ class AdminIndexActionLinkTests(TestCase):
         self.assertContains(
             response, f'href="{reverse("admin:accounts_rfid_scan")}"'
         )
-        self.assertNotContains(response, "Build selected packages for PyPI")
+        self.assertNotContains(response, "Build selected packages")
         self.assertNotContains(response, "Purge selected logs")
         content = response.content.decode()
         row_match = re.search(
-            r'<tr class="model-packageconfig[^>]*>(.*?)</tr>', content, re.DOTALL
+            r'<tr class="model-packagerelease[^>]*>(.*?)</tr>', content, re.DOTALL
         )
         self.assertIsNotNone(row_match)
         row_html = row_match.group(1)
