@@ -1,5 +1,6 @@
 import subprocess
 from functools import lru_cache
+from pathlib import Path
 
 @lru_cache()
 def get_revision() -> str:
@@ -9,9 +10,12 @@ def get_revision() -> str:
     subprocess calls, but will be refreshed on each restart.
     """
     try:
+        repo_root = Path(__file__).resolve().parents[1]
         return (
             subprocess.check_output(
-                ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
+                ["git", "rev-parse", "HEAD"],
+                stderr=subprocess.DEVNULL,
+                cwd=repo_root,
             )
             .decode()
             .strip()
