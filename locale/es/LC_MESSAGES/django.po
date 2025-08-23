@@ -292,8 +292,12 @@ msgid "Register current host"
 msgstr "Registrar anfitrión actual"
 
 #: nodes/templates/admin/nodes/nodescreenshot/change_list.html:7
-msgid "Capture screenshot"
-msgstr ""
+msgid "Take site screenshot"
+msgstr "Tomar captura del sitio"
+
+#: nodes/templates/admin/nodes/nodescreenshot/change_list.html:11
+msgid "Take desktop screenshot"
+msgstr "Tomar captura de escritorio"
 
 #: nodes/templates/admin/nodes/textsample/change_list.html:7
 msgid "Add from clipboard"
