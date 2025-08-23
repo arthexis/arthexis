@@ -37,6 +37,16 @@ fi
 # If requested, install nginx configuration and reload
 if [ "$SETUP_NGINX" = true ]; then
     NGINX_CONF="/etc/nginx/conf.d/arthexis.conf"
+
+    # Remove existing nginx configs for arthexis.com to avoid conflicts
+    CONFLICTS=$(sudo grep -rlE "server_name\s+.*arthexis\.com" /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null || true)
+    for f in $CONFLICTS; do
+        if [ "$f" != "$NGINX_CONF" ]; then
+            echo "Removing conflicting nginx config: $f"
+            sudo rm -f "$f"
+        fi
+    done
+
     sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
 # Redirect all HTTP traffic to HTTPS
 server {
@@ -68,6 +78,7 @@ server {
     }
 }
 NGINXCONF
+    sudo nginx -t
     sudo systemctl reload nginx
 fi
 
