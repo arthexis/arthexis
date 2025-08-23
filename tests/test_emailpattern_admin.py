@@ -16,6 +16,6 @@ from django.urls import reverse
 class EmailPatternAdminUrlTests(TestCase):
     def test_changelist_url_is_reversible(self):
         self.assertEqual(
-            reverse("admin:post_office_emailpattern_changelist"),
-            "/admin/post_office/emailpattern/",
+            reverse("admin:emails_emailpattern_changelist"),
+            "/admin/emails/emailpattern/",
         )

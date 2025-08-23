@@ -10,7 +10,7 @@ from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 
 from .models import (
-    UserProxy,
+    User,
     Account,
     Vehicle,
     Credit,
@@ -48,7 +48,7 @@ class AccountRFIDInline(admin.TabularInline):
     verbose_name_plural = "RFIDs"
 
 
-@admin.register(UserProxy)
+@admin.register(User)
 class UserAdmin(DjangoUserAdmin):
     fieldsets = DjangoUserAdmin.fieldsets + (
         ("Contact", {"fields": ("phone_number", "address", "has_charger")}),

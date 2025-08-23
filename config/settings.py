@@ -158,10 +158,6 @@ AUTHENTICATION_BACKENDS = [
     "accounts.backends.RFIDBackend",
 ]
 
-# Use a custom migrations module for the auth app so we can override
-# the built-in User proxy migration without depending on the legacy
-# ``integrator`` package.
-MIGRATION_MODULES = {"auth": "config.auth_migrations"}
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases

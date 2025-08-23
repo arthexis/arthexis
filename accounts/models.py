@@ -166,17 +166,6 @@ class User(Entity, AbstractUser):
     def __str__(self):
         return self.username
 
-
-class UserProxy(User):
-    """Proxy model to display users under the auth app in admin."""
-
-    class Meta:
-        proxy = True
-        app_label = "auth"
-        verbose_name = User._meta.verbose_name
-        verbose_name_plural = User._meta.verbose_name_plural
-
-
 class RFID(Entity):
     """RFID tag that may be assigned to one account."""
 
