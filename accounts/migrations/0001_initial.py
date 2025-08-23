@@ -15,7 +15,10 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("auth", "0011_update_proxy_permissions"),
+        # Depends on Django's built-in auth app.
+        # Use the latest stable migration to avoid NodeNotFoundError
+        # on environments where intermediate auth migrations were removed.
+        ("auth", "0012_alter_user_first_name_max_length"),
         ("contenttypes", "0002_remove_content_type_name"),
     ]
 
