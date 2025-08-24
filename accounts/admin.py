@@ -24,7 +24,6 @@ from .models import (
     WMICode,
     EVModel,
     RFID,
-    RFIDSource,
 )
 
 
@@ -268,7 +267,6 @@ class RFIDAdmin(ImportExportModelAdmin):
     search_fields = ("label_id", "rfid")
     autocomplete_fields = ["accounts"]
     actions = ["scan_rfids", "swap_color"]
-    readonly_fields = ("source",)
 
     def accounts_display(self, obj):
         return ", ".join(str(a) for a in obj.accounts.all())
@@ -430,13 +428,3 @@ class RFIDAdmin(ImportExportModelAdmin):
                     pass
 
 
-@admin.register(RFIDSource)
-class RFIDSourceAdmin(admin.ModelAdmin):
-    list_display = ("name", "endpoint", "default_order", "proxy_url", "uuid")
-    readonly_fields = ("uuid",)
-
-    def get_fields(self, request, obj=None):
-        fields = ["name", "endpoint", "proxy_url", "default_order"]
-        if obj and not obj.proxy_url:
-            fields.append("uuid")
-        return fields

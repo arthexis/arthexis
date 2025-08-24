@@ -2,7 +2,6 @@ from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.http import HttpRequest
 import json
-from unittest.mock import patch
 
 from django.utils import timezone
 from .models import (
@@ -16,7 +15,7 @@ from .models import (
     Brand,
     EVModel,
 )
-from accounts.models import RFID, RFIDSource
+from accounts.models import RFID
 from ocpp.models import Transaction, Charger
 
 from django.core.exceptions import ValidationError
@@ -231,45 +230,6 @@ class RFIDAssignmentTests(TestCase):
         self.acc1.rfids.add(self.tag)
         with self.assertRaises(ValidationError):
             self.acc2.rfids.add(self.tag)
-
-
-class RFIDSourceTests(TestCase):
-    def test_auto_fields(self):
-        RFIDSource.objects.all().delete()
-        first = RFIDSource.objects.create(name="local", endpoint="rfids")
-        second = RFIDSource.objects.create(
-            name="remote", endpoint="rfids", proxy_url="https://ex.com"
-        )
-        first.refresh_from_db()
-        second.refresh_from_db()
-        self.assertIsNotNone(first.uuid)
-        self.assertIsNone(second.uuid)
-        self.assertEqual(first.default_order, 0)
-        self.assertEqual(second.default_order, 1)
-
-    @patch("requests.get")
-    def test_test_fetch(self, mock_get):
-        mock_get.return_value.json.return_value = {"rfids": []}
-        mock_get.return_value.raise_for_status.return_value = None
-        src = RFIDSource.objects.create(name="fetcher", endpoint="rfids")
-        data = src.test_fetch("https://ex.com")
-        mock_get.assert_called_once_with(
-            "https://ex.com/api/rfid/rfids/", params={"test": "true"}
-        )
-        self.assertEqual(data, {"rfids": []})
-        self.assertEqual(RFID.objects.count(), 0)
-
-    @patch("requests.post")
-    def test_test_serve(self, mock_post):
-        mock_post.return_value.json.return_value = {"ok": True}
-        mock_post.return_value.raise_for_status.return_value = None
-        src = RFIDSource.objects.create(name="poster", endpoint="rfids")
-        data = src.test_serve(["AA11"], base_url="https://ex.com")
-        mock_post.assert_called_once_with(
-            "https://ex.com/api/rfid/rfids/", json={"rfids": ["AA11"], "test": True}
-        )
-        self.assertEqual(data, {"ok": True})
-        self.assertEqual(RFID.objects.count(), 0)
 
 
 class AccountTests(TestCase):

@@ -1,5 +1,5 @@
 import time
-from accounts.models import RFID, RFIDSource
+from accounts.models import RFID
 
 
 def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
@@ -24,18 +24,7 @@ def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
                 (status, uid) = mfrc.MFRC522_Anticoll()
                 if status == mfrc.MI_OK:
                     rfid = "".join(f"{x:02X}" for x in uid[:5])
-                    source_uuid = (
-                        RFIDSource.objects.filter(proxy_url__isnull=True)
-                        .order_by("default_order")
-                        .values_list("uuid", flat=True)
-                        .first()
-                    )
-                    tag, created = RFID.objects.get_or_create(
-                        rfid=rfid, defaults={"source": source_uuid}
-                    )
-                    if source_uuid and tag.source != source_uuid:
-                        tag.source = source_uuid
-                        tag.save(update_fields=["source"])
+                    tag, created = RFID.objects.get_or_create(rfid=rfid)
                     result = {
                         "rfid": rfid,
                         "label_id": tag.pk,
@@ -45,8 +34,6 @@ def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
                         "released": tag.released,
                         "reference": tag.reference.value if tag.reference else None,
                     }
-                    if source_uuid:
-                        result["source"] = str(source_uuid)
                     try:
                         from nodes.notifications import notify
 

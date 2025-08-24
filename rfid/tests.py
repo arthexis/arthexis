@@ -9,8 +9,6 @@ django.setup()
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from rfid.reader import read_rfid
-from rfid.scanner import scan_sources, test_sources
-from accounts.models import RFIDSource
 
 
 class ScanNextViewTests(SimpleTestCase):
@@ -30,8 +28,6 @@ class ScanNextViewTests(SimpleTestCase):
 
 
 class ReaderNotificationTests(TestCase):
-    def setUp(self):
-        RFIDSource.objects.create(name="local", endpoint="scanner")
     def _mock_reader(self):
         class MockReader:
             MI_OK = 1
@@ -55,7 +51,6 @@ class ReaderNotificationTests(TestCase):
             allowed=True,
             color="black",
             released=False,
-            source=None,
             reference=reference,
         )
         mock_get.return_value = (tag, False)
@@ -63,7 +58,6 @@ class ReaderNotificationTests(TestCase):
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
         self.assertEqual(result["label_id"], 1)
         self.assertEqual(result["reference"], "https://example.com")
-        self.assertTrue(result.get("source"))
         mock_notify.assert_called_once_with(
             "RFID 1 OK INT", f"{result['rfid']} BLACK"
         )
@@ -77,7 +71,6 @@ class ReaderNotificationTests(TestCase):
             allowed=False,
             color="black",
             released=False,
-            source=None,
             reference=None,
         )
         mock_get.return_value = (tag, False)
@@ -86,7 +79,6 @@ class ReaderNotificationTests(TestCase):
         mock_notify.assert_called_once_with(
             "RFID 2 BAD INT", f"{result['rfid']} BLACK"
         )
-        self.assertTrue(result.get("source"))
 
 
 class RestartViewTests(SimpleTestCase):
@@ -101,93 +93,19 @@ class RestartViewTests(SimpleTestCase):
 
 class ScanTestViewTests(SimpleTestCase):
     @patch("config.middleware.get_site")
-    @patch("rfid.views.test_sources", return_value={"local": {"irq_pin": 7}, "remote": []})
+    @patch("rfid.views.test_sources", return_value={"irq_pin": 7})
     def test_scan_test_success(self, mock_test, mock_site):
         resp = self.client.get(reverse("rfid-scan-test"))
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json(), {"local": {"irq_pin": 7}, "remote": []})
+        self.assertEqual(resp.json(), {"irq_pin": 7})
 
     @patch("config.middleware.get_site")
     @patch(
         "rfid.views.test_sources",
-        return_value={
-            "local": {"error": "no scanner detected"},
-            "remote": [{"source": "remote", "status": "ok"}],
-        },
-    )
-    def test_scan_test_remote_only(self, mock_test, mock_site):
-        resp = self.client.get(reverse("rfid-scan-test"))
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(
-            resp.json(),
-            {
-                "local": {"error": "no scanner detected"},
-                "remote": [{"source": "remote", "status": "ok"}],
-            },
-        )
-
-    @patch("config.middleware.get_site")
-    @patch(
-        "rfid.views.test_sources",
-        return_value={"local": {"error": "no scanner detected"}, "remote": []},
+        return_value={"error": "no scanner detected"},
     )
     def test_scan_test_error(self, mock_test, mock_site):
         resp = self.client.get(reverse("rfid-scan-test"))
         self.assertEqual(resp.status_code, 500)
-        self.assertEqual(resp.json(), {"local": {"error": "no scanner detected"}, "remote": []})
+        self.assertEqual(resp.json(), {"error": "no scanner detected"})
 
-class ScannerSelectionTests(TestCase):
-    def setUp(self):
-        RFIDSource.objects.create(name="local", endpoint="scanner", default_order=0)
-        RFIDSource.objects.create(
-            name="remote", endpoint="scanner", proxy_url="http://example.com", default_order=1
-        )
-
-    @patch("rfid.scanner.requests.get")
-    @patch("rfid.scanner.get_next_tag", return_value=None)
-    def test_falls_back_to_remote(self, mock_get_next, mock_get):
-        mock_get.return_value = MagicMock(json=lambda: {"rfid": "REMOTE", "label_id": 42}, status_code=200)
-        result = scan_sources()
-        self.assertEqual(result, {"rfid": "REMOTE", "label_id": 42})
-        mock_get_next.assert_called_once()
-        mock_get.assert_called_once()
-
-    @patch("rfid.scanner.requests.get")
-    @patch("rfid.scanner.get_next_tag", return_value={"rfid": "LOCAL", "label_id": 1})
-    def test_local_preferred(self, mock_get_next, mock_get):
-        result = scan_sources()
-        self.assertEqual(result["rfid"], "LOCAL")
-        mock_get_next.assert_called_once()
-        mock_get.assert_not_called()
-
-
-class ScanNextFallbackTests(TestCase):
-    def setUp(self):
-        RFIDSource.objects.create(name="local", endpoint="scanner", default_order=0)
-        RFIDSource.objects.create(
-            name="remote", endpoint="scanner", proxy_url="http://example.com", default_order=1
-        )
-
-    @patch("config.middleware.get_site")
-    @patch("rfid.scanner.requests.get")
-    @patch("rfid.scanner.get_next_tag", return_value=None)
-    def test_view_uses_remote_when_local_missing(self, mock_get_next, mock_get, mock_site):
-        mock_get.return_value = MagicMock(json=lambda: {"rfid": "REMOTE", "label_id": 7}, status_code=200)
-        resp = self.client.get(reverse("rfid-scan-next"))
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json(), {"rfid": "REMOTE", "label_id": 7})
-
-
-class ScannerTestSourcesTests(TestCase):
-    def setUp(self):
-        RFIDSource.objects.create(name="local", endpoint="scanner", default_order=0)
-        RFIDSource.objects.create(
-            name="remote", endpoint="scanner", proxy_url="http://example.com", default_order=1
-        )
-
-    @patch("rfid.scanner.check_irq_pin", return_value={"irq_pin": 5})
-    @patch("rfid.scanner._test_remote", return_value={"source": "remote", "status": "ok"})
-    def test_test_sources(self, mock_remote, mock_local):
-        result = test_sources()
-        self.assertEqual(result["local"], {"irq_pin": 5})
-        self.assertEqual(result["remote"], [{"source": "remote", "status": "ok"}])

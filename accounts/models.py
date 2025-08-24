@@ -9,10 +9,8 @@ from django.apps import apps
 from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
 from datetime import timedelta
-from urllib.parse import urljoin
 from django.contrib.contenttypes.models import ContentType
 from integrate.models import Entity, EntityUserManager
-from uuid import uuid4
 
 
 class Address(Entity):
@@ -222,7 +220,6 @@ class RFID(Entity):
     )
     released = models.BooleanField(default=False)
     added_on = models.DateTimeField(auto_now_add=True)
-    source = models.UUIDField(null=True, blank=True, editable=False)
 
     def save(self, *args, **kwargs):
         if self.rfid:
@@ -250,64 +247,6 @@ class RFID(Entity):
         verbose_name = "RFID"
         verbose_name_plural = "RFIDs"
         db_table = "accounts_rfid"
-
-
-class RFIDSource(Entity):
-    """Endpoint configuration for RFID scanners."""
-
-    name = models.CharField(max_length=100, unique=True)
-    endpoint = models.SlugField(
-        max_length=50,
-        help_text="Slug for the RFID batch endpoint; '/api/rfid/' is added automatically",
-    )
-    default_order = models.PositiveIntegerField(default=0)
-    proxy_url = models.URLField(blank=True, null=True)
-    uuid = models.UUIDField(blank=True, null=True, editable=False, unique=True)
-
-    class Meta:
-        verbose_name = "RFID source"
-        verbose_name_plural = "RFID sources"
-        ordering = ["default_order"]
-
-    def save(self, *args, **kwargs):
-        if self._state.adding and self.default_order == 0:
-            self.default_order = RFIDSource.objects.count()
-        if self.proxy_url:
-            self.uuid = None
-        elif not self.uuid:
-            self.uuid = uuid4()
-        super().save(*args, **kwargs)
-
-    def _build_url(self, base_url: str) -> str:
-        """Construct the full RFID endpoint URL from a base URL."""
-
-        return urljoin(
-            base_url.rstrip("/") + "/", f"api/rfid/{self.endpoint.strip('/')}/"
-        )
-
-    def test_fetch(self, base_url: str):
-        """Fetch RFIDs from the endpoint without persisting them."""
-        import requests
-
-        url = self._build_url(base_url)
-        resp = requests.get(url, params={"test": "true"})
-        resp.raise_for_status()
-        return resp.json()
-
-    def test_serve(self, rfids=None, base_url: str = None):
-        """Send RFIDs to the endpoint without altering remote data."""
-        import requests
-
-        url = self._build_url(base_url)
-        payload = {"test": True}
-        if rfids is not None:
-            payload["rfids"] = rfids
-        resp = requests.post(url, json=payload)
-        resp.raise_for_status()
-        return resp.json()
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name
 
 
 class Account(Entity):
