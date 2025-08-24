@@ -1,6 +1,7 @@
 import hashlib
 from io import BytesIO
 
+from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import models
 from integrate.models import Entity
@@ -34,6 +35,13 @@ class Reference(Entity):
         default=False, verbose_name="Include in Footer"
     )
     created = models.DateTimeField(auto_now_add=True)
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="references",
+        null=True,
+        blank=True,
+    )
 
     def save(self, *args, **kwargs):
         if self.method == "qr" and self.value:

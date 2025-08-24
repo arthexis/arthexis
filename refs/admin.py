@@ -6,8 +6,8 @@ from .models import Reference, Tag, TaggedItem
 
 @admin.register(Reference)
 class ReferenceAdmin(admin.ModelAdmin):
-    list_display = ("alt_text", "content_type", "include_in_footer")
-    readonly_fields = ("uses", "qr_code")
+    list_display = ("alt_text", "content_type", "include_in_footer", "author")
+    readonly_fields = ("uses", "qr_code", "author")
     fields = (
         "alt_text",
         "content_type",
@@ -15,6 +15,7 @@ class ReferenceAdmin(admin.ModelAdmin):
         "file",
         "method",
         "include_in_footer",
+        "author",
         "uses",
         "qr_code",
     )
