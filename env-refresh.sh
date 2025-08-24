@@ -2,25 +2,11 @@
 set -e
 
 VENV_DIR=".venv"
-
-# Determine which Python executable is available
-if command -v python3 >/dev/null 2>&1; then
-  PYTHON_CMD="python3"
-elif command -v python >/dev/null 2>&1; then
-  PYTHON_CMD="python"
-else
-  echo "Python interpreter not found" >&2
-  exit 1
-fi
-
-if [ ! -d "$VENV_DIR" ]; then
-  "$PYTHON_CMD" -m venv "$VENV_DIR"
-fi
-
 PYTHON="$VENV_DIR/bin/python"
+
 if [ ! -f "$PYTHON" ]; then
-  echo "Virtual environment not found" >&2
-  exit 0
+  echo "Virtual environment not found. Run ./install.sh first." >&2
+  exit 1
 fi
 
 if [ -f requirements.txt ]; then

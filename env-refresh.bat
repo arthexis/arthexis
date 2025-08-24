@@ -1,11 +1,8 @@
 @echo off
 set VENV=.venv
 if not exist %VENV%\Scripts\python.exe (
-    py -m venv %VENV%
-)
-if not exist %VENV%\Scripts\python.exe (
-    echo Virtual environment not found
-    exit /b 0
+    echo Virtual environment not found. Run install.sh first.
+    exit /b 1
 )
 if exist requirements.txt (
     for /f "skip=1 tokens=1" %%h in ('certutil -hashfile requirements.txt MD5') do (
