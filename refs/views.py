@@ -3,6 +3,7 @@ from io import BytesIO
 
 import base64
 import qrcode
+from django.http import HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
@@ -18,12 +19,16 @@ def recent(request):
     refs_qs = Reference.objects.filter(created__gte=since).order_by("-created")
 
     if request.method == "POST":
+        if not request.user.is_authenticated:
+            return HttpResponseForbidden("Authentication required")
         form = ReferenceForm(request.POST, request.FILES)
         if form.is_valid():
-            form.save()
+            ref = form.save(commit=False)
+            ref.author = request.user
+            ref.save()
             return redirect("refs:recent")
     else:
-        form = ReferenceForm()
+        form = ReferenceForm() if request.user.is_authenticated else None
 
     return render(
         request,

@@ -34,6 +34,7 @@
     </ul>
   </div>
   <div class="col-md-5">
+    {% if form %}
     <h2>{% trans "New Reference" %}</h2>
     <form method="post" enctype="multipart/form-data" class="card card-body">
       {% csrf_token %}
@@ -55,6 +56,9 @@
       </div>
       <button type="submit" class="btn btn-primary w-100">{% trans "Create" %}</button>
     </form>
+    {% else %}
+    <p>{% trans "You must be logged in to create a reference." %}</p>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

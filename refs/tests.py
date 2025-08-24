@@ -43,6 +43,9 @@ class ReferenceLandingPageTests(TestCase):
 class RecentReferencesTests(TestCase):
     def setUp(self):
         self.client = Client()
+        self.user = get_user_model().objects.create_user(
+            "tester", "tester@example.com", "pass"
+        )
 
     def test_only_recent_references_are_listed(self):
         old_ref = Reference.objects.create(value="https://old.com", alt_text="Old")
@@ -54,12 +57,27 @@ class RecentReferencesTests(TestCase):
         self.assertNotContains(resp, "https://old.com")
 
     def test_can_submit_new_reference(self):
+        self.client.force_login(self.user)
         resp = self.client.post(
             reverse("refs:recent"),
             {"value": "https://form.com", "alt_text": "Form", "content_type": "text"},
         )
         self.assertEqual(resp.status_code, 302)
-        self.assertTrue(Reference.objects.filter(value="https://form.com").exists())
+        ref = Reference.objects.get(value="https://form.com")
+        self.assertEqual(ref.author, self.user)
+
+    def test_anonymous_cannot_submit_reference(self):
+        resp = self.client.post(
+            reverse("refs:recent"),
+            {"value": "https://anon.com", "alt_text": "Anon", "content_type": "text"},
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertFalse(Reference.objects.filter(value="https://anon.com").exists())
+
+    def test_form_hidden_for_anonymous(self):
+        resp = self.client.get(reverse("refs:recent"))
+        self.assertNotContains(resp, "New Reference")
+        self.assertContains(resp, "You must be logged in")
 
     def test_long_text_shows_excerpt(self):
         long_text = "x" * 150
