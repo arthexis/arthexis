@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("auth", "0001_initial"),
-        ("contenttypes", "0002_remove_content_type_name"),
+        ("contenttypes", "__first__"),
         ("refs", "__first__"),
     ]
 
