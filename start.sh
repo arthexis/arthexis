@@ -15,10 +15,12 @@ if [ -f SERVICE ]; then
   fi
 fi
 
-# Activate virtual environment if present
-if [ -d .venv ]; then
-  source .venv/bin/activate
+# Ensure virtual environment is available
+if [ ! -d .venv ]; then
+  echo "Virtual environment not found. Run ./install.sh first." >&2
+  exit 1
 fi
+source .venv/bin/activate
 
 # Default to port 8000 but allow override via first argument
 PORT=${1:-8000}
