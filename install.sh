@@ -68,6 +68,9 @@ if [ "$SETUP_NGINX" = true ]; then
     echo "$NGINX_MODE" > NGINX_MODE
     NGINX_CONF="/etc/nginx/conf.d/arthexis-${NGINX_MODE}.conf"
 
+    # Ensure nginx config directory exists
+    sudo mkdir -p /etc/nginx/conf.d
+
     # Remove existing nginx configs for arthexis*
     sudo rm -f /etc/nginx/conf.d/arthexis-*.conf
 
@@ -122,8 +125,13 @@ NGINXCONF
     fi
 
     sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
-    sudo nginx -t
-    sudo systemctl reload nginx
+
+    if command -v nginx >/dev/null 2>&1; then
+        sudo nginx -t
+        sudo systemctl reload nginx || echo "Warning: nginx reload failed"
+    else
+        echo "nginx not installed; skipping nginx test and reload"
+    fi
 fi
 
 source .venv/bin/activate
