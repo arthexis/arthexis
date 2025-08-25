@@ -98,8 +98,25 @@ document.addEventListener('DOMContentLoaded', function () {
 {% block extrastyle %}
 {{ block.super }}
 <style>
+#header {
+    padding-top: 1em;
+    padding-bottom: 1em;
+}
+
+#branding {
+    flex-direction: column;
+    align-items: center;
+}
+
+#site-name {
+    margin-inline-end: 0;
+}
+
 #site-badges {
     margin-top: 0.5em;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 #site-badges .badge {
     margin-right: 0.5em;
