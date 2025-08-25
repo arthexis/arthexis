@@ -3,12 +3,20 @@ from django import forms
 
 import asyncio
 from datetime import timedelta
+import json
 
 from django.utils import timezone
+from django.urls import path
+from django.http import HttpResponse, HttpResponseRedirect
+from django.template.response import TemplateResponse
 
 from .models import Charger, Simulator, MeterReading, Transaction, Location
 from .simulator import ChargePointSimulator
 from . import store
+from .transactions_io import (
+    export_transactions,
+    import_transactions as import_transactions_data,
+)
 
 
 class LocationAdminForm(forms.ModelForm):
@@ -29,6 +37,18 @@ class LocationAdminForm(forms.ModelForm):
             "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
             "ocpp/charger_map.js",
         )
+
+
+class TransactionExportForm(forms.Form):
+    start = forms.DateTimeField(required=False)
+    end = forms.DateTimeField(required=False)
+    chargers = forms.ModelMultipleChoiceField(
+        queryset=Charger.objects.all(), required=False
+    )
+
+
+class TransactionImportForm(forms.Form):
+    file = forms.FileField()
 
 
 @admin.register(Location)
@@ -227,6 +247,7 @@ class MeterReadingInline(admin.TabularInline):
 
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
+    change_list_template = "admin/ocpp/transaction/change_list.html"
     list_display = (
         "charger",
         "account",
@@ -241,6 +262,64 @@ class TransactionAdmin(admin.ModelAdmin):
     list_filter = ("charger", "account")
     date_hierarchy = "start_time"
     inlines = [MeterReadingInline]
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "export/",
+                self.admin_site.admin_view(self.export_view),
+                name="ocpp_transaction_export",
+            ),
+            path(
+                "import/",
+                self.admin_site.admin_view(self.import_view),
+                name="ocpp_transaction_import",
+            ),
+        ]
+        return custom + urls
+
+    def export_view(self, request):
+        if request.method == "POST":
+            form = TransactionExportForm(request.POST)
+            if form.is_valid():
+                chargers = form.cleaned_data["chargers"]
+                data = export_transactions(
+                    start=form.cleaned_data["start"],
+                    end=form.cleaned_data["end"],
+                    chargers=[c.charger_id for c in chargers] if chargers else None,
+                )
+                response = HttpResponse(
+                    json.dumps(data, indent=2, ensure_ascii=False),
+                    content_type="application/json",
+                )
+                response[
+                    "Content-Disposition"
+                ] = "attachment; filename=transactions.json"
+                return response
+        else:
+            form = TransactionExportForm()
+        context = self.admin_site.each_context(request)
+        context["form"] = form
+        return TemplateResponse(
+            request, "admin/ocpp/transaction/export.html", context
+        )
+
+    def import_view(self, request):
+        if request.method == "POST":
+            form = TransactionImportForm(request.POST, request.FILES)
+            if form.is_valid():
+                data = json.load(form.cleaned_data["file"])
+                imported = import_transactions_data(data)
+                self.message_user(request, f"Imported {imported} transactions")
+                return HttpResponseRedirect("../")
+        else:
+            form = TransactionImportForm()
+        context = self.admin_site.each_context(request)
+        context["form"] = form
+        return TemplateResponse(
+            request, "admin/ocpp/transaction/import.html", context
+        )
 
 
 class MeterReadingDateFilter(admin.SimpleListFilter):
