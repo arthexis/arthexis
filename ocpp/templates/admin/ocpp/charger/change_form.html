@@ -1,5 +1,5 @@
 {% extends "admin/change_form.html" %}
-{% load static %}
+{% load static i18n %}
 
 {% block extrahead %}
 {{ block.super }}
@@ -36,6 +36,7 @@
 {% endblock %}
 
 {% block object-tools-items %}
+  <li><a href="{{ original.get_absolute_url }}" target="_blank">Landing page</a></li>
   {% if original.reference %}
   <li><a href="{{ original.reference.value }}" target="_blank">Reference</a></li>
   {% endif %}

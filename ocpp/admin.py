@@ -73,7 +73,7 @@ class ChargerAdmin(admin.ModelAdmin):
         "last_heartbeat",
         "session_kw",
         "total_kw_display",
-        "test_link",
+        "page_link",
         "qr_link",
         "log_link",
         "status_link",
@@ -81,15 +81,14 @@ class ChargerAdmin(admin.ModelAdmin):
     search_fields = ("charger_id", "number", "location__name")
     actions = ["purge_data", "delete_selected"]
 
-    def test_link(self, obj):
+    def page_link(self, obj):
         from django.utils.html import format_html
 
         return format_html(
-            '<a href="{}" onclick="window.open(this.href,\'landing\',\'width=400,height=600\');return false;">open</a>',
-            obj.get_absolute_url(),
+            '<a href="{}" target="_blank">open</a>', obj.get_absolute_url()
         )
 
-    test_link.short_description = "Landing Page"
+    page_link.short_description = "Landing Page"
 
     def qr_link(self, obj):
         from django.utils.html import format_html
