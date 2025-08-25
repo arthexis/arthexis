@@ -81,31 +81,3 @@ class ReaderNotificationTests(TestCase):
         )
 
 
-class RestartViewTests(SimpleTestCase):
-    @patch("config.middleware.get_site")
-    @patch("rfid.views.restart_sources", return_value={"status": "restarted"})
-    def test_restart_endpoint(self, mock_restart, mock_site):
-        resp = self.client.post(reverse("rfid-scan-restart"))
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json(), {"status": "restarted"})
-        mock_restart.assert_called_once()
-
-
-class ScanTestViewTests(SimpleTestCase):
-    @patch("config.middleware.get_site")
-    @patch("rfid.views.test_sources", return_value={"irq_pin": 7})
-    def test_scan_test_success(self, mock_test, mock_site):
-        resp = self.client.get(reverse("rfid-scan-test"))
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json(), {"irq_pin": 7})
-
-    @patch("config.middleware.get_site")
-    @patch(
-        "rfid.views.test_sources",
-        return_value={"error": "no scanner detected"},
-    )
-    def test_scan_test_error(self, mock_test, mock_site):
-        resp = self.client.get(reverse("rfid-scan-test"))
-        self.assertEqual(resp.status_code, 500)
-        self.assertEqual(resp.json(), {"error": "no scanner detected"})
-

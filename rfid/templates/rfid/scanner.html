@@ -1,9 +1,6 @@
 {% with prefix=prefix|default:"rfid" %}
   <div id="{{ prefix }}-scanner">
   <p id="{{ prefix }}-status">Scanner ready</p>
-  <p>
-    <button id="{{ prefix }}-restart-test">Restart &amp; Test Scanner</button>
-  </p>
   <div class="field"><span class="label">Label:</span><span class="value" id="{{ prefix }}-label"></span></div>
   <div class="field"><span class="label">RFID:</span><span class="value" id="{{ prefix }}-rfid"></span></div>
   <div class="field"><span class="label">Color:</span><span class="value" id="{{ prefix }}-color"></span></div>
@@ -38,11 +35,10 @@
   const allowedEl = document.getElementById('{{ prefix }}-allowed');
   const releasedEl = document.getElementById('{{ prefix }}-released');
   const referenceEl = document.getElementById('{{ prefix }}-reference');
-  const restartTestBtn = document.getElementById('{{ prefix }}-restart-test');
 
   function showError(message){
     console.error(message);
-    statusEl.textContent = 'RFID reader not detected. Please connect the reader and press Restart & Test Scanner.';
+    statusEl.textContent = 'RFID reader not detected.';
   }
 
   async function poll(){
@@ -59,7 +55,7 @@
         allowedEl.textContent = data.allowed === undefined ? '' : (data.allowed ? 'Yes' : 'No');
         releasedEl.textContent = data.released === undefined ? '' : (data.released ? 'Yes' : 'No');
         referenceEl.textContent = data.reference || '';
-        if(data.reference && /^https?:\/\//i.test(data.reference)){
+        if(data.reference && /^https?:\\/\\//i.test(data.reference)){
           const w = window.open(data.reference, '_blank');
           if(w){ w.focus(); }
         }
@@ -71,24 +67,8 @@
     }
     setTimeout(poll, 200);
   }
-  restartTestBtn.addEventListener('click', async () => {
-    try {
-      await fetch('{{ restart_url }}', {method: 'POST'});
-      const resp = await fetch('{{ test_url }}');
-      const data = await resp.json();
-      let msg = '';
-      if(data.error){
-        msg = 'No local scanner detected.';
-      } else if(data.irq_pin !== undefined){
-        msg = `IRQ pin ${data.irq_pin}.`;
-      }
-      statusEl.textContent = msg || 'Test completed';
-      poll();
-    } catch(err) {
-      statusEl.textContent = 'Test failed';
-    }
-  });
   poll();
 })();
 </script>
 {% endwith %}
+
