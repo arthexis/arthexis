@@ -32,7 +32,6 @@ from .models import (
     Backup,
 )
 from .tasks import capture_node_screenshot, sample_clipboard
-from nodes.notifications import NotificationManager
 
 
 class NodeTests(TestCase):
@@ -462,42 +461,50 @@ class StartupNotificationTests(TestCase):
         mock_notify.assert_called_once_with("1.2.3.4:9000", "v1.2.3 r123456")
 
 
-def _fake_time_factory():
-    current = [0]
+class NotificationManagerTests(TestCase):
+    def test_send_writes_trimmed_lines(self):
+        from .notifications import NotificationManager
 
-    def fake_time():
-        return current[0]
-
-    def fake_sleep(seconds):
-        current[0] += seconds
-
-    return fake_time, fake_sleep
-
-
-class NotificationDisplayTests(TestCase):
-    @patch("nodes.notifications.threading.Thread")
-    @patch("nodes.notifications.NotificationManager._init_lcd", return_value=MagicMock())
-    def test_long_message_scrolls(self, mock_init, mock_thread):
-        mock_thread.return_value.start = lambda: None
         manager = NotificationManager()
-        subject = "a" * 20
-        body = "b" * 30
-        manager.send(subject, body)
-        note = manager.queue.get_nowait()
-        self.assertEqual(note.subject, subject)
-        self.assertEqual(note.body, body)
-        fake_time, fake_sleep = _fake_time_factory()
-        with patch("nodes.notifications.time.time", fake_time), patch(
-            "nodes.notifications.time.sleep", fake_sleep
-        ):
-            manager.lcd.clear.reset_mock()
-            manager.lcd.write.reset_mock()
-            manager._lcd_display(note, duration=1)
-        top_calls = [c for c in manager.lcd.write.call_args_list if c[0][1] == 0]
-        bottom_calls = [c for c in manager.lcd.write.call_args_list if c[0][1] == 1]
-        self.assertTrue(len(top_calls) > 1)
-        self.assertTrue(len(bottom_calls) > 1)
+        mock_lcd = MagicMock()
+        manager.lcd = mock_lcd
+        result = manager.send("a" * 20, "b" * 20)
+        self.assertTrue(result)
+        mock_lcd.clear.assert_called_once()
+        mock_lcd.write.assert_any_call(0, 0, "a" * 16)
+        mock_lcd.write.assert_any_call(0, 1, "b" * 16)
 
+    def test_send_falls_back_to_gui(self):
+        from .notifications import NotificationManager
+
+        manager = NotificationManager()
+        manager.lcd = None
+        manager._gui_display = MagicMock()
+        result = manager.send("hi", "there")
+        self.assertFalse(result)
+        manager._gui_display.assert_called_once_with("hi", "there")
+
+    def test_send_handles_lcd_exception(self):
+        from .notifications import NotificationManager
+
+        mock_lcd = MagicMock()
+        mock_lcd.clear.side_effect = RuntimeError("boom")
+        manager = NotificationManager()
+        manager.lcd = mock_lcd
+        manager._gui_display = MagicMock()
+        result = manager.send("hi", "there")
+        self.assertFalse(result)
+        manager._gui_display.assert_called_once_with("hi", "there")
+
+    @patch("nodes.notifications.NotificationManager._init_lcd", return_value=MagicMock())
+    def test_send_reinitialises_lcd(self, mock_init):
+        from .notifications import NotificationManager
+
+        manager = NotificationManager()
+        manager.lcd = None
+        result = manager.send("subj", "body")
+        self.assertTrue(result)
+        self.assertEqual(mock_init.call_count, 2)
 
 class NotificationInitTests(TestCase):
     @patch("nodes.notifications.threading.Thread")
@@ -689,27 +696,5 @@ class ClipboardTaskTests(TestCase):
         result = capture_node_screenshot("http://example.com")
         self.assertEqual(result, "")
         self.assertEqual(NodeScreenshot.objects.count(), 0)
-
-
-class NotificationTests(TestCase):
-    def test_gui_fallback_when_lcd_unavailable(self):
-        from .notifications import Notification, NotificationManager
-
-        manager = NotificationManager()
-        manager.lcd = None
-        with patch("nodes.notifications.plyer_notify") as mock_notify:
-            manager._display(Notification("hello", "world"))
-            mock_notify.notify.assert_called_once_with(title="hello", message="world")
-
-    def test_lcd_display_writes_lines(self):
-        from .notifications import Notification, NotificationManager
-
-        manager = NotificationManager()
-        mock_lcd = MagicMock()
-        manager.lcd = mock_lcd
-        manager._display(Notification("line1", "line2"))
-        mock_lcd.clear.assert_called_once()
-        mock_lcd.write.assert_any_call(0, 0, "line1".ljust(16))
-        mock_lcd.write.assert_any_call(0, 1, "line2".ljust(16))
 
 
