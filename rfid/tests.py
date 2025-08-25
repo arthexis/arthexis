@@ -1,4 +1,5 @@
 import os
+import importlib
 from unittest.mock import patch, MagicMock
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -79,5 +80,18 @@ class ReaderNotificationTests(TestCase):
         mock_notify.assert_called_once_with(
             "RFID 2 BAD INT", f"{result['rfid']} BLACK"
         )
+
+
+class PersistentScannerTests(SimpleTestCase):
+    @patch("rfid.scanner.read_rfid", return_value={"rfid": None, "label_id": None})
+    @patch("rfid.scanner.MFRC522")
+    def test_reader_initialized_once(self, mock_mfrc, mock_read):
+        import rfid.scanner as scanner
+
+        scanner._reader = None
+        scanner.scan_sources()
+        scanner.scan_sources()
+        self.assertEqual(mock_mfrc.call_count, 1)
+        mock_read.assert_called_with(mfrc=mock_mfrc.return_value, cleanup=False)
 
 
