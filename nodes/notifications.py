@@ -8,7 +8,9 @@ fits the 16x2 hardware display.
 
 from __future__ import annotations
 
+import ctypes
 import logging
+import sys
 
 from .lcd import CharLCD1602, LCDUnavailableError
 
@@ -68,6 +70,14 @@ class NotificationManager:
                 return
             except Exception as exc:  # pragma: no cover - depends on platform
                 logger.warning("GUI notification failed: %s", exc)
+        if sys.platform.startswith("win"):
+            try:  # pragma: no cover - depends on platform
+                ctypes.windll.user32.MessageBoxW(
+                    0, f"{subject}\n{body}", "Arthexis", 0x1000
+                )
+                return
+            except Exception as exc:  # pragma: no cover - depends on platform
+                logger.warning("Windows notification failed: %s", exc)
         logger.info("%s %s", subject, body)
 
 
