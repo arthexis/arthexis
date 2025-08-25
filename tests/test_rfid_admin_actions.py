@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import RequestFactory, TestCase
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.urls import reverse
 
 from accounts.admin import RFIDAdmin
 from accounts.models import RFID
@@ -53,4 +54,20 @@ class RFIDAdminActionTests(TestCase):
         white.refresh_from_db()
         self.assertEqual(black.color, RFID.WHITE)
         self.assertEqual(white.color, RFID.BLACK)
+
+
+class RFIDAdminWatchLinkTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="rfidwatch", email="watch@example.com", password="password"
+        )
+        self.client.force_login(self.user)
+
+    def test_change_list_shows_watch_toggle(self):
+        response = self.client.get(reverse("admin:accounts_rfid_changelist"))
+        self.assertContains(response, "Toggle RFID Watch")
+        self.assertContains(
+            response, reverse("admin:accounts_rfid_watch_toggle")
+        )
 
