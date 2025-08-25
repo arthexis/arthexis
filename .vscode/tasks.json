@@ -14,9 +14,9 @@
         {
             "label": "Dev: start",
             "type": "shell",
-            "command": "${workspaceFolder}/start.sh",
+            "command": "${workspaceFolder}/start.sh --reload",
             "windows": {
-                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\manage.py runserver 0.0.0.0:8000"
+                "command": "${workspaceFolder}\\start.bat --reload"
             },
             "problemMatcher": [],
             "detail": "Start the Django development server"
