@@ -2,8 +2,8 @@
 
 Messages are written directly to the LCD.  When the display is
 unavailable the message is shown using a desktop notification (via
-``plyer``) or logged.  Each line is truncated to 16 characters so that it
-fits the 16x2 hardware display.
+``plyer`` or a Windows toast) or logged.  Each line is truncated to
+16 characters so that it fits the 16x2 hardware display.
 """
 
 from __future__ import annotations
@@ -18,6 +18,11 @@ try:  # pragma: no cover - optional dependency
     from plyer import notification as plyer_notify
 except Exception:  # pragma: no cover - plyer may not be installed
     plyer_notify = None
+
+try:  # pragma: no cover - optional dependency
+    from win10toast import ToastNotifier
+except Exception:  # pragma: no cover - win10toast may not be installed
+    ToastNotifier = None
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +76,19 @@ class NotificationManager:
             except Exception as exc:  # pragma: no cover - depends on platform
                 logger.warning("GUI notification failed: %s", exc)
         if sys.platform.startswith("win"):
+            if ToastNotifier:
+                try:  # pragma: no cover - depends on platform
+                    ToastNotifier().show_toast(
+                        "Arthexis",
+                        f"{subject}\n{body}",
+                        duration=6,
+                        threaded=True,
+                    )
+                    return
+                except Exception as exc:  # pragma: no cover - depends on platform
+                    logger.warning(
+                        "Windows toast notification failed: %s", exc
+                    )
             try:  # pragma: no cover - depends on platform
                 ctypes.windll.user32.MessageBoxW(
                     0, f"{subject}\n{body}", "Arthexis", 0x1000
