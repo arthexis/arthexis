@@ -69,6 +69,8 @@ class NotificationManager:
     # Display helpers -------------------------------------------------
     def _display(self, note: Notification) -> None:
         duration = max(note.duration, 6)
+        if not self.lcd:
+            self.lcd = self._init_lcd()
         if self.lcd:
             self._lcd_display(note, duration)
         else:
