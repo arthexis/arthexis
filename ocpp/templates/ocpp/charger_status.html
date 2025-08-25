@@ -21,8 +21,9 @@
       animation: text-update-fade 1s ease-out;
     }
   </style>
-  <h1>{{ charger.name|default:charger.charger_id }}</h1>
-  {% if past_session %}
+    <h1>{{ charger.name|default:charger.charger_id }}</h1>
+    <p><a href="{% url 'charger-page' charger.charger_id %}">{% trans "Landing page" %}</a></p>
+    {% if past_session %}
   <div class="alert alert-info" role="alert">
     {% trans "Viewing past session" %} {{ tx.id }}. <a href="{% url 'charger-page' charger.charger_id %}">{% trans "Back to live" %}</a>
   </div>

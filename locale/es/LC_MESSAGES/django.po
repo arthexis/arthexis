@@ -350,6 +350,10 @@ msgstr ""
 msgid "Status"
 msgstr ""
 
+#: ocpp/templates/ocpp/charger_status.html:25
+msgid "Landing page"
+msgstr ""
+
 #: ocpp/templates/ocpp/charger_status.html:27
 msgid "Viewing past session"
 msgstr ""

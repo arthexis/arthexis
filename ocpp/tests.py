@@ -422,6 +422,12 @@ class ChargerAdminTests(TestCase):
         log_url = reverse("charger-log", args=["LOG1"]) + "?type=charger"
         self.assertContains(resp, log_url)
 
+    def test_admin_change_links_landing_page(self):
+        charger = Charger.objects.create(charger_id="CHANGE1")
+        url = reverse("admin:ocpp_charger_change", args=[charger.pk])
+        resp = self.client.get(url)
+        self.assertContains(resp, charger.get_absolute_url())
+
     def test_admin_shows_location_name(self):
         loc = Location.objects.create(name="AdminLoc")
         Charger.objects.create(charger_id="ADMINLOC", location=loc)
@@ -959,6 +965,11 @@ class ChargerStatusViewTests(TestCase):
         tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
         resp = self.client.get(reverse("charger-status", args=[charger.charger_id]))
         self.assertContains(resp, f"?session={tx.id}")
+
+    def test_status_links_landing_page(self):
+        charger = Charger.objects.create(charger_id="LAND1")
+        resp = self.client.get(reverse("charger-status", args=[charger.charger_id]))
+        self.assertContains(resp, reverse("charger-page", args=[charger.charger_id]))
 
     def test_past_session_chart(self):
         charger = Charger.objects.create(charger_id="PAST1")
