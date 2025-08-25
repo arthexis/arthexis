@@ -16,7 +16,10 @@ from typing import List
 try:  # pragma: no cover - hardware dependent
     import smbus  # type: ignore
 except Exception:  # pragma: no cover - missing dependency
-    smbus = None  # type: ignore
+    try:  # pragma: no cover - hardware dependent
+        import smbus2 as smbus  # type: ignore
+    except Exception:  # pragma: no cover - missing dependency
+        smbus = None  # type: ignore
 
 
 class LCDUnavailableError(RuntimeError):
