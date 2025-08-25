@@ -16,16 +16,16 @@ def scan_next(_request):
 
 @require_POST
 def scan_restart(_request):
-    """Restart the RFID scanner(s)."""
+    """Restart the RFID scanner."""
     result = restart_sources()
     status = 500 if result.get("error") else 200
     return JsonResponse(result, status=status)
 
 
 def scan_test(_request):
-    """Report wiring information for local and remote RFID scanners."""
+    """Report wiring information for the local RFID scanner."""
     result = test_sources()
-    status = 500 if result["local"].get("error") and not result["remote"] else 200
+    status = 500 if result.get("error") else 200
     return JsonResponse(result, status=status)
 
 

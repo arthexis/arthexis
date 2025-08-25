@@ -193,42 +193,6 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
-            name="RFIDSource",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("is_seed_data", models.BooleanField(default=False, editable=False)),
-                ("is_deleted", models.BooleanField(default=False, editable=False)),
-                ("name", models.CharField(max_length=100, unique=True)),
-                (
-                    "endpoint",
-                    models.SlugField(
-                        help_text="Slug for the RFID batch endpoint; '/api/rfid/' is added automatically"
-                    ),
-                ),
-                ("default_order", models.PositiveIntegerField(default=0)),
-                ("proxy_url", models.URLField(blank=True, null=True)),
-                (
-                    "uuid",
-                    models.UUIDField(
-                        blank=True, editable=False, null=True, unique=True
-                    ),
-                ),
-            ],
-            options={
-                "verbose_name": "RFID source",
-                "verbose_name_plural": "RFID sources",
-                "ordering": ["default_order"],
-            },
-        ),
-        migrations.CreateModel(
             name="User",
             fields=[
                 (
@@ -536,7 +500,6 @@ class Migration(migrations.Migration):
                 ),
                 ("released", models.BooleanField(default=False)),
                 ("added_on", models.DateTimeField(auto_now_add=True)),
-                ("source", models.UUIDField(blank=True, editable=False, null=True)),
                 (
                     "reference",
                     models.ForeignKey(

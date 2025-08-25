@@ -77,16 +77,10 @@
       const resp = await fetch('{{ test_url }}');
       const data = await resp.json();
       let msg = '';
-      if(data.local){
-        if(data.local.error){
-          msg += 'No local scanner detected.';
-        } else if(data.local.irq_pin !== undefined){
-          msg += `IRQ pin ${data.local.irq_pin}.`;
-        }
-      }
-      if(data.remote && data.remote.length){
-        const parts = data.remote.map(r => `${r.source}: ${r.error ? r.error : 'ok'}`);
-        msg += ` Checking remote scanner... ${parts.join('; ')}`;
+      if(data.error){
+        msg = 'No local scanner detected.';
+      } else if(data.irq_pin !== undefined){
+        msg = `IRQ pin ${data.irq_pin}.`;
       }
       statusEl.textContent = msg || 'Test completed';
       poll();
