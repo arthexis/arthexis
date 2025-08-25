@@ -1,9 +1,9 @@
 """Simple notification helper for a 16x2 LCD display.
 
 Messages are written directly to the LCD.  When the display is
-unavailable the message is shown using a Windows toast notification or
-logged.  Each line is truncated to 16 characters so that it fits the
-16x2 hardware display.
+unavailable the message is shown using a Windows notification that
+auto-dismisses after six seconds or logged.  Each line is truncated to
+16 characters so that it fits the 16x2 hardware display.
 """
 
 from __future__ import annotations
@@ -17,6 +17,10 @@ try:  # pragma: no cover - optional dependency
     from win10toast import ToastNotifier
 except Exception:  # pragma: no cover - win10toast may not be installed
     ToastNotifier = None
+try:  # pragma: no cover - optional dependency
+    from plyer import notification as plyer_notification
+except Exception:  # pragma: no cover - plyer may not be installed
+    plyer_notification = None
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +30,9 @@ class NotificationManager:
 
     def __init__(self) -> None:
         self.lcd = self._init_lcd()
+        self._toaster = (
+            ToastNotifier() if sys.platform.startswith("win") and ToastNotifier else None
+        )
 
     # LCD helpers -----------------------------------------------------
     def _init_lcd(self):
@@ -63,17 +70,23 @@ class NotificationManager:
 
     # GUI/log fallback ------------------------------------------------
     def _gui_display(self, subject: str, body: str) -> None:
-        if sys.platform.startswith("win") and ToastNotifier:
-            try:  # pragma: no cover - depends on platform
-                ToastNotifier().show_toast(
-                    "Arthexis",
-                    f"{subject}\n{body}",
-                    duration=10,
-                    threaded=True,
-                )
-                return
-            except Exception as exc:  # pragma: no cover - depends on platform
-                logger.warning("Windows toast notification failed: %s", exc)
+        if sys.platform.startswith("win"):
+            if self._toaster:
+                try:  # pragma: no cover - depends on platform
+                    self._toaster.show_toast(
+                        "Arthexis", f"{subject}\n{body}", duration=6, threaded=True
+                    )
+                    return
+                except Exception as exc:  # pragma: no cover - depends on platform
+                    logger.warning("Windows toast notification failed: %s", exc)
+            elif plyer_notification:
+                try:  # pragma: no cover - depends on platform
+                    plyer_notification.notify(
+                        title="Arthexis", message=f"{subject}\n{body}", timeout=6
+                    )
+                    return
+                except Exception as exc:  # pragma: no cover - depends on platform
+                    logger.warning("Windows notification failed: %s", exc)
         logger.info("%s %s", subject, body)
 
 
