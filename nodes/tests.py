@@ -506,6 +506,47 @@ class NotificationManagerTests(TestCase):
         self.assertTrue(result)
         self.assertEqual(mock_init.call_count, 2)
 
+class NotificationInitTests(TestCase):
+    @patch("nodes.notifications.threading.Thread")
+    def test_retries_lcd_initialisation(self, mock_thread):
+        mock_thread.return_value.start = lambda: None
+        lcd = MagicMock()
+        with patch(
+            "nodes.notifications.NotificationManager._init_lcd",
+            side_effect=[None, lcd],
+        ) as mock_init:
+            manager = NotificationManager()
+            manager.send("subj", "body")
+            note = manager.queue.get_nowait()
+            fake_time, fake_sleep = _fake_time_factory()
+            with patch("nodes.notifications.time.time", fake_time), patch(
+                "nodes.notifications.time.sleep", fake_sleep,
+            ):
+                manager._display(note)
+        self.assertIs(manager.lcd, lcd)
+        self.assertEqual(mock_init.call_count, 2)
+        lcd.write.assert_called()
+
+    @patch("nodes.notifications.threading.Thread")
+    def test_gui_notification_when_lcd_unavailable(self, mock_thread):
+        mock_thread.return_value.start = lambda: None
+        with patch(
+            "nodes.notifications.NotificationManager._init_lcd",
+            side_effect=[None, None],
+        ) as mock_init:
+            manager = NotificationManager()
+            manager.send("subj", "body")
+            note = manager.queue.get_nowait()
+            manager._gui_display = MagicMock()
+            fake_time, fake_sleep = _fake_time_factory()
+            with patch("nodes.notifications.time.time", fake_time), patch(
+                "nodes.notifications.time.sleep", fake_sleep,
+            ):
+                manager._display(note)
+        self.assertEqual(mock_init.call_count, 2)
+        manager._gui_display.assert_called_once_with(note)
+
+
 
 class RecipeTests(TestCase):
     def test_step_sync_and_text_update(self):
