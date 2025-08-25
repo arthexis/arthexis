@@ -22,9 +22,20 @@ if [ ! -d .venv ]; then
 fi
 source .venv/bin/activate
 
-# Default to port 8000 and disabled auto-reload unless --reload is provided
-PORT=8000
+# Determine default port based on nginx mode if present
+PORT=""
 RELOAD=false
+if [ -f NGINX_MODE ]; then
+  MODE="$(cat NGINX_MODE)"
+  if [ "$MODE" = "private" ]; then
+    PORT=8888
+  else
+    PORT=8000
+  fi
+fi
+if [ -z "$PORT" ]; then
+  PORT=8000
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,8 +47,16 @@ while [[ $# -gt 0 ]]; do
       RELOAD=true
       shift
       ;;
+    --private)
+      PORT=8888
+      shift
+      ;;
+    --public)
+      PORT=8000
+      shift
+      ;;
     *)
-      echo "Usage: $0 [--port PORT] [--reload]" >&2
+      echo "Usage: $0 [--port PORT] [--reload] [--private|--public]" >&2
       exit 1
       ;;
   esac
