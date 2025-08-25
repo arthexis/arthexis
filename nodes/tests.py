@@ -506,14 +506,30 @@ class NotificationManagerTests(TestCase):
         self.assertTrue(result)
         self.assertEqual(mock_init.call_count, 2)
 
-    def test_gui_display_uses_message_box_on_windows(self):
+    def test_gui_display_uses_windows_toast(self):
         from .notifications import NotificationManager
 
         with patch("nodes.notifications.plyer_notify", None):
             with patch("nodes.notifications.sys.platform", "win32"):
-                with patch("nodes.notifications.ctypes") as mock_ctypes:
+                mock_toast = MagicMock()
+                with patch(
+                    "nodes.notifications.ToastNotifier", return_value=mock_toast
+                ):
                     manager = NotificationManager()
                     manager._gui_display("hi", "there")
+        mock_toast.show_toast.assert_called_once_with(
+            "Arthexis", "hi\nthere", duration=6, threaded=True
+        )
+
+    def test_gui_display_falls_back_to_message_box_on_windows(self):
+        from .notifications import NotificationManager
+
+        with patch("nodes.notifications.plyer_notify", None):
+            with patch("nodes.notifications.sys.platform", "win32"):
+                with patch("nodes.notifications.ToastNotifier", None):
+                    with patch("nodes.notifications.ctypes") as mock_ctypes:
+                        manager = NotificationManager()
+                        manager._gui_display("hi", "there")
         mock_ctypes.windll.user32.MessageBoxW.assert_called_once_with(
             0, "hi\nthere", "Arthexis", 0x1000
         )
