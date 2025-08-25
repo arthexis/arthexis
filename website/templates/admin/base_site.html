@@ -98,14 +98,17 @@ document.addEventListener('DOMContentLoaded', function () {
 {% block extrastyle %}
 {{ block.super }}
 <style>
-#site-name .badge {
-    margin-left: 0.5em;
+#site-badges {
+    margin-top: 0.5em;
+}
+#site-badges .badge {
+    margin-right: 0.5em;
     font-size: 0.7em;
     padding: 2px 4px;
     border-radius: 4px;
     color: white;
 }
-#site-name .badge a {
+#site-badges .badge a {
     color: white;
     text-decoration: none;
 }
@@ -143,18 +146,20 @@ document.addEventListener('DOMContentLoaded', function () {
 {% block branding %}
 <h1 id="site-name">
   <a href="{% url 'admin:index' %}"><span id="server-clock"></span></a>
-    {% if badge_site %}
-      <span class="badge" style="background-color: {{ badge_site_color }};">
-        <a href="{% url 'admin:website_siteproxy_changelist' %}">SITE</a>:
-        <a href="{% url 'admin:website_siteproxy_change' badge_site.pk %}">{{ badge_site.name }}</a>
-        <span style="display:none">SITE: {{ badge_site.name }}</span>
-      </span>
-    {% else %}
-      <span class="badge badge-unknown">
-        <a href="{% url 'admin:website_siteproxy_changelist' %}">SITE</a>: Unknown
-        <span style="display:none">SITE: Unknown</span>
-      </span>
-    {% endif %}
+</h1>
+<div id="site-badges">
+  {% if badge_site %}
+    <span class="badge" style="background-color: {{ badge_site_color }};">
+      <a href="{% url 'admin:website_siteproxy_changelist' %}">SITE</a>:
+      <a href="{% url 'admin:website_siteproxy_change' badge_site.pk %}">{{ badge_site.name }}</a>
+      <span style="display:none">SITE: {{ badge_site.name }}</span>
+    </span>
+  {% else %}
+    <span class="badge badge-unknown">
+      <a href="{% url 'admin:website_siteproxy_changelist' %}">SITE</a>: Unknown
+      <span style="display:none">SITE: Unknown</span>
+    </span>
+  {% endif %}
   {% if badge_node %}
     <span class="badge" style="background-color: {{ badge_node_color }};">
       <a href="{% url 'admin:nodes_node_changelist' %}">NODE</a>:
@@ -170,7 +175,7 @@ document.addEventListener('DOMContentLoaded', function () {
       <span style="display:none">NODE: Unknown</span>
     </span>
   {% endif %}
-</h1>
+</div>
 {% endblock %}
 {% block userlinks %}
   {% if site_url %}
