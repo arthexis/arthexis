@@ -134,6 +134,25 @@ body.login #server-clock {
     font-family: monospace;
     font-size: 0.9em;
 }
+
+body:not(.login) #site-badges {
+    margin-left: 0.5em;
+}
+
+body:not(.login) #site-badges .badge {
+    margin-right: 0.25em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    color: white;
+}
+
+body:not(.login) #site-badges .badge a {
+    color: white;
+    text-decoration: none;
+}
+
+body:not(.login) .badge-unknown {background-color:#6c757d;}
 #nav-sidebar .module h2 {
     cursor: pointer;
 }
