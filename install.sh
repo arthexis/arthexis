@@ -3,9 +3,10 @@ set -e
 
 SERVICE=""
 SETUP_NGINX=false
+PORT=8888
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--nginx]" >&2
+    echo "Usage: $0 [--service NAME] [--nginx] [--port PORT]" >&2
     exit 1
 }
 
@@ -19,6 +20,11 @@ while [[ $# -gt 0 ]]; do
         --nginx)
             SETUP_NGINX=true
             shift
+            ;;
+        --port)
+            [ -z "$2" ] && usage
+            PORT="$2"
+            shift 2
             ;;
         *)
             usage
@@ -67,7 +73,7 @@ server {
 
     # Default proxy to web app
     location / {
-        proxy_pass http://127.0.0.1:8888;
+        proxy_pass http://127.0.0.1:PORT_PLACEHOLDER;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -78,6 +84,7 @@ server {
     }
 }
 NGINXCONF
+    sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
     sudo nginx -t
     sudo systemctl reload nginx
 fi
@@ -111,7 +118,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$BASE_DIR
-ExecStart=$BASE_DIR/.venv/bin/python manage.py runserver 0.0.0.0:8888
+ExecStart=$BASE_DIR/.venv/bin/python manage.py runserver 0.0.0.0:$PORT
 Restart=always
 User=$(id -un)
 

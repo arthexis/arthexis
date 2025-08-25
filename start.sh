@@ -22,8 +22,21 @@ if [ ! -d .venv ]; then
 fi
 source .venv/bin/activate
 
-# Default to port 8000 but allow override via first argument
-PORT=${1:-8000}
+# Default to port 8000 but allow override via --port
+PORT=8000
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --port)
+      PORT="$2"
+      shift 2
+      ;;
+    *)
+      echo "Usage: $0 [--port PORT]" >&2
+      exit 1
+      ;;
+  esac
+done
 
 # Start the Django development server
 python manage.py runserver 0.0.0.0:$PORT
