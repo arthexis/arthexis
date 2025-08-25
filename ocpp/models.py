@@ -28,6 +28,7 @@ class Charger(Entity):
     """Known charge point with optional configuration."""
 
     charger_id = models.CharField(_("Serial Number"), max_length=100, unique=True)
+    number = models.PositiveIntegerField(_("Charger Number"), default=1)
     config = models.JSONField(default=dict, blank=True)
     require_rfid = models.BooleanField(_("Require RFID"), default=False)
     last_heartbeat = models.DateTimeField(null=True, blank=True)
@@ -68,7 +69,9 @@ class Charger(Entity):
 
     @property
     def name(self) -> str:
-        return self.location.name if self.location else ""
+        if self.location:
+            return f"{self.location.name} #{self.number}" if self.number else self.location.name
+        return ""
 
     @property
     def latitude(self):

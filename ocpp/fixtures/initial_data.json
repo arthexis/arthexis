@@ -13,6 +13,7 @@
     "pk": 1,
     "fields": {
       "charger_id": "CP1",
+      "number": 1,
       "config": {},
       "require_rfid": false,
       "last_heartbeat": null,
@@ -27,6 +28,7 @@
     "pk": 2,
     "fields": {
       "charger_id": "CP2",
+      "number": 2,
       "config": {},
       "require_rfid": true,
       "last_heartbeat": null,

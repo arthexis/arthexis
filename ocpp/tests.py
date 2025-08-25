@@ -38,6 +38,14 @@ class ChargerFixtureTests(TestCase):
         cp1 = Charger.objects.get(charger_id="CP1")
         self.assertFalse(cp1.require_rfid)
 
+    def test_charger_numbers(self):
+        cp1 = Charger.objects.get(charger_id="CP1")
+        cp2 = Charger.objects.get(charger_id="CP2")
+        self.assertEqual(cp1.number, 1)
+        self.assertEqual(cp2.number, 2)
+        self.assertEqual(cp1.name, "Simulator #1")
+        self.assertEqual(cp2.name, "Simulator #2")
+
 
 class SinkConsumerTests(TransactionTestCase):
     async def test_sink_replies(self):
@@ -643,7 +651,7 @@ class ChargerLocationTests(TestCase):
         charger = Charger.objects.create(charger_id="LOC1", location=loc)
         self.assertAlmostEqual(float(charger.latitude), 10.123456)
         self.assertAlmostEqual(float(charger.longitude), -20.654321)
-        self.assertEqual(charger.name, "Loc1")
+        self.assertEqual(charger.name, "Loc1 #1")
 
 
 class MeterReadingTests(TransactionTestCase):
