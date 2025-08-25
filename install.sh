@@ -3,10 +3,11 @@ set -e
 
 SERVICE=""
 SETUP_NGINX=false
-PORT=8888
+NGINX_MODE=""
+PORT=""
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--nginx] [--port PORT]" >&2
+    echo "Usage: $0 [--service NAME] [--nginx] [--public|--internal] [--port PORT]" >&2
     exit 1
 }
 
@@ -21,6 +22,16 @@ while [[ $# -gt 0 ]]; do
             SETUP_NGINX=true
             shift
             ;;
+        --internal)
+            SETUP_NGINX=true
+            NGINX_MODE="internal"
+            shift
+            ;;
+        --public)
+            SETUP_NGINX=true
+            NGINX_MODE="public"
+            shift
+            ;;
         --port)
             [ -z "$2" ] && usage
             PORT="$2"
@@ -32,6 +43,18 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [ -z "$PORT" ]; then
+    if [ "$NGINX_MODE" = "public" ]; then
+        PORT=8000
+    else
+        PORT=8888
+    fi
+fi
+
+if [ "$SETUP_NGINX" = true ] && [ -z "$NGINX_MODE" ]; then
+    NGINX_MODE="internal"
+fi
+
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
 
@@ -42,18 +65,14 @@ fi
 
 # If requested, install nginx configuration and reload
 if [ "$SETUP_NGINX" = true ]; then
-    NGINX_CONF="/etc/nginx/conf.d/arthexis.conf"
+    echo "$NGINX_MODE" > NGINX_MODE
+    NGINX_CONF="/etc/nginx/conf.d/arthexis-${NGINX_MODE}.conf"
 
-    # Remove existing nginx configs for arthexis.com to avoid conflicts
-    CONFLICTS=$(sudo grep -rlE "server_name\s+.*arthexis\.com" /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null || true)
-    for f in $CONFLICTS; do
-        if [ "$f" != "$NGINX_CONF" ]; then
-            echo "Removing conflicting nginx config: $f"
-            sudo rm -f "$f"
-        fi
-    done
+    # Remove existing nginx configs for arthexis*
+    sudo rm -f /etc/nginx/conf.d/arthexis-*.conf
 
-    sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
+    if [ "$NGINX_MODE" = "public" ]; then
+        sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
 # Redirect all HTTP traffic to HTTPS
 server {
     listen 80;
@@ -84,6 +103,24 @@ server {
     }
 }
 NGINXCONF
+    else
+        sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
+server {
+    listen 8000;
+    location / {
+        proxy_pass http://127.0.0.1:PORT_PLACEHOLDER;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+NGINXCONF
+    fi
+
     sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
     sudo nginx -t
     sudo systemctl reload nginx

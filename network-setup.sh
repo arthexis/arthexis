@@ -8,16 +8,21 @@ set -euo pipefail
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password]
-  --password  Prompt for a new WiFi password even if one is already configured.
+Usage: $0 [--password] [--no-firewall]
+  --password     Prompt for a new WiFi password even if one is already configured.
+  --no-firewall  Skip firewall port validation.
 USAGE
 }
 
 FORCE_PASSWORD=false
+SKIP_FIREWALL=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --password)
             FORCE_PASSWORD=true
+            ;;
+        --no-firewall)
+            SKIP_FIREWALL=true
             ;;
         -h|--help)
             usage
@@ -41,6 +46,33 @@ command -v nmcli >/dev/null 2>&1 || {
     echo "nmcli (NetworkManager) is required." >&2
     exit 1
 }
+
+if [[ $SKIP_FIREWALL == false ]]; then
+    PORTS=(22 5900 21114)
+    MODE="internal"
+    if [ -f NGINX_MODE ]; then
+        MODE="$(cat NGINX_MODE)"
+    fi
+    if [ "$MODE" = "public" ]; then
+        PORTS+=(80 443 8000)
+    else
+        PORTS+=(8000 8888)
+    fi
+
+    if command -v ufw >/dev/null 2>&1; then
+        STATUS=$(ufw status 2>/dev/null || true)
+        if echo "$STATUS" | grep -iq "inactive"; then
+            :
+        else
+            for p in "${PORTS[@]}"; do
+                if ! echo "$STATUS" | grep -q "${p}"; then
+                    echo "Port $p is not allowed through the firewall" >&2
+                    exit 1
+                fi
+            done
+        fi
+    fi
+fi
 
 slugify() {
     local input="$1"
