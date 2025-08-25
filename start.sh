@@ -22,8 +22,9 @@ if [ ! -d .venv ]; then
 fi
 source .venv/bin/activate
 
-# Default to port 8000 but allow override via --port
+# Default to port 8000 and disabled auto-reload unless --reload is provided
 PORT=8000
+RELOAD=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -31,12 +32,20 @@ while [[ $# -gt 0 ]]; do
       PORT="$2"
       shift 2
       ;;
+    --reload)
+      RELOAD=true
+      shift
+      ;;
     *)
-      echo "Usage: $0 [--port PORT]" >&2
+      echo "Usage: $0 [--port PORT] [--reload]" >&2
       exit 1
       ;;
   esac
 done
 
 # Start the Django development server
-python manage.py runserver 0.0.0.0:$PORT
+if [ "$RELOAD" = true ]; then
+  python manage.py runserver 0.0.0.0:$PORT
+else
+  python manage.py runserver 0.0.0.0:$PORT --noreload
+fi
