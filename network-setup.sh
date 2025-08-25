@@ -42,6 +42,41 @@ command -v nmcli >/dev/null 2>&1 || {
     exit 1
 }
 
+slugify() {
+    local input="$1"
+    echo "$input" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
+}
+
+# Reinstall wlan1 connections with uniform naming
+if nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
+    declare -A SEEN_SLUGS=()
+    while IFS= read -r con; do
+        iface="$(nmcli -g connection.interface-name connection show "$con" 2>/dev/null || true)"
+        if [[ "$iface" == "wlan1" ]]; then
+            ssid="$(nmcli -g 802-11-wireless.ssid connection show "$con" 2>/dev/null || true)"
+            [[ -z "$ssid" ]] && continue
+            slug="$(slugify "$ssid")"
+            new_name="gate-$slug"
+            if [[ -n "${SEEN_SLUGS[$slug]:-}" ]]; then
+                nmcli connection delete "$con"
+                continue
+            fi
+            SEEN_SLUGS[$slug]=1
+            psk="$(nmcli -s -g 802-11-wireless-security.psk connection show "$con" 2>/dev/null || true)"
+            key_mgmt="$(nmcli -g 802-11-wireless-security.key-mgmt connection show "$con" 2>/dev/null || true)"
+            nmcli connection delete "$con"
+            nmcli device disconnect wlan1 || true
+            nmcli device connect wlan1 || true
+            if [[ -n "$psk" ]]; then
+                nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" \
+                    wifi-sec.key-mgmt "$key_mgmt" wifi-sec.psk "$psk" autoconnect yes
+            else
+                nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" autoconnect yes
+            fi
+        fi
+    done < <(nmcli -t -f NAME connection show)
+fi
+
 # Preserve existing password if connection already exists
 EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show gelectriic-ap 2>/dev/null || true)"
 
