@@ -49,15 +49,14 @@ command -v nmcli >/dev/null 2>&1 || {
 
 if [[ $SKIP_FIREWALL == false ]]; then
     PORTS=(22 5900 21114)
+    MODE="internal"
     if [ -f NGINX_MODE ]; then
         MODE="$(cat NGINX_MODE)"
-        if [ "$MODE" = "private" ]; then
-            PORTS+=(8000 8888)
-        else
-            PORTS+=(80 443 8000)
-        fi
+    fi
+    if [ "$MODE" = "public" ]; then
+        PORTS+=(80 443 8000)
     else
-        PORTS+=(8000)
+        PORTS+=(8000 8888)
     fi
 
     if command -v ufw >/dev/null 2>&1; then

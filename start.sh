@@ -27,14 +27,13 @@ PORT=""
 RELOAD=false
 if [ -f NGINX_MODE ]; then
   MODE="$(cat NGINX_MODE)"
-  if [ "$MODE" = "private" ]; then
-    PORT=8888
-  else
-    PORT=8000
-  fi
+else
+  MODE="internal"
 fi
-if [ -z "$PORT" ]; then
+if [ "$MODE" = "public" ]; then
   PORT=8000
+else
+  PORT=8888
 fi
 
 while [[ $# -gt 0 ]]; do
@@ -47,16 +46,16 @@ while [[ $# -gt 0 ]]; do
       RELOAD=true
       shift
       ;;
-    --private)
-      PORT=8888
-      shift
-      ;;
     --public)
       PORT=8000
       shift
       ;;
+    --internal)
+      PORT=8888
+      shift
+      ;;
     *)
-      echo "Usage: $0 [--port PORT] [--reload] [--private|--public]" >&2
+      echo "Usage: $0 [--port PORT] [--reload] [--public|--internal]" >&2
       exit 1
       ;;
   esac

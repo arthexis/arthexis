@@ -7,7 +7,7 @@ NGINX_MODE=""
 PORT=""
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--nginx] [--private|--public] [--port PORT]" >&2
+    echo "Usage: $0 [--service NAME] [--nginx] [--public|--internal] [--port PORT]" >&2
     exit 1
 }
 
@@ -22,9 +22,9 @@ while [[ $# -gt 0 ]]; do
             SETUP_NGINX=true
             shift
             ;;
-        --private)
+        --internal)
             SETUP_NGINX=true
-            NGINX_MODE="private"
+            NGINX_MODE="internal"
             shift
             ;;
         --public)
@@ -52,7 +52,7 @@ if [ -z "$PORT" ]; then
 fi
 
 if [ "$SETUP_NGINX" = true ] && [ -z "$NGINX_MODE" ]; then
-    NGINX_MODE="private"
+    NGINX_MODE="internal"
 fi
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
