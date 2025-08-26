@@ -25,6 +25,10 @@ source .venv/bin/activate
 # Determine default port based on nginx mode if present
 PORT=""
 RELOAD=false
+CELERY=false
+if [ -f CELERY ]; then
+  CELERY=true
+fi
 if [ -f NGINX_MODE ]; then
   MODE="$(cat NGINX_MODE)"
 else
@@ -46,6 +50,14 @@ while [[ $# -gt 0 ]]; do
       RELOAD=true
       shift
       ;;
+    --celery)
+      CELERY=true
+      shift
+      ;;
+    --no-celery)
+      CELERY=false
+      shift
+      ;;
     --public)
       PORT=8000
       shift
@@ -55,11 +67,20 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
-      echo "Usage: $0 [--port PORT] [--reload] [--public|--internal]" >&2
+      echo "Usage: $0 [--port PORT] [--reload] [--public|--internal] [--celery|--no-celery]" >&2
       exit 1
       ;;
   esac
 done
+
+# Start required Celery components if requested
+if [ "$CELERY" = true ]; then
+  celery -A config worker -l info &
+  CELERY_WORKER_PID=$!
+  celery -A config beat -l info &
+  CELERY_BEAT_PID=$!
+  trap "kill $CELERY_WORKER_PID $CELERY_BEAT_PID" EXIT
+fi
 
 # Start the Django development server
 if [ "$RELOAD" = true ]; then

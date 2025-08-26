@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 from celery import shared_task
@@ -17,6 +18,12 @@ def check_github_updates() -> None:
 
     branch = "main"
     subprocess.run(["git", "fetch", "origin", branch], cwd=base_dir, check=True)
+
+    log_dir = base_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "auto-upgrade.log"
+    with log_file.open("a") as fh:
+        fh.write(f"{datetime.utcnow().isoformat()} check_github_updates triggered\n")
 
     if mode == "latest":
         local = subprocess.check_output(["git", "rev-parse", branch], cwd=base_dir).decode().strip()
@@ -41,6 +48,9 @@ def check_github_updates() -> None:
         if local == remote:
             return
         args = ["./upgrade.sh", "--no-restart"]
+
+    with log_file.open("a") as fh:
+        fh.write(f"{datetime.utcnow().isoformat()} running: {' '.join(args)}\n")
 
     subprocess.run(args, cwd=base_dir, check=True)
 
