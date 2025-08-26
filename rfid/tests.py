@@ -1,5 +1,5 @@
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
@@ -61,8 +61,12 @@ class ReaderNotificationTests(TestCase):
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
         self.assertEqual(result["label_id"], 1)
         self.assertEqual(result["reference"], "https://example.com")
-        mock_notify.assert_called_once_with(
-            "RFID 1 OK", f"{result['rfid']} BLACK"
+        self.assertEqual(mock_notify.call_count, 2)
+        mock_notify.assert_has_calls(
+            [
+                call(f"RFID {result['rfid']}", "Hold on reader"),
+                call("RFID 1 OK", f"{result['rfid']} BLACK"),
+            ]
         )
 
     @patch("msg.notifications.notify")
@@ -79,8 +83,12 @@ class ReaderNotificationTests(TestCase):
         mock_get.return_value = (tag, False)
 
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
-        mock_notify.assert_called_once_with(
-            "RFID 2 BAD", f"{result['rfid']} BLACK"
+        self.assertEqual(mock_notify.call_count, 2)
+        mock_notify.assert_has_calls(
+            [
+                call(f"RFID {result['rfid']}", "Hold on reader"),
+                call("RFID 2 BAD", f"{result['rfid']} BLACK"),
+            ]
         )
 
 
