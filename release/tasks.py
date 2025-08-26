@@ -54,7 +54,7 @@ def check_github_updates() -> None:
 
     subprocess.run(args, cwd=base_dir, check=True)
 
-    service_file = base_dir / "SERVICE"
+    service_file = base_dir / "locks/service.lck"
     if service_file.exists():
         service = service_file.read_text().strip()
         subprocess.run([

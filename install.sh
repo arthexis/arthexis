@@ -81,11 +81,13 @@ fi
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
+LOCK_DIR="$BASE_DIR/locks"
+mkdir -p "$LOCK_DIR"
 
 if [ "$ENABLE_CELERY" = true ]; then
-    touch CELERY
+    touch "$LOCK_DIR/celery.lck"
 else
-    rm -f CELERY
+    rm -f "$LOCK_DIR/celery.lck"
 fi
 
 # Create virtual environment if missing
@@ -95,7 +97,7 @@ fi
 
 # If requested, install nginx configuration and reload
 if [ "$SETUP_NGINX" = true ]; then
-    echo "$NGINX_MODE" > NGINX_MODE
+    echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
     NGINX_CONF="/etc/nginx/conf.d/arthexis-${NGINX_MODE}.conf"
 
     # Ensure nginx config directory exists
@@ -186,7 +188,7 @@ deactivate
 # If a service name was provided, install a systemd unit and persist its name
 if [ -n "$SERVICE" ]; then
     SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
-    echo "$SERVICE" > SERVICE
+    echo "$SERVICE" > "$LOCK_DIR/service.lck"
     if [ "$ENABLE_CELERY" = true ]; then
         EXEC_CMD="/bin/sh -c 'cd $BASE_DIR && .venv/bin/celery -A config worker -l info & .venv/bin/celery -A config beat -l info & exec .venv/bin/python manage.py runserver 0.0.0.0:$PORT'"
     else
