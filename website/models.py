@@ -3,6 +3,7 @@ from integrate.models import Entity
 from django.contrib.sites.models import Site
 from django.apps import apps as django_apps
 from django.utils.text import slugify
+from django.utils.translation import gettext_lazy as _
 
 
 class ApplicationManager(models.Manager):
@@ -54,6 +55,8 @@ class SiteApplication(Entity):
     objects = SiteApplicationManager()
 
     class Meta:
+        verbose_name = _("Module")
+        verbose_name_plural = _("Modules")
         unique_together = ("site", "path")
 
     def natural_key(self):  # pragma: no cover - simple representation

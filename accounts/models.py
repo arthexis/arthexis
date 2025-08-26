@@ -131,6 +131,9 @@ class Address(Entity):
     state = models.CharField(max_length=2, choices=State.choices)
     postal_code = models.CharField(max_length=10)
 
+    class Meta:
+        verbose_name_plural = _("Addresses")
+
     def clean(self):
         from django.core.exceptions import ValidationError
 

@@ -2,7 +2,6 @@ import logging
 from pathlib import Path
 
 from django.conf import settings
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import LoginView
@@ -164,11 +163,6 @@ def invitation_login(request, uidb64, token):
         login(request, user, backend="accounts.backends.LocalhostAdminBackend")
         return redirect(reverse("admin:index") if user.is_staff else "/")
     return render(request, "website/invitation_login.html", {"form": form})
-
-
-@staff_member_required
-def admin_console(request):
-    return render(request, "admin/console.html")
 
 
 def csrf_failure(request, reason=""):

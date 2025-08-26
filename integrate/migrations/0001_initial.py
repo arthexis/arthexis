@@ -5,6 +5,7 @@ import fernet_fields.fields
 import utils.sigils
 from django.conf import settings
 from django.db import migrations, models
+import integrate.models
 
 
 class Migration(migrations.Migration):
@@ -71,7 +72,7 @@ class Migration(migrations.Migration):
                 ('status', models.CharField(choices=[('pending', 'Pending'), ('approved', 'Approved'), ('rejected', 'Rejected')], default='pending', editable=False, max_length=8)),
                 ('responded_at', models.DateTimeField(blank=True, editable=False, null=True)),
                 ('response_comment', models.TextField(blank=True)),
-                ('approver', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='requests_to_approve', to=settings.AUTH_USER_MODEL)),
+                ('approver', models.ForeignKey(default=integrate.models.default_request_approver_pk, on_delete=django.db.models.deletion.CASCADE, related_name='requests_to_approve', to=settings.AUTH_USER_MODEL)),
                 ('requester', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='requests_sent', to=settings.AUTH_USER_MODEL)),
                 ('request_type', models.ForeignKey(default=1, on_delete=django.db.models.deletion.PROTECT, to='integrate.requesttype')),
             ],
