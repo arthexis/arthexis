@@ -204,7 +204,14 @@ class RFID(Entity):
     allowed = models.BooleanField(default=True)
     BLACK = "black"
     WHITE = "white"
-    COLOR_CHOICES = [(BLACK, "Black"), (WHITE, "White")]
+    BLUE = "blue"
+    TRANS = "trans"
+    COLOR_CHOICES = [
+        (BLACK, "Black"),
+        (WHITE, "White"),
+        (BLUE, "Blue"),
+        (TRANS, "Trans"),
+    ]
     color = models.CharField(
         max_length=5,
         choices=COLOR_CHOICES,
@@ -220,6 +227,7 @@ class RFID(Entity):
     )
     released = models.BooleanField(default=False)
     added_on = models.DateTimeField(auto_now_add=True)
+    last_seen_on = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if self.rfid:

@@ -245,7 +245,15 @@ class RFIDResource(resources.ModelResource):
 
     class Meta:
         model = RFID
-        fields = ("label_id", "rfid", "reference", "allowed", "color", "released")
+        fields = (
+            "label_id",
+            "rfid",
+            "reference",
+            "allowed",
+            "color",
+            "released",
+            "last_seen_on",
+        )
         import_id_fields = ("label_id",)
 
 
@@ -262,12 +270,14 @@ class RFIDAdmin(ImportExportModelAdmin):
         "accounts_display",
         "allowed",
         "added_on",
+        "last_seen_on",
         "write_link",
     )
     list_filter = ("color", "released", "allowed")
     search_fields = ("label_id", "rfid")
     autocomplete_fields = ["accounts"]
     actions = ["scan_rfids", "swap_color"]
+    readonly_fields = ("added_on", "last_seen_on")
 
     def accounts_display(self, obj):
         return ", ".join(str(a) for a in obj.accounts.all())

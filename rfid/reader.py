@@ -1,4 +1,5 @@
 import time
+from django.utils import timezone
 from accounts.models import RFID
 
 
@@ -25,6 +26,8 @@ def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
                 if status == mfrc.MI_OK:
                     rfid = "".join(f"{x:02X}" for x in uid[:5])
                     tag, created = RFID.objects.get_or_create(rfid=rfid)
+                    tag.last_seen_on = timezone.now()
+                    tag.save(update_fields=["last_seen_on"])
                     result = {
                         "rfid": rfid,
                         "label_id": tag.pk,
