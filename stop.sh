@@ -3,6 +3,17 @@ set -e
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
+LOCK_DIR="$BASE_DIR/locks"
+
+# If a systemd service was installed, stop it instead of killing processes
+if [ -f "$LOCK_DIR/service.lck" ]; then
+  SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
+  if systemctl list-unit-files | grep -Fq "${SERVICE_NAME}.service"; then
+    sudo systemctl stop "$SERVICE_NAME"
+    sudo systemctl status "$SERVICE_NAME" --no-pager || true
+    exit 0
+  fi
+fi
 
 # Activate virtual environment if present
 if [ -d .venv ]; then
@@ -25,8 +36,25 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+PATTERN="manage.py runserver"
 if [ "$ALL" = true ]; then
-  pkill -f "manage.py runserver" || true
+  pkill -f "$PATTERN" || true
 else
-  pkill -f "manage.py runserver 0.0.0.0:$PORT" || true
+  pkill -f "$PATTERN 0.0.0.0:$PORT" || true
 fi
+# Also stop any Celery components started by start.sh
+pkill -f "celery -A config" || true
+
+# Wait for processes to fully terminate
+if [ "$ALL" = true ]; then
+  while pgrep -f "$PATTERN" > /dev/null; do
+    sleep 0.5
+  done
+else
+  while pgrep -f "$PATTERN 0.0.0.0:$PORT" > /dev/null; do
+    sleep 0.5
+  done
+fi
+while pgrep -f "celery -A config" > /dev/null; do
+  sleep 0.5
+done
