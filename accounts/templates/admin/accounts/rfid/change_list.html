@@ -2,4 +2,5 @@
 {% block object-tools-items %}
 {{ block.super }}
 <li><a href="{% url 'admin:accounts_rfid_scan' %}">Scan RFIDs</a></li>
+<li><a href="{% url 'admin:accounts_rfid_watch_toggle' %}">Toggle RFID Watch</a></li>
 {% endblock %}

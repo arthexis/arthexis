@@ -301,6 +301,11 @@ class RFIDAdmin(ImportExportModelAdmin):
                 name="accounts_rfid_scan_next",
             ),
             path(
+                "watch/toggle/",
+                self.admin_site.admin_view(self.watch_toggle),
+                name="accounts_rfid_watch_toggle",
+            ),
+            path(
                 "<int:pk>/write/",
                 self.admin_site.admin_view(self.write_view),
                 name="accounts_rfid_write",
@@ -324,6 +329,17 @@ class RFIDAdmin(ImportExportModelAdmin):
         result = scan_sources()
         status = 500 if result.get("error") else 200
         return JsonResponse(result, status=status)
+
+    def watch_toggle(self, request):
+        from rfid.always_on import is_running, start, stop
+
+        if is_running():
+            stop()
+            self.message_user(request, "RFID watch disabled")
+        else:
+            start()
+            self.message_user(request, "RFID watch enabled")
+        return redirect("admin:accounts_rfid_changelist")
 
     def write_link(self, obj):
         url = reverse("admin:accounts_rfid_write", args=[obj.pk])
