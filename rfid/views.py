@@ -9,9 +9,9 @@ from accounts.models import RFID
 from .scanner import scan_sources, restart_sources, test_sources
 
 
-def scan_next(_request):
+def scan_next(request):
     """Return the next scanned RFID tag."""
-    result = scan_sources()
+    result = scan_sources(request)
     status = 500 if result.get("error") else 200
     return JsonResponse(result, status=status)
 
