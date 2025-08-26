@@ -43,6 +43,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         offered = self.scope.get("subprotocols", [])
         if "ocpp1.6" in offered:
             subprotocol = "ocpp1.6"
+        # If a connection for this charger already exists, close it so a new
+        # simulator session can start immediately.
+        existing = store.connections.get(self.charger_id)
+        if existing is not None:
+            await existing.close()
         await self.accept(subprotocol=subprotocol)
         store.add_log(
             self.charger_id,

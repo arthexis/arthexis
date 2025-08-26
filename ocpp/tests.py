@@ -289,6 +289,22 @@ class CSMSConsumerTests(TransactionTestCase):
         data = json.loads(files[0].read_text())
         self.assertTrue(any("StartTransaction" in m["message"] for m in data))
 
+    async def test_second_connection_closes_first(self):
+        communicator1 = WebsocketCommunicator(application, "/DUPLICATE/")
+        connected, _ = await communicator1.connect()
+        self.assertTrue(connected)
+        first_consumer = store.connections.get("DUPLICATE")
+
+        communicator2 = WebsocketCommunicator(application, "/DUPLICATE/")
+        connected2, _ = await communicator2.connect()
+        self.assertTrue(connected2)
+
+        # The first communicator should be closed when the second connects.
+        await communicator1.wait()
+        self.assertIsNot(store.connections.get("DUPLICATE"), first_consumer)
+
+        await communicator2.disconnect()
+
 
 class ChargerLandingTests(TestCase):
     def setUp(self):
@@ -853,6 +869,48 @@ class ChargePointSimulatorTests(TransactionTestCase):
         finally:
             await sim.stop()
             store.clear_log(cfg.cp_path, log_type="simulator")
+            server.close()
+            await server.wait_closed()
+
+    async def test_simulator_stops_when_charger_closes(self):
+        async def handler(ws):
+            async for msg in ws:
+                data = json.loads(msg)
+                action = data[2]
+                if action == "BootNotification":
+                    await ws.send(
+                        json.dumps([3, data[1], {"status": "Accepted"}])
+                    )
+                elif action == "Authorize":
+                    await ws.send(
+                        json.dumps([3, data[1], {"idTagInfo": {"status": "Accepted"}}])
+                    )
+                    await ws.close()
+                    break
+
+        server = await websockets.serve(handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"])
+        port = server.sockets[0].getsockname()[1]
+
+        cfg = SimulatorConfig(
+            host="127.0.0.1",
+            ws_port=port,
+            cp_path="SIMTERM/",
+            duration=0.1,
+            interval=0.05,
+            kw_min=0.1,
+            kw_max=0.2,
+            pre_charge_delay=0.0,
+        )
+        sim = ChargePointSimulator(cfg)
+        try:
+            started, _, _ = await asyncio.to_thread(sim.start)
+            self.assertTrue(started)
+            # Allow time for the server to close the connection
+            await asyncio.sleep(0.1)
+            self.assertEqual(sim.status, "stopped")
+            self.assertFalse(sim._thread.is_alive())
+        finally:
+            await sim.stop()
             server.close()
             await server.wait_closed()
 
