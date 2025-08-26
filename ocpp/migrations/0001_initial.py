@@ -74,7 +74,7 @@ class Migration(migrations.Migration):
                 ('cp_path', models.CharField(max_length=100)),
                 ('host', models.CharField(default='127.0.0.1', max_length=100)),
                 ('ws_port', models.IntegerField(default=8000, verbose_name='WS Port')),
-                ('rfid', models.CharField(default='FFFFFFFF', max_length=8)),
+                ('rfid', models.CharField(default='FFFFFFFF', max_length=255)),
                 ('vin', models.CharField(blank=True, max_length=17)),
                 ('duration', models.IntegerField(default=600)),
                 ('interval', models.FloatField(default=5.0)),

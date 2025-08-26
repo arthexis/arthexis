@@ -215,6 +215,10 @@ class RFIDValidationTests(TestCase):
         tag = RFID.objects.create(rfid="deadbeef")
         self.assertEqual(tag.rfid, "DEADBEEF")
 
+    def test_long_rfid_allowed(self):
+        tag = RFID.objects.create(rfid="DEADBEEF10")
+        self.assertEqual(tag.rfid, "DEADBEEF10")
+
     def test_find_user_by_rfid(self):
         user = User.objects.create_user(username="finder", password="pwd")
         acc = Account.objects.create(user=user, name="FINDER")
