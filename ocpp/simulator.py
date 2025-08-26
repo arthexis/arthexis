@@ -220,14 +220,27 @@ class ChargePointSimulator:
                 )
             )
             await recv()
+        except websockets.exceptions.ConnectionClosed as exc:
+            if not self._connected.is_set():
+                self._connect_error = str(exc)
+                self._connected.set()
+            # The charger closed the connection; mark the simulator as
+            # terminated rather than erroring so the status reflects that it
+            # was stopped remotely.
+            self.status = "stopped"
+            self._stop_event.set()
+            store.add_log(
+                cfg.cp_path,
+                f"Disconnected by charger (code={getattr(exc, 'code', '')})",
+                log_type="simulator",
+            )
+            return
         except Exception as exc:
             if not self._connected.is_set():
                 self._connect_error = str(exc)
                 self._connected.set()
             self.status = "error"
             self._stop_event.set()
-            if isinstance(exc, websockets.exceptions.ConnectionClosed):
-                return
             raise
         finally:
             if ws is not None:
