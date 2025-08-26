@@ -71,8 +71,8 @@ if [ "$SETUP_NGINX" = true ]; then
     # Ensure nginx config directory exists
     sudo mkdir -p /etc/nginx/conf.d
 
-    # Remove existing nginx configs for arthexis*
-    sudo rm -f /etc/nginx/conf.d/arthexis-*.conf
+    # Remove existing nginx configs for arthexis* (run in root shell to expand wildcard)
+    sudo sh -c 'rm -f /etc/nginx/conf.d/arthexis-*.conf'
 
     if [ "$NGINX_MODE" = "public" ]; then
         sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
@@ -110,6 +110,7 @@ NGINXCONF
         sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
 server {
     listen 8000;
+    server_name _;
     location / {
         proxy_pass http://127.0.0.1:PORT_PLACEHOLDER;
         proxy_http_version 1.1;
