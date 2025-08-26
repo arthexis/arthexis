@@ -225,3 +225,6 @@ __marimo__/
 # Hash file used by upgrade scripts to track dependency changes
 requirements.md5
 REVISION
+
+# Auto-upgrade control file
+AUTO_UPGRADE
