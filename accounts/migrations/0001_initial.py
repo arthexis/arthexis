@@ -493,13 +493,19 @@ class Migration(migrations.Migration):
                 (
                     "color",
                     models.CharField(
-                        choices=[("black", "Black"), ("white", "White")],
+                        choices=[
+                            ("black", "Black"),
+                            ("white", "White"),
+                            ("blue", "Blue"),
+                            ("trans", "Trans"),
+                        ],
                         default="black",
                         max_length=5,
                     ),
                 ),
                 ("released", models.BooleanField(default=False)),
                 ("added_on", models.DateTimeField(auto_now_add=True)),
+                ("last_seen_on", models.DateTimeField(blank=True, null=True)),
                 (
                     "reference",
                     models.ForeignKey(

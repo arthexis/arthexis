@@ -14,6 +14,7 @@ import shutil
 
 from accounts.models import RFID
 from rfid.reader import read_rfid
+from accounts.models import RFID
 
 
 class ScanNextViewTests(SimpleTestCase):
@@ -84,6 +85,28 @@ class ReaderNotificationTests(TestCase):
         mock_notify.assert_called_once_with(
             "RFID 2 BAD", f"{result['rfid']} BLACK"
         )
+
+
+class RFIDLastSeenTests(TestCase):
+    def _mock_reader(self):
+        class MockReader:
+            MI_OK = 1
+            PICC_REQIDL = 0
+
+            def MFRC522_Request(self, _):
+                return (self.MI_OK, None)
+
+            def MFRC522_Anticoll(self):
+                return (self.MI_OK, [0xAB, 0xCD, 0x12, 0x34])
+
+        return MockReader()
+
+    @patch("nodes.notifications.notify")
+    def test_last_seen_updated_on_read(self, _mock_notify):
+        tag = RFID.objects.create(rfid="ABCD1234")
+        read_rfid(mfrc=self._mock_reader(), cleanup=False)
+        tag.refresh_from_db()
+        self.assertIsNotNone(tag.last_seen_on)
 
 
 class RestartViewTests(SimpleTestCase):
