@@ -21,7 +21,6 @@ from .models import (
     Node,
     NodeRole,
     NodeScreenshot,
-    NodeMessage,
     NodeCommand,
     Recipe,
     ScreenSource,
@@ -319,13 +318,6 @@ class NodeScreenshotAdmin(admin.ModelAdmin):
             '<img src="data:image/png;base64,{}" style="max-width:100%;" />',
             encoded,
         )
-
-
-@admin.register(NodeMessage)
-class NodeMessageAdmin(admin.ModelAdmin):
-    list_display = ("node", "method", "created")
-
-
 @admin.register(NodeCommand)
 class NodeCommandAdmin(admin.ModelAdmin):
     list_display = ("command", "created")

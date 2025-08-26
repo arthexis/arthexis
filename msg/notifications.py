@@ -73,7 +73,7 @@ class NotificationManager:
             if self._toaster:
                 try:  # pragma: no cover - depends on platform
                     self._toaster.show_toast(
-                        "Arthexis", f"{subject}\n{body}", duration=6, threaded=True
+                        "Arthexis", f"{subject}\n{body}", duration=10, threaded=True
                     )
                     return
                 except Exception as exc:  # pragma: no cover - depends on platform
@@ -81,7 +81,7 @@ class NotificationManager:
             elif plyer_notification:
                 try:  # pragma: no cover - depends on platform
                     plyer_notification.notify(
-                        title="Arthexis", message=f"{subject}\n{body}", timeout=6
+                        title="Arthexis", message=f"{subject}\n{body}", timeout=10
                     )
                     return
                 except Exception as exc:  # pragma: no cover - depends on platform

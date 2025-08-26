@@ -16,7 +16,7 @@ def _startup_notification() -> None:
     """
 
     try:  # import here to avoid circular import during app loading
-        from msg import notify
+        from msg.notifications import notify
     except Exception:  # pragma: no cover - failure shouldn't break startup
         return
 
