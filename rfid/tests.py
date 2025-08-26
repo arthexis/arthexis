@@ -156,3 +156,35 @@ class ScannerTemplateTests(TestCase):
         self.assertNotContains(resp, 'id="rfid-configure"')
 
 
+class ReaderPollingTests(SimpleTestCase):
+    def _mock_reader_no_tag(self):
+        class MockReader:
+            MI_OK = 1
+            PICC_REQIDL = 0
+
+            def MFRC522_Request(self, _):
+                return (0, None)
+
+        return MockReader()
+
+    @patch("rfid.reader.time.sleep")
+    def test_poll_interval_used(self, mock_sleep):
+        read_rfid(
+            mfrc=self._mock_reader_no_tag(),
+            cleanup=False,
+            timeout=0.002,
+            poll_interval=0.001,
+        )
+        mock_sleep.assert_called_with(0.001)
+
+    @patch("rfid.reader.time.sleep")
+    def test_use_irq_skips_sleep(self, mock_sleep):
+        read_rfid(
+            mfrc=self._mock_reader_no_tag(),
+            cleanup=False,
+            timeout=0.002,
+            use_irq=True,
+        )
+        mock_sleep.assert_not_called()
+
+

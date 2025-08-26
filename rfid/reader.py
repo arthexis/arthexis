@@ -7,8 +7,25 @@ def _hex_to_bytes(value: str) -> list[int]:
     return [int(value[i : i + 2], 16) for i in range(0, len(value), 2)]
 
 
-def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
-    """Read a single RFID tag using the MFRC522 reader."""
+def read_rfid(
+    mfrc=None,
+    cleanup: bool = True,
+    timeout: float = 1.0,
+    poll_interval: float | None = 0.05,
+    use_irq: bool = False,
+) -> dict:
+    """Read a single RFID tag using the MFRC522 reader.
+
+    Args:
+        mfrc: Optional MFRC522 reader instance.
+        cleanup: Whether to call ``GPIO.cleanup`` on exit.
+        timeout: How long to poll for a card before giving up.
+        poll_interval: Delay between polling attempts.  Set to ``None`` or
+            ``0`` to skip sleeping (useful when hardware interrupts are
+            configured).
+        use_irq: If ``True``, do not sleep between polls regardless of
+            ``poll_interval``.
+    """
     try:
         if mfrc is None:
             from mfrc522 import MFRC522  # type: ignore
@@ -136,7 +153,8 @@ def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
                     except Exception:
                         pass
                     return result
-            time.sleep(0.2)
+            if not use_irq and poll_interval:
+                time.sleep(poll_interval)
         return {"rfid": None, "label_id": None}
     except Exception as exc:  # pragma: no cover - hardware dependent
         try:
