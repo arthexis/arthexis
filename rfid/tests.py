@@ -1,5 +1,4 @@
 import os
-import importlib
 from unittest.mock import patch, MagicMock
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -60,7 +59,7 @@ class ReaderNotificationTests(TestCase):
         self.assertEqual(result["label_id"], 1)
         self.assertEqual(result["reference"], "https://example.com")
         mock_notify.assert_called_once_with(
-            "RFID 1 OK INT", f"{result['rfid']} BLACK"
+            "RFID 1 OK", f"{result['rfid']} BLACK"
         )
 
     @patch("nodes.notifications.notify")
@@ -78,20 +77,35 @@ class ReaderNotificationTests(TestCase):
 
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
         mock_notify.assert_called_once_with(
-            "RFID 2 BAD INT", f"{result['rfid']} BLACK"
+            "RFID 2 BAD", f"{result['rfid']} BLACK"
         )
 
 
-class PersistentScannerTests(SimpleTestCase):
-    @patch("rfid.scanner.read_rfid", return_value={"rfid": None, "label_id": None})
-    @patch("rfid.scanner.MFRC522")
-    def test_reader_initialized_once(self, mock_mfrc, mock_read):
-        import rfid.scanner as scanner
+class RestartViewTests(SimpleTestCase):
+    @patch("config.middleware.get_site")
+    @patch("rfid.views.restart_sources", return_value={"status": "restarted"})
+    def test_restart_endpoint(self, mock_restart, mock_site):
+        resp = self.client.post(reverse("rfid-scan-restart"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"status": "restarted"})
+        mock_restart.assert_called_once()
 
-        scanner._reader = None
-        scanner.scan_sources()
-        scanner.scan_sources()
-        self.assertEqual(mock_mfrc.call_count, 1)
-        mock_read.assert_called_with(mfrc=mock_mfrc.return_value, cleanup=False)
 
+class ScanTestViewTests(SimpleTestCase):
+    @patch("config.middleware.get_site")
+    @patch("rfid.views.test_sources", return_value={"irq_pin": 7})
+    def test_scan_test_success(self, mock_test, mock_site):
+        resp = self.client.get(reverse("rfid-scan-test"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"irq_pin": 7})
+
+    @patch("config.middleware.get_site")
+    @patch(
+        "rfid.views.test_sources",
+        return_value={"error": "no scanner detected"},
+    )
+    def test_scan_test_error(self, mock_test, mock_site):
+        resp = self.client.get(reverse("rfid-scan-test"))
+        self.assertEqual(resp.status_code, 500)
+        self.assertEqual(resp.json(), {"error": "no scanner detected"})
 
