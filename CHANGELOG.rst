@@ -4,6 +4,7 @@ Changelog
 Unreleased
 ----------
 - Add --satellite flag to install script
+- Add msg app for LCD/Windows notifications
 
 0.1.1 [revision 76f70b6a72c78fcdf143a19ddcc88a0fbd209b3d]
 ---------------------------------------------------------

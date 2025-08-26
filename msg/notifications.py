@@ -1,17 +1,16 @@
 """Simple notification helper for a 16x2 LCD display.
 
-Messages are written directly to the LCD.  When the display is
-unavailable the message is shown using a Windows notification that
-auto-dismisses after six seconds or logged.  Each line is truncated to
-16 characters so that it fits the 16x2 hardware display.
+Messages are written directly to the LCD. When the display is unavailable
+ the message is shown using a Windows notification that auto-dismisses after
+ six seconds or logged. Each line is truncated to 16 characters so that it
+ fits the 16x2 hardware display.
 """
-
 from __future__ import annotations
 
 import logging
 import sys
 
-from .lcd import CharLCD1602, LCDUnavailableError
+from nodes.lcd import CharLCD1602, LCDUnavailableError
 
 try:  # pragma: no cover - optional dependency
     from win10toast import ToastNotifier
@@ -49,7 +48,7 @@ class NotificationManager:
     def send(self, subject: str, body: str = "") -> bool:
         """Display *subject* and *body* and return ``True`` on success.
 
-        The method truncates each line to 16 characters.  If the LCD is not
+        The method truncates each line to 16 characters. If the LCD is not
         available or writing fails a GUI notification is attempted instead
         and ``False`` is returned.
         """

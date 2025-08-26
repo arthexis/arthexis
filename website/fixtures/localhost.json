@@ -5,5 +5,18 @@
       "domain": "127.0.0.1",
       "name": "Terminal"
     }
+  },
+  {
+    "model": "website.application",
+    "fields": {"name": "msg"}
+  },
+  {
+    "model": "website.siteapplication",
+    "fields": {
+      "site": ["127.0.0.1"],
+      "application": ["msg"],
+      "path": "/msg/",
+      "is_default": true
+    }
   }
 ]

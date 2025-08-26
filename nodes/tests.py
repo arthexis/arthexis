@@ -452,7 +452,7 @@ class StartupNotificationTests(TestCase):
             (tmp_path / "VERSION").write_text("1.2.3")
             with self.settings(BASE_DIR=tmp_path):
                 with patch("utils.revision.get_revision", return_value="abcdef123456"):
-                    with patch("nodes.notifications.notify") as mock_notify:
+                    with patch("msg.notifications.notify") as mock_notify:
                         with patch("nodes.apps.socket.gethostname", return_value="host"):
                             with patch("nodes.apps.socket.gethostbyname", return_value="1.2.3.4"):
                                 with patch.dict(os.environ, {"PORT": "9000"}):
@@ -463,7 +463,7 @@ class StartupNotificationTests(TestCase):
 
 class NotificationManagerTests(TestCase):
     def test_send_writes_trimmed_lines(self):
-        from .notifications import NotificationManager
+        from msg.notifications import NotificationManager
 
         manager = NotificationManager()
         mock_lcd = MagicMock()
@@ -475,7 +475,7 @@ class NotificationManagerTests(TestCase):
         mock_lcd.write.assert_any_call(0, 1, "b" * 16)
 
     def test_send_falls_back_to_gui(self):
-        from .notifications import NotificationManager
+        from msg.notifications import NotificationManager
 
         manager = NotificationManager()
         manager.lcd = None
@@ -485,7 +485,7 @@ class NotificationManagerTests(TestCase):
         manager._gui_display.assert_called_once_with("hi", "there")
 
     def test_send_handles_lcd_exception(self):
-        from .notifications import NotificationManager
+        from msg.notifications import NotificationManager
 
         mock_lcd = MagicMock()
         mock_lcd.clear.side_effect = RuntimeError("boom")
@@ -496,9 +496,9 @@ class NotificationManagerTests(TestCase):
         self.assertFalse(result)
         manager._gui_display.assert_called_once_with("hi", "there")
 
-    @patch("nodes.notifications.NotificationManager._init_lcd", return_value=MagicMock())
+    @patch("msg.notifications.NotificationManager._init_lcd", return_value=MagicMock())
     def test_send_reinitialises_lcd(self, mock_init):
-        from .notifications import NotificationManager
+        from msg.notifications import NotificationManager
 
         manager = NotificationManager()
         manager.lcd = None
@@ -507,11 +507,11 @@ class NotificationManagerTests(TestCase):
         self.assertEqual(mock_init.call_count, 2)
 
     def test_gui_display_uses_windows_toast(self):
-        from .notifications import NotificationManager
+        from msg.notifications import NotificationManager
 
-        with patch("nodes.notifications.sys.platform", "win32"):
+        with patch("msg.notifications.sys.platform", "win32"):
             mock_toast = MagicMock()
-            with patch("nodes.notifications.ToastNotifier", return_value=mock_toast):
+            with patch("msg.notifications.ToastNotifier", return_value=mock_toast):
                 manager = NotificationManager()
                 manager._gui_display("hi", "there")
         mock_toast.show_toast.assert_called_once_with(
@@ -519,11 +519,11 @@ class NotificationManagerTests(TestCase):
         )
 
     def test_gui_display_logs_when_toast_unavailable(self):
-        from .notifications import NotificationManager
+        from msg.notifications import NotificationManager
 
-        with patch("nodes.notifications.sys.platform", "win32"):
-            with patch("nodes.notifications.ToastNotifier", None):
-                with patch("nodes.notifications.logger") as mock_logger:
+        with patch("msg.notifications.sys.platform", "win32"):
+            with patch("msg.notifications.ToastNotifier", None):
+                with patch("msg.notifications.logger") as mock_logger:
                     manager = NotificationManager()
                     manager._gui_display("hi", "there")
         mock_logger.info.assert_called_once_with("%s %s", "hi", "there")

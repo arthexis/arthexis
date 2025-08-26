@@ -125,6 +125,7 @@ LOCAL_APPS = [
     "website",
     "emails",
     "app",
+    "msg",
 ]
 
 INSTALLED_APPS = [

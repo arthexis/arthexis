@@ -117,7 +117,7 @@ def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
                         "key_b_verified": tag.key_b_verified,
                     }
                     try:
-                        from nodes.notifications import notify
+                        from msg import notify
 
                         status_text = "OK" if tag.allowed else "BAD"
                         color_word = (tag.color or "").upper()
