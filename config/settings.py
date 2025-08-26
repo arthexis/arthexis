@@ -19,6 +19,9 @@ import socket
 from django.utils.translation import gettext_lazy as _
 from celery.schedules import crontab
 from django.http import request as http_request
+from django.middleware.csrf import CsrfViewMiddleware
+from django.core.exceptions import DisallowedHost
+from urllib.parse import urlsplit
 import django.utils.encoding as encoding
 
 if not hasattr(encoding, "force_text"):  # pragma: no cover - Django>=5 compatibility
@@ -69,6 +72,43 @@ ALLOWED_HOSTS = [
     "www.arthexis.com",
     "arthexis.com",
 ]
+
+
+# Allow CSRF origin verification for hosts within allowed subnets.
+_original_origin_verified = CsrfViewMiddleware._origin_verified
+
+
+def _origin_verified_with_subnets(self, request):
+    request_origin = request.META["HTTP_ORIGIN"]
+    try:
+        good_host = request.get_host()
+    except DisallowedHost:
+        pass
+    else:
+        good_origin = "%s://%s" % (
+            "https" if request.is_secure() else "http",
+            good_host,
+        )
+        if request_origin == good_origin:
+            return True
+        try:
+            origin_host = urlsplit(request_origin).hostname
+            origin_ip = ipaddress.ip_address(origin_host)
+            request_ip = ipaddress.ip_address(good_host.split(":")[0])
+        except ValueError:
+            pass
+        else:
+            for pattern in ALLOWED_HOSTS:
+                try:
+                    network = ipaddress.ip_network(pattern)
+                except ValueError:
+                    continue
+                if origin_ip in network and request_ip in network:
+                    return True
+    return _original_origin_verified(self, request)
+
+
+CsrfViewMiddleware._origin_verified = _origin_verified_with_subnets
 
 
 # Application definition

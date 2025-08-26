@@ -257,6 +257,18 @@ class RFIDResource(resources.ModelResource):
         import_id_fields = ("label_id",)
 
 
+class RFIDForm(forms.ModelForm):
+    """RFID admin form with optional reference field."""
+
+    class Meta:
+        model = RFID
+        fields = "__all__"
+
+    reference = forms.ModelChoiceField(
+        queryset=Reference.objects.all(), required=False
+    )
+
+
 @admin.register(RFID)
 class RFIDAdmin(ImportExportModelAdmin):
     change_list_template = "admin/accounts/rfid/change_list.html"
@@ -278,6 +290,7 @@ class RFIDAdmin(ImportExportModelAdmin):
     autocomplete_fields = ["accounts"]
     actions = ["scan_rfids", "swap_color"]
     readonly_fields = ("added_on", "last_seen_on")
+    form = RFIDForm
 
     def accounts_display(self, obj):
         return ", ".join(str(a) for a in obj.accounts.all())
