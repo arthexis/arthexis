@@ -26,7 +26,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ "$ALL" = true ]; then
-  pkill -f "manage.py runserver" || true
+  PATTERN="manage.py runserver"
 else
-  pkill -f "manage.py runserver 0.0.0.0:$PORT" || true
+  PATTERN="manage.py runserver 0.0.0.0:$PORT"
 fi
+
+pkill -f "$PATTERN" || true
+
+while pgrep -f "$PATTERN" >/dev/null; do
+  sleep 1
+done

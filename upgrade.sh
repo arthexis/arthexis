@@ -7,6 +7,7 @@ cd "$BASE_DIR"
 FORCE=0
 CLEAN_DB=0
 NO_RESTART=0
+CLEAN=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --latest)
@@ -21,11 +22,20 @@ while [[ $# -gt 0 ]]; do
       NO_RESTART=1
       shift
       ;;
+    --clean)
+      CLEAN=1
+      CLEAN_DB=1
+      shift
+      ;;
     *)
       break
       ;;
   esac
 done
+
+if [ "$CLEAN" -eq 1 ]; then
+  NO_RESTART=0
+fi
 
 # Determine current and remote versions
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -77,7 +87,11 @@ if [ "$CLEAN_DB" -eq 1 ]; then
 fi
 
 # Refresh environment and restart service
-./env-refresh.sh
-if [[ $NO_RESTART -eq 0 ]]; then
-  ./start.sh
+if [ "$CLEAN" -eq 1 ]; then
+  ./install.sh --satellite
+else
+  ./env-refresh.sh
+  if [[ $NO_RESTART -eq 0 ]]; then
+    ./start.sh
+  fi
 fi
