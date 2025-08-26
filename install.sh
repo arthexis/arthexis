@@ -5,9 +5,11 @@ SERVICE=""
 SETUP_NGINX=false
 NGINX_MODE=""
 PORT=""
+AUTO_UPGRADE=false
+LATEST=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--nginx] [--public|--internal] [--port PORT]" >&2
+    echo "Usage: $0 [--service NAME] [--nginx] [--public|--internal] [--port PORT] [--auto-upgrade] [--latest]" >&2
     exit 1
 }
 
@@ -36,6 +38,14 @@ while [[ $# -gt 0 ]]; do
             [ -z "$2" ] && usage
             PORT="$2"
             shift 2
+            ;;
+        --auto-upgrade)
+            AUTO_UPGRADE=true
+            shift
+            ;;
+        --latest)
+            LATEST=true
+            shift
             ;;
         *)
             usage
@@ -152,6 +162,7 @@ fi
 
 deactivate
 
+
 # If a service name was provided, install a systemd unit and persist its name
 if [ -n "$SERVICE" ]; then
     SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
@@ -173,6 +184,19 @@ WantedBy=multi-user.target
 SERVICEEOF
     sudo systemctl daemon-reload
     sudo systemctl enable "$SERVICE"
-    sudo systemctl restart "$SERVICE"
+fi
+
+if [ "$AUTO_UPGRADE" = true ]; then
+    if [ "$LATEST" = true ]; then
+        echo "latest" > AUTO_UPGRADE
+        ./upgrade.sh --latest
+    else
+        echo "version" > AUTO_UPGRADE
+        ./upgrade.sh
+    fi
+else
+    if [ -n "$SERVICE" ]; then
+        sudo systemctl restart "$SERVICE"
+    fi
 fi
 
