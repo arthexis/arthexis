@@ -3,6 +3,7 @@ from django.contrib import admin
 from django.urls import path, reverse
 from django.shortcuts import redirect, render
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.utils.html import format_html
@@ -291,12 +292,12 @@ class RFIDAdmin(ImportExportModelAdmin):
         custom = [
             path(
                 "scan/",
-                self.admin_site.admin_view(self.scan_view),
+                self.admin_site.admin_view(csrf_exempt(self.scan_view)),
                 name="accounts_rfid_scan",
             ),
             path(
                 "scan/next/",
-                self.admin_site.admin_view(self.scan_next),
+                self.admin_site.admin_view(csrf_exempt(self.scan_next)),
                 name="accounts_rfid_scan_next",
             ),
             path(
