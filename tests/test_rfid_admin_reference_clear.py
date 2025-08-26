@@ -46,3 +46,10 @@ class RFIDAdminReferenceClearTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.rfid.refresh_from_db()
         self.assertIsNone(self.rfid.reference)
+
+    def test_reference_widget_has_related_links(self):
+        url = reverse("admin:accounts_rfid_change", args=[self.rfid.pk])
+        response = self.client.get(url)
+        self.assertContains(response, "related-lookup")
+        self.assertContains(response, "add-related")
+        self.assertContains(response, "change-related")

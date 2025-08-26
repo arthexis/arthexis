@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib import admin
+from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
 from django.urls import path, reverse
 from django.shortcuts import redirect, render
 from django.http import JsonResponse
@@ -264,9 +265,19 @@ class RFIDForm(forms.ModelForm):
         model = RFID
         fields = "__all__"
 
-    reference = forms.ModelChoiceField(
-        queryset=Reference.objects.all(), required=False
-    )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["reference"].required = False
+        rel = RFID._meta.get_field("reference").remote_field
+        widget = self.fields["reference"].widget
+        self.fields["reference"].widget = RelatedFieldWidgetWrapper(
+            widget,
+            rel,
+            admin.site,
+            can_add_related=True,
+            can_change_related=True,
+            can_view_related=True,
+        )
 
 
 @admin.register(RFID)
@@ -288,6 +299,7 @@ class RFIDAdmin(ImportExportModelAdmin):
     list_filter = ("color", "released", "allowed")
     search_fields = ("label_id", "rfid")
     autocomplete_fields = ["accounts"]
+    raw_id_fields = ["reference"]
     actions = ["scan_rfids", "swap_color"]
     readonly_fields = ("added_on", "last_seen_on")
     form = RFIDForm
