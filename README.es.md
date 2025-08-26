@@ -33,7 +33,7 @@ Solo se enumeran las aplicaciones con fixtures de sitio y vistas públicas.
 | ocpp | Panel OCPP 1.6 con vistas de estado y registros de cargadores |
 | refs | Listado reciente de referencias y generador de QR al vuelo |
 | awg | Calculadora de calibre AWG y referencias de ocupación de tubería |
-| arts | Visor de artículos con calendario y navegación |
+| msg | Remitente de mensajes con notificaciones en dispositivo |
 
 ## Enlaces Externos
 - [Python 3.12](https://www.python.org/downloads/release/python-31210/)
