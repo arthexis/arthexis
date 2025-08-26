@@ -7,8 +7,17 @@ def _hex_to_bytes(value: str) -> list[int]:
     return [int(value[i : i + 2], 16) for i in range(0, len(value), 2)]
 
 
-def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
-    """Read a single RFID tag using the MFRC522 reader."""
+def read_rfid(
+    mfrc=None, cleanup=True, timeout: float = 1.0, full_read: bool = True
+) -> dict:
+    """Read a single RFID tag using the MFRC522 reader.
+
+    Args:
+        mfrc: Optional pre-initialized MFRC522 reader instance.
+        cleanup: Whether to perform GPIO cleanup after reading.
+        timeout: Maximum time to wait for a tag.
+        full_read: If ``False``, skip sector reads and return after UID capture.
+    """
     try:
         if mfrc is None:
             from mfrc522 import MFRC522  # type: ignore
@@ -31,6 +40,17 @@ def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
                     rfid = "".join(f"{x:02X}" for x in uid[:5])
                     tag, created = RFID.objects.get_or_create(rfid=rfid)
                     tag.last_seen_on = timezone.now()
+                    if not full_read:
+                        tag.save(update_fields=["last_seen_on"])
+                        return {
+                            "rfid": rfid,
+                            "label_id": tag.pk,
+                            "created": created,
+                            "color": tag.color,
+                            "allowed": tag.allowed,
+                            "released": tag.released,
+                            "reference": tag.reference.value if tag.reference else None,
+                        }
                     mfrc.MFRC522_SelectTag(uid)
                     try:
                         from msg import notify

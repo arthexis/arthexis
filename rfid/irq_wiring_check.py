@@ -32,7 +32,7 @@ def check_irq_pin():
                 pass
         return {"irq_pin": IRQ_PIN}
 
-    result = read_rfid(timeout=0.1)
+    result = read_rfid(timeout=0.1, full_read=False)
     if result.get("error"):
         return {"error": "no scanner detected"}
     return {"irq_pin": None}

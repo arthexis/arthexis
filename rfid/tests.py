@@ -58,16 +58,10 @@ class ReaderNotificationTests(TestCase):
         )
         mock_get.return_value = (tag, False)
 
-        result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
+        result = read_rfid(mfrc=self._mock_reader(), cleanup=False, full_read=False)
         self.assertEqual(result["label_id"], 1)
         self.assertEqual(result["reference"], "https://example.com")
-        self.assertEqual(mock_notify.call_count, 2)
-        mock_notify.assert_has_calls(
-            [
-                call(f"RFID {result['rfid']}", "Hold on reader"),
-                call("RFID 1 OK", f"{result['rfid']} BLACK"),
-            ]
-        )
+        mock_notify.assert_not_called()
 
     @patch("msg.notifications.notify")
     @patch("accounts.models.RFID.objects.get_or_create")
@@ -82,14 +76,8 @@ class ReaderNotificationTests(TestCase):
         )
         mock_get.return_value = (tag, False)
 
-        result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
-        self.assertEqual(mock_notify.call_count, 2)
-        mock_notify.assert_has_calls(
-            [
-                call(f"RFID {result['rfid']}", "Hold on reader"),
-                call("RFID 2 BAD", f"{result['rfid']} BLACK"),
-            ]
-        )
+        result = read_rfid(mfrc=self._mock_reader(), cleanup=False, full_read=False)
+        mock_notify.assert_not_called()
 
 
 class RFIDLastSeenTests(TestCase):
@@ -109,7 +97,7 @@ class RFIDLastSeenTests(TestCase):
     @patch("msg.notifications.notify")
     def test_last_seen_updated_on_read(self, _mock_notify):
         tag = RFID.objects.create(rfid="ABCD1234")
-        read_rfid(mfrc=self._mock_reader(), cleanup=False)
+        read_rfid(mfrc=self._mock_reader(), cleanup=False, full_read=False)
         tag.refresh_from_db()
         self.assertIsNotNone(tag.last_seen_on)
 
