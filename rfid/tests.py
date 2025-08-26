@@ -44,7 +44,7 @@ class ReaderNotificationTests(TestCase):
 
         return MockReader()
 
-    @patch("msg.notifications.notify")
+    @patch("rfid.reader.notify_async")
     @patch("accounts.models.RFID.objects.get_or_create")
     def test_notify_on_allowed_tag(self, mock_get, mock_notify):
         reference = MagicMock(value="https://example.com")
@@ -69,7 +69,7 @@ class ReaderNotificationTests(TestCase):
             ]
         )
 
-    @patch("msg.notifications.notify")
+    @patch("rfid.reader.notify_async")
     @patch("accounts.models.RFID.objects.get_or_create")
     def test_notify_on_disallowed_tag(self, mock_get, mock_notify):
         tag = MagicMock(
@@ -106,7 +106,7 @@ class RFIDLastSeenTests(TestCase):
 
         return MockReader()
 
-    @patch("msg.notifications.notify")
+    @patch("rfid.reader.notify_async")
     def test_last_seen_updated_on_read(self, _mock_notify):
         tag = RFID.objects.create(rfid="ABCD1234")
         read_rfid(mfrc=self._mock_reader(), cleanup=False)

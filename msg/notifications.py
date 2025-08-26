@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import threading
 
 from nodes.lcd import CharLCD1602, LCDUnavailableError
 
@@ -75,6 +76,18 @@ class NotificationManager:
         self._gui_display(subject, body)
         return False
 
+    def send_async(self, subject: str, body: str = "") -> None:
+        """Dispatch :meth:`send` on a background thread."""
+
+        def _send() -> None:
+            try:
+                self.send(subject, body)
+            except Exception:
+                # Notification failures shouldn't affect callers.
+                pass
+
+        threading.Thread(target=_send, daemon=True).start()
+
     # GUI/log fallback ------------------------------------------------
     def _gui_display(self, subject: str, body: str) -> None:
         if sys.platform.startswith("win"):
@@ -105,3 +118,9 @@ def notify(subject: str, body: str = "") -> bool:
     """Convenience wrapper using the global :class:`NotificationManager`."""
 
     return manager.send(subject=subject, body=body)
+
+
+def notify_async(subject: str, body: str = "") -> None:
+    """Run :func:`notify` without blocking the caller."""
+
+    manager.send_async(subject=subject, body=body)
