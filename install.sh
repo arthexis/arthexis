@@ -9,7 +9,7 @@ AUTO_UPGRADE=false
 LATEST=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--nginx] [--public|--internal] [--port PORT] [--auto-upgrade] [--latest]" >&2
+    echo "Usage: $0 [--service NAME] [--nginx] [--public|--internal] [--port PORT] [--auto-upgrade] [--latest] [--satellite]" >&2
     exit 1
 }
 
@@ -44,6 +44,14 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --latest)
+            LATEST=true
+            shift
+            ;;
+        --satellite)
+            AUTO_UPGRADE=true
+            SETUP_NGINX=true
+            NGINX_MODE="internal"
+            SERVICE="arthexis"
             LATEST=true
             shift
             ;;
