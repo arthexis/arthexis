@@ -3,6 +3,9 @@
   <p id="{{ prefix }}-status">Scanner ready</p>
   <p>
     <button id="{{ prefix }}-restart-test">Restart &amp; Test Scanner</button>
+    {% if request.user.is_staff %}
+      <a id="{{ prefix }}-configure" href="#" style="display:none; margin-left:1em;"></a>
+    {% endif %}
   </p>
   <div class="field"><span class="label">Label:</span><span class="value" id="{{ prefix }}-label"></span></div>
   <div class="field"><span class="label">RFID:</span><span class="value" id="{{ prefix }}-rfid"></span></div>
@@ -39,6 +42,8 @@
   const releasedEl = document.getElementById('{{ prefix }}-released');
   const referenceEl = document.getElementById('{{ prefix }}-reference');
   const restartTestBtn = document.getElementById('{{ prefix }}-restart-test');
+  const configureEl = document.getElementById('{{ prefix }}-configure');
+  const adminTemplate = '{{ admin_change_url_template|default:""|escapejs }}';
 
   function showError(message){
     console.error(message);
@@ -62,6 +67,11 @@
         if(data.reference && /^https?:\/\//i.test(data.reference)){
           const w = window.open(data.reference, '_blank');
           if(w){ w.focus(); }
+        }
+        if(configureEl){
+          configureEl.textContent = `Configure RFID ${data.label_id}`;
+          configureEl.href = adminTemplate ? adminTemplate.replace('0', data.label_id) : '#';
+          configureEl.style.display = 'inline';
         }
         const okText = data.allowed === undefined ? '' : (data.allowed ? 'OK' : 'BAD');
         const statusMsg = okText ? `RFID ${data.label_id} ${okText}` : `RFID ${data.label_id}`;

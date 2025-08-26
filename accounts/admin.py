@@ -331,6 +331,9 @@ class RFIDAdmin(ImportExportModelAdmin):
     def scan_view(self, request):
         context = self.admin_site.each_context(request)
         context["scan_url"] = reverse("admin:accounts_rfid_scan_next")
+        context["admin_change_url_template"] = reverse(
+            "admin:accounts_rfid_change", args=[0]
+        )
         return render(request, "admin/accounts/rfid/scan.html", context)
 
     def scan_next(self, request):
