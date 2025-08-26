@@ -33,6 +33,22 @@ class ScanNextViewTests(SimpleTestCase):
         self.assertEqual(resp.json(), {"error": "boom"})
 
 
+class ScanNextReferenceURLTests(TestCase):
+    @override_settings(ALLOWED_HOSTS=["scanner.local"])
+    @patch("config.middleware.get_site")
+    @patch("rfid.scanner.get_next_tag")
+    def test_reference_uses_request_host(self, mock_get_next_tag, mock_site):
+        Site.objects.update_or_create(id=1, defaults={"domain": "example.com", "name": "example"})
+        tag = RFID.objects.create(rfid="DEADBEEF")
+        self.assertIn("example.com", tag.reference.value)
+        mock_get_next_tag.return_value = {"rfid": "DEADBEEF", "label_id": tag.pk, "created": False}
+        resp = self.client.get(reverse("rfid-scan-next"), HTTP_HOST="scanner.local")
+        tag.refresh_from_db()
+        expected = f"http://scanner.local{reverse('rfid-page', args=[tag.label_id])}"
+        self.assertEqual(resp.json(), {"rfid": "DEADBEEF", "label_id": tag.pk, "created": False, "reference": expected})
+        self.assertEqual(tag.reference.value, expected)
+
+
 class ReaderNotificationTests(TestCase):
     def _mock_reader(self):
         class MockReader:

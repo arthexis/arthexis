@@ -336,7 +336,7 @@ class RFIDAdmin(ImportExportModelAdmin):
     def scan_next(self, request):
         from rfid.scanner import scan_sources
 
-        result = scan_sources()
+        result = scan_sources(request)
         status = 500 if result.get("error") else 200
         return JsonResponse(result, status=status)
 
