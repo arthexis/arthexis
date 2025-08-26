@@ -1,7 +1,16 @@
-from django.test import Client, TestCase, TransactionTestCase
+import os
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+import django
+django.setup()
+
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.http import HttpRequest
+from django.contrib.sites.models import Site
 import json
+import tempfile
+import shutil
 
 from django.utils import timezone
 from .models import (
@@ -230,6 +239,27 @@ class RFIDAssignmentTests(TestCase):
         self.acc1.rfids.add(self.tag)
         with self.assertRaises(ValidationError):
             self.acc2.rfids.add(self.tag)
+
+
+class RFIDReferenceTests(TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmpdir)
+        override = override_settings(MEDIA_ROOT=self.tmpdir)
+        override.enable()
+        self.addCleanup(override.disable)
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": "website"}
+        )
+
+    def test_reference_created(self):
+        tag = RFID.objects.create(rfid="DEADBEEF")
+        self.assertIsNotNone(tag.reference)
+        self.assertEqual(tag.reference.alt_text, f"Label {tag.label_id}")
+        self.assertEqual(
+            tag.reference.value,
+            f"http://testserver{reverse('rfid-page', args=[tag.label_id])}",
+        )
 
 
 class AccountTests(TestCase):

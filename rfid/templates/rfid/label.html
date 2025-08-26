@@ -1,0 +1,9 @@
+{% extends "website/base.html" %}
+{% load ref_tags %}
+{% block content %}
+<h1>Label {{ rfid.label_id }}</h1>
+{% if rfid.reference %}
+    {% ref_img rfid.reference.value alt=rfid.reference.alt_text %}
+{% endif %}
+<p>Status: {% if rfid.allowed %}Valid{% else %}Invalid{% endif %}</p>
+{% endblock %}

@@ -10,6 +10,10 @@ from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
 from datetime import timedelta
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.sites.models import Site
+from django.urls import reverse
+
+from refs.models import Reference
 from integrate.models import Entity, EntityUserManager
 
 
@@ -221,6 +225,14 @@ class RFID(Entity):
     released = models.BooleanField(default=False)
     added_on = models.DateTimeField(auto_now_add=True)
 
+    def get_absolute_url(self):
+        return reverse("rfid-page", args=[self.label_id])
+
+    def _full_url(self) -> str:
+        domain = Site.objects.get_current().domain
+        scheme = getattr(settings, "DEFAULT_HTTP_PROTOCOL", "http")
+        return f"{scheme}://{domain}{self.get_absolute_url()}"
+
     def save(self, *args, **kwargs):
         if self.rfid:
             self.rfid = self.rfid.upper()
@@ -229,6 +241,13 @@ class RFID(Entity):
         if self.key_b:
             self.key_b = self.key_b.upper()
         super().save(*args, **kwargs)
+        ref_value = self._full_url()
+        if not self.reference or self.reference.value != ref_value:
+            ref, _ = Reference.objects.get_or_create(
+                value=ref_value, defaults={"alt_text": f"Label {self.label_id}"}
+            )
+            self.reference = ref
+            super().save(update_fields=["reference"])
         if not self.allowed:
             self.accounts.clear()
 
