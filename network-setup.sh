@@ -6,6 +6,10 @@
 
 set -euo pipefail
 
+BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$BASE_DIR"
+LOCK_DIR="$BASE_DIR/locks"
+
 usage() {
     cat <<USAGE
 Usage: $0 [--password] [--no-firewall]
@@ -50,8 +54,8 @@ command -v nmcli >/dev/null 2>&1 || {
 if [[ $SKIP_FIREWALL == false ]]; then
     PORTS=(22 5900 21114)
     MODE="internal"
-    if [ -f NGINX_MODE ]; then
-        MODE="$(cat NGINX_MODE)"
+    if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
+        MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
     fi
     if [ "$MODE" = "public" ]; then
         PORTS+=(80 443 8000)

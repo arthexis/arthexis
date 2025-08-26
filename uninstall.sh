@@ -23,12 +23,13 @@ done
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
+LOCK_DIR="$BASE_DIR/locks"
 
-if [ -z "$SERVICE" ] && [ -f SERVICE ]; then
-    SERVICE="$(cat SERVICE)"
+if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
+    SERVICE="$(cat "$LOCK_DIR/service.lck")"
 fi
 
-read -p "This will stop the Arthexis server. Continue? [y/N] " CONFIRM
+read -r -p "This will stop the Arthexis server. Continue? [y/N] " CONFIRM
 if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
     echo "Aborted."
     exit 0
@@ -42,7 +43,7 @@ if [ -n "$SERVICE" ] && systemctl list-unit-files | grep -Fq "${SERVICE}.service
         sudo rm "$SERVICE_FILE"
         sudo systemctl daemon-reload
     fi
-    rm -f SERVICE
+    rm -f "$LOCK_DIR/service.lck"
 else
     pkill -f "manage.py runserver" || true
 fi

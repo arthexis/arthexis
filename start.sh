@@ -3,10 +3,11 @@ set -e
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
+LOCK_DIR="$BASE_DIR/locks"
 
 # If a systemd service was installed, restart it instead of launching a new process
-if [ -f SERVICE ]; then
-  SERVICE_NAME="$(cat SERVICE)"
+if [ -f "$LOCK_DIR/service.lck" ]; then
+  SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
   if systemctl list-unit-files | grep -Fq "${SERVICE_NAME}.service"; then
     sudo systemctl restart "$SERVICE_NAME"
     # Show status information so the user can verify the service state
@@ -26,11 +27,11 @@ source .venv/bin/activate
 PORT=""
 RELOAD=false
 CELERY=false
-if [ -f CELERY ]; then
+if [ -f "$LOCK_DIR/celery.lck" ]; then
   CELERY=true
 fi
-if [ -f NGINX_MODE ]; then
-  MODE="$(cat NGINX_MODE)"
+if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
+  MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
 else
   MODE="internal"
 fi
@@ -79,12 +80,12 @@ if [ "$CELERY" = true ]; then
   CELERY_WORKER_PID=$!
   celery -A config beat -l info &
   CELERY_BEAT_PID=$!
-  trap "kill $CELERY_WORKER_PID $CELERY_BEAT_PID" EXIT
+  trap 'kill "$CELERY_WORKER_PID" "$CELERY_BEAT_PID"' EXIT
 fi
 
 # Start the Django development server
 if [ "$RELOAD" = true ]; then
-  python manage.py runserver 0.0.0.0:$PORT
+  python manage.py runserver 0.0.0.0:"$PORT"
 else
-  python manage.py runserver 0.0.0.0:$PORT --noreload
+  python manage.py runserver 0.0.0.0:"$PORT" --noreload
 fi

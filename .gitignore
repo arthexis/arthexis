@@ -155,8 +155,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-SERVICE
-NGINX_MODE
+locks/
 
 # Spyder project settings
 .spyderproject
