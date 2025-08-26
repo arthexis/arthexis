@@ -494,6 +494,7 @@ class NotificationManagerTests(TestCase):
         manager._gui_display = MagicMock()
         result = manager.send("hi", "there")
         self.assertFalse(result)
+        mock_lcd.reset.assert_called_once()
         manager._gui_display.assert_called_once_with("hi", "there")
 
     @patch("msg.notifications.NotificationManager._init_lcd", return_value=MagicMock())
@@ -515,7 +516,7 @@ class NotificationManagerTests(TestCase):
                 manager = NotificationManager()
                 manager._gui_display("hi", "there")
         mock_toast.show_toast.assert_called_once_with(
-            "Arthexis", "hi\nthere", duration=10, threaded=True
+            "Arthexis", "hi\nthere", duration=6, threaded=True
         )
 
     def test_gui_display_logs_when_toast_unavailable(self):
