@@ -422,3 +422,16 @@ class RFIDFixtureTests(TestCase):
         tag = RFID.objects.get(rfid="FFFFFFFF")
         self.assertIn(account, tag.accounts.all())
         self.assertEqual(tag.accounts.count(), 1)
+
+
+class RFIDKeyVerificationFlagTests(TestCase):
+    def test_flags_reset_on_key_change(self):
+        tag = RFID.objects.create(
+            rfid="ABC12345", key_a_verified=True, key_b_verified=True
+        )
+        tag.key_a = "A1A1A1A1A1A1"
+        tag.save()
+        self.assertFalse(tag.key_a_verified)
+        tag.key_b = "B1B1B1B1B1B1"
+        tag.save()
+        self.assertFalse(tag.key_b_verified)

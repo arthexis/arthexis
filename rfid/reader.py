@@ -3,6 +3,10 @@ from django.utils import timezone
 from accounts.models import RFID
 
 
+def _hex_to_bytes(value: str) -> list[int]:
+    return [int(value[i : i + 2], 16) for i in range(0, len(value), 2)]
+
+
 def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
     """Read a single RFID tag using the MFRC522 reader."""
     try:
@@ -27,7 +31,79 @@ def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
                     rfid = "".join(f"{x:02X}" for x in uid[:5])
                     tag, created = RFID.objects.get_or_create(rfid=rfid)
                     tag.last_seen_on = timezone.now()
-                    tag.save(update_fields=["last_seen_on"])
+                    mfrc.MFRC522_SelectTag(uid)
+                    default_key = [0xFF] * 6
+                    sector_data: list[list[str | None]] = []
+                    key_a_ok = False
+                    key_b_ok = False
+                    for sector in range(16):
+                        sector_blocks: list[str | None] = []
+                        for block_offset in range(4):
+                            block = sector * 4 + block_offset
+                            data_hex: str | None = None
+                            # Try Key A first
+                            key_a_bytes = _hex_to_bytes(tag.key_a or "FFFFFFFFFFFF")
+                            if (
+                                mfrc.MFRC522_Auth(
+                                    mfrc.PICC_AUTHENT1A, block, key_a_bytes, uid
+                                )
+                                == mfrc.MI_OK
+                            ):
+                                key_a_ok = True
+                                data = mfrc.MFRC522_Read(block)
+                                if data:
+                                    data_hex = "".join(f"{x:02X}" for x in data)
+                            elif (
+                                mfrc.MFRC522_Auth(
+                                    mfrc.PICC_AUTHENT1A, block, default_key, uid
+                                )
+                                == mfrc.MI_OK
+                            ):
+                                key_a_ok = True
+                                tag.key_a = "FFFFFFFFFFFF"
+                                data = mfrc.MFRC522_Read(block)
+                                if data:
+                                    data_hex = "".join(f"{x:02X}" for x in data)
+                            else:
+                                # Try Key B if Key A failed
+                                key_b_bytes = _hex_to_bytes(tag.key_b or "FFFFFFFFFFFF")
+                                if (
+                                    mfrc.MFRC522_Auth(
+                                        mfrc.PICC_AUTHENT1B, block, key_b_bytes, uid
+                                    )
+                                    == mfrc.MI_OK
+                                ):
+                                    key_b_ok = True
+                                    data = mfrc.MFRC522_Read(block)
+                                    if data:
+                                        data_hex = "".join(f"{x:02X}" for x in data)
+                                elif (
+                                    mfrc.MFRC522_Auth(
+                                        mfrc.PICC_AUTHENT1B, block, default_key, uid
+                                    )
+                                    == mfrc.MI_OK
+                                ):
+                                    key_b_ok = True
+                                    tag.key_b = "FFFFFFFFFFFF"
+                                    data = mfrc.MFRC522_Read(block)
+                                    if data:
+                                        data_hex = "".join(f"{x:02X}" for x in data)
+                            sector_blocks.append(data_hex)
+                        sector_data.append(sector_blocks)
+                    mfrc.MFRC522_StopCrypto1()
+                    tag.data = sector_data
+                    tag.key_a_verified = key_a_ok
+                    tag.key_b_verified = key_b_ok
+                    tag.save(
+                        update_fields=[
+                            "last_seen_on",
+                            "data",
+                            "key_a_verified",
+                            "key_b_verified",
+                            "key_a",
+                            "key_b",
+                        ]
+                    )
                     result = {
                         "rfid": rfid,
                         "label_id": tag.pk,
@@ -36,6 +112,9 @@ def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
                         "allowed": tag.allowed,
                         "released": tag.released,
                         "reference": tag.reference.value if tag.reference else None,
+                        "data": tag.data,
+                        "key_a_verified": tag.key_a_verified,
+                        "key_b_verified": tag.key_b_verified,
                     }
                     try:
                         from nodes.notifications import notify
