@@ -6,6 +6,7 @@ cd "$BASE_DIR"
 
 FORCE=0
 CLEAN_DB=0
+NO_RESTART=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --latest)
@@ -14,6 +15,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --clean-db)
       CLEAN_DB=1
+      shift
+      ;;
+    --no-restart)
+      NO_RESTART=1
       shift
       ;;
     *)
@@ -47,7 +52,9 @@ if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --o
 fi
 
 # Stop running instance (if any)
-./stop.sh --all >/dev/null 2>&1 || true
+if [[ $NO_RESTART -eq 0 ]]; then
+  ./stop.sh --all >/dev/null 2>&1 || true
+fi
 
 # Pull latest changes
 git pull --rebase
@@ -71,4 +78,6 @@ fi
 
 # Refresh environment and restart service
 ./env-refresh.sh
-./start.sh
+if [[ $NO_RESTART -eq 0 ]]; then
+  ./start.sh
+fi

@@ -1,0 +1,59 @@
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+from celery import shared_task
+
+
+@shared_task
+def check_github_updates() -> None:
+    """Check the GitHub repo for updates and upgrade if needed."""
+    base_dir = Path(__file__).resolve().parent.parent
+    mode_file = base_dir / "AUTO_UPGRADE"
+    mode = "version"
+    if mode_file.exists():
+        mode = mode_file.read_text().strip()
+
+    branch = "main"
+    subprocess.run(["git", "fetch", "origin", branch], cwd=base_dir, check=True)
+
+    if mode == "latest":
+        local = subprocess.check_output(["git", "rev-parse", branch], cwd=base_dir).decode().strip()
+        remote = subprocess.check_output([
+            "git",
+            "rev-parse",
+            f"origin/{branch}",
+        ], cwd=base_dir).decode().strip()
+        if local == remote:
+            return
+        args = ["./upgrade.sh", "--latest", "--no-restart"]
+    else:
+        local = "0"
+        version_file = base_dir / "VERSION"
+        if version_file.exists():
+            local = version_file.read_text().strip()
+        remote = subprocess.check_output([
+            "git",
+            "show",
+            f"origin/{branch}:VERSION",
+        ], cwd=base_dir).decode().strip()
+        if local == remote:
+            return
+        args = ["./upgrade.sh", "--no-restart"]
+
+    subprocess.run(args, cwd=base_dir, check=True)
+
+    service_file = base_dir / "SERVICE"
+    if service_file.exists():
+        service = service_file.read_text().strip()
+        subprocess.run([
+            "sudo",
+            "systemctl",
+            "kill",
+            "--signal=TERM",
+            service,
+        ])
+    else:
+        subprocess.run(["pkill", "-f", "manage.py runserver"])
+
