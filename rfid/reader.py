@@ -32,6 +32,12 @@ def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
                     tag, created = RFID.objects.get_or_create(rfid=rfid)
                     tag.last_seen_on = timezone.now()
                     mfrc.MFRC522_SelectTag(uid)
+                    try:
+                        from msg import notify
+
+                        notify(f"RFID {rfid}", "Hold on reader")
+                    except Exception:
+                        pass
                     default_key = [0xFF] * 6
                     sector_data: list[list[str | None]] = []
                     key_a_ok = False
@@ -133,6 +139,13 @@ def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
             time.sleep(0.2)
         return {"rfid": None, "label_id": None}
     except Exception as exc:  # pragma: no cover - hardware dependent
+        try:
+            from msg import notify
+
+            if 'rfid' in locals():
+                notify(f"RFID {rfid}", "Read failed")
+        except Exception:
+            pass
         return {"error": str(exc)}
     finally:  # pragma: no cover - cleanup hardware
         if cleanup and GPIO:
