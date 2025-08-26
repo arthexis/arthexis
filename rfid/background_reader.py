@@ -24,7 +24,7 @@ def _irq_callback(channel):  # pragma: no cover - hardware dependent
     logger.debug("IRQ callback triggered on channel %s", channel)
     from .reader import read_rfid
 
-    result = read_rfid(mfrc=_reader, cleanup=False)
+    result = read_rfid(mfrc=_reader, cleanup=False, use_irq=True)
     if result.get("error"):
         logger.warning("RFID read error via IRQ: %s", result["error"])
     elif result.get("rfid"):
