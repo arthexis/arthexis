@@ -59,7 +59,9 @@
           const w = window.open(data.reference, '_blank');
           if(w){ w.focus(); }
         }
-        statusEl.textContent = data.created ? `Created label ${data.label_id}` : `Detected label ${data.label_id}`;
+        const okText = data.allowed === undefined ? '' : (data.allowed ? 'OK' : 'BAD');
+        const statusMsg = okText ? `RFID ${data.label_id} ${okText}` : `RFID ${data.label_id}`;
+        statusEl.textContent = data.created ? `Created ${statusMsg}` : statusMsg;
       }
     } catch(err){
       showError(err);

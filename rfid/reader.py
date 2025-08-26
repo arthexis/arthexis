@@ -38,9 +38,11 @@ def read_rfid(mfrc=None, cleanup=True, timeout: float = 1.0) -> dict:
                         from nodes.notifications import notify
 
                         status_text = "OK" if tag.allowed else "BAD"
-                        privacy = "PUB" if tag.released else "INT"
                         color_word = (tag.color or "").upper()
-                        subject = f"RFID {tag.label_id} {status_text} {privacy}".strip()
+                        # Display scan results on the LCD in the format:
+                        #   Row 1: "RFID <label> <OK/BAD>"
+                        #   Row 2: "<rfid> <COLOR>"
+                        subject = f"RFID {tag.label_id} {status_text}".strip()
                         body = f"{rfid} {color_word}".strip()
                         notify(subject, body)
                     except Exception:
