@@ -423,47 +423,77 @@ class RFIDAdmin(ImportExportModelAdmin):
                                 }
                             )
                         try:
+                            from rfid.reader import read_rfid
+
                             mfrc.MFRC522_SelectTag(uid)
-                            # Default auth with factory keys, sector 1 trailer block
                             default_key = [0xFF] * 6
-                            block = 7
-                            if (
-                                mfrc.MFRC522_Auth(
-                                    mfrc.PICC_AUTHENT1A, block, default_key, uid
+                            key_a = [int(tag.key_a[i : i + 2], 16) for i in range(0, 12, 2)]
+                            key_b = [int(tag.key_b[i : i + 2], 16) for i in range(0, 12, 2)]
+                            for sector in range(16):
+                                blocks = (
+                                    tag.data[sector]
+                                    if isinstance(tag.data, list)
+                                    and sector < len(tag.data)
+                                    else []
                                 )
-                                == mfrc.MI_OK
-                            ):
-                                key_a = [
-                                    int(tag.key_a[i : i + 2], 16)
-                                    for i in range(0, 12, 2)
-                                ]
-                                key_b = [
-                                    int(tag.key_b[i : i + 2], 16)
-                                    for i in range(0, 12, 2)
-                                ]
-                                data = key_a + [0xFF, 0x07, 0x80, 0x69] + key_b
-                                mfrc.MFRC522_Write(block, data)
-                                mfrc.MFRC522_StopCrypto1()
-                                return JsonResponse(
-                                    {
-                                        "rfid": rfid,
-                                        "label_id": tag.pk,
-                                        "match": True,
-                                        "written": True,
-                                    }
-                                )
-                            return JsonResponse(
-                                {
-                                    "rfid": rfid,
-                                    "label_id": tag.pk,
-                                    "match": True,
-                                    "written": False,
-                                    "error": "auth failed",
-                                }
+                                for block_offset in range(3):
+                                    block = sector * 4 + block_offset
+                                    if (
+                                        mfrc.MFRC522_Auth(
+                                            mfrc.PICC_AUTHENT1B, block, key_b, uid
+                                        )
+                                        != mfrc.MI_OK
+                                        and mfrc.MFRC522_Auth(
+                                            mfrc.PICC_AUTHENT1B, block, default_key, uid
+                                        )
+                                        != mfrc.MI_OK
+                                    ):
+                                        raise Exception("auth failed")
+                                    hex_data = (
+                                        blocks[block_offset]
+                                        if block_offset < len(blocks)
+                                        and blocks[block_offset]
+                                        else "00" * 16
+                                    )
+                                    data_bytes = [
+                                        int(hex_data[i : i + 2], 16)
+                                        for i in range(0, 32, 2)
+                                    ]
+                                    mfrc.MFRC522_Write(block, data_bytes)
+                                block = sector * 4 + 3
+                                if (
+                                    mfrc.MFRC522_Auth(
+                                        mfrc.PICC_AUTHENT1A, block, key_a, uid
+                                    )
+                                    != mfrc.MI_OK
+                                    and mfrc.MFRC522_Auth(
+                                        mfrc.PICC_AUTHENT1A, block, default_key, uid
+                                    )
+                                    != mfrc.MI_OK
+                                ):
+                                    raise Exception("auth failed")
+                                trailer = key_a + [0xFF, 0x07, 0x80, 0x69] + key_b
+                                mfrc.MFRC522_Write(block, trailer)
+                            mfrc.MFRC522_StopCrypto1()
+                            tag.key_a_verified = True
+                            tag.key_b_verified = True
+                            tag.save(update_fields=["key_a_verified", "key_b_verified"])
+                            verify = read_rfid(mfrc=mfrc, cleanup=False)
+                            validated = (
+                                verify.get("rfid") == tag.rfid
+                                and verify.get("data") == tag.data
                             )
-                        except (
-                            Exception
-                        ) as exc:  # pragma: no cover - hardware dependent
+                            response = {
+                                "rfid": rfid,
+                                "label_id": tag.pk,
+                                "match": True,
+                                "written": True,
+                                "validated": validated,
+                            }
+                            if not validated:
+                                response["validation_error"] = "mismatch"
+                            return JsonResponse(response)
+                        except Exception as exc:  # pragma: no cover - hardware dependent
                             return JsonResponse(
                                 {
                                     "rfid": rfid,

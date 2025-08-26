@@ -202,6 +202,13 @@ class RFID(Entity):
         ],
         verbose_name="Key B",
     )
+    data = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Sector and block data",
+    )
+    key_a_verified = models.BooleanField(default=False)
+    key_b_verified = models.BooleanField(default=False)
     allowed = models.BooleanField(default=True)
     BLACK = "black"
     WHITE = "white"
@@ -231,6 +238,13 @@ class RFID(Entity):
     last_seen_on = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
+        if self.pk:
+            old = type(self).objects.filter(pk=self.pk).values("key_a", "key_b").first()
+            if old:
+                if self.key_a and old["key_a"] != self.key_a.upper():
+                    self.key_a_verified = False
+                if self.key_b and old["key_b"] != self.key_b.upper():
+                    self.key_b_verified = False
         if self.rfid:
             self.rfid = self.rfid.upper()
         if self.key_a:
