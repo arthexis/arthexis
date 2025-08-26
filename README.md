@@ -62,7 +62,7 @@ Only applications with site fixtures and public views are listed below.
 | ocpp | OCPP 1.6 charge point dashboard, charger status and log pages |
 | refs | Recent references list and on‑the‑fly QR generator |
 | awg | AWG wire gauge calculator and conduit fill references |
-| arts | Article viewer with calendar and navigation |
+| msg | Staff message sender with on-device notifications |
 
 ## External Links
 - [Python 3.12](https://www.python.org/downloads/release/python-31210/)
