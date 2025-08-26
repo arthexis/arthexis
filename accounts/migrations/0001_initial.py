@@ -143,6 +143,7 @@ class Migration(migrations.Migration):
                 ("postal_code", models.CharField(max_length=10)),
             ],
             options={
+                "verbose_name_plural": "Addresses",
                 "abstract": False,
             },
         ),

@@ -133,6 +133,8 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
+                "verbose_name": "Module",
+                "verbose_name_plural": "Modules",
                 "unique_together": {("site", "path")},
             },
         ),

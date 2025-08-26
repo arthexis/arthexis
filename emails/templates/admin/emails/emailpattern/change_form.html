@@ -1,6 +1,0 @@
-{% extends "admin/change_form.html" %}
-{% load i18n %}
-{% block object-tools-items %}
-{{ block.super }}
-<li><a href="{% url 'admin:emails_emailpattern_test' original.pk %}">{% trans 'Test pattern' %}</a></li>
-{% endblock %}
