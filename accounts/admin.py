@@ -154,7 +154,7 @@ class AccountAdmin(admin.ModelAdmin):
         class OnboardForm(forms.Form):
             first_name = forms.CharField(label="First name")
             last_name = forms.CharField(label="Last name")
-            rfid = forms.CharField(max_length=8, required=False, label="RFID")
+            rfid = forms.CharField(required=False, label="RFID")
             allow_login = forms.BooleanField(
                 required=False, initial=False, label="Allow login"
             )
