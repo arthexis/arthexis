@@ -19,12 +19,25 @@
     "fields": {"name": "refs"}
   },
   {
+    "model": "website.application",
+    "fields": {"name": "msg"}
+  },
+  {
     "model": "website.siteapplication",
     "fields": {
       "site": ["192.168.129.10"],
       "application": ["ocpp"],
       "path": "/ocpp/",
       "is_default": false
+    }
+  },
+  {
+    "model": "website.siteapplication",
+    "fields": {
+      "site": ["192.168.129.10"],
+      "application": ["msg"],
+      "path": "/msg/",
+      "is_default": true
     }
   },
   {

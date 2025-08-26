@@ -15,6 +15,7 @@ from django.conf import settings
 from pathlib import Path
 from unittest.mock import patch
 from django.core import mail
+from django.core.management import call_command
 import re
 
 from nodes.models import Node, NodeScreenshot
@@ -194,6 +195,8 @@ class ReadmeSidebarTests(TestCase):
     def setUp(self):
         self.client = Client()
         Site.objects.update_or_create(id=1, defaults={"name": "Terminal"})
+        call_command("register_site_apps")
+        SiteApplication.objects.all().delete()
 
     def test_table_of_contents_sidebar_present(self):
         resp = self.client.get(reverse("website:index"))
@@ -205,7 +208,7 @@ class ReadmeSidebarTests(TestCase):
     def test_included_apps_table_renders(self):
         resp = self.client.get(reverse("website:index"))
         self.assertContains(resp, "<table")
-        self.assertContains(resp, "<td>accounts</td>")
+        self.assertContains(resp, "<td>rfid</td>")
 
 
 class SiteAdminRegisterCurrentTests(TestCase):
@@ -334,6 +337,29 @@ class NavAppsTests(TestCase):
         SiteApplication.objects.create(site=site, application=app, path="/accounts/")
         resp = self.client.get(reverse("website:index"))
         self.assertNotContains(resp, 'href="/accounts/"')
+
+
+class StaffNavVisibilityTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        site, _ = Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": "Terminal"}
+        )
+        app = Application.objects.create(name="msg")
+        SiteApplication.objects.create(site=site, application=app, path="/msg/")
+        User = get_user_model()
+        self.user = User.objects.create_user("user", password="pw")
+        self.staff = User.objects.create_user("staff", password="pw", is_staff=True)
+
+    def test_nonstaff_pill_hidden(self):
+        self.client.login(username="user", password="pw")
+        resp = self.client.get(reverse("website:index"))
+        self.assertNotContains(resp, 'href="/msg/"')
+
+    def test_staff_sees_pill(self):
+        self.client.login(username="staff", password="pw")
+        resp = self.client.get(reverse("website:index"))
+        self.assertContains(resp, 'href="/msg/"')
 
 
 class ApplicationModelTests(TestCase):

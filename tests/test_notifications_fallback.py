@@ -1,4 +1,4 @@
-from nodes import notifications
+from msg import notifications
 
 
 def test_gui_display_uses_toast_when_available(monkeypatch):

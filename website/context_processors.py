@@ -31,7 +31,10 @@ def nav_links(request):
         requires_login = getattr(view_func, "login_required", False) or hasattr(
             view_func, "login_url"
         )
+        staff_only = getattr(view_func, "staff_required", False)
         if requires_login and not request.user.is_authenticated:
+            continue
+        if staff_only and not request.user.is_staff:
             continue
         valid_apps.append(app)
         if request.path.startswith(app.path):
