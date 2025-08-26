@@ -28,6 +28,13 @@ class MessageViewTests(TestCase):
         self.assertRedirects(resp, self.url)
         mock_notify.assert_called_once_with("hi", "there")
 
+    def test_can_send_empty_subject_and_body(self):
+        self.client.login(username="staff", password="pw")
+        with patch("msg.views.notify") as mock_notify:
+            resp = self.client.post(self.url, {"subject": "", "body": ""})
+        self.assertRedirects(resp, self.url)
+        mock_notify.assert_called_once_with("", "")
+
     def test_nonstaff_redirected(self):
         self.client.login(username="user", password="pw")
         resp = self.client.get(self.url)

@@ -4,7 +4,18 @@
 <h1>Send Message</h1>
 <form method="post">
   {% csrf_token %}
-  {{ form.as_p }}
+  <div class="mb-3 row align-items-center">
+    <label for="{{ form.subject.id_for_label }}" class="col-sm-2 col-form-label text-sm-end">Subject:</label>
+    <div class="col-sm-10 col-md-6">
+      {{ form.subject }}
+    </div>
+  </div>
+  <div class="mb-3 row align-items-center">
+    <label for="{{ form.body.id_for_label }}" class="col-sm-2 col-form-label text-sm-end">Body:</label>
+    <div class="col-sm-10 col-md-6">
+      {{ form.body }}
+    </div>
+  </div>
   <button type="submit" class="btn btn-primary">Send</button>
 </form>
 {% endblock %}

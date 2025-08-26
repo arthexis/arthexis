@@ -6,7 +6,7 @@ class Message(Entity):
     """System message that can be sent to LCD or GUI."""
 
     subject = models.CharField(max_length=32, blank=True)
-    body = models.CharField(max_length=32)
+    body = models.CharField(max_length=32, blank=True)
     node = models.ForeignKey(
         "nodes.Node",
         on_delete=models.SET_NULL,

@@ -28,7 +28,7 @@ class Migration(migrations.Migration):
                 ("is_seed_data", models.BooleanField(default=False, editable=False)),
                 ("is_deleted", models.BooleanField(default=False, editable=False)),
                 ("subject", models.CharField(blank=True, max_length=32)),
-                ("body", models.CharField(max_length=32)),
+                ("body", models.CharField(blank=True, max_length=32)),
                 ("node", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="messages", to="nodes.node")),
                 ("created", models.DateTimeField(auto_now_add=True)),
             ],
