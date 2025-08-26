@@ -72,6 +72,8 @@ class CharLCD1602:
         self._pulse_enable(high)
         self._write_word(self.LCD_ADDR, low)
         self._pulse_enable(low)
+        # Give the LCD time to process the command to avoid garbled output.
+        time.sleep(0.001)
 
     def send_data(self, data: int) -> None:
         high = (data & 0xF0) | 0x01
@@ -80,6 +82,8 @@ class CharLCD1602:
         self._pulse_enable(high)
         self._write_word(self.LCD_ADDR, low)
         self._pulse_enable(low)
+        # Allow the LCD controller to catch up between data writes.
+        time.sleep(0.001)
 
     def i2c_scan(self) -> List[str]:  # pragma: no cover - requires hardware
         cmd = "i2cdetect -y 1 | awk 'NR>1 {$1=\"\"; print}'"
@@ -112,6 +116,10 @@ class CharLCD1602:
     def clear(self) -> None:
         self.send_command(0x01)
         time.sleep(0.002)
+
+    def reset(self) -> None:
+        """Re-run the initialisation sequence to recover the display."""
+        self.init_lcd(addr=self.LCD_ADDR, bl=self.BLEN)
 
     def set_backlight(self, on: bool = True) -> None:  # pragma: no cover - hardware dependent
         self.BLEN = 1 if on else 0
