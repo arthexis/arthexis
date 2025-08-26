@@ -5,7 +5,14 @@ from django import forms
 from django.contrib import admin, messages
 
 from config.offline import requires_network
-from .models import BskyAccount, OdooInstance, RequestType, Request
+from .models import (
+    BskyAccount,
+    OdooInstance,
+    RequestType,
+    Request,
+    default_request_approver,
+    default_request_approver_pk,
+)
 from django.apps import apps
 from django.shortcuts import render, redirect
 from django.urls import path
@@ -122,6 +129,20 @@ class RequestAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("number", "responded_at", "requester", "status")
     actions = ["approve_requests", "reject_requests"]
+
+    def get_changeform_initial_data(self, request):
+        data = super().get_changeform_initial_data(request)
+        data.setdefault("approver", default_request_approver_pk())
+        return data
+
+    def get_fields(self, request, obj=None):
+        fields = list(super().get_fields(request, obj))
+        approver = obj.approver if obj else default_request_approver()
+        status = obj.status if obj else Request.Status.PENDING
+        if status == Request.Status.PENDING and request.user != approver:
+            if "response_comment" in fields:
+                fields.remove("response_comment")
+        return fields
 
     @admin.action(description="Approve selected requests")
     def approve_requests(self, request, queryset):

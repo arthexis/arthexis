@@ -123,7 +123,6 @@ LOCAL_APPS = [
     "release",
     "integrate",
     "website",
-    "emails",
     "app",
     "msg",
 ]
@@ -142,7 +141,6 @@ INSTALLED_APPS = [
     "fernet_fields",
     "post_office",
     "django_celery_beat",
-    "webshell",
 ] + LOCAL_APPS
 
 SITE_ID = 1

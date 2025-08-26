@@ -74,6 +74,7 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 {% now "c" as current_time %}
+{% now "T" as current_tz %}
 <script id="admin-server-clock">
 document.addEventListener('DOMContentLoaded', function () {
     const clock = document.getElementById('server-clock');
@@ -88,7 +89,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function update() {
         const now = new Date(serverStart + (Date.now() - clientStart));
         const formatted = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-        clock.textContent = formatted;
+        clock.textContent = `${formatted} {{ current_tz|escapejs }}`;
     }
     update();
     setInterval(update, 1000);
@@ -130,7 +131,7 @@ body.login #site-badges .badge a {
     text-decoration: none;
 }
 body.login .badge-unknown {background-color:#6c757d;}
-body.login #server-clock {
+#server-clock {
     font-family: monospace;
     font-size: 0.9em;
 }

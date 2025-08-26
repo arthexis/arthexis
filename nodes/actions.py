@@ -91,7 +91,7 @@ class GenerateBackupAction(NodeAction):
         with file_path.open("w", encoding="utf-8") as fh:
             call_command(
                 "dumpdata",
-                exclude=["emails", "post_office.emailpattern"],
+                exclude=["post_office.emailpattern"],
                 stdout=fh,
             )
         size = file_path.stat().st_size

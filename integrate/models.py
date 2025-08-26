@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import UserManager as DjangoUserManager
 
 from fernet_fields import EncryptedCharField
@@ -54,6 +55,14 @@ class Entity(models.Model):
             self.save(update_fields=["is_deleted"])
         else:
             super().delete(using=using, keep_parents=keep_parents)
+
+
+def default_request_approver():
+    return get_user_model().objects.get(username="arthexis")
+
+
+def default_request_approver_pk():
+    return default_request_approver().pk
 
 
 class BskyAccount(Entity):
@@ -121,6 +130,7 @@ class Request(Entity):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="requests_to_approve",
+        default=default_request_approver_pk,
     )
     status = models.CharField(
         max_length=8,

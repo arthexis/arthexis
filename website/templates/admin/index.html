@@ -90,7 +90,6 @@
   <h1>Home</h1>
   <div>
     <a href="{% url 'admin:seed-data' %}" class="button">Seed data</a>
-    <a href="#" id="open-console" class="button">Open console</a>
   </div>
  </div>
 {% endblock %}
@@ -148,17 +147,6 @@
     </div>
   </div>
 </div>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  const link = document.getElementById('open-console');
-  if (!link) return;
-
-  link.addEventListener('click', function (e) {
-    e.preventDefault();
-    window.open('/webshell/', 'admin-console', 'width=800,height=600');
-  });
-});
-</script>
 {% endblock %}
 
 {% block sidebar %}{% endblock %}

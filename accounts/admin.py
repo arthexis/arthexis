@@ -11,6 +11,7 @@ from django.utils.html import format_html
 from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
+from django.contrib.auth.models import Group
 
 from refs.models import Reference
 
@@ -27,6 +28,21 @@ from .models import (
     EVModel,
     RFID,
 )
+
+
+class SecurityGroup(Group):
+    class Meta:
+        proxy = True
+        verbose_name = "Security Group"
+        verbose_name_plural = "Security Groups"
+
+
+admin.site.unregister(Group)
+
+
+@admin.register(SecurityGroup)
+class SecurityGroupAdmin(admin.ModelAdmin):
+    pass
 
 
 class AccountRFIDForm(forms.ModelForm):

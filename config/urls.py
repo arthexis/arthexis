@@ -17,8 +17,6 @@ from django.urls import include, path
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_exempt
 from django.views.i18n import set_language
-from webshell.views import execute_script_view
-from website.views import admin_console
 
 admin.site.site_header = _("Constellation")
 admin.site.site_title = _("Constellation")
@@ -65,8 +63,6 @@ def autodiscovered_urlpatterns():
 urlpatterns = [
     path("admin/doc/", include("django.contrib.admindocs.urls")),
     path("admin/", admin.site.urls),
-    path("webshell/", admin_console, name="admin-console"),
-    path("webshell/execute/", execute_script_view, name="webshell_execute"),
     path("i18n/setlang/", csrf_exempt(set_language), name="set_language"),
     path("", include("website.urls")),
 ]
