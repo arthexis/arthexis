@@ -126,7 +126,8 @@ done
 
 # Configure eth0 shared connection
 nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect yes \
-    ipv4.method shared ipv4.addresses 192.168.129.10/16 ipv4.never-default yes ipv6.method ignore
+    ipv4.method shared ipv4.addresses 192.168.129.10/16 ipv4.never-default yes \
+    ipv6.method ignore ipv6.never-default yes
 
 # Obtain or prompt for WiFi password
 if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
@@ -147,6 +148,7 @@ fi
 # Configure wlan0 access point
 nmcli connection add type wifi ifname wlan0 con-name gelectriic-ap autoconnect yes \
     ssid gelectriic-ap mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
+    ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
     wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
 
 # Bring up connections
