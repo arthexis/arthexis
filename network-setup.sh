@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Network setup script
-# Configures eth0 with a static IP and creates a Wi-Fi access point on wlan0
-# using NetworkManager (nmcli).
+# Configures eth0 with a shared static IP and creates a Wi-Fi access point on
+# wlan0 using NetworkManager (nmcli).
 
 set -euo pipefail
 
@@ -79,12 +79,16 @@ slugify() {
     echo "$input" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
 }
 
-# Reinstall wlan1 connections with uniform naming
+# Reinstall wlan1 connections with uniform naming, only for 5GHz networks
 if nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
     declare -A SEEN_SLUGS=()
     while IFS= read -r con; do
         iface="$(nmcli -g connection.interface-name connection show "$con" 2>/dev/null || true)"
         if [[ "$iface" == "wlan1" ]]; then
+            band="$(nmcli -g 802-11-wireless.band connection show "$con" 2>/dev/null || true)"
+            if [[ "$band" == "bg" ]]; then
+                continue
+            fi
             ssid="$(nmcli -g 802-11-wireless.ssid connection show "$con" 2>/dev/null || true)"
             [[ -z "$ssid" ]] && continue
             slug="$(slugify "$ssid")"
@@ -101,9 +105,10 @@ if nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
             nmcli device connect wlan1 || true
             if [[ -n "$psk" ]]; then
                 nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" \
-                    wifi-sec.key-mgmt "$key_mgmt" wifi-sec.psk "$psk" autoconnect yes
+                    wifi.band a wifi-sec.key-mgmt "$key_mgmt" wifi-sec.psk "$psk" autoconnect yes
             else
-                nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" autoconnect yes
+                nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" \
+                    wifi.band a autoconnect yes
             fi
         fi
     done < <(nmcli -t -f NAME connection show)
@@ -119,9 +124,9 @@ for dev in eth0 wlan0; do
     done
 done
 
-# Configure eth0 static connection
-nmcli connection add type ethernet ifname eth0 con-name eth0-static autoconnect yes \
-    ipv4.method manual ipv4.addresses 192.168.129.10/16 ipv4.never-default yes ipv6.method ignore
+# Configure eth0 shared connection
+nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect yes \
+    ipv4.method shared ipv4.addresses 192.168.129.10/16 ipv4.never-default yes ipv6.method ignore
 
 # Obtain or prompt for WiFi password
 if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
@@ -142,10 +147,10 @@ fi
 # Configure wlan0 access point
 nmcli connection add type wifi ifname wlan0 con-name gelectriic-ap autoconnect yes \
     ssid gelectriic-ap mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
-    wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
+    wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
 
 # Bring up connections
-nmcli connection up eth0-static
+nmcli connection up eth0-shared
 nmcli connection up gelectriic-ap
 
 # Show final status
