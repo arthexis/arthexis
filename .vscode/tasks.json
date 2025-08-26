@@ -14,9 +14,9 @@
         {
             "label": "Dev: start",
             "type": "shell",
-            "command": "${workspaceFolder}/start.sh --reload",
+            "command": "${workspaceFolder}/start.sh --reload --celery",
             "windows": {
-                "command": "${workspaceFolder}\\start.bat --reload"
+                "command": "${workspaceFolder}\\start.bat --reload --celery"
             },
             "problemMatcher": [],
             "detail": "Start the Django development server"

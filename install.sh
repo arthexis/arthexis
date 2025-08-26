@@ -7,9 +7,10 @@ NGINX_MODE=""
 PORT=""
 AUTO_UPGRADE=false
 LATEST=false
+ENABLE_CELERY=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--nginx] [--public|--internal] [--port PORT] [--auto-upgrade] [--latest] [--satellite]" >&2
+    echo "Usage: $0 [--service NAME] [--nginx] [--public|--internal] [--port PORT] [--auto-upgrade] [--latest] [--satellite] [--celery]" >&2
     exit 1
 }
 
@@ -47,12 +48,17 @@ while [[ $# -gt 0 ]]; do
             LATEST=true
             shift
             ;;
+        --celery)
+            ENABLE_CELERY=true
+            shift
+            ;;
         --satellite)
             AUTO_UPGRADE=true
             SETUP_NGINX=true
             NGINX_MODE="internal"
             SERVICE="arthexis"
             LATEST=true
+            ENABLE_CELERY=true
             shift
             ;;
         *)
@@ -75,6 +81,12 @@ fi
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
+
+if [ "$ENABLE_CELERY" = true ]; then
+    touch CELERY
+else
+    rm -f CELERY
+fi
 
 # Create virtual environment if missing
 if [ ! -d .venv ]; then
@@ -175,6 +187,11 @@ deactivate
 if [ -n "$SERVICE" ]; then
     SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
     echo "$SERVICE" > SERVICE
+    if [ "$ENABLE_CELERY" = true ]; then
+        EXEC_CMD="/bin/sh -c 'cd $BASE_DIR && .venv/bin/celery -A config worker -l info & .venv/bin/celery -A config beat -l info & exec .venv/bin/python manage.py runserver 0.0.0.0:$PORT'"
+    else
+        EXEC_CMD="$BASE_DIR/.venv/bin/python manage.py runserver 0.0.0.0:$PORT"
+    fi
     sudo bash -c "cat > '$SERVICE_FILE'" <<SERVICEEOF
 [Unit]
 Description=Arthexis Constellation Django service
@@ -183,7 +200,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$BASE_DIR
-ExecStart=$BASE_DIR/.venv/bin/python manage.py runserver 0.0.0.0:$PORT
+ExecStart=$EXEC_CMD
 Restart=always
 User=$(id -un)
 
@@ -205,12 +222,13 @@ if [ "$AUTO_UPGRADE" = true ]; then
     source .venv/bin/activate
     python manage.py shell <<'PYCODE'
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
+from django.utils.text import slugify
 
 schedule, _ = IntervalSchedule.objects.get_or_create(
     every=10, period=IntervalSchedule.MINUTES
 )
 PeriodicTask.objects.update_or_create(
-    name="auto_upgrade_check",
+    name=slugify("auto upgrade check"),
     defaults={"interval": schedule, "task": "release.tasks.check_github_updates"},
 )
 PYCODE
