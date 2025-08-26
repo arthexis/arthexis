@@ -6,8 +6,13 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
 django.setup()
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+from django.contrib.sites.models import Site
+import tempfile
+import shutil
+
+from accounts.models import RFID
 from rfid.reader import read_rfid
 
 
@@ -108,4 +113,23 @@ class ScanTestViewTests(SimpleTestCase):
         resp = self.client.get(reverse("rfid-scan-test"))
         self.assertEqual(resp.status_code, 500)
         self.assertEqual(resp.json(), {"error": "no scanner detected"})
+
+
+class RFIDLabelPageTests(TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmpdir)
+        override = override_settings(MEDIA_ROOT=self.tmpdir)
+        override.enable()
+        self.addCleanup(override.disable)
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": "website"}
+        )
+
+    def test_label_page(self):
+        tag = RFID.objects.create(rfid="FEEDBEEF", allowed=False)
+        resp = self.client.get(reverse("rfid-page", args=[tag.label_id]))
+        self.assertContains(resp, f"Label {tag.label_id}")
+        self.assertContains(resp, "Invalid")
+        self.assertContains(resp, '<img', html=False)
 

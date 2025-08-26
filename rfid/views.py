@@ -1,8 +1,10 @@
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from website.utils import landing
+
+from accounts.models import RFID
 
 from .scanner import scan_sources, restart_sources, test_sources
 
@@ -38,3 +40,9 @@ def reader(request):
         "test_url": reverse("rfid-scan-test"),
     }
     return render(request, "rfid/reader.html", context)
+
+
+def label(request, label_id):
+    """Public page for a single RFID label."""
+    tag = get_object_or_404(RFID, label_id=label_id)
+    return render(request, "rfid/label.html", {"rfid": tag})
