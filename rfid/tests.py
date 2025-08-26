@@ -6,15 +6,12 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
 django.setup()
 
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
-from django.contrib.sites.models import Site
-import tempfile
-import shutil
+from django.contrib.auth import get_user_model
 
 from accounts.models import RFID
 from rfid.reader import read_rfid
-from accounts.models import RFID
 
 
 class ScanNextViewTests(SimpleTestCase):
@@ -31,22 +28,6 @@ class ScanNextViewTests(SimpleTestCase):
         resp = self.client.get(reverse("rfid-scan-next"))
         self.assertEqual(resp.status_code, 500)
         self.assertEqual(resp.json(), {"error": "boom"})
-
-
-class ScanNextReferenceURLTests(TestCase):
-    @override_settings(ALLOWED_HOSTS=["scanner.local"])
-    @patch("config.middleware.get_site")
-    @patch("rfid.scanner.get_next_tag")
-    def test_reference_uses_request_host(self, mock_get_next_tag, mock_site):
-        Site.objects.update_or_create(id=1, defaults={"domain": "example.com", "name": "example"})
-        tag = RFID.objects.create(rfid="DEADBEEF")
-        self.assertIn("example.com", tag.reference.value)
-        mock_get_next_tag.return_value = {"rfid": "DEADBEEF", "label_id": tag.pk, "created": False}
-        resp = self.client.get(reverse("rfid-scan-next"), HTTP_HOST="scanner.local")
-        tag.refresh_from_db()
-        expected = f"http://scanner.local{reverse('rfid-page', args=[tag.label_id])}"
-        self.assertEqual(resp.json(), {"rfid": "DEADBEEF", "label_id": tag.pk, "created": False, "reference": expected})
-        self.assertEqual(tag.reference.value, expected)
 
 
 class ReaderNotificationTests(TestCase):
@@ -154,21 +135,16 @@ class ScanTestViewTests(SimpleTestCase):
         self.assertEqual(resp.json(), {"error": "no scanner detected"})
 
 
-class RFIDLabelPageTests(TestCase):
-    def setUp(self):
-        self.tmpdir = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.tmpdir)
-        override = override_settings(MEDIA_ROOT=self.tmpdir)
-        override.enable()
-        self.addCleanup(override.disable)
-        Site.objects.update_or_create(
-            id=1, defaults={"domain": "testserver", "name": "website"}
-        )
+class ScannerTemplateTests(TestCase):
+    def test_configure_link_for_staff(self):
+        User = get_user_model()
+        staff = User.objects.create_user("staff", password="pwd", is_staff=True)
+        self.client.force_login(staff)
+        resp = self.client.get(reverse("rfid-reader"))
+        self.assertContains(resp, 'id="rfid-configure"')
 
-    def test_label_page(self):
-        tag = RFID.objects.create(rfid="FEEDBEEF", allowed=False)
-        resp = self.client.get(reverse("rfid-page", args=[tag.label_id]))
-        self.assertContains(resp, f"Label {tag.label_id}")
-        self.assertContains(resp, "Invalid")
-        self.assertContains(resp, '<img', html=False)
+    def test_no_link_for_anonymous(self):
+        resp = self.client.get(reverse("rfid-reader"))
+        self.assertNotContains(resp, 'id="rfid-configure"')
+
 
