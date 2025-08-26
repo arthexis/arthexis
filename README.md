@@ -10,25 +10,42 @@ Arthexis Constellation is a Django-based suite that centralizes tools for managi
 4. Install dependencies: `pip install -r requirements.txt`
 
 ## Shell Scripts
-The project includes helper shell scripts to streamline development:
+The project includes helper shell scripts to streamline development. Each script's supported flags are listed below:
 
 - `install.sh`  \
-  Set up a virtual environment, install dependencies, and optionally configure a systemd service with `--service NAME`.
+  Set up a virtual environment, install dependencies, and optionally configure a systemd service. Flags:
+  - `--service NAME` – install a systemd service with the given name.
+  - `--nginx` – install an nginx proxy (defaults to internal mode).
+  - `--public`, `--internal` – specify nginx mode; also sets the default port (`8000` or `8888`).
+  - `--port PORT` – run on a custom port.
+  - `--auto-upgrade` – enable periodic upgrade checks.
+  - `--latest` – track the latest commit when auto-upgrading.
+  - `--celery` – enable Celery worker and beat.
+  - `--satellite` – shortcut for internal nginx service with auto-upgrade, latest, and Celery.
 
-- `start.sh [port]`  \
-  Run the development server on the specified port (default `8888`).
+- `start.sh`  \
+  Run the development server. Flags:
+  - `--port PORT` – serve on a specific port (defaults to `8888`, or `8000` with `--public`).
+  - `--reload` – enable auto-reload.
+  - `--celery`, `--no-celery` – start or skip Celery worker and beat.
+  - `--public`, `--internal` – shorthands for port `8000` or `8888`.
 
-- `stop.sh [port|--all]`  \
-  Stop the server on a given port or all running servers.
+- `stop.sh`  \
+  Stop a running development server. Flags:
+  - `[PORT]` – stop the server on the given port (default `8888`).
+  - `--all` – stop all running servers.
 
 - `command.sh <command> [args...]`  \
-  Execute Django management commands using hyphenated names (e.g., `./command.sh show-migrations`).
+  Execute Django management commands using hyphenated names; no additional flags.
 
 - `dev-maintenance.sh`  \
-  Install updated dependencies when requirements change and perform database maintenance tasks.
+  Install updated dependencies when requirements change and perform database maintenance tasks; no flags.
 
 - `upgrade.sh`  \
-  Pull the latest code and reinstall dependencies when needed.
+  Pull the latest code and reinstall dependencies when needed. Flags:
+  - `--latest` – force upgrade to the latest commit.
+  - `--clean-db` – remove the existing database before upgrading.
+  - `--no-restart` – skip restarting the server after upgrade.
 
 ## VS Code Tasks
 The `.vscode/tasks.json` file provides two tasks:
