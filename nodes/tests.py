@@ -23,7 +23,6 @@ from .actions import NodeAction
 from .models import (
     Node,
     NodeScreenshot,
-    NodeMessage,
     Recipe,
     ScreenSource,
     Step,
@@ -32,6 +31,7 @@ from .models import (
     Backup,
 )
 from .tasks import capture_node_screenshot, sample_clipboard
+from msg.models import Message
 
 
 class NodeTests(TestCase):
@@ -169,8 +169,8 @@ class NodeTests(TestCase):
             url, data="hello", content_type="text/plain"
         )
         self.assertEqual(post_resp.status_code, 200)
-        self.assertEqual(NodeMessage.objects.count(), 1)
-        msg = NodeMessage.objects.first()
+        self.assertEqual(Message.objects.count(), 1)
+        msg = Message.objects.first()
         self.assertEqual(msg.body, "hello")
         self.assertEqual(msg.node, node)
 

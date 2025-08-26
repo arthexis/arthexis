@@ -156,21 +156,6 @@ class NodeScreenshot(Entity):
         return self.path
 
 
-class NodeMessage(Entity):
-    """Message received via a node's public API."""
-
-    node = models.ForeignKey(
-        Node, related_name="messages", on_delete=models.CASCADE
-    )
-    method = models.CharField(max_length=10)
-    headers = models.JSONField(default=dict, blank=True)
-    body = models.TextField(blank=True)
-    created = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.node} {self.method} {self.created}"
-
-
 class NodeCommand(Entity):
     """Shell command that can be executed on nodes."""
 

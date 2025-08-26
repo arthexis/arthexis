@@ -7,6 +7,13 @@ class Message(Entity):
 
     subject = models.CharField(max_length=32, blank=True)
     body = models.CharField(max_length=32)
+    node = models.ForeignKey(
+        "nodes.Node",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="messages",
+    )
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:

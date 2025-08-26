@@ -120,22 +120,6 @@ class Migration(migrations.Migration):
                 'ordering': ['-priority', 'id'],
             },
         ),
-        migrations.CreateModel(
-            name='NodeMessage',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('method', models.CharField(max_length=10)),
-                ('headers', models.JSONField(blank=True, default=dict)),
-                ('body', models.TextField(blank=True)),
-                ('created', models.DateTimeField(auto_now_add=True)),
-                ('node', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='messages', to='nodes.node')),
-            ],
-            options={
-                'abstract': False,
-            },
-        ),
         migrations.AddField(
             model_name='node',
             name='roles',

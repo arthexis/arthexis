@@ -89,11 +89,14 @@ class GenerateBackupAction(NodeAction):
         filename = f"backup-{timezone.now().strftime('%Y%m%d%H%M%S')}.json"
         file_path = backup_dir / filename
         with file_path.open("w", encoding="utf-8") as fh:
-            call_command(
-                "dumpdata",
-                exclude=["post_office.emailpattern"],
-                stdout=fh,
-            )
+            exclude = []
+            if apps.is_installed("emails"):
+                exclude.append("emails")
+            if apps.is_installed("post_office") and "emailpattern" in apps.all_models.get(
+                "post_office", {}
+            ):
+                exclude.append("post_office.emailpattern")
+            call_command("dumpdata", exclude=exclude, stdout=fh)
         size = file_path.stat().st_size
         tables = set(connection.introspection.table_names())
         objects = 0

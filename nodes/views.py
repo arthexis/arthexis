@@ -6,8 +6,9 @@ from django.shortcuts import get_object_or_404
 
 from utils.api import api_login_required
 
-from .models import Node, NodeScreenshot, NodeMessage
+from .models import Node, NodeScreenshot
 from .utils import capture_screenshot, save_screenshot
+from msg.models import Message
 
 
 @api_login_required
@@ -81,7 +82,7 @@ def public_node_endpoint(request, endpoint):
     """Public API endpoint for a node.
 
     - ``GET`` returns information about the node.
-    - ``POST`` stores the request as a :class:`NodeMessage`.
+    - ``POST`` stores the request as a :class:`msg.models.Message`.
     """
 
     node = get_object_or_404(
@@ -99,10 +100,9 @@ def public_node_endpoint(request, endpoint):
         return JsonResponse(data)
 
     if request.method == "POST":
-        NodeMessage.objects.create(
+        Message.objects.create(
             node=node,
-            method=request.method,
-            headers=dict(request.headers),
+            subject=request.method,
             body=request.body.decode("utf-8") if request.body else "",
         )
         return JsonResponse({"status": "stored"})
