@@ -7,9 +7,10 @@ NGINX_MODE=""
 PORT=""
 AUTO_UPGRADE=false
 LATEST=false
+PREPARE=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--nginx] [--public|--internal] [--port PORT] [--auto-upgrade] [--latest]" >&2
+    echo "Usage: $0 [--service NAME] [--nginx] [--public|--internal] [--port PORT] [--auto-upgrade] [--latest] [--prepare]" >&2
     exit 1
 }
 
@@ -47,11 +48,49 @@ while [[ $# -gt 0 ]]; do
             LATEST=true
             shift
             ;;
+        --prepare)
+            PREPARE=true
+            shift
+            ;;
         *)
             usage
             ;;
     esac
 done
+
+if [ "$PREPARE" = true ]; then
+    if [ "$EUID" -ne 0 ]; then
+        echo "--prepare must be run with sudo" >&2
+        exit 1
+    fi
+
+    echo "Updating OS packages"
+    apt-get update
+    apt-get upgrade -y
+
+    echo "Checking Raspberry Pi Connect"
+    if ! systemctl is-active --quiet raspberrypi-connect-agent; then
+        echo "Raspberry Pi Connect is not active. Please configure it before proceeding." >&2
+        exit 1
+    fi
+
+    echo "Checking internet connectivity"
+    if ! ping -q -c1 -W1 8.8.8.8 >/dev/null 2>&1; then
+        echo "No internet connection available." >&2
+        exit 1
+    fi
+
+    echo "Ensuring nginx is installed"
+    if ! command -v nginx >/dev/null 2>&1; then
+        apt-get install -y nginx
+    fi
+
+    echo "Installing OS packages for Python requirements"
+    apt-get install -y build-essential python3-dev libpq-dev libjpeg-dev zlib1g-dev libffi-dev libssl-dev pkg-config
+
+    echo "Preparation complete"
+    exit 0
+fi
 
 if [ -z "$PORT" ]; then
     if [ "$NGINX_MODE" = "public" ]; then
