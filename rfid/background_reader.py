@@ -75,8 +75,10 @@ def _worker():  # pragma: no cover - background thread
     if not _setup_hardware():
         logger.error("RFID hardware setup failed; background reader not running")
         return
-    while not _stop_event.is_set():
-        _stop_event.wait(0.5)
+    # Wait indefinitely until a stop is requested, relying solely on IRQ
+    # callbacks to populate the tag queue. This avoids periodic polling and
+    # lets the thread sleep until explicitly stopped.
+    _stop_event.wait()
     if GPIO:
         try:
             GPIO.remove_event_detect(IRQ_PIN)

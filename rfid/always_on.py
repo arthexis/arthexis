@@ -13,7 +13,9 @@ _stop = threading.Event()
 def _worker() -> None:  # pragma: no cover - background thread
     logger.debug("RFID watch thread started")
     while not _stop.is_set():
-        result = get_next_tag(timeout=0.5)
+        # Use a shorter timeout for faster responsiveness when polling for
+        # new tags from the background reader.
+        result = get_next_tag(timeout=0.1)
         if result and result.get("rfid"):
             logger.info("RFID tag detected: %s", result.get("rfid"))
             tag_scanned.send(sender=None, **result)
