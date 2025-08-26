@@ -343,12 +343,3 @@ CELERY_BEAT_SCHEDULE = {
     }
 }
 
-auto_upgrade_file = BASE_DIR / "AUTO_UPGRADE"
-if auto_upgrade_file.exists():
-    mode = auto_upgrade_file.read_text().strip() or "version"
-    CELERY_BEAT_SCHEDULE["auto_upgrade"] = {
-        "task": "app.tasks.auto_upgrade",
-        "schedule": crontab(minute="*/10"),
-        "args": (mode,),
-    }
-
