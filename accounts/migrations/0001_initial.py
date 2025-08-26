@@ -505,7 +505,6 @@ class Migration(migrations.Migration):
                 ),
                 ("released", models.BooleanField(default=False)),
                 ("added_on", models.DateTimeField(auto_now_add=True)),
-                ("last_seen_on", models.DateTimeField(blank=True, null=True)),
                 (
                     "reference",
                     models.ForeignKey(
