@@ -82,11 +82,12 @@ slugify() {
 # Reinstall wlan1 connections with uniform naming, only for 5GHz networks
 if nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
     declare -A SEEN_SLUGS=()
+    nmcli device disconnect wlan1 || true
     while IFS= read -r con; do
         iface="$(nmcli -g connection.interface-name connection show "$con" 2>/dev/null || true)"
         if [[ "$iface" == "wlan1" ]]; then
             band="$(nmcli -g 802-11-wireless.band connection show "$con" 2>/dev/null || true)"
-            if [[ "$band" == "bg" ]]; then
+            if [[ "$band" != "a" ]]; then
                 continue
             fi
             ssid="$(nmcli -g 802-11-wireless.ssid connection show "$con" 2>/dev/null || true)"
@@ -101,8 +102,6 @@ if nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
             psk="$(nmcli -s -g 802-11-wireless-security.psk connection show "$con" 2>/dev/null || true)"
             key_mgmt="$(nmcli -g 802-11-wireless-security.key-mgmt connection show "$con" 2>/dev/null || true)"
             nmcli connection delete "$con"
-            nmcli device disconnect wlan1 || true
-            nmcli device connect wlan1 || true
             if [[ -n "$psk" ]]; then
                 nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" \
                     wifi.band a wifi-sec.key-mgmt "$key_mgmt" wifi-sec.psk "$psk" autoconnect yes
@@ -112,6 +111,7 @@ if nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
             fi
         fi
     done < <(nmcli -t -f NAME connection show)
+    nmcli device connect wlan1 || true
 fi
 
 # Preserve existing password if connection already exists
