@@ -19,12 +19,6 @@
     }
   },
   {
-    "model": "website.application",
-    "fields": {
-      "name": "arts"
-    }
-  },
-  {
     "model": "website.siteapplication",
     "fields": {
       "site": [
@@ -47,19 +41,6 @@
         "awg"
       ],
       "path": "/awg/",
-      "is_default": false
-    }
-  },
-  {
-    "model": "website.siteapplication",
-    "fields": {
-      "site": [
-        "arthexis.com"
-      ],
-      "application": [
-        "arts"
-      ],
-      "path": "/arts/",
       "is_default": false
     }
   }

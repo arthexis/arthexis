@@ -85,7 +85,6 @@ LOCAL_APPS = [
     "website",
     "emails",
     "app",
-    "arts",
 ]
 
 INSTALLED_APPS = [
