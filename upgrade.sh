@@ -5,10 +5,22 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
 
 FORCE=0
-if [[ "${1:-}" == "--latest" ]]; then
-  FORCE=1
-  shift
-fi
+CLEAN_DB=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --latest)
+      FORCE=1
+      shift
+      ;;
+    --clean-db)
+      CLEAN_DB=1
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 # Determine current and remote versions
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -49,6 +61,12 @@ fi
 if [ ! -d .venv ]; then
   echo "Virtual environment not found. Run ./install.sh first." >&2
   exit 1
+fi
+
+# Remove existing database if requested
+if [ "$CLEAN_DB" -eq 1 ]; then
+  DB_FILE="db.sqlite3"
+  rm -f "$DB_FILE"
 fi
 
 # Refresh environment and restart service
