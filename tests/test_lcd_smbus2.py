@@ -26,3 +26,25 @@ def test_charlcd1602_falls_back_to_smbus2(monkeypatch):
 
     lcd = lcd_module.CharLCD1602()
     assert isinstance(lcd, lcd_module.CharLCD1602)
+
+
+def test_init_lcd_defaults_when_scan_unavailable(monkeypatch):
+    """``init_lcd`` falls back to the default address when scanning fails."""
+
+    # Provide a fake smbus implementation so the module can be imported.
+    fake_bus = types.SimpleNamespace(write_byte=lambda *a, **k: None, close=lambda: None)
+    fake_smbus = types.SimpleNamespace(SMBus=lambda channel: fake_bus)
+    monkeypatch.setitem(sys.modules, "smbus", fake_smbus)
+
+    # Ensure a fresh import of nodes.lcd using the fake smbus.
+    if "nodes.lcd" in sys.modules:
+        del sys.modules["nodes.lcd"]
+    lcd_module = importlib.import_module("nodes.lcd")
+
+    lcd = lcd_module.CharLCD1602(bus=fake_bus)
+    # Simulate ``i2cdetect`` being unavailable.
+    monkeypatch.setattr(lcd, "i2c_scan", lambda: [])
+
+    lcd.init_lcd()
+
+    assert lcd.LCD_ADDR == lcd.PCF8574_address
