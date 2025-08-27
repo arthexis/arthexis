@@ -41,3 +41,19 @@ def test_gui_display_uses_plyer_when_toast_unavailable(monkeypatch):
 
     assert fake.calls[0]["title"] == "Arthexis"
     assert fake.calls[0]["timeout"] == 6
+
+
+def test_send_returns_true_and_disables_toaster_on_failure(monkeypatch):
+    class BadToaster:
+        def show_toast(self, *args, **kwargs):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(notifications, "ToastNotifier", lambda: BadToaster())
+    monkeypatch.setattr(notifications, "plyer_notification", None)
+    monkeypatch.setattr(notifications.sys, "platform", "win32")
+
+    nm = notifications.NotificationManager()
+    nm.lcd = None
+
+    assert nm.send("subject", "body") is True
+    assert nm._toaster is None
