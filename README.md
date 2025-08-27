@@ -9,13 +9,19 @@ Arthexis Constellation is a Django-based suite that centralizes tools for managi
 3. *(Optional)* Create and activate a virtual environment: `python -m venv .venv` and `source .venv/bin/activate`
 4. Install dependencies: `pip install -r requirements.txt`
 
+## External Requirements
+The setup scripts rely on several system packages. If they are missing and an internet connection is available, the setup process will automatically install them:
+- `nginx`
+- `openssh-server`
+- `NetworkManager` (provides `nmcli`)
+- `ufw` (firewall validation, optional)
+
 ## Shell Scripts
 The project includes helper shell scripts to streamline development. Each script's supported flags are listed below:
 
 - `install.sh`  \
-  Set up a virtual environment, install dependencies, and optionally configure a systemd service. Flags:
+  Set up a virtual environment, install dependencies, configure an nginx proxy, and optionally install a systemd service. Flags:
   - `--service NAME` – install a systemd service with the given name.
-  - `--nginx` – install an nginx proxy (defaults to internal mode).
   - `--public`, `--internal` – specify nginx mode; also sets the default port (`8000` or `8888`).
   - `--port PORT` – run on a custom port.
   - `--auto-upgrade` – enable periodic upgrade checks.

@@ -51,6 +51,33 @@ command -v nmcli >/dev/null 2>&1 || {
     exit 1
 }
 
+# Ensure required packages are installed
+APT_UPDATED=false
+ensure_pkg() {
+    local cmd="$1"
+    local pkg="$2"
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        if [ "$APT_UPDATED" = false ]; then
+            apt-get update
+            APT_UPDATED=true
+        fi
+        apt-get install -y "$pkg"
+    fi
+}
+
+ensure_pkg nginx nginx
+ensure_pkg sshd openssh-server
+systemctl enable ssh >/dev/null 2>&1 || true
+systemctl restart ssh >/dev/null 2>&1 || true
+
+# Ensure SSH port is open if a firewall is active
+if command -v ufw >/dev/null 2>&1; then
+    STATUS=$(ufw status 2>/dev/null || true)
+    if ! echo "$STATUS" | grep -iq "inactive"; then
+        ufw allow 22/tcp || true
+    fi
+fi
+
 if [[ $SKIP_FIREWALL == false ]]; then
     PORTS=(22 5900 21114)
     MODE="internal"
