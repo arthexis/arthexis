@@ -2,8 +2,7 @@
 set -e
 
 SERVICE=""
-SETUP_NGINX=false
-NGINX_MODE=""
+NGINX_MODE="internal"
 PORT=""
 AUTO_UPGRADE=false
 LATEST=false
@@ -12,7 +11,7 @@ ENABLE_LCD_SCREEN=false
 DISABLE_LCD_SCREEN=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--nginx] [--public|--internal] [--port PORT] [--auto-upgrade] [--latest] [--satellite] [--celery] [--lcd-screen|--no-lcd-screen]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--auto-upgrade] [--latest] [--satellite] [--celery] [--lcd-screen|--no-lcd-screen]" >&2
     exit 1
 }
 
@@ -23,17 +22,11 @@ while [[ $# -gt 0 ]]; do
             SERVICE="$2"
             shift 2
             ;;
-        --nginx)
-            SETUP_NGINX=true
-            shift
-            ;;
         --internal)
-            SETUP_NGINX=true
             NGINX_MODE="internal"
             shift
             ;;
         --public)
-            SETUP_NGINX=true
             NGINX_MODE="public"
             shift
             ;;
@@ -66,7 +59,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --satellite)
             AUTO_UPGRADE=true
-            SETUP_NGINX=true
             NGINX_MODE="internal"
             SERVICE="arthexis"
             LATEST=true
@@ -85,10 +77,6 @@ if [ -z "$PORT" ]; then
     else
         PORT=8888
     fi
-fi
-
-if [ "$SETUP_NGINX" = true ] && [ -z "$NGINX_MODE" ]; then
-    NGINX_MODE="internal"
 fi
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -114,19 +102,18 @@ if [ ! -d .venv ]; then
     python3 -m venv .venv
 fi
 
-# If requested, install nginx configuration and reload
-if [ "$SETUP_NGINX" = true ]; then
-    echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
-    NGINX_CONF="/etc/nginx/conf.d/arthexis-${NGINX_MODE}.conf"
+# Install nginx configuration and reload
+echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
+NGINX_CONF="/etc/nginx/conf.d/arthexis-${NGINX_MODE}.conf"
 
-    # Ensure nginx config directory exists
-    sudo mkdir -p /etc/nginx/conf.d
+# Ensure nginx config directory exists
+sudo mkdir -p /etc/nginx/conf.d
 
-    # Remove existing nginx configs for arthexis* (run in root shell to expand wildcard)
-    sudo sh -c 'rm -f /etc/nginx/conf.d/arthexis-*.conf'
+# Remove existing nginx configs for arthexis* (run in root shell to expand wildcard)
+sudo sh -c 'rm -f /etc/nginx/conf.d/arthexis-*.conf'
 
-    if [ "$NGINX_MODE" = "public" ]; then
-        sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
+if [ "$NGINX_MODE" = "public" ]; then
+    sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
 # Redirect all HTTP traffic to HTTPS
 server {
     listen 80;
@@ -157,8 +144,8 @@ server {
     }
 }
 NGINXCONF
-    else
-        sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
+else
+    sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
 server {
     listen 8000;
     server_name _;
@@ -174,16 +161,15 @@ server {
     }
 }
 NGINXCONF
-    fi
+fi
 
-    sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
+sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
 
-    if command -v nginx >/dev/null 2>&1; then
-        sudo nginx -t
-        sudo systemctl reload nginx || echo "Warning: nginx reload failed"
-    else
-        echo "nginx not installed; skipping nginx test and reload"
-    fi
+if command -v nginx >/dev/null 2>&1; then
+    sudo nginx -t
+    sudo systemctl reload nginx || echo "Warning: nginx reload failed"
+else
+    echo "nginx not installed; skipping nginx test and reload"
 fi
 
 source .venv/bin/activate
