@@ -6,6 +6,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from website.models import Application, SiteApplication
+from .models import Message
 
 
 class MessageViewTests(TestCase):
@@ -39,3 +40,33 @@ class MessageViewTests(TestCase):
         self.client.login(username="user", password="pw")
         resp = self.client.get(self.url)
         self.assertEqual(resp.status_code, 302)
+
+
+class MessageAdminActionTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            "msg_admin", "admin@example.com", "pass"
+        )
+        self.client = Client()
+        self.client.force_login(self.admin)
+        self.m1 = Message.objects.create(subject="s1", body="b1")
+        self.m2 = Message.objects.create(subject="s2", body="b2")
+        self.url = reverse("admin:msg_message_changelist")
+
+    @patch("msg.admin.notify")
+    def test_send_messages_action(self, mock_notify):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "send_messages",
+                "_selected_action": [self.m1.pk, self.m2.pk],
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_notify.call_count, 2)
+        mock_notify.assert_any_call("s1", "b1")
+        mock_notify.assert_any_call("s2", "b2")
+        msgs = [m.message for m in response.wsgi_request._messages]
+        self.assertIn("2 messages sent", msgs)
