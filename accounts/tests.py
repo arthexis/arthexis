@@ -4,10 +4,15 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
 django.setup()
 
-from django.test import Client, TestCase, TransactionTestCase
+from django.test import Client, TestCase, TransactionTestCase, RequestFactory
 from django.urls import reverse
 from django.http import HttpRequest
 import json
+import sys
+import types
+from unittest.mock import patch
+from django.contrib import admin
+from accounts.admin import RFIDAdmin
 
 from django.utils import timezone
 from .models import (
@@ -435,3 +440,62 @@ class RFIDKeyVerificationFlagTests(TestCase):
         tag.key_b = "B1B1B1B1B1B1"
         tag.save()
         self.assertFalse(tag.key_b_verified)
+
+
+class RFIDWriteFallbackTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.tag = RFID.objects.create(
+            rfid="DEADBEEF00",
+            key_a="A0A1A2A3A4A5",
+            key_b="B0B1B2B3B4B5",
+            data=[],
+        )
+        self.admin = RFIDAdmin(RFID, admin.site)
+
+    def test_write_uses_key_a_after_key_b_failure(self):
+        request = self.factory.get("/")
+
+        class MockMFRC522:
+            MI_OK = 0
+            PICC_REQIDL = 0x26
+            PICC_AUTHENT1A = 0x60
+            PICC_AUTHENT1B = 0x61
+
+            def MFRC522_Request(self, _):
+                return (self.MI_OK, None)
+
+            def MFRC522_Anticoll(self):
+                return (self.MI_OK, [0xDE, 0xAD, 0xBE, 0xEF, 0x00])
+
+            def MFRC522_SelectTag(self, _):
+                pass
+
+            def MFRC522_Auth(self, mode, _block, key, _uid):
+                if mode == self.PICC_AUTHENT1A and key == [0xFF] * 6:
+                    return self.MI_OK
+                return 1
+
+            def MFRC522_Write(self, _block, _data):
+                pass
+
+            def MFRC522_StopCrypto1(self):
+                pass
+
+        mock_mod = types.ModuleType("mfrc522")
+        mock_mod.MFRC522 = MockMFRC522
+
+        with patch.dict(sys.modules, {"mfrc522": mock_mod}), patch(
+            "rfid.reader.read_rfid",
+            return_value={"rfid": self.tag.rfid, "data": self.tag.data},
+        ), patch("time.sleep", return_value=None):
+            resp = self.admin.write_next(request, self.tag.pk)
+
+        self.assertEqual(resp.status_code, 200)
+        payload = json.loads(resp.content)
+        self.assertTrue(payload["written"])
+        self.assertTrue(payload["validated"])
+
+        self.tag.refresh_from_db()
+        self.assertTrue(self.tag.key_a_verified)
+        self.assertTrue(self.tag.key_b_verified)

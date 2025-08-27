@@ -464,7 +464,23 @@ class RFIDAdmin(ImportExportModelAdmin):
                                         )
                                         != mfrc.MI_OK
                                     ):
-                                        raise Exception("auth failed")
+                                        if (
+                                            mfrc.MFRC522_Auth(
+                                                mfrc.PICC_AUTHENT1A,
+                                                block,
+                                                key_a,
+                                                uid,
+                                            )
+                                            != mfrc.MI_OK
+                                            and mfrc.MFRC522_Auth(
+                                                mfrc.PICC_AUTHENT1A,
+                                                block,
+                                                default_key,
+                                                uid,
+                                            )
+                                            != mfrc.MI_OK
+                                        ):
+                                            raise Exception("auth failed")
                                     hex_data = (
                                         blocks[block_offset]
                                         if block_offset < len(blocks)
