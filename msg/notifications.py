@@ -39,9 +39,13 @@ class NotificationManager:
         # a non-interactive environment (e.g. service or CI). Any failure will
         # disable further toast attempts so the application falls back to
         # logging quietly.
-        self._toaster = (
-            ToastNotifier() if sys.platform.startswith("win") and ToastNotifier else None
-        )
+        self._toaster = None
+        if sys.platform.startswith("win") and ToastNotifier:
+            try:  # pragma: no cover - depends on platform
+                self._toaster = ToastNotifier()
+            except Exception as exc:  # pragma: no cover - depends on platform
+                logger.warning("Windows toast notifier unavailable: %s", exc)
+                self._toaster = None
 
     # LCD helpers -----------------------------------------------------
     def _init_lcd(self):
