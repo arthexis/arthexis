@@ -7,7 +7,6 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
-from django.utils.html import format_html
 from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
@@ -299,7 +298,6 @@ class RFIDForm(forms.ModelForm):
 @admin.register(RFID)
 class RFIDAdmin(ImportExportModelAdmin):
     change_list_template = "admin/accounts/rfid/change_list.html"
-    change_form_template = "admin/accounts/rfid/change_form.html"
     resource_class = RFIDResource
     list_display = (
         "label_id",
@@ -310,7 +308,6 @@ class RFIDAdmin(ImportExportModelAdmin):
         "allowed",
         "added_on",
         "last_seen_on",
-        "write_link",
     )
     list_filter = ("color", "released", "allowed")
     search_fields = ("label_id", "rfid")
@@ -356,16 +353,6 @@ class RFIDAdmin(ImportExportModelAdmin):
                 self.admin_site.admin_view(self.watch_toggle),
                 name="accounts_rfid_watch_toggle",
             ),
-            path(
-                "<int:pk>/write/",
-                self.admin_site.admin_view(self.write_view),
-                name="accounts_rfid_write",
-            ),
-            path(
-                "<int:pk>/write/next/",
-                self.admin_site.admin_view(self.write_next),
-                name="accounts_rfid_write_next",
-            ),
         ]
         return custom + urls
 
@@ -394,157 +381,4 @@ class RFIDAdmin(ImportExportModelAdmin):
             start()
             self.message_user(request, "RFID watch enabled")
         return redirect("admin:accounts_rfid_changelist")
-
-    def write_link(self, obj):
-        url = reverse("admin:accounts_rfid_write", args=[obj.pk])
-        return format_html('<a href="{}">Write</a>', url)
-
-    write_link.short_description = "Write"
-
-    def write_view(self, request, pk):
-        tag = RFID.objects.get(pk=pk)
-        context = self.admin_site.each_context(request)
-        context.update({"rfid": tag})
-        return render(request, "admin/accounts/rfid/write.html", context)
-
-    def write_next(self, request, pk):
-        try:
-            from mfrc522 import MFRC522
-        except Exception as exc:  # pragma: no cover - hardware dependent
-            return JsonResponse({"error": str(exc)}, status=500)
-
-        import time
-
-        try:
-            import RPi.GPIO as GPIO  # pragma: no cover - hardware dependent
-        except Exception:  # pragma: no cover - hardware dependent
-            GPIO = None
-
-        tag = RFID.objects.get(pk=pk)
-        mfrc = MFRC522()
-        timeout = time.time() + 1
-        try:
-            while time.time() < timeout:  # pragma: no cover - hardware loop
-                (status, _TagType) = mfrc.MFRC522_Request(mfrc.PICC_REQIDL)
-                if status == mfrc.MI_OK:
-                    (status, uid) = mfrc.MFRC522_Anticoll()
-                    if status == mfrc.MI_OK:
-                        rfid = "".join(f"{x:02X}" for x in uid[:5])
-                        if rfid != tag.rfid:
-                            return JsonResponse(
-                                {
-                                    "rfid": rfid,
-                                    "label_id": tag.pk,
-                                    "match": False,
-                                }
-                            )
-                        try:
-                            from rfid.reader import read_rfid
-
-                            mfrc.MFRC522_SelectTag(uid)
-                            default_key = [0xFF] * 6
-                            key_a = [int(tag.key_a[i : i + 2], 16) for i in range(0, 12, 2)]
-                            key_b = [int(tag.key_b[i : i + 2], 16) for i in range(0, 12, 2)]
-                            for sector in range(16):
-                                blocks = (
-                                    tag.data[sector]
-                                    if isinstance(tag.data, list)
-                                    and sector < len(tag.data)
-                                    else []
-                                )
-                                for block_offset in range(3):
-                                    block = sector * 4 + block_offset
-                                    if block == 0:
-                                        # Skip manufacturer block 0 in sector 0
-                                        continue
-                                    if (
-                                        mfrc.MFRC522_Auth(
-                                            mfrc.PICC_AUTHENT1B, block, key_b, uid
-                                        )
-                                        != mfrc.MI_OK
-                                        and mfrc.MFRC522_Auth(
-                                            mfrc.PICC_AUTHENT1B, block, default_key, uid
-                                        )
-                                        != mfrc.MI_OK
-                                    ):
-                                        if (
-                                            mfrc.MFRC522_Auth(
-                                                mfrc.PICC_AUTHENT1A,
-                                                block,
-                                                key_a,
-                                                uid,
-                                            )
-                                            != mfrc.MI_OK
-                                            and mfrc.MFRC522_Auth(
-                                                mfrc.PICC_AUTHENT1A,
-                                                block,
-                                                default_key,
-                                                uid,
-                                            )
-                                            != mfrc.MI_OK
-                                        ):
-                                            raise Exception("auth failed")
-                                    hex_data = (
-                                        blocks[block_offset]
-                                        if block_offset < len(blocks)
-                                        and blocks[block_offset]
-                                        else "00" * 16
-                                    )
-                                    data_bytes = [
-                                        int(hex_data[i : i + 2], 16)
-                                        for i in range(0, 32, 2)
-                                    ]
-                                    mfrc.MFRC522_Write(block, data_bytes)
-                                block = sector * 4 + 3
-                                if (
-                                    mfrc.MFRC522_Auth(
-                                        mfrc.PICC_AUTHENT1A, block, key_a, uid
-                                    )
-                                    != mfrc.MI_OK
-                                    and mfrc.MFRC522_Auth(
-                                        mfrc.PICC_AUTHENT1A, block, default_key, uid
-                                    )
-                                    != mfrc.MI_OK
-                                ):
-                                    raise Exception("auth failed")
-                                trailer = key_a + [0xFF, 0x07, 0x80, 0x69] + key_b
-                                mfrc.MFRC522_Write(block, trailer)
-                            mfrc.MFRC522_StopCrypto1()
-                            tag.key_a_verified = True
-                            tag.key_b_verified = True
-                            tag.save(update_fields=["key_a_verified", "key_b_verified"])
-                            verify = read_rfid(mfrc=mfrc, cleanup=False)
-                            validated = (
-                                verify.get("rfid") == tag.rfid
-                                and verify.get("data") == tag.data
-                            )
-                            response = {
-                                "rfid": rfid,
-                                "label_id": tag.pk,
-                                "match": True,
-                                "written": True,
-                                "validated": validated,
-                            }
-                            if not validated:
-                                response["validation_error"] = "mismatch"
-                            return JsonResponse(response)
-                        except Exception as exc:  # pragma: no cover - hardware dependent
-                            return JsonResponse(
-                                {
-                                    "rfid": rfid,
-                                    "label_id": tag.pk,
-                                    "match": True,
-                                    "written": False,
-                                    "error": str(exc),
-                                }
-                            )
-                time.sleep(0.2)
-            return JsonResponse({"rfid": None, "label_id": None})
-        finally:  # pragma: no cover - cleanup hardware
-            if GPIO:
-                try:
-                    GPIO.cleanup()
-                except Exception:
-                    pass
-
 

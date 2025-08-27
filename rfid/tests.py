@@ -61,12 +61,9 @@ class ReaderNotificationTests(TestCase):
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
         self.assertEqual(result["label_id"], 1)
         self.assertEqual(result["reference"], "https://example.com")
-        self.assertEqual(mock_notify.call_count, 2)
+        self.assertEqual(mock_notify.call_count, 1)
         mock_notify.assert_has_calls(
-            [
-                call(f"RFID {result['rfid']}", "Hold on reader"),
-                call("RFID 1 OK", f"{result['rfid']} BLACK"),
-            ]
+            [call("RFID 1 OK", f"{result['rfid']} BLACK")]
         )
 
     @patch("rfid.reader.notify_async")
@@ -83,12 +80,9 @@ class ReaderNotificationTests(TestCase):
         mock_get.return_value = (tag, False)
 
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
-        self.assertEqual(mock_notify.call_count, 2)
+        self.assertEqual(mock_notify.call_count, 1)
         mock_notify.assert_has_calls(
-            [
-                call(f"RFID {result['rfid']}", "Hold on reader"),
-                call("RFID 2 BAD", f"{result['rfid']} BLACK"),
-            ]
+            [call("RFID 2 BAD", f"{result['rfid']} BLACK")]
         )
 
 
