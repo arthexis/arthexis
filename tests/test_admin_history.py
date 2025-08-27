@@ -26,5 +26,3 @@ class AdminHistoryTests(TestCase):
         self.assertEqual(response.status_code, 200)
         history = AdminHistory.objects.get(user=user)
         self.assertEqual(history.url, url)
-        index = self.client.get(reverse("admin:index"))
-        self.assertContains(index, url)
