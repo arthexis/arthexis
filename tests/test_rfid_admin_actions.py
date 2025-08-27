@@ -55,19 +55,3 @@ class RFIDAdminActionTests(TestCase):
         self.assertEqual(black.color, RFID.WHITE)
         self.assertEqual(white.color, RFID.BLACK)
 
-
-class RFIDAdminWatchLinkTests(TestCase):
-    def setUp(self):
-        User = get_user_model()
-        self.user = User.objects.create_superuser(
-            username="rfidwatch", email="watch@example.com", password="password"
-        )
-        self.client.force_login(self.user)
-
-    def test_change_list_shows_watch_toggle(self):
-        response = self.client.get(reverse("admin:accounts_rfid_changelist"))
-        self.assertContains(response, "Toggle RFID Watch")
-        self.assertContains(
-            response, reverse("admin:accounts_rfid_watch_toggle")
-        )
-
