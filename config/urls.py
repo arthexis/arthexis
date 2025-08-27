@@ -16,7 +16,10 @@ from django.contrib import admin
 from django.urls import include, path
 from django.views.decorators.csrf import csrf_exempt
 from django.views.i18n import set_language
+from django.utils.translation import gettext_lazy as _
 
+admin.site.site_header = _("Constellation")
+admin.site.site_title = _("Constellation")
 
 # Apps that require a custom prefix for their URLs
 URL_PREFIX_OVERRIDES = {"accounts": "api/rfid"}
@@ -57,7 +60,6 @@ def autodiscovered_urlpatterns():
 
 
 urlpatterns = [
-    path("grappelli/", include("grappelli.urls")),
     path("admin/doc/", include("django.contrib.admindocs.urls")),
     path("admin/", admin.site.urls),
     path("i18n/setlang/", csrf_exempt(set_language), name="set_language"),
