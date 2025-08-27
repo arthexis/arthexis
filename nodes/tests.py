@@ -465,47 +465,41 @@ class NotificationManagerTests(TestCase):
     def test_send_writes_trimmed_lines(self):
         from msg.notifications import NotificationManager
 
-        manager = NotificationManager()
-        mock_lcd = MagicMock()
-        manager.lcd = mock_lcd
-        result = manager.send("a" * 20, "b" * 20)
-        self.assertTrue(result)
-        mock_lcd.clear.assert_called_once()
-        mock_lcd.write.assert_any_call(0, 0, "a" * 16)
-        mock_lcd.write.assert_any_call(0, 1, "b" * 16)
+        with TemporaryDirectory() as tmp:
+            lock = Path(tmp) / "lcd_screen.lck"
+            lock.touch()
+            manager = NotificationManager(lock_file=lock)
+            result = manager.send("a" * 70, "b" * 70)
+            self.assertTrue(result)
+            content = lock.read_text().splitlines()
+            self.assertEqual(content[0], "a" * 64)
+            self.assertEqual(content[1], "b" * 64)
 
     def test_send_falls_back_to_gui(self):
         from msg.notifications import NotificationManager
 
-        manager = NotificationManager()
-        manager.lcd = None
-        manager._gui_display = MagicMock()
-        result = manager.send("hi", "there")
-        self.assertFalse(result)
-        manager._gui_display.assert_called_once_with("hi", "there")
-
-    def test_send_handles_lcd_exception(self):
-        from msg.notifications import NotificationManager
-
-        mock_lcd = MagicMock()
-        mock_lcd.clear.side_effect = RuntimeError("boom")
-        manager = NotificationManager()
-        manager.lcd = mock_lcd
-        manager._gui_display = MagicMock()
-        result = manager.send("hi", "there")
-        self.assertFalse(result)
-        mock_lcd.reset.assert_called_once()
-        manager._gui_display.assert_called_once_with("hi", "there")
-
-    @patch("msg.notifications.NotificationManager._init_lcd", return_value=MagicMock())
-    def test_send_reinitialises_lcd(self, mock_init):
-        from msg.notifications import NotificationManager
-
-        manager = NotificationManager()
-        manager.lcd = None
-        result = manager.send("subj", "body")
+        with TemporaryDirectory() as tmp:
+            lock = Path(tmp) / "lcd_screen.lck"
+            lock.touch()
+            manager = NotificationManager(lock_file=lock)
+            manager._gui_display = MagicMock()
+            with patch.object(
+                manager, "_write_lock_file", side_effect=RuntimeError("boom")
+            ):
+                result = manager.send("hi", "there")
         self.assertTrue(result)
-        self.assertEqual(mock_init.call_count, 2)
+        manager._gui_display.assert_called_once_with("hi", "there")
+
+    def test_send_uses_gui_when_lock_missing(self):
+        from msg.notifications import NotificationManager
+
+        with TemporaryDirectory() as tmp:
+            lock = Path(tmp) / "lcd_screen.lck"
+            manager = NotificationManager(lock_file=lock)
+            manager._gui_display = MagicMock()
+            result = manager.send("hi", "there")
+        self.assertTrue(result)
+        manager._gui_display.assert_called_once_with("hi", "there")
 
     def test_gui_display_uses_windows_toast(self):
         from msg.notifications import NotificationManager

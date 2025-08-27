@@ -11,6 +11,11 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
   if systemctl list-unit-files | grep -Fq "${SERVICE_NAME}.service"; then
     sudo systemctl stop "$SERVICE_NAME"
     sudo systemctl status "$SERVICE_NAME" --no-pager || true
+    LCD_SERVICE="lcd-$SERVICE_NAME"
+    if systemctl list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
+      sudo systemctl stop "$LCD_SERVICE"
+      sudo systemctl status "$LCD_SERVICE" --no-pager || true
+    fi
     exit 0
   fi
 fi
