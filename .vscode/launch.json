@@ -10,7 +10,7 @@
                 "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
             },
             "program": "${workspaceFolder}/vscode_manage.py",
-            "args": ["runserver", "--noreload", "--celery"],
+            "args": ["runserver", "--noreload"],
             "django": true,
             "noDebug": true
         },
@@ -23,7 +23,7 @@
                 "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
             },
             "program": "${workspaceFolder}/vscode_manage.py",
-            "args": ["runserver", "--noreload", "--celery"],
+            "args": ["runserver", "--noreload"],
             "django": true
         }
     ]
