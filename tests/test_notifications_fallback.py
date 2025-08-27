@@ -15,7 +15,6 @@ def test_gui_display_uses_toast_when_available(monkeypatch):
     monkeypatch.setattr(notifications.sys, "platform", "win32")
 
     nm = notifications.NotificationManager()
-    nm.lcd = None
     nm._gui_display("subject", "body")
 
     assert fake.calls[0][0] == "Arthexis"
@@ -36,14 +35,13 @@ def test_gui_display_uses_plyer_when_toast_unavailable(monkeypatch):
     monkeypatch.setattr(notifications.sys, "platform", "win32")
 
     nm = notifications.NotificationManager()
-    nm.lcd = None
     nm._gui_display("subject", "body")
 
     assert fake.calls[0]["title"] == "Arthexis"
     assert fake.calls[0]["timeout"] == 6
 
 
-def test_send_returns_true_and_disables_toaster_on_failure(monkeypatch):
+def test_send_returns_true_and_disables_toaster_on_failure(monkeypatch, tmp_path):
     class BadToaster:
         def show_toast(self, *args, **kwargs):
             raise RuntimeError("boom")
@@ -52,8 +50,24 @@ def test_send_returns_true_and_disables_toaster_on_failure(monkeypatch):
     monkeypatch.setattr(notifications, "plyer_notification", None)
     monkeypatch.setattr(notifications.sys, "platform", "win32")
 
-    nm = notifications.NotificationManager()
-    nm.lcd = None
+    lock = tmp_path / "lcd_screen.lck"
+    lock.touch()
+    nm = notifications.NotificationManager(lock_file=lock)
+
+    monkeypatch.setattr(
+        nm, "_write_lock_file", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+    )
 
     assert nm.send("subject", "body") is True
     assert nm._toaster is None
+
+
+def test_send_uses_gui_when_lock_file_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(notifications.sys, "platform", "win32")
+    lock = tmp_path / "lcd_screen.lck"  # do not create
+    nm = notifications.NotificationManager(lock_file=lock)
+    calls = []
+    nm._gui_display = lambda s, b: calls.append((s, b))
+
+    assert nm.send("subject", "body") is True
+    assert calls == [("subject", "body")]

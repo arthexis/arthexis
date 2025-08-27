@@ -1,17 +1,16 @@
 """Simple notification helper for a 16x2 LCD display.
 
-Messages are written directly to the LCD. When the display is unavailable
- the message is shown using a Windows notification that auto-dismisses after
- six seconds or logged. Each line is truncated to 16 characters so that it
- fits the 16x2 hardware display.
+Messages are written to a lock file read by an independent service that
+updates the LCD. If writing to the lock file fails, a Windows
+notification or log entry is used as a fallback. Each line is truncated
+to 64 characters; scrolling is handled by the LCD service.
 """
 from __future__ import annotations
 
 import logging
 import sys
 import threading
-
-from nodes.lcd import CharLCD1602, LCDUnavailableError
+from pathlib import Path
 
 try:  # pragma: no cover - optional dependency
     from win10toast import ToastNotifier
@@ -26,15 +25,12 @@ logger = logging.getLogger(__name__)
 
 
 class NotificationManager:
-    """Write notifications to the LCD or fall back to GUI/log output."""
+    """Write notifications to a lock file or fall back to GUI/log output."""
 
-    def __init__(self) -> None:
-        # Attempt to initialise the LCD once during construction. If it fails
-        # we remember that an attempt was made so that subsequent notifications
-        # don't repeatedly retry and flood the logs.
-        self.lcd = self._init_lcd()
-        self._lcd_attempted = True
-
+    def __init__(self, lock_file: Path | None = None) -> None:
+        base_dir = Path(__file__).resolve().parents[1]
+        self.lock_file = lock_file or base_dir / "locks" / "lcd_screen.lck"
+        self.lock_file.parent.mkdir(parents=True, exist_ok=True)
         # ``win10toast`` is only available on Windows and can fail when used in
         # a non-interactive environment (e.g. service or CI). Any failure will
         # disable further toast attempts so the application falls back to
@@ -43,50 +39,26 @@ class NotificationManager:
             ToastNotifier() if sys.platform.startswith("win") and ToastNotifier else None
         )
 
-    # LCD helpers -----------------------------------------------------
-    def _init_lcd(self):
-        try:
-            lcd = CharLCD1602()
-            lcd.init_lcd()
-            return lcd
-        except LCDUnavailableError as exc:  # pragma: no cover - hardware dependent
-            logger.warning("LCD not initialized: %s", exc)
-        except Exception as exc:  # pragma: no cover - hardware dependent
-            logger.warning("Unexpected LCD error: %s", exc)
-        return None
+    def _write_lock_file(self, subject: str, body: str) -> None:
+        self.lock_file.write_text(f"{subject}\n{body}\n", encoding="utf-8")
 
     def send(self, subject: str, body: str = "") -> bool:
-        """Display *subject* and *body* and return ``True`` on success.
+        """Store *subject* and *body* in ``lcd_screen.lck`` when available.
 
-        The method truncates each line to 16 characters. If the LCD is not
-        available or writing fails a GUI/log notification is used instead.
-        In either case the function returns ``True`` so callers do not keep
+        The method truncates each line to 64 characters. If the lock file is
+        missing or writing fails, a GUI/log notification is used instead. In
+        either case the function returns ``True`` so callers do not keep
         retrying in a loop when only the fallback is available.
         """
 
-        if not self.lcd and not getattr(self, "_lcd_attempted", False):
-            self.lcd = self._init_lcd()
-            self._lcd_attempted = True
-        if self.lcd:
+        if self.lock_file.exists():
             try:
-                self.lcd.clear()
-                self.lcd.write(0, 0, subject[:16].ljust(16))
-                self.lcd.write(0, 1, body[:16].ljust(16))
+                self._write_lock_file(subject[:64], body[:64])
                 return True
-            except Exception as exc:  # pragma: no cover - hardware dependent
-                logger.warning("LCD display failed: %s", exc)
-                try:
-                    self.lcd.reset()
-                    self.lcd.clear()
-                    self.lcd.write(0, 0, subject[:16].ljust(16))
-                    self.lcd.write(0, 1, body[:16].ljust(16))
-                    return True
-                except Exception as exc2:  # pragma: no cover - hardware dependent
-                    logger.warning("LCD reset failed: %s", exc2)
-                    self.lcd = None
-        # Even if the LCD is unavailable we still consider the notification
-        # successfully handled once the GUI/log fallback runs to avoid callers
-        # retrying in a loop.
+            except Exception as exc:  # pragma: no cover - filesystem dependent
+                logger.warning("LCD lock file write failed: %s", exc)
+        else:
+            logger.debug("LCD lock file missing; using fallback notification")
         self._gui_display(subject, body)
         return True
 

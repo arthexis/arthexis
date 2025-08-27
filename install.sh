@@ -8,9 +8,11 @@ PORT=""
 AUTO_UPGRADE=false
 LATEST=false
 ENABLE_CELERY=false
+ENABLE_LCD_SCREEN=false
+DISABLE_LCD_SCREEN=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--nginx] [--public|--internal] [--port PORT] [--auto-upgrade] [--latest] [--satellite] [--celery]" >&2
+    echo "Usage: $0 [--service NAME] [--nginx] [--public|--internal] [--port PORT] [--auto-upgrade] [--latest] [--satellite] [--celery] [--lcd-screen|--no-lcd-screen]" >&2
     exit 1
 }
 
@@ -52,6 +54,16 @@ while [[ $# -gt 0 ]]; do
             ENABLE_CELERY=true
             shift
             ;;
+        --lcd-screen)
+            ENABLE_LCD_SCREEN=true
+            DISABLE_LCD_SCREEN=false
+            shift
+            ;;
+        --no-lcd-screen)
+            ENABLE_LCD_SCREEN=false
+            DISABLE_LCD_SCREEN=true
+            shift
+            ;;
         --satellite)
             AUTO_UPGRADE=true
             SETUP_NGINX=true
@@ -88,6 +100,13 @@ if [ "$ENABLE_CELERY" = true ]; then
     touch "$LOCK_DIR/celery.lck"
 else
     rm -f "$LOCK_DIR/celery.lck"
+fi
+
+LCD_LOCK="$LOCK_DIR/lcd_screen.lck"
+if [ "$ENABLE_LCD_SCREEN" = true ]; then
+    touch "$LCD_LOCK"
+else
+    rm -f "$LCD_LOCK"
 fi
 
 # Create virtual environment if missing
@@ -211,6 +230,44 @@ WantedBy=multi-user.target
 SERVICEEOF
     sudo systemctl daemon-reload
     sudo systemctl enable "$SERVICE"
+fi
+
+if [ "$ENABLE_LCD_SCREEN" = true ] && [ -n "$SERVICE" ]; then
+    LCD_SERVICE="lcd-$SERVICE"
+    LCD_SERVICE_FILE="/etc/systemd/system/${LCD_SERVICE}.service"
+    sudo bash -c "cat > '$LCD_SERVICE_FILE'" <<SERVICEEOF
+[Unit]
+Description=LCD screen updater service for Arthexis
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$BASE_DIR
+ExecStart=$BASE_DIR/.venv/bin/python -m msg.lcd_screen
+Restart=always
+User=$(id -un)
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+    sudo systemctl daemon-reload
+    sudo systemctl enable "$LCD_SERVICE"
+elif [ "$DISABLE_LCD_SCREEN" = true ]; then
+    if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
+        SERVICE="$(cat "$LOCK_DIR/service.lck")"
+    fi
+    if [ -n "$SERVICE" ]; then
+        LCD_SERVICE="lcd-$SERVICE"
+        if systemctl list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
+            sudo systemctl stop "$LCD_SERVICE" || true
+            sudo systemctl disable "$LCD_SERVICE" || true
+            LCD_SERVICE_FILE="/etc/systemd/system/${LCD_SERVICE}.service"
+            if [ -f "$LCD_SERVICE_FILE" ]; then
+                sudo rm "$LCD_SERVICE_FILE"
+            fi
+            sudo systemctl daemon-reload
+        fi
+    fi
 fi
 
 if [ "$AUTO_UPGRADE" = true ]; then
