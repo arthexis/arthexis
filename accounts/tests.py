@@ -458,6 +458,7 @@ class RFIDWriteSkipBlockTests(TestCase):
             PICC_AUTHENT1B = 0x61
             PICC_AUTHENT1A = 0x60
 
+
             def MFRC522_Request(self, _):
                 return (self.MI_OK, None)
 
