@@ -4,10 +4,15 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
 django.setup()
 
-from django.test import Client, TestCase, TransactionTestCase
+from django.test import Client, TestCase, TransactionTestCase, RequestFactory
 from django.urls import reverse
 from django.http import HttpRequest
 import json
+import sys
+import types
+from unittest.mock import patch
+from django.contrib import admin
+from .admin import RFIDAdmin
 
 from django.utils import timezone
 from .models import (
@@ -435,3 +440,49 @@ class RFIDKeyVerificationFlagTests(TestCase):
         tag.key_b = "B1B1B1B1B1B1"
         tag.save()
         self.assertFalse(tag.key_b_verified)
+
+
+class RFIDWriteSkipBlockTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.tag = RFID.objects.create(rfid="DEADBEEF00")
+        self.admin = RFIDAdmin(RFID, admin.site)
+
+    def test_block_zero_skipped(self):
+        request = self.factory.post("/")
+        written_blocks = []
+
+        class FakeMFRC:
+            MI_OK = 0
+            PICC_REQIDL = 0x26
+            PICC_AUTHENT1B = 0x61
+            PICC_AUTHENT1A = 0x60
+
+            def MFRC522_Request(self, _):
+                return (self.MI_OK, None)
+
+            def MFRC522_Anticoll(self):
+                return (self.MI_OK, [0xDE, 0xAD, 0xBE, 0xEF, 0x00])
+
+            def MFRC522_SelectTag(self, uid):
+                pass
+
+            def MFRC522_Auth(self, *args, **kwargs):
+                return self.MI_OK
+
+            def MFRC522_Write(self, block, data):
+                written_blocks.append(block)
+
+            def MFRC522_StopCrypto1(self):
+                pass
+
+        fake_module = types.SimpleNamespace(MFRC522=FakeMFRC)
+
+        with patch.dict("sys.modules", {"mfrc522": fake_module}), patch(
+            "rfid.reader.read_rfid",
+            return_value={"rfid": self.tag.rfid, "data": self.tag.data},
+        ), patch("time.sleep", lambda *args, **kwargs: None):
+            response = self.admin.write_next(request, self.tag.pk)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(0, written_blocks)
