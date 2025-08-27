@@ -333,7 +333,7 @@ LOGGING = {
 
 # Celery configuration
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
-CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "memory://")
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
 CELERY_BEAT_SCHEDULE = {
