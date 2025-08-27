@@ -46,6 +46,32 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+# Ensure D-Bus and NetworkManager services are available
+ensure_service() {
+    local svc="$1"
+    systemctl enable "$svc" >/dev/null 2>&1 || true
+    if ! systemctl is-active --quiet "$svc"; then
+        echo "Starting $svc service..."
+        systemctl start "$svc" >/dev/null 2>&1 || echo "Warning: unable to start $svc" >&2
+    fi
+}
+
+ensure_service dbus
+ensure_service NetworkManager
+
+# Check initial internet connectivity (non-fatal)
+check_connectivity() {
+    ping -c1 -W2 8.8.8.8 >/dev/null 2>&1
+}
+
+INITIAL_CONNECTIVITY=true
+if check_connectivity; then
+    echo "Internet connectivity detected."
+else
+    echo "No internet connectivity detected at start; continuing..." >&2
+    INITIAL_CONNECTIVITY=false
+fi
+
 command -v nmcli >/dev/null 2>&1 || {
     echo "nmcli (NetworkManager) is required." >&2
     exit 1
@@ -58,10 +84,15 @@ ensure_pkg() {
     local pkg="$2"
     if ! command -v "$cmd" >/dev/null 2>&1; then
         if [ "$APT_UPDATED" = false ]; then
-            apt-get update
+            if ! apt-get update; then
+                echo "Warning: apt-get update failed; continuing without package installation" >&2
+                return
+            fi
             APT_UPDATED=true
         fi
-        apt-get install -y "$pkg"
+        if ! apt-get install -y "$pkg"; then
+            echo "Warning: failed to install $pkg" >&2
+        fi
     fi
 }
 
@@ -189,9 +220,10 @@ nmcli connection up gelectriic-ap
 # Show final status
 nmcli device status
 
-# Check internet connectivity
-if ping -c1 -W2 8.8.8.8 >/dev/null 2>&1; then
+# Final internet connectivity check
+if check_connectivity; then
     echo "Internet connectivity confirmed."
 else
-    echo "No internet connectivity." >&2
+    echo "No internet connectivity after configuration." >&2
+    exit 1
 fi
