@@ -86,21 +86,38 @@ class CharLCD1602:
         time.sleep(0.001)
 
     def i2c_scan(self) -> List[str]:  # pragma: no cover - requires hardware
+        """Return a list of detected I2C addresses.
+
+        The implementation relies on the external ``i2cdetect`` command.  On
+        systems where ``i2c-tools`` is not installed or the command cannot be
+        executed (e.g. insufficient permissions), the function returns an empty
+        list so callers can fall back to a sensible default address.
+        """
+
         cmd = "i2cdetect -y 1 | awk 'NR>1 {$1=\"\"; print}'"
-        out = subprocess.check_output(cmd, shell=True).decode()
+        try:
+            out = subprocess.check_output(cmd, shell=True).decode()
+        except Exception:  # pragma: no cover - depends on environment
+            return []
         out = out.replace("\n", "").replace(" --", "")
         return [tok for tok in out.split(" ") if tok]
 
     def init_lcd(self, addr: int | None = None, bl: int = 1) -> None:
         self.BLEN = 1 if bl else 0
         if addr is None:
-            found = self.i2c_scan()
-            if "27" in found:
-                self.LCD_ADDR = self.PCF8574_address
-            elif "3f" in found or "3F" in found:
+            try:
+                found = self.i2c_scan()
+            except Exception:  # pragma: no cover - i2c detection issues
+                found = []
+            if "3f" in found or "3F" in found:
                 self.LCD_ADDR = self.PCF8574A_address
             else:
-                raise LCDUnavailableError("LCD I2C address not found")
+                # Default to the common PCF8574 address (0x27) when detection
+                # fails or returns no recognised addresses. This mirrors the
+                # behaviour prior to introducing automatic address detection and
+                # prevents the display from remaining uninitialised on systems
+                # without ``i2c-tools``.
+                self.LCD_ADDR = self.PCF8574_address
         else:
             self.LCD_ADDR = addr
 
