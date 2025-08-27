@@ -29,7 +29,16 @@ class NotificationManager:
     """Write notifications to the LCD or fall back to GUI/log output."""
 
     def __init__(self) -> None:
+        # Attempt to initialise the LCD once during construction. If it fails
+        # we remember that an attempt was made so that subsequent notifications
+        # don't repeatedly retry and flood the logs.
         self.lcd = self._init_lcd()
+        self._lcd_attempted = True
+
+        # ``win10toast`` is only available on Windows and can fail when used in
+        # a non-interactive environment (e.g. service or CI). Any failure will
+        # disable further toast attempts so the application falls back to
+        # logging quietly.
         self._toaster = (
             ToastNotifier() if sys.platform.startswith("win") and ToastNotifier else None
         )
@@ -50,12 +59,14 @@ class NotificationManager:
         """Display *subject* and *body* and return ``True`` on success.
 
         The method truncates each line to 16 characters. If the LCD is not
-        available or writing fails a GUI notification is attempted instead
-        and ``False`` is returned.
+        available or writing fails a GUI/log notification is used instead.
+        In either case the function returns ``True`` so callers do not keep
+        retrying in a loop when only the fallback is available.
         """
 
-        if not self.lcd:
+        if not self.lcd and not getattr(self, "_lcd_attempted", False):
             self.lcd = self._init_lcd()
+            self._lcd_attempted = True
         if self.lcd:
             try:
                 self.lcd.clear()
@@ -73,8 +84,11 @@ class NotificationManager:
                 except Exception as exc2:  # pragma: no cover - hardware dependent
                     logger.warning("LCD reset failed: %s", exc2)
                     self.lcd = None
+        # Even if the LCD is unavailable we still consider the notification
+        # successfully handled once the GUI/log fallback runs to avoid callers
+        # retrying in a loop.
         self._gui_display(subject, body)
-        return False
+        return True
 
     def send_async(self, subject: str, body: str = "") -> None:
         """Dispatch :meth:`send` on a background thread."""
@@ -99,6 +113,9 @@ class NotificationManager:
                     return
                 except Exception as exc:  # pragma: no cover - depends on platform
                     logger.warning("Windows toast notification failed: %s", exc)
+                    # Disable further toast attempts; the log fallback will be used
+                    # instead to avoid repeated errors in headless environments.
+                    self._toaster = None
             elif plyer_notification:
                 try:  # pragma: no cover - depends on platform
                     plyer_notification.notify(
