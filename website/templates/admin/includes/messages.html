@@ -1,0 +1,34 @@
+{% if messages %}
+<style>
+.messagelist li .copy-message {
+  float: right;
+  margin-left: 1em;
+}
+</style>
+<ul class="messagelist">{% for message in messages %}
+  <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>
+    <span class="message-content">{{ message|capfirst }}</span>
+    <a href="#" class="copy-message">Copy</a>
+  </li>
+{% endfor %}</ul>
+<script>
+document.querySelectorAll('.messagelist .copy-message').forEach(function(btn) {
+  btn.addEventListener('click', function(e) {
+    e.preventDefault();
+    const li = btn.closest('li');
+    const content = li.querySelector('.message-content');
+    const html = content.innerHTML;
+    const text = content.innerText;
+    if (navigator.clipboard && window.ClipboardItem) {
+      const item = new ClipboardItem({
+        'text/plain': new Blob([text], {type: 'text/plain'}),
+        'text/html': new Blob([html], {type: 'text/html'})
+      });
+      navigator.clipboard.write([item]);
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text);
+    }
+  });
+});
+</script>
+{% endif %}

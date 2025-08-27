@@ -1,0 +1,152 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrahead %}
+  {{ block.super }}
+{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'admin/css/dashboard.css' %}">
+  <style>
+    .dashboard {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        box-sizing: border-box;
+    }
+    .dashboard-main {
+        flex: 1 1 calc(70% - 0.5rem);
+        min-width: 300px;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+    .dashboard-side {
+        flex: 1 1 calc(30% - 0.5rem);
+        min-width: 300px;
+        max-width: 100%;
+        box-sizing: border-box;
+        background: var(--darkened-bg);
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+    .dashboard-side .module {
+        background: none;
+    }
+    .dashboard-side .module h2 {
+        background: none;
+        padding: 16px;
+        margin-bottom: 16px;
+        border-bottom: 1px solid var(--hairline-color);
+        font-size: 1.125rem;
+        color: var(--body-fg);
+    }
+    .dashboard-side h3 {
+        color: var(--body-quiet-color);
+        padding: 0 16px;
+        margin: 0 0 16px;
+    }
+    .dashboard-side p {
+        padding: 0 16px;
+    }
+    .dashboard-side .actionlist {
+        padding: 0;
+        margin: 16px;
+    }
+    .dashboard-side .actionlist li {
+        line-height: 1.2;
+        margin-bottom: 10px;
+        padding-left: 18px;
+    }
+    /* Override Django's dashboard defaults so the flex layout works */
+    .dashboard #content {
+        width: auto;
+        box-sizing: border-box;
+    }
+    #content-main,
+    #recent-boxes {
+        float: none;
+        width: auto;
+    }
+    .dashboard-main td.actions {
+        text-align: right;
+        white-space: nowrap;
+    }
+    .dashboard-main td.actions .actionlink {
+        margin-left: 16px;
+    }
+    .dashboard-main td.actions .actionlink:first-child {
+        margin-left: 0;
+    }
+  </style>
+{% endblock %}
+
+{% block coltype %}colM{% endblock %}
+
+{% block bodyclass %}{{ block.super }} dashboard{% endblock %}
+
+{% block content_title %}
+<div id="admin-home-header" style="display:flex; justify-content:space-between; align-items:center;">
+  <h1>Home</h1>
+  <div>
+    <a href="{% url 'admin:seed-data' %}" class="button">Seed data</a>
+  </div>
+ </div>
+{% endblock %}
+
+{% block nav-breadcrumbs %}{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+
+{% block content %}
+<div class="dashboard" id="admin-dashboard">
+  <div id="content-main" class="dashboard-main">
+    {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
+</div>
+<div class="dashboard-side" id="recent-boxes">
+    <div class="module" id="recent-history-module">
+        <h2>{% translate 'Recent admin lists' %}</h2>
+        {% with history=user.admin_history.all|slice:":10" %}
+            {% if history %}
+            <ul class="actionlist">
+                {% for item in history %}
+                <li class="changelink"><a href="{{ item.url }}">{{ item.admin_label }}</a></li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p>{% translate 'None available' %}</p>
+            {% endif %}
+        {% endwith %}
+    </div>
+    <div class="module" id="recent-actions-module">
+        <h2>{% translate 'Recent actions' %}</h2>
+        <h3>{% translate 'My actions' %}</h3>
+            {% load log %}
+            {% get_admin_log 10 as admin_log for_user user %}
+            {% if not admin_log %}
+            <p>{% translate 'None available' %}</p>
+            {% else %}
+            <ul class="actionlist">
+            {% for entry in admin_log %}
+            <li class="{% if entry.is_addition %}addlink{% endif %}{% if entry.is_change %} changelink{% endif %}{% if entry.is_deletion %} deletelink{% endif %}">
+                <span class="visually-hidden">{% if entry.is_addition %}{% translate 'Added:' %}{% elif entry.is_change %}{% translate 'Changed:' %}{% elif entry.is_deletion %}{% translate 'Deleted:' %}{% endif %}</span>
+                {% if entry.is_deletion or not entry.get_admin_url %}
+                    {{ entry.object_repr }}
+                {% else %}
+                    <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
+                {% endif %}
+                <br>
+                {% if entry.content_type %}
+                    <span class="mini quiet">{% filter capfirst %}{{ entry.content_type.name }}{% endfilter %}</span>
+                {% else %}
+                    <span class="mini quiet">{% translate 'Unknown content' %}</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+            </ul>
+            {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block sidebar %}{% endblock %}
