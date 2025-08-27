@@ -348,11 +348,6 @@ class RFIDAdmin(ImportExportModelAdmin):
                 self.admin_site.admin_view(csrf_exempt(self.scan_next)),
                 name="accounts_rfid_scan_next",
             ),
-            path(
-                "watch/toggle/",
-                self.admin_site.admin_view(self.watch_toggle),
-                name="accounts_rfid_watch_toggle",
-            ),
         ]
         return custom + urls
 
@@ -370,15 +365,4 @@ class RFIDAdmin(ImportExportModelAdmin):
         result = scan_sources(request)
         status = 500 if result.get("error") else 200
         return JsonResponse(result, status=status)
-
-    def watch_toggle(self, request):
-        from rfid.always_on import is_running, start, stop
-
-        if is_running():
-            stop()
-            self.message_user(request, "RFID watch disabled")
-        else:
-            start()
-            self.message_user(request, "RFID watch enabled")
-        return redirect("admin:accounts_rfid_changelist")
 
