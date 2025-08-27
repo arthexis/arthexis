@@ -128,6 +128,7 @@ LOCAL_APPS = [
 ]
 
 INSTALLED_APPS = [
+    "grappelli",
     "django.contrib.admin",
     "django.contrib.admindocs",
     "config.auth_app.AuthConfig",
