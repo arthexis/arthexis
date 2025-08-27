@@ -454,6 +454,9 @@ class RFIDAdmin(ImportExportModelAdmin):
                                 )
                                 for block_offset in range(3):
                                     block = sector * 4 + block_offset
+                                    if block == 0:
+                                        # Skip manufacturer block 0 in sector 0
+                                        continue
                                     if (
                                         mfrc.MFRC522_Auth(
                                             mfrc.PICC_AUTHENT1B, block, key_b, uid
