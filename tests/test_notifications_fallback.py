@@ -6,8 +6,8 @@ def test_gui_display_uses_toast_when_available(monkeypatch):
         def __init__(self):
             self.calls = []
 
-        def show_toast(self, title, message, duration, threaded):
-            self.calls.append((title, message, duration, threaded))
+        def show_toast(self, title, message, duration=5, **kwargs):
+            self.calls.append((title, message, duration, kwargs))
 
     fake = FakeToaster()
     monkeypatch.setattr(notifications, "ToastNotifier", lambda: fake)
