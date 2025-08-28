@@ -26,7 +26,7 @@ def sample_clipboard() -> None:
         logger.info("Duplicate clipboard content; sample not created")
         return
     node = Node.get_local()
-    TextSample.objects.create(content=content, node=node, automated=True)
+    TextSample.objects.create(content=content, node=node)
 
 
 @shared_task

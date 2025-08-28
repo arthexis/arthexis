@@ -378,8 +378,8 @@ class RecipeAdmin(admin.ModelAdmin):
 
 @admin.register(TextSample)
 class TextSampleAdmin(admin.ModelAdmin):
-    list_display = ("name", "node", "created_at", "short_content", "automated")
-    readonly_fields = ("created_at", "name", "automated")
+    list_display = ("name", "node", "user", "created_at", "short_content")
+    readonly_fields = ("created_at", "name", "user")
     change_list_template = "admin/nodes/textsample/change_list.html"
 
     def get_urls(self):
@@ -408,7 +408,8 @@ class TextSampleAdmin(admin.ModelAdmin):
             )
             return redirect("..")
         node = Node.get_local()
-        TextSample.objects.create(content=content, node=node)
+        user = request.user if request.user.is_authenticated else None
+        TextSample.objects.create(content=content, node=node, user=user)
         self.message_user(
             request, "Text sample added from clipboard.", level=messages.SUCCESS
         )
