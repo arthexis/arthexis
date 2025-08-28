@@ -5,7 +5,7 @@ from django.utils.translation import gettext_lazy as _
 class CoreConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "core"
-    verbose_name = _("Business Cores")
+    verbose_name = _("Business Models")
 
     def ready(self):  # pragma: no cover - called by Django
         from django.contrib.auth import get_user_model
