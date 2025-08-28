@@ -266,18 +266,20 @@ class RFID(Entity):
     key_a_verified = models.BooleanField(default=False)
     key_b_verified = models.BooleanField(default=False)
     allowed = models.BooleanField(default=True)
-    BLACK = "black"
-    WHITE = "white"
-    BLUE = "blue"
-    TRANS = "trans"
+    BLACK = "B"
+    WHITE = "W"
+    BLUE = "U"
+    RED = "R"
+    GREEN = "G"
     COLOR_CHOICES = [
         (BLACK, "Black"),
         (WHITE, "White"),
         (BLUE, "Blue"),
-        (TRANS, "Trans"),
+        (RED, "Red"),
+        (GREEN, "Green"),
     ]
     color = models.CharField(
-        max_length=5,
+        max_length=1,
         choices=COLOR_CHOICES,
         default=BLACK,
     )

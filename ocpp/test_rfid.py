@@ -52,7 +52,7 @@ class ReaderNotificationTests(TestCase):
             label_id=1,
             pk=1,
             allowed=True,
-            color="black",
+            color="B",
             released=False,
             reference=reference,
         )
@@ -63,7 +63,7 @@ class ReaderNotificationTests(TestCase):
         self.assertEqual(result["reference"], "https://example.com")
         self.assertEqual(mock_notify.call_count, 1)
         mock_notify.assert_has_calls(
-            [call("RFID 1 OK", f"{result['rfid']} BLACK")]
+            [call("RFID 1 OK", f"{result['rfid']} B")]
         )
 
     @patch("ocpp.rfid.reader.notify_async")
@@ -73,7 +73,7 @@ class ReaderNotificationTests(TestCase):
             label_id=2,
             pk=2,
             allowed=False,
-            color="black",
+            color="B",
             released=False,
             reference=None,
         )
@@ -82,7 +82,7 @@ class ReaderNotificationTests(TestCase):
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
         self.assertEqual(mock_notify.call_count, 1)
         mock_notify.assert_has_calls(
-            [call("RFID 2 BAD", f"{result['rfid']} BLACK")]
+            [call("RFID 2 BAD", f"{result['rfid']} B")]
         )
 
 

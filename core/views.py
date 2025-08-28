@@ -105,12 +105,12 @@ def rfid_batch(request):
     """Export or import RFID tags in batch."""
 
     if request.method == "GET":
-        color = request.GET.get("color", RFID.BLACK).lower()
+        color = request.GET.get("color", RFID.BLACK).upper()
         released = request.GET.get("released")
         if released is not None:
             released = released.lower()
         qs = RFID.objects.all()
-        if color != "all":
+        if color != "ALL":
             qs = qs.filter(color=color)
         if released in ("true", "false"):
             qs = qs.filter(released=(released == "true"))
@@ -143,7 +143,9 @@ def rfid_batch(request):
                 continue
             allowed = row.get("allowed", True)
             accounts = row.get("accounts") or []
-            color = (row.get("color") or RFID.BLACK).strip().lower() or RFID.BLACK
+            color = (
+                (row.get("color") or RFID.BLACK).strip().upper() or RFID.BLACK
+            )
             released = row.get("released", False)
             if isinstance(released, str):
                 released = released.lower() == "true"

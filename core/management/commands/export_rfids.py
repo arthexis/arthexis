@@ -12,9 +12,9 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--color",
-            choices=["black", "white", "all"],
-            default="black",
-            help="Filter RFIDs by color (default: black)",
+            choices=[c[0] for c in RFID.COLOR_CHOICES] + ["ALL"],
+            default=RFID.BLACK,
+            help="Filter RFIDs by color code (default: {})".format(RFID.BLACK),
         )
         parser.add_argument(
             "--released",
@@ -26,9 +26,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         path = options["path"]
         qs = RFID.objects.all()
-        color = options["color"]
+        color = options["color"].upper()
         released = options["released"]
-        if color != "all":
+        if color != "ALL":
             qs = qs.filter(color=color)
         if released != "all":
             qs = qs.filter(released=(released == "true"))
