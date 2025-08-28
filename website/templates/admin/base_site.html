@@ -83,6 +83,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     const serverStart = Date.parse("{{ current_time|escapejs }}");
     const clientStart = Date.now();
+    const tz = "{{ TIME_ZONE|escapejs }}";
     function pad(n) {
         return String(n).padStart(2, '0');
     }
@@ -90,6 +91,12 @@ document.addEventListener('DOMContentLoaded', function () {
         const now = new Date(serverStart + (Date.now() - clientStart));
         const formatted = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
         clock.textContent = `${formatted} {{ current_tz|escapejs }}`;
+        const dateFull = new Intl.DateTimeFormat([], { timeZone: tz, year: 'numeric', month: 'long', day: 'numeric' }).format(now);
+        const weekday = new Intl.DateTimeFormat([], { timeZone: tz, weekday: 'long' }).format(now);
+        const tzName = new Intl.DateTimeFormat([], { timeZone: tz, timeZoneName: 'long' })
+            .formatToParts(now)
+            .find(part => part.type === 'timeZoneName').value;
+        clock.title = `${dateFull}\n${weekday}\n${tzName}`;
     }
     update();
     setInterval(update, 1000);
