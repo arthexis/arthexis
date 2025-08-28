@@ -25,6 +25,9 @@ from django.db.utils import OperationalError
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
+from django.db.models.signals import post_save
+from website.models import Module, Landing, _create_landings
+
 
 def _local_app_labels() -> list[str]:
     base_dir = Path(settings.BASE_DIR)
@@ -141,10 +144,18 @@ def run_database_tasks() -> None:
                 with dest.open("w") as f:
                     json.dump(data, f)
                 patched.append(str(dest))
-            call_command("loaddata", *patched)
+            post_save.disconnect(_create_landings, sender=Module)
+            try:
+                call_command("loaddata", *patched)
+                for module in Module.objects.all():
+                    module.create_landings()
+                Landing.objects.update(is_seed_data=True)
+            finally:
+                post_save.connect(_create_landings, sender=Module)
 
     # Ensure Application and Module entries exist for local apps
     call_command("register_site_apps")
+    Landing.objects.update(is_seed_data=True)
 
 
 TASKS = {"database": run_database_tasks}
