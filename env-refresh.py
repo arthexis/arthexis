@@ -28,6 +28,7 @@ django.setup()
 from django.db.models.signals import post_save
 from website.models import Module, Landing, _create_landings
 from nodes.models import Node
+from django.contrib.sites.models import Site
 
 
 def _local_app_labels() -> list[str]:
@@ -159,7 +160,14 @@ def run_database_tasks() -> None:
     Landing.objects.update(is_seed_data=True)
 
     # Ensure current node is registered or updated
-    Node.register_current()
+    node, _ = Node.register_current()
+
+    control_lock = Path(settings.BASE_DIR) / "locks" / "control.lck"
+    if control_lock.exists():
+        Site.objects.update_or_create(
+            domain=node.public_endpoint,
+            defaults={"name": "Control"},
+        )
 
 
 TASKS = {"database": run_database_tasks}

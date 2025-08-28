@@ -11,9 +11,10 @@ ENABLE_CELERY=false
 ENABLE_LCD_SCREEN=false
 DISABLE_LCD_SCREEN=false
 CLEAN=false
+ENABLE_CONTROL=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--celery] [--lcd-screen|--no-lcd-screen] [--clean]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--control] [--celery] [--lcd-screen|--no-lcd-screen] [--clean]" >&2
     exit 1
 }
 
@@ -75,6 +76,17 @@ while [[ $# -gt 0 ]]; do
             ENABLE_CELERY=true
             shift
             ;;
+        --control)
+            AUTO_UPGRADE=true
+            NGINX_MODE="internal"
+            SERVICE="arthexis"
+            LATEST=true
+            ENABLE_CELERY=true
+            ENABLE_LCD_SCREEN=true
+            DISABLE_LCD_SCREEN=false
+            ENABLE_CONTROL=true
+            shift
+            ;;
         *)
             usage
             ;;
@@ -114,6 +126,13 @@ if [ "$ENABLE_LCD_SCREEN" = true ]; then
     touch "$LCD_LOCK"
 else
     rm -f "$LCD_LOCK"
+fi
+
+CONTROL_LOCK="$LOCK_DIR/control.lck"
+if [ "$ENABLE_CONTROL" = true ]; then
+    touch "$CONTROL_LOCK"
+else
+    rm -f "$CONTROL_LOCK"
 fi
 
 # Create virtual environment if missing

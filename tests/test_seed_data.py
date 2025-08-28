@@ -15,6 +15,7 @@ from django.test import TestCase
 from django.conf import settings
 from integrate.models import RequestType
 from nodes.models import Node
+from django.contrib.sites.models import Site
 import socket
 
 
@@ -81,3 +82,20 @@ class EnvRefreshNodeTests(TestCase):
         self.env_refresh.run_database_tasks()
         node = Node.objects.get(mac_address=mac)
         self.assertEqual(node.hostname, socket.gethostname())
+
+    def test_env_refresh_creates_control_site(self):
+        Node.objects.all().delete()
+        Site.objects.all().delete()
+        lock_dir = Path(settings.BASE_DIR) / "locks"
+        lock_dir.mkdir(exist_ok=True)
+        control_lock = lock_dir / "control.lck"
+        try:
+            control_lock.touch()
+            self.env_refresh.run_database_tasks()
+            node = Node.get_local()
+            self.assertIsNotNone(node)
+            self.assertTrue(
+                Site.objects.filter(domain=node.public_endpoint, name="Control").exists()
+            )
+        finally:
+            control_lock.unlink(missing_ok=True)
