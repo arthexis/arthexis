@@ -21,22 +21,15 @@ class OdooTests(TestCase):
         User = get_user_model()
         self.user = User.objects.create_user(username="tester", password="secret")
         self.client.force_login(self.user)
-        os.environ.update(
-            {
-                "ODOO_URL": "http://odoo.local",
-                "ODOO_DATABASE": "db",
-                "ODOO_USERNAME": "user",
-            }
-        )
         self.instance = OdooInstance.objects.create(
             name="Local",
-            url="[ODOO_URL]",
-            database="[ODOO_DATABASE]",
-            username="[ODOO_USERNAME]",
+            url="http://odoo.local",
+            database="db",
+            username="user",
             password="pwd",
         )
 
-    def test_fields_resolve_sigils(self):
+    def test_fields_store_values(self):
         self.assertEqual(self.instance.url, "http://odoo.local")
         self.assertEqual(self.instance.database, "db")
         self.assertEqual(self.instance.username, "user")
@@ -77,18 +70,11 @@ class OdooAdminTests(TestCase):
             email="admin@example.com",
         )
         self.client.force_login(self.admin)
-        os.environ.update(
-            {
-                "ODOO_URL": "http://odoo.local",
-                "ODOO_DATABASE": "db",
-                "ODOO_USERNAME": "user",
-            }
-        )
         self.instance = OdooInstance.objects.create(
             name="Local",
-            url="[ODOO_URL]",
-            database="[ODOO_DATABASE]",
-            username="[ODOO_USERNAME]",
+            url="http://odoo.local",
+            database="db",
+            username="user",
             password="pwd",
         )
 

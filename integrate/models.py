@@ -5,7 +5,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import UserManager as DjangoUserManager
 
 from fernet_fields import EncryptedCharField
-from utils.sigils import SigilCharField, SigilURLField
 
 
 class EntityQuerySet(models.QuerySet):
@@ -84,9 +83,9 @@ class OdooInstance(Entity):
     """Connection details for an Odoo server."""
 
     name = models.CharField(max_length=100)
-    url = SigilURLField()
-    database = SigilCharField(max_length=100)
-    username = SigilCharField(max_length=100)
+    url = models.URLField()
+    database = models.CharField(max_length=100)
+    username = models.CharField(max_length=100)
     password = EncryptedCharField(max_length=100)
 
     def __str__(self) -> str:  # pragma: no cover - simple repr
