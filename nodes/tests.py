@@ -605,9 +605,23 @@ class TextSampleAdminTests(TestCase):
         self.assertEqual(TextSample.objects.count(), 1)
         sample = TextSample.objects.first()
         self.assertEqual(sample.content, "clip text")
-        self.assertFalse(sample.automated)
+        self.assertEqual(sample.user, self.user)
         self.assertIsNone(sample.node)
         self.assertContains(response, "Text sample added from clipboard")
+
+    @patch("pyperclip.paste")
+    def test_add_from_clipboard_sets_node_when_local_exists(self, mock_paste):
+        mock_paste.return_value = "clip text"
+        Node.objects.create(
+            hostname="host",
+            address="127.0.0.1",
+            port=8000,
+            mac_address=Node.get_current_mac(),
+        )
+        url = reverse("admin:nodes_textsample_from_clipboard")
+        self.client.get(url, follow=True)
+        sample = TextSample.objects.first()
+        self.assertIsNotNone(sample.node)
 
     @patch("pyperclip.paste")
     def test_add_from_clipboard_skips_duplicate(self, mock_paste):
@@ -633,7 +647,7 @@ class ClipboardTaskTests(TestCase):
         self.assertEqual(TextSample.objects.count(), 1)
         sample = TextSample.objects.first()
         self.assertEqual(sample.content, "task text")
-        self.assertTrue(sample.automated)
+        self.assertIsNone(sample.user)
         self.assertIsNotNone(sample.node)
         self.assertEqual(sample.node.hostname, "host")
         # Duplicate should not create another sample
