@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.account",
+    "pk": 1,
+    "fields": {
+      "name": "GELECTRIIC",
+      "user": ["admin"],
+      "rfids": [1],
+      "service_account": true
+    }
+  }
+]

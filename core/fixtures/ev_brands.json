@@ -1,0 +1,48 @@
+[
+  {
+    "model": "core.brand",
+    "pk": 1,
+    "fields": {
+      "name": "Porsche"
+    }
+  },
+  {
+    "model": "core.brand",
+    "pk": 2,
+    "fields": {
+      "name": "Audi"
+    }
+  },
+  {
+    "model": "core.wmicode",
+    "pk": 1,
+    "fields": {
+      "brand": 1,
+      "code": "WP0"
+    }
+  },
+  {
+    "model": "core.wmicode",
+    "pk": 4,
+    "fields": {
+      "brand": 1,
+      "code": "WP1"
+    }
+  },
+  {
+    "model": "core.wmicode",
+    "pk": 2,
+    "fields": {
+      "brand": 2,
+      "code": "WAU"
+    }
+  },
+  {
+    "model": "core.wmicode",
+    "pk": 3,
+    "fields": {
+      "brand": 2,
+      "code": "TRU"
+    }
+  }
+]

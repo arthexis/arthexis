@@ -160,7 +160,7 @@ def invitation_login(request, uidb64, token):
             user.set_password(password)
         user.is_active = True
         user.save()
-        login(request, user, backend="accounts.backends.LocalhostAdminBackend")
+        login(request, user, backend="core.backends.LocalhostAdminBackend")
         return redirect(reverse("admin:index") if user.is_staff else "/")
     return render(request, "website/invitation_login.html", {"form": form})
 

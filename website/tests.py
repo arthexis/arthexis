@@ -333,10 +333,10 @@ class NavAppsTests(TestCase):
 
     def test_app_without_root_url_excluded(self):
         site = Site.objects.get(id=1)
-        app = Application.objects.create(name="accounts")
-        SiteApplication.objects.create(site=site, application=app, path="/accounts/")
+        app = Application.objects.create(name="core")
+        SiteApplication.objects.create(site=site, application=app, path="/core/")
         resp = self.client.get(reverse("website:index"))
-        self.assertNotContains(resp, 'href="/accounts/"')
+        self.assertNotContains(resp, 'href="/core/"')
 
 
 class StaffNavVisibilityTests(TestCase):
@@ -345,8 +345,8 @@ class StaffNavVisibilityTests(TestCase):
         site, _ = Site.objects.update_or_create(
             id=1, defaults={"domain": "testserver", "name": "Terminal"}
         )
-        app = Application.objects.create(name="msg")
-        SiteApplication.objects.create(site=site, application=app, path="/msg/")
+        app = Application.objects.create(name="rfid")
+        SiteApplication.objects.create(site=site, application=app, path="/rfid/")
         User = get_user_model()
         self.user = User.objects.create_user("user", password="pw")
         self.staff = User.objects.create_user("staff", password="pw", is_staff=True)
@@ -354,12 +354,12 @@ class StaffNavVisibilityTests(TestCase):
     def test_nonstaff_pill_hidden(self):
         self.client.login(username="user", password="pw")
         resp = self.client.get(reverse("website:index"))
-        self.assertNotContains(resp, 'href="/msg/"')
+        self.assertNotContains(resp, 'href="/rfid/"')
 
     def test_staff_sees_pill(self):
         self.client.login(username="staff", password="pw")
         resp = self.client.get(reverse("website:index"))
-        self.assertContains(resp, 'href="/msg/"')
+        self.assertContains(resp, 'href="/rfid/"')
 
 
 class ApplicationModelTests(TestCase):
@@ -367,9 +367,9 @@ class ApplicationModelTests(TestCase):
         site, _ = Site.objects.update_or_create(
             id=1, defaults={"domain": "testserver", "name": "website"}
         )
-        app = Application.objects.create(name="accounts")
+        app = Application.objects.create(name="core")
         site_app = SiteApplication.objects.create(site=site, application=app)
-        self.assertEqual(site_app.path, "/accounts/")
+        self.assertEqual(site_app.path, "/core/")
 
     def test_installed_flag_false_when_missing(self):
         app = Application.objects.create(name="missing")
@@ -381,7 +381,7 @@ class ApplicationAdminFormTests(TestCase):
         admin_instance = ApplicationAdmin(Application, admin.site)
         form = admin_instance.get_form(request=None)()
         choices = [choice[0] for choice in form.fields["name"].choices]
-        self.assertIn("accounts", choices)
+        self.assertIn("core", choices)
 
 
 class AllowedHostSubnetTests(TestCase):

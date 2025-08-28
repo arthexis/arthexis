@@ -10,7 +10,7 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 
-from accounts.models import RFID
+from core.models import RFID
 from rfid.reader import read_rfid
 
 
@@ -45,7 +45,7 @@ class ReaderNotificationTests(TestCase):
         return MockReader()
 
     @patch("rfid.reader.notify_async")
-    @patch("accounts.models.RFID.objects.get_or_create")
+    @patch("core.models.RFID.objects.get_or_create")
     def test_notify_on_allowed_tag(self, mock_get, mock_notify):
         reference = MagicMock(value="https://example.com")
         tag = MagicMock(
@@ -67,7 +67,7 @@ class ReaderNotificationTests(TestCase):
         )
 
     @patch("rfid.reader.notify_async")
-    @patch("accounts.models.RFID.objects.get_or_create")
+    @patch("core.models.RFID.objects.get_or_create")
     def test_notify_on_disallowed_tag(self, mock_get, mock_notify):
         tag = MagicMock(
             label_id=2,

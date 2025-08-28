@@ -3,7 +3,7 @@ import ipaddress
 from django.http import HttpRequest
 from django.contrib.auth import get_user_model
 
-from accounts.backends import LocalhostAdminBackend
+from core.backends import LocalhostAdminBackend
 
 
 def test_docker_network_allowed(tmp_path):

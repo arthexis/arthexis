@@ -8,7 +8,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
 
-def test_accounts_url_autodiscovered():
+def test_core_url_autodiscovered():
     match = resolve("/api/rfid/rfid-login/")
     assert match.view_name == "rfid-login"
 

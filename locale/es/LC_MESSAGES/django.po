@@ -19,35 +19,35 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? "
 "1 : 2;\n"
 
-#: accounts/apps.py:8
-msgid "Business Models"
-msgstr "Modelos de negocio"
+#: core/apps.py:8
+msgid "Business Cores"
+msgstr "Núcleos de negocio"
 
-#: accounts/models.py:140
+#: core/models.py:140
 msgid "Invalid municipality for the selected state"
 msgstr ""
 
-#: accounts/models.py:395
+#: core/models.py:395
 msgid "EV Brand"
 msgstr ""
 
-#: accounts/models.py:396
+#: core/models.py:396
 msgid "EV Brands"
 msgstr ""
 
-#: accounts/models.py:419
+#: core/models.py:419
 msgid "WMI code"
 msgstr ""
 
-#: accounts/models.py:420
+#: core/models.py:420
 msgid "WMI codes"
 msgstr ""
 
-#: accounts/models.py:434
+#: core/models.py:434
 msgid "EV Model"
 msgstr ""
 
-#: accounts/models.py:435
+#: core/models.py:435
 msgid "EV Models"
 msgstr ""
 

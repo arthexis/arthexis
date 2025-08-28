@@ -39,7 +39,7 @@ def reader(request):
     }
     if request.user.is_staff:
         context["admin_change_url_template"] = reverse(
-            "admin:accounts_rfid_change", args=[0]
+            "admin:core_rfid_change", args=[0]
         )
     return render(request, "rfid/reader.html", context)
 

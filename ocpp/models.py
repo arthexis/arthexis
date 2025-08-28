@@ -5,7 +5,7 @@ from django.contrib.sites.models import Site
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 
-from accounts.models import Account, Reference
+from core.models import Account, Reference
 
 
 class Location(Entity):

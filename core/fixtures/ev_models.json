@@ -1,0 +1,18 @@
+[
+  {
+    "model": "core.evmodel",
+    "pk": 1,
+    "fields": {
+      "brand": 1,
+      "name": "Taycan"
+    }
+  },
+  {
+    "model": "core.evmodel",
+    "pk": 2,
+    "fields": {
+      "brand": 2,
+      "name": "e-tron GT"
+    }
+  }
+]

@@ -12,8 +12,8 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from accounts.models import RFID
-from accounts.models import Reference
+from core.models import RFID
+from core.models import Reference
 
 
 class RFIDAdminReferenceClearTests(TestCase):
@@ -28,7 +28,7 @@ class RFIDAdminReferenceClearTests(TestCase):
         self.rfid = RFID.objects.create(rfid="AABBCCDD", reference=self.reference)
 
     def test_reference_can_be_cleared(self):
-        url = reverse("admin:accounts_rfid_change", args=[self.rfid.pk])
+        url = reverse("admin:core_rfid_change", args=[self.rfid.pk])
         response = self.client.get(url)
         csrf = response.cookies["csrftoken"].value
         data = {
@@ -48,7 +48,7 @@ class RFIDAdminReferenceClearTests(TestCase):
         self.assertIsNone(self.rfid.reference)
 
     def test_reference_widget_has_related_links(self):
-        url = reverse("admin:accounts_rfid_change", args=[self.rfid.pk])
+        url = reverse("admin:core_rfid_change", args=[self.rfid.pk])
         response = self.client.get(url)
         self.assertContains(response, "related-lookup")
         self.assertContains(response, "add-related")

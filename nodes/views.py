@@ -8,7 +8,7 @@ from utils.api import api_login_required
 
 from .models import Node, NodeScreenshot
 from .utils import capture_screenshot, save_screenshot
-from msg.models import Message
+from core.models import Message
 
 
 @api_login_required
@@ -82,7 +82,7 @@ def public_node_endpoint(request, endpoint):
     """Public API endpoint for a node.
 
     - ``GET`` returns information about the node.
-    - ``POST`` stores the request as a :class:`msg.models.Message`.
+    - ``POST`` stores the request as a :class:`core.models.Message`.
     """
 
     node = get_object_or_404(
