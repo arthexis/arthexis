@@ -27,6 +27,7 @@ django.setup()
 
 from django.db.models.signals import post_save
 from website.models import Module, Landing, _create_landings
+from nodes.models import Node
 
 
 def _local_app_labels() -> list[str]:
@@ -156,6 +157,9 @@ def run_database_tasks() -> None:
     # Ensure Application and Module entries exist for local apps
     call_command("register_site_apps")
     Landing.objects.update(is_seed_data=True)
+
+    # Ensure current node is registered or updated
+    Node.register_current()
 
 
 TASKS = {"database": run_database_tasks}
