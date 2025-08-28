@@ -9,9 +9,10 @@ LATEST=false
 ENABLE_CELERY=false
 ENABLE_LCD_SCREEN=false
 DISABLE_LCD_SCREEN=false
+CLEAN=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--auto-upgrade] [--latest] [--satellite] [--celery] [--lcd-screen|--no-lcd-screen]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--auto-upgrade] [--latest] [--satellite] [--celery] [--lcd-screen|--no-lcd-screen] [--clean]" >&2
     exit 1
 }
 
@@ -57,6 +58,10 @@ while [[ $# -gt 0 ]]; do
             DISABLE_LCD_SCREEN=true
             shift
             ;;
+        --clean)
+            CLEAN=true
+            shift
+            ;;
         --satellite)
             AUTO_UPGRADE=true
             NGINX_MODE="internal"
@@ -81,6 +86,15 @@ fi
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
+DB_FILE="$BASE_DIR/db.sqlite3"
+if [ -f "$DB_FILE" ]; then
+    if [ "$CLEAN" = true ]; then
+        rm "$DB_FILE"
+    else
+        echo "Database file $DB_FILE exists. Use --clean to remove it before installing." >&2
+        exit 1
+    fi
+fi
 LOCK_DIR="$BASE_DIR/locks"
 mkdir -p "$LOCK_DIR"
 
