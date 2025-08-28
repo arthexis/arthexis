@@ -2,7 +2,6 @@
 
 import django.db.models.deletion
 import fernet_fields.fields
-import utils.sigils
 from django.conf import settings
 from django.db import migrations, models
 import integrate.models
@@ -24,9 +23,9 @@ class Migration(migrations.Migration):
                 ('is_seed_data', models.BooleanField(default=False, editable=False)),
                 ('is_deleted', models.BooleanField(default=False, editable=False)),
                 ('name', models.CharField(max_length=100)),
-                ('url', utils.sigils.SigilURLField()),
-                ('database', utils.sigils.SigilCharField(max_length=100)),
-                ('username', utils.sigils.SigilCharField(max_length=100)),
+                ('url', models.URLField()),
+                ('database', models.CharField(max_length=100)),
+                ('username', models.CharField(max_length=100)),
                 ('password', fernet_fields.fields.EncryptedCharField(max_length=100)),
             ],
             options={
