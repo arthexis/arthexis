@@ -134,14 +134,28 @@ body.login .badge-unknown {background-color:#6c757d;}
 #server-clock {
     font-family: monospace;
     font-size: 0.9rem;
-    position: relative;
-    top: -2px;
+}
+
+body:not(.login) #header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+body:not(.login) #branding,
+body:not(.login) #user-tools {
+    float: none;
+}
+
+body:not(.login) #branding {
+    display: flex;
+    align-items: center;
 }
 
 body:not(.login) #site-badges {
     margin-left: 0.5em;
-    position: relative;
-    top: 2px;
+    display: flex;
+    align-items: center;
 }
 
 body:not(.login) #site-badges .badge {
