@@ -317,7 +317,10 @@ class RFID(Entity):
     @staticmethod
     def get_account_by_rfid(value):
         """Return the account associated with an RFID code if it exists."""
-        Account = apps.get_model("accounts", "Account")
+        try:
+            Account = apps.get_model("core", "Account")
+        except LookupError:  # pragma: no cover - accounts app optional
+            return None
         return Account.objects.filter(
             rfids__rfid=value.upper(), rfids__allowed=True
         ).first()

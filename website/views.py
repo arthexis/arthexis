@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 def index(request):
     site = get_site(request)
     app = (
-        site.site_applications.filter(is_default=True)
+        site.modules.filter(is_default=True)
         .select_related("application")
         .first()
     )
@@ -60,7 +60,7 @@ def index(request):
 
 def sitemap(request):
     site = get_site(request)
-    applications = site.site_applications.all()
+    applications = site.modules.all()
     base = request.build_absolute_uri("/").rstrip("/")
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',

@@ -19,7 +19,7 @@
     }
   },
   {
-    "model": "website.siteapplication",
+    "model": "website.module",
     "fields": {
       "site": [
         "arthexis.com"
@@ -32,7 +32,7 @@
     }
   },
   {
-    "model": "website.siteapplication",
+    "model": "website.module",
     "fields": {
       "site": [
         "arthexis.com"

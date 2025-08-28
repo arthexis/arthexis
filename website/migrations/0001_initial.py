@@ -79,7 +79,7 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
-            name="SiteApplication",
+            name="Module",
             fields=[
                 (
                     "id",
@@ -109,17 +109,12 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("is_default", models.BooleanField(default=False)),
-                (
-                    "favicon",
-                    models.ImageField(
-                        blank=True, upload_to="site_applications/favicons/"
-                    ),
-                ),
+                ("favicon", models.ImageField(blank=True, upload_to="modules/favicons/")),
                 (
                     "application",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
-                        related_name="site_applications",
+                        related_name="modules",
                         to="website.application",
                     ),
                 ),
@@ -127,7 +122,7 @@ class Migration(migrations.Migration):
                     "site",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
-                        related_name="site_applications",
+                        related_name="modules",
                         to="sites.site",
                     ),
                 ),
@@ -136,6 +131,38 @@ class Migration(migrations.Migration):
                 "verbose_name": "Module",
                 "verbose_name_plural": "Modules",
                 "unique_together": {("site", "path")},
+            },
+        ),
+        migrations.CreateModel(
+            name="Landing",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                ("path", models.CharField(max_length=200)),
+                ("label", models.CharField(max_length=100)),
+                ("enabled", models.BooleanField(default=True)),
+                ("description", models.TextField(blank=True)),
+                (
+                    "module",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="landings",
+                        to="website.module",
+                    ),
+                ),
+            ],
+            options={
+                "abstract": False,
+                "unique_together": {("module", "path")},
             },
         ),
     ]

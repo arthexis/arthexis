@@ -143,7 +143,7 @@ def run_database_tasks() -> None:
                 patched.append(str(dest))
             call_command("loaddata", *patched)
 
-    # Ensure Application and SiteApplication entries exist for local apps
+    # Ensure Application and Module entries exist for local apps
     call_command("register_site_apps")
 
 

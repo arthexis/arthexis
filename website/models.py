@@ -4,6 +4,8 @@ from django.contrib.sites.models import Site
 from django.apps import apps as django_apps
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
+from importlib import import_module
+from django.urls import URLPattern
 
 
 class ApplicationManager(models.Manager):
@@ -27,17 +29,17 @@ class Application(Entity):
         return django_apps.is_installed(self.name)
 
 
-class SiteApplicationManager(models.Manager):
+class ModuleManager(models.Manager):
     def get_by_natural_key(self, domain: str, path: str):
         return self.get(site__domain=domain, path=path)
 
 
-class SiteApplication(Entity):
+class Module(Entity):
     site = models.ForeignKey(
-        Site, on_delete=models.CASCADE, related_name="site_applications"
+        Site, on_delete=models.CASCADE, related_name="modules",
     )
     application = models.ForeignKey(
-        Application, on_delete=models.CASCADE, related_name="site_applications"
+        Application, on_delete=models.CASCADE, related_name="modules",
     )
     path = models.CharField(
         max_length=100,
@@ -50,9 +52,9 @@ class SiteApplication(Entity):
         help_text="Text used for the navbar pill; defaults to the application name.",
     )
     is_default = models.BooleanField(default=False)
-    favicon = models.ImageField(upload_to="site_applications/favicons/", blank=True)
+    favicon = models.ImageField(upload_to="modules/favicons/", blank=True)
 
-    objects = SiteApplicationManager()
+    objects = ModuleManager()
 
     class Meta:
         verbose_name = _("Module")
@@ -76,6 +78,42 @@ class SiteApplication(Entity):
             self.path = f"/{slugify(self.application.name)}/"
         super().save(*args, **kwargs)
 
+    def create_landings(self):
+        try:
+            urlconf = import_module(f"{self.application.name}.urls")
+        except Exception:
+            try:
+                urlconf = import_module(f"{self.application.name.lower()}.urls")
+            except Exception:
+                Landing.objects.get_or_create(
+                    module=self,
+                    path=self.path,
+                    defaults={"label": self.application.name},
+                )
+                return
+        patterns = getattr(urlconf, "urlpatterns", [])
+        created = False
+        for pattern in patterns:
+            if isinstance(pattern, URLPattern):
+                callback = pattern.callback
+                if getattr(callback, "landing", False):
+                    Landing.objects.get_or_create(
+                        module=self,
+                        path=f"{self.path}{str(pattern.pattern)}",
+                        defaults={
+                            "label": getattr(
+                                callback,
+                                "landing_label",
+                                callback.__name__.replace("_", " ").title(),
+                            )
+                        },
+                    )
+                    created = True
+        if not created:
+            Landing.objects.get_or_create(
+                module=self, path=self.path, defaults={"label": self.application.name}
+            )
+
 
 class SiteBadge(Entity):
     site = models.OneToOneField(Site, on_delete=models.CASCADE, related_name="badge")
@@ -93,3 +131,28 @@ class SiteProxy(Site):
         verbose_name = "Site"
         verbose_name_plural = "Sites"
 
+
+class Landing(Entity):
+    module = models.ForeignKey(
+        Module, on_delete=models.CASCADE, related_name="landings"
+    )
+    path = models.CharField(max_length=200)
+    label = models.CharField(max_length=100)
+    enabled = models.BooleanField(default=True)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ("module", "path")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.label} ({self.path})"
+
+
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+
+@receiver(post_save, sender=Module)
+def _create_landings(sender, instance, created, **kwargs):  # pragma: no cover - simple handler
+    if created:
+        instance.create_landings()

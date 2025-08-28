@@ -14,7 +14,7 @@ from django.conf import settings
 from nodes.models import Node
 from nodes.utils import capture_screenshot, save_screenshot
 
-from .models import SiteBadge, Application, SiteProxy, SiteApplication
+from .models import SiteBadge, Application, SiteProxy, Module, Landing
 
 
 def get_local_app_choices():
@@ -36,14 +36,14 @@ class SiteBadgeInline(admin.StackedInline):
     fields = ("badge_color", "favicon")
 
 
-class SiteApplicationInline(admin.TabularInline):
-    model = SiteApplication
+class ModuleInline(admin.TabularInline):
+    model = Module
     extra = 0
     fields = ("application", "path", "menu", "is_default", "favicon")
 
 
 class SiteAdmin(DjangoSiteAdmin):
-    inlines = [SiteBadgeInline, SiteApplicationInline]
+    inlines = [SiteBadgeInline, ModuleInline]
     change_list_template = "admin/sites/site/change_list.html"
     fields = ("domain", "name")
     list_display = ("domain", "name")
@@ -127,8 +127,8 @@ class ApplicationForm(forms.ModelForm):
         self.fields["name"].choices = get_local_app_choices()
 
 
-class ApplicationSiteInline(admin.TabularInline):
-    model = SiteApplication
+class ApplicationModuleInline(admin.TabularInline):
+    model = Module
     fk_name = "application"
     extra = 0
 
@@ -138,15 +138,22 @@ class ApplicationAdmin(admin.ModelAdmin):
     form = ApplicationForm
     list_display = ("name", "installed")
     readonly_fields = ("installed",)
-    inlines = [ApplicationSiteInline]
+    inlines = [ApplicationModuleInline]
 
     @admin.display(boolean=True)
     def installed(self, obj):
         return obj.installed
 
 
-@admin.register(SiteApplication)
-class SiteApplicationAdmin(admin.ModelAdmin):
+class LandingInline(admin.TabularInline):
+    model = Landing
+    extra = 0
+    fields = ("path", "label", "enabled", "description")
+
+
+@admin.register(Module)
+class ModuleAdmin(admin.ModelAdmin):
     list_display = ("application", "site", "path", "menu", "is_default")
     list_filter = ("site", "application")
     fields = ("site", "application", "path", "menu", "is_default", "favicon")
+    inlines = [LandingInline]
