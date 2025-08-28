@@ -2,6 +2,7 @@ import socket
 
 from django.contrib.sites.models import Site
 from django.http import HttpRequest
+from django.conf import settings
 
 
 def site_and_node(request: HttpRequest):
@@ -57,4 +58,5 @@ def site_and_node(request: HttpRequest):
         "badge_node": node,
         "badge_site_color": site_color,
         "badge_node_color": node_color,
+        "TIME_ZONE": settings.TIME_ZONE,
     }
