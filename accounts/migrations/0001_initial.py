@@ -17,7 +17,6 @@ class Migration(migrations.Migration):
     dependencies = [
         ("auth", "0001_initial"),
         ("contenttypes", "__first__"),
-        ("refs", "__first__"),
     ]
 
     operations = [
@@ -327,6 +326,44 @@ class Migration(migrations.Migration):
             ],
         ),
         migrations.CreateModel(
+            name="Reference",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                (
+                    "content_type",
+                    models.CharField(
+                        choices=[("text", "Text"), ("image", "Image")],
+                        default="text",
+                        max_length=5,
+                    ),
+                ),
+                ("alt_text", models.CharField(max_length=500, verbose_name="Title / Alt Text")),
+                ("value", models.TextField(blank=True)),
+                ("file", models.FileField(blank=True, upload_to="refs/")),
+                ("image", models.ImageField(blank=True, upload_to="refs/qr/")),
+                ("uses", models.PositiveIntegerField(default=0)),
+                ("method", models.CharField(default="qr", max_length=50)),
+                (
+                    "include_in_footer",
+                    models.BooleanField(default=False, verbose_name="Include in Footer"),
+                ),
+                ("created", models.DateTimeField(auto_now_add=True)),
+                (
+                    "author",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="references",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+            ],
+            options={"abstract": False},
+        ),
+        migrations.CreateModel(
             name="Account",
             fields=[
                 (
@@ -514,7 +551,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="rfids",
-                        to="refs.reference",
+                        to="accounts.reference",
                     ),
                 ),
             ],

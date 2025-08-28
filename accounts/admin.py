@@ -11,9 +11,7 @@ from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
 from django.contrib.auth.models import Group
-
-from refs.models import Reference
-
+from django.utils.html import format_html
 from .models import (
     User,
     Account,
@@ -26,6 +24,7 @@ from .models import (
     WMICode,
     EVModel,
     RFID,
+    Reference,
 )
 
 
@@ -37,6 +36,34 @@ class SecurityGroup(Group):
 
 
 admin.site.unregister(Group)
+
+
+@admin.register(Reference)
+class ReferenceAdmin(admin.ModelAdmin):
+    list_display = ("alt_text", "content_type", "include_in_footer", "author")
+    readonly_fields = ("uses", "qr_code", "author")
+    fields = (
+        "alt_text",
+        "content_type",
+        "value",
+        "file",
+        "method",
+        "include_in_footer",
+        "author",
+        "uses",
+        "qr_code",
+    )
+
+    def qr_code(self, obj):
+        if obj.image:
+            return format_html(
+                '<img src="{}" alt="{}" style="height:200px;"/>',
+                obj.image.url,
+                obj.alt_text,
+            )
+        return ""
+
+    qr_code.short_description = "QR Code"
 
 
 @admin.register(SecurityGroup)

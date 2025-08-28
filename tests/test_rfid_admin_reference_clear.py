@@ -13,7 +13,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from accounts.models import RFID
-from refs.models import Reference
+from accounts.models import Reference
 
 
 class RFIDAdminReferenceClearTests(TestCase):

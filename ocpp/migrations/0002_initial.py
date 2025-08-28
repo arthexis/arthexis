@@ -11,14 +11,13 @@ class Migration(migrations.Migration):
     dependencies = [
         ('accounts', '0001_initial'),
         ('ocpp', '0001_initial'),
-        ('refs', '0001_initial'),
     ]
 
     operations = [
         migrations.AddField(
             model_name='charger',
             name='reference',
-            field=models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='refs.reference'),
+            field=models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='accounts.reference'),
         ),
         migrations.AddField(
             model_name='charger',
