@@ -115,7 +115,7 @@ class RFIDBatchApiTests(TestCase):
                         "rfid": "CARD999",
                         "accounts": [self.account.id],
                         "allowed": True,
-                        "color": "black",
+                        "color": "B",
                         "released": False,
                     }
                 ]
@@ -124,7 +124,7 @@ class RFIDBatchApiTests(TestCase):
 
     def test_export_rfids_color_filter(self):
         RFID.objects.create(rfid="CARD111", color=RFID.WHITE)
-        response = self.client.get(reverse("rfid-batch"), {"color": "white"})
+        response = self.client.get(reverse("rfid-batch"), {"color": "W"})
         self.assertEqual(
             response.json(),
             {
@@ -133,7 +133,7 @@ class RFIDBatchApiTests(TestCase):
                         "rfid": "CARD111",
                         "accounts": [],
                         "allowed": True,
-                        "color": "white",
+                        "color": "W",
                         "released": False,
                     }
                 ]
@@ -152,7 +152,7 @@ class RFIDBatchApiTests(TestCase):
                         "rfid": "CARD112",
                         "accounts": [],
                         "allowed": True,
-                        "color": "black",
+                        "color": "B",
                         "released": True,
                     }
                 ]
@@ -166,7 +166,7 @@ class RFIDBatchApiTests(TestCase):
                     "rfid": "A1B2C3D4",
                     "accounts": [self.account.id],
                     "allowed": True,
-                    "color": "white",
+                    "color": "W",
                     "released": True,
                 }
             ]
@@ -182,7 +182,7 @@ class RFIDBatchApiTests(TestCase):
             RFID.objects.filter(
                 rfid="A1B2C3D4",
                 accounts=self.account,
-                color="white",
+                color=RFID.WHITE,
                 released=True,
             ).exists()
         )
