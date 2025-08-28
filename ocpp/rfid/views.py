@@ -29,9 +29,9 @@ def scan_test(_request):
     return JsonResponse(result, status=status)
 
 
-@landing("RFID Reader")
+@landing("RFID Scanner")
 def reader(request):
-    """Public page to read RFID tags."""
+    """Public page to scan RFID tags."""
     context = {
         "scan_url": reverse("rfid-scan-next"),
         "restart_url": reverse("rfid-scan-restart"),
