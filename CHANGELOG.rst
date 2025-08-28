@@ -4,6 +4,7 @@ Changelog
 Unreleased
 ----------
 - Add --satellite flag to install script
+- Add --control flag to install script to create Control site
 - Add msg app for LCD/Windows notifications
 - Remove environment sigils integration
 - Show full date and timezone in admin clock tooltip
