@@ -53,6 +53,14 @@
       nav.toc a:hover {
         text-decoration: underline;
       }
+      .nav-item.dropdown .nav-link::after {
+        display: none;
+      }
+      .nav-item.dropdown:hover .badge,
+      .nav-item.dropdown.show .badge {
+        background-color: var(--bs-primary);
+        color: var(--bs-white);
+      }
     </style>
   </head>
   <body class="p-3 pb-0 d-flex flex-column min-vh-100">
@@ -76,8 +84,8 @@
                       </li>
                     {% else %}
                       <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                          <span class="badge rounded-pill text-bg-primary">{{ module.menu_label|upper }}</span>
+                        <a class="nav-link" href="#" role="button">
+                          <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
                         </a>
                         <ul class="dropdown-menu">
                           {% for landing in landings %}
@@ -167,6 +175,49 @@
           setTheme('dark');
         }
       })();
+    </script>
+    <script>
+      document.querySelectorAll('.nav-item.dropdown').forEach(item => {
+        const link = item.querySelector('.nav-link');
+        const menu = item.querySelector('.dropdown-menu');
+        let clickOpen = false;
+
+        const show = () => {
+          item.classList.add('show');
+          menu.classList.add('show');
+        };
+        const hide = () => {
+          item.classList.remove('show');
+          menu.classList.remove('show');
+        };
+
+        link.addEventListener('click', e => {
+          e.preventDefault();
+          e.stopPropagation();
+          show();
+          clickOpen = true;
+        });
+
+        if (window.matchMedia('(hover: hover)').matches) {
+          item.addEventListener('mouseenter', () => {
+            if (!clickOpen) {
+              show();
+            }
+          });
+          item.addEventListener('mouseleave', () => {
+            if (!clickOpen) {
+              hide();
+            }
+          });
+        }
+
+        document.addEventListener('click', e => {
+          if (clickOpen && !item.contains(e.target)) {
+            clickOpen = false;
+            hide();
+          }
+        });
+      });
     </script>
     <svg xmlns="http://www.w3.org/2000/svg" class="base-svgs">
       <symbol viewBox="0 0 24 24" width="1.5rem" height="1.5rem" id="icon-moon"><path d="M0 0h24v24H0z" fill="none"/><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol>
