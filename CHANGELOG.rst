@@ -3,6 +3,7 @@ Changelog
 
 Unreleased
 ----------
+- Run migrations during install to avoid missing tables after database removal
 - Add --satellite flag to install script
 - Add --control flag to install script to create Control site
 - Add msg app for LCD/Windows notifications
