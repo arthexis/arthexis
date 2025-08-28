@@ -2,18 +2,14 @@ from django.contrib import admin, messages
 from django.urls import path, reverse
 from django.shortcuts import redirect, render
 from django.utils.html import format_html
-from django.utils.text import slugify
 from django import forms
 from app.widgets import CopyColorWidget
 from django.db import models
 from django.conf import settings
 from pathlib import Path
 import base64
-import socket
-import os
 import pyperclip
 from pyperclip import PyperclipException
-from utils import revision
 from .utils import capture_screenshot, capture_screen, save_screenshot
 from .actions import NodeAction
 
@@ -101,47 +97,11 @@ class NodeAdmin(admin.ModelAdmin):
 
     def register_current(self, request):
         """Create or update the Node entry for this host."""
-        hostname = socket.gethostname()
-        try:
-            address = socket.gethostbyname(hostname)
-        except OSError:
-            address = "127.0.0.1"
-        port = int(os.environ.get("PORT", 8000))
-        base_path = str(settings.BASE_DIR)
-        ver_path = Path(settings.BASE_DIR) / "VERSION"
-        installed_version = ver_path.read_text().strip() if ver_path.exists() else ""
-        rev_value = revision.get_revision()
-        installed_revision = rev_value if rev_value else ""
-
-        mac = Node.get_current_mac()
-        slug = slugify(hostname)
-
-        node = Node.objects.filter(mac_address=mac).first()
-        if not node:
-            node = Node.objects.filter(public_endpoint=slug).first()
-
-        defaults = {
-            "hostname": hostname,
-            "address": address,
-            "port": port,
-            "base_path": base_path,
-            "installed_version": installed_version,
-            "installed_revision": installed_revision,
-            "public_endpoint": slug,
-            "mac_address": mac,
-        }
-
-        if node:
-            for field, value in defaults.items():
-                setattr(node, field, value)
-            node.save(update_fields=list(defaults.keys()))
-            created = False
-        else:
-            node = Node.objects.create(**defaults)
-            created = True
-
+        node, created = Node.register_current()
         if created:
-            self.message_user(request, f"Current host registered as {node}", messages.SUCCESS)
+            self.message_user(
+                request, f"Current host registered as {node}", messages.SUCCESS
+            )
         else:
             self.message_user(
                 request,

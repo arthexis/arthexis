@@ -14,6 +14,8 @@ django.setup()
 from django.test import TestCase
 from django.conf import settings
 from integrate.models import RequestType
+from nodes.models import Node
+import socket
 
 
 class SeedDataEntityTests(TestCase):
@@ -57,3 +59,25 @@ class EnvRefreshFixtureTests(TestCase):
         rt = RequestType.all_objects.get(pk=999)
         self.assertTrue(rt.is_seed_data)
         shutil.rmtree(tmp_dir)
+
+
+class EnvRefreshNodeTests(TestCase):
+    def setUp(self):
+        base_dir = Path(settings.BASE_DIR)
+        spec = importlib.util.spec_from_file_location("env_refresh", base_dir / "env-refresh.py")
+        self.env_refresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.env_refresh)
+        self.env_refresh.call_command = lambda *args, **kwargs: None
+        self.env_refresh._fixture_files = lambda: []
+
+    def test_env_refresh_registers_node(self):
+        Node.objects.all().delete()
+        self.env_refresh.run_database_tasks()
+        self.assertIsNotNone(Node.get_local())
+
+    def test_env_refresh_updates_existing_node(self):
+        mac = Node.get_current_mac()
+        Node.objects.create(hostname="old", address="0.0.0.0", port=1, mac_address=mac)
+        self.env_refresh.run_database_tasks()
+        node = Node.objects.get(mac_address=mac)
+        self.assertEqual(node.hostname, socket.gethostname())

@@ -4,6 +4,10 @@ import re
 from django.utils.text import slugify
 from django.conf import settings
 import uuid
+import os
+import socket
+from pathlib import Path
+from utils import revision
 
 
 class NodeRole(Entity):
@@ -53,6 +57,45 @@ class Node(Entity):
         """Return the node representing the current host if it exists."""
         mac = cls.get_current_mac()
         return cls.objects.filter(mac_address=mac).first()
+
+    @classmethod
+    def register_current(cls):
+        """Create or update the :class:`Node` entry for this host."""
+        hostname = socket.gethostname()
+        try:
+            address = socket.gethostbyname(hostname)
+        except OSError:
+            address = "127.0.0.1"
+        port = int(os.environ.get("PORT", 8000))
+        base_path = str(settings.BASE_DIR)
+        ver_path = Path(settings.BASE_DIR) / "VERSION"
+        installed_version = ver_path.read_text().strip() if ver_path.exists() else ""
+        rev_value = revision.get_revision()
+        installed_revision = rev_value if rev_value else ""
+        mac = cls.get_current_mac()
+        slug = slugify(hostname)
+        node = cls.objects.filter(mac_address=mac).first()
+        if not node:
+            node = cls.objects.filter(public_endpoint=slug).first()
+        defaults = {
+            "hostname": hostname,
+            "address": address,
+            "port": port,
+            "base_path": base_path,
+            "installed_version": installed_version,
+            "installed_revision": installed_revision,
+            "public_endpoint": slug,
+            "mac_address": mac,
+        }
+        if node:
+            for field, value in defaults.items():
+                setattr(node, field, value)
+            node.save(update_fields=list(defaults.keys()))
+            created = False
+        else:
+            node = cls.objects.create(**defaults)
+            created = True
+        return node, created
 
     @property
     def is_local(self):
