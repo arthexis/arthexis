@@ -225,6 +225,8 @@ else
     echo "Requirements unchanged. Skipping installation."
 fi
 
+python manage.py migrate --noinput
+
 deactivate
 
 
