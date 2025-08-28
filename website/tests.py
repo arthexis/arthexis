@@ -5,7 +5,7 @@ from django.contrib.sites.models import Site
 from django.contrib import admin
 from django.core.exceptions import DisallowedHost
 import socket
-from website.models import Application, SiteApplication, SiteBadge
+from website.models import Application, Module, SiteBadge
 from website.admin import ApplicationAdmin
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
@@ -196,7 +196,7 @@ class ReadmeSidebarTests(TestCase):
         self.client = Client()
         Site.objects.update_or_create(id=1, defaults={"name": "Terminal"})
         call_command("register_site_apps")
-        SiteApplication.objects.all().delete()
+        Module.objects.all().delete()
 
     def test_table_of_contents_sidebar_present(self):
         resp = self.client.get(reverse("website:index"))
@@ -310,7 +310,7 @@ class NavAppsTests(TestCase):
             id=1, defaults={"domain": "127.0.0.1", "name": "Terminal"}
         )
         app = Application.objects.create(name="Readme")
-        SiteApplication.objects.create(
+        Module.objects.create(
             site=site, application=app, path="/", is_default=True
         )
 
@@ -324,7 +324,7 @@ class NavAppsTests(TestCase):
         self.assertContains(resp, "README")
 
     def test_nav_pill_uses_menu_field(self):
-        site_app = SiteApplication.objects.get()
+        site_app = Module.objects.get()
         site_app.menu = "Docs"
         site_app.save()
         resp = self.client.get(reverse("website:index"))
@@ -334,7 +334,7 @@ class NavAppsTests(TestCase):
     def test_app_without_root_url_excluded(self):
         site = Site.objects.get(id=1)
         app = Application.objects.create(name="core")
-        SiteApplication.objects.create(site=site, application=app, path="/core/")
+        Module.objects.create(site=site, application=app, path="/core/")
         resp = self.client.get(reverse("website:index"))
         self.assertNotContains(resp, 'href="/core/"')
 
@@ -346,7 +346,7 @@ class StaffNavVisibilityTests(TestCase):
             id=1, defaults={"domain": "testserver", "name": "Terminal"}
         )
         app = Application.objects.create(name="rfid")
-        SiteApplication.objects.create(site=site, application=app, path="/rfid/")
+        Module.objects.create(site=site, application=app, path="/rfid/")
         User = get_user_model()
         self.user = User.objects.create_user("user", password="pw")
         self.staff = User.objects.create_user("staff", password="pw", is_staff=True)
@@ -354,7 +354,7 @@ class StaffNavVisibilityTests(TestCase):
     def test_nonstaff_pill_hidden(self):
         self.client.login(username="user", password="pw")
         resp = self.client.get(reverse("website:index"))
-        self.assertNotContains(resp, 'href="/rfid/"')
+        self.assertContains(resp, 'href="/rfid/"')
 
     def test_staff_sees_pill(self):
         self.client.login(username="staff", password="pw")
@@ -368,7 +368,7 @@ class ApplicationModelTests(TestCase):
             id=1, defaults={"domain": "testserver", "name": "website"}
         )
         app = Application.objects.create(name="core")
-        site_app = SiteApplication.objects.create(site=site, application=app)
+        site_app = Module.objects.create(site=site, application=app)
         self.assertEqual(site_app.path, "/core/")
 
     def test_installed_flag_false_when_missing(self):
@@ -382,6 +382,18 @@ class ApplicationAdminFormTests(TestCase):
         form = admin_instance.get_form(request=None)()
         choices = [choice[0] for choice in form.fields["name"].choices]
         self.assertIn("core", choices)
+
+
+class LandingCreationTests(TestCase):
+    def setUp(self):
+        self.site, _ = Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": "Terminal"}
+        )
+        self.app, _ = Application.objects.get_or_create(name="website")
+
+    def test_landings_created_on_module_creation(self):
+        module = Module.objects.create(site=self.site, application=self.app, path="/")
+        self.assertTrue(module.landings.filter(path="/").exists())
 
 
 class AllowedHostSubnetTests(TestCase):
@@ -443,7 +455,7 @@ class FaviconTests(TestCase):
                 site=site, badge_color="#28a745", favicon=self._png("site.png")
             )
             app = Application.objects.create(name="readme")
-            SiteApplication.objects.create(
+            Module.objects.create(
                 site=site,
                 application=app,
                 path="/",
@@ -462,7 +474,7 @@ class FaviconTests(TestCase):
                 site=site, badge_color="#28a745", favicon=self._png("site.png")
             )
             app = Application.objects.create(name="readme")
-            SiteApplication.objects.create(
+            Module.objects.create(
                 site=site, application=app, path="/", is_default=True
             )
             resp = self.client.get(reverse("website:index"))

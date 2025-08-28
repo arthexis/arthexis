@@ -65,13 +65,33 @@
           </button>
           <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-              {% if nav_apps %}
-                {% for app in nav_apps %}
-                <li class="nav-item">
-                  <a class="nav-link" href="{{ app.path }}">
-                    <span class="badge rounded-pill text-bg-secondary">{{ app.menu_label|upper }}</span>
-                  </a>
-                </li>
+              {% if nav_modules %}
+                {% for module in nav_modules %}
+                  {% with landings=module.enabled_landings %}
+                    {% if landings|length == 1 %}
+                      <li class="nav-item">
+                        <a class="nav-link" href="{{ landings.0.path }}">
+                          <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
+                        </a>
+                      </li>
+                    {% else %}
+                      <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                          <span class="badge rounded-pill text-bg-primary">{{ module.menu_label|upper }}</span>
+                        </a>
+                        <ul class="dropdown-menu">
+                          {% for landing in landings %}
+                            <li>
+                              <a class="dropdown-item" href="{{ landing.path }}">{{ landing.label }}</a>
+                              {% if landing.description %}
+                                <small class="dropdown-item-text text-muted">{{ landing.description }}</small>
+                              {% endif %}
+                            </li>
+                          {% endfor %}
+                        </ul>
+                      </li>
+                    {% endif %}
+                  {% endwith %}
                 {% endfor %}
               {% endif %}
             </ul>

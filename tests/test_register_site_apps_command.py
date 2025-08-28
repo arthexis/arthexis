@@ -15,7 +15,7 @@ from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.test import TestCase
 
-from website.models import Application, SiteApplication
+from website.models import Application, Module
 from nodes.models import Node
 
 
@@ -23,7 +23,7 @@ class RegisterSiteAppsCommandTests(TestCase):
     def test_register_site_apps_creates_entries(self):
         Site.objects.all().delete()
         Application.objects.all().delete()
-        SiteApplication.objects.all().delete()
+        Module.objects.all().delete()
 
         call_command("register_site_apps")
 
@@ -42,4 +42,4 @@ class RegisterSiteAppsCommandTests(TestCase):
                 continue
             self.assertTrue(Application.objects.filter(name=config.label).exists())
             app = Application.objects.get(name=config.label)
-            self.assertTrue(site.site_applications.filter(application=app).exists())
+            self.assertTrue(site.modules.filter(application=app).exists())

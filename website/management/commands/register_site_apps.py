@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand
 from django.utils.text import slugify
 import socket
 
-from website.models import Application, SiteApplication
+from website.models import Application, Module
 from nodes.models import Node
 
 
@@ -39,6 +39,8 @@ class Command(BaseCommand):
                 continue
             app, _ = Application.objects.get_or_create(name=config.label)
             path = f"/{slugify(app.name)}/"
-            SiteApplication.objects.update_or_create(
+            module, created = Module.objects.update_or_create(
                 site=site, path=path, defaults={"application": app}
             )
+            if created:
+                module.create_landings()

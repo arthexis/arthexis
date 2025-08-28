@@ -11,7 +11,7 @@
     "fields": {"name": "rfid"}
   },
   {
-    "model": "website.siteapplication",
+    "model": "website.module",
     "fields": {
       "site": ["127.0.0.1"],
       "application": ["rfid"],
