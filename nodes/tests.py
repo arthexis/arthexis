@@ -31,7 +31,7 @@ from .models import (
     Backup,
 )
 from .tasks import capture_node_screenshot, sample_clipboard
-from msg.models import Message
+from core.models import Message
 
 
 class NodeTests(TestCase):
@@ -452,7 +452,7 @@ class StartupNotificationTests(TestCase):
             (tmp_path / "VERSION").write_text("1.2.3")
             with self.settings(BASE_DIR=tmp_path):
                 with patch("utils.revision.get_revision", return_value="abcdef123456"):
-                    with patch("msg.notifications.notify") as mock_notify:
+                    with patch("core.notifications.notify") as mock_notify:
                         with patch("nodes.apps.socket.gethostname", return_value="host"):
                             with patch("nodes.apps.socket.gethostbyname", return_value="1.2.3.4"):
                                 with patch.dict(os.environ, {"PORT": "9000"}):
@@ -463,7 +463,7 @@ class StartupNotificationTests(TestCase):
 
 class NotificationManagerTests(TestCase):
     def test_send_writes_trimmed_lines(self):
-        from msg.notifications import NotificationManager
+        from core.notifications import NotificationManager
 
         with TemporaryDirectory() as tmp:
             lock = Path(tmp) / "lcd_screen.lck"
@@ -476,7 +476,7 @@ class NotificationManagerTests(TestCase):
             self.assertEqual(content[1], "b" * 64)
 
     def test_send_falls_back_to_gui(self):
-        from msg.notifications import NotificationManager
+        from core.notifications import NotificationManager
 
         with TemporaryDirectory() as tmp:
             lock = Path(tmp) / "lcd_screen.lck"
@@ -491,7 +491,7 @@ class NotificationManagerTests(TestCase):
         manager._gui_display.assert_called_once_with("hi", "there")
 
     def test_send_uses_gui_when_lock_missing(self):
-        from msg.notifications import NotificationManager
+        from core.notifications import NotificationManager
 
         with TemporaryDirectory() as tmp:
             lock = Path(tmp) / "lcd_screen.lck"
@@ -502,11 +502,11 @@ class NotificationManagerTests(TestCase):
         manager._gui_display.assert_called_once_with("hi", "there")
 
     def test_gui_display_uses_windows_toast(self):
-        from msg.notifications import NotificationManager
+        from core.notifications import NotificationManager
 
-        with patch("msg.notifications.sys.platform", "win32"):
+        with patch("core.notifications.sys.platform", "win32"):
             mock_toast = MagicMock()
-            with patch("msg.notifications.ToastNotifier", return_value=mock_toast):
+            with patch("core.notifications.ToastNotifier", return_value=mock_toast):
                 manager = NotificationManager()
                 manager._gui_display("hi", "there")
         mock_toast.show_toast.assert_called_once_with(
@@ -514,11 +514,11 @@ class NotificationManagerTests(TestCase):
         )
 
     def test_gui_display_logs_when_toast_unavailable(self):
-        from msg.notifications import NotificationManager
+        from core.notifications import NotificationManager
 
-        with patch("msg.notifications.sys.platform", "win32"):
-            with patch("msg.notifications.ToastNotifier", None):
-                with patch("msg.notifications.logger") as mock_logger:
+        with patch("core.notifications.sys.platform", "win32"):
+            with patch("core.notifications.ToastNotifier", None):
+                with patch("core.notifications.logger") as mock_logger:
                     manager = NotificationManager()
                     manager._gui_display("hi", "there")
         mock_logger.info.assert_called_once_with("%s %s", "hi", "there")

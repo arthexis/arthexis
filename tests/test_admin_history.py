@@ -11,7 +11,7 @@ django.setup()
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
-from accounts.models import AdminHistory
+from core.models import AdminHistory
 
 
 class AdminHistoryTests(TestCase):
@@ -21,7 +21,7 @@ class AdminHistoryTests(TestCase):
             username="histadmin", email="histadmin@example.com", password="password"
         )
         self.client.force_login(user)
-        url = reverse("admin:accounts_account_changelist") + "?q=test"
+        url = reverse("admin:core_account_changelist") + "?q=test"
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         history = AdminHistory.objects.get(user=user)

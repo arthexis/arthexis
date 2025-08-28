@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.user",
+    "pk": 2,
+    "fields": {
+      "username": "arthexis",
+      "email": "arthexis@gmail.com",
+      "is_staff": true,
+      "is_superuser": true,
+      "is_active": false,
+      "password": ""
+    }
+  }
+]

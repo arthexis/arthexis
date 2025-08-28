@@ -8,7 +8,7 @@ class RfidConfig(AppConfig):
     def ready(self):  # pragma: no cover - startup side effects
         from .background_reader import start
         from .signals import tag_scanned
-        from msg import notify
+        from core.notifications import notify
 
         def _notify(_sender, rfid=None, **_kwargs):
             if rfid:

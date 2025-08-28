@@ -8,14 +8,14 @@
   },
   {
     "model": "website.application",
-    "fields": {"name": "msg"}
+    "fields": {"name": "rfid"}
   },
   {
     "model": "website.siteapplication",
     "fields": {
       "site": ["127.0.0.1"],
-      "application": ["msg"],
-      "path": "/msg/",
+      "application": ["rfid"],
+      "path": "/rfid/",
       "is_default": true
     }
   }

@@ -106,7 +106,7 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
         "tool": {
             "setuptools": {
                 "packages": [
-                    "accounts",
+                    "core",
                     "config",
                     "nodes",
                     "ocpp",

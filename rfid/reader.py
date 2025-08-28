@@ -1,7 +1,7 @@
 import time
 from django.utils import timezone
-from accounts.models import RFID
-from msg.notifications import notify_async
+from core.models import RFID
+from core.notifications import notify_async
 
 
 def read_rfid(

@@ -25,5 +25,5 @@ class AdminRfidScanCsrfTests(TestCase):
         self.client.force_login(self.user)
 
     def test_scan_view_allows_post_without_csrf(self):
-        response = self.client.post(reverse("admin:accounts_rfid_scan"))
+        response = self.client.post(reverse("admin:core_rfid_scan"))
         self.assertEqual(response.status_code, 200)

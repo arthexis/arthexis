@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('accounts', '0001_initial'),
+        ('core', '0001_initial'),
         ('ocpp', '0001_initial'),
     ]
 
@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='charger',
             name='reference',
-            field=models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='accounts.reference'),
+            field=models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='core.reference'),
         ),
         migrations.AddField(
             model_name='charger',
@@ -32,7 +32,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='transaction',
             name='account',
-            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.PROTECT, related_name='transactions', to='accounts.account'),
+            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.PROTECT, related_name='transactions', to='core.account'),
         ),
         migrations.AddField(
             model_name='transaction',

@@ -15,8 +15,8 @@ from django.test import RequestFactory, TestCase
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.urls import reverse
 
-from accounts.admin import RFIDAdmin
-from accounts.models import RFID
+from core.admin import RFIDAdmin
+from core.models import RFID
 
 
 class RFIDAdminActionTests(TestCase):
@@ -30,7 +30,7 @@ class RFIDAdminActionTests(TestCase):
         )
 
     def _request_with_messages(self):
-        request = self.factory.post("/admin/accounts/rfid/")
+        request = self.factory.post("/admin/core/rfid/")
         request.user = self.user
         middleware = SessionMiddleware(lambda req: None)
         middleware.process_request(request)
@@ -39,7 +39,7 @@ class RFIDAdminActionTests(TestCase):
         return request
 
     def test_swap_color_action_registered(self):
-        request = self.factory.get("/admin/accounts/rfid/")
+        request = self.factory.get("/admin/core/rfid/")
         request.user = self.user
         actions = self.admin.get_actions(request)
         self.assertIn("swap_color", actions)

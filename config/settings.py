@@ -115,7 +115,7 @@ CsrfViewMiddleware._origin_verified = _origin_verified_with_subnets
 
 LOCAL_APPS = [
     "nodes",
-    "accounts",
+    "core",
     "rfid",
     "ocpp",
     "awg",
@@ -123,7 +123,6 @@ LOCAL_APPS = [
     "integrate",
     "website",
     "app",
-    "msg",
 ]
 
 INSTALLED_APPS = [
@@ -152,7 +151,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "accounts.middleware.AdminHistoryMiddleware",
+    "core.middleware.AdminHistoryMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -187,12 +186,12 @@ CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
 
 
 # Custom user model
-AUTH_USER_MODEL = "accounts.User"
+AUTH_USER_MODEL = "core.User"
 
 # Enable RFID authentication backend and restrict default admin login to localhost
 AUTHENTICATION_BACKENDS = [
-    "accounts.backends.LocalhostAdminBackend",
-    "accounts.backends.RFIDBackend",
+    "core.backends.LocalhostAdminBackend",
+    "core.backends.RFIDBackend",
 ]
 
 

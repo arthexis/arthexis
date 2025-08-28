@@ -2,7 +2,7 @@ import asyncio
 import json
 from datetime import datetime
 from django.utils import timezone
-from accounts.models import Account
+from core.models import Account
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async

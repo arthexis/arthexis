@@ -229,7 +229,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$BASE_DIR
-ExecStart=$BASE_DIR/.venv/bin/python -m msg.lcd_screen
+ExecStart=$BASE_DIR/.venv/bin/python -m core.lcd_screen
 Restart=always
 User=$(id -un)
 

@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 
 from ocpp.models import Charger, Transaction, MeterReading
-from accounts.models import Account
+from core.models import Account
 
 
 class TransactionExportImportTests(TestCase):
