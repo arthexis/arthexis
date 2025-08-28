@@ -11,6 +11,10 @@
     "fields": {"name": "ocpp"}
   },
   {
+    "model": "website.application",
+    "fields": {"name": "awg"}
+  },
+  {
     "model": "website.module",
     "fields": {
       "site": ["127.0.0.1"],
@@ -25,6 +29,15 @@
       "module": ["127.0.0.1", "/ocpp/"],
       "path": "/ocpp/rfid/",
       "label": "RFID Scanner"
+    }
+  },
+  {
+    "model": "website.module",
+    "fields": {
+      "site": ["127.0.0.1"],
+      "application": ["awg"],
+      "path": "/awg/",
+      "is_default": false
     }
   }
 ]
