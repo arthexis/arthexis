@@ -3,6 +3,7 @@ from channels.testing import WebsocketCommunicator
 from channels.db import database_sync_to_async
 from django.test import Client, TransactionTestCase, TestCase
 from unittest import skip
+from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
@@ -914,6 +915,81 @@ class ChargePointSimulatorTests(TransactionTestCase):
             await asyncio.sleep(0.1)
             self.assertEqual(sim.status, "stopped")
             self.assertFalse(sim._thread.is_alive())
+        finally:
+            await sim.stop()
+            server.close()
+            await server.wait_closed()
+
+    async def test_pre_charge_sends_heartbeat_and_meter(self):
+        received = []
+
+        async def handler(ws):
+            async for msg in ws:
+                data = json.loads(msg)
+                received.append(data)
+                action = data[2]
+                if action == "BootNotification":
+                    await ws.send(json.dumps([3, data[1], {"status": "Accepted"}]))
+                elif action in {"Authorize", "StatusNotification", "Heartbeat", "MeterValues"}:
+                    await ws.send(json.dumps([3, data[1], {}]))
+                elif action == "StartTransaction":
+                    await ws.send(
+                        json.dumps(
+                            [
+                                3,
+                                data[1],
+                                {"transactionId": 1, "idTagInfo": {"status": "Accepted"}},
+                            ]
+                        )
+                    )
+                elif action == "StopTransaction":
+                    await ws.send(json.dumps([3, data[1], {"idTagInfo": {"status": "Accepted"}}]))
+                    break
+
+        server = await websockets.serve(handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"])
+        port = server.sockets[0].getsockname()[1]
+
+        try:
+            cfg = SimulatorConfig(
+                host="127.0.0.1",
+                ws_port=port,
+                cp_path="SIMPRE/",
+                duration=0.1,
+                interval=0.05,
+                kw_min=0.1,
+                kw_max=0.2,
+                pre_charge_delay=0.1,
+            )
+            sim = ChargePointSimulator(cfg)
+            await sim._run_session()
+        finally:
+            server.close()
+            await server.wait_closed()
+
+        actions = [msg[2] for msg in received]
+        start_idx = actions.index("StartTransaction")
+        pre_actions = actions[:start_idx]
+        self.assertIn("Heartbeat", pre_actions)
+        self.assertIn("MeterValues", pre_actions)
+
+    async def test_simulator_times_out_without_response(self):
+        async def handler(ws):
+            async for _ in ws:
+                pass
+
+        server = await websockets.serve(handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"])
+        port = server.sockets[0].getsockname()[1]
+
+        cfg = SimulatorConfig(host="127.0.0.1", ws_port=port, cp_path="SIMTO/")
+        sim = ChargePointSimulator(cfg)
+        store.simulators[99] = sim
+        try:
+            with patch("ocpp.simulator.asyncio.wait_for", side_effect=asyncio.TimeoutError):
+                started, status, _ = await asyncio.to_thread(sim.start)
+            await asyncio.to_thread(sim._thread.join)
+            self.assertFalse(started)
+            self.assertIn("Timeout", status)
+            self.assertNotIn(99, store.simulators)
         finally:
             await sim.stop()
             server.close()

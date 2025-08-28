@@ -182,9 +182,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 reply_payload = {
                     "currentTime": datetime.utcnow().isoformat() + "Z"
                 }
+                now = timezone.now()
+                self.charger.last_heartbeat = now
                 await database_sync_to_async(
                     Charger.objects.filter(charger_id=self.charger_id).update
-                )(last_heartbeat=timezone.now())
+                )(last_heartbeat=now)
             elif action == "Authorize":
                 account = await self._get_account(payload.get("idTag"))
                 if self.charger.require_rfid:
@@ -198,6 +200,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 reply_payload = {"idTagInfo": {"status": status}}
             elif action == "MeterValues":
                 await self._store_meter_values(payload, text_data)
+                self.charger.last_meter_values = payload
                 await database_sync_to_async(
                     Charger.objects.filter(charger_id=self.charger_id).update
                 )(last_meter_values=payload)

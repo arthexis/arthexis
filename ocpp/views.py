@@ -64,7 +64,6 @@ def charger_list(request):
             {
                 "charger_id": cid,
                 "name": charger.name,
-                "config": charger.config,
                 "require_rfid": charger.require_rfid,
                 "transaction": tx_data,
                 "lastHeartbeat": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None,
@@ -108,7 +107,6 @@ def charger_detail(request, cid):
         {
             "charger_id": cid,
             "name": charger.name,
-            "config": charger.config,
             "require_rfid": charger.require_rfid,
             "transaction": tx_data,
             "lastHeartbeat": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None,

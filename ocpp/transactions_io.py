@@ -32,12 +32,11 @@ def export_transactions(
 
     for charger in Charger.objects.filter(charger_id__in=export_chargers):
         data["chargers"].append(
-            {
-                "charger_id": charger.charger_id,
-                "number": charger.number,
-                "config": charger.config,
-                "require_rfid": charger.require_rfid,
-            }
+                {
+                    "charger_id": charger.charger_id,
+                    "number": charger.number,
+                    "require_rfid": charger.require_rfid,
+                }
         )
 
     for tx in qs:
@@ -88,7 +87,6 @@ def import_transactions(data: dict) -> int:
             charger_id=item["charger_id"],
             defaults={
                 "number": item.get("number", 1),
-                "config": item.get("config", {}),
                 "require_rfid": item.get("require_rfid", False),
             },
         )
