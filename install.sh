@@ -6,13 +6,14 @@ NGINX_MODE="internal"
 PORT=""
 AUTO_UPGRADE=false
 LATEST=false
+UPGRADE=false
 ENABLE_CELERY=false
 ENABLE_LCD_SCREEN=false
 DISABLE_LCD_SCREEN=false
 CLEAN=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--auto-upgrade] [--latest] [--satellite] [--celery] [--lcd-screen|--no-lcd-screen] [--clean]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--celery] [--lcd-screen|--no-lcd-screen] [--clean]" >&2
     exit 1
 }
 
@@ -35,6 +36,10 @@ while [[ $# -gt 0 ]]; do
             [ -z "$2" ] && usage
             PORT="$2"
             shift 2
+            ;;
+        --upgrade)
+            UPGRADE=true
+            shift
             ;;
         --auto-upgrade)
             AUTO_UPGRADE=true
@@ -273,10 +278,15 @@ fi
 if [ "$AUTO_UPGRADE" = true ]; then
     if [ "$LATEST" = true ]; then
         echo "latest" > AUTO_UPGRADE
-        ./upgrade.sh --latest
     else
         echo "version" > AUTO_UPGRADE
-        ./upgrade.sh
+    fi
+    if [ "$UPGRADE" = true ]; then
+        if [ "$LATEST" = true ]; then
+            ./upgrade.sh --latest
+        else
+            ./upgrade.sh
+        fi
     fi
     source .venv/bin/activate
     python manage.py shell <<'PYCODE'
@@ -292,9 +302,13 @@ PeriodicTask.objects.update_or_create(
 )
 PYCODE
     deactivate
-else
-    if [ -n "$SERVICE" ]; then
-        sudo systemctl restart "$SERVICE"
+elif [ "$UPGRADE" = true ]; then
+    if [ "$LATEST" = true ]; then
+        ./upgrade.sh --latest
+    else
+        ./upgrade.sh
     fi
+elif [ -n "$SERVICE" ]; then
+    sudo systemctl restart "$SERVICE"
 fi
 
