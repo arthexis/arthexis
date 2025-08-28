@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 
 from . import views
 
@@ -12,4 +12,5 @@ urlpatterns = [
     path("c/<str:cid>/sessions/", views.charger_session_search, name="charger-session-search"),
     path("log/<str:cid>/", views.charger_log_page, name="charger-log"),
     path("c/<str:cid>/status/", views.charger_status, name="charger-status"),
+    path("rfid/", include("ocpp.rfid.urls")),
 ]

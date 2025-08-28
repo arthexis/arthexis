@@ -1,15 +1,15 @@
 from unittest import TestCase
 from unittest.mock import patch, MagicMock, ANY
 
-from rfid.background_reader import _setup_hardware, IRQ_PIN, GPIO
-from rfid.reader import read_rfid
+from .background_reader import _setup_hardware, IRQ_PIN, GPIO
+from .reader import read_rfid
 
 
 class IRQPinSetupManualTest(TestCase):
     """Manual test to ensure IRQ pin setup uses the expected GPIO pin."""
 
     def test_irq_pin_setup(self):
-        with patch("rfid.background_reader.GPIO") as mock_gpio, \
+        with patch("ocpp.rfid.background_reader.GPIO") as mock_gpio, \
              patch.dict("sys.modules", {"mfrc522": MagicMock(MFRC522=MagicMock())}):
             _setup_hardware()
             mock_gpio.setmode.assert_called_once_with(mock_gpio.BCM)

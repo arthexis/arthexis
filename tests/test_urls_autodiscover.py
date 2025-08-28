@@ -15,6 +15,6 @@ def test_core_url_autodiscovered():
 
 
 def test_rfid_url_autodiscovered():
-    match = resolve("/rfid/")
+    match = resolve("/ocpp/rfid/")
     assert match.view_name == "rfid-reader"
 
