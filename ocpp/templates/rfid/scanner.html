@@ -8,11 +8,13 @@
     {% endif %}
   </p>
   <div class="field"><span class="label">Label:</span><span class="value" id="{{ prefix }}-label"></span></div>
-  <div class="field"><span class="label">RFID:</span><span class="value" id="{{ prefix }}-rfid"></span></div>
   <div class="field"><span class="label">Color:</span><span class="value" id="{{ prefix }}-color"></span></div>
   <div class="field"><span class="label">Valid:</span><span class="value" id="{{ prefix }}-allowed"></span></div>
-  <div class="field"><span class="label">Released:</span><span class="value" id="{{ prefix }}-released"></span></div>
-  <div class="field"><span class="label">Reference:</span><span class="value" id="{{ prefix }}-reference"></span></div>
+  {% if request.user.is_staff %}
+    <div class="field"><span class="label">RFID:</span><span class="value" id="{{ prefix }}-rfid"></span></div>
+    <div class="field"><span class="label">Released:</span><span class="value" id="{{ prefix }}-released"></span></div>
+    <div class="field"><span class="label">Reference:</span><span class="value" id="{{ prefix }}-reference"></span></div>
+  {% endif %}
 </div>
 <style>
 #{{ prefix }}-scanner .field {
@@ -36,9 +38,9 @@
 (function(){
   const statusEl = document.getElementById('{{ prefix }}-status');
   const labelEl = document.getElementById('{{ prefix }}-label');
-  const rfidEl = document.getElementById('{{ prefix }}-rfid');
   const colorEl = document.getElementById('{{ prefix }}-color');
   const allowedEl = document.getElementById('{{ prefix }}-allowed');
+  const rfidEl = document.getElementById('{{ prefix }}-rfid');
   const releasedEl = document.getElementById('{{ prefix }}-released');
   const referenceEl = document.getElementById('{{ prefix }}-reference');
   const restartTestBtn = document.getElementById('{{ prefix }}-restart-test');
@@ -59,12 +61,12 @@
         return;
       } else if(data.rfid){
         labelEl.textContent = data.label_id;
-        rfidEl.textContent = data.rfid || '';
+        if(rfidEl){ rfidEl.textContent = data.rfid || ''; }
         colorEl.textContent = data.color || '';
         allowedEl.textContent = data.allowed === undefined ? '' : (data.allowed ? 'Yes' : 'No');
-        releasedEl.textContent = data.released === undefined ? '' : (data.released ? 'Yes' : 'No');
-        referenceEl.textContent = data.reference || '';
-        if(data.reference && /^https?:\/\//i.test(data.reference)){
+        if(releasedEl){ releasedEl.textContent = data.released === undefined ? '' : (data.released ? 'Yes' : 'No'); }
+        if(referenceEl){ referenceEl.textContent = data.reference || ''; }
+        if(referenceEl && data.reference && /^https?:\/\//i.test(data.reference)){
           const w = window.open(data.reference, '_blank');
           if(w){ w.focus(); }
         }

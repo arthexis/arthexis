@@ -9,6 +9,9 @@ django.setup()
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
+
+from website.models import Application, Module
 
 from core.models import RFID
 from ocpp.rfid.reader import read_rfid
@@ -137,17 +140,47 @@ class ScanTestViewTests(SimpleTestCase):
         self.assertEqual(resp.json(), {"error": "no scanner detected"})
 
 
+class RFIDLandingTests(TestCase):
+    def test_scanner_view_registered_as_landing(self):
+        site, _ = Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": "website"}
+        )
+        app = Application.objects.create(name="Ocpp")
+        module = Module.objects.create(site=site, application=app, path="/ocpp/")
+        module.create_landings()
+        self.assertTrue(
+            module.landings.filter(path="/ocpp/rfid/").exists()
+        )
+
 class ScannerTemplateTests(TestCase):
+    def setUp(self):
+        self.url = reverse("rfid-reader")
+
     def test_configure_link_for_staff(self):
         User = get_user_model()
         staff = User.objects.create_user("staff", password="pwd", is_staff=True)
         self.client.force_login(staff)
-        resp = self.client.get(reverse("rfid-reader"))
+        resp = self.client.get(self.url)
         self.assertContains(resp, 'id="rfid-configure"')
 
     def test_no_link_for_anonymous(self):
-        resp = self.client.get(reverse("rfid-reader"))
+        resp = self.client.get(self.url)
         self.assertNotContains(resp, 'id="rfid-configure"')
+
+    def test_advanced_fields_for_staff(self):
+        User = get_user_model()
+        staff = User.objects.create_user("staff2", password="pwd", is_staff=True)
+        self.client.force_login(staff)
+        resp = self.client.get(self.url)
+        self.assertContains(resp, 'id="rfid-rfid"')
+        self.assertContains(resp, 'id="rfid-released"')
+        self.assertContains(resp, 'id="rfid-reference"')
+
+    def test_basic_fields_for_public(self):
+        resp = self.client.get(self.url)
+        self.assertNotContains(resp, 'id="rfid-rfid"')
+        self.assertNotContains(resp, 'id="rfid-released"')
+        self.assertNotContains(resp, 'id="rfid-reference"')
 
 
 class ReaderPollingTests(SimpleTestCase):
