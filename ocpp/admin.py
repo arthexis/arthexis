@@ -17,6 +17,8 @@ from .transactions_io import (
     export_transactions,
     import_transactions as import_transactions_data,
 )
+from core.admin import RFIDAdmin
+from .models import RFID
 
 
 class LocationAdminForm(forms.ModelForm):
@@ -365,4 +367,7 @@ class MeterReadingAdmin(admin.ModelAdmin):
     )
     date_hierarchy = "timestamp"
     list_filter = ("charger", MeterReadingDateFilter)
+
+
+admin.site.register(RFID, RFIDAdmin)
 

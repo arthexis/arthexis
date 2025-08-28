@@ -208,7 +208,7 @@ class ReadmeSidebarTests(TestCase):
     def test_included_apps_table_renders(self):
         resp = self.client.get(reverse("website:index"))
         self.assertContains(resp, "<table")
-        self.assertContains(resp, "<td>rfid</td>")
+        self.assertContains(resp, "<td>ocpp</td>")
 
 
 class SiteAdminRegisterCurrentTests(TestCase):
@@ -345,8 +345,8 @@ class StaffNavVisibilityTests(TestCase):
         site, _ = Site.objects.update_or_create(
             id=1, defaults={"domain": "testserver", "name": "Terminal"}
         )
-        app = Application.objects.create(name="rfid")
-        Module.objects.create(site=site, application=app, path="/rfid/")
+        app = Application.objects.create(name="ocpp")
+        Module.objects.create(site=site, application=app, path="/ocpp/")
         User = get_user_model()
         self.user = User.objects.create_user("user", password="pw")
         self.staff = User.objects.create_user("staff", password="pw", is_staff=True)
@@ -354,12 +354,12 @@ class StaffNavVisibilityTests(TestCase):
     def test_nonstaff_pill_hidden(self):
         self.client.login(username="user", password="pw")
         resp = self.client.get(reverse("website:index"))
-        self.assertContains(resp, 'href="/rfid/"')
+        self.assertContains(resp, 'href="/ocpp/"')
 
     def test_staff_sees_pill(self):
         self.client.login(username="staff", password="pw")
         resp = self.client.get(reverse("website:index"))
-        self.assertContains(resp, 'href="/rfid/"')
+        self.assertContains(resp, 'href="/ocpp/"')
 
 
 class ApplicationModelTests(TestCase):

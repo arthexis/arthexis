@@ -8,14 +8,14 @@
   },
   {
     "model": "website.application",
-    "fields": {"name": "rfid"}
+    "fields": {"name": "ocpp"}
   },
   {
     "model": "website.module",
     "fields": {
       "site": ["127.0.0.1"],
-      "application": ["rfid"],
-      "path": "/rfid/",
+      "application": ["ocpp"],
+      "path": "/ocpp/",
       "is_default": true
     }
   }

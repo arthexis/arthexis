@@ -116,7 +116,6 @@ CsrfViewMiddleware._origin_verified = _origin_verified_with_subnets
 LOCAL_APPS = [
     "nodes",
     "core",
-    "rfid",
     "ocpp",
     "awg",
     "release",

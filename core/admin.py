@@ -403,7 +403,7 @@ class RFIDAdmin(ImportExportModelAdmin):
         return render(request, "admin/core/rfid/scan.html", context)
 
     def scan_next(self, request):
-        from rfid.scanner import scan_sources
+        from ocpp.rfid.scanner import scan_sources
 
         result = scan_sources(request)
         status = 500 if result.get("error") else 200

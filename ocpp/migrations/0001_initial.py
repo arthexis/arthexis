@@ -107,4 +107,10 @@ class Migration(migrations.Migration):
                 'verbose_name_plural': 'Transactions',
             },
         ),
+        migrations.CreateModel(
+            name='RFID',
+            fields=[],
+            options={'proxy': True, 'indexes': [], 'constraints': [], 'verbose_name': 'RFID', 'verbose_name_plural': 'RFIDs'},
+            bases=('core.rfid',),
+        ),
     ]

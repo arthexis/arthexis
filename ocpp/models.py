@@ -5,7 +5,7 @@ from django.contrib.sites.models import Site
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 
-from core.models import Account, Reference
+from core.models import Account, Reference, RFID as CoreRFID
 
 
 class Location(Entity):
@@ -250,4 +250,12 @@ class Simulator(Entity):
         if not path.endswith("/"):
             path += "/"
         return f"ws://{self.host}:{self.ws_port}/{path}"
+
+
+class RFID(CoreRFID):
+    class Meta:
+        proxy = True
+        app_label = "ocpp"
+        verbose_name = CoreRFID._meta.verbose_name
+        verbose_name_plural = CoreRFID._meta.verbose_name_plural
 

@@ -11,25 +11,12 @@
     "fields": {"name": "ocpp"}
   },
   {
-    "model": "website.application",
-    "fields": {"name": "rfid"}
-  },
-  {
     "model": "website.module",
     "fields": {
       "site": ["192.168.129.10"],
       "application": ["ocpp"],
       "path": "/ocpp/",
       "is_default": true
-    }
-  },
-  {
-    "model": "website.module",
-    "fields": {
-      "site": ["192.168.129.10"],
-      "application": ["rfid"],
-      "path": "/rfid/",
-      "is_default": false
     }
   }
 ]
