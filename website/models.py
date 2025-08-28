@@ -93,22 +93,30 @@ class Module(Entity):
                 return
         patterns = getattr(urlconf, "urlpatterns", [])
         created = False
-        for pattern in patterns:
-            if isinstance(pattern, URLPattern):
-                callback = pattern.callback
-                if getattr(callback, "landing", False):
-                    Landing.objects.get_or_create(
-                        module=self,
-                        path=f"{self.path}{str(pattern.pattern)}",
-                        defaults={
-                            "label": getattr(
-                                callback,
-                                "landing_label",
-                                callback.__name__.replace("_", " ").title(),
-                            )
-                        },
-                    )
-                    created = True
+
+        def _walk(patterns, prefix=""):
+            nonlocal created
+            for pattern in patterns:
+                if isinstance(pattern, URLPattern):
+                    callback = pattern.callback
+                    if getattr(callback, "landing", False):
+                        Landing.objects.get_or_create(
+                            module=self,
+                            path=f"{self.path}{prefix}{str(pattern.pattern)}",
+                            defaults={
+                                "label": getattr(
+                                    callback,
+                                    "landing_label",
+                                    callback.__name__.replace("_", " ").title(),
+                                )
+                            },
+                        )
+                        created = True
+                else:
+                    _walk(pattern.url_patterns, prefix=f"{prefix}{str(pattern.pattern)}")
+
+        _walk(patterns)
+
         if not created:
             Landing.objects.get_or_create(
                 module=self, path=self.path, defaults={"label": self.application.name}
