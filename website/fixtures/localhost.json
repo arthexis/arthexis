@@ -18,5 +18,13 @@
       "path": "/ocpp/",
       "is_default": true
     }
+  },
+  {
+    "model": "website.landing",
+    "fields": {
+      "module": ["127.0.0.1", "/ocpp/"],
+      "path": "/ocpp/rfid/",
+      "label": "RFID Scanner"
+    }
   }
 ]

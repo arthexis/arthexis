@@ -32,6 +32,14 @@
     }
   },
   {
+    "model": "website.landing",
+    "fields": {
+      "module": ["arthexis.com", "/ocpp/"],
+      "path": "/ocpp/rfid/",
+      "label": "RFID Scanner"
+    }
+  },
+  {
     "model": "website.module",
     "fields": {
       "site": [
