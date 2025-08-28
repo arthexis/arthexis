@@ -84,7 +84,16 @@ class ChargePointSimulator:
 
             async def recv() -> str:
                 try:
-                    raw = await ws.recv()
+                    raw = await asyncio.wait_for(ws.recv(), timeout=60)
+                except asyncio.TimeoutError:
+                    self.status = "stopped"
+                    self._stop_event.set()
+                    store.add_log(
+                        cfg.cp_path,
+                        "Timeout waiting for response from charger",
+                        log_type="simulator",
+                    )
+                    raise
                 except Exception:
                     self.status = "error"
                     raise
@@ -135,6 +144,33 @@ class ChargePointSimulator:
                                     "connectorId": 1,
                                     "errorCode": "NoError",
                                     "status": "Available",
+                                },
+                            ]
+                        )
+                    )
+                    await recv()
+                    await send(json.dumps([2, "hb", "Heartbeat", {}]))
+                    await recv()
+                    await send(
+                        json.dumps(
+                            [
+                                2,
+                                "meter",
+                                "MeterValues",
+                                {
+                                    "connectorId": 1,
+                                    "meterValue": [
+                                        {
+                                            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                            "sampledValue": [
+                                                {
+                                                    "value": "0",
+                                                    "measurand": "Energy.Active.Import.Register",
+                                                    "unit": "kW",
+                                                }
+                                            ],
+                                        }
+                                    ],
                                 },
                             ]
                         )
@@ -220,6 +256,13 @@ class ChargePointSimulator:
                 )
             )
             await recv()
+        except asyncio.TimeoutError:
+            if not self._connected.is_set():
+                self._connect_error = "Timeout waiting for response"
+                self._connected.set()
+            self.status = "stopped"
+            self._stop_event.set()
+            return
         except websockets.exceptions.ConnectionClosed as exc:
             if not self._connected.is_set():
                 self._connect_error = str(exc)
@@ -252,17 +295,23 @@ class ChargePointSimulator:
                 )
 
     async def _run(self) -> None:
-        while not self._stop_event.is_set():
-            try:
-                await self._run_session()
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                # wait briefly then retry
-                await asyncio.sleep(1)
-                continue
-            if not self.config.repeat:
-                break
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    await self._run_session()
+                except asyncio.CancelledError:
+                    break
+                except Exception:
+                    # wait briefly then retry
+                    await asyncio.sleep(1)
+                    continue
+                if not self.config.repeat:
+                    break
+        finally:
+            for key, sim in list(store.simulators.items()):
+                if sim is self:
+                    store.simulators.pop(key, None)
+                    break
 
     def start(self) -> tuple[bool, str, str]:
         if self._thread and self._thread.is_alive():
@@ -290,7 +339,10 @@ class ChargePointSimulator:
         if self._connect_error == "accepted":
             self.status = "running"
             return True, "Connection accepted", log_file
-        self.status = "error"
+        if "Timeout" in self._connect_error:
+            self.status = "stopped"
+        else:
+            self.status = "error"
         return False, f"Connection failed: {self._connect_error}", log_file
 
     async def stop(self) -> None:

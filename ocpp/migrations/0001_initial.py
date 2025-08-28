@@ -19,7 +19,6 @@ class Migration(migrations.Migration):
                 ('is_deleted', models.BooleanField(default=False, editable=False)),
                 ('charger_id', models.CharField(max_length=100, unique=True, verbose_name='Serial Number')),
                 ('number', models.PositiveIntegerField(default=1, verbose_name='Charger Number')),
-                ('config', models.JSONField(blank=True, default=dict)),
                 ('require_rfid', models.BooleanField(default=False, verbose_name='Require RFID')),
                 ('last_heartbeat', models.DateTimeField(blank=True, null=True)),
                 ('last_meter_values', models.JSONField(blank=True, default=dict)),

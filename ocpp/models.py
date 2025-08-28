@@ -24,11 +24,10 @@ class Location(Entity):
 
 
 class Charger(Entity):
-    """Known charge point with optional configuration."""
+    """Known charge point."""
 
     charger_id = models.CharField(_("Serial Number"), max_length=100, unique=True)
     number = models.PositiveIntegerField(_("Charger Number"), default=1)
-    config = models.JSONField(default=dict, blank=True)
     require_rfid = models.BooleanField(_("Require RFID"), default=False)
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_meter_values = models.JSONField(default=dict, blank=True)

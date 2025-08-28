@@ -68,7 +68,6 @@ class ChargerAdmin(admin.ModelAdmin):
                 "fields": (
                     "charger_id",
                     "number",
-                    "config",
                     "require_rfid",
                     "last_heartbeat",
                     "last_meter_values",
