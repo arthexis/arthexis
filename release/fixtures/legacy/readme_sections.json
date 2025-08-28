@@ -28,7 +28,7 @@
     "pk": 4,
     "fields": {
       "order": 4,
-      "content": "## Included Apps\n| App | Purpose |\n| --- | --- |\n| accounts | User accounts, RFID login, and credit management |\n| app | Core utilities and site model tweaks |\n| awg | American Wire Gauge references and calculator |\n| clipboard | Store and scan clipboard text samples |\n| crm | Customer relationship management with Odoo support |\n| emails | Email templates and messaging |\n| nodes | Register project nodes and manage NGINX templates |\n| ocpp | OCPP 1.6 charge point management |\n| refs | Reusable references and QR codes |\n| release | Packaging and PyPI release helpers |\n| rfid | Public RFID reader |\n| social.bsky | Bluesky integration |\n| social.meta | Facebook page integration |\n| todos | Track project tasks from code TODOs |\n| website | Default site and README renderer |\n| readme | Build project README and expose docs |"
+      "content": "## Included Apps\n| App | Purpose |\n| --- | --- |\n| accounts | User accounts, RFID login, and credit management |\n| app | Core utilities and site model tweaks |\n| awg | American Wire Gauge references and calculator |\n| clipboard | Store and scan clipboard text samples |\n| crm | Customer relationship management with Odoo support |\n| emails | Email templates and messaging |\n| nodes | Register project nodes and manage NGINX templates |\n| ocpp | OCPP 1.6 charge point management |\n| release | Packaging and PyPI release helpers |\n| rfid | Public RFID reader |\n| social.bsky | Bluesky integration |\n| social.meta | Facebook page integration |\n| todos | Track project tasks from code TODOs |\n| website | Default site and README renderer |\n| readme | Build project README and expose docs |"
     }
   },
   {

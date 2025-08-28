@@ -23,4 +23,4 @@ Repository = "https://github.com/arthexis/arthexis"
 Homepage = "https://arthexis.com"
 
 [tool.setuptools]
-packages = [ "accounts", "config", "nodes", "ocpp", "refs", "website", "release", "integrate",]
+packages = [ "accounts", "config", "nodes", "ocpp", "website", "release", "integrate",]

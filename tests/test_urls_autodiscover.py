@@ -18,7 +18,3 @@ def test_rfid_url_autodiscovered():
     match = resolve("/rfid/")
     assert match.view_name == "rfid-reader"
 
-def test_refs_url_autodiscovered():
-    match = resolve("/refs/")
-    assert match.view_name == "refs:recent"
-
