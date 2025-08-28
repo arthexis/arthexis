@@ -20,8 +20,8 @@ msgstr ""
 "1 : 2;\n"
 
 #: core/apps.py:8
-msgid "Business Cores"
-msgstr "Núcleos de negocio"
+msgid "Business Models"
+msgstr "Modelos de negocio"
 
 #: core/models.py:140
 msgid "Invalid municipality for the selected state"

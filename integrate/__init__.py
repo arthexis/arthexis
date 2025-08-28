@@ -1,1 +1,1 @@
-"""Integrate app."""
+"""Integration Models app."""
