@@ -98,14 +98,22 @@ ensure_pkg() {
 
 ensure_pkg nginx nginx
 ensure_pkg sshd openssh-server
-systemctl enable ssh >/dev/null 2>&1 || true
-systemctl restart ssh >/dev/null 2>&1 || true
+ensure_service ssh
 
-# Ensure SSH port is open if a firewall is active
+# Ensure VNC server is installed and running
+if systemctl list-unit-files | grep -q 'vncserver-x11-serviced.service'; then
+    ensure_service vncserver-x11-serviced
+else
+    ensure_pkg x11vnc x11vnc
+    ensure_service x11vnc
+fi
+
+# Ensure SSH and VNC ports are open if a firewall is active
 if command -v ufw >/dev/null 2>&1; then
     STATUS=$(ufw status 2>/dev/null || true)
     if ! echo "$STATUS" | grep -iq "inactive"; then
         ufw allow 22/tcp || true
+        ufw allow 5900/tcp || true
     fi
 fi
 
@@ -177,9 +185,14 @@ if nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
 fi
 
 # Preserve existing password if connection already exists
-EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show gelectriic-ap 2>/dev/null || true)"
+HOSTNAME_SLUG="$(slugify "$(hostname)")"
+AP_NAME="gelectriic-$HOSTNAME_SLUG"
+EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null \
+    || nmcli -s -g 802-11-wireless-security.psk connection show gelectriic-ap 2>/dev/null || true)"
 
 # Remove existing connections on eth0 and wlan0
+nmcli connection delete gelectriic-ap 2>/dev/null || true
+nmcli connection delete "$AP_NAME" 2>/dev/null || true
 for dev in eth0 wlan0; do
     nmcli -t -f NAME,DEVICE connection show | awk -F: -v D="$dev" '$2==D {print $1}' | while read -r con; do
         nmcli connection delete "$con"
@@ -194,7 +207,7 @@ nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect 
 # Obtain or prompt for WiFi password
 if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
     while true; do
-        read -rsp "Enter WiFi password for 'gelectriic-ap': " WIFI_PASS1; echo
+        read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
         read -rsp "Confirm password: " WIFI_PASS2; echo
         if [[ "$WIFI_PASS1" == "$WIFI_PASS2" && -n "$WIFI_PASS1" ]]; then
             WIFI_PASS="$WIFI_PASS1"
@@ -208,14 +221,20 @@ else
 fi
 
 # Configure wlan0 access point
-nmcli connection add type wifi ifname wlan0 con-name gelectriic-ap autoconnect yes \
-    ssid gelectriic-ap mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
+nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" autoconnect yes \
+    ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
     ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
     wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
 
 # Bring up connections
 nmcli connection up eth0-shared
-nmcli connection up gelectriic-ap
+nmcli connection up "$AP_NAME"
+
+# Allow wlan0 clients to reach local services on 10.42.0.1
+if command -v iptables >/dev/null 2>&1; then
+    iptables -C INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT 2>/dev/null || \
+        iptables -A INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT
+fi
 
 # Show final status
 nmcli device status
