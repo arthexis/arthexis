@@ -659,35 +659,51 @@ class Message(Entity):
         return f"{self.subject} {self.body}".strip()
 
 
-class PackageRelease(Entity):
-    """Store metadata and credentials for building a PyPI release."""
+class PackagerProfile(Entity):
+    """Store credentials for publishing packages."""
 
-    name = models.CharField(max_length=100, default=DEFAULT_PACKAGE.name)
-    description = models.CharField(max_length=255, default=DEFAULT_PACKAGE.description)
-    author = models.CharField(max_length=100, default=DEFAULT_PACKAGE.author)
-    email = models.EmailField(default=DEFAULT_PACKAGE.email)
-    python_requires = models.CharField(max_length=20, default=DEFAULT_PACKAGE.python_requires)
-    license = models.CharField(max_length=100, default=DEFAULT_PACKAGE.license)
-    repository_url = models.URLField(default=DEFAULT_PACKAGE.repository_url)
-    homepage_url = models.URLField(default=DEFAULT_PACKAGE.homepage_url)
-    version = models.CharField(max_length=20, unique=True, default="0.0.0")
-    revision = models.CharField(max_length=40, blank=True)
-    pypi_url = models.URLField(blank=True)
-    is_live = models.BooleanField(default=False)
-    username = models.CharField(max_length=100, blank=True)
-    password = models.CharField(max_length=100, blank=True)
+    name = models.CharField(max_length=100)
     token = models.CharField(max_length=200, blank=True)
 
     class Meta:
-        verbose_name = "Package Release"
-        verbose_name_plural = "Package Releases"
-        get_latest_by = "version"
+        verbose_name = "Packager Profile"
+        verbose_name_plural = "Packager Profiles"
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return self.name
+
+    def to_credentials(self) -> Credentials | None:
+        """Return credentials for this profile."""
+        if self.token:
+            return Credentials(token=self.token)
+        return None
+
+
+class PackageHub(Entity):
+    """Package details shared across releases."""
+
+    name = models.CharField(max_length=100, default=DEFAULT_PACKAGE.name)
+    description = models.CharField(
+        max_length=255, default=DEFAULT_PACKAGE.description
+    )
+    author = models.CharField(max_length=100, default=DEFAULT_PACKAGE.author)
+    email = models.EmailField(default=DEFAULT_PACKAGE.email)
+    python_requires = models.CharField(
+        max_length=20, default=DEFAULT_PACKAGE.python_requires
+    )
+    license = models.CharField(max_length=100, default=DEFAULT_PACKAGE.license)
+    repository_url = models.URLField(default=DEFAULT_PACKAGE.repository_url)
+    homepage_url = models.URLField(default=DEFAULT_PACKAGE.homepage_url)
+
+    class Meta:
+        verbose_name = "Package Hub"
+        verbose_name_plural = "Package Hubs"
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name
 
     def to_package(self) -> Package:
-        """Return a :class:`Package` instance for this configuration."""
+        """Return a :class:`Package` instance from hub data."""
         return Package(
             name=self.name,
             description=self.description,
@@ -699,12 +715,37 @@ class PackageRelease(Entity):
             homepage_url=self.homepage_url,
         )
 
+
+class PackageRelease(Entity):
+    """Store metadata for a specific package version."""
+
+    hub = models.ForeignKey(
+        PackageHub, on_delete=models.CASCADE, related_name="releases"
+    )
+    profile = models.ForeignKey(
+        PackagerProfile, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    version = models.CharField(max_length=20, unique=True, default="0.0.0")
+    revision = models.CharField(max_length=40, blank=True)
+    pypi_url = models.URLField(blank=True)
+    is_live = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Package Release"
+        verbose_name_plural = "Package Releases"
+        get_latest_by = "version"
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"{self.hub.name} {self.version}"
+
+    def to_package(self) -> Package:
+        """Return a :class:`Package` built from the hub."""
+        return self.hub.to_package()
+
     def to_credentials(self) -> Credentials | None:
-        """Return :class:`Credentials` if any credential fields are set."""
-        if self.token:
-            return Credentials(token=self.token)
-        if self.username and self.password:
-            return Credentials(username=self.username, password=self.password)
+        """Return :class:`Credentials` from the associated profile."""
+        if self.profile:
+            return self.profile.to_credentials()
         return None
 
     @property
@@ -724,7 +765,7 @@ class PackageRelease(Entity):
         return f"{major}.{minor}.{patch}"
 
     def save(self, *args, **kwargs):
-        self.pypi_url = f"https://pypi.org/project/{self.name}/{self.version}/"
+        self.pypi_url = f"https://pypi.org/project/{self.hub.name}/{self.version}/"
         try:  # pragma: no cover - network check best effort
             import requests
 
