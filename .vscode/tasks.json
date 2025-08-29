@@ -12,6 +12,16 @@
             "detail": "Refresh virtual environment and database"
         },
         {
+            "label": "Dev: refresh clean",
+            "type": "shell",
+            "command": "rm -f ${workspaceFolder}/db.sqlite3 && ${workspaceFolder}/env-refresh.sh",
+            "windows": {
+                "command": "Remove-Item -ErrorAction SilentlyContinue \"${workspaceFolder}\\db.sqlite3\"; ${workspaceFolder}\\env-refresh.bat"
+            },
+            "problemMatcher": [],
+            "detail": "Delete database file and refresh virtual environment and database"
+        },
+        {
             "label": "Dev: start",
             "type": "shell",
             "command": "${workspaceFolder}/start.sh --reload",
