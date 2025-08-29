@@ -63,7 +63,10 @@ class Module(Entity):
         unique_together = ("node_role", "path")
 
     def natural_key(self):  # pragma: no cover - simple representation
-        return (self.node_role.name, self.path)
+        role_name = None
+        if getattr(self, "node_role_id", None):
+            role_name = self.node_role.name
+        return (role_name, self.path)
 
     natural_key.dependencies = ["nodes.NodeRole"]
 

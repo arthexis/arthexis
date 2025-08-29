@@ -17,28 +17,27 @@ def _startup_notification() -> None:
     except Exception:  # pragma: no cover - failure shouldn't break startup
         return
 
+    host = socket.gethostname()
+    try:
+        address = socket.gethostbyname(host)
+    except socket.gaierror:
+        address = host
+
+    port = os.environ.get("PORT", "8000")
+
+    version = ""
+    ver_path = Path(settings.BASE_DIR) / "VERSION"
+    if ver_path.exists():
+        version = ver_path.read_text().strip()
+
+    revision_value = revision.get_revision()
+    rev_short = revision_value[-6:] if revision_value else ""
+
+    body = f"v{version}"
+    if rev_short:
+        body += f" r{rev_short}"
+
     def _worker() -> None:  # pragma: no cover - background thread
-        host = socket.gethostname()
-        # Prefer IP address over hostname when available
-        try:
-            address = socket.gethostbyname(host)
-        except socket.gaierror:
-            address = host
-
-        port = os.environ.get("PORT", "8000")
-
-        version = ""
-        ver_path = Path(settings.BASE_DIR) / "VERSION"
-        if ver_path.exists():
-            version = ver_path.read_text().strip()
-
-        revision_value = revision.get_revision()
-        rev_short = revision_value[-6:] if revision_value else ""
-
-        body = f"v{version}"
-        if rev_short:
-            body += f" r{rev_short}"
-
         # Allow the LCD a moment to become ready and retry a few times
         for _ in range(5):
             if notify(f"{address}:{port}", body):
