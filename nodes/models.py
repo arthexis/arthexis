@@ -14,6 +14,7 @@ class NodeRole(Entity):
     """Assignable role for a :class:`Node`."""
 
     name = models.CharField(max_length=50, unique=True)
+    description = models.CharField(max_length=200, blank=True)
 
     class Meta:
         ordering = ["name"]
@@ -32,7 +33,7 @@ class Node(Entity):
     )
     port = models.PositiveIntegerField(default=8000)
     badge_color = models.CharField(max_length=7, default="#28a745")
-    roles = models.ManyToManyField(NodeRole, blank=True)
+    role = models.ForeignKey(NodeRole, on_delete=models.SET_NULL, null=True, blank=True)
     last_seen = models.DateTimeField(auto_now=True)
     enable_public_api = models.BooleanField(default=False)
     public_endpoint = models.SlugField(blank=True, unique=True)
@@ -95,6 +96,20 @@ class Node(Entity):
         else:
             node = cls.objects.create(**defaults)
             created = True
+            # assign role from installation lock file
+            role_lock = Path(settings.BASE_DIR) / "locks" / "role.lck"
+            role_name = (
+                role_lock.read_text().strip() if role_lock.exists() else "Unknown"
+            )
+            role = NodeRole.objects.filter(name=role_name).first()
+            if role:
+                node.role = role
+                node.save(update_fields=["role"])
+        if created and node.role is None:
+            unknown = NodeRole.objects.filter(name="Unknown").first()
+            if unknown:
+                node.role = unknown
+                node.save(update_fields=["role"])
         return node, created
 
     @property

@@ -12,9 +12,10 @@ ENABLE_LCD_SCREEN=false
 DISABLE_LCD_SCREEN=false
 CLEAN=false
 ENABLE_CONTROL=false
+NODE_ROLE="Unknown"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--terminal] [--control] [--celery] [--lcd-screen|--no-lcd-screen] [--clean]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--terminal] [--control] [--constellation] [--celery] [--lcd-screen|--no-lcd-screen] [--clean]" >&2
     exit 1
 }
 
@@ -74,6 +75,7 @@ while [[ $# -gt 0 ]]; do
             SERVICE="arthexis"
             LATEST=true
             ENABLE_CELERY=true
+            NODE_ROLE="Gateway"
             shift
             ;;
         --terminal)
@@ -82,6 +84,7 @@ while [[ $# -gt 0 ]]; do
             SERVICE="arthexis"
             LATEST=true
             ENABLE_CELERY=true
+            NODE_ROLE="Terminal"
             shift
             ;;
         --control)
@@ -93,6 +96,16 @@ while [[ $# -gt 0 ]]; do
             ENABLE_LCD_SCREEN=true
             DISABLE_LCD_SCREEN=false
             ENABLE_CONTROL=true
+            NODE_ROLE="Control"
+            shift
+            ;;
+        --constellation)
+            AUTO_UPGRADE=true
+            NGINX_MODE="public"
+            SERVICE="arthexis"
+            ENABLE_CELERY=true
+            LATEST=false
+            NODE_ROLE="Constellation"
             shift
             ;;
         *)
@@ -150,6 +163,7 @@ fi
 
 # Install nginx configuration and reload
 echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
+echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 NGINX_CONF="/etc/nginx/conf.d/arthexis-${NGINX_MODE}.conf"
 
 # Ensure nginx config directory exists
