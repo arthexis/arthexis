@@ -34,7 +34,9 @@ from .models import (
     Reference,
     Message,
     OdooProfile,
+    PackageHub,
     PackageRelease,
+    PackagerProfile,
 )
 from .notifications import notify
 from . import release
@@ -76,6 +78,16 @@ class ReferenceAdmin(admin.ModelAdmin):
         return ""
 
     qr_code.short_description = "QR Code"
+
+
+@admin.register(PackagerProfile)
+class PackagerProfileAdmin(admin.ModelAdmin):
+    list_display = ("name",)
+
+
+@admin.register(PackageHub)
+class PackageHubAdmin(admin.ModelAdmin):
+    list_display = ("name",)
 
 
 @admin.register(SecurityGroup)
@@ -457,7 +469,7 @@ class BuildReleaseForm(forms.Form):
 
 @admin.register(PackageRelease)
 class PackageReleaseAdmin(admin.ModelAdmin):
-    list_display = ("name", "version", "pypi_url", "is_live")
+    list_display = ("hub", "version", "pypi_url", "is_live")
     actions = ["build_release", "create_next_release"]
 
     @admin.action(description="Build selected packages")
@@ -482,7 +494,7 @@ class PackageReleaseAdmin(admin.ModelAdmin):
                             stash=stash_opt,
                         )
                         self.message_user(
-                            request, f"Built {cfg.name}", messages.SUCCESS
+                            request, f"Built {cfg.hub.name}", messages.SUCCESS
                         )
                     except ValidationError as exc:
                         self.message_user(
