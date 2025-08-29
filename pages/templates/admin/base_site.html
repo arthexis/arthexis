@@ -7,6 +7,7 @@
 <script id="admin-collapsible-apps">
 document.addEventListener('DOMContentLoaded', function () {
     const modules = document.querySelectorAll('#nav-sidebar .module');
+    const current = document.querySelector('#nav-sidebar .module.current-app');
     modules.forEach(function (module, index) {
         const header = module.querySelector('h2');
         const content = module.querySelector('ul, table');
@@ -16,8 +17,8 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         }
 
-        // Collapse all groups by default except for the last one.
-        if (index !== modules.length - 1) {
+        // Collapse all groups by default except for the current one.
+        if (module !== current && !(current == null && index === modules.length - 1)) {
             module.classList.add('collapsed');
         }
     });
@@ -50,19 +51,24 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
-        // If searching, expand groups with matches. Otherwise collapse all but last visible group.
+        // If searching, expand groups with matches. Otherwise collapse all but current visible group.
         if (query) {
             visibleModules.forEach(function (module) {
                 module.classList.remove('collapsed');
             });
         } else {
-            visibleModules.forEach(function (module, index) {
-                if (index === visibleModules.length - 1) {
+            const current = sidebar.querySelector('.module.current-app');
+            visibleModules.forEach(function (module) {
+                if (module === current) {
                     module.classList.remove('collapsed');
                 } else {
                     module.classList.add('collapsed');
                 }
             });
+            if (!current && visibleModules.length) {
+                const last = visibleModules[visibleModules.length - 1];
+                last.classList.remove('collapsed');
+            }
         }
     }
 
