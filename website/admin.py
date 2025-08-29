@@ -65,7 +65,7 @@ class SiteAdmin(DjangoSiteAdmin):
                 continue
             if screenshot:
                 link = reverse(
-                    "admin:nodes_nodescreenshot_change", args=[screenshot.pk]
+                    "admin:nodes_contentsample_change", args=[screenshot.pk]
                 )
                 self.message_user(
                     request,

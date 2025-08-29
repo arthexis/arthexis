@@ -11,18 +11,16 @@ from django.http import HttpResponse
 import base64
 import pyperclip
 from pyperclip import PyperclipException
-from .utils import capture_screenshot, capture_screen, save_screenshot
+from .utils import capture_screenshot, save_screenshot
 from .actions import NodeAction
 
 from .models import (
     Node,
     NodeRole,
-    NodeScreenshot,
+    ContentSample,
     NodeCommand,
     Recipe,
-    ScreenSource,
     Step,
-    TextSample,
     TextPattern,
     Backup,
 )
@@ -185,106 +183,68 @@ class NodeRoleAdmin(admin.ModelAdmin):
     list_display = ("name", "description")
 
 
-@admin.register(ScreenSource)
-class ScreenSourceAdmin(admin.ModelAdmin):
-    list_display = ("name", "kind", "parameter", "priority")
-
-
-@admin.register(NodeScreenshot)
-class NodeScreenshotAdmin(admin.ModelAdmin):
-    list_display = ("path", "node", "origin", "method", "created")
-    change_list_template = "admin/nodes/nodescreenshot/change_list.html"
-    readonly_fields = ("image_preview", "created")
-    fields = ("image_preview", "path", "node", "origin", "method", "created")
+@admin.register(ContentSample)
+class ContentSampleAdmin(admin.ModelAdmin):
+    list_display = ("name", "kind", "node", "user", "created_at")
+    readonly_fields = ("created_at", "name", "user", "image_preview")
 
     def get_urls(self):
         urls = super().get_urls()
         custom = [
             path(
-                "capture/",
-                self.admin_site.admin_view(self.capture_now),
-                name="nodes_nodescreenshot_capture",
+                "from-clipboard/",
+                self.admin_site.admin_view(self.add_from_clipboard),
+                name="nodes_contentsample_from_clipboard",
             ),
             path(
-                "capture-desktop/",
-                self.admin_site.admin_view(self.capture_desktop),
-                name="nodes_nodescreenshot_capture_desktop",
+                "capture/",
+                self.admin_site.admin_view(self.capture_now),
+                name="nodes_contentsample_capture",
             ),
         ]
         return custom + urls
 
-    def capture_now(self, request):
-        node = Node.get_local()
-        source_id = request.GET.get("source")
-        if source_id:
-            sources = ScreenSource.objects.filter(
-                pk=source_id, kind=ScreenSource.URL
-            )
-        else:
-            sources = ScreenSource.objects.filter(kind=ScreenSource.URL).order_by(
-                "priority"
-            )
-        for source in sources:
-            try:
-                url = request.build_absolute_uri(source.parameter)
-                path = capture_screenshot(url)
-            except Exception:
-                continue
-            screenshot = save_screenshot(
-                path, node=node, method="ADMIN", origin=source
-            )
-            if screenshot:
-                self.message_user(
-                    request, f"Screenshot saved to {path}", messages.SUCCESS
-                )
-            else:
-                self.message_user(
-                    request, "Duplicate screenshot; not saved", messages.INFO
-                )
-            break
-        else:
+    def add_from_clipboard(self, request):
+        try:
+            content = pyperclip.paste()
+        except PyperclipException as exc:  # pragma: no cover - depends on OS clipboard
+            self.message_user(request, f"Clipboard error: {exc}", level=messages.ERROR)
+            return redirect("..")
+        if not content:
+            self.message_user(request, "Clipboard is empty.", level=messages.INFO)
+            return redirect("..")
+        if ContentSample.objects.filter(content=content, kind=ContentSample.TEXT).exists():
             self.message_user(
-                request, "No screenshot source succeeded", messages.WARNING
+                request, "Duplicate sample not created.", level=messages.INFO
             )
+            return redirect("..")
+        user = request.user if request.user.is_authenticated else None
+        ContentSample.objects.create(content=content, user=user, kind=ContentSample.TEXT)
+        self.message_user(
+            request, "Text sample added from clipboard.", level=messages.SUCCESS
+        )
         return redirect("..")
 
-    def capture_desktop(self, request):
+    def capture_now(self, request):
         node = Node.get_local()
-        source_id = request.GET.get("source")
-        if source_id:
-            sources = ScreenSource.objects.filter(
-                pk=source_id, kind=ScreenSource.SCREEN
-            )
-        else:
-            sources = ScreenSource.objects.filter(
-                kind=ScreenSource.SCREEN
-            ).order_by("priority")
-        for source in sources:
-            try:
-                path = capture_screen(int(source.parameter or 0))
-            except Exception:
-                continue
-            screenshot = save_screenshot(
-                path, node=node, method="ADMIN", origin=source
-            )
-            if screenshot:
-                self.message_user(
-                    request, f"Screenshot saved to {path}", messages.SUCCESS
-                )
-            else:
-                self.message_user(
-                    request, "Duplicate screenshot; not saved", messages.INFO
-                )
-            break
+        url = request.build_absolute_uri("/")
+        try:
+            path = capture_screenshot(url)
+        except Exception as exc:  # pragma: no cover - depends on selenium setup
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return redirect("..")
+        sample = save_screenshot(path, node=node, method="ADMIN")
+        if sample:
+            self.message_user(request, f"Screenshot saved to {path}", messages.SUCCESS)
         else:
             self.message_user(
-                request, "No screenshot source succeeded", messages.WARNING
+                request, "Duplicate screenshot; not saved", messages.INFO
             )
         return redirect("..")
 
     @admin.display(description="Screenshot")
     def image_preview(self, obj):
-        if not obj or not obj.path:
+        if not obj or obj.kind != ContentSample.IMAGE or not obj.path:
             return ""
         file_path = Path(obj.path)
         if not file_path.is_absolute():
@@ -297,6 +257,8 @@ class NodeScreenshotAdmin(admin.ModelAdmin):
             '<img src="data:image/png;base64,{}" style="max-width:100%;" />',
             encoded,
         )
+
+
 @admin.register(NodeCommand)
 class NodeCommandAdmin(admin.ModelAdmin):
     list_display = ("command", "created")
@@ -355,49 +317,6 @@ class RecipeAdmin(admin.ModelAdmin):
             Step.objects.create(recipe=obj, order=idx, script=script)
 
 
-@admin.register(TextSample)
-class TextSampleAdmin(admin.ModelAdmin):
-    list_display = ("name", "node", "user", "created_at", "short_content")
-    readonly_fields = ("created_at", "name", "user")
-    change_list_template = "admin/nodes/textsample/change_list.html"
-
-    def get_urls(self):
-        urls = super().get_urls()
-        custom = [
-            path(
-                "from-clipboard/",
-                self.admin_site.admin_view(self.add_from_clipboard),
-                name="nodes_textsample_from_clipboard",
-            )
-        ]
-        return custom + urls
-
-    def add_from_clipboard(self, request):
-        try:
-            content = pyperclip.paste()
-        except PyperclipException as exc:  # pragma: no cover - depends on OS clipboard
-            self.message_user(request, f"Clipboard error: {exc}", level=messages.ERROR)
-            return redirect("..")
-        if not content:
-            self.message_user(request, "Clipboard is empty.", level=messages.INFO)
-            return redirect("..")
-        if TextSample.objects.filter(content=content).exists():
-            self.message_user(
-                request, "Duplicate sample not created.", level=messages.INFO
-            )
-            return redirect("..")
-        node = Node.get_local()
-        user = request.user if request.user.is_authenticated else None
-        TextSample.objects.create(content=content, node=node, user=user)
-        self.message_user(
-            request, "Text sample added from clipboard.", level=messages.SUCCESS
-        )
-        return redirect("..")
-
-    def short_content(self, obj):
-        return obj.content[:50]
-
-    short_content.short_description = "Content"
 
 
 @admin.register(TextPattern)
@@ -407,7 +326,7 @@ class TextPatternAdmin(admin.ModelAdmin):
 
     @admin.action(description="Scan latest sample")
     def scan_latest_sample(self, request, queryset):
-        sample = TextSample.objects.first()
+        sample = ContentSample.objects.filter(kind=ContentSample.TEXT).first()
         if not sample:
             self.message_user(request, "No samples available.", level=messages.WARNING)
             return
