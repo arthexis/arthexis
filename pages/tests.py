@@ -7,6 +7,7 @@ from django.core.exceptions import DisallowedHost
 import socket
 from pages.models import Application, Module, SiteBadge
 from pages.admin import ApplicationAdmin
+from django.apps import apps as django_apps
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
 import tempfile
@@ -396,6 +397,11 @@ class ApplicationModelTests(TestCase):
         app = Application.objects.create(name="missing")
         self.assertFalse(app.installed)
 
+    def test_verbose_name_property(self):
+        app = Application.objects.create(name="ocpp")
+        config = django_apps.get_app_config("ocpp")
+        self.assertEqual(app.verbose_name, config.verbose_name)
+
 
 class ApplicationAdminFormTests(TestCase):
     def test_name_field_uses_local_apps(self):
@@ -403,6 +409,22 @@ class ApplicationAdminFormTests(TestCase):
         form = admin_instance.get_form(request=None)()
         choices = [choice[0] for choice in form.fields["name"].choices]
         self.assertIn("core", choices)
+
+
+class ApplicationAdminDisplayTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="app-admin", password="pwd", email="admin@example.com"
+        )
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_changelist_shows_verbose_name(self):
+        Application.objects.create(name="ocpp")
+        resp = self.client.get(reverse("admin:pages_application_changelist"))
+        config = django_apps.get_app_config("ocpp")
+        self.assertContains(resp, config.verbose_name)
 
 
 class LandingCreationTests(TestCase):

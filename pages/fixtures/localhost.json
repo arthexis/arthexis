@@ -3,16 +3,16 @@
     "model": "sites.site",
     "fields": {
         "domain": "127.0.0.1",
-        "name": "local"
+        "name": "127.0.0.1"
     }
   },
   {
     "model": "pages.application",
-    "fields": {"name": "ocpp"}
+    "fields": {"name": "ocpp", "description": "Provides Open Charge Point Protocol services."}
   },
   {
     "model": "pages.application",
-    "fields": {"name": "awg"}
+    "fields": {"name": "awg", "description": "Cable sizing tools using AWG standards."}
   },
   {
     "model": "pages.module",
