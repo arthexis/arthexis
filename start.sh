@@ -16,6 +16,13 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
     sudo systemctl restart "$SERVICE_NAME"
     # Show status information so the user can verify the service state
     sudo systemctl status "$SERVICE_NAME" --no-pager
+    if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+      LCD_SERVICE="lcd-$SERVICE_NAME"
+      if systemctl list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
+        sudo systemctl restart "$LCD_SERVICE"
+        sudo systemctl status "$LCD_SERVICE" --no-pager || true
+      fi
+    fi
     exit 0
   fi
 fi
