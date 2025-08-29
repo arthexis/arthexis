@@ -1,12 +1,5 @@
 [
   {
-    "model": "sites.site",
-    "fields": {
-      "domain": "arthexis.com",
-      "name": ""
-    }
-  },
-  {
     "model": "website.application",
     "fields": {
       "name": "ocpp"
