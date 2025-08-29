@@ -1,5 +1,6 @@
 from utils.sites import get_site
 import socket
+from nodes.models import Node
 
 from .active_app import set_active_app
 
@@ -12,7 +13,9 @@ class ActiveAppMiddleware:
 
     def __call__(self, request):
         site = get_site(request)
-        active = site.name or "Terminal"
+        node = Node.get_local()
+        role_name = node.role.name if node and node.role else "Terminal"
+        active = site.name or role_name
         set_active_app(active)
         request.active_app = active
         try:

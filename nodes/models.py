@@ -8,6 +8,12 @@ import os
 import socket
 from pathlib import Path
 from utils import revision
+from django.db import models
+
+
+class NodeRoleManager(models.Manager):
+    def get_by_natural_key(self, name: str):
+        return self.get(name=name)
 
 
 class NodeRole(Entity):
@@ -16,8 +22,13 @@ class NodeRole(Entity):
     name = models.CharField(max_length=50, unique=True)
     description = models.CharField(max_length=200, blank=True)
 
+    objects = NodeRoleManager()
+
     class Meta:
         ordering = ["name"]
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        return (self.name,)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name

@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.contrib.sites.models import Site
 from website.models import Application, Module
+from nodes.models import Node, NodeRole
 
 from config.asgi import application
 
@@ -393,11 +394,16 @@ class ChargerLandingTests(TestCase):
 
 class SimulatorLandingTests(TestCase):
     def setUp(self):
-        site, _ = Site.objects.update_or_create(
-            id=1, defaults={"domain": "testserver", "name": "website"}
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={"hostname": "localhost", "address": "127.0.0.1", "role": role},
+        )
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
         )
         app = Application.objects.create(name="Ocpp")
-        module = Module.objects.create(site=site, application=app, path="/ocpp/")
+        module = Module.objects.create(node_role=role, application=app, path="/ocpp/")
         module.create_landings()
         User = get_user_model()
         self.user = User.objects.create_user(username="nav", password="pwd")

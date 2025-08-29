@@ -3,7 +3,7 @@
     "model": "sites.site",
     "fields": {
       "domain": "192.168.129.10",
-      "name": "Gateway"
+      "name": ""
     }
   },
   {
@@ -17,7 +17,7 @@
   {
     "model": "website.module",
     "fields": {
-      "site": ["192.168.129.10"],
+      "node_role": ["Gateway"],
       "application": ["ocpp"],
       "path": "/ocpp/",
       "is_default": true
@@ -26,7 +26,7 @@
   {
     "model": "website.landing",
     "fields": {
-      "module": ["192.168.129.10", "/ocpp/"],
+      "module": ["Gateway", "/ocpp/"],
       "path": "/ocpp/rfid/",
       "label": "RFID Scanner"
     }
@@ -34,7 +34,7 @@
   {
     "model": "website.module",
     "fields": {
-      "site": ["192.168.129.10"],
+      "node_role": ["Gateway"],
       "application": ["awg"],
       "path": "/awg/",
       "is_default": false

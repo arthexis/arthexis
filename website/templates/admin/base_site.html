@@ -213,8 +213,8 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
   {% if badge_site %}
     <span class="badge" style="background-color: {{ badge_site_color }};">
       <a href="{% url 'admin:website_siteproxy_changelist' %}">SITE</a>:
-      <a href="{% url 'admin:website_siteproxy_change' badge_site.pk %}">{{ badge_site.name }}</a>
-      <span style="display:none">SITE: {{ badge_site.name }}</span>
+      <a href="{% url 'admin:website_siteproxy_change' badge_site.pk %}">{{ badge_site_name }}</a>
+      <span style="display:none">SITE: {{ badge_site_name }}</span>
     </span>
   {% else %}
     <span class="badge badge-unknown">

@@ -53,9 +53,12 @@ def site_and_node(request: HttpRequest):
     if node:
         node_color = node.badge_color
 
+    site_name = site.name if site else ""
+    node_role_name = node.role.name if node and node.role else ""
     return {
         "badge_site": site,
         "badge_node": node,
+        "badge_site_name": site_name or node_role_name,
         "badge_site_color": site_color,
         "badge_node_color": node_color,
         "TIME_ZONE": settings.TIME_ZONE,

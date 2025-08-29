@@ -12,22 +12,25 @@ from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 
 from website.models import Application, Module
+from nodes.models import Node, NodeRole
 
 from core.models import RFID
 from ocpp.rfid.reader import read_rfid
 
 
 class ScanNextViewTests(SimpleTestCase):
+    @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")
     @patch("ocpp.rfid.views.scan_sources", return_value={"rfid": "ABCD1234", "label_id": 1, "created": False})
-    def test_scan_next_success(self, mock_scan, mock_site):
+    def test_scan_next_success(self, mock_scan, mock_site, mock_node):
         resp = self.client.get(reverse("rfid-scan-next"))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), {"rfid": "ABCD1234", "label_id": 1, "created": False})
 
+    @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")
     @patch("ocpp.rfid.views.scan_sources", return_value={"error": "boom"})
-    def test_scan_next_error(self, mock_scan, mock_site):
+    def test_scan_next_error(self, mock_scan, mock_site, mock_node):
         resp = self.client.get(reverse("rfid-scan-next"))
         self.assertEqual(resp.status_code, 500)
         self.assertEqual(resp.json(), {"error": "boom"})
@@ -112,9 +115,10 @@ class RFIDLastSeenTests(TestCase):
 
 
 class RestartViewTests(SimpleTestCase):
+    @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")
     @patch("ocpp.rfid.views.restart_sources", return_value={"status": "restarted"})
-    def test_restart_endpoint(self, mock_restart, mock_site):
+    def test_restart_endpoint(self, mock_restart, mock_site, mock_node):
         resp = self.client.post(reverse("rfid-scan-restart"))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), {"status": "restarted"})
@@ -122,19 +126,21 @@ class RestartViewTests(SimpleTestCase):
 
 
 class ScanTestViewTests(SimpleTestCase):
+    @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")
     @patch("ocpp.rfid.views.test_sources", return_value={"irq_pin": 7})
-    def test_scan_test_success(self, mock_test, mock_site):
+    def test_scan_test_success(self, mock_test, mock_site, mock_node):
         resp = self.client.get(reverse("rfid-scan-test"))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), {"irq_pin": 7})
 
+    @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")
     @patch(
         "ocpp.rfid.views.test_sources",
         return_value={"error": "no scanner detected"},
     )
-    def test_scan_test_error(self, mock_test, mock_site):
+    def test_scan_test_error(self, mock_test, mock_site, mock_node):
         resp = self.client.get(reverse("rfid-scan-test"))
         self.assertEqual(resp.status_code, 500)
         self.assertEqual(resp.json(), {"error": "no scanner detected"})
@@ -142,11 +148,16 @@ class ScanTestViewTests(SimpleTestCase):
 
 class RFIDLandingTests(TestCase):
     def test_scanner_view_registered_as_landing(self):
-        site, _ = Site.objects.update_or_create(
-            id=1, defaults={"domain": "testserver", "name": "website"}
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={"hostname": "localhost", "address": "127.0.0.1", "role": role},
+        )
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
         )
         app = Application.objects.create(name="Ocpp")
-        module = Module.objects.create(site=site, application=app, path="/ocpp/")
+        module = Module.objects.create(node_role=role, application=app, path="/ocpp/")
         module.create_landings()
         self.assertTrue(
             module.landings.filter(path="/ocpp/rfid/").exists()

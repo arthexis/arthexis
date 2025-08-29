@@ -3,7 +3,7 @@
     "model": "sites.site",
     "fields": {
       "domain": "127.0.0.1",
-      "name": "Terminal"
+      "name": ""
     }
   },
   {
@@ -17,7 +17,7 @@
   {
     "model": "website.module",
     "fields": {
-      "site": ["127.0.0.1"],
+      "node_role": ["Terminal"],
       "application": ["ocpp"],
       "path": "/ocpp/",
       "is_default": true
@@ -26,7 +26,7 @@
   {
     "model": "website.landing",
     "fields": {
-      "module": ["127.0.0.1", "/ocpp/"],
+      "module": ["Terminal", "/ocpp/"],
       "path": "/ocpp/rfid/",
       "label": "RFID Scanner"
     }
@@ -34,7 +34,7 @@
   {
     "model": "website.module",
     "fields": {
-      "site": ["127.0.0.1"],
+      "node_role": ["Terminal"],
       "application": ["awg"],
       "path": "/awg/",
       "is_default": false

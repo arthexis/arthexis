@@ -18,7 +18,7 @@ from django.core import mail
 from django.core.management import call_command
 import re
 
-from nodes.models import Node, NodeScreenshot
+from nodes.models import Node, NodeScreenshot, NodeRole
 
 
 class LoginViewTests(TestCase):
@@ -239,7 +239,7 @@ class SiteAdminRegisterCurrentTests(TestCase):
         )
         self.assertRedirects(resp, reverse("admin:website_siteproxy_changelist"))
         site = Site.objects.get(domain="127.0.0.1")
-        self.assertEqual(site.name, "Terminal")
+        self.assertEqual(site.name, "")
 
 
 class SiteAdminScreenshotTests(TestCase):
@@ -292,8 +292,13 @@ class AdminBadgesWebsiteTests(TestCase):
             username="badge-admin2", password="pwd", email="admin@example.com"
         )
         self.client.force_login(self.admin)
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={"hostname": "localhost", "address": "127.0.0.1", "role": role},
+        )
         Site.objects.update_or_create(
-            id=1, defaults={"name": "Terminal", "domain": "127.0.0.1"}
+            id=1, defaults={"name": "", "domain": "127.0.0.1"}
         )
 
     @override_settings(ALLOWED_HOSTS=["127.0.0.1", "testserver"])
@@ -305,12 +310,17 @@ class AdminBadgesWebsiteTests(TestCase):
 class NavAppsTests(TestCase):
     def setUp(self):
         self.client = Client()
-        site, _ = Site.objects.update_or_create(
-            id=1, defaults={"domain": "127.0.0.1", "name": "Terminal"}
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={"hostname": "localhost", "address": "127.0.0.1", "role": role},
+        )
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "127.0.0.1", "name": ""}
         )
         app = Application.objects.create(name="Readme")
         Module.objects.create(
-            site=site, application=app, path="/", is_default=True
+            node_role=role, application=app, path="/", is_default=True
         )
 
     def test_nav_pill_renders(self):
@@ -331,9 +341,9 @@ class NavAppsTests(TestCase):
         self.assertNotContains(resp, 'badge rounded-pill text-bg-secondary">README')
 
     def test_app_without_root_url_excluded(self):
-        site = Site.objects.get(id=1)
+        role = NodeRole.objects.get(name="Terminal")
         app = Application.objects.create(name="core")
-        Module.objects.create(site=site, application=app, path="/core/")
+        Module.objects.create(node_role=role, application=app, path="/core/")
         resp = self.client.get(reverse("website:index"))
         self.assertNotContains(resp, 'href="/core/"')
 
@@ -341,11 +351,16 @@ class NavAppsTests(TestCase):
 class StaffNavVisibilityTests(TestCase):
     def setUp(self):
         self.client = Client()
-        site, _ = Site.objects.update_or_create(
-            id=1, defaults={"domain": "testserver", "name": "Terminal"}
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={"hostname": "localhost", "address": "127.0.0.1", "role": role},
+        )
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
         )
         app = Application.objects.create(name="ocpp")
-        Module.objects.create(site=site, application=app, path="/ocpp/")
+        Module.objects.create(node_role=role, application=app, path="/ocpp/")
         User = get_user_model()
         self.user = User.objects.create_user("user", password="pw")
         self.staff = User.objects.create_user("staff", password="pw", is_staff=True)
@@ -363,11 +378,16 @@ class StaffNavVisibilityTests(TestCase):
 
 class ApplicationModelTests(TestCase):
     def test_path_defaults_to_slugified_name(self):
-        site, _ = Site.objects.update_or_create(
-            id=1, defaults={"domain": "testserver", "name": "website"}
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={"hostname": "localhost", "address": "127.0.0.1", "role": role},
+        )
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
         )
         app = Application.objects.create(name="core")
-        site_app = Module.objects.create(site=site, application=app)
+        site_app = Module.objects.create(node_role=role, application=app)
         self.assertEqual(site_app.path, "/core/")
 
     def test_installed_flag_false_when_missing(self):
@@ -385,13 +405,19 @@ class ApplicationAdminFormTests(TestCase):
 
 class LandingCreationTests(TestCase):
     def setUp(self):
-        self.site, _ = Site.objects.update_or_create(
-            id=1, defaults={"domain": "testserver", "name": "Terminal"}
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={"hostname": "localhost", "address": "127.0.0.1", "role": role},
         )
         self.app, _ = Application.objects.get_or_create(name="website")
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
+        )
+        self.role = role
 
     def test_landings_created_on_module_creation(self):
-        module = Module.objects.create(site=self.site, application=self.app, path="/")
+        module = Module.objects.create(node_role=self.role, application=self.app, path="/")
         self.assertTrue(module.landings.filter(path="/").exists())
 
 
@@ -399,7 +425,7 @@ class LandingFixtureTests(TestCase):
     def test_constellation_fixture_loads_without_duplicates(self):
         fixture = Path(settings.BASE_DIR, "website", "fixtures", "constellation.json")
         call_command("loaddata", str(fixture))
-        module = Module.objects.get(path="/ocpp/", site__domain="arthexis.com")
+        module = Module.objects.get(path="/ocpp/", node_role__name="Constellation")
         self.assertEqual(module.landings.filter(path="/ocpp/rfid/").count(), 1)
 
 
@@ -455,15 +481,20 @@ class FaviconTests(TestCase):
 
     def test_site_app_favicon_preferred_over_site(self):
         with override_settings(MEDIA_ROOT=self.tmpdir):
+            role, _ = NodeRole.objects.get_or_create(name="Terminal")
+            Node.objects.update_or_create(
+                mac_address=Node.get_current_mac(),
+                defaults={"hostname": "localhost", "address": "127.0.0.1", "role": role},
+            )
             site, _ = Site.objects.update_or_create(
-                id=1, defaults={"domain": "testserver", "name": "Terminal"}
+                id=1, defaults={"domain": "testserver", "name": ""}
             )
             SiteBadge.objects.create(
                 site=site, badge_color="#28a745", favicon=self._png("site.png")
             )
             app = Application.objects.create(name="readme")
             Module.objects.create(
-                site=site,
+                node_role=role,
                 application=app,
                 path="/",
                 is_default=True,
@@ -474,23 +505,33 @@ class FaviconTests(TestCase):
 
     def test_site_favicon_used_when_app_missing(self):
         with override_settings(MEDIA_ROOT=self.tmpdir):
+            role, _ = NodeRole.objects.get_or_create(name="Terminal")
+            Node.objects.update_or_create(
+                mac_address=Node.get_current_mac(),
+                defaults={"hostname": "localhost", "address": "127.0.0.1", "role": role},
+            )
             site, _ = Site.objects.update_or_create(
-                id=1, defaults={"domain": "testserver", "name": "Terminal"}
+                id=1, defaults={"domain": "testserver", "name": ""}
             )
             SiteBadge.objects.create(
                 site=site, badge_color="#28a745", favicon=self._png("site.png")
             )
             app = Application.objects.create(name="readme")
             Module.objects.create(
-                site=site, application=app, path="/", is_default=True
+                node_role=role, application=app, path="/", is_default=True
             )
             resp = self.client.get(reverse("website:index"))
             self.assertContains(resp, "site.png")
 
     def test_default_favicon_used_when_none_defined(self):
         with override_settings(MEDIA_ROOT=self.tmpdir):
+            role, _ = NodeRole.objects.get_or_create(name="Terminal")
+            Node.objects.update_or_create(
+                mac_address=Node.get_current_mac(),
+                defaults={"hostname": "localhost", "address": "127.0.0.1", "role": role},
+            )
             Site.objects.update_or_create(
-                id=1, defaults={"domain": "testserver", "name": "Terminal"}
+                id=1, defaults={"domain": "testserver", "name": ""}
             )
             resp = self.client.get(reverse("website:index"))
             b64 = (
