@@ -6,7 +6,10 @@ from django.shortcuts import redirect, render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import get_user_model
-from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.contrib.auth.admin import (
+    GroupAdmin as DjangoGroupAdmin,
+    UserAdmin as DjangoUserAdmin,
+)
 from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
@@ -69,7 +72,7 @@ class ReferenceAdmin(admin.ModelAdmin):
 
 
 @admin.register(SecurityGroup)
-class SecurityGroupAdmin(admin.ModelAdmin):
+class SecurityGroupAdmin(DjangoGroupAdmin):
     pass
 
 
