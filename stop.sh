@@ -4,6 +4,11 @@ set -e
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
+LCD_LOCK="$LOCK_DIR/lcd_screen.lck"
+PYTHON="python3"
+if [ -d "$BASE_DIR/.venv" ]; then
+  PYTHON="$BASE_DIR/.venv/bin/python"
+fi
 
 # If a systemd service was installed, stop it instead of killing processes
 if [ -f "$LOCK_DIR/service.lck" ]; then
@@ -12,6 +17,13 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
     sudo systemctl stop "$SERVICE_NAME"
     sudo systemctl status "$SERVICE_NAME" --no-pager || true
     LCD_SERVICE="lcd-$SERVICE_NAME"
+    if [ -f "$LCD_LOCK" ]; then
+      "$PYTHON" - <<'PY'
+from core.notifications import notify
+notify("Goodbye!")
+PY
+      sleep 1
+    fi
     if systemctl list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
       sudo systemctl stop "$LCD_SERVICE"
       sudo systemctl status "$LCD_SERVICE" --no-pager || true
@@ -63,3 +75,10 @@ fi
 while pgrep -f "celery -A config" > /dev/null; do
   sleep 0.5
 done
+
+if [ -f "$LCD_LOCK" ]; then
+  "$PYTHON" - <<'PY'
+from core.notifications import notify
+notify("Goodbye!")
+PY
+fi
