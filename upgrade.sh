@@ -77,7 +77,11 @@ if [ "$CLEAN_DB" -eq 1 ]; then
 fi
 
 # Refresh environment and restart service
-./env-refresh.sh
+ENV_ARGS=""
+if [[ $FORCE -eq 1 ]]; then
+  ENV_ARGS="--latest"
+fi
+./env-refresh.sh $ENV_ARGS
 if [[ $NO_RESTART -eq 0 ]]; then
   ./start.sh
 fi

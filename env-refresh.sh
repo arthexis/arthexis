@@ -4,6 +4,19 @@ set -e
 VENV_DIR=".venv"
 PYTHON="$VENV_DIR/bin/python"
 
+LATEST=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --latest)
+      LATEST=1
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
 if [ ! -f "$PYTHON" ]; then
   echo "Virtual environment not found. Run ./install.sh first." >&2
   exit 1
@@ -21,4 +34,8 @@ if [ -f requirements.txt ]; then
   fi
 fi
 
-"$PYTHON" env-refresh.py database
+if [ "$LATEST" -eq 1 ]; then
+  "$PYTHON" env-refresh.py --latest database
+else
+  "$PYTHON" env-refresh.py database
+fi
