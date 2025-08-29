@@ -9,6 +9,8 @@ import socket
 from pathlib import Path
 from utils import revision
 from django.db import models
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
 
 
 class NodeRoleManager(models.Manager):
@@ -121,7 +123,34 @@ class Node(Entity):
             if terminal:
                 node.role = terminal
                 node.save(update_fields=["role"])
+        node.ensure_keys()
         return node, created
+
+    def ensure_keys(self):
+        security_dir = Path(settings.BASE_DIR) / "security"
+        security_dir.mkdir(parents=True, exist_ok=True)
+        priv_path = security_dir / f"{self.public_endpoint}"
+        pub_path = security_dir / f"{self.public_endpoint}.pub"
+        if not priv_path.exists() or not pub_path.exists():
+            private_key = rsa.generate_private_key(
+                public_exponent=65537, key_size=2048
+            )
+            private_bytes = private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            public_bytes = private_key.public_key().public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            priv_path.write_bytes(private_bytes)
+            pub_path.write_bytes(public_bytes)
+            self.public_key = public_bytes.decode()
+            self.save(update_fields=["public_key"])
+        elif not self.public_key:
+            self.public_key = pub_path.read_text()
+            self.save(update_fields=["public_key"])
 
     @property
     def is_local(self):

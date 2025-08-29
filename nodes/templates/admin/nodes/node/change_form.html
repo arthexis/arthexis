@@ -2,6 +2,11 @@
 {% load i18n %}
 
 {% block object-tools-items %}
+    {% if public_key_url %}
+        <li>
+            <a href="{{ public_key_url }}">{% trans "Download public key" %}</a>
+        </li>
+    {% endif %}
     {% for action in node_actions %}
         <li>
             <a href="{% url 'admin:nodes_node_action' object_id action.slug %}">
