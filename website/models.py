@@ -161,6 +161,8 @@ from django.dispatch import receiver
 
 
 @receiver(post_save, sender=Module)
-def _create_landings(sender, instance, created, **kwargs):  # pragma: no cover - simple handler
-    if created:
+def _create_landings(
+    sender, instance, created, raw, **kwargs
+):  # pragma: no cover - simple handler
+    if created and not raw:
         instance.create_landings()
