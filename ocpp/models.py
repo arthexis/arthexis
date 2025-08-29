@@ -27,7 +27,7 @@ class Charger(Entity):
     """Known charge point."""
 
     charger_id = models.CharField(_("Serial Number"), max_length=100, unique=True)
-    number = models.PositiveIntegerField(_("Charger Number"), default=1)
+    connector_id = models.CharField(_("Connector ID"), max_length=10, blank=True, null=True)
     require_rfid = models.BooleanField(_("Require RFID"), default=False)
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_meter_values = models.JSONField(default=dict, blank=True)
@@ -68,7 +68,11 @@ class Charger(Entity):
     @property
     def name(self) -> str:
         if self.location:
-            return f"{self.location.name} #{self.number}" if self.number else self.location.name
+            return (
+                f"{self.location.name} #{self.connector_id}"
+                if self.connector_id
+                else self.location.name
+            )
         return ""
 
     @property

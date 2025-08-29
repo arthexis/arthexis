@@ -67,7 +67,7 @@ class ChargerAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "charger_id",
-                    "number",
+                    "connector_id",
                     "require_rfid",
                     "last_heartbeat",
                     "last_meter_values",
@@ -86,20 +86,17 @@ class ChargerAdmin(admin.ModelAdmin):
     readonly_fields = ("last_heartbeat", "last_meter_values")
     list_display = (
         "charger_id",
-        "number",
+        "connector_id",
         "location_name",
         "require_rfid",
-        "latitude",
-        "longitude",
         "last_heartbeat",
         "session_kw",
         "total_kw_display",
         "page_link",
-        "qr_link",
         "log_link",
         "status_link",
     )
-    search_fields = ("charger_id", "number", "location__name")
+    search_fields = ("charger_id", "connector_id", "location__name")
     actions = ["purge_data", "delete_selected"]
 
     def page_link(self, obj):

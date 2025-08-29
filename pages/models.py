@@ -16,6 +16,7 @@ class ApplicationManager(models.Manager):
 
 class Application(Entity):
     name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
 
     objects = ApplicationManager()
 
@@ -28,6 +29,13 @@ class Application(Entity):
     @property
     def installed(self) -> bool:
         return django_apps.is_installed(self.name)
+
+    @property
+    def verbose_name(self) -> str:
+        try:
+            return django_apps.get_app_config(self.name).verbose_name
+        except LookupError:
+            return self.name
 
 
 class ModuleManager(models.Manager):

@@ -1,0 +1,88 @@
+import xmlrpc.client
+from django.utils import timezone
+from django.core.exceptions import ValidationError
+from core.models import User, OdooProfile
+
+
+class FakeCommon:
+    def __init__(self, uid):
+        self.uid = uid
+
+    def authenticate(self, db, username, password, _):
+        return self.uid
+
+
+class FakeModels:
+    def __init__(self, info=None, raise_error=False):
+        self.info = info or {"name": "Odoo User", "email": "user@example.com"}
+        self.raise_error = raise_error
+
+    def execute_kw(self, db, uid, password, model, method, args, kwargs):
+        if self.raise_error:
+            raise Exception("fail")
+        return [self.info]
+
+
+def test_verify_success(monkeypatch):
+    def fake_proxy(url):
+        if url.endswith("/common"):
+            return FakeCommon(uid=42)
+        return FakeModels()
+
+    monkeypatch.setattr(xmlrpc.client, "ServerProxy", fake_proxy)
+    user = User.objects.create(username="u")
+    profile = OdooProfile.objects.create(
+        user=user,
+        host="http://test",
+        database="db",
+        username="u",
+        password="p",
+    )
+    assert profile.verify() is True
+    profile.refresh_from_db()
+    assert profile.odoo_uid == 42
+    assert profile.name == "Odoo User"
+    assert profile.email == "user@example.com"
+    assert profile.verified_on is not None
+
+
+def test_credentials_change_resets_verification(monkeypatch):
+    user = User.objects.create(username="u")
+    profile = OdooProfile.objects.create(
+        user=user,
+        host="http://test",
+        database="db",
+        username="u",
+        password="p",
+    )
+    profile.verified_on = timezone.now()
+    profile.save()
+    profile.password = "new"
+    profile.save()
+    profile.refresh_from_db()
+    assert profile.verified_on is None
+
+
+def test_execute_failure_marks_unverified(monkeypatch):
+    user = User.objects.create(username="u")
+    profile = OdooProfile.objects.create(
+        user=user,
+        host="http://test",
+        database="db",
+        username="u",
+        password="p",
+    )
+    profile.odoo_uid = 42
+    profile.verified_on = timezone.now()
+    profile.save()
+
+    def fake_proxy(url):
+        return FakeModels(raise_error=True)
+
+    monkeypatch.setattr(xmlrpc.client, "ServerProxy", fake_proxy)
+    try:
+        profile.execute("res.users", "read", [42])
+    except Exception:
+        pass
+    profile.refresh_from_db()
+    assert profile.verified_on is None
