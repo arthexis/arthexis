@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404
 
 from utils.api import api_login_required
 
-from .models import Node, NodeScreenshot
+from .models import Node
 from .utils import capture_screenshot, save_screenshot
 from core.models import Message
 
@@ -70,8 +70,7 @@ def capture(request):
         path = capture_screenshot(url)
     except Exception as exc:  # pragma: no cover - depends on selenium setup
         return JsonResponse({"detail": str(exc)}, status=500)
-    node = Node.get_local()
-    screenshot = save_screenshot(path, node=node, method=request.method)
+    screenshot = save_screenshot(path, method=request.method)
     node_id = screenshot.node.id if screenshot and screenshot.node else None
     return JsonResponse({"screenshot": str(path), "node": node_id})
 

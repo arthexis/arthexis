@@ -23,12 +23,10 @@ from .actions import NodeAction
 
 from .models import (
     Node,
-    NodeScreenshot,
+    ContentSample,
     Recipe,
-    ScreenSource,
     Step,
     TextPattern,
-    TextSample,
     Backup,
 )
 from .tasks import capture_node_screenshot, sample_clipboard
@@ -113,8 +111,8 @@ class NodeTests(TestCase):
         self.assertEqual(data["screenshot"], "screenshots/test.png")
         self.assertEqual(data["node"], node.id)
         mock_capture.assert_called_once()
-        self.assertEqual(NodeScreenshot.objects.count(), 1)
-        screenshot = NodeScreenshot.objects.first()
+        self.assertEqual(ContentSample.objects.count(), 1)
+        screenshot = ContentSample.objects.first()
         self.assertEqual(screenshot.node, node)
         self.assertEqual(screenshot.method, "GET")
 
@@ -134,7 +132,7 @@ class NodeTests(TestCase):
         mock_capture.return_value = Path("screenshots/dup.png")
         self.client.get(reverse("node-screenshot"))
         self.client.get(reverse("node-screenshot"))
-        self.assertEqual(NodeScreenshot.objects.count(), 1)
+        self.assertEqual(ContentSample.objects.count(), 1)
 
     @patch("nodes.views.capture_screenshot")
     def test_capture_screenshot_error(self, mock_capture):
@@ -150,7 +148,7 @@ class NodeTests(TestCase):
         self.assertEqual(response.status_code, 500)
         data = response.json()
         self.assertEqual(data["detail"], "fail")
-        self.assertEqual(NodeScreenshot.objects.count(), 0)
+        self.assertEqual(ContentSample.objects.count(), 0)
 
     def test_public_api_get_and_post(self):
         node = Node.objects.create(
@@ -227,7 +225,6 @@ class NodeTests(TestCase):
         self.assertEqual(backup.report["objects"], 5)
 
 class NodeAdminTests(TestCase):
-    fixtures = ["screen_sources"]
 
     def setUp(self):
         self.client = Client()
@@ -313,15 +310,14 @@ class NodeAdminTests(TestCase):
             port=80,
             mac_address=Node.get_current_mac(),
         )
-        url = reverse("admin:nodes_nodescreenshot_capture")
+        url = reverse("admin:nodes_contentsample_capture")
         response = self.client.get(url, follow=True)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(NodeScreenshot.objects.count(), 1)
-        screenshot = NodeScreenshot.objects.first()
+        self.assertEqual(ContentSample.objects.count(), 1)
+        screenshot = ContentSample.objects.first()
         self.assertEqual(screenshot.node, node)
         self.assertEqual(screenshot.path, "screenshots/test.png")
         self.assertEqual(screenshot.method, "ADMIN")
-        self.assertEqual(screenshot.origin.name, "Homepage")
         mock_capture_screen.assert_not_called()
         mock_capture_screenshot.assert_called_once_with("http://testserver/")
         self.assertContains(
@@ -345,16 +341,15 @@ class NodeAdminTests(TestCase):
             port=80,
             mac_address=Node.get_current_mac(),
         )
-        url = reverse("admin:nodes_nodescreenshot_capture_desktop")
+        url = reverse("admin:nodes_contentsample_capture_desktop")
         response = self.client.get(url, follow=True)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(NodeScreenshot.objects.count(), 1)
-        screenshot = NodeScreenshot.objects.first()
+        self.assertEqual(ContentSample.objects.count(), 1)
+        screenshot = ContentSample.objects.first()
         self.assertEqual(screenshot.node, node)
         self.assertEqual(screenshot.path, "screenshots/desktop.png")
         self.assertEqual(screenshot.method, "ADMIN")
-        self.assertEqual(screenshot.origin.name, "Screen 1")
-        mock_capture_screen.assert_called_once_with(1)
+        mock_capture_screen.assert_called_once_with(0)
         mock_capture_screenshot.assert_not_called()
         self.assertContains(
             response, "Screenshot saved to screenshots/desktop.png"
@@ -370,8 +365,8 @@ class NodeAdminTests(TestCase):
                     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR42mP8/5+hHgAFgwJ/lSdX6QAAAABJRU5ErkJggg=="
                 )
             )
-        screenshot = NodeScreenshot.objects.create(path="screenshots/test.png")
-        url = reverse("admin:nodes_nodescreenshot_change", args=[screenshot.id])
+        screenshot = ContentSample.objects.create(path="screenshots/test.png", kind=ContentSample.IMAGE)
+        url = reverse("admin:nodes_contentsample_change", args=[screenshot.id])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data:image/png;base64")
@@ -617,7 +612,7 @@ class TextPatternAdminActionTests(TestCase):
         self.assertIn("Matched 'This is [not] good' -> 'This is very good'", msgs)
 
 
-class TextSampleAdminTests(TestCase):
+class ContentSampleAdminTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_superuser(
@@ -628,12 +623,11 @@ class TextSampleAdminTests(TestCase):
     @patch("pyperclip.paste")
     def test_add_from_clipboard_creates_sample(self, mock_paste):
         mock_paste.return_value = "clip text"
-        url = reverse("admin:nodes_textsample_from_clipboard")
+        url = reverse("admin:nodes_contentsample_from_clipboard")
         response = self.client.get(url, follow=True)
-        self.assertEqual(TextSample.objects.count(), 1)
-        sample = TextSample.objects.first()
+        self.assertEqual(ContentSample.objects.count(), 1)
+        sample = ContentSample.objects.first()
         self.assertEqual(sample.content, "clip text")
-        self.assertEqual(sample.user, self.user)
         self.assertIsNone(sample.node)
         self.assertContains(response, "Text sample added from clipboard")
 
@@ -646,18 +640,18 @@ class TextSampleAdminTests(TestCase):
             port=8000,
             mac_address=Node.get_current_mac(),
         )
-        url = reverse("admin:nodes_textsample_from_clipboard")
+        url = reverse("admin:nodes_contentsample_from_clipboard")
         self.client.get(url, follow=True)
-        sample = TextSample.objects.first()
+        sample = ContentSample.objects.first()
         self.assertIsNotNone(sample.node)
 
     @patch("pyperclip.paste")
     def test_add_from_clipboard_skips_duplicate(self, mock_paste):
         mock_paste.return_value = "clip text"
-        url = reverse("admin:nodes_textsample_from_clipboard")
+        url = reverse("admin:nodes_contentsample_from_clipboard")
         self.client.get(url, follow=True)
         resp = self.client.get(url, follow=True)
-        self.assertEqual(TextSample.objects.count(), 1)
+        self.assertEqual(ContentSample.objects.count(), 1)
         self.assertContains(resp, "Duplicate sample not created")
 
 
@@ -672,15 +666,14 @@ class ClipboardTaskTests(TestCase):
             mac_address=Node.get_current_mac(),
         )
         sample_clipboard()
-        self.assertEqual(TextSample.objects.count(), 1)
-        sample = TextSample.objects.first()
+        self.assertEqual(ContentSample.objects.count(), 1)
+        sample = ContentSample.objects.first()
         self.assertEqual(sample.content, "task text")
-        self.assertIsNone(sample.user)
         self.assertIsNotNone(sample.node)
         self.assertEqual(sample.node.hostname, "host")
         # Duplicate should not create another sample
         sample_clipboard()
-        self.assertEqual(TextSample.objects.count(), 1)
+        self.assertEqual(ContentSample.objects.count(), 1)
 
     @patch("nodes.tasks.capture_screenshot")
     def test_capture_node_screenshot_task(self, mock_capture):
@@ -696,8 +689,8 @@ class ClipboardTaskTests(TestCase):
         file_path.write_bytes(b"task")
         mock_capture.return_value = Path("screenshots/test.png")
         capture_node_screenshot("http://example.com")
-        self.assertEqual(NodeScreenshot.objects.count(), 1)
-        screenshot = NodeScreenshot.objects.first()
+        self.assertEqual(ContentSample.objects.count(), 1)
+        screenshot = ContentSample.objects.first()
         self.assertEqual(screenshot.node, node)
         self.assertEqual(screenshot.path, "screenshots/test.png")
         self.assertEqual(screenshot.method, "TASK")
@@ -713,6 +706,6 @@ class ClipboardTaskTests(TestCase):
         mock_capture.side_effect = RuntimeError("boom")
         result = capture_node_screenshot("http://example.com")
         self.assertEqual(result, "")
-        self.assertEqual(NodeScreenshot.objects.count(), 0)
+        self.assertEqual(ContentSample.objects.count(), 0)
 
 

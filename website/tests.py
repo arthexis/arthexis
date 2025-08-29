@@ -18,7 +18,7 @@ from django.core import mail
 from django.core.management import call_command
 import re
 
-from nodes.models import Node, NodeScreenshot, NodeRole
+from nodes.models import Node, ContentSample, NodeRole
 
 
 class LoginViewTests(TestCase):
@@ -274,12 +274,12 @@ class SiteAdminScreenshotTests(TestCase):
             follow=True,
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(NodeScreenshot.objects.count(), 1)
-        screenshot = NodeScreenshot.objects.first()
+        self.assertEqual(ContentSample.objects.count(), 1)
+        screenshot = ContentSample.objects.first()
         self.assertEqual(screenshot.node, self.node)
         self.assertEqual(screenshot.path, "screenshots/test.png")
         self.assertEqual(screenshot.method, "ADMIN")
-        link = reverse("admin:nodes_nodescreenshot_change", args=[screenshot.pk])
+        link = reverse("admin:nodes_contentsample_change", args=[screenshot.pk])
         self.assertContains(response, link)
         mock_capture.assert_called_once_with("http://testserver/")
 

@@ -1,0 +1,21 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_urls static %}
+
+{% block object-tools-items %}
+    <li>
+        <a href="{% url 'admin:nodes_contentsample_capture' %}" class="addlink">
+            {% trans 'Take site screenshot' %}
+        </a>
+    </li>
+    <li>
+        <a href="{% url 'admin:nodes_contentsample_capture_desktop' %}" class="addlink">
+            {% trans 'Take desktop screenshot' %}
+        </a>
+    </li>
+    <li>
+        <a href="{% url 'admin:nodes_contentsample_from_clipboard' %}" class="addlink">
+            {% trans 'Add from clipboard' %}
+        </a>
+    </li>
+    {{ block.super }}
+{% endblock %}

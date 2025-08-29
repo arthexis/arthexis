@@ -5,7 +5,7 @@ import pyperclip
 from pyperclip import PyperclipException
 from celery import shared_task
 
-from .models import TextSample, Node
+from .models import ContentSample
 from .utils import capture_screenshot, save_screenshot
 
 logger = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 @shared_task
 def sample_clipboard() -> None:
-    """Save current clipboard contents to a :class:`TextSample` entry."""
+    """Save current clipboard contents to a :class:`ContentSample` entry."""
     try:
         content = pyperclip.paste()
     except PyperclipException as exc:  # pragma: no cover - depends on OS clipboard
@@ -22,18 +22,17 @@ def sample_clipboard() -> None:
     if not content:
         logger.info("Clipboard is empty")
         return
-    if TextSample.objects.filter(content=content).exists():
+    if ContentSample.objects.filter(content=content, kind=ContentSample.TEXT).exists():
         logger.info("Duplicate clipboard content; sample not created")
         return
-    node = Node.get_local()
-    TextSample.objects.create(content=content, node=node)
+    ContentSample.objects.create(content=content, kind=ContentSample.TEXT)
 
 
 @shared_task
 def capture_node_screenshot(
     url: str | None = None, port: int = 8000, method: str = "TASK"
 ) -> str:
-    """Capture a screenshot of ``url`` and record it as a :class:`NodeScreenshot`."""
+    """Capture a screenshot of ``url`` and record it as a :class:`ContentSample`."""
     if url is None:
         url = f"http://localhost:{port}"
     try:
@@ -41,8 +40,7 @@ def capture_node_screenshot(
     except Exception as exc:  # pragma: no cover - depends on selenium setup
         logger.error("Screenshot capture failed: %s", exc)
         return ""
-    node = Node.get_local()
-    save_screenshot(path, node=node, method=method)
+    save_screenshot(path, method=method)
     return str(path)
 
 

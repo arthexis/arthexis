@@ -8,7 +8,7 @@ from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.common.exceptions import WebDriverException
 
-from .models import NodeScreenshot, ScreenSource
+from .models import ContentSample
 
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
 logger = logging.getLogger(__name__)
@@ -46,11 +46,10 @@ def save_screenshot(
     path: Path,
     node=None,
     method: str = "",
-    origin: ScreenSource | None = None,
 ):
     """Save screenshot file info if not already recorded.
 
-    Returns the created :class:`NodeScreenshot` or ``None`` if duplicate.
+    Returns the created :class:`ContentSample` or ``None`` if duplicate.
     """
 
     original = path
@@ -58,10 +57,14 @@ def save_screenshot(
         path = settings.LOG_DIR / path
     with path.open("rb") as fh:
         digest = hashlib.sha256(fh.read()).hexdigest()
-    if NodeScreenshot.objects.filter(hash=digest).exists():
+    if ContentSample.objects.filter(hash=digest).exists():
         logger.info("Duplicate screenshot content; record not created")
         return None
     stored_path = str(original if not original.is_absolute() else path)
-    return NodeScreenshot.objects.create(
-        node=node, path=stored_path, method=method, hash=digest, origin=origin
+    return ContentSample.objects.create(
+        node=node,
+        path=stored_path,
+        method=method,
+        hash=digest,
+        kind=ContentSample.IMAGE,
     )
