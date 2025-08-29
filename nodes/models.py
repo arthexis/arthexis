@@ -255,26 +255,27 @@ class ContentSample(Entity):
         return str(self.name)
 
 
-class NodeCommand(Entity):
-    """Shell command that can be executed on nodes."""
+class NodeTask(Entity):
+    """Recipe that can be executed on nodes."""
 
-    command = models.TextField()
+    recipe = models.TextField()
+    role = models.ForeignKey(NodeRole, on_delete=models.SET_NULL, null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created"]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.command
+        return self.recipe
 
     def run(self, node: Node):
-        """Execute this command on ``node`` and return its output."""
+        """Execute this recipe on ``node`` and return its output."""
         if not node.is_local:
             raise NotImplementedError("Remote node execution is not implemented")
         import subprocess
 
         result = subprocess.run(
-            self.command, shell=True, capture_output=True, text=True
+            self.recipe, shell=True, capture_output=True, text=True
         )
         return result.stdout + result.stderr
 

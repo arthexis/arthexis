@@ -1,5 +1,0 @@
-[
-  {"model": "nodes.nodecommand", "pk": 1, "fields": {"command": "nmcli con show", "created": "2024-01-01T00:00:00Z"}},
-  {"model": "nodes.nodecommand", "pk": 2, "fields": {"command": "ifconfig", "created": "2024-01-01T00:00:00Z"}}
-]
-
