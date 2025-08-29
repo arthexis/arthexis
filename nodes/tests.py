@@ -16,6 +16,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
+from django.contrib.sites.models import Site
 from django_celery_beat.models import PeriodicTask
 from django.conf import settings
 from .admin import RecipeAdmin
@@ -247,6 +248,7 @@ class NodeAdminTests(TestCase):
 
     def test_register_current_host(self):
         url = reverse("admin:nodes_node_register_current")
+        hostname = socket.gethostname()
         with patch("utils.revision.get_revision", return_value="abcdef123456"):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 302)
@@ -265,6 +267,9 @@ class NodeAdminTests(TestCase):
         self.assertTrue(priv.exists())
         self.assertTrue(pub.exists())
         self.assertTrue(node.public_key)
+        self.assertTrue(
+            Site.objects.filter(domain=hostname, name="host").exists()
+        )
 
     def test_register_current_updates_existing_node(self):
         hostname = socket.gethostname()

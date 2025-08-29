@@ -24,14 +24,14 @@
     "model": "sites.site",
     "fields": {
       "domain": "10.42.0.1",
-      "name": "wlan-ap"
+      "name": "wlan-router"
     }
   },
   {
     "model": "sites.site",
     "fields": {
-      "domain": "arthexis.com",
-      "name": "cloud-main"
+      "domain": "arrthexis.com",
+      "name": "cloud"
     }
   }
 ]

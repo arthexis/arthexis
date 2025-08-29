@@ -3,6 +3,7 @@ from integrate.models import Entity
 import re
 from django.utils.text import slugify
 from django.conf import settings
+from django.contrib.sites.models import Site
 import uuid
 import os
 import socket
@@ -123,6 +124,7 @@ class Node(Entity):
             if terminal:
                 node.role = terminal
                 node.save(update_fields=["role"])
+        Site.objects.get_or_create(domain=hostname, defaults={"name": "host"})
         node.ensure_keys()
         return node, created
 
