@@ -35,6 +35,15 @@ if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
     exit 0
 fi
 
+LCD_LOCK="$LOCK_DIR/lcd_screen.lck"
+if [ -f "$LCD_LOCK" ]; then
+    python3 - <<'PY'
+from core.notifications import notify
+notify("Goodbye!")
+PY
+    sleep 2
+fi
+
 if [ -n "$SERVICE" ] && systemctl list-unit-files | grep -Fq "${SERVICE}.service"; then
     sudo systemctl stop "$SERVICE" || true
     sudo systemctl disable "$SERVICE" || true
