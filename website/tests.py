@@ -396,6 +396,14 @@ class LandingCreationTests(TestCase):
         self.assertTrue(module.landings.filter(path="/").exists())
 
 
+class LandingFixtureTests(TestCase):
+    def test_constellation_fixture_loads_without_duplicates(self):
+        fixture = Path(settings.BASE_DIR, "website", "fixtures", "constellation.json")
+        call_command("loaddata", str(fixture))
+        module = Module.objects.get(path="/ocpp/", site__domain="arthexis.com")
+        self.assertEqual(module.landings.filter(path="/ocpp/rfid/").count(), 1)
+
+
 class AllowedHostSubnetTests(TestCase):
     def setUp(self):
         self.client = Client()
