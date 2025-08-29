@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_DIR="$SCRIPT_DIR/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
+exec > >(tee "$LOG_FILE") 2>&1
+
 SERVICE=""
 NGINX_MODE="internal"
 PORT=""
@@ -134,7 +140,7 @@ if [ -z "$PORT" ]; then
     fi
 fi
 
-BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+BASE_DIR="$SCRIPT_DIR"
 cd "$BASE_DIR"
 DB_FILE="$BASE_DIR/db.sqlite3"
 if [ -f "$DB_FILE" ]; then

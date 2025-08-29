@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_DIR="$SCRIPT_DIR/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
+exec > >(tee "$LOG_FILE") 2>&1
+
 SERVICE=""
 
 usage() {
@@ -21,7 +27,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+BASE_DIR="$SCRIPT_DIR"
 cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 
