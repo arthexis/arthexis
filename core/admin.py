@@ -73,7 +73,7 @@ class ReferenceAdmin(admin.ModelAdmin):
 
 @admin.register(SecurityGroup)
 class SecurityGroupAdmin(DjangoGroupAdmin):
-    filter_horizontal = ("permissions",)
+    pass
 
 
 class AccountRFIDForm(forms.ModelForm):
