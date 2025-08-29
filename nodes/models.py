@@ -99,16 +99,16 @@ class Node(Entity):
             # assign role from installation lock file
             role_lock = Path(settings.BASE_DIR) / "locks" / "role.lck"
             role_name = (
-                role_lock.read_text().strip() if role_lock.exists() else "Unknown"
+                role_lock.read_text().strip() if role_lock.exists() else "Terminal"
             )
             role = NodeRole.objects.filter(name=role_name).first()
             if role:
                 node.role = role
                 node.save(update_fields=["role"])
         if created and node.role is None:
-            unknown = NodeRole.objects.filter(name="Unknown").first()
-            if unknown:
-                node.role = unknown
+            terminal = NodeRole.objects.filter(name="Terminal").first()
+            if terminal:
+                node.role = terminal
                 node.save(update_fields=["role"])
         return node, created
 
