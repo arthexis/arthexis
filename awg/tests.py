@@ -93,7 +93,7 @@ class AWGCalculatorTests(TestCase):
             temperature=60,
             conduit="emt",
             ground=1,
-            show_in_website=True,
+            show_in_pages=True,
         )
         resp = self.client.get(reverse("awg:calculator"))
         self.assertContains(resp, "Or try a pre-loaded template:")

@@ -3,7 +3,7 @@
 This module includes URL patterns from any installed application that exposes
 an internal ``urls`` module. This allows new apps with URL configurations to be
 added without editing this file, except for top-level routes such as the admin
-interface or the main website.
+interface or the main pages.
 """
 
 from importlib import import_module
@@ -43,8 +43,8 @@ def autodiscovered_urlpatterns():
             # Skip third-party apps outside of the project
             continue
 
-        if app_config.label == "website":
-            # Root website URLs are handled explicitly below
+        if app_config.label == "pages":
+            # Root pages URLs are handled explicitly below
             continue
 
         module_name = f"{app_config.name}.urls"
@@ -63,7 +63,7 @@ urlpatterns = [
     path("admin/doc/", include("django.contrib.admindocs.urls")),
     path("admin/", admin.site.urls),
     path("i18n/setlang/", csrf_exempt(set_language), name="set_language"),
-    path("", include("website.urls")),
+    path("", include("pages.urls")),
 ]
 
 urlpatterns += autodiscovered_urlpatterns()

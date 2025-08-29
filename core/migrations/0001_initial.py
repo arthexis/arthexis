@@ -752,4 +752,27 @@ class Migration(migrations.Migration):
             ],
             options={"ordering": ["-created"]},
         ),
-    ]
+            migrations.CreateModel(
+            name='PackageRelease',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('is_seed_data', models.BooleanField(default=False, editable=False)),
+                ('is_deleted', models.BooleanField(default=False, editable=False)),
+                ('name', models.CharField(default='arthexis', max_length=100)),
+                ('description', models.CharField(default='Django-based MESH system', max_length=255)),
+                ('author', models.CharField(default='Rafael J. Guillén-Osorio', max_length=100)),
+                ('email', models.EmailField(default='tecnologia@gelectriic.com', max_length=254)),
+                ('python_requires', models.CharField(default='>=3.10', max_length=20)),
+                ('license', models.CharField(default='MIT', max_length=100)),
+                ('repository_url', models.URLField(default='https://github.com/arthexis/arthexis')),
+                ('homepage_url', models.URLField(default='https://arthexis.com')),
+                ('username', models.CharField(blank=True, max_length=100)),
+                ('password', models.CharField(blank=True, max_length=100)),
+                ('token', models.CharField(blank=True, max_length=200)),
+            ],
+            options={
+                'verbose_name': 'Package Release',
+                'verbose_name_plural': 'Package Releases',
+            },
+        ),
+]

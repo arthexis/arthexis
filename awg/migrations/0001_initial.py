@@ -53,7 +53,7 @@ class Migration(migrations.Migration):
                 ('temperature', models.PositiveIntegerField(blank=True, null=True)),
                 ('conduit', models.CharField(blank=True, max_length=10)),
                 ('ground', models.PositiveIntegerField(blank=True, default=1, null=True)),
-                ('show_in_website', models.BooleanField(blank=True, default=False)),
+                ('show_in_pages', models.BooleanField(blank=True, default=False)),
             ],
             options={
                 'verbose_name': 'Calculator Template',

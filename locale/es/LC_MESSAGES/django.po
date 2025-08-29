@@ -255,11 +255,11 @@ msgstr "La caída de voltaje puede exceder el 3% con los parámetros elegidos"
 msgid "Voltage drop exceeds 3% with given max_awg"
 msgstr "La caída de voltaje supera el 3% con el AWG máximo dado"
 
-#: config/settings.py:227 website/templates/website/base.html:81
+#: config/settings.py:227 pages/templates/pages/base.html:81
 msgid "English"
 msgstr "Inglés"
 
-#: config/settings.py:228 website/templates/website/base.html:81
+#: config/settings.py:228 pages/templates/pages/base.html:81
 msgid "Spanish"
 msgstr "Español"
 
@@ -456,116 +456,116 @@ msgstr ""
 msgid "Create"
 msgstr ""
 
-#: website/templates/admin/app_list.html:8
+#: pages/templates/admin/app_list.html:8
 #, python-format
 msgid "Models in the %(name)s application"
 msgstr ""
 
-#: website/templates/admin/app_list.html:12
+#: pages/templates/admin/app_list.html:12
 msgid "Model name"
 msgstr ""
 
-#: website/templates/admin/app_list.html:13
+#: pages/templates/admin/app_list.html:13
 #, fuzzy
 #| msgid "Constellation"
 msgid "Model actions"
 msgstr "Constellation"
 
-#: website/templates/admin/app_list.html:14
+#: pages/templates/admin/app_list.html:14
 msgid "Add link"
 msgstr ""
 
-#: website/templates/admin/app_list.html:15
+#: pages/templates/admin/app_list.html:15
 msgid "Change or view list link"
 msgstr ""
 
-#: website/templates/admin/app_list.html:41
+#: pages/templates/admin/app_list.html:41
 msgid "Add"
 msgstr ""
 
-#: website/templates/admin/app_list.html:49
+#: pages/templates/admin/app_list.html:49
 msgid "View"
 msgstr ""
 
-#: website/templates/admin/app_list.html:51
+#: pages/templates/admin/app_list.html:51
 msgid "Change"
 msgstr ""
 
-#: website/templates/admin/app_list.html:64
+#: pages/templates/admin/app_list.html:64
 msgid "You don’t have permission to view or edit anything."
 msgstr ""
 
-#: website/templates/admin/base_site.html:3
+#: pages/templates/admin/base_site.html:3
 msgid "Django site admin"
 msgstr ""
 
-#: website/templates/admin/base_site.html:83
+#: pages/templates/admin/base_site.html:83
 msgid "Django administration"
 msgstr ""
 
-#: website/templates/admin/index.html:131
+#: pages/templates/admin/index.html:131
 msgid "Recent admin lists"
 msgstr ""
 
-#: website/templates/admin/index.html:140
-#: website/templates/admin/index.html:150
+#: pages/templates/admin/index.html:140
+#: pages/templates/admin/index.html:150
 msgid "None available"
 msgstr ""
 
-#: website/templates/admin/index.html:145
+#: pages/templates/admin/index.html:145
 msgid "Recent actions"
 msgstr ""
 
-#: website/templates/admin/index.html:146
+#: pages/templates/admin/index.html:146
 msgid "My actions"
 msgstr ""
 
-#: website/templates/admin/index.html:155
+#: pages/templates/admin/index.html:155
 msgid "Added:"
 msgstr ""
 
-#: website/templates/admin/index.html:155
+#: pages/templates/admin/index.html:155
 msgid "Changed:"
 msgstr ""
 
-#: website/templates/admin/index.html:155
+#: pages/templates/admin/index.html:155
 msgid "Deleted:"
 msgstr ""
 
-#: website/templates/admin/index.html:165
+#: pages/templates/admin/index.html:165
 msgid "Unknown content"
 msgstr ""
 
-#: website/templates/admin/sites/site/change_list.html:7
+#: pages/templates/admin/sites/site/change_list.html:7
 #, fuzzy
 #| msgid "Register current host"
 msgid "Register Current"
 msgstr "Registrar anfitrión actual"
 
-#: website/templates/website/base.html:67
-#: website/templates/website/login.html:4
-#: website/templates/website/login.html:9
+#: pages/templates/pages/base.html:67
+#: pages/templates/pages/login.html:4
+#: pages/templates/pages/login.html:9
 msgid "Login"
 msgstr ""
 
-#: website/templates/website/base.html:72
-#: website/templates/website/base.html:99
+#: pages/templates/pages/base.html:72
+#: pages/templates/pages/base.html:99
 msgid "Dark Mode"
 msgstr "Modo Oscuro"
 
-#: website/templates/website/base.html:99
+#: pages/templates/pages/base.html:99
 msgid "Light Mode"
 msgstr "Modo Claro"
 
-#: website/templates/website/login.html:14
+#: pages/templates/pages/login.html:14
 msgid "Username"
 msgstr ""
 
-#: website/templates/website/login.html:18
+#: pages/templates/pages/login.html:18
 msgid "Password"
 msgstr ""
 
-#: website/templates/website/login.html:22
+#: pages/templates/pages/login.html:22
 msgid "Log in"
 msgstr ""
 

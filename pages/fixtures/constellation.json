@@ -1,0 +1,55 @@
+[
+  {
+    "model": "sites.site",
+    "fields": {
+        "domain": "arrthexis.com",
+        "name": "cloud"
+    }
+  },
+  {
+    "model": "pages.application",
+    "fields": {
+      "name": "ocpp"
+    }
+  },
+  {
+    "model": "pages.application",
+    "fields": {
+      "name": "awg"
+    }
+  },
+  {
+    "model": "pages.module",
+    "fields": {
+      "node_role": [
+        "Constellation"
+      ],
+      "application": [
+        "ocpp"
+      ],
+      "path": "/ocpp/",
+      "is_default": true
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "module": ["Constellation", "/ocpp/"],
+      "path": "/ocpp/rfid/",
+      "label": "RFID Scanner"
+    }
+  },
+  {
+    "model": "pages.module",
+    "fields": {
+      "node_role": [
+        "Constellation"
+      ],
+      "application": [
+        "awg"
+      ],
+      "path": "/awg/",
+      "is_default": false
+    }
+  }
+]

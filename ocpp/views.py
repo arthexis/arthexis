@@ -10,7 +10,7 @@ from django.contrib.auth.decorators import login_required
 
 from utils.api import api_login_required
 
-from website.utils import landing
+from pages.utils import landing
 
 from . import store
 from .models import Transaction, Charger

@@ -2,7 +2,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
-from website.utils import landing
+from pages.utils import landing
 
 from .scanner import scan_sources, restart_sources, test_sources
 

@@ -2,9 +2,13 @@ from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
 from django.urls import path, reverse
+from pathlib import Path
 from django.shortcuts import redirect, render
+from django.template.response import TemplateResponse
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.core.exceptions import ValidationError
+from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import (
     GroupAdmin as DjangoGroupAdmin,
@@ -29,6 +33,7 @@ from .models import (
     RFID,
     Reference,
     Message,
+    PackageRelease,
 )
 from .notifications import notify
 
@@ -412,3 +417,68 @@ class RFIDAdmin(ImportExportModelAdmin):
         status = 500 if result.get("error") else 200
         return JsonResponse(result, status=status)
 
+
+class BuildReleaseForm(forms.Form):
+    bump = forms.BooleanField(initial=True, required=False, label="Bump version")
+    upload = forms.BooleanField(initial=False, required=False, label="Upload to PyPI")
+    tests = forms.BooleanField(initial=True, required=False, label="Run tests")
+    stash = forms.BooleanField(initial=False, required=False, label="Auto stash before building")
+
+    def __init__(self, *args, **kwargs):
+        current_version = kwargs.pop("current_version", "")
+        super().__init__(*args, **kwargs)
+        if current_version:
+            self.fields["bump"].help_text = f"Current version: {current_version}"
+
+
+@admin.register(PackageRelease)
+class PackageReleaseAdmin(admin.ModelAdmin):
+    list_display = ("name", "author", "repository_url")
+    actions = ["build_release"]
+
+    @admin.action(description="Build selected packages")
+    def build_release(self, request, queryset):
+        if "apply" in request.POST:
+            form = BuildReleaseForm(request.POST)
+            if form.is_valid():
+                bump = form.cleaned_data["bump"]
+                upload = form.cleaned_data["upload"]
+                tests_opt = form.cleaned_data["tests"]
+                stash_opt = form.cleaned_data["stash"]
+                for cfg in queryset:
+                    try:
+                        cfg.full_clean()
+                        cfg.build(
+                            bump=bump,
+                            tests=tests_opt,
+                            dist=True,
+                            twine=upload,
+                            git=True,
+                            tag=True,
+                            stash=stash_opt,
+                        )
+                        self.message_user(
+                            request, f"Built {cfg.name}", messages.SUCCESS
+                        )
+                    except ValidationError as exc:
+                        self.message_user(
+                            request, "; ".join(exc.messages), messages.ERROR
+                        )
+                    except Exception as exc:
+                        self.message_user(request, str(exc), messages.ERROR)
+                return None
+        else:
+            version = (
+                Path("VERSION").read_text().strip()
+                if Path("VERSION").exists()
+                else ""
+            )
+            form = BuildReleaseForm(current_version=version)
+        context = {
+            "form": form,
+            "queryset": queryset,
+            "action": "build_release",
+        }
+        return TemplateResponse(
+            request, "admin/core/packagerelease/build_release.html", context
+        )

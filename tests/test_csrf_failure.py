@@ -16,7 +16,7 @@ class CSRFFailureViewTests(TestCase):
         self.client = Client(enforce_csrf_checks=True)
 
     def test_custom_csrf_failure_view(self):
-        with self.assertLogs("website.views", level="WARNING") as cm:
+        with self.assertLogs("pages.views", level="WARNING") as cm:
             response = self.client.post("/login/", {})
         self.assertEqual(response.status_code, 403)
         content = response.content.decode()

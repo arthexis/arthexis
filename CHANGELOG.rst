@@ -282,7 +282,7 @@ Unreleased
 - a244d9e feat(awg): set calculator as main view
 - f0e71c8 Remove generic app index view and routes
 - b0cb1dd Remove git maintenance tasks
-- 27fa5d1 Add show_in_website field migration
+- 27fa5d1 Add show_in_pages field migration
 - 45a62cd Remove git push from maintenance
 - 7d45f05 Improve app index view docs
 - 8361fd1 Remove MD5 check from install script
@@ -317,7 +317,7 @@ Unreleased
 - 66e99dd Display node screenshots in admin
 - 93d1985 Make AWG calculator template fields optional
 - c4470f8 Generalize fixture loading
-- d39fd95 Fix website migration dependency
+- d39fd95 Fix pages migration dependency
 - 347a3a7 Add configurable clipboard polling and text samples
 - 14b7730 Fix migration dependency for sites app
 - 55bc8c4 Add migration for slug-based RFID endpoint
@@ -358,7 +358,7 @@ Unreleased
 - 2068204 Fix Site dependency and prevent maintenance reset
 - d09d9c1 Add Celery tasks for clipboard samples and node screenshots
 - 71e5195 Replace app READMEs with admindocs
-- c5f3bc6 Move Site admin to website app
+- c5f3bc6 Move Site admin to pages app
 - 6d9e854 test: ensure simulator sends messages
 - 266e664 feat(admin): link site and node badges
 - 3872854 Style README sidebar like PEP pages
@@ -377,7 +377,7 @@ Unreleased
 - b6ae5e8 Load localhost site fixture during dev maintenance
 - 4642673 Handle inconsistent history in dev maintenance
 - 2aa58b6 Move RFID to dedicated app and add QR sidebar
-- 898389b Remove duplicate website app migration
+- 898389b Remove duplicate pages app migration
 - 540ca5a Remove automatic git sync and restart
 - 1aa2a16 Rename build to revision and show revision in footer
 - 9f3e7ac Fix App migration dependency
@@ -386,7 +386,7 @@ Unreleased
 - 8c2b33f Add App model and navigation pills
 - da0c623 Move README TOC sidebar to left
 - 73d8994 Move theme toggle into navbar
-- 044fd76 Move website navbar to left
+- 044fd76 Move pages navbar to left
 - 63811e6 chore: decouple dev maintenance from launchers
 - c79344b Auto migrations
 - bd20c9f Auto migrations
@@ -412,7 +412,7 @@ Unreleased
 - 0fa852e Auto migrations
 - 831f2b5 Add VSCode wrapper to strip debugpy for git sync restarts
 - 7639580 Add Register Current button to Sites admin
-- fa46d43 test(website): isolate admin sidebar tests
+- fa46d43 test(pages): isolate admin sidebar tests
 - 09907a2 Expand node detection to check server IPs
 - d259fbc Auto migrations
 - 03f1ed4 refine debugpy detection for git sync restart
@@ -539,8 +539,8 @@ Unreleased
 - fc5b127 Add loadenv support and envs directory
 - 1a8ae0c mig
 - 0fe368d Move RFID model under auth app
-- 5a39479 feat(website): add navigation bar and sitemap
-- 6304ad6 feat(website): add navigation bar and sitemap
+- 5a39479 feat(pages): add navigation bar and sitemap
+- 6304ad6 feat(pages): add navigation bar and sitemap
 - 03843a7 Simplify Account string representation
 - ad20082 Add AWG reference app
 - 35db6d3 Improve charger labels and QR code
@@ -588,14 +588,14 @@ Unreleased
 - 5391b8d Rename RFID blacklist to allowed and add CSV management commands
 - fe9a93b Enable autoreload in dev
 - fb68ff4 Replace UID with RFID field
-- fd7fbd5 Add Bootstrap styling for readme website
+- fd7fbd5 Add Bootstrap styling for readme pages
 - b50c748 Add WebSocket charge point simulator
 - 31238cd merge db
 - 266e60a Add vehicles linked to accounts
 - 44e618f merge
 - 527668b Add RFID model and support multiple tags
 - b01960c merge
-- f9c28db Create readme and website apps with site routing
+- f9c28db Create readme and pages apps with site routing
 - cc93399 Add RFID enforcement option for chargers
 - 13116ce ocpp: record last heartbeat and metervalues
 - b984410 Add account model for tracking energy credits

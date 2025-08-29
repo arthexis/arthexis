@@ -14,7 +14,7 @@
       "temperature": 60,
       "conduit": "emt",
       "ground": 1,
-      "show_in_website": true
+      "show_in_pages": true
     }
   },
   {
@@ -32,7 +32,7 @@
       "temperature": 75,
       "conduit": "emt",
       "ground": 1,
-      "show_in_website": true
+      "show_in_pages": true
     }
   }
 ]

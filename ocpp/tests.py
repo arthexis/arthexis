@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.sites.models import Site
-from website.models import Application, Module
+from pages.models import Application, Module
 from nodes.models import Node, NodeRole
 
 from config.asgi import application
@@ -411,11 +411,11 @@ class SimulatorLandingTests(TestCase):
 
     @skip("Navigation links unavailable in test environment")
     def test_simulator_app_link_in_nav(self):
-        resp = self.client.get(reverse("website:index"))
+        resp = self.client.get(reverse("pages:index"))
         self.assertContains(resp, "/ocpp/")
         self.assertNotContains(resp, "/ocpp/simulator/")
         self.client.force_login(self.user)
-        resp = self.client.get(reverse("website:index"))
+        resp = self.client.get(reverse("pages:index"))
         self.assertContains(resp, "/ocpp/")
         self.assertContains(resp, "/ocpp/simulator/")
 

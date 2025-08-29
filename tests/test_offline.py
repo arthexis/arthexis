@@ -26,7 +26,7 @@ def test_async_function_offline(monkeypatch):
         asyncio.run(async_func())
 
 def test_release_build_offline(monkeypatch):
-    from release.utils import build
+    from core.release import build
     monkeypatch.setenv('ARTHEXIS_OFFLINE', '1')
     with pytest.raises(OfflineError):
         build()
