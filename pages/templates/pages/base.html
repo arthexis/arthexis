@@ -61,6 +61,21 @@
         background-color: var(--bs-primary);
         color: var(--bs-white);
       }
+      .user-info-tooltip {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        white-space: nowrap;
+        margin-top: 0.25rem;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+        border-radius: 0.25rem;
+        background-color: var(--bs-dark);
+        color: var(--bs-white);
+        z-index: 1000;
+      }
     </style>
   </head>
   <body class="p-3 pb-0 d-flex flex-column min-vh-100">
@@ -104,10 +119,15 @@
               {% endif %}
             </ul>
             <div class="toolbar ms-lg-3 d-flex align-items-center" role="toolbar">
-              <a class="btn btn-sm btn-outline-light me-2" href="{% url 'pages:login' %}" aria-label="{% trans "Login" %}">
+              <a class="btn btn-sm btn-outline-light me-2 position-relative user-info-trigger" href="{% if request.user.is_authenticated %}{% url 'admin:index' %}{% else %}{% url 'pages:login' %}{% endif %}" aria-label="{% if request.user.is_authenticated %}{% trans "Admin" %}{% else %}{% trans "Login" %}{% endif %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-person"></use>
                 </svg>
+                {% if request.user.is_authenticated %}
+                <div class="user-info-tooltip">
+                  {{ request.user.username }} - {% if request.user.is_staff %}{% trans "Staff" %}{% else %}{% trans "Not staff" %}{% endif %}
+                </div>
+                {% endif %}
               </a>
               <button id="theme-toggle" class="btn btn-sm btn-outline-light" onclick="toggleTheme()" aria-label="{% trans "Dark Mode" %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
@@ -211,11 +231,25 @@
           });
         }
 
-        document.addEventListener('click', e => {
-          if (clickOpen && !item.contains(e.target)) {
-            clickOpen = false;
-            hide();
-          }
+      document.addEventListener('click', e => {
+        if (clickOpen && !item.contains(e.target)) {
+          clickOpen = false;
+          hide();
+        }
+      });
+    });
+    </script>
+    <script>
+      document.querySelectorAll('.user-info-trigger').forEach(btn => {
+        const tooltip = btn.querySelector('.user-info-tooltip');
+        if (!tooltip) {
+          return;
+        }
+        btn.addEventListener('mouseenter', () => {
+          tooltip.style.display = 'block';
+        });
+        btn.addEventListener('mouseleave', () => {
+          tooltip.style.display = 'none';
         });
       });
     </script>
