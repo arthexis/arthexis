@@ -3,7 +3,7 @@
     "model": "sites.site",
     "fields": {
       "domain": "arthexis.com",
-      "name": "Constellation"
+      "name": ""
     }
   },
   {
@@ -21,8 +21,8 @@
   {
     "model": "website.module",
     "fields": {
-      "site": [
-        "arthexis.com"
+      "node_role": [
+        "Constellation"
       ],
       "application": [
         "ocpp"
@@ -34,7 +34,7 @@
   {
     "model": "website.landing",
     "fields": {
-      "module": ["arthexis.com", "/ocpp/"],
+      "module": ["Constellation", "/ocpp/"],
       "path": "/ocpp/rfid/",
       "label": "RFID Scanner"
     }
@@ -42,8 +42,8 @@
   {
     "model": "website.module",
     "fields": {
-      "site": [
-        "arthexis.com"
+      "node_role": [
+        "Constellation"
       ],
       "application": [
         "awg"

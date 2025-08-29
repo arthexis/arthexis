@@ -9,6 +9,7 @@ from django import forms
 from utils.sites import get_site
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
+from nodes.models import Node
 from django.urls import reverse
 from django.utils import translation
 from django.utils.encoding import force_bytes, force_str
@@ -18,6 +19,7 @@ from django.utils.translation import gettext as _
 
 import markdown
 from website.utils import landing
+from .models import Module
 
 
 logger = logging.getLogger(__name__)
@@ -26,8 +28,10 @@ logger = logging.getLogger(__name__)
 @landing("Home")
 def index(request):
     site = get_site(request)
+    node = Node.get_local()
+    role = node.role if node else None
     app = (
-        site.modules.filter(is_default=True)
+        Module.objects.filter(node_role=role, is_default=True)
         .select_related("application")
         .first()
     )
@@ -60,7 +64,9 @@ def index(request):
 
 def sitemap(request):
     site = get_site(request)
-    applications = site.modules.all()
+    node = Node.get_local()
+    role = node.role if node else None
+    applications = Module.objects.filter(node_role=role)
     base = request.build_absolute_uri("/").rstrip("/")
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',

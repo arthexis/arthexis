@@ -11,6 +11,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("sites", "0002_alter_domain_unique"),
+        ("nodes", "0001_initial"),
     ]
 
     operations = [
@@ -119,18 +120,18 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
-                    "site",
+                    "node_role",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="modules",
-                        to="sites.site",
+                        to="nodes.noderole",
                     ),
                 ),
             ],
             options={
                 "verbose_name": "Module",
                 "verbose_name_plural": "Modules",
-                "unique_together": {("site", "path")},
+                "unique_together": {("node_role", "path")},
             },
         ),
         migrations.CreateModel(

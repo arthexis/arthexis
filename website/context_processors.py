@@ -2,6 +2,8 @@ from utils.sites import get_site
 from django.urls import Resolver404, resolve
 from django.conf import settings
 from pathlib import Path
+from nodes.models import Node
+from .models import Module
 
 _favicon_path = (
     Path(settings.BASE_DIR) / "website" / "fixtures" / "data" / "favicon.txt"
@@ -15,9 +17,15 @@ except OSError:
 def nav_links(request):
     """Provide navigation links for the current site."""
     site = get_site(request)
-    try:
-        modules = site.modules.select_related("application").prefetch_related("landings").all()
-    except Exception:
+    node = Node.get_local()
+    role = node.role if node else None
+    if role:
+        modules = (
+            Module.objects.filter(node_role=role)
+            .select_related("application")
+            .prefetch_related("landings")
+        )
+    else:
         modules = []
 
     valid_modules = []

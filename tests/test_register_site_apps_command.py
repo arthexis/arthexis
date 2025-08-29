@@ -16,7 +16,7 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from website.models import Application, Module
-from nodes.models import Node
+from nodes.models import Node, NodeRole
 
 
 class RegisterSiteAppsCommandTests(TestCase):
@@ -28,12 +28,13 @@ class RegisterSiteAppsCommandTests(TestCase):
         call_command("register_site_apps")
 
         site = Site.objects.get(domain="127.0.0.1")
-        self.assertEqual(site.name, "Terminal")
+        self.assertEqual(site.name, "")
 
         node = Node.objects.get(hostname=socket.gethostname())
         self.assertFalse(node.enable_public_api)
         self.assertFalse(node.clipboard_polling)
         self.assertFalse(node.screenshot_polling)
+        role = NodeRole.objects.get(name="Terminal")
 
         for label in settings.LOCAL_APPS:
             try:
@@ -42,4 +43,6 @@ class RegisterSiteAppsCommandTests(TestCase):
                 continue
             self.assertTrue(Application.objects.filter(name=config.label).exists())
             app = Application.objects.get(name=config.label)
-            self.assertTrue(site.modules.filter(application=app).exists())
+            self.assertTrue(
+                Module.objects.filter(node_role=role, application=app).exists()
+            )

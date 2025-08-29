@@ -36,14 +36,17 @@ class SiteBadgeInline(admin.StackedInline):
     fields = ("badge_color", "favicon")
 
 
-class ModuleInline(admin.TabularInline):
-    model = Module
-    extra = 0
-    fields = ("application", "path", "menu", "is_default", "favicon")
+class SiteForm(forms.ModelForm):
+    name = forms.CharField(required=False)
+
+    class Meta:
+        model = Site
+        fields = "__all__"
 
 
 class SiteAdmin(DjangoSiteAdmin):
-    inlines = [SiteBadgeInline, ModuleInline]
+    form = SiteForm
+    inlines = [SiteBadgeInline]
     change_list_template = "admin/sites/site/change_list.html"
     fields = ("domain", "name")
     list_display = ("domain", "name")
@@ -98,7 +101,7 @@ class SiteAdmin(DjangoSiteAdmin):
         except ValueError:
             name = domain
         else:
-            name = "Terminal"
+            name = ""
         site, created = Site.objects.get_or_create(
             domain=domain, defaults={"name": name}
         )
@@ -153,7 +156,7 @@ class LandingInline(admin.TabularInline):
 
 @admin.register(Module)
 class ModuleAdmin(admin.ModelAdmin):
-    list_display = ("application", "site", "path", "menu", "is_default")
-    list_filter = ("site", "application")
-    fields = ("site", "application", "path", "menu", "is_default", "favicon")
+    list_display = ("application", "node_role", "path", "menu", "is_default")
+    list_filter = ("node_role", "application")
+    fields = ("node_role", "application", "path", "menu", "is_default", "favicon")
     inlines = [LandingInline]

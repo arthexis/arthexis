@@ -1,6 +1,7 @@
 from django.db import models
 from integrate.models import Entity
 from django.contrib.sites.models import Site
+from nodes.models import NodeRole
 from django.apps import apps as django_apps
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
@@ -30,13 +31,13 @@ class Application(Entity):
 
 
 class ModuleManager(models.Manager):
-    def get_by_natural_key(self, domain: str, path: str):
-        return self.get(site__domain=domain, path=path)
+    def get_by_natural_key(self, role: str, path: str):
+        return self.get(node_role__name=role, path=path)
 
 
 class Module(Entity):
-    site = models.ForeignKey(
-        Site, on_delete=models.CASCADE, related_name="modules",
+    node_role = models.ForeignKey(
+        NodeRole, on_delete=models.CASCADE, related_name="modules",
     )
     application = models.ForeignKey(
         Application, on_delete=models.CASCADE, related_name="modules",
@@ -59,12 +60,12 @@ class Module(Entity):
     class Meta:
         verbose_name = _("Module")
         verbose_name_plural = _("Modules")
-        unique_together = ("site", "path")
+        unique_together = ("node_role", "path")
 
     def natural_key(self):  # pragma: no cover - simple representation
-        return (self.site.domain, self.path)
+        return (self.node_role.name, self.path)
 
-    natural_key.dependencies = ["sites.Site"]
+    natural_key.dependencies = ["nodes.NodeRole"]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.application.name} ({self.path})"
