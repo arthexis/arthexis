@@ -1,5 +1,12 @@
 [
   {
+    "model": "sites.site",
+    "fields": {
+        "domain": "127.0.0.1",
+        "name": "local"
+    }
+  },
+  {
     "model": "website.application",
     "fields": {"name": "ocpp"}
   },

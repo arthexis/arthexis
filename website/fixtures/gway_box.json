@@ -1,5 +1,12 @@
 [
   {
+    "model": "sites.site",
+    "fields": {
+        "domain": "192.168.129.10",
+        "name": "ethernet"
+    }
+  },
+  {
     "model": "website.application",
     "fields": {"name": "ocpp"}
   },
