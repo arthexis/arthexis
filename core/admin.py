@@ -27,7 +27,9 @@ from .models import (
     RFID,
     Reference,
     OdooProfile,
+    PackageHub,
     PackageRelease,
+    PackagerProfile,
 )
 from . import release
 
@@ -410,7 +412,7 @@ class BuildReleaseForm(forms.Form):
 
 @admin.register(PackageRelease)
 class PackageReleaseAdmin(admin.ModelAdmin):
-    list_display = ("name", "version", "pypi_url", "is_live")
+    list_display = ("hub", "version", "pypi_url", "is_live")
     actions = ["build_release", "create_next_release"]
 
     @admin.action(description="Build selected packages")
@@ -435,7 +437,7 @@ class PackageReleaseAdmin(admin.ModelAdmin):
                             stash=stash_opt,
                         )
                         self.message_user(
-                            request, f"Built {cfg.name}", messages.SUCCESS
+                            request, f"Built {cfg.hub.name}", messages.SUCCESS
                         )
                     except ValidationError as exc:
                         self.message_user(

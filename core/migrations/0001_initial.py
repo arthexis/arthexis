@@ -599,13 +599,24 @@ class Migration(migrations.Migration):
                 ('license', models.CharField(default='MIT', max_length=100)),
                 ('repository_url', models.URLField(default='https://github.com/arthexis/arthexis')),
                 ('homepage_url', models.URLField(default='https://arthexis.com')),
+            ],
+            options={
+                'verbose_name': 'Package Hub',
+                'verbose_name_plural': 'Package Hubs',
+            },
+        ),
+        migrations.CreateModel(
+            name='PackageRelease',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('is_seed_data', models.BooleanField(default=False, editable=False)),
+                ('is_deleted', models.BooleanField(default=False, editable=False)),
                 ('version', models.CharField(default='0.0.0', max_length=20, unique=True)),
                 ('revision', models.CharField(blank=True, max_length=40)),
                 ('pypi_url', models.URLField(blank=True)),
                 ('is_live', models.BooleanField(default=False)),
-                ('username', models.CharField(blank=True, max_length=100)),
-                ('password', models.CharField(blank=True, max_length=100)),
-                ('token', models.CharField(blank=True, max_length=200)),
+                ('hub', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='releases', to='core.packagehub')),
+                ('profile', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='core.packagerprofile')),
             ],
             options={
                 'verbose_name': 'Package Release',
