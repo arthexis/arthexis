@@ -2,6 +2,13 @@ name: Install latest release
 
 on:
   pull_request:
+    paths:
+      - '**/migrations/**'
+      - '.github/workflows/release-install.yml'
+  push:
+    paths:
+      - '**/migrations/**'
+      - '.github/workflows/release-install.yml'
 
 jobs:
   install:
