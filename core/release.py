@@ -108,7 +108,6 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
                     "nodes",
                     "ocpp",
                     "pages",
-                    "bind",
                 ]
             }
         },

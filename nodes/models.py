@@ -1,5 +1,5 @@
 from django.db import models
-from bind.models import Entity
+from core.entity import Entity
 import re
 from django.utils.text import slugify
 from django.conf import settings

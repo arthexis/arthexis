@@ -1,5 +1,5 @@
 from django.db import models
-from bind.models import Entity
+from core.entity import Entity
 from django.utils.translation import gettext_lazy as _
 
 
