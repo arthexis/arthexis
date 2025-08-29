@@ -30,12 +30,12 @@ def test_verify_success(monkeypatch):
         return FakeModels()
 
     monkeypatch.setattr(xmlrpc.client, "ServerProxy", fake_proxy)
-    user = User.objects.create(username="u")
+    user = User.objects.create(username="u0")
     profile = OdooProfile.objects.create(
         user=user,
         host="http://test",
         database="db",
-        username="u",
+        username="u0",
         password="p",
     )
     assert profile.verify() is True
@@ -47,12 +47,12 @@ def test_verify_success(monkeypatch):
 
 
 def test_credentials_change_resets_verification(monkeypatch):
-    user = User.objects.create(username="u")
+    user = User.objects.create(username="u1")
     profile = OdooProfile.objects.create(
         user=user,
         host="http://test",
         database="db",
-        username="u",
+        username="u1",
         password="p",
     )
     profile.verified_on = timezone.now()
@@ -64,12 +64,12 @@ def test_credentials_change_resets_verification(monkeypatch):
 
 
 def test_execute_failure_marks_unverified(monkeypatch):
-    user = User.objects.create(username="u")
+    user = User.objects.create(username="u2")
     profile = OdooProfile.objects.create(
         user=user,
         host="http://test",
         database="db",
-        username="u",
+        username="u2",
         password="p",
     )
     profile.odoo_uid = 42
