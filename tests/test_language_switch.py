@@ -16,11 +16,11 @@ from django.conf import settings
 class LanguageSwitchTests(TestCase):
     def setUp(self):
         self.client = Client(enforce_csrf_checks=True)
-        Site.objects.update_or_create(id=1, defaults={"domain": "testserver", "name": "website"})
+        Site.objects.update_or_create(id=1, defaults={"domain": "testserver", "name": "pages"})
 
     def test_switch_language_without_csrf(self):
         # Visit the home page to ensure site is set up
-        self.client.get(reverse("website:index"))
+        self.client.get(reverse("pages:index"))
         # Submit language change without CSRF token
         resp = self.client.post(reverse("set_language"), {"language": "es", "next": "/"})
         self.assertEqual(resp.status_code, 302)

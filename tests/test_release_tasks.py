@@ -1,12 +1,12 @@
 import types
 
-import release.tasks as tasks
+import core.tasks as tasks
 
 
 def _setup_tmp(monkeypatch, tmp_path):
-    release_dir = tmp_path / "release"
-    release_dir.mkdir()
-    fake_file = release_dir / "tasks.py"
+    core_dir = tmp_path / "core"
+    core_dir.mkdir()
+    fake_file = core_dir / "tasks.py"
     fake_file.write_text("")
     monkeypatch.setattr(tasks, "__file__", str(fake_file))
     return tmp_path

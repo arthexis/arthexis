@@ -74,7 +74,7 @@ class CalculatorTemplateAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "description",
-        "show_in_website",
+        "show_in_pages",
         "meters",
         "amps",
         "volts",
@@ -86,7 +86,7 @@ class CalculatorTemplateAdmin(admin.ModelAdmin):
     fields = (
         "name",
         "description",
-        "show_in_website",
+        "show_in_pages",
         "meters",
         "amps",
         "volts",

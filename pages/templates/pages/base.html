@@ -1,0 +1,228 @@
+{% load i18n %}
+<!doctype html>
+<html lang="{{ LANGUAGE_CODE }}" data-bs-theme="light">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="{{ favicon_url }}">
+    <title>{% block title %}{{ badge_site_name|default:"Arthexis" }} {% trans "Constellation" %}{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+      html[data-bs-theme='light'] {
+        --bs-body-bg: #f8f9fa;
+      }
+      html {
+        font-size: clamp(16px, 1.2vw, 24px);
+      }
+      @media (min-width: 1600px) {
+        .container {
+          max-width: 90%;
+        }
+      }
+      .toolbar svg {
+        fill: currentColor;
+      }
+      nav.toc {
+        position: sticky;
+        top: 1rem;
+        max-height: calc(100vh - 2rem);
+        overflow-y: auto;
+        font-size: 0.9rem;
+        border-left: 1px solid #dee2e6;
+        padding-left: 1rem;
+      }
+      nav.toc h4 {
+        font-size: 1rem;
+        margin-top: 0;
+        margin-bottom: 0.5rem;
+      }
+      nav.toc ul {
+        list-style: none;
+        padding-left: 0;
+        margin-bottom: 0;
+      }
+      nav.toc li {
+        margin-bottom: 0.25rem;
+      }
+      nav.toc ul ul {
+        margin-left: 1rem;
+      }
+      nav.toc a {
+        text-decoration: none;
+      }
+      nav.toc a:hover {
+        text-decoration: underline;
+      }
+      .nav-item.dropdown .nav-link::after {
+        display: none;
+      }
+      .nav-item.dropdown:hover .badge,
+      .nav-item.dropdown.show .badge {
+        background-color: var(--bs-primary);
+        color: var(--bs-white);
+      }
+    </style>
+  </head>
+  <body class="p-3 pb-0 d-flex flex-column min-vh-100">
+    <div class="container flex-grow-1">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-3">
+        <div class="container-fluid">
+          <a class="navbar-brand" href="/">{{ badge_site_name|default:"Arthexis" }}</a>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+          <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+              {% if nav_modules %}
+                {% for module in nav_modules %}
+                  {% with landings=module.enabled_landings %}
+                    {% if landings|length == 1 %}
+                      <li class="nav-item">
+                        <a class="nav-link" href="{{ landings.0.path }}">
+                          <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
+                        </a>
+                      </li>
+                    {% else %}
+                      <li class="nav-item dropdown">
+                        <a class="nav-link" href="#" role="button">
+                          <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
+                        </a>
+                        <ul class="dropdown-menu">
+                          {% for landing in landings %}
+                            <li>
+                              <a class="dropdown-item" href="{{ landing.path }}">{{ landing.label }}</a>
+                              {% if landing.description %}
+                                <small class="dropdown-item-text text-muted">{{ landing.description }}</small>
+                              {% endif %}
+                            </li>
+                          {% endfor %}
+                        </ul>
+                      </li>
+                    {% endif %}
+                  {% endwith %}
+                {% endfor %}
+              {% endif %}
+            </ul>
+            <div class="toolbar ms-lg-3 d-flex align-items-center" role="toolbar">
+              <a class="btn btn-sm btn-outline-light me-2" href="{% url 'pages:login' %}" aria-label="{% trans "Login" %}">
+                <svg aria-hidden="true" width="1.5rem" height="1.5rem">
+                  <use href="#icon-person"></use>
+                </svg>
+              </a>
+              <button id="theme-toggle" class="btn btn-sm btn-outline-light" onclick="toggleTheme()" aria-label="{% trans "Dark Mode" %}">
+                <svg aria-hidden="true" width="1.5rem" height="1.5rem">
+                  <use href="#icon-moon"></use>
+                </svg>
+              </button>
+              <form action="{% url 'set_language' %}" method="post" class="d-inline ms-2">
+                {% csrf_token %}
+                <input name="next" type="hidden" value="{{ request.get_full_path }}">
+                <input name="language" type="hidden" value="{% if LANGUAGE_CODE|slice:":2" == 'en' %}es{% else %}en{% endif %}">
+                <button class="btn btn-sm btn-outline-light" type="submit" aria-label="{% if LANGUAGE_CODE|slice:":2" == 'en' %}{% trans 'Spanish' %}{% else %}{% trans 'English' %}{% endif %}">
+                  <svg aria-hidden="true" width="1.5rem" height="1.5rem">
+                    <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="currentColor" font-size="0.8rem" font-weight="bold">
+                      {% if LANGUAGE_CODE|slice:":2" == 'en' %}ES{% else %}EN{% endif %}
+                    </text>
+                  </svg>
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+      {% block content %}{% endblock %}
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      function setTheme(theme) {
+        document.documentElement.setAttribute('data-bs-theme', theme);
+        localStorage.setItem('theme', theme);
+        const toggle = document.getElementById('theme-toggle');
+        const icon = toggle.querySelector('use');
+        toggle.setAttribute('aria-label', theme === 'dark' ? '{% trans "Light Mode" %}' : '{% trans "Dark Mode" %}');
+        icon.setAttribute('href', theme === 'dark' ? '#icon-sun' : '#icon-moon');
+        icon.setAttribute('xlink:href', theme === 'dark' ? '#icon-sun' : '#icon-moon');
+
+        const navbar = document.querySelector('nav.navbar');
+        const buttons = document.querySelectorAll('.toolbar .btn');
+        if (theme === 'light') {
+          navbar.classList.remove('navbar-dark', 'bg-dark');
+          navbar.classList.add('navbar-light', 'bg-white');
+          buttons.forEach(btn => {
+            btn.classList.remove('btn-outline-light');
+            btn.classList.add('btn-outline-dark');
+          });
+        } else {
+          navbar.classList.remove('navbar-light', 'bg-white');
+          navbar.classList.add('navbar-dark', 'bg-dark');
+          buttons.forEach(btn => {
+            btn.classList.remove('btn-outline-dark');
+            btn.classList.add('btn-outline-light');
+          });
+        }
+      }
+
+      function toggleTheme() {
+        const current = document.documentElement.getAttribute('data-bs-theme') || 'light';
+        setTheme(current === 'light' ? 'dark' : 'light');
+      }
+
+      (function() {
+        const saved = localStorage.getItem('theme');
+        if (saved) {
+          setTheme(saved);
+        } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          setTheme('dark');
+        }
+      })();
+    </script>
+    <script>
+      document.querySelectorAll('.nav-item.dropdown').forEach(item => {
+        const link = item.querySelector('.nav-link');
+        const menu = item.querySelector('.dropdown-menu');
+        let clickOpen = false;
+
+        const show = () => {
+          item.classList.add('show');
+          menu.classList.add('show');
+        };
+        const hide = () => {
+          item.classList.remove('show');
+          menu.classList.remove('show');
+        };
+
+        link.addEventListener('click', e => {
+          e.preventDefault();
+          e.stopPropagation();
+          show();
+          clickOpen = true;
+        });
+
+        if (window.matchMedia('(hover: hover)').matches) {
+          item.addEventListener('mouseenter', () => {
+            if (!clickOpen) {
+              show();
+            }
+          });
+          item.addEventListener('mouseleave', () => {
+            if (!clickOpen) {
+              hide();
+            }
+          });
+        }
+
+        document.addEventListener('click', e => {
+          if (clickOpen && !item.contains(e.target)) {
+            clickOpen = false;
+            hide();
+          }
+        });
+      });
+    </script>
+    <svg xmlns="http://www.w3.org/2000/svg" class="base-svgs">
+      <symbol viewBox="0 0 24 24" width="1.5rem" height="1.5rem" id="icon-moon"><path d="M0 0h24v24H0z" fill="none"/><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol>
+      <symbol viewBox="0 0 24 24" width="1.5rem" height="1.5rem" id="icon-sun"><path d="M0 0h24v24H0z" fill="none"/><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol>
+      <symbol viewBox="0 0 24 24" width="1.5rem" height="1.5rem" id="icon-person"><path d="M0 0h24v24H0z" fill="none"/><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></symbol>
+    </svg>
+  </body>
+</html>

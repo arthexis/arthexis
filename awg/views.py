@@ -9,7 +9,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.translation import gettext as _, gettext_lazy as _lazy
 
-from website.utils import landing
+from pages.utils import landing
 
 from .models import CableSize, ConduitFill, CalculatorTemplate
 
@@ -279,6 +279,6 @@ def calculator(request):
             else:
                 context["result"] = result
     context["templates"] = (
-        CalculatorTemplate.objects.filter(show_in_website=True).order_by("name")
+        CalculatorTemplate.objects.filter(show_in_pages=True).order_by("name")
     )
     return render(request, "awg/calculator.html", context)

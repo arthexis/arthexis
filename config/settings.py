@@ -118,9 +118,8 @@ LOCAL_APPS = [
     "core",
     "ocpp",
     "awg",
-    "release",
     "bind",
-    "website",
+    "pages",
     "app",
 ]
 
@@ -155,14 +154,14 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-CSRF_FAILURE_VIEW = "website.views.csrf_failure"
+CSRF_FAILURE_VIEW = "pages.views.csrf_failure"
 
 ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "website" / "templates"],
+        "DIRS": [BASE_DIR / "pages" / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -170,7 +169,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.template.context_processors.i18n",
                 "django.contrib.messages.context_processors.messages",
-                "website.context_processors.nav_links",
+                "pages.context_processors.nav_links",
                 "config.context_processors.site_and_node",
             ],
         },

@@ -1,0 +1,273 @@
+{% extends "admin/base.html" %}
+{% load i18n %}
+{% block title %}{% if title %}{{ title }} | {% endif %}{{ site_title|default:_('Django site admin') }}{% endblock %}
+{% block extrahead %}
+{{ block.super }}
+<link rel="icon" href="data:image/png;base64,{% include 'admin/favicon.txt' %}">
+<script id="admin-collapsible-apps">
+document.addEventListener('DOMContentLoaded', function () {
+    const modules = document.querySelectorAll('#nav-sidebar .module');
+    modules.forEach(function (module, index) {
+        const header = module.querySelector('h2');
+        const content = module.querySelector('ul, table');
+        if (header && content) {
+            header.addEventListener('click', function () {
+                module.classList.toggle('collapsed');
+            });
+        }
+
+        // Collapse all groups by default except for the last one.
+        if (index !== modules.length - 1) {
+            module.classList.add('collapsed');
+        }
+    });
+});
+</script>
+<script id="admin-filter-empty-groups">
+document.addEventListener('DOMContentLoaded', function () {
+    const nav = document.getElementById('nav-filter');
+    const sidebar = document.getElementById('nav-sidebar');
+    if (!nav || !sidebar) {
+        return;
+    }
+
+    const modules = Array.from(sidebar.querySelectorAll('.module'));
+
+    function toggleEmptyGroups() {
+        const query = nav.value.trim().toLowerCase();
+        const visibleModules = [];
+
+        modules.forEach(function (module) {
+            const hasVisibleRows = Array.from(module.querySelectorAll('tr')).some(function (row) {
+                return row.style.display !== 'none' && row.querySelector('th[scope="row"]');
+            });
+
+            if (hasVisibleRows) {
+                module.style.display = '';
+                visibleModules.push(module);
+            } else {
+                module.style.display = 'none';
+            }
+        });
+
+        // If searching, expand groups with matches. Otherwise collapse all but last visible group.
+        if (query) {
+            visibleModules.forEach(function (module) {
+                module.classList.remove('collapsed');
+            });
+        } else {
+            visibleModules.forEach(function (module, index) {
+                if (index === visibleModules.length - 1) {
+                    module.classList.remove('collapsed');
+                } else {
+                    module.classList.add('collapsed');
+                }
+            });
+        }
+    }
+
+    nav.addEventListener('change', toggleEmptyGroups);
+    nav.addEventListener('input', toggleEmptyGroups);
+    nav.addEventListener('keyup', toggleEmptyGroups);
+
+    toggleEmptyGroups();
+});
+</script>
+{% now "c" as current_time %}
+{% now "T" as current_tz %}
+<script id="admin-server-clock">
+document.addEventListener('DOMContentLoaded', function () {
+    const clock = document.getElementById('server-clock');
+    if (!clock) {
+        return;
+    }
+    const serverStart = Date.parse("{{ current_time|escapejs }}");
+    const clientStart = Date.now();
+    const tz = "{{ TIME_ZONE|escapejs }}";
+    function pad(n) {
+        return String(n).padStart(2, '0');
+    }
+    function update() {
+        const now = new Date(serverStart + (Date.now() - clientStart));
+        const formatted = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        clock.textContent = `${formatted} {{ current_tz|escapejs }}`;
+        const dateFull = new Intl.DateTimeFormat([], { timeZone: tz, year: 'numeric', month: 'long', day: 'numeric' }).format(now);
+        const weekday = new Intl.DateTimeFormat([], { timeZone: tz, weekday: 'long' }).format(now);
+        const tzName = new Intl.DateTimeFormat([], { timeZone: tz, timeZoneName: 'long' })
+            .formatToParts(now)
+            .find(part => part.type === 'timeZoneName').value;
+        clock.title = `${dateFull}\n${weekday}\n${tzName}`;
+    }
+    update();
+    setInterval(update, 1000);
+});
+</script>
+{% endblock %}
+{% block extrastyle %}
+{{ block.super }}
+<style>
+body.login #header {
+    padding-top: 1em;
+    padding-bottom: 1em;
+}
+
+body.login #branding {
+    flex-direction: column;
+    align-items: center;
+}
+
+body.login #site-name {
+    margin-inline-end: 0;
+}
+
+body.login #site-badges {
+    margin-top: 0.5em;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+body.login #site-badges .badge {
+    margin-right: 0.5em;
+    font-size: 0.7em;
+    padding: 2px 4px;
+    border-radius: 4px;
+    color: white;
+}
+body.login #site-badges .badge a {
+    color: white;
+    text-decoration: none;
+}
+body.login .badge-unknown {background-color:#6c757d;}
+#server-clock {
+    font-family: monospace;
+    font-size: 0.9rem;
+}
+
+body:not(.login) #header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+body:not(.login) #branding,
+body:not(.login) #user-tools {
+    float: none;
+}
+
+body:not(.login) #branding {
+    display: flex;
+    align-items: center;
+}
+
+body:not(.login) #site-badges {
+    margin-left: 0.5em;
+    display: flex;
+    align-items: center;
+}
+
+body:not(.login) #site-badges .badge {
+    margin-right: 0.25em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    color: white;
+}
+
+body:not(.login) #site-badges .badge a {
+    color: white;
+    text-decoration: none;
+}
+
+body:not(.login) .badge-unknown {background-color:#6c757d;}
+#nav-sidebar .module h2 {
+    cursor: pointer;
+}
+#nav-sidebar .module h2::after {
+    content: '\25BC';
+    float: right;
+    transition: transform 0.2s;
+}
+#nav-sidebar .module.collapsed h2::after {
+    transform: rotate(-90deg);
+}
+#nav-sidebar .module.collapsed ul,
+#nav-sidebar .module.collapsed table {
+    display: none;
+}
+.form-row > div:only-child input[type="text"]:not(.vDateField):not(.vTimeField),
+.form-row > div:only-child textarea {
+    width: 150% !important;
+}
+
+.form-row .datetime {
+    display: flex;
+    gap: 0.5em;
+}
+</style>
+{% endblock %}
+{% block branding %}
+<h1 id="site-name">
+  <a href="{% url 'admin:index' %}"><span id="server-clock"></span></a>
+</h1>
+<div id="site-badges">
+  {% if badge_site %}
+    <span class="badge" style="background-color: {{ badge_site_color }};">
+      <a href="{% url 'admin:pages_siteproxy_changelist' %}">SITE</a>:
+      <a href="{% url 'admin:pages_siteproxy_change' badge_site.pk %}">{{ badge_admin_site_name }}</a>
+      <span style="display:none">SITE: {{ badge_admin_site_name }}</span>
+    </span>
+  {% else %}
+    <span class="badge badge-unknown">
+      <a href="{% url 'admin:pages_siteproxy_changelist' %}">SITE</a>: Unknown
+      <span style="display:none">SITE: Unknown</span>
+    </span>
+  {% endif %}
+  {% if badge_node %}
+    <span class="badge" style="background-color: {{ badge_node_color }};">
+      <a href="{% url 'admin:nodes_node_changelist' %}">NODE</a>:
+      <a href="{% url 'admin:nodes_node_change' badge_node.pk %}">{{ badge_node.hostname }}</a>
+      <span style="display:none">NODE: {{ badge_node.hostname }}</span>
+    </span>
+    {% if badge_node.role %}
+      <span class="badge" style="background-color: {{ badge_node_color }};">ROLE: {{ badge_node.role.name }}</span>
+    {% endif %}
+  {% else %}
+    <span class="badge badge-unknown">
+      <a href="{% url 'admin:nodes_node_changelist' %}">NODE</a>: Unknown
+      <span style="display:none">NODE: Unknown</span>
+    </span>
+  {% endif %}
+</div>
+{% endblock %}
+{% block userlinks %}
+  {% if site_url %}
+    <a href="{{ site_url }}">{% trans 'View site' %}</a> /
+  {% endif %}
+  {% if user.is_active and user.is_staff %}
+    {% url 'django-admindocs-docroot' as docsroot %}
+    {% if docsroot %}
+      <a href="{{ docsroot }}">{% trans 'Documentation' %}</a> /
+    {% endif %}
+  {% endif %}
+  {% if user.has_usable_password %}
+    <a href="{% url 'admin:password_change' %}">{% trans 'Change password' %}</a> /
+  {% endif %}
+  <form id="logout-form" method="post" action="{% url 'admin:logout' %}" style="display: inline;">
+    {% csrf_token %}
+    <button type="submit">{% trans 'Log out' %}</button>
+  </form>
+  /
+  <form action="{% url 'set_language' %}" method="post" style="display: inline;">
+    {% csrf_token %}
+    <input name="next" type="hidden" value="{{ request.get_full_path }}">
+    <input name="language" type="hidden" value="{% if LANGUAGE_CODE|slice:':2' == 'en' %}es{% else %}en{% endif %}">
+    <button type="submit" style="background: none; border: none; color: var(--header-link-color); cursor: pointer;">
+      {% if LANGUAGE_CODE|slice:':2' == 'en' %}{% trans 'Spanish' %}{% else %}{% trans 'English' %}{% endif %}
+    </button>
+  </form>
+  {% include "admin/color_theme_toggle.html" %}
+{% endblock %}
+{% block nav-global %}{% endblock %}
+{% block messages %}
+  {% include "admin/includes/messages.html" %}
+{% endblock %}

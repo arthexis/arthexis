@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 
-from website.models import Application, Module
+from pages.models import Application, Module
 from nodes.models import Node, NodeRole
 
 from core.models import RFID
