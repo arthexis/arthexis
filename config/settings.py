@@ -299,6 +299,8 @@ BSKY_APP_PASSWORD = os.environ.get("BSKY_APP_PASSWORD")
 # Logging configuration
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
+OLD_LOG_DIR = LOG_DIR / "old"
+OLD_LOG_DIR.mkdir(exist_ok=True)
 LOG_FILE_NAME = "tests.log" if "test" in sys.argv else f"{socket.gethostname()}.log"
 
 LOGGING = {
