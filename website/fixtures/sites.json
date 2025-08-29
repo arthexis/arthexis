@@ -1,0 +1,37 @@
+[
+  {
+    "model": "sites.site",
+    "fields": {
+      "domain": "127.0.0.1",
+      "name": "local"
+    }
+  },
+  {
+    "model": "sites.site",
+    "fields": {
+      "domain": "localhost",
+      "name": "localhost"
+    }
+  },
+  {
+    "model": "sites.site",
+    "fields": {
+      "domain": "192.168.129.10",
+      "name": "ethernet"
+    }
+  },
+  {
+    "model": "sites.site",
+    "fields": {
+      "domain": "10.42.0.1",
+      "name": "wlan-ap"
+    }
+  },
+  {
+    "model": "sites.site",
+    "fields": {
+      "domain": "arthexis.com",
+      "name": "cloud-main"
+    }
+  }
+]
