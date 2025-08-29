@@ -148,8 +148,37 @@ class AddressAdmin(admin.ModelAdmin):
     search_fields = ("street", "municipality", "postal_code")
 
 
+class OdooProfileAdminForm(forms.ModelForm):
+    """Admin form for :class:`core.models.OdooProfile` with hidden password."""
+
+    password = forms.CharField(
+        widget=forms.PasswordInput(render_value=True),
+        required=False,
+        help_text="Leave blank to keep the current password.",
+    )
+
+    class Meta:
+        model = OdooProfile
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["password"].initial = ""
+            self.initial["password"] = ""
+        else:
+            self.fields["password"].required = True
+
+    def clean_password(self):
+        pwd = self.cleaned_data.get("password")
+        if not pwd and self.instance.pk:
+            return self.instance.password
+        return pwd
+
+
 @admin.register(OdooProfile)
 class OdooProfileAdmin(admin.ModelAdmin):
+    form = OdooProfileAdminForm
     list_display = ("user", "host", "database", "verified_on")
     readonly_fields = ("verified_on", "odoo_uid", "name", "email")
     actions = ["verify_credentials"]
