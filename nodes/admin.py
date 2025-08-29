@@ -3,7 +3,7 @@ from django.urls import path, reverse
 from django.shortcuts import redirect, render
 from django.utils.html import format_html
 from django import forms
-from app.widgets import CopyColorWidget
+from app.widgets import CopyColorWidget, CodeEditorWidget
 from django.db import models
 from django.conf import settings
 from pathlib import Path
@@ -18,7 +18,7 @@ from .models import (
     Node,
     NodeRole,
     ContentSample,
-    NodeCommand,
+    NodeTask,
     Recipe,
     Step,
     TextPattern,
@@ -52,7 +52,7 @@ class NodeAdmin(admin.ModelAdmin):
     change_list_template = "admin/nodes/node/change_list.html"
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
-    actions = ["run_command"]
+    actions = ["run_task"]
 
     def api(self, obj):
         return obj.enable_public_api
@@ -123,23 +123,23 @@ class NodeAdmin(admin.ModelAdmin):
         self.message_user(request, "Public key not found", messages.ERROR)
         return redirect("..")
 
-    def run_command(self, request, queryset):
+    def run_task(self, request, queryset):
         if "apply" in request.POST:
-            command_text = request.POST.get("command", "")
-            cmd_obj, _ = NodeCommand.objects.get_or_create(command=command_text)
+            recipe_text = request.POST.get("recipe", "")
+            task_obj, _ = NodeTask.objects.get_or_create(recipe=recipe_text)
             results = []
             for node in queryset:
                 try:
-                    output = cmd_obj.run(node)
+                    output = task_obj.run(node)
                 except Exception as exc:
                     output = str(exc)
                 results.append((node, output))
-            context = {"command": command_text, "results": results}
-            return render(request, "admin/nodes/command_result.html", context)
+            context = {"recipe": recipe_text, "results": results}
+            return render(request, "admin/nodes/task_result.html", context)
         context = {"nodes": queryset}
-        return render(request, "admin/nodes/node/run_command.html", context)
+        return render(request, "admin/nodes/node/run_task.html", context)
 
-    run_command.short_description = "Run shell command"
+    run_task.short_description = "Run task"
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}
@@ -259,35 +259,43 @@ class ContentSampleAdmin(admin.ModelAdmin):
         )
 
 
-@admin.register(NodeCommand)
-class NodeCommandAdmin(admin.ModelAdmin):
-    list_display = ("command", "created")
+class NodeTaskForm(forms.ModelForm):
+    class Meta:
+        model = NodeTask
+        fields = "__all__"
+        widgets = {"recipe": CodeEditorWidget()}
+
+
+@admin.register(NodeTask)
+class NodeTaskAdmin(admin.ModelAdmin):
+    form = NodeTaskForm
+    list_display = ("recipe", "role", "created")
     actions = ["execute"]
 
     def execute(self, request, queryset):
         if queryset.count() != 1:
             self.message_user(
-                request, "Please select exactly one command", messages.ERROR
+                request, "Please select exactly one task", messages.ERROR
             )
             return
-        command_obj = queryset.first()
+        task_obj = queryset.first()
         if "apply" in request.POST:
             node_ids = request.POST.getlist("nodes")
             nodes_qs = Node.objects.filter(pk__in=node_ids)
             results = []
             for node in nodes_qs:
                 try:
-                    output = command_obj.run(node)
+                    output = task_obj.run(node)
                 except Exception as exc:
                     output = str(exc)
                 results.append((node, output))
-            context = {"command": command_obj.command, "results": results}
-            return render(request, "admin/nodes/command_result.html", context)
+            context = {"recipe": task_obj.recipe, "results": results}
+            return render(request, "admin/nodes/task_result.html", context)
         nodes = Node.objects.all()
-        context = {"nodes": nodes, "command_obj": command_obj}
-        return render(request, "admin/nodes/nodecommand/run.html", context)
+        context = {"nodes": nodes, "task_obj": task_obj}
+        return render(request, "admin/nodes/nodetask/run.html", context)
 
-    execute.short_description = "Run command on nodes"
+    execute.short_description = "Run task on nodes"
 
 
 @admin.register(Backup)

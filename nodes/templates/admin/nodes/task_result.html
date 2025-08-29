@@ -1,7 +1,8 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
-<h1>Command output</h1>
-<p><strong>Command:</strong> {{ command }}</p>
+<h1>Task output</h1>
+<p><strong>Recipe:</strong></p>
+<pre>{{ recipe }}</pre>
 {% for node, output in results %}
 <h2>{{ node }}</h2>
 <pre>{{ output }}</pre>

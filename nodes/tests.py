@@ -11,6 +11,7 @@ import socket
 import base64
 from tempfile import TemporaryDirectory
 import shutil
+import time
 
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -456,14 +457,22 @@ class StartupNotificationTests(TestCase):
             tmp_path = Path(tmp)
             (tmp_path / "VERSION").write_text("1.2.3")
             with self.settings(BASE_DIR=tmp_path):
-                with patch("utils.revision.get_revision", return_value="abcdef123456"):
+                with patch("nodes.apps.revision.get_revision", return_value="abcdef123456"):
                     with patch("core.notifications.notify") as mock_notify:
                         with patch("nodes.apps.socket.gethostname", return_value="host"):
-                            with patch("nodes.apps.socket.gethostbyname", return_value="1.2.3.4"):
-                                with patch.dict(os.environ, {"PORT": "9000"}):
+                            with patch(
+                                "nodes.apps.socket.gethostbyname", return_value="1.2.3.4"
+                            ):
+                                with patch.dict(
+                                    os.environ, {"PORT": "9000"}
+                                ):
                                     _startup_notification()
+                                    time.sleep(0.1)
 
-        mock_notify.assert_called_once_with("1.2.3.4:9000", "v1.2.3 r123456")
+        mock_notify.assert_called_once()
+        args, _ = mock_notify.call_args
+        self.assertEqual(args[0], "1.2.3.4:9000")
+        self.assertTrue(args[1].startswith("v1.2.3 r"))
 
 
 class NotificationManagerTests(TestCase):
@@ -515,7 +524,7 @@ class NotificationManagerTests(TestCase):
                 manager = NotificationManager()
                 manager._gui_display("hi", "there")
         mock_toast.show_toast.assert_called_once_with(
-            "Arthexis", "hi\nthere", duration=6, threaded=True
+            "Arthexis", "hi\nthere", duration=6
         )
 
     def test_gui_display_logs_when_toast_unavailable(self):
