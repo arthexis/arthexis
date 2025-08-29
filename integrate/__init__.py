@@ -1,1 +1,0 @@
-"""Integration Models app."""

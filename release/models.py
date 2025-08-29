@@ -1,5 +1,5 @@
 from django.db import models
-from integrate.models import Entity
+from bind.models import Entity
 from . import Package, Credentials, DEFAULT_PACKAGE
 
 
