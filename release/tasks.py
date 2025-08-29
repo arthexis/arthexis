@@ -25,6 +25,14 @@ def check_github_updates() -> None:
     with log_file.open("a") as fh:
         fh.write(f"{datetime.utcnow().isoformat()} check_github_updates triggered\n")
 
+    lcd_lock = base_dir / "locks" / "lcd_screen.lck"
+    has_lcd = lcd_lock.exists()
+    notify = None
+    startup = None
+    if has_lcd:
+        from core.notifications import notify  # type: ignore
+        from nodes.apps import _startup_notification as startup  # type: ignore
+
     if mode == "latest":
         local = subprocess.check_output(["git", "rev-parse", branch], cwd=base_dir).decode().strip()
         remote = subprocess.check_output([
@@ -33,7 +41,11 @@ def check_github_updates() -> None:
             f"origin/{branch}",
         ], cwd=base_dir).decode().strip()
         if local == remote:
+            if has_lcd and startup:
+                startup()
             return
+        if has_lcd and notify:
+            notify("Upgrading...", "")
         args = ["./upgrade.sh", "--latest", "--no-restart"]
     else:
         local = "0"
@@ -46,7 +58,11 @@ def check_github_updates() -> None:
             f"origin/{branch}:VERSION",
         ], cwd=base_dir).decode().strip()
         if local == remote:
+            if has_lcd and startup:
+                startup()
             return
+        if has_lcd and notify:
+            notify("Upgrading...", "")
         args = ["./upgrade.sh", "--no-restart"]
 
     with log_file.open("a") as fh:
