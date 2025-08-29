@@ -58,7 +58,10 @@ def site_and_node(request: HttpRequest):
     return {
         "badge_site": site,
         "badge_node": node,
+        # Public views fall back to the node role when the site name is blank.
         "badge_site_name": site_name or node_role_name,
+        # Admin site badge uses the site display name if set, otherwise the domain.
+        "badge_admin_site_name": site_name or (site.domain if site else ""),
         "badge_site_color": site_color,
         "badge_node_color": node_color,
         "TIME_ZONE": settings.TIME_ZONE,

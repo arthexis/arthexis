@@ -302,9 +302,9 @@ class AdminBadgesWebsiteTests(TestCase):
         )
 
     @override_settings(ALLOWED_HOSTS=["127.0.0.1", "testserver"])
-    def test_badge_shows_website_for_ip_domain(self):
+    def test_badge_shows_domain_when_site_name_blank(self):
         resp = self.client.get(reverse("admin:index"), HTTP_HOST="127.0.0.1")
-        self.assertContains(resp, "SITE: Terminal")
+        self.assertContains(resp, "SITE: 127.0.0.1")
 
 
 class NavAppsTests(TestCase):
