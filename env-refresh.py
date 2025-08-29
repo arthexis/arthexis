@@ -201,6 +201,13 @@ def run_database_tasks(*, latest: bool = False) -> None:
             defaults={"name": "Control"},
         )
 
+    # Load personal user data fixtures last
+    data_dir = Path(settings.BASE_DIR) / "data"
+    if data_dir.is_dir():
+        personal = sorted(data_dir.glob("*.json"))
+        if personal:
+            call_command("loaddata", *[str(p) for p in personal])
+
     # Update migrations hash file after successful run
     hash_file.write_text(new_hash)
 

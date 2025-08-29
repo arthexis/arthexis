@@ -70,6 +70,7 @@ logs/*
 !logs/old/
 logs/old/*
 !logs/old/.gitkeep
+data/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal

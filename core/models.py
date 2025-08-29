@@ -19,6 +19,7 @@ from django.utils import timezone
 
 from .entity import Entity, EntityUserManager
 from .release import Package, Credentials, DEFAULT_PACKAGE
+from .user_data import UserDatum  # noqa: F401 - ensure model registration
 
 
 class Address(Entity):
