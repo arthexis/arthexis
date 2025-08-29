@@ -105,7 +105,7 @@ class TransactionAdminExportImportTests(TestCase):
         url = reverse("admin:ocpp_transaction_import")
         payload = {
             "chargers": [
-                {"charger_id": "C9", "number": 1, "require_rfid": False}
+                {"charger_id": "C9", "connector_id": 1, "require_rfid": False}
             ],
             "transactions": [
                 {

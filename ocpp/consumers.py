@@ -145,6 +145,9 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             await database_sync_to_async(MeterReading.objects.bulk_create)(readings)
             if tx_obj and start_updated:
                 await database_sync_to_async(tx_obj.save)(update_fields=["meter_start"])
+        if connector is not None and not self.charger.connector_id:
+            self.charger.connector_id = str(connector)
+            await database_sync_to_async(self.charger.save)(update_fields=["connector_id"])
         if temperature is not None:
             self.charger.temperature = temperature
             self.charger.temperature_unit = temp_unit

@@ -34,7 +34,7 @@ def export_transactions(
         data["chargers"].append(
                 {
                     "charger_id": charger.charger_id,
-                    "number": charger.number,
+                    "connector_id": charger.connector_id,
                     "require_rfid": charger.require_rfid,
                 }
         )
@@ -86,7 +86,7 @@ def import_transactions(data: dict) -> int:
         charger, _ = Charger.objects.get_or_create(
             charger_id=item["charger_id"],
             defaults={
-                "number": item.get("number", 1),
+                "connector_id": item.get("connector_id", None),
                 "require_rfid": item.get("require_rfid", False),
             },
         )

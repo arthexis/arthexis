@@ -1,7 +1,7 @@
 from django.db import migrations, models
 
 
-def ensure_charger_number(apps, schema_editor):
+def ensure_connector_id(apps, schema_editor):
     Charger = apps.get_model("ocpp", "Charger")
     table = Charger._meta.db_table
     with schema_editor.connection.cursor() as cursor:
@@ -11,9 +11,9 @@ def ensure_charger_number(apps, schema_editor):
                 cursor, table
             )
         ]
-    if "number" not in columns:
-        field = models.PositiveIntegerField(default=1)
-        field.set_attributes_from_name("number")
+    if "connector_id" not in columns:
+        field = models.CharField(max_length=10, null=True, blank=True)
+        field.set_attributes_from_name("connector_id")
         schema_editor.add_field(Charger, field)
 
 
@@ -23,5 +23,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(ensure_charger_number, migrations.RunPython.noop),
+        migrations.RunPython(ensure_connector_id, migrations.RunPython.noop),
     ]
