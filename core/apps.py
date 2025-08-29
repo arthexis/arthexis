@@ -10,6 +10,7 @@ class CoreConfig(AppConfig):
     def ready(self):  # pragma: no cover - called by Django
         from django.contrib.auth import get_user_model
         from django.db.models.signals import post_migrate
+        from .user_data import patch_admin_user_datum
 
         def create_default_admin(**kwargs):
             User = get_user_model()
@@ -17,3 +18,4 @@ class CoreConfig(AppConfig):
                 User.objects.create_superuser("admin", password="admin")
 
         post_migrate.connect(create_default_admin, sender=self)
+        patch_admin_user_datum()
