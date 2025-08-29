@@ -777,6 +777,7 @@ class Migration(migrations.Migration):
             options={
                 'verbose_name': 'Package Release',
                 'verbose_name_plural': 'Package Releases',
+                'get_latest_by': 'version',
             },
         ),
 ]
