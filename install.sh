@@ -12,7 +12,7 @@ ENABLE_LCD_SCREEN=false
 DISABLE_LCD_SCREEN=false
 CLEAN=false
 ENABLE_CONTROL=false
-NODE_ROLE="Unknown"
+NODE_ROLE="Terminal"
 
 usage() {
     echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--terminal] [--control] [--constellation] [--celery] [--lcd-screen|--no-lcd-screen] [--clean]" >&2
