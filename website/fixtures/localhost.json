@@ -2,8 +2,8 @@
   {
     "model": "sites.site",
     "fields": {
-      "domain": "127.0.0.1",
-      "name": ""
+        "domain": "127.0.0.1",
+        "name": "local"
     }
   },
   {

@@ -2,8 +2,8 @@
   {
     "model": "sites.site",
     "fields": {
-      "domain": "arthexis.com",
-      "name": ""
+        "domain": "arthexis.com",
+        "name": "cloud-main"
     }
   },
   {
