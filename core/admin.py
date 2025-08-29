@@ -429,7 +429,7 @@ class RFIDAdmin(ImportExportModelAdmin):
     search_fields = ("label_id", "rfid")
     autocomplete_fields = ["accounts"]
     raw_id_fields = ["reference"]
-    actions = ["scan_rfids", "swap_color"]
+    actions = ["scan_rfids"]
     readonly_fields = ("added_on", "last_seen_on")
     form = RFIDForm
 
@@ -442,14 +442,6 @@ class RFIDAdmin(ImportExportModelAdmin):
         return redirect("admin:core_rfid_scan")
 
     scan_rfids.short_description = "Scan new RFIDs"
-
-    def swap_color(self, request, queryset):
-        for tag in queryset:
-            tag.color = RFID.WHITE if tag.color == RFID.BLACK else RFID.BLACK
-            tag.save()
-        self.message_user(request, "RFID colors swapped")
-
-    swap_color.short_description = "Swap color"
 
     def get_urls(self):
         urls = super().get_urls()
