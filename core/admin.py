@@ -37,6 +37,7 @@ from .models import (
     PackageRelease,
 )
 from .notifications import notify
+from . import release
 
 
 class SecurityGroup(Group):
@@ -486,6 +487,17 @@ class PackageReleaseAdmin(admin.ModelAdmin):
                     except ValidationError as exc:
                         self.message_user(
                             request, "; ".join(exc.messages), messages.ERROR
+                        )
+                    except release.TestsFailed as exc:
+                        log_text = (
+                            Path(exc.log_path).read_text(encoding="utf-8")
+                            if Path(exc.log_path).exists()
+                            else exc.output
+                        )
+                        return TemplateResponse(
+                            request,
+                            "admin/core/packagerelease/test_logs.html",
+                            {"log": log_text, "log_path": exc.log_path},
                         )
                     except Exception as exc:
                         self.message_user(request, str(exc), messages.ERROR)

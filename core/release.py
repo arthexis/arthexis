@@ -59,6 +59,20 @@ class ReleaseError(Exception):
     pass
 
 
+class TestsFailed(ReleaseError):
+    """Raised when the test suite fails.
+
+    Attributes:
+        log_path: Location of the saved test log.
+        output:   Combined stdout/stderr from the test run.
+    """
+
+    def __init__(self, log_path: Path, output: str):
+        super().__init__("Tests failed")
+        self.log_path = log_path
+        self.output = output
+
+
 def _run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=check)
 
@@ -72,8 +86,22 @@ def _current_commit() -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
 
 
-def run_tests() -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, "manage.py", "test"], capture_output=True, text=True)
+def run_tests(log_path: Optional[Path] = None) -> subprocess.CompletedProcess:
+    """Run the project's test suite and write output to ``log_path``.
+
+    The log file is stored separately from regular application logs to avoid
+    mixing test output with runtime logging.
+    """
+
+    log_path = log_path or Path("logs/test.log")
+    proc = subprocess.run(
+        [sys.executable, "manage.py", "test"],
+        capture_output=True,
+        text=True,
+    )
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(proc.stdout + proc.stderr, encoding="utf-8")
+    return proc
 
 
 def _write_pyproject(package: Package, version: str, requirements: list[str]) -> None:
@@ -233,9 +261,10 @@ def build(
     ]
 
     if tests:
-        proc = run_tests()
+        log_path = Path("logs/test.log")
+        proc = run_tests(log_path=log_path)
         if proc.returncode != 0:
-            raise ReleaseError("Tests failed")
+            raise TestsFailed(log_path, proc.stdout + proc.stderr)
 
     commit_hash = _current_commit()
     prev_revision = _last_changelog_revision()
