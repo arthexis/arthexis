@@ -92,12 +92,11 @@ class NotificationManager:
                     # Disable further toast attempts; the log fallback will be used
                     # instead to avoid repeated errors in headless environments.
                     self._toaster = None
-            elif plyer_notification:
+            if plyer_notification:
                 try:  # pragma: no cover - depends on platform
                     plyer_notification.notify(
                         title="Arthexis", message=f"{subject}\n{body}", timeout=6
                     )
-                    return
                 except Exception as exc:  # pragma: no cover - depends on platform
                     logger.warning("Windows notification failed: %s", exc)
         logger.info("%s %s", subject, body)
