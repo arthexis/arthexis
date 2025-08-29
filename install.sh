@@ -19,6 +19,15 @@ usage() {
     exit 1
 }
 
+require_nginx() {
+    if ! command -v nginx >/dev/null 2>&1; then
+        echo "Nginx is required for the $1 role but is not installed."
+        echo "Install nginx and re-run this script. For Debian/Ubuntu:"
+        echo "  sudo apt-get update && sudo apt-get install nginx"
+        exit 1
+    fi
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --service)
@@ -70,6 +79,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --satellite)
+            require_nginx "satellite"
             AUTO_UPGRADE=true
             NGINX_MODE="internal"
             SERVICE="arthexis"
@@ -88,6 +98,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --control)
+            require_nginx "control"
             AUTO_UPGRADE=true
             NGINX_MODE="internal"
             SERVICE="arthexis"
@@ -100,6 +111,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --constellation)
+            require_nginx "constellation"
             AUTO_UPGRADE=true
             NGINX_MODE="public"
             SERVICE="arthexis"
