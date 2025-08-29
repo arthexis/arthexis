@@ -3,6 +3,7 @@ from django.urls import path, reverse
 from django.shortcuts import redirect, render
 from django.utils.html import format_html
 from django import forms
+from django.contrib.admin.widgets import FilteredSelectMultiple
 from app.widgets import CopyColorWidget, CodeEditorWidget
 from django.db import models
 from django.conf import settings
@@ -177,10 +178,31 @@ class NodeAdmin(admin.ModelAdmin):
             self.message_user(request, str(exc), messages.ERROR)
         return redirect(reverse("admin:nodes_node_change", args=[node_id]))
 
+class NodeRoleAdminForm(forms.ModelForm):
+    nodes = forms.ModelMultipleChoiceField(
+        queryset=Node.objects.all(),
+        required=False,
+        widget=FilteredSelectMultiple("Nodes", False),
+    )
+
+    class Meta:
+        model = NodeRole
+        fields = ("name", "description", "nodes")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["nodes"].initial = self.instance.node_set.all()
+
 
 @admin.register(NodeRole)
 class NodeRoleAdmin(admin.ModelAdmin):
+    form = NodeRoleAdminForm
     list_display = ("name", "description")
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        obj.node_set.set(form.cleaned_data.get("nodes", []))
 
 
 @admin.register(ContentSample)

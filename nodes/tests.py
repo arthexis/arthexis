@@ -26,6 +26,7 @@ from .actions import NodeAction
 from .models import (
     Node,
     ContentSample,
+    NodeRole,
     Recipe,
     Step,
     TextPattern,
@@ -712,5 +713,40 @@ class ClipboardTaskTests(TestCase):
         self.assertEqual(
             ContentSample.objects.filter(kind=ContentSample.IMAGE).count(), 0
         )
+
+
+class NodeRoleAdminTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            "role_admin", "admin@example.com", "pass"
+        )
+        self.client.login(username="role_admin", password="pass")
+
+    def test_change_role_nodes(self):
+        role = NodeRole.objects.create(name="TestRole")
+        node1 = Node.objects.create(
+            hostname="n1",
+            address="127.0.0.1",
+            port=8000,
+            mac_address="00:11:22:33:44:55",
+            role=role,
+        )
+        node2 = Node.objects.create(
+            hostname="n2",
+            address="127.0.0.2",
+            port=8000,
+            mac_address="00:11:22:33:44:66",
+        )
+        url = reverse("admin:nodes_noderole_change", args=[role.pk])
+        resp = self.client.get(url)
+        self.assertContains(resp, f'<option value="{node1.pk}" selected>')
+        post_data = {"name": "TestRole", "description": "", "nodes": [node2.pk]}
+        resp = self.client.post(url, post_data, follow=True)
+        self.assertRedirects(resp, reverse("admin:nodes_noderole_changelist"))
+        node1.refresh_from_db()
+        node2.refresh_from_db()
+        self.assertIsNone(node1.role)
+        self.assertEqual(node2.role, role)
 
 
