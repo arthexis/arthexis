@@ -45,7 +45,7 @@ def save_screenshot(path: Path, node=None, method: str = ""):
     if ContentSample.objects.filter(hash=digest).exists():
         logger.info("Duplicate screenshot content; record not created")
         return None
-    stored_path = str(original if not original.is_absolute() else path)
+    stored_path = (original if not original.is_absolute() else path).as_posix()
     return ContentSample.objects.create(
         node=node,
         path=stored_path,

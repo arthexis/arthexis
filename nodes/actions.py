@@ -5,7 +5,7 @@ from typing import Dict, Iterable, Optional, Type
 from django.apps import apps
 from django.conf import settings
 from django.core.management import call_command
-from django.http import FileResponse
+from django.http import HttpResponse
 from django.utils import timezone
 from pathlib import Path
 from django.db import connection
@@ -107,9 +107,7 @@ class GenerateBackupAction(NodeAction):
         Backup.objects.create(
             location=str(file_path.relative_to(base_path)), size=size, report=report
         )
-        return FileResponse(
-            file_path.open("rb"),
-            as_attachment=True,
-            filename=filename,
-            content_type="application/json",
-        )
+        data = file_path.read_bytes()
+        response = HttpResponse(data, content_type="application/json")
+        response["Content-Disposition"] = f"attachment; filename={filename}"
+        return response
