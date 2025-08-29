@@ -14,7 +14,7 @@ CLEAN=false
 ENABLE_CONTROL=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--control] [--celery] [--lcd-screen|--no-lcd-screen] [--clean]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--terminal] [--control] [--celery] [--lcd-screen|--no-lcd-screen] [--clean]" >&2
     exit 1
 }
 
@@ -70,6 +70,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --satellite)
             AUTO_UPGRADE=true
+            NGINX_MODE="internal"
+            SERVICE="arthexis"
+            LATEST=true
+            ENABLE_CELERY=true
+            shift
+            ;;
+        --terminal)
+            AUTO_UPGRADE=false
             NGINX_MODE="internal"
             SERVICE="arthexis"
             LATEST=true
