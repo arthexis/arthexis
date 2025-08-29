@@ -139,9 +139,13 @@ class ApplicationModuleInline(admin.TabularInline):
 @admin.register(Application)
 class ApplicationAdmin(admin.ModelAdmin):
     form = ApplicationForm
-    list_display = ("name", "installed")
+    list_display = ("name", "app_verbose_name", "installed")
     readonly_fields = ("installed",)
     inlines = [ApplicationModuleInline]
+
+    @admin.display(description="Verbose name")
+    def app_verbose_name(self, obj):
+        return obj.verbose_name
 
     @admin.display(boolean=True)
     def installed(self, obj):

@@ -3,7 +3,7 @@
     "model": "sites.site",
     "fields": {
       "domain": "127.0.0.1",
-      "name": "local"
+      "name": "127.0.0.1"
     }
   },
   {
@@ -17,21 +17,21 @@
     "model": "sites.site",
     "fields": {
       "domain": "192.168.129.10",
-      "name": "ethernet"
+      "name": "192.168.129.10"
     }
   },
   {
     "model": "sites.site",
     "fields": {
       "domain": "10.42.0.1",
-      "name": "wlan-router"
+      "name": "10.42.0.1"
     }
   },
   {
     "model": "sites.site",
     "fields": {
-      "domain": "arrthexis.com",
-      "name": "cloud"
+      "domain": "arthexis.com",
+      "name": "Arthexis"
     }
   }
 ]
