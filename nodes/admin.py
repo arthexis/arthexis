@@ -46,14 +46,13 @@ class NodeAdmin(admin.ModelAdmin):
         "clipboard",
         "screenshot",
         "installed_version",
-        "roles_list",
+        "role",
         "last_seen",
     )
     search_fields = ("hostname", "address", "mac_address")
     change_list_template = "admin/nodes/node/change_list.html"
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
-    filter_horizontal = ("roles",)
     actions = ["run_command"]
 
     def api(self, obj):
@@ -74,10 +73,6 @@ class NodeAdmin(admin.ModelAdmin):
     screenshot.boolean = True
     screenshot.short_description = "Screenshot"
 
-    def roles_list(self, obj):
-        return ", ".join(obj.roles.values_list("name", flat=True))
-
-    roles_list.short_description = "Roles"
 
     def get_urls(self):
         urls = super().get_urls()
@@ -163,7 +158,7 @@ class NodeAdmin(admin.ModelAdmin):
 
 @admin.register(NodeRole)
 class NodeRoleAdmin(admin.ModelAdmin):
-    list_display = ("name",)
+    list_display = ("name", "description")
 
 
 @admin.register(ScreenSource)

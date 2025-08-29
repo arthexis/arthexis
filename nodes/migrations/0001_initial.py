@@ -29,6 +29,19 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
+            name='NodeRole',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('is_seed_data', models.BooleanField(default=False, editable=False)),
+                ('is_deleted', models.BooleanField(default=False, editable=False)),
+                ('name', models.CharField(max_length=50, unique=True)),
+                ('description', models.CharField(blank=True, max_length=200)),
+            ],
+            options={
+                'ordering': ['name'],
+            },
+        ),
+        migrations.CreateModel(
             name='Node',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
@@ -49,6 +62,7 @@ class Migration(migrations.Migration):
                 ('base_path', models.CharField(blank=True, max_length=255)),
                 ('installed_version', models.CharField(blank=True, max_length=20)),
                 ('installed_revision', models.CharField(blank=True, max_length=40)),
+                ('role', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='nodes.noderole')),
             ],
             options={
                 'abstract': False,
@@ -65,18 +79,6 @@ class Migration(migrations.Migration):
             ],
             options={
                 'ordering': ['-created'],
-            },
-        ),
-        migrations.CreateModel(
-            name='NodeRole',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('name', models.CharField(max_length=50, unique=True)),
-            ],
-            options={
-                'ordering': ['name'],
             },
         ),
         migrations.CreateModel(
@@ -119,11 +121,6 @@ class Migration(migrations.Migration):
             options={
                 'ordering': ['-priority', 'id'],
             },
-        ),
-        migrations.AddField(
-            model_name='node',
-            name='roles',
-            field=models.ManyToManyField(blank=True, to='nodes.noderole'),
         ),
         migrations.CreateModel(
             name='NodeScreenshot',
