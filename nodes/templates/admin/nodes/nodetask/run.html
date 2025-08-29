@@ -1,8 +1,6 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
 <h1>Run saved task</h1>
-<p><strong>Recipe:</strong></p>
-<pre>{{ task_obj.recipe }}</pre>
 <form method="post">{% csrf_token %}
     <input type="hidden" name="action" value="execute">
     <input type="hidden" name="_selected_action" value="{{ task_obj.pk }}">

@@ -1,11 +1,15 @@
 from django.contrib import admin, messages
+from django.contrib.auth.admin import (
+    GroupAdmin as DjangoGroupAdmin,
+    UserAdmin as DjangoUserAdmin,
+)
+from django.contrib.auth.models import Group
 from django.urls import path, reverse
 from django.shortcuts import redirect, render
 from django.utils.html import format_html
 from django import forms
 from django.contrib.admin.widgets import FilteredSelectMultiple
 from app.widgets import CopyColorWidget, CodeEditorWidget
-from django.db import models
 from django.conf import settings
 from pathlib import Path
 from django.http import HttpResponse
@@ -14,17 +18,47 @@ import pyperclip
 from pyperclip import PyperclipException
 from .utils import capture_screenshot, save_screenshot
 from .actions import NodeAction
+from .models import Node, NodeRole, ContentSample, NodeTask, User, Message
+from core.notifications import notify
 
-from .models import (
-    Node,
-    NodeRole,
-    ContentSample,
-    NodeTask,
-    Recipe,
-    Step,
-    TextPattern,
-    Backup,
-)
+
+class SecurityGroup(Group):
+    class Meta:
+        proxy = True
+        verbose_name = "Security Group"
+        verbose_name_plural = "Security Groups"
+
+
+admin.site.unregister(Group)
+
+
+@admin.register(SecurityGroup)
+class SecurityGroupAdmin(DjangoGroupAdmin):
+    pass
+
+
+@admin.register(User)
+class UserAdmin(DjangoUserAdmin):
+    fieldsets = DjangoUserAdmin.fieldsets + (
+        ("Contact", {"fields": ("phone_number", "address", "has_charger")}),
+    )
+    add_fieldsets = DjangoUserAdmin.add_fieldsets + (
+        ("Contact", {"fields": ("phone_number", "address", "has_charger")}),
+    )
+
+
+@admin.register(Message)
+class MessageAdmin(admin.ModelAdmin):
+    list_display = ("subject", "body", "node", "created")
+    search_fields = ("subject", "body")
+    ordering = ("-created",)
+    actions = ["send_messages"]
+
+    @admin.action(description="Send selected messages")
+    def send_messages(self, request, queryset):
+        for msg in queryset:
+            notify(msg.subject, msg.body)
+        self.message_user(request, f"{queryset.count()} messages sent")
 
 
 class NodeAdminForm(forms.ModelForm):
@@ -320,80 +354,5 @@ class NodeTaskAdmin(admin.ModelAdmin):
     execute.short_description = "Run task on nodes"
 
 
-@admin.register(Backup)
-class BackupAdmin(admin.ModelAdmin):
-    list_display = ("location", "created_at", "size")
-    readonly_fields = ("created_at",)
 
 
-class StepInline(admin.TabularInline):
-    model = Step
-    extra = 0
-
-
-@admin.register(Recipe)
-class RecipeAdmin(admin.ModelAdmin):
-    fields = ("name", "full_script")
-    inlines = [StepInline]
-    formfield_overrides = {
-        models.TextField: {"widget": forms.Textarea(attrs={"rows": 20, "style": "width:100%"})}
-    }
-
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        lines = [line for line in obj.full_script.splitlines() if line.strip()]
-        obj.steps.all().delete()
-        for idx, script in enumerate(lines, start=1):
-            Step.objects.create(recipe=obj, order=idx, script=script)
-
-
-
-
-@admin.register(TextPattern)
-class TextPatternAdmin(admin.ModelAdmin):
-    list_display = ("mask", "priority")
-    actions = ["scan_latest_sample", "test_clipboard"]
-
-    @admin.action(description="Scan latest sample")
-    def scan_latest_sample(self, request, queryset):
-        sample = ContentSample.objects.filter(kind=ContentSample.TEXT).first()
-        if not sample:
-            self.message_user(request, "No samples available.", level=messages.WARNING)
-            return
-        for pattern in TextPattern.objects.order_by("-priority", "id"):
-            result = pattern.match(sample.content)
-            if result is not None:
-                if result != pattern.mask:
-                    msg = f"Matched '{pattern.mask}' -> '{result}'"
-                else:
-                    msg = f"Matched '{pattern.mask}'"
-                self.message_user(request, msg, level=messages.SUCCESS)
-                return
-        self.message_user(
-            request,
-            "No pattern matched the latest sample.",
-            level=messages.INFO,
-        )
-
-    @admin.action(description="Test against clipboard")
-    def test_clipboard(self, request, queryset):
-        try:
-            content = pyperclip.paste()
-        except PyperclipException as exc:  # pragma: no cover - depends on OS clipboard
-            self.message_user(request, f"Clipboard error: {exc}", level=messages.ERROR)
-            return
-        if not content:
-            self.message_user(request, "Clipboard is empty.", level=messages.INFO)
-            return
-        for pattern in queryset:
-            result = pattern.match(content)
-            if result is not None:
-                if result != pattern.mask:
-                    msg = f"Matched '{pattern.mask}' -> '{result}'"
-                else:
-                    msg = f"Matched '{pattern.mask}'"
-                self.message_user(request, msg, level=messages.SUCCESS)
-            else:
-                self.message_user(
-                    request, f"No match for '{pattern.mask}'", level=messages.INFO
-                )

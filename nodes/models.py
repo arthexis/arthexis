@@ -1,5 +1,6 @@
 from django.db import models
-from core.entity import Entity
+from core.entity import Entity, EntityUserManager
+from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 import re
 from django.utils.text import slugify
 from django.conf import settings
@@ -9,9 +10,30 @@ import os
 import socket
 from pathlib import Path
 from utils import revision
-from django.db import models
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
+
+
+class User(Entity, AbstractUser):
+    objects = EntityUserManager()
+    all_objects = DjangoUserManager()
+    """Custom user model."""
+
+    phone_number = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Optional contact phone number",
+    )
+    address = models.ForeignKey(
+        "core.Address",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    has_charger = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.username
 
 
 class NodeRoleManager(models.Manager):
@@ -220,6 +242,52 @@ class Node(Entity):
             PeriodicTask.objects.filter(name=task_name).delete()
 
 
+class NodeTask(Entity):
+    """Recipe that can be executed on nodes."""
+
+    recipe = models.TextField()
+    role = models.ForeignKey(NodeRole, on_delete=models.SET_NULL, null=True, blank=True)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created"]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.recipe
+
+    def run(self, node: Node):
+        """Execute this recipe on ``node`` and return its output."""
+        if not node.is_local:
+            raise NotImplementedError("Remote node execution is not implemented")
+        import subprocess
+
+        result = subprocess.run(
+            self.recipe, shell=True, capture_output=True, text=True
+        )
+        return result.stdout + result.stderr
+
+
+class Message(Entity):
+    """System message that can be sent to LCD or GUI."""
+
+    subject = models.CharField(max_length=32, blank=True)
+    body = models.CharField(max_length=32, blank=True)
+    node = models.ForeignKey(
+        "Node",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="messages",
+    )
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created"]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.subject} {self.body}".strip()
+
+
 class ContentSample(Entity):
     """Collected content such as text snippets or screenshots."""
 
@@ -255,146 +323,11 @@ class ContentSample(Entity):
         return str(self.name)
 
 
-class NodeTask(Entity):
-    """Recipe that can be executed on nodes."""
-
-    recipe = models.TextField()
-    role = models.ForeignKey(NodeRole, on_delete=models.SET_NULL, null=True, blank=True)
-    created = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created"]
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.recipe
-
-    def run(self, node: Node):
-        """Execute this recipe on ``node`` and return its output."""
-        if not node.is_local:
-            raise NotImplementedError("Remote node execution is not implemented")
-        import subprocess
-
-        result = subprocess.run(
-            self.recipe, shell=True, capture_output=True, text=True
-        )
-        return result.stdout + result.stderr
-
-
-class Recipe(Entity):
-    """A collection of script steps that can be executed by nodes."""
-
-    name = models.CharField(max_length=100)
-    full_script = models.TextField(blank=True)
-
-    def __str__(self):  # pragma: no cover - simple representation
-        return self.name
-
-    def sync_full_script(self):
-        """Update ``full_script`` to match the joined step scripts."""
-        steps = self.steps.order_by("order").values_list("script", flat=True)
-        self.full_script = "\n".join(steps)
-        super().save(update_fields=["full_script"])
-
-
-class Step(Entity):
-    """Individual step belonging to a :class:`Recipe`."""
-
-    recipe = models.ForeignKey(
-        Recipe, related_name="steps", on_delete=models.CASCADE
-    )
-    order = models.PositiveIntegerField()
-    script = models.TextField()
-
-    class Meta:
-        ordering = ["order"]
-
-    def __str__(self):  # pragma: no cover - simple representation
-        return f"{self.order}: {self.script[:30]}"
-
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        self.recipe.sync_full_script()
-
-    def delete(self, *args, **kwargs):
-        super().delete(*args, **kwargs)
-        self.recipe.sync_full_script()
 
 
 
 
-class TextPattern(Entity):
-    """Text mask with optional sigils used to match against text content samples."""
-
-    mask = models.TextField()
-    priority = models.IntegerField(default=0)
-
-    class Meta:
-        ordering = ["-priority", "id"]
-
-    SIGIL_RE = re.compile(r"\[(.+?)\]")
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.mask
-
-    def match(self, text: str):
-        """Return the mask with sigils replaced if ``text`` matches it.
-
-        ``None`` is returned when no match is found. When a match occurs, the
-        returned string is the original mask with each ``[sigil]`` replaced by the
-        corresponding text from ``text``. Multiple sigils are supported.
-        """
-
-        regex, names = self._compile_regex()
-        match = re.search(regex, text, re.DOTALL)
-        if not match:
-            return None
-        result = self.mask
-        for name, value in zip(names, match.groups()):
-            result = result.replace(f"[{name}]", value)
-        return result
-
-    def _compile_regex(self):
-        """Compile the mask into a regex pattern and return pattern and sigils."""
-
-        pattern_parts = []
-        sigil_names = []
-        last_index = 0
-        matches = list(self.SIGIL_RE.finditer(self.mask))
-        for idx, match in enumerate(matches):
-            pattern_parts.append(re.escape(self.mask[last_index : match.start()]))
-            sigil_names.append(match.group(1))
-            part = "(.*)" if idx == len(matches) - 1 else "(.*?)"
-            pattern_parts.append(part)
-            last_index = match.end()
-        pattern_parts.append(re.escape(self.mask[last_index:]))
-        regex = "".join(pattern_parts)
-        return regex, sigil_names
 
 
-class Backup(Entity):
-    """Database backup metadata.
-
-    Stores the location of the exported data, creation date, size and a
-    report of the exported objects.  The actual backup process is left to
-    the view or task that creates the model instance, keeping the model
-    backend agnostic.
-    """
-
-    location = models.CharField(
-        max_length=255, help_text="Location or link to the backup file"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    size = models.BigIntegerField(help_text="Size of the backup in bytes")
-    report = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text="Report of exported objects",
-    )
-
-    class Meta:
-        ordering = ["-created_at"]
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.location
 
 

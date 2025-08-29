@@ -1,4 +1,3 @@
-from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.db import models
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -17,7 +16,7 @@ import qrcode
 import xmlrpc.client
 from django.utils import timezone
 
-from .entity import Entity, EntityUserManager
+from .entity import Entity
 from .release import Package, Credentials, DEFAULT_PACKAGE
 
 
@@ -152,28 +151,6 @@ class Address(Entity):
 
     def __str__(self):  # pragma: no cover - simple representation
         return f"{self.street} {self.number}, {self.municipality}, {self.state}"
-
-
-class User(Entity, AbstractUser):
-    objects = EntityUserManager()
-    all_objects = DjangoUserManager()
-    """Custom user model."""
-
-    phone_number = models.CharField(
-        max_length=20,
-        blank=True,
-        help_text="Optional contact phone number",
-    )
-    address = models.ForeignKey(
-        Address,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-    )
-    has_charger = models.BooleanField(default=False)
-
-    def __str__(self):
-        return self.username
 
 
 class OdooProfile(Entity):
@@ -636,27 +613,6 @@ class AdminHistory(Entity):
     def admin_label(self) -> str:  # pragma: no cover - simple representation
         model = self.content_type.model_class()
         return model._meta.verbose_name_plural if model else self.content_type.name
-
-
-class Message(Entity):
-    """System message that can be sent to LCD or GUI."""
-
-    subject = models.CharField(max_length=32, blank=True)
-    body = models.CharField(max_length=32, blank=True)
-    node = models.ForeignKey(
-        "nodes.Node",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="messages",
-    )
-    created = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created"]
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.subject} {self.body}".strip()
 
 
 class PackageRelease(Entity):

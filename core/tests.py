@@ -10,8 +10,8 @@ from django.http import HttpRequest
 import json
 
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 from .models import (
-    User,
     Account,
     Vehicle,
     Credit,
@@ -22,6 +22,7 @@ from .models import (
     EVModel,
     RFID,
 )
+User = get_user_model()
 from ocpp.models import Transaction, Charger
 
 from django.core.exceptions import ValidationError

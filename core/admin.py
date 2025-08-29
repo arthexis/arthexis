@@ -10,17 +10,11 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
 from django.contrib import messages
 from django.contrib.auth import get_user_model
-from django.contrib.auth.admin import (
-    GroupAdmin as DjangoGroupAdmin,
-    UserAdmin as DjangoUserAdmin,
-)
 from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
-from django.contrib.auth.models import Group
 from django.utils.html import format_html
 from .models import (
-    User,
     Account,
     Vehicle,
     Credit,
@@ -32,22 +26,10 @@ from .models import (
     EVModel,
     RFID,
     Reference,
-    Message,
     OdooProfile,
     PackageRelease,
 )
-from .notifications import notify
 from . import release
-
-
-class SecurityGroup(Group):
-    class Meta:
-        proxy = True
-        verbose_name = "Security Group"
-        verbose_name_plural = "Security Groups"
-
-
-admin.site.unregister(Group)
 
 
 @admin.register(Reference)
@@ -78,11 +60,6 @@ class ReferenceAdmin(admin.ModelAdmin):
     qr_code.short_description = "QR Code"
 
 
-@admin.register(SecurityGroup)
-class SecurityGroupAdmin(DjangoGroupAdmin):
-    pass
-
-
 class AccountRFIDForm(forms.ModelForm):
     """Form for assigning existing RFIDs to an account."""
 
@@ -97,20 +74,6 @@ class AccountRFIDForm(forms.ModelForm):
         return rfid
 
 
-@admin.register(Message)
-class MessageAdmin(admin.ModelAdmin):
-    list_display = ("subject", "body", "node", "created")
-    search_fields = ("subject", "body")
-    ordering = ("-created",)
-    actions = ["send_messages"]
-
-    @admin.action(description="Send selected messages")
-    def send_messages(self, request, queryset):
-        for msg in queryset:
-            notify(msg.subject, msg.body)
-        self.message_user(request, f"{queryset.count()} messages sent")
-
-
 class AccountRFIDInline(admin.TabularInline):
     model = Account.rfids.through
     form = AccountRFIDForm
@@ -118,16 +81,6 @@ class AccountRFIDInline(admin.TabularInline):
     extra = 0
     verbose_name = "RFID"
     verbose_name_plural = "RFIDs"
-
-
-@admin.register(User)
-class UserAdmin(DjangoUserAdmin):
-    fieldsets = DjangoUserAdmin.fieldsets + (
-        ("Contact", {"fields": ("phone_number", "address", "has_charger")}),
-    )
-    add_fieldsets = DjangoUserAdmin.add_fieldsets + (
-        ("Contact", {"fields": ("phone_number", "address", "has_charger")}),
-    )
 
 
 @admin.register(Address)

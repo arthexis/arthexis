@@ -16,24 +16,13 @@ import time
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
-from django.contrib import admin
 from django.contrib.sites.models import Site
 from django_celery_beat.models import PeriodicTask
 from django.conf import settings
-from .admin import RecipeAdmin
 from .actions import NodeAction
 
-from .models import (
-    Node,
-    ContentSample,
-    NodeRole,
-    Recipe,
-    Step,
-    TextPattern,
-    Backup,
-)
+from .models import Node, ContentSample, NodeRole, Message
 from .tasks import capture_node_screenshot, sample_clipboard
-from core.models import Message
 
 
 class NodeTests(TestCase):
@@ -224,14 +213,6 @@ class NodeTests(TestCase):
         node.screenshot_polling = False
         node.save()
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
-
-    def test_backup_creation(self):
-        backup = Backup.objects.create(
-            location="backups/test.json", size=1234, report={"objects": 5}
-        )
-        self.assertEqual(Backup.objects.count(), 1)
-        self.assertEqual(backup.size, 1234)
-        self.assertEqual(backup.report["objects"], 5)
 
 class NodeAdminTests(TestCase):
 
@@ -428,27 +409,6 @@ class NodeActionTests(TestCase):
         finally:
             NodeAction.registry.pop("dummyaction", None)
 
-    def test_generate_backup_action_creates_backup(self):
-        hostname = socket.gethostname()
-        node = Node.objects.create(
-            hostname=hostname,
-            address="127.0.0.1",
-            port=8000,
-            mac_address=Node.get_current_mac(),
-        )
-        url = reverse(
-            "admin:nodes_node_action", args=[node.pk, "generate-db-backup"]
-        )
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("attachment", response["Content-Disposition"])
-        self.assertEqual(Backup.objects.count(), 1)
-        backup = Backup.objects.first()
-        path = Path(settings.BASE_DIR) / backup.location
-        if path.exists():
-            path.unlink()
-
-
 
 class StartupNotificationTests(TestCase):
     def test_startup_notification_uses_ip_and_revision(self):
@@ -537,71 +497,6 @@ class NotificationManagerTests(TestCase):
                     manager = NotificationManager()
                     manager._gui_display("hi", "there")
         mock_logger.info.assert_called_once_with("%s %s", "hi", "there")
-
-
-class RecipeTests(TestCase):
-    def test_step_sync_and_text_update(self):
-        recipe = Recipe.objects.create(name="sample")
-        Step.objects.create(recipe=recipe, order=1, script="echo one")
-        Step.objects.create(recipe=recipe, order=2, script="echo two")
-        recipe.refresh_from_db()
-        self.assertEqual(recipe.full_script, "echo one\necho two")
-
-        recipe.full_script = "first\nsecond"
-
-        class DummyForm:
-            cleaned_data = {"full_script": recipe.full_script}
-
-        admin_instance = RecipeAdmin(Recipe, admin.site)
-        admin_instance.save_model(None, recipe, DummyForm(), False)
-
-        steps = list(recipe.steps.order_by("order").values_list("script", flat=True))
-        self.assertEqual(steps, ["first", "second"])
-
-
-class TextPatternMatchTests(TestCase):
-    def test_match_with_sigil(self):
-        pattern = TextPattern.objects.create(mask="This is [not] good", priority=1)
-        result = pattern.match("Indeed, This is very good.")
-        self.assertEqual(result, "This is very good")
-
-    def test_match_without_sigil(self):
-        pattern = TextPattern.objects.create(mask="simple", priority=1)
-        result = pattern.match("a simple example")
-        self.assertEqual(result, "simple")
-
-    def test_no_match(self):
-        pattern = TextPattern.objects.create(mask="missing", priority=1)
-        self.assertIsNone(pattern.match("nothing to see"))
-
-    def test_match_multiple_sigils(self):
-        pattern = TextPattern.objects.create(
-            mask="Hello [first] [last]", priority=1
-        )
-        result = pattern.match("Well, Hello John Doe!")
-        self.assertEqual(result, "Hello John Doe!")
-
-
-class TextPatternAdminActionTests(TestCase):
-    def setUp(self):
-        User = get_user_model()
-        self.user = User.objects.create_superuser(
-            "pattern_admin", "admin@example.com", "pass"
-        )
-        self.client.login(username="pattern_admin", password="pass")
-
-    @patch("pyperclip.paste")
-    def test_test_clipboard_action(self, mock_paste):
-        mock_paste.return_value = "This is very good"
-        pattern = TextPattern.objects.create(mask="This is [not] good", priority=1)
-        url = reverse("admin:nodes_textpattern_changelist")
-        response = self.client.post(
-            url,
-            {"action": "test_clipboard", "_selected_action": [pattern.pk]},
-            follow=True,
-        )
-        msgs = [m.message for m in response.wsgi_request._messages]
-        self.assertIn("Matched 'This is [not] good' -> 'This is very good'", msgs)
 
 
 class ContentSampleAdminTests(TestCase):

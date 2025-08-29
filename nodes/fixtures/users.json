@@ -1,6 +1,6 @@
 [
   {
-    "model": "core.user",
+    "model": "nodes.user",
     "pk": 2,
     "fields": {
       "username": "arthexis",

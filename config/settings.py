@@ -182,7 +182,7 @@ CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
 
 
 # Custom user model
-AUTH_USER_MODEL = "core.User"
+AUTH_USER_MODEL = "nodes.User"
 
 # Enable RFID authentication backend and restrict default admin login to localhost
 AUTHENTICATION_BACKENDS = [

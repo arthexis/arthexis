@@ -1,7 +1,10 @@
 import xmlrpc.client
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from core.models import User, OdooProfile
+from django.contrib.auth import get_user_model
+from core.models import OdooProfile
+
+User = get_user_model()
 
 
 class FakeCommon:
