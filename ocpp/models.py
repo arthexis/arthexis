@@ -1,5 +1,5 @@
 from django.db import models
-from integrate.models import Entity
+from bind.models import Entity
 from django.urls import reverse
 from django.contrib.sites.models import Site
 from django.conf import settings

@@ -119,7 +119,7 @@ LOCAL_APPS = [
     "ocpp",
     "awg",
     "release",
-    "integrate",
+    "bind",
     "website",
     "app",
 ]

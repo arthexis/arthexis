@@ -5,7 +5,7 @@ import django.contrib.auth.validators
 import django.core.validators
 import django.db.models.deletion
 import django.utils.timezone
-import integrate.models
+import bind.models
 from django.conf import settings
 from django.db import migrations, models
 
@@ -322,7 +322,7 @@ class Migration(migrations.Migration):
                 "abstract": False,
             },
             managers=[
-                ("objects", integrate.models.EntityUserManager()),
+                ("objects", bind.models.EntityUserManager()),
                 ("all_objects", django.contrib.auth.models.UserManager()),
             ],
         ),

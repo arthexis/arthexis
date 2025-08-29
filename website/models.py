@@ -1,5 +1,5 @@
 from django.db import models
-from integrate.models import Entity
+from bind.models import Entity
 from django.contrib.sites.models import Site
 from nodes.models import NodeRole
 from django.apps import apps as django_apps

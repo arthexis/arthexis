@@ -1,6 +1,6 @@
 [
   {
-    "model": "integrate.requesttype",
+    "model": "bind.requesttype",
     "pk": 1,
     "fields": {
       "code": "GEN",

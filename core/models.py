@@ -15,7 +15,7 @@ from io import BytesIO
 from django.core.files.base import ContentFile
 import qrcode
 
-from integrate.models import Entity, EntityUserManager
+from bind.models import Entity, EntityUserManager
 
 
 class Address(Entity):

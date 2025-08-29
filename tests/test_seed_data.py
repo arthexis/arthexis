@@ -13,7 +13,7 @@ django.setup()
 
 from django.test import TestCase
 from django.conf import settings
-from integrate.models import RequestType
+from bind.models import RequestType
 from nodes.models import Node
 from django.contrib.sites.models import Site
 import socket
@@ -36,7 +36,7 @@ class EnvRefreshFixtureTests(TestCase):
             json.dumps(
                 [
                     {
-                        "model": "integrate.requesttype",
+                        "model": "bind.requesttype",
                         "pk": 999,
                         "fields": {"code": "FTR", "name": "Fixture"},
                     }

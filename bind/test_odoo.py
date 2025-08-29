@@ -38,7 +38,7 @@ class OdooTests(TestCase):
 
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT password FROM integrate_odooinstance WHERE id = %s",
+                "SELECT password FROM bind_odooinstance WHERE id = %s",
                 [self.instance.pk],
             )
             raw = cursor.fetchone()[0]
@@ -48,7 +48,7 @@ class OdooTests(TestCase):
     def test_connection_success(self, mock_proxy):
         mock_srv = mock_proxy.return_value
         mock_srv.authenticate.return_value = 1
-        response = self.client.post(reverse("integrate:odoo-test", args=[self.instance.pk]))
+        response = self.client.post(reverse("bind:odoo-test", args=[self.instance.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["detail"], "success")
 
@@ -56,7 +56,7 @@ class OdooTests(TestCase):
     def test_connection_invalid(self, mock_proxy):
         mock_srv = mock_proxy.return_value
         mock_srv.authenticate.return_value = False
-        response = self.client.post(reverse("integrate:odoo-test", args=[self.instance.pk]))
+        response = self.client.post(reverse("bind:odoo-test", args=[self.instance.pk]))
         self.assertEqual(response.status_code, 401)
 
 
@@ -82,7 +82,7 @@ class OdooAdminTests(TestCase):
     def test_admin_action(self, mock_proxy):
         mock_srv = mock_proxy.return_value
         mock_srv.authenticate.return_value = 1
-        url = reverse("admin:integrate_odooinstance_changelist")
+        url = reverse("admin:bind_odooinstance_changelist")
         resp = self.client.post(
             url,
             {
