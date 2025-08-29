@@ -7,6 +7,7 @@ from app.widgets import CopyColorWidget
 from django.db import models
 from django.conf import settings
 from pathlib import Path
+from django.http import HttpResponse
 import base64
 import pyperclip
 from pyperclip import PyperclipException
@@ -87,6 +88,11 @@ class NodeAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.action_view),
                 name="nodes_node_action",
             ),
+            path(
+                "<int:node_id>/public-key/",
+                self.admin_site.admin_view(self.public_key),
+                name="nodes_node_public_key",
+            ),
         ]
         return custom + urls
 
@@ -103,6 +109,20 @@ class NodeAdmin(admin.ModelAdmin):
                 f"Current host already registered as {node}",
                 messages.INFO,
             )
+        return redirect("..")
+
+    def public_key(self, request, node_id):
+        node = self.get_object(request, node_id)
+        if not node:
+            self.message_user(request, "Unknown node", messages.ERROR)
+            return redirect("..")
+        security_dir = Path(settings.BASE_DIR) / "security"
+        pub_path = security_dir / f"{node.public_endpoint}.pub"
+        if pub_path.exists():
+            response = HttpResponse(pub_path.read_bytes(), content_type="text/plain")
+            response["Content-Disposition"] = f'attachment; filename="{pub_path.name}"'
+            return response
+        self.message_user(request, "Public key not found", messages.ERROR)
         return redirect("..")
 
     def run_command(self, request, queryset):
@@ -126,6 +146,10 @@ class NodeAdmin(admin.ModelAdmin):
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}
         extra_context["node_actions"] = NodeAction.get_actions()
+        if object_id:
+            extra_context["public_key_url"] = reverse(
+                "admin:nodes_node_public_key", args=[object_id]
+            )
         return super().changeform_view(
             request, object_id, form_url, extra_context=extra_context
         )

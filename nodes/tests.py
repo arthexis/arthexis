@@ -10,6 +10,7 @@ from unittest.mock import patch, call, MagicMock
 import socket
 import base64
 from tempfile import TemporaryDirectory
+import shutil
 
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -236,6 +237,11 @@ class NodeAdminTests(TestCase):
         )
         self.client.force_login(self.admin)
 
+    def tearDown(self):
+        security_dir = Path(settings.BASE_DIR) / "security"
+        if security_dir.exists():
+            shutil.rmtree(security_dir)
+
     def test_register_current_host(self):
         url = reverse("admin:nodes_node_register_current")
         with patch("utils.revision.get_revision", return_value="abcdef123456"):
@@ -249,6 +255,13 @@ class NodeAdminTests(TestCase):
         self.assertEqual(node.installed_version, ver)
         self.assertEqual(node.installed_revision, rev)
         self.assertEqual(node.mac_address, Node.get_current_mac())
+        sec_dir = Path(settings.BASE_DIR) / "security"
+        priv = sec_dir / f"{node.public_endpoint}"
+        pub = sec_dir / f"{node.public_endpoint}.pub"
+        self.assertTrue(sec_dir.exists())
+        self.assertTrue(priv.exists())
+        self.assertTrue(pub.exists())
+        self.assertTrue(node.public_key)
 
     def test_register_current_updates_existing_node(self):
         hostname = socket.gethostname()
@@ -267,6 +280,21 @@ class NodeAdminTests(TestCase):
         node = Node.objects.first()
         self.assertEqual(node.mac_address, Node.get_current_mac())
         self.assertEqual(node.hostname, hostname)
+
+    def test_public_key_download_link(self):
+        self.client.get(reverse("admin:nodes_node_register_current"))
+        node = Node.objects.first()
+        change_url = reverse("admin:nodes_node_change", args=[node.pk])
+        response = self.client.get(change_url)
+        download_url = reverse("admin:nodes_node_public_key", args=[node.pk])
+        self.assertContains(response, download_url)
+        resp = self.client.get(download_url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp["Content-Disposition"],
+            f'attachment; filename="{node.public_endpoint}.pub"',
+        )
+        self.assertIn(node.public_key.strip(), resp.content.decode())
 
     @patch("nodes.admin.capture_screenshot")
     @patch("nodes.admin.capture_screen")
