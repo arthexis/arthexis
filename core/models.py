@@ -15,7 +15,7 @@ from io import BytesIO
 from django.core.files.base import ContentFile
 import qrcode
 
-from bind.models import Entity, EntityUserManager
+from .entity import Entity, EntityUserManager
 from .release import Package, Credentials, DEFAULT_PACKAGE
 
 

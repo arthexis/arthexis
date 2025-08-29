@@ -13,16 +13,15 @@ django.setup()
 
 from django.test import TestCase
 from django.conf import settings
-from bind.models import RequestType
-from nodes.models import Node
+from nodes.models import Node, NodeRole
 from django.contrib.sites.models import Site
 import socket
 
 
 class SeedDataEntityTests(TestCase):
     def test_preserve_seed_data_on_create(self):
-        rt = RequestType.objects.create(code="XYZ", name="Test", is_seed_data=True)
-        self.assertTrue(RequestType.all_objects.get(pk=rt.pk).is_seed_data)
+        role = NodeRole.objects.create(name="Tester", is_seed_data=True)
+        self.assertTrue(NodeRole.all_objects.get(pk=role.pk).is_seed_data)
 
 
 class EnvRefreshFixtureTests(TestCase):
@@ -36,9 +35,9 @@ class EnvRefreshFixtureTests(TestCase):
             json.dumps(
                 [
                     {
-                        "model": "bind.requesttype",
+                        "model": "nodes.noderole",
                         "pk": 999,
-                        "fields": {"code": "FTR", "name": "Fixture"},
+                        "fields": {"name": "Fixture Role"},
                     }
                 ]
             )
@@ -57,8 +56,8 @@ class EnvRefreshFixtureTests(TestCase):
 
         env_refresh.call_command = fake_call_command
         env_refresh.run_database_tasks()
-        rt = RequestType.all_objects.get(pk=999)
-        self.assertTrue(rt.is_seed_data)
+        role = NodeRole.all_objects.get(pk=999)
+        self.assertTrue(role.is_seed_data)
         shutil.rmtree(tmp_dir)
 
 

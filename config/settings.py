@@ -118,7 +118,6 @@ LOCAL_APPS = [
     "core",
     "ocpp",
     "awg",
-    "bind",
     "pages",
     "app",
 ]
@@ -134,7 +133,6 @@ INSTALLED_APPS = [
     "import_export",
     "django.contrib.sites",
     "channels",
-    "fernet_fields",
     "post_office",
     "django_celery_beat",
 ] + LOCAL_APPS
