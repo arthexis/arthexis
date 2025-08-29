@@ -752,7 +752,7 @@ class Migration(migrations.Migration):
             ],
             options={"ordering": ["-created"]},
         ),
-            migrations.CreateModel(
+        migrations.CreateModel(
             name='PackageRelease',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
@@ -777,6 +777,24 @@ class Migration(migrations.Migration):
             options={
                 'verbose_name': 'Package Release',
                 'verbose_name_plural': 'Package Releases',
+                'get_latest_by': 'version',
             },
         ),
-]
+        migrations.CreateModel(
+            name='OdooProfile',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('is_seed_data', models.BooleanField(default=False, editable=False)),
+                ('is_deleted', models.BooleanField(default=False, editable=False)),
+                ('host', models.CharField(max_length=255)),
+                ('database', models.CharField(max_length=255)),
+                ('username', models.CharField(max_length=255)),
+                ('password', models.CharField(max_length=255)),
+                ('verified_on', models.DateTimeField(blank=True, null=True)),
+                ('odoo_uid', models.PositiveIntegerField(blank=True, editable=False, null=True)),
+                ('name', models.CharField(blank=True, editable=False, max_length=255)),
+                ('email', models.EmailField(blank=True, editable=False, max_length=254)),
+                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='odoo_profile', to=settings.AUTH_USER_MODEL)),
+            ],
+        ),
+    ]

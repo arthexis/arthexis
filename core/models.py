@@ -14,6 +14,8 @@ import hashlib
 from io import BytesIO
 from django.core.files.base import ContentFile
 import qrcode
+import xmlrpc.client
+from django.utils import timezone
 
 from .entity import Entity, EntityUserManager
 from .release import Package, Credentials, DEFAULT_PACKAGE
@@ -172,6 +174,91 @@ class User(Entity, AbstractUser):
 
     def __str__(self):
         return self.username
+
+
+class OdooProfile(Entity):
+    """Store Odoo API credentials for a user."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        related_name="odoo_profile",
+        on_delete=models.CASCADE,
+    )
+    host = models.CharField(max_length=255)
+    database = models.CharField(max_length=255)
+    username = models.CharField(max_length=255)
+    password = models.CharField(max_length=255)
+    verified_on = models.DateTimeField(null=True, blank=True)
+    odoo_uid = models.PositiveIntegerField(null=True, blank=True, editable=False)
+    name = models.CharField(max_length=255, blank=True, editable=False)
+    email = models.EmailField(blank=True, editable=False)
+
+    def _clear_verification(self):
+        self.verified_on = None
+        self.odoo_uid = None
+        self.name = ""
+        self.email = ""
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            old = type(self).all_objects.get(pk=self.pk)
+            if (
+                old.username != self.username
+                or old.password != self.password
+                or old.database != self.database
+                or old.host != self.host
+            ):
+                self._clear_verification()
+        super().save(*args, **kwargs)
+
+    @property
+    def is_verified(self):
+        return self.verified_on is not None
+
+    def verify(self):
+        """Check credentials against Odoo and pull user info."""
+        common = xmlrpc.client.ServerProxy(f"{self.host}/xmlrpc/2/common")
+        uid = common.authenticate(self.database, self.username, self.password, {})
+        if not uid:
+            self._clear_verification()
+            raise ValidationError(_("Invalid Odoo credentials"))
+        models_proxy = xmlrpc.client.ServerProxy(f"{self.host}/xmlrpc/2/object")
+        info = models_proxy.execute_kw(
+            self.database,
+            uid,
+            self.password,
+            "res.users",
+            "read",
+            [uid],
+            {"fields": ["name", "email"]},
+        )[0]
+        self.odoo_uid = uid
+        self.name = info.get("name", "")
+        self.email = info.get("email", "")
+        self.verified_on = timezone.now()
+        self.save(update_fields=["odoo_uid", "name", "email", "verified_on"])
+        return True
+
+    def execute(self, model, method, *args, **kwargs):
+        """Execute an Odoo RPC call, invalidating credentials on failure."""
+        try:
+            client = xmlrpc.client.ServerProxy(f"{self.host}/xmlrpc/2/object")
+            return client.execute_kw(
+                self.database,
+                self.odoo_uid,
+                self.password,
+                model,
+                method,
+                args,
+                kwargs,
+            )
+        except Exception:
+            self._clear_verification()
+            self.save(update_fields=["verified_on"])
+            raise
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return f"{self.user} @ {self.host}"
 
 
 class Reference(Entity):

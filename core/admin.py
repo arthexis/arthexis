@@ -33,6 +33,7 @@ from .models import (
     RFID,
     Reference,
     Message,
+    OdooProfile,
     PackageRelease,
 )
 from .notifications import notify
@@ -132,6 +133,28 @@ class UserAdmin(DjangoUserAdmin):
 class AddressAdmin(admin.ModelAdmin):
     list_display = ("street", "number", "municipality", "state", "postal_code")
     search_fields = ("street", "municipality", "postal_code")
+
+
+@admin.register(OdooProfile)
+class OdooProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "host", "database", "verified_on")
+    readonly_fields = ("verified_on", "odoo_uid", "name", "email")
+    actions = ["verify_credentials"]
+    fieldsets = (
+        (None, {"fields": ("user", "host", "database", "username", "password")}),
+        ("Odoo", {"fields": ("verified_on", "odoo_uid", "name", "email")}),
+    )
+
+    @admin.action(description="Test selected credentials")
+    def verify_credentials(self, request, queryset):
+        for profile in queryset:
+            try:
+                profile.verify()
+                self.message_user(request, f"{profile.user} verified")
+            except Exception as exc:  # pragma: no cover - admin feedback
+                self.message_user(
+                    request, f"{profile.user}: {exc}", level=messages.ERROR
+                )
 
 
 class CreditInline(admin.TabularInline):
