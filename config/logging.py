@@ -1,4 +1,6 @@
 import sys
+import os
+import glob
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
@@ -23,3 +25,19 @@ class ActiveAppFileHandler(TimedRotatingFileHandler):
                 self.stream.close()
             self.stream = self._open()
         super().emit(record)
+
+    def rotation_filename(self, default_name: str) -> str:
+        """Place rotated logs inside the old log directory."""
+        default_path = Path(default_name)
+        return str(Path(settings.OLD_LOG_DIR) / default_path.name)
+
+    def getFilesToDelete(self):
+        """Return files to delete in the old log directory respecting backupCount."""
+        if self.backupCount <= 0:
+            return []
+        _, base_name = os.path.split(self.baseFilename)
+        files = glob.glob(os.path.join(settings.OLD_LOG_DIR, base_name + ".*"))
+        files.sort()
+        if len(files) <= self.backupCount:
+            return []
+        return files[: len(files) - self.backupCount]
