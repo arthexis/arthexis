@@ -353,7 +353,7 @@ schedule, _ = IntervalSchedule.objects.get_or_create(
 )
 PeriodicTask.objects.update_or_create(
     name=slugify("auto upgrade check"),
-    defaults={"interval": schedule, "task": "release.tasks.check_github_updates"},
+    defaults={"interval": schedule, "task": "core.tasks.check_github_updates"},
 )
 PYCODE
     deactivate

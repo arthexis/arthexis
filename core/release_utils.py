@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -16,39 +15,8 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # pragma: no cover - fallback when missing
     toml = None  # type: ignore
 
-from . import Credentials, Package, DEFAULT_PACKAGE
+from .release import Credentials, Package, DEFAULT_PACKAGE
 from config.offline import requires_network
-
-
-TODO_PATTERN = re.compile(r"#\s*TODO\s*:?(.*)")
-
-
-def create_todos_from_comments(base_path: str | Path | None = None) -> None:
-    """Create :class:`Todo` objects from ``# TODO`` comments in the codebase.
-
-    Parameters
-    ----------
-    base_path:
-        Root directory to scan. Defaults to the project root.
-    """
-
-    root = Path(base_path) if base_path else Path(__file__).resolve().parent.parent
-    from .models import Todo
-
-    for path in root.rglob("*.py"):
-        if "migrations" in path.parts:
-            continue
-        text = path.read_text(encoding="utf-8").splitlines()
-        for lineno, line in enumerate(text, 1):
-            match = TODO_PATTERN.search(line)
-            if not match:
-                continue
-            todo_text = match.group(1).strip()
-            Todo.objects.get_or_create(
-                text=todo_text,
-                file_path=str(path.relative_to(root)),
-                line_number=lineno,
-            )
 
 
 class ReleaseError(Exception):
@@ -68,15 +36,6 @@ def _current_commit() -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
 
 
-def run_tests() -> "TestLog":
-    """Run the test suite and store the output in :class:`TestLog`."""
-    proc = subprocess.run(
-        [sys.executable, "manage.py", "test"], capture_output=True, text=True
-    )
-    from .models import TestLog
-
-    status = "success" if proc.returncode == 0 else "failure"
-    return TestLog.objects.create(status=status, output=proc.stdout + proc.stderr)
 
 
 def _write_pyproject(package: Package, version: str, requirements: list[str]) -> None:
@@ -111,7 +70,6 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
                     "nodes",
                     "ocpp",
                     "website",
-                    "release",
                     "integrate",
                 ]
             }
@@ -243,8 +201,10 @@ def build(
     ]
 
     if tests:
-        log = run_tests()
-        if log.status != "success":
+        proc = subprocess.run(
+            [sys.executable, "manage.py", "test"], capture_output=True, text=True
+        )
+        if proc.returncode != 0:
             raise ReleaseError("Tests failed")
 
     commit_hash = _current_commit()

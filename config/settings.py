@@ -118,7 +118,6 @@ LOCAL_APPS = [
     "core",
     "ocpp",
     "awg",
-    "release",
     "integrate",
     "website",
     "app",
