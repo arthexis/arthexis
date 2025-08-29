@@ -524,7 +524,7 @@ class NotificationManagerTests(TestCase):
                 manager = NotificationManager()
                 manager._gui_display("hi", "there")
         mock_toast.show_toast.assert_called_once_with(
-            "Arthexis", "hi\nthere", duration=6
+            "Arthexis", "hi\nthere", duration=6, threaded=True
         )
 
     def test_gui_display_logs_when_toast_unavailable(self):

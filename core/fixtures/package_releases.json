@@ -1,0 +1,107 @@
+[
+  {
+    "model": "core.packagerelease",
+    "pk": 1,
+    "fields": {
+      "name": "arthexis",
+      "description": "Django-based MESH system",
+      "author": "Rafael J. Guillén-Osorio",
+      "email": "tecnologia@gelectriic.com",
+      "python_requires": ">=3.10",
+      "license": "MIT",
+      "repository_url": "https://github.com/arthexis/arthexis",
+      "homepage_url": "https://arthexis.com",
+      "version": "0.0.0",
+      "revision": "",
+      "pypi_url": "https://pypi.org/project/arthexis/0.0.0/",
+      "is_live": false,
+      "username": "",
+      "password": "",
+      "token": ""
+    }
+  },
+  {
+    "model": "core.packagerelease",
+    "pk": 2,
+    "fields": {
+      "name": "arthexis",
+      "description": "Django-based MESH system",
+      "author": "Rafael J. Guillén-Osorio",
+      "email": "tecnologia@gelectriic.com",
+      "python_requires": ">=3.10",
+      "license": "MIT",
+      "repository_url": "https://github.com/arthexis/arthexis",
+      "homepage_url": "https://arthexis.com",
+      "version": "0.0.1",
+      "revision": "",
+      "pypi_url": "https://pypi.org/project/arthexis/0.0.1/",
+      "is_live": false,
+      "username": "",
+      "password": "",
+      "token": ""
+    }
+  },
+  {
+    "model": "core.packagerelease",
+    "pk": 3,
+    "fields": {
+      "name": "arthexis",
+      "description": "Django-based MESH system",
+      "author": "Rafael J. Guillén-Osorio",
+      "email": "tecnologia@gelectriic.com",
+      "python_requires": ">=3.10",
+      "license": "MIT",
+      "repository_url": "https://github.com/arthexis/arthexis",
+      "homepage_url": "https://arthexis.com",
+      "version": "0.1.0",
+      "revision": "",
+      "pypi_url": "https://pypi.org/project/arthexis/0.1.0/",
+      "is_live": false,
+      "username": "",
+      "password": "",
+      "token": ""
+    }
+  },
+  {
+    "model": "core.packagerelease",
+    "pk": 4,
+    "fields": {
+      "name": "arthexis",
+      "description": "Django-based MESH system",
+      "author": "Rafael J. Guillén-Osorio",
+      "email": "tecnologia@gelectriic.com",
+      "python_requires": ">=3.10",
+      "license": "MIT",
+      "repository_url": "https://github.com/arthexis/arthexis",
+      "homepage_url": "https://arthexis.com",
+      "version": "0.1.1",
+      "revision": "76f70b6a72c78fcdf143a19ddcc88a0fbd209b3d",
+      "pypi_url": "https://pypi.org/project/arthexis/0.1.1/",
+      "is_live": false,
+      "username": "",
+      "password": "",
+      "token": ""
+    }
+  },
+  {
+    "model": "core.packagerelease",
+    "pk": 5,
+    "fields": {
+      "name": "arthexis",
+      "description": "Django-based MESH system",
+      "author": "Rafael J. Guillén-Osorio",
+      "email": "tecnologia@gelectriic.com",
+      "python_requires": ">=3.10",
+      "license": "MIT",
+      "repository_url": "https://github.com/arthexis/arthexis",
+      "homepage_url": "https://arthexis.com",
+      "version": "1.0.0",
+      "revision": "",
+      "pypi_url": "https://pypi.org/project/arthexis/1.0.0/",
+      "is_live": false,
+      "username": "",
+      "password": "",
+      "token": ""
+    }
+  }
+]

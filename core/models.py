@@ -583,6 +583,10 @@ class PackageRelease(Entity):
     license = models.CharField(max_length=100, default=DEFAULT_PACKAGE.license)
     repository_url = models.URLField(default=DEFAULT_PACKAGE.repository_url)
     homepage_url = models.URLField(default=DEFAULT_PACKAGE.homepage_url)
+    version = models.CharField(max_length=20, unique=True, default="0.0.0")
+    revision = models.CharField(max_length=40, blank=True)
+    pypi_url = models.URLField(blank=True)
+    is_live = models.BooleanField(default=False)
     username = models.CharField(max_length=100, blank=True)
     password = models.CharField(max_length=100, blank=True)
     token = models.CharField(max_length=200, blank=True)
@@ -590,6 +594,7 @@ class PackageRelease(Entity):
     class Meta:
         verbose_name = "Package Release"
         verbose_name_plural = "Package Releases"
+        get_latest_by = "version"
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name
@@ -614,6 +619,43 @@ class PackageRelease(Entity):
         if self.username and self.password:
             return Credentials(username=self.username, password=self.password)
         return None
+
+    @property
+    def migration_number(self) -> int:
+        """Return the migration number derived from the version bits."""
+        from packaging.version import Version
+
+        v = Version(self.version)
+        return (v.major << 2) | (v.minor << 1) | v.micro
+
+    @staticmethod
+    def version_from_migration(number: int) -> str:
+        """Return version string encoded by ``number``."""
+        major = (number >> 2) & 0x3FFFFF
+        minor = (number >> 1) & 0x1
+        patch = number & 0x1
+        return f"{major}.{minor}.{patch}"
+
+    def save(self, *args, **kwargs):
+        self.pypi_url = f"https://pypi.org/project/{self.name}/{self.version}/"
+        try:  # pragma: no cover - network check best effort
+            import requests
+
+            resp = requests.head(self.pypi_url, timeout=5)
+            self.is_live = resp.status_code == 200
+        except Exception:
+            self.is_live = False
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def latest(cls):
+        """Return the latest release by version."""
+        from packaging.version import Version
+
+        releases = list(cls.objects.all())
+        if not releases:
+            return None
+        return max(releases, key=lambda r: Version(r.version))
 
     def build(self, **kwargs) -> None:
         """Wrapper around :func:`core.release.build` for convenience."""

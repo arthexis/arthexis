@@ -433,8 +433,8 @@ class BuildReleaseForm(forms.Form):
 
 @admin.register(PackageRelease)
 class PackageReleaseAdmin(admin.ModelAdmin):
-    list_display = ("name", "author", "repository_url")
-    actions = ["build_release"]
+    list_display = ("name", "version", "pypi_url", "is_live")
+    actions = ["build_release", "create_next_release"]
 
     @admin.action(description="Build selected packages")
     def build_release(self, request, queryset):
@@ -482,3 +482,19 @@ class PackageReleaseAdmin(admin.ModelAdmin):
         return TemplateResponse(
             request, "admin/core/packagerelease/build_release.html", context
         )
+
+    @admin.action(description="Create next release")
+    def create_next_release(self, request, queryset):
+        for cfg in queryset:
+            number = cfg.migration_number + 1
+            new_version = cfg.version_from_migration(number)
+            cfg.pk = None
+            cfg.version = new_version
+            cfg.revision = ""
+            cfg.is_live = False
+            cfg.save()
+            self.message_user(
+                request,
+                f"Created release {new_version}",
+                messages.SUCCESS,
+            )
