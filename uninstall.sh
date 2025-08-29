@@ -63,3 +63,19 @@ if [ -n "$SERVICE" ] && systemctl list-unit-files | grep -Fq "${SERVICE}.service
 else
     pkill -f "manage.py runserver" || true
 fi
+
+# Ensure any Celery workers or beats are also stopped
+pkill -f "celery -A config" || true
+
+# Remove the local SQLite database if it exists
+DB_FILE="$BASE_DIR/db.sqlite3"
+if [ -f "$DB_FILE" ]; then
+    rm -f "$DB_FILE"
+fi
+
+# Clear lock directory and other cached configuration
+rm -rf "$LOCK_DIR"
+rm -f "$BASE_DIR/AUTO_UPGRADE"
+rm -f "$BASE_DIR/requirements.md5"
+
+echo "Uninstall complete."
