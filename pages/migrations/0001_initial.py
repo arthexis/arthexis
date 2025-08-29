@@ -30,6 +30,7 @@ class Migration(migrations.Migration):
                 ("is_seed_data", models.BooleanField(default=False, editable=False)),
                 ("is_deleted", models.BooleanField(default=False, editable=False)),
                 ("name", models.CharField(max_length=100, unique=True)),
+                ("description", models.TextField(blank=True)),
             ],
             options={
                 "abstract": False,
