@@ -218,41 +218,39 @@ class Node(Entity):
             PeriodicTask.objects.filter(name=task_name).delete()
 
 
-class ScreenSource(Entity):
-    """Configured source for taking screenshots."""
+class ContentSample(Entity):
+    """Collected content such as text snippets or screenshots."""
 
-    SCREEN = "SCREEN"
-    URL = "URL"
-    KIND_CHOICES = [(SCREEN, "Screen"), (URL, "URL")]
+    TEXT = "TEXT"
+    IMAGE = "IMAGE"
+    KIND_CHOICES = [(TEXT, "Text"), (IMAGE, "Image")]
 
-    name = models.CharField(max_length=50, unique=True)
+    name = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     kind = models.CharField(max_length=10, choices=KIND_CHOICES)
-    parameter = models.CharField(max_length=200, blank=True)
-    priority = models.PositiveIntegerField(default=0)
-
-    class Meta:
-        ordering = ["priority", "id"]
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name
-
-
-class NodeScreenshot(Entity):
-    """Screenshot captured from a node."""
-
+    content = models.TextField(blank=True)
+    path = models.CharField(max_length=255, blank=True)
+    method = models.CharField(max_length=10, default="", blank=True)
+    hash = models.CharField(max_length=64, unique=True, null=True, blank=True)
     node = models.ForeignKey(
         Node, on_delete=models.SET_NULL, null=True, blank=True
     )
-    origin = models.ForeignKey(
-        ScreenSource, on_delete=models.SET_NULL, null=True, blank=True
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
     )
-    path = models.CharField(max_length=255)
-    method = models.CharField(max_length=10, default="", blank=True)
-    hash = models.CharField(max_length=64, unique=True, null=True, blank=True)
-    created = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Content Sample"
+        verbose_name_plural = "Content Samples"
+
+    def save(self, *args, **kwargs):
+        if self.node_id is None:
+            self.node = Node.get_local()
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.path
+        return str(self.name)
 
 
 class NodeCommand(Entity):
@@ -319,30 +317,10 @@ class Step(Entity):
         self.recipe.sync_full_script()
 
 
-class TextSample(Entity):
-    """Clipboard text captured with timestamp."""
-
-    name = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    content = models.TextField()
-    node = models.ForeignKey(
-        Node, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-        verbose_name = "Text Sample"
-        verbose_name_plural = "Text Samples"
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return str(self.name)
 
 
 class TextPattern(Entity):
-    """Text mask with optional sigils used to match against ``TextSample`` content."""
+    """Text mask with optional sigils used to match against text content samples."""
 
     mask = models.TextField()
     priority = models.IntegerField(default=0)

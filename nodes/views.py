@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404
 
 from utils.api import api_login_required
 
-from .models import Node, NodeScreenshot
+from .models import Node
 from .utils import capture_screenshot, save_screenshot
 from core.models import Message
 

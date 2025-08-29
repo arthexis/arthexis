@@ -11,12 +11,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name="textsample",
-            name="automated",
-        ),
         migrations.AddField(
-            model_name="textsample",
+            model_name="contentsample",
             name="user",
             field=models.ForeignKey(
                 blank=True,
