@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_DIR="$SCRIPT_DIR/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
+exec > >(tee "$LOG_FILE") 2>&1
+
 # Renew Let's Encrypt certificate for arthexis.com without reconfiguring services.
 DOMAIN="arthexis.com"
 LIVE_DIR="/etc/letsencrypt/live"
