@@ -1,5 +1,7 @@
 @echo off
 set VENV=.venv
+set LATEST=0
+if "%1"=="--latest" set LATEST=1
 if not exist %VENV%\Scripts\python.exe (
     echo Virtual environment not found. Run install.sh first.
     exit /b 1
@@ -16,4 +18,8 @@ if exist requirements.txt (
         echo %REQ_HASH%>requirements.md5
     )
 )
-%VENV%\Scripts\python.exe env-refresh.py database
+if %LATEST%==1 (
+    %VENV%\Scripts\python.exe env-refresh.py --latest database
+) else (
+    %VENV%\Scripts\python.exe env-refresh.py database
+)

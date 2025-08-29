@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import json
 import tempfile
+import hashlib
 
 import django
 import importlib.util
@@ -54,6 +55,24 @@ def _fixture_files() -> list[str]:
     return sorted(fixtures)
 
 
+def _migration_hash(app_labels: list[str]) -> str:
+    """Return an md5 hash of all migration files for the given apps."""
+    md5 = hashlib.md5()
+    for label in app_labels:
+        try:
+            app_config = apps.get_app_config(label)
+        except LookupError:  # pragma: no cover - defensive
+            continue
+        migrations_dir = Path(app_config.path) / "migrations"
+        if not migrations_dir.is_dir():
+            continue
+        for path in sorted(migrations_dir.glob("*.py")):
+            if path.name == "__init__.py":
+                continue
+            md5.update(path.read_bytes())
+    return md5.hexdigest()
+
+
 def _remove_integrator_from_auth_migration() -> None:
     """Strip lingering integrator imports from Django's auth migration."""
     spec = importlib.util.find_spec("django.contrib.auth.migrations.0013_userproxy")
@@ -72,7 +91,7 @@ def _remove_integrator_from_auth_migration() -> None:
     path.write_text(patched + ("\n" if not patched.endswith("\n") else ""))
 
 
-def run_database_tasks() -> None:
+def run_database_tasks(*, latest: bool = False) -> None:
     """Run all database related maintenance steps."""
     default_db = settings.DATABASES["default"]
     using_sqlite = default_db["ENGINE"] == "django.db.backends.sqlite3"
@@ -92,6 +111,19 @@ def run_database_tasks() -> None:
             call_command("makemigrations", *local_apps, interactive=False)
         else:  # pragma: no cover - unreachable in sqlite
             raise
+
+    # Compute migrations hash and compare with stored value
+    hash_file = Path(settings.BASE_DIR) / "migrations.md5"
+    new_hash = _migration_hash(local_apps)
+    stored_hash = hash_file.read_text().strip() if hash_file.exists() else ""
+
+    if latest and stored_hash and stored_hash != new_hash:
+        if using_sqlite:
+            connections.close_all()
+            Path(default_db["NAME"]).unlink(missing_ok=True)
+        else:  # pragma: no cover - unreachable in sqlite
+            for label in reversed(local_apps):
+                call_command("migrate", label, "zero", interactive=False)
 
     try:
         call_command("migrate", interactive=False)
@@ -169,15 +201,18 @@ def run_database_tasks() -> None:
             defaults={"name": "Control"},
         )
 
+    # Update migrations hash file after successful run
+    hash_file.write_text(new_hash)
+
 
 TASKS = {"database": run_database_tasks}
 
 
-def main(selected: list[str] | None = None) -> None:
+def main(selected: list[str] | None = None, *, latest: bool = False) -> None:
     """Run the selected maintenance tasks."""
     to_run = selected or list(TASKS)
     for name in to_run:
-        TASKS[name]()
+        TASKS[name](latest=latest)
 
 
 if __name__ == "__main__":
@@ -185,6 +220,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "tasks", nargs="*", choices=TASKS.keys(), help="Tasks to run"
     )
+    parser.add_argument(
+        "--latest", action="store_true", help="Force rebuild if migrations changed"
+    )
     args = parser.parse_args()
-    main(args.tasks)
+    main(args.tasks, latest=args.latest)
 
