@@ -20,10 +20,6 @@ from .models import (
     NodeRole,
     ContentSample,
     NodeTask,
-    Recipe,
-    Step,
-    TextPattern,
-    Backup,
 )
 
 
@@ -201,7 +197,6 @@ class NodeRoleAdmin(admin.ModelAdmin):
     list_display = ("name", "description")
 
     def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
         obj.node_set.set(form.cleaned_data.get("nodes", []))
 
 
@@ -318,82 +313,3 @@ class NodeTaskAdmin(admin.ModelAdmin):
         return render(request, "admin/nodes/nodetask/run.html", context)
 
     execute.short_description = "Run task on nodes"
-
-
-@admin.register(Backup)
-class BackupAdmin(admin.ModelAdmin):
-    list_display = ("location", "created_at", "size")
-    readonly_fields = ("created_at",)
-
-
-class StepInline(admin.TabularInline):
-    model = Step
-    extra = 0
-
-
-@admin.register(Recipe)
-class RecipeAdmin(admin.ModelAdmin):
-    fields = ("name", "full_script")
-    inlines = [StepInline]
-    formfield_overrides = {
-        models.TextField: {"widget": forms.Textarea(attrs={"rows": 20, "style": "width:100%"})}
-    }
-
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        lines = [line for line in obj.full_script.splitlines() if line.strip()]
-        obj.steps.all().delete()
-        for idx, script in enumerate(lines, start=1):
-            Step.objects.create(recipe=obj, order=idx, script=script)
-
-
-
-
-@admin.register(TextPattern)
-class TextPatternAdmin(admin.ModelAdmin):
-    list_display = ("mask", "priority")
-    actions = ["scan_latest_sample", "test_clipboard"]
-
-    @admin.action(description="Scan latest sample")
-    def scan_latest_sample(self, request, queryset):
-        sample = ContentSample.objects.filter(kind=ContentSample.TEXT).first()
-        if not sample:
-            self.message_user(request, "No samples available.", level=messages.WARNING)
-            return
-        for pattern in TextPattern.objects.order_by("-priority", "id"):
-            result = pattern.match(sample.content)
-            if result is not None:
-                if result != pattern.mask:
-                    msg = f"Matched '{pattern.mask}' -> '{result}'"
-                else:
-                    msg = f"Matched '{pattern.mask}'"
-                self.message_user(request, msg, level=messages.SUCCESS)
-                return
-        self.message_user(
-            request,
-            "No pattern matched the latest sample.",
-            level=messages.INFO,
-        )
-
-    @admin.action(description="Test against clipboard")
-    def test_clipboard(self, request, queryset):
-        try:
-            content = pyperclip.paste()
-        except PyperclipException as exc:  # pragma: no cover - depends on OS clipboard
-            self.message_user(request, f"Clipboard error: {exc}", level=messages.ERROR)
-            return
-        if not content:
-            self.message_user(request, "Clipboard is empty.", level=messages.INFO)
-            return
-        for pattern in queryset:
-            result = pattern.match(content)
-            if result is not None:
-                if result != pattern.mask:
-                    msg = f"Matched '{pattern.mask}' -> '{result}'"
-                else:
-                    msg = f"Matched '{pattern.mask}'"
-                self.message_user(request, msg, level=messages.SUCCESS)
-            else:
-                self.message_user(
-                    request, f"No match for '{pattern.mask}'", level=messages.INFO
-                )

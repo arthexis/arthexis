@@ -14,21 +14,6 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Backup',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('location', models.CharField(help_text='Location or link to the backup file', max_length=255)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('size', models.BigIntegerField(help_text='Size of the backup in bytes')),
-                ('report', models.JSONField(blank=True, default=dict, help_text='Report of exported objects')),
-            ],
-            options={
-                'ordering': ['-created_at'],
-            },
-        ),
-        migrations.CreateModel(
             name='NodeRole',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
@@ -88,46 +73,6 @@ class Migration(migrations.Migration):
             ],
             options={
                 'ordering': ['-created'],
-            },
-        ),
-        migrations.CreateModel(
-            name='Recipe',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('name', models.CharField(max_length=100)),
-                ('full_script', models.TextField(blank=True)),
-            ],
-            options={
-                'abstract': False,
-            },
-        ),
-        migrations.CreateModel(
-            name='TextPattern',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('mask', models.TextField()),
-                ('priority', models.IntegerField(default=0)),
-            ],
-            options={
-                'ordering': ['-priority', 'id'],
-            },
-        ),
-        migrations.CreateModel(
-            name='Step',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('order', models.PositiveIntegerField()),
-                ('script', models.TextField()),
-                ('recipe', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='steps', to='nodes.recipe')),
-            ],
-            options={
-                'ordering': ['order'],
             },
         ),
         migrations.CreateModel(
