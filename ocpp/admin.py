@@ -67,7 +67,7 @@ class ChargerAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "charger_id",
-                    "number",
+                    "connector_id",
                     "require_rfid",
                     "last_heartbeat",
                     "last_meter_values",
@@ -86,20 +86,16 @@ class ChargerAdmin(admin.ModelAdmin):
     readonly_fields = ("last_heartbeat", "last_meter_values")
     list_display = (
         "charger_id",
-        "number",
+        "connector_id",
         "location_name",
         "require_rfid",
-        "latitude",
-        "longitude",
-        "last_heartbeat",
         "session_kw",
         "total_kw_display",
         "page_link",
-        "qr_link",
         "log_link",
         "status_link",
     )
-    search_fields = ("charger_id", "number", "location__name")
+    search_fields = ("charger_id", "connector_id", "location__name")
     actions = ["purge_data", "delete_selected"]
 
     def page_link(self, obj):
@@ -110,17 +106,6 @@ class ChargerAdmin(admin.ModelAdmin):
         )
 
     page_link.short_description = "Landing Page"
-
-    def qr_link(self, obj):
-        from django.utils.html import format_html
-
-        if obj.reference and obj.reference.image:
-            return format_html(
-                '<a href="{}" target="_blank">qr</a>', obj.reference.image.url
-            )
-        return ""
-
-    qr_link.short_description = "QR Code"
 
     def log_link(self, obj):
         from django.utils.html import format_html

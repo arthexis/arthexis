@@ -56,7 +56,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         )
         store.connections[self.charger_id] = self
         store.logs["charger"].setdefault(self.charger_id, [])
-        self.charger, _ = await database_sync_to_async(
+        self.charger, self._created = await database_sync_to_async(
             Charger.objects.update_or_create
         )(
             charger_id=self.charger_id,
@@ -171,6 +171,13 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         if isinstance(msg, list) and msg and msg[0] == 2:
             msg_id, action = msg[1], msg[2]
             payload = msg[3] if len(msg) > 3 else {}
+            connector = payload.get("connectorId")
+            if self._created and connector is not None:
+                self.charger.connector_id = connector
+                await database_sync_to_async(self.charger.save)(
+                    update_fields=["connector_id"]
+                )
+                self._created = False
             reply_payload = {}
             if action == "BootNotification":
                 reply_payload = {

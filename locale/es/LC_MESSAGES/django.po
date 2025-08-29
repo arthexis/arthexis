@@ -605,6 +605,9 @@ msgstr "Ubicaciones"
 msgid "Charger"
 msgstr "Cargador"
 
+msgid "Connector ID"
+msgstr "ID del Conector"
+
 #: ocpp/models.py:31
 msgid "Require RFID"
 msgstr "Requiere RFID"

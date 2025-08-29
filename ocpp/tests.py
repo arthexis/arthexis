@@ -41,11 +41,11 @@ class ChargerFixtureTests(TestCase):
         cp1 = Charger.objects.get(charger_id="CP1")
         self.assertFalse(cp1.require_rfid)
 
-    def test_charger_numbers(self):
+    def test_charger_connector_ids(self):
         cp1 = Charger.objects.get(charger_id="CP1")
         cp2 = Charger.objects.get(charger_id="CP2")
-        self.assertEqual(cp1.number, 1)
-        self.assertEqual(cp2.number, 2)
+        self.assertEqual(cp1.connector_id, 1)
+        self.assertEqual(cp2.connector_id, 2)
         self.assertEqual(cp1.name, "Simulator #1")
         self.assertEqual(cp2.name, "Simulator #2")
 
@@ -437,11 +437,11 @@ class ChargerAdminTests(TestCase):
         status_url = reverse("charger-status", args=["ADMIN1"])
         self.assertContains(resp, status_url)
 
-    def test_admin_lists_qr_link(self):
+    def test_admin_list_excludes_qr_link(self):
         charger = Charger.objects.create(charger_id="QR1")
         url = reverse("admin:ocpp_charger_changelist")
         resp = self.client.get(url)
-        self.assertContains(resp, charger.reference.image.url)
+        self.assertNotContains(resp, charger.reference.image.url)
 
     def test_admin_lists_log_link(self):
         charger = Charger.objects.create(charger_id="LOG1")
@@ -580,11 +580,19 @@ class SimulatorAdminTests(TestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        exists = await database_sync_to_async(Charger.objects.filter(charger_id="NEWCHG").exists)()
+        exists = await database_sync_to_async(
+            Charger.objects.filter(charger_id="NEWCHG").exists
+        )()
         self.assertTrue(exists)
+
+        await communicator.send_json_to(
+            [2, "1", "StartTransaction", {"meterStart": 0, "connectorId": 5}]
+        )
+        await communicator.receive_json_from()
 
         charger = await database_sync_to_async(Charger.objects.get)(charger_id="NEWCHG")
         self.assertEqual(charger.last_path, "/NEWCHG/")
+        self.assertEqual(charger.connector_id, 5)
 
         await communicator.disconnect()
 
