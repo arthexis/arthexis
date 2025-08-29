@@ -221,8 +221,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
  
-# Hash file used by upgrade scripts to track dependency changes
-requirements.md5
+# Hash files used by upgrade scripts to track dependency changes
+*.md5
 REVISION
 
 # Auto-upgrade control file
