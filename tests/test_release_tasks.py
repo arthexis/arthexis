@@ -9,8 +9,6 @@ def _setup_tmp(monkeypatch, tmp_path):
     fake_file = release_dir / "tasks.py"
     fake_file.write_text("")
     monkeypatch.setattr(tasks, "__file__", str(fake_file))
-    (tmp_path / "locks").mkdir()
-    (tmp_path / "locks" / "lcd_screen.lck").write_text("")
     return tmp_path
 
 
