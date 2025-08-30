@@ -15,7 +15,7 @@ from pages.models import Application, Module
 from nodes.models import Node, NodeRole
 
 from core.models import RFID
-from ocpp.rfid.reader import read_rfid
+from ocpp.rfid.reader import read_rfid, enable_deep_read
 
 
 class ScanNextViewTests(SimpleTestCase):
@@ -193,6 +193,17 @@ class ScannerTemplateTests(TestCase):
         self.assertNotContains(resp, 'id="rfid-released"')
         self.assertNotContains(resp, 'id="rfid-reference"')
 
+    def test_deep_read_button_for_staff(self):
+        User = get_user_model()
+        staff = User.objects.create_user("staff3", password="pwd", is_staff=True)
+        self.client.force_login(staff)
+        resp = self.client.get(self.url)
+        self.assertContains(resp, 'id="rfid-deep-read"')
+
+    def test_no_deep_read_button_for_public(self):
+        resp = self.client.get(self.url)
+        self.assertNotContains(resp, 'id="rfid-deep-read"')
+
 
 class ReaderPollingTests(SimpleTestCase):
     def _mock_reader_no_tag(self):
@@ -224,5 +235,67 @@ class ReaderPollingTests(SimpleTestCase):
             use_irq=True,
         )
         mock_sleep.assert_not_called()
+
+
+class DeepReadViewTests(TestCase):
+    @patch("config.middleware.Node.get_local", return_value=None)
+    @patch("config.middleware.get_site")
+    @patch("ocpp.rfid.views.enable_deep_read_mode", return_value={"status": "deep", "timeout": 60})
+    def test_enable_deep_read(self, mock_enable, mock_site, mock_node):
+        User = get_user_model()
+        staff = User.objects.create_user("staff4", password="pwd", is_staff=True)
+        self.client.force_login(staff)
+        resp = self.client.post(reverse("rfid-scan-deep"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"status": "deep", "timeout": 60})
+        mock_enable.assert_called_once()
+
+    def test_forbidden_for_anonymous(self):
+        resp = self.client.post(reverse("rfid-scan-deep"))
+        self.assertNotEqual(resp.status_code, 200)
+
+
+class DeepReadAuthTests(TestCase):
+    class MockReader:
+        MI_OK = 1
+        MI_ERR = 2
+        PICC_REQIDL = 0
+        PICC_AUTHENT1A = 0x60
+        PICC_AUTHENT1B = 0x61
+
+        def __init__(self):
+            self.auth_calls = []
+
+        def MFRC522_Request(self, _):
+            return (self.MI_OK, None)
+
+        def MFRC522_Anticoll(self):
+            return (self.MI_OK, [0xAA, 0xBB, 0xCC, 0xDD, 0xEE])
+
+        def MFRC522_Auth(self, mode, block, key, uid):
+            self.auth_calls.append(mode)
+            return self.MI_ERR if mode == self.PICC_AUTHENT1A else self.MI_OK
+
+        def MFRC522_Read(self, block):
+            return (self.MI_OK, [0] * 16)
+
+    @patch("core.notifications.notify_async")
+    @patch("core.models.RFID.objects.get_or_create")
+    def test_auth_tries_key_a_then_b(self, mock_get, mock_notify):
+        tag = MagicMock(
+            label_id=1,
+            pk=1,
+            allowed=True,
+            color="B",
+            released=False,
+            reference=None,
+        )
+        mock_get.return_value = (tag, False)
+        reader = self.MockReader()
+        enable_deep_read(60)
+        read_rfid(mfrc=reader, cleanup=False)
+        self.assertGreaterEqual(len(reader.auth_calls), 2)
+        self.assertEqual(reader.auth_calls[0], reader.PICC_AUTHENT1A)
+        self.assertEqual(reader.auth_calls[1], reader.PICC_AUTHENT1B)
 
 
