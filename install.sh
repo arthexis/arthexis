@@ -89,7 +89,7 @@ while [[ $# -gt 0 ]]; do
             AUTO_UPGRADE=true
             NGINX_MODE="internal"
             SERVICE="arthexis"
-            LATEST=true
+            LATEST=false
             ENABLE_CELERY=true
             NODE_ROLE="Gateway"
             shift
