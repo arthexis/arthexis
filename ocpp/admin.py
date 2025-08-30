@@ -99,6 +99,9 @@ class ChargerAdmin(admin.ModelAdmin):
     search_fields = ("charger_id", "connector_id", "location__name")
     actions = ["purge_data", "delete_selected"]
 
+    def get_view_on_site_url(self, obj=None):
+        return obj.get_absolute_url() if obj else None
+
     def page_link(self, obj):
         from django.utils.html import format_html
 

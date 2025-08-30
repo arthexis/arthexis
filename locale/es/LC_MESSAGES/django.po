@@ -606,8 +606,8 @@ msgid "Charger"
 msgstr "Cargador"
 
 #: ocpp/models.py:31
-msgid "Require RFID"
-msgstr "Requiere RFID"
+msgid "Require RFID Authorization"
+msgstr "Requiere autorización RFID"
 
 #: ocpp/models.py:140
 msgid "Transaction"

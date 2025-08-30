@@ -26,9 +26,24 @@ class Location(Entity):
 class Charger(Entity):
     """Known charge point."""
 
-    charger_id = models.CharField(_("Serial Number"), max_length=100, unique=True)
-    connector_id = models.CharField(_("Connector ID"), max_length=10, blank=True, null=True)
-    require_rfid = models.BooleanField(_("Require RFID"), default=False)
+    charger_id = models.CharField(
+        _("Serial Number"),
+        max_length=100,
+        unique=True,
+        help_text="Unique identifier reported by the charger.",
+    )
+    connector_id = models.CharField(
+        _("Connector ID"),
+        max_length=10,
+        blank=True,
+        null=True,
+        help_text="Optional connector identifier for multi-connector chargers.",
+    )
+    require_rfid = models.BooleanField(
+        _("Require RFID Authorization"),
+        default=False,
+        help_text="Require a valid RFID before starting a charging session.",
+    )
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_meter_values = models.JSONField(default=dict, blank=True)
     temperature = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
