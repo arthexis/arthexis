@@ -175,6 +175,15 @@ fi
 
 if [[ $NO_RESTART -eq 0 ]]; then
   echo "Restarting services..."
-  ./start.sh >/dev/null 2>&1
-  echo "Services restarted"
+  if [ -f "$LOCK_DIR/service.lck" ]; then
+    SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
+    echo "Existing services before restart:"
+    systemctl status "$SERVICE_NAME" --no-pager || true
+    if [ -f "$LOCK_DIR/celery.lck" ]; then
+      systemctl status "celery-$SERVICE_NAME" --no-pager || true
+      systemctl status "celery-beat-$SERVICE_NAME" --no-pager || true
+    fi
+  fi
+  nohup ./start.sh >/dev/null 2>&1 &
+  echo "Services restart triggered"
 fi
