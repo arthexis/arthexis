@@ -70,6 +70,29 @@ class AWGCalculatorTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "No Suitable Cable Found")
 
+    def test_results_column_reordered_on_mobile(self):
+        url = reverse("awg:calculator")
+        resp = self.client.get(url)
+        content = resp.content.decode()
+        self.assertNotIn("order-first", content)
+        self.assertNotIn("order-lg-last", content)
+
+        data = {
+            "meters": "10",
+            "amps": "40",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "1",
+        }
+        resp = self.client.post(url, data)
+        content = resp.content.decode()
+        self.assertIn("order-first", content)
+        self.assertIn("order-lg-last", content)
+
     def test_query_params_prefill_form(self):
         url = (
             reverse("awg:calculator")
