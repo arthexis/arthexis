@@ -347,7 +347,10 @@ def promote(
     current = _current_branch()
     branch = f"release/{version}"
     try:
-        _run(["git", "checkout", "-b", branch])
+        try:
+            _run(["git", "checkout", "-b", branch])
+        except subprocess.CalledProcessError:
+            _run(["git", "checkout", branch])
         build(
             package=package,
             creds=creds,
