@@ -7,10 +7,12 @@ import json
 
 from django.conf import settings
 from django.contrib import admin
+from django.contrib import messages
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.db import models
+from django.db import IntegrityError, models
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.template.response import TemplateResponse
@@ -132,6 +134,7 @@ class UserDatumAdminMixin(admin.ModelAdmin):
     ):
         if issubclass(self.model, Entity):
             context["show_user_datum"] = True
+            context["show_save_as_copy"] = True
             if obj is not None:
                 ct = ContentType.objects.get_for_model(obj)
                 context["is_user_datum"] = UserDatum.objects.filter(
@@ -142,7 +145,20 @@ class UserDatumAdminMixin(admin.ModelAdmin):
         return super().render_change_form(request, context, add, change, form_url, obj)
 
     def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
+        if "_saveacopy" in request.POST:
+            obj = obj.clone()
+            form.instance = obj
+            try:
+                super().save_model(request, obj, form, False)
+            except IntegrityError:
+                self.message_user(
+                    request,
+                    _("Unable to save copy. Adjust unique fields and try again."),
+                    messages.ERROR,
+                )
+                raise ValidationError("save_as_copy")
+        else:
+            super().save_model(request, obj, form, change)
         if not issubclass(self.model, Entity):
             return
         ct = ContentType.objects.get_for_model(obj)
