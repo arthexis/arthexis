@@ -56,8 +56,12 @@ if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --o
   STASHED=1
 fi
 
-# Stop running instance (if any)
-if [[ $NO_RESTART -eq 0 ]]; then
+# Track if the node is installed (virtual environment present)
+VENV_PRESENT=1
+[ -d .venv ] || VENV_PRESENT=0
+
+# Stop running instance only if the node is installed
+if [[ $NO_RESTART -eq 0 && $VENV_PRESENT -eq 1 ]]; then
   echo "Stopping running instance..."
   ./stop.sh --all >/dev/null 2>&1 || true
 fi
@@ -72,10 +76,10 @@ if [ "$STASHED" -eq 1 ]; then
   git stash pop || true
 fi
 
-# Ensure virtual environment is present
-if [ ! -d .venv ]; then
-  echo "Virtual environment not found. Run ./install.sh first." >&2
-  exit 1
+# Exit after pulling if the node isn't installed
+if [ $VENV_PRESENT -eq 0 ]; then
+  echo "Virtual environment not found. Run ./install.sh to install the node. Skipping remaining steps." >&2
+  exit 0
 fi
 
 # Remove existing database if requested
