@@ -80,6 +80,10 @@ class InvitationTests(TestCase):
         resp = self.client.get(reverse("pages:login"))
         self.assertContains(resp, reverse("pages:request-invite"))
 
+    def test_request_invite_sets_csrf_cookie(self):
+        resp = self.client.get(reverse("pages:request-invite"))
+        self.assertIn("csrftoken", resp.cookies)
+
     def test_invitation_flow(self):
         resp = self.client.post(
             reverse("pages:request-invite"), {"email": "invite@example.com"}
