@@ -11,7 +11,7 @@
     }
   },
   {
-    "model": "core.packagehub",
+    "model": "core.package",
     "pk": 1,
     "fields": {
       "name": "arthexis",
@@ -29,7 +29,7 @@
     "model": "core.packagerelease",
     "pk": 1,
     "fields": {
-      "hub": 1,
+      "package": 1,
       "profile": 1,
       "version": "0.0.0",
       "revision": "",
@@ -43,7 +43,7 @@
     "model": "core.packagerelease",
     "pk": 2,
     "fields": {
-      "hub": 1,
+      "package": 1,
       "profile": 1,
       "version": "0.0.1",
       "revision": "",
@@ -57,7 +57,7 @@
     "model": "core.packagerelease",
     "pk": 3,
     "fields": {
-      "hub": 1,
+      "package": 1,
       "profile": 1,
       "version": "0.1.0",
       "revision": "",
@@ -71,7 +71,7 @@
     "model": "core.packagerelease",
     "pk": 4,
     "fields": {
-      "hub": 1,
+      "package": 1,
       "profile": 1,
       "version": "0.1.1",
       "revision": "",
@@ -85,7 +85,7 @@
     "model": "core.packagerelease",
     "pk": 5,
     "fields": {
-      "hub": 1,
+      "package": 1,
       "profile": 1,
       "version": "0.1.2",
       "revision": "",
@@ -99,7 +99,7 @@
     "model": "core.packagerelease",
     "pk": 6,
     "fields": {
-      "hub": 1,
+      "package": 1,
       "profile": 1,
       "version": "1.0.0",
       "revision": "",

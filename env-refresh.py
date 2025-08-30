@@ -34,6 +34,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth import get_user_model
 
 from core.user_data import UserDatum
+from core.models import Package, PackageRelease
+from utils import revision as revision_utils
 
 
 def _local_app_labels() -> list[str]:
@@ -93,6 +95,21 @@ def _remove_integrator_from_auth_migration() -> None:
         line for line in content.splitlines() if "integrator" not in line
     )
     path.write_text(patched + ("\n" if not patched.endswith("\n") else ""))
+
+
+def _refresh_next_release(version: str = "0.1.2") -> None:
+    """Recreate the pending package release for the given version."""
+    package = Package.objects.first()
+    if not package:
+        return
+    PackageRelease.all_objects.filter(version=version).delete()
+    PackageRelease.objects.create(
+        package=package,
+        profile=package.release_manager,
+        version=version,
+        revision=revision_utils.get_revision(),
+        is_seed_data=True,
+    )
 
 
 def run_database_tasks(*, latest: bool = False) -> None:
@@ -195,6 +212,9 @@ def run_database_tasks(*, latest: bool = False) -> None:
     # Ensure Application and Module entries exist for local apps
     call_command("register_site_apps")
     Landing.objects.update(is_seed_data=True)
+
+    # Recreate the upcoming package release to track latest revision
+    _refresh_next_release()
 
     # Ensure current node is registered or updated
     node, _ = Node.register_current()

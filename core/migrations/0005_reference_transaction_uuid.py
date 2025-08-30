@@ -19,7 +19,6 @@ class Migration(migrations.Migration):
             model_name="reference",
             name="transaction_uuid",
             field=models.UUIDField(default=uuid.uuid4, editable=True, db_index=True),
-            preserve_default=False,
         ),
         migrations.RunPython(assign_transaction_uuids, migrations.RunPython.noop),
     ]
