@@ -93,6 +93,7 @@ while sudo pgrep -f "celery -A config" > /dev/null; do
   sleep 0.5
 done
 
+
 if [ -f "$LCD_LOCK" ]; then
   "$PYTHON" - <<'PY'
 from core.notifications import notify
