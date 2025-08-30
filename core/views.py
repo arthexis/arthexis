@@ -4,11 +4,88 @@ from datetime import date, timedelta
 from django.contrib.auth import authenticate, login
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.admin.views.decorators import staff_member_required
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from pathlib import Path
+import subprocess
 
 from utils.api import api_login_required
 
-from .models import Product, Subscription, EnergyAccount
+from .models import Product, Subscription, EnergyAccount, PackageRelease
 from .models import RFID
+
+
+def _append_log(path: Path, message: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(message + "\n")
+
+
+def _step_promote_build(release, ctx, log_path: Path) -> None:
+    from . import release as release_utils
+
+    _append_log(log_path, "Generating build files")
+    commit_hash, branch, current = release_utils.promote(
+        package=release.to_package(),
+        version=release.version,
+        creds=release.to_credentials(),
+    )
+    release.revision = commit_hash
+    release.save(update_fields=["revision"])
+    ctx["branch"] = branch
+    ctx["current"] = current
+    release_name = f"{release.package.name}-{release.version}-{commit_hash[:7]}"
+    new_log = log_path.with_name(f"{release_name}.log")
+    log_path.rename(new_log)
+    ctx["log"] = new_log.name
+    _append_log(new_log, "Build complete")
+
+
+def _step_dump_fixture(release, ctx, log_path: Path) -> None:
+    from django.core.management import call_command
+
+    _append_log(log_path, "Dumping fixture")
+    call_command(
+        "dumpdata",
+        "core.packagerelease",
+        format="json",
+        indent=2,
+        output="core/fixtures/releases.json",
+    )
+    subprocess.run(["git", "add", "core/fixtures/releases.json"], check=True)
+    subprocess.run(
+        ["git", "commit", "-m", f"Add fixture for {release.version}"], check=True
+    )
+    _append_log(log_path, "Fixture committed")
+
+
+def _step_push_branch(release, ctx, log_path: Path) -> None:
+    branch = ctx.get("branch")
+    current = ctx.get("current")
+    _append_log(log_path, f"Pushing branch {branch}")
+    subprocess.run(["git", "push", "-u", "origin", branch], check=True)
+    subprocess.run(["git", "checkout", current], check=True)
+    _append_log(log_path, "Branch pushed")
+
+
+def _step_publish(release, ctx, log_path: Path) -> None:
+    from . import release as release_utils
+
+    _append_log(log_path, "Uploading distribution")
+    release_utils.publish(
+        package=release.to_package(), creds=release.to_credentials()
+    )
+    _append_log(log_path, "Upload complete")
+
+
+PROMOTE_STEPS = [
+    ("Generate build", _step_promote_build),
+    ("Dump fixture", _step_dump_fixture),
+    ("Push branch", _step_push_branch),
+]
+
+PUBLISH_STEPS = [("Upload to index", _step_publish)]
 
 
 @csrf_exempt
@@ -167,3 +244,58 @@ def rfid_batch(request):
         return JsonResponse({"imported": count})
 
     return JsonResponse({"detail": "GET or POST required"}, status=400)
+
+
+@staff_member_required
+def release_progress(request, pk: int, action: str):
+    release = get_object_or_404(PackageRelease, pk=pk)
+    session_key = f"release_{action}_{pk}"
+    ctx = request.session.get(session_key, {})
+    step = int(request.GET.get("step", ctx.get("step", 0)))
+
+    identifier = f"{release.package.name}-{release.version}"
+    if release.revision:
+        identifier = f"{identifier}-{release.revision[:7]}"
+    log_name = ctx.get("log") or f"{identifier}.log"
+    log_path = Path("logs") / log_name
+    ctx.setdefault("log", log_name)
+
+    steps = PROMOTE_STEPS if action == "promote" else PUBLISH_STEPS
+    error = ctx.get("error")
+
+    if step < len(steps) and not error:
+        name, func = steps[step]
+        try:
+            func(release, ctx, log_path)
+            step += 1
+            ctx["step"] = step
+            request.session[session_key] = ctx
+            return redirect(
+                f"{reverse('release-progress', args=[pk, action])}?step={step}"
+            )
+        except Exception as exc:  # pragma: no cover - best effort logging
+            _append_log(log_path, f"{name} failed: {exc}")
+            ctx["error"] = str(exc)
+            request.session[session_key] = ctx
+
+    done = step >= len(steps) and not error
+    if done:
+        if action == "promote" and not release.is_promoted:
+            release.is_promoted = True
+            release.save(update_fields=["is_promoted"])
+        if action == "publish" and not release.is_published:
+            release.is_published = True
+            release.save(update_fields=["is_published"])
+
+    log_content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+    context = {
+        "release": release,
+        "action": action,
+        "steps": [s[0] for s in steps],
+        "current_step": step,
+        "done": done,
+        "error": error,
+        "log_content": log_content,
+        "log_path": str(log_path),
+    }
+    return render(request, "core/release_progress.html", context)

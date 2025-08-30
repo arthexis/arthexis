@@ -1,0 +1,22 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>{{ action|capfirst }} {{ release.package.name }} {{ release.version }}</h1>
+<ol>
+{% for step in steps %}
+  <li>{% if forloop.counter0 < current_step %}✅{% elif forloop.counter0 == current_step and not done and not error %}⏳{% else %}⬜{% endif %} {{ step }}</li>
+{% endfor %}
+</ol>
+<pre>{{ log_content }}</pre>
+{% if error %}
+<p class="error">{{ error }}</p>
+{% elif not done %}
+<meta http-equiv="refresh" content="1; url={{ request.path }}?step={{ current_step }}">
+<p>Running...</p>
+{% else %}
+<p>All steps completed.</p>
+<div>
+  <input type="text" id="logpath" value="{{ log_path }}" readonly>
+  <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('logpath').value)">Copy log path</button>
+</div>
+{% endif %}
+{% endblock %}

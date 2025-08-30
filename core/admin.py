@@ -688,32 +688,34 @@ class PackageReleaseAdmin(admin.ModelAdmin):
 
     @admin.action(description="Promote selected releases")
     def promote_release(self, request, queryset):
-        for cfg in queryset:
-            try:
-                cfg.full_clean()
-                cfg.promote()
-                cfg.is_promoted = True
-                cfg.save(update_fields=["is_promoted"])
-                self.message_user(request, f"Promoted {cfg.package.name}", messages.SUCCESS)
-            except ValidationError as exc:
-                self.message_user(request, "; ".join(exc.messages), messages.ERROR)
-            except Exception as exc:
-                self.message_user(request, str(exc), messages.ERROR)
+        if queryset.count() != 1:
+            self.message_user(
+                request, "Select exactly one release to promote", messages.ERROR
+            )
+            return
+        cfg = queryset.first()
+        try:
+            cfg.full_clean()
+        except ValidationError as exc:
+            self.message_user(request, "; ".join(exc.messages), messages.ERROR)
+            return
+        return redirect(
+            reverse("release-progress", args=[cfg.pk, "promote"])
+        )
 
     @admin.action(description="Publish to Index")
     def publish_to_index(self, request, queryset):
-        for cfg in queryset:
-            if not cfg.is_certified:
-                self.message_user(
-                    request,
-                    f"{cfg.package.name} {cfg.version} is not certified",
-                    messages.ERROR,
-                )
-                continue
-            try:
-                cfg.publish()
-                cfg.is_published = True
-                cfg.save(update_fields=["is_published"])
-                self.message_user(request, f"Published {cfg.package.name}", messages.SUCCESS)
-            except Exception as exc:
-                self.message_user(request, str(exc), messages.ERROR)
+        if queryset.count() != 1:
+            self.message_user(
+                request, "Select exactly one release to publish", messages.ERROR
+            )
+            return
+        cfg = queryset.first()
+        if not cfg.is_certified:
+            self.message_user(
+                request,
+                f"{cfg.package.name} {cfg.version} is not certified",
+                messages.ERROR,
+            )
+            return
+        return redirect(reverse("release-progress", args=[cfg.pk, "publish"]))
