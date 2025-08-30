@@ -4,6 +4,7 @@
   <p>
     <button id="{{ prefix }}-restart-test">Restart &amp; Test Scanner</button>
     {% if request.user.is_staff %}
+      <button id="{{ prefix }}-deep-read">Enable Deep Read</button>
       <a id="{{ prefix }}-configure" href="#" style="display:none; margin-left:1em;"></a>
     {% endif %}
   </p>
@@ -44,6 +45,7 @@
   const releasedEl = document.getElementById('{{ prefix }}-released');
   const referenceEl = document.getElementById('{{ prefix }}-reference');
   const restartTestBtn = document.getElementById('{{ prefix }}-restart-test');
+  const deepBtn = document.getElementById('{{ prefix }}-deep-read');
   const configureEl = document.getElementById('{{ prefix }}-configure');
   const adminTemplate = '{{ admin_change_url_template|default:""|escapejs }}';
 
@@ -102,6 +104,16 @@
       statusEl.textContent = 'Test failed';
     }
   });
+  if(deepBtn){
+    deepBtn.addEventListener('click', async () => {
+      try {
+        await fetch('{{ deep_read_url|default:"" }}', {method: 'POST'});
+        statusEl.textContent = 'Deep read enabled for 60 seconds';
+      } catch(err){
+        statusEl.textContent = 'Deep read failed';
+      }
+    });
+  }
   poll();
 })();
 </script>

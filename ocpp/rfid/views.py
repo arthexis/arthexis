@@ -2,9 +2,10 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
+from django.contrib.admin.views.decorators import staff_member_required
 from pages.utils import landing
 
-from .scanner import scan_sources, restart_sources, test_sources
+from .scanner import scan_sources, restart_sources, test_sources, enable_deep_read_mode
 
 
 def scan_next(request):
@@ -29,6 +30,15 @@ def scan_test(_request):
     return JsonResponse(result, status=status)
 
 
+@require_POST
+@staff_member_required
+def scan_deep(_request):
+    """Enable deep read mode on the RFID scanner."""
+    result = enable_deep_read_mode()
+    status = 500 if result.get("error") else 200
+    return JsonResponse(result, status=status)
+
+
 @landing("RFID Scanner")
 def reader(request):
     """Public page to scan RFID tags."""
@@ -41,6 +51,7 @@ def reader(request):
         context["admin_change_url_template"] = reverse(
             "admin:core_rfid_change", args=[0]
         )
+        context["deep_read_url"] = reverse("rfid-scan-deep")
     return render(request, "rfid/reader.html", context)
 
 

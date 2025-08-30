@@ -4,6 +4,15 @@ from core.models import RFID
 from core.notifications import notify_async
 
 
+_deep_read_until: float = 0.0
+
+
+def enable_deep_read(duration: float = 60) -> None:
+    """Enable deep read mode for ``duration`` seconds."""
+    global _deep_read_until
+    _deep_read_until = time.time() + duration
+
+
 def read_rfid(
     mfrc=None,
     cleanup: bool = True,
@@ -54,6 +63,25 @@ def read_rfid(
                         "released": tag.released,
                         "reference": tag.reference.value if tag.reference else None,
                     }
+                    if time.time() < _deep_read_until:
+                        dump = []
+                        default_key = [0xFF] * 6
+                        for block in range(64):
+                            try:
+                                status = mfrc.MFRC522_Auth(
+                                    mfrc.PICC_AUTHENT1A, block, default_key, uid
+                                )
+                                if status != mfrc.MI_OK:
+                                    status = mfrc.MFRC522_Auth(
+                                        mfrc.PICC_AUTHENT1B, block, default_key, uid
+                                    )
+                                if status == mfrc.MI_OK:
+                                    r, data = mfrc.MFRC522_Read(block)
+                                    if r == mfrc.MI_OK:
+                                        dump.append({"block": block, "data": data})
+                            except Exception:
+                                continue
+                        result["dump"] = dump
                     status_text = "OK" if tag.allowed else "BAD"
                     color_word = (tag.color or "").upper()
                     subject = f"RFID {tag.label_id} {status_text}".strip()
