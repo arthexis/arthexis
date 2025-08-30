@@ -4,7 +4,7 @@
     "pk": 1,
     "fields": {
       "name": "GELECTRIIC",
-      "user": ["admin"],
+      "user": 2,
       "rfids": [1],
       "service_account": true
     }
