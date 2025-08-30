@@ -285,6 +285,21 @@ class CSMSConsumerTests(TransactionTestCase):
         data = json.loads(files[0].read_text())
         self.assertTrue(any("StartTransaction" in m["message"] for m in data))
 
+    async def test_binary_message_logged(self):
+        cid = "BINARY1"
+        log_path = Path("logs") / f"charger.{cid}.log"
+        if log_path.exists():
+            log_path.unlink()
+        communicator = WebsocketCommunicator(application, f"/{cid}/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_to(bytes_data=b"\x01\x02\x03")
+        await communicator.disconnect()
+
+        content = log_path.read_text()
+        self.assertIn("AQID", content)
+
     async def test_session_file_written_on_disconnect(self):
         cid = "LOGTEST2"
         log_path = Path("logs") / f"charger.{cid}.log"
