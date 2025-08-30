@@ -3,7 +3,7 @@ from core.models import PackageRelease
 
 
 class ReleaseMappingTests(TestCase):
-    fixtures = ["package_releases.json"]
+    fixtures = ["users.json", "package_releases.json"]
 
     def test_migration_number_formula(self):
         release = PackageRelease.objects.get(version="0.1.1")
