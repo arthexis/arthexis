@@ -137,9 +137,14 @@ def patch_admin_user_datum() -> None:
         if isinstance(model_admin, UserDatumAdminMixin):
             continue
         admin.site.unregister(model)
+        template = (
+            getattr(model_admin, "change_form_template", None)
+            or "admin/user_datum_change_form.html"
+        )
+        attrs = {"change_form_template": template}
         Patched = type(
             f"Patched{model_admin.__class__.__name__}",
             (UserDatumAdminMixin, model_admin.__class__),
-            {},
+            attrs,
         )
         admin.site.register(model, Patched)
