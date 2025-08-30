@@ -417,6 +417,7 @@ class RFIDFixtureTests(TestCase):
     def test_fixture_assigns_gelectriic_rfid(self):
         call_command(
             "loaddata",
+            "core/fixtures/users.json",
             "core/fixtures/energy_accounts.json",
             "core/fixtures/rfids.json",
             verbosity=0,
