@@ -299,6 +299,13 @@ if ls data/*.json >/dev/null 2>&1; then
     python manage.py loaddata data/*.json
 fi
 
+# Refresh environment data and register this node
+if [ "$LATEST" = true ]; then
+    ./env-refresh.sh --latest
+else
+    ./env-refresh.sh
+fi
+
 deactivate
 
 

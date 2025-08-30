@@ -19,6 +19,12 @@ def test_install_script_includes_constellation_flag():
     assert "--constellation" in content
 
 
+def test_install_script_runs_env_refresh():
+    script_path = Path(__file__).resolve().parent.parent / "install.sh"
+    content = script_path.read_text()
+    assert "env-refresh.sh" in content
+
+
 def test_install_script_requires_nginx_for_roles():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()
