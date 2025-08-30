@@ -179,7 +179,6 @@ class EnergyAccountRFIDInline(admin.TabularInline):
     verbose_name_plural = "RFIDs"
 
 
-@admin.register(User)
 class UserAdmin(DjangoUserAdmin):
     fieldsets = DjangoUserAdmin.fieldsets + (
         ("Contact", {"fields": ("phone_number", "address", "has_charger")}),

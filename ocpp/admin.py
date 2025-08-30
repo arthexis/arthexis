@@ -10,7 +10,14 @@ from django.urls import path
 from django.http import HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 
-from .models import Charger, Simulator, MeterReading, Transaction, Location
+from .models import (
+    Charger,
+    Simulator,
+    MeterReading,
+    Transaction,
+    Location,
+    ElectricVehicle,
+)
 from .simulator import ChargePointSimulator
 from . import store
 from .transactions_io import (
@@ -366,6 +373,13 @@ class MeterReadingAdmin(admin.ModelAdmin):
     )
     date_hierarchy = "timestamp"
     list_filter = ("charger", MeterReadingDateFilter)
+
+
+@admin.register(ElectricVehicle)
+class ElectricVehicleAdmin(admin.ModelAdmin):
+    list_display = ("vin", "brand", "model", "account")
+    search_fields = ("vin", "brand__name", "model__name", "account__name")
+    fields = ("account", "vin", "brand", "model")
 
 
 admin.site.register(RFID, RFIDAdmin)
