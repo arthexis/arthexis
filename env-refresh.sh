@@ -33,6 +33,7 @@ if [ ! -f "$PYTHON" ]; then
   exit 1
 fi
 
+
 if [ "$CLEAN" -eq 1 ]; then
   rm -f "$SCRIPT_DIR/db.sqlite3"
 fi

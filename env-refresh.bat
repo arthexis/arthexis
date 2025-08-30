@@ -20,6 +20,7 @@ if not exist %VENV%\Scripts\python.exe (
     echo Virtual environment not found. Run install.sh first.
     exit /b 1
 )
+
 if %CLEAN%==1 (
     del /f /q "%~dp0db.sqlite3" 2>nul
 )
