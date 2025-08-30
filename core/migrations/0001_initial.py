@@ -769,7 +769,7 @@ class Migration(migrations.Migration):
                 ('version', models.CharField(default='0.0.0', max_length=20, unique=True)),
                 ('revision', models.CharField(blank=True, max_length=40)),
                 ('pypi_url', models.URLField(blank=True)),
-                ('is_live', models.BooleanField(default=False)),
+                ('is_published', models.BooleanField(default=False)),
                 ('is_promoted', models.BooleanField(default=False, editable=False)),
                 ('is_certified', models.BooleanField(default=False, editable=False)),
                 ('hub', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='releases', to='core.packagehub')),

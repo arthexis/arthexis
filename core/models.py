@@ -722,7 +722,7 @@ class PackageRelease(Entity):
     version = models.CharField(max_length=20, unique=True, default="0.0.0")
     revision = models.CharField(max_length=40, blank=True)
     pypi_url = models.URLField(blank=True)
-    is_live = models.BooleanField(default=False)
+    is_published = models.BooleanField(default=False)
     is_promoted = models.BooleanField(default=False, editable=False)
     is_certified = models.BooleanField(default=False, editable=False)
 
@@ -767,9 +767,9 @@ class PackageRelease(Entity):
             import requests
 
             resp = requests.head(self.pypi_url, timeout=5)
-            self.is_live = resp.status_code == 200
+            self.is_published = resp.status_code == 200
         except Exception:
-            self.is_live = False
+            self.is_published = False
         super().save(*args, **kwargs)
 
     @classmethod
@@ -785,18 +785,25 @@ class PackageRelease(Entity):
     def build(self, **kwargs) -> None:
         """Wrapper around :func:`core.release.build` for convenience."""
         from . import release as release_utils
+        from utils import revision as revision_utils
 
-        release_utils.build(package=self.to_package(), creds=self.to_credentials(), **kwargs)
+        release_utils.build(
+            package=self.to_package(), creds=self.to_credentials(), **kwargs
+        )
+        self.revision = revision_utils.get_revision()
+        self.save(update_fields=["revision"])
 
     def promote(self) -> None:
         """Run the promotion workflow for this release."""
         from . import release as release_utils
 
-        release_utils.promote(
+        commit_hash = release_utils.promote(
             package=self.to_package(),
             version=self.version,
             creds=self.to_credentials(),
         )
+        self.revision = commit_hash
+        self.save(update_fields=["revision"])
 
     def publish(self) -> None:
         """Upload the pre-built distribution to the package index."""
@@ -805,6 +812,10 @@ class PackageRelease(Entity):
         release_utils.publish(
             package=self.to_package(), creds=self.to_credentials()
         )
+
+    @property
+    def revision_short(self) -> str:
+        return self.revision[-6:] if self.revision else ""
 
 # Ensure each RFID can only be linked to one account
 @receiver(m2m_changed, sender=Account.rfids.through)
