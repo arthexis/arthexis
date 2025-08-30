@@ -12,9 +12,9 @@
         {% trans "If the email exists, an invitation has been sent." %}
       </div>
     {% else %}
-    <form method="post">
-      {% csrf_token %}
-      {{ form.non_field_errors }}
+      <form method="post">
+        {% csrf_token %}{# ensure CSRF token is included for POST submissions #}
+        {{ form.non_field_errors }}
       <div class="mb-3">
         <label for="id_email" class="form-label">{% trans "Email" %}</label>
         <input type="email" name="email" class="form-control" id="id_email" required>
