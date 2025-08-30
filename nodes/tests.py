@@ -9,6 +9,8 @@ from pathlib import Path
 from unittest.mock import patch, call, MagicMock
 import socket
 import base64
+import json
+import uuid
 from tempfile import TemporaryDirectory
 import shutil
 import time
@@ -26,9 +28,11 @@ from .models import (
     Node,
     ContentSample,
     NodeRole,
+    NetMessage,
 )
 from .tasks import capture_node_screenshot, sample_clipboard
-from core.models import Message
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization, hashes
 
 
 class NodeTests(TestCase):
@@ -172,10 +176,9 @@ class NodeTests(TestCase):
             url, data="hello", content_type="text/plain"
         )
         self.assertEqual(post_resp.status_code, 200)
-        self.assertEqual(Message.objects.count(), 1)
-        msg = Message.objects.first()
+        self.assertEqual(NetMessage.objects.count(), 1)
+        msg = NetMessage.objects.first()
         self.assertEqual(msg.body, "hello")
-        self.assertEqual(msg.node, node)
 
     def test_public_api_disabled(self):
         node = Node.objects.create(
@@ -187,6 +190,55 @@ class NodeTests(TestCase):
         url = reverse("node-public-endpoint", args=[node.public_endpoint])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 404)
+
+    def test_net_message_requires_signature(self):
+        payload = {
+            "uuid": str(uuid.uuid4()),
+            "subject": "s",
+            "body": "b",
+            "seen": [],
+            "sender": str(uuid.uuid4()),
+        }
+        resp = self.client.post(
+            reverse("net-message"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_net_message_with_valid_signature(self):
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_key = key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode()
+        sender = Node.objects.create(
+            hostname="sender",
+            address="10.0.0.1",
+            port=8000,
+            mac_address="00:11:22:33:44:cc",
+            public_key=public_key,
+        )
+        msg_id = str(uuid.uuid4())
+        payload = {
+            "uuid": msg_id,
+            "subject": "hello",
+            "body": "world",
+            "seen": [],
+            "sender": str(sender.uuid),
+        }
+        payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        signature = key.sign(
+            payload_json.encode(), padding.PKCS1v15(), hashes.SHA256()
+        )
+        resp = self.client.post(
+            reverse("net-message"),
+            data=payload_json,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=base64.b64encode(signature).decode(),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(NetMessage.objects.filter(uuid=msg_id).exists())
 
     def test_clipboard_polling_creates_task(self):
         node = Node.objects.create(

@@ -20,6 +20,7 @@ from .models import (
     NodeRole,
     ContentSample,
     NodeTask,
+    NetMessage,
 )
 
 
@@ -274,6 +275,14 @@ class ContentSampleAdmin(admin.ModelAdmin):
             '<img src="data:image/png;base64,{}" style="max-width:100%;" />',
             encoded,
         )
+
+
+@admin.register(NetMessage)
+class NetMessageAdmin(admin.ModelAdmin):
+    list_display = ("subject", "body", "created", "complete")
+    search_fields = ("subject", "body")
+    list_filter = ("complete",)
+    ordering = ("-created",)
 
 
 class NodeTaskForm(forms.ModelForm):

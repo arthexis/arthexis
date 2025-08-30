@@ -76,6 +76,30 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
+            name='NetMessage',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('is_seed_data', models.BooleanField(default=False, editable=False)),
+                ('is_deleted', models.BooleanField(default=False, editable=False)),
+                ('uuid', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
+                ('subject', models.CharField(blank=True, max_length=64)),
+                ('body', models.CharField(blank=True, max_length=256)),
+                ('created', models.DateTimeField(auto_now_add=True)),
+                ('complete', models.BooleanField(default=False)),
+                (
+                    'propagated_to',
+                    models.ManyToManyField(
+                        blank=True,
+                        related_name='received_net_messages',
+                        to='nodes.node',
+                    ),
+                ),
+            ],
+            options={
+                'ordering': ['-created'],
+            },
+        ),
+        migrations.CreateModel(
             name='ContentSample',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),

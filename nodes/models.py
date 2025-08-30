@@ -1,6 +1,8 @@
 from django.db import models
 from core.entity import Entity
 import re
+import json
+import base64
 from django.utils.text import slugify
 from django.conf import settings
 from django.contrib.sites.models import Site
@@ -11,7 +13,8 @@ from pathlib import Path
 from utils import revision
 from django.db import models
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import padding
 
 
 class NodeRoleManager(models.Manager):
@@ -218,6 +221,135 @@ class Node(Entity):
             )
         else:
             PeriodicTask.objects.filter(name=task_name).delete()
+
+
+class NetMessage(Entity):
+    """Message propagated across nodes."""
+
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    subject = models.CharField(max_length=64, blank=True)
+    body = models.CharField(max_length=256, blank=True)
+    propagated_to = models.ManyToManyField(
+        Node, blank=True, related_name="received_net_messages"
+    )
+    created = models.DateTimeField(auto_now_add=True)
+    complete = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created"]
+
+    @classmethod
+    def broadcast(cls, subject: str, body: str, seen: list[str] | None = None):
+        msg = cls.objects.create(subject=subject[:64], body=body[:256])
+        msg.propagate(seen=seen or [])
+        return msg
+
+    def propagate(self, seen: list[str] | None = None):
+        from core.notifications import notify
+        import random
+        import requests
+
+        notify(self.subject, self.body)
+        local = Node.get_local()
+        private_key = None
+        seen = list(seen or [])
+        local_id = None
+        if local:
+            local_id = str(local.uuid)
+            if local_id not in seen:
+                seen.append(local_id)
+            priv_path = (
+                Path(local.base_path or settings.BASE_DIR)
+                / "security"
+                / f"{local.public_endpoint}"
+            )
+            try:
+                private_key = serialization.load_pem_private_key(
+                    priv_path.read_bytes(), password=None
+                )
+            except Exception:
+                private_key = None
+        for node_id in seen:
+            node = Node.objects.filter(uuid=node_id).first()
+            if node and (not local or node.pk != local.pk):
+                self.propagated_to.add(node)
+
+        all_nodes = Node.objects.all()
+        if local:
+            all_nodes = all_nodes.exclude(pk=local.pk)
+        total_known = all_nodes.count()
+        target_limit = total_known if total_known < 2 else 3
+
+        if self.propagated_to.count() >= target_limit:
+            self.complete = True
+            self.save(update_fields=["complete"])
+            return
+
+        remaining = list(
+            all_nodes.exclude(pk__in=self.propagated_to.values_list("pk", flat=True))
+        )
+        if not remaining:
+            self.complete = True
+            self.save(update_fields=["complete"])
+            return
+
+        role_order = ["Control", "Constellation", "Gateway", "Terminal"]
+        selected: list[Node] = []
+        for role_name in role_order:
+            role_nodes = [n for n in remaining if n.role and n.role.name == role_name]
+            random.shuffle(role_nodes)
+            for n in role_nodes:
+                selected.append(n)
+                remaining.remove(n)
+                if len(selected) + self.propagated_to.count() >= target_limit:
+                    break
+            if len(selected) + self.propagated_to.count() >= target_limit:
+                break
+        if len(selected) + self.propagated_to.count() < target_limit:
+            random.shuffle(remaining)
+            for n in remaining:
+                selected.append(n)
+                if len(selected) + self.propagated_to.count() >= target_limit:
+                    break
+
+        seen_list = seen.copy()
+        for node in selected:
+            seen_list.append(str(node.uuid))
+            payload = {
+                "uuid": str(self.uuid),
+                "subject": self.subject,
+                "body": self.body,
+                "seen": seen_list,
+                "sender": local_id,
+            }
+            payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+            headers = {"Content-Type": "application/json"}
+            if private_key:
+                try:
+                    signature = private_key.sign(
+                        payload_json.encode(),
+                        padding.PKCS1v15(),
+                        hashes.SHA256(),
+                    )
+                    headers["X-Signature"] = base64.b64encode(signature).decode()
+                except Exception:
+                    pass
+            try:
+                requests.post(
+                    f"http://{node.address}:{node.port}/nodes/net-message/",
+                    data=payload_json,
+                    headers=headers,
+                    timeout=1,
+                )
+            except Exception:
+                pass
+            self.propagated_to.add(node)
+
+        if self.propagated_to.count() >= target_limit or (
+            total_known and self.propagated_to.count() >= total_known
+        ):
+            self.complete = True
+        self.save(update_fields=["complete"] if self.complete else [])
 
 
 class ContentSample(Entity):
