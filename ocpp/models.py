@@ -5,7 +5,7 @@ from django.contrib.sites.models import Site
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 
-from core.models import EnergyAccount, Reference, RFID as CoreRFID
+from core.models import EnergyAccount, Reference, RFID as CoreRFID, Vehicle as CoreVehicle
 
 
 class Location(Entity):
@@ -276,4 +276,12 @@ class RFID(CoreRFID):
         app_label = "ocpp"
         verbose_name = CoreRFID._meta.verbose_name
         verbose_name_plural = CoreRFID._meta.verbose_name_plural
+
+
+class ElectricVehicle(CoreVehicle):
+    class Meta:
+        proxy = True
+        app_label = "ocpp"
+        verbose_name = _("Electric Vehicle")
+        verbose_name_plural = _("Electric Vehicles")
 

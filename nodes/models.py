@@ -15,6 +15,7 @@ from django.core.exceptions import ValidationError
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
+from django.contrib.auth import get_user_model
 
 
 class NodeRoleManager(models.Manager):
@@ -426,6 +427,17 @@ class NodeTask(Entity):
             self.recipe, shell=True, capture_output=True, text=True
         )
         return result.stdout + result.stderr
+
+
+UserModel = get_user_model()
+
+
+class User(UserModel):
+    class Meta:
+        proxy = True
+        app_label = "nodes"
+        verbose_name = UserModel._meta.verbose_name
+        verbose_name_plural = UserModel._meta.verbose_name_plural
 
 
 
