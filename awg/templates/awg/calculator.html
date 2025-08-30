@@ -86,7 +86,7 @@
         </select>
       </div>
     </div>
-    <div class="col-lg-6 d-flex flex-column">
+    <div class="col-lg-6 d-flex flex-column{% if result or error or no_cable %} order-first order-lg-last{% endif %}">
       {% if not result and not error and not no_cable %}
       <div class="mb-3">
         <button type="submit" class="btn btn-primary w-100 fs-4">{% trans "Calculate" %}</button>
