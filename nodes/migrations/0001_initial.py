@@ -47,6 +47,7 @@ class Migration(migrations.Migration):
                 ('base_path', models.CharField(blank=True, max_length=255)),
                 ('installed_version', models.CharField(blank=True, max_length=20)),
                 ('installed_revision', models.CharField(blank=True, max_length=40)),
+                ('has_lcd_screen', models.BooleanField(default=False)),
                 ('role', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='nodes.noderole')),
             ],
             options={

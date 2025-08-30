@@ -43,6 +43,7 @@ class NodeAdmin(admin.ModelAdmin):
         "public_endpoint",
         "clipboard",
         "screenshot",
+        "lcd",
         "installed_version",
         "role",
         "last_seen",
@@ -70,6 +71,12 @@ class NodeAdmin(admin.ModelAdmin):
 
     screenshot.boolean = True
     screenshot.short_description = "Screenshot"
+
+    def lcd(self, obj):
+        return obj.has_lcd_screen
+
+    lcd.boolean = True
+    lcd.short_description = "LCD"
 
 
     def get_urls(self):
