@@ -61,6 +61,7 @@ class Node(Entity):
     base_path = models.CharField(max_length=255, blank=True)
     installed_version = models.CharField(max_length=20, blank=True)
     installed_revision = models.CharField(max_length=40, blank=True)
+    has_lcd_screen = models.BooleanField(default=False)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.hostname}:{self.port}"
@@ -95,6 +96,7 @@ class Node(Entity):
         node = cls.objects.filter(mac_address=mac).first()
         if not node:
             node = cls.objects.filter(public_endpoint=slug).first()
+        lcd_lock = Path(settings.BASE_DIR) / "locks" / "lcd_screen.lck"
         defaults = {
             "hostname": hostname,
             "address": address,
@@ -104,11 +106,15 @@ class Node(Entity):
             "installed_revision": installed_revision,
             "public_endpoint": slug,
             "mac_address": mac,
+            "has_lcd_screen": lcd_lock.exists(),
         }
         if node:
             for field, value in defaults.items():
+                if field == "has_lcd_screen":
+                    continue
                 setattr(node, field, value)
-            node.save(update_fields=list(defaults.keys()))
+            update_fields = [k for k in defaults.keys() if k != "has_lcd_screen"]
+            node.save(update_fields=update_fields)
             created = False
         else:
             node = cls.objects.create(**defaults)

@@ -21,7 +21,13 @@ def node_list(request):
     """Return a JSON list of all known nodes."""
 
     nodes = list(
-        Node.objects.values("hostname", "address", "port", "last_seen")
+        Node.objects.values(
+            "hostname",
+            "address",
+            "port",
+            "last_seen",
+            "has_lcd_screen",
+        )
     )
     return JsonResponse({"nodes": nodes})
 
@@ -41,6 +47,7 @@ def node_info(request):
         "port": node.port,
         "mac_address": node.mac_address,
         "public_key": node.public_key,
+        "has_lcd_screen": node.has_lcd_screen,
     }
 
     if token:
@@ -87,6 +94,7 @@ def register_node(request):
     public_key = data.get("public_key")
     token = data.get("token")
     signature = data.get("signature")
+    has_lcd_screen = data.get("has_lcd_screen")
 
     if not hostname or not address or not mac_address:
         return JsonResponse(
@@ -108,7 +116,12 @@ def register_node(request):
             return JsonResponse({"detail": "invalid signature"}, status=403)
 
     mac_address = mac_address.lower()
-    defaults = {"hostname": hostname, "address": address, "port": port}
+    defaults = {
+        "hostname": hostname,
+        "address": address,
+        "port": port,
+        "has_lcd_screen": bool(has_lcd_screen),
+    }
     if verified:
         defaults["public_key"] = public_key
 
@@ -120,11 +133,13 @@ def register_node(request):
         node.hostname = hostname
         node.address = address
         node.port = port
+        update_fields = ["hostname", "address", "port"]
         if verified:
             node.public_key = public_key
-            update_fields = ["hostname", "address", "port", "public_key"]
-        else:
-            update_fields = ["hostname", "address", "port"]
+            update_fields.append("public_key")
+        if has_lcd_screen is not None:
+            node.has_lcd_screen = bool(has_lcd_screen)
+            update_fields.append("has_lcd_screen")
         node.save(update_fields=update_fields)
         return JsonResponse(
             {"id": node.id, "detail": f"Node already exists (id: {node.id})"}

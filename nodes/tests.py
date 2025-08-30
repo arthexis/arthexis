@@ -93,6 +93,73 @@ class NodeTests(TestCase):
         hostnames = {n["hostname"] for n in data["nodes"]}
         self.assertEqual(hostnames, {"dup", "local2"})
 
+    def test_register_node_has_lcd_screen_toggle(self):
+        url = reverse("register-node")
+        first = self.client.post(
+            url,
+            data={
+                "hostname": "lcd",
+                "address": "127.0.0.1",
+                "port": 8000,
+                "mac_address": "00:aa:bb:cc:dd:ee",
+                "has_lcd_screen": True,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(first.status_code, 200)
+        node = Node.objects.get(mac_address="00:aa:bb:cc:dd:ee")
+        self.assertTrue(node.has_lcd_screen)
+
+        self.client.post(
+            url,
+            data={
+                "hostname": "lcd",
+                "address": "127.0.0.1",
+                "port": 8000,
+                "mac_address": "00:aa:bb:cc:dd:ee",
+                "has_lcd_screen": False,
+            },
+            content_type="application/json",
+        )
+        node.refresh_from_db()
+        self.assertFalse(node.has_lcd_screen)
+
+
+class NodeRegisterCurrentTests(TestCase):
+    def test_register_current_sets_and_retains_lcd(self):
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            locks = base / "locks"
+            locks.mkdir()
+            (locks / "lcd_screen.lck").touch()
+            with override_settings(BASE_DIR=base):
+                with patch("nodes.models.Node.get_current_mac", return_value="00:ff:ee:dd:cc:bb"), patch(
+                    "nodes.models.socket.gethostname", return_value="testhost"
+                ), patch(
+                    "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
+                ), patch(
+                    "nodes.models.revision.get_revision", return_value="rev"
+                ), patch.object(Node, "ensure_keys"):
+                    node, created = Node.register_current()
+            self.assertTrue(created)
+            self.assertTrue(node.has_lcd_screen)
+
+            node.has_lcd_screen = False
+            node.save(update_fields=["has_lcd_screen"])
+
+            with override_settings(BASE_DIR=base):
+                with patch("nodes.models.Node.get_current_mac", return_value="00:ff:ee:dd:cc:bb"), patch(
+                    "nodes.models.socket.gethostname", return_value="testhost"
+                ), patch(
+                    "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
+                ), patch(
+                    "nodes.models.revision.get_revision", return_value="rev"
+                ), patch.object(Node, "ensure_keys"):
+                    node2, created2 = Node.register_current()
+            self.assertFalse(created2)
+            node.refresh_from_db()
+            self.assertFalse(node.has_lcd_screen)
+
     @patch("nodes.views.capture_screenshot")
     def test_capture_screenshot(self, mock_capture):
         hostname = socket.gethostname()

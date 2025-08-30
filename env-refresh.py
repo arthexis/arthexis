@@ -18,7 +18,7 @@ from django.apps import apps
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import connections
+from django.db import connections, connection
 from django.db.migrations.exceptions import InconsistentMigrationHistory
 from django.db.utils import OperationalError
 
@@ -129,38 +129,39 @@ def run_database_tasks(*, latest: bool = False) -> None:
             for label in reversed(local_apps):
                 call_command("migrate", label, "zero", interactive=False)
 
-    try:
-        call_command("migrate", interactive=False)
-    except InconsistentMigrationHistory:
-        call_command("reset_ocpp_migrations")
-        call_command("migrate", interactive=False)
-    except OperationalError as exc:
-        if using_sqlite:
-            connections.close_all()
-            Path(default_db["NAME"]).unlink(missing_ok=True)
+    if not connection.in_atomic_block:
+        try:
             call_command("migrate", interactive=False)
-        else:  # pragma: no cover - unreachable in sqlite
-            try:
-                import psycopg
-                from psycopg import sql
-
-                params = {
-                    "dbname": "postgres",
-                    "user": default_db.get("USER", ""),
-                    "password": default_db.get("PASSWORD", ""),
-                    "host": default_db.get("HOST", ""),
-                    "port": default_db.get("PORT", ""),
-                }
-                with psycopg.connect(**params, autocommit=True) as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            sql.SQL("CREATE DATABASE {}" ).format(
-                                sql.Identifier(default_db["NAME"])
-                            )
-                        )
+        except InconsistentMigrationHistory:
+            call_command("reset_ocpp_migrations")
+            call_command("migrate", interactive=False)
+        except OperationalError as exc:
+            if using_sqlite:
+                connections.close_all()
+                Path(default_db["NAME"]).unlink(missing_ok=True)
                 call_command("migrate", interactive=False)
-            except Exception:
-                raise exc
+            else:  # pragma: no cover - unreachable in sqlite
+                try:
+                    import psycopg
+                    from psycopg import sql
+
+                    params = {
+                        "dbname": "postgres",
+                        "user": default_db.get("USER", ""),
+                        "password": default_db.get("PASSWORD", ""),
+                        "host": default_db.get("HOST", ""),
+                        "port": default_db.get("PORT", ""),
+                    }
+                    with psycopg.connect(**params, autocommit=True) as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                sql.SQL("CREATE DATABASE {}" ).format(
+                                    sql.Identifier(default_db["NAME"])
+                                )
+                            )
+                    call_command("migrate", interactive=False)
+                except Exception:
+                    raise exc
 
     fixtures = _fixture_files()
     if fixtures:
