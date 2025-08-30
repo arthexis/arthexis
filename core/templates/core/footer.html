@@ -1,9 +1,15 @@
-<footer class="container mt-5 mt-auto">
-  <div class="row">
+
+<footer class="container mt-5 border-top pt-3">
+  <div class="row row-cols-2 row-cols-md-6">
     {% for ref in footer_refs %}
-      <div class="col">
+      <div class="col mb-2">
         <a href="{{ ref.value }}">{{ ref.alt_text|default:ref.value }}</a>
       </div>
     {% endfor %}
+  </div>
+  <div class="row mt-3">
+    <div class="col text-center">
+      <small class="text-muted">v{{ version }}{% if revision %} r{{ revision }}{% endif %}</small>
+    </div>
   </div>
 </footer>

@@ -9,6 +9,16 @@ Arthexis Constellation is a Django-based suite that centralizes tools for managi
 3. *(Optional)* Create and activate a virtual environment: `python -m venv .venv` and `source .venv/bin/activate`
 4. Install dependencies: `pip install -r requirements.txt`
 
+## Quick Start
+After installing dependencies, initialize the project and launch a development server:
+
+```bash
+./install.sh --internal
+./start.sh --reload
+```
+
+The server will be accessible at http://localhost:8888 by default.
+
 ## External Requirements
 The setup scripts rely on several system packages. If they are missing and an internet connection is available, the setup process will automatically install them:
 - `nginx`

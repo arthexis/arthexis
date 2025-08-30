@@ -1,7 +1,11 @@
+from pathlib import Path
+
 from django import template
+from django.conf import settings
 from django.utils.safestring import mark_safe
 
 from core.models import Reference
+from utils import revision
 
 register = template.Library()
 
@@ -25,4 +29,18 @@ def ref_img(value, size=200, alt=None):
 @register.inclusion_tag("core/footer.html")
 def render_footer():
     """Render footer links for references marked to appear there."""
-    return {"footer_refs": Reference.objects.filter(include_in_footer=True)}
+    refs = list(Reference.objects.filter(include_in_footer=True))
+
+    version = ""
+    ver_path = Path(settings.BASE_DIR) / "VERSION"
+    if ver_path.exists():
+        version = ver_path.read_text().strip()
+
+    revision_value = revision.get_revision()
+    rev_short = revision_value[-6:] if revision_value else ""
+
+    return {
+        "footer_refs": refs,
+        "version": version,
+        "revision": rev_short,
+    }
