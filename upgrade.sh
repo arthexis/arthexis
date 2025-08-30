@@ -98,5 +98,6 @@ echo "Refreshing environment..."
 ./env-refresh.sh $ENV_ARGS
 if [[ $NO_RESTART -eq 0 ]]; then
   echo "Restarting services..."
-  ./start.sh
+  nohup ./start.sh >/dev/null 2>&1 &
+  echo "Services restarted"
 fi
