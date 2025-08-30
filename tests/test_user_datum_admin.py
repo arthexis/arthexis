@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.contrib.contenttypes.models import ContentType
@@ -21,7 +21,7 @@ from core.models import OdooProfile
 from core.user_data import UserDatum
 
 
-class UserDatumAdminTests(TestCase):
+class UserDatumAdminTests(TransactionTestCase):
     def setUp(self):
         call_command("flush", verbosity=0, interactive=False)
         User = get_user_model()
