@@ -49,6 +49,14 @@ class UserDatumAdminTests(TestCase):
         self.assertContains(response, "name=\"_user_datum\"")
         self.assertContains(response, "User Datum")
 
+    def test_checkbox_has_form_attribute(self):
+        url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
+        response = self.client.get(url)
+        form_id = f"{self.profile._meta.model_name}_form"
+        self.assertContains(
+            response, f'name="_user_datum" form="{form_id}"'
+        )
+
     def test_userdatum_created_when_checked(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
         data = {
@@ -60,13 +68,18 @@ class UserDatumAdminTests(TestCase):
             "_user_datum": "on",
             "_save": "Save",
         }
-        self.client.post(url, data)
+        response = self.client.post(url, data, follow=True)
         ct = ContentType.objects.get_for_model(OdooProfile)
         self.assertTrue(
             UserDatum.objects.filter(
                 user=self.user, content_type=ct, object_id=self.profile.pk
             ).exists()
         )
+        messages = [m.message for m in response.context["messages"]]
+        self.assertTrue(
+            any(str(self.fixture_path) in msg for msg in messages),
+        )
+
 
     def test_userdatum_persists_after_save(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
@@ -81,8 +94,11 @@ class UserDatumAdminTests(TestCase):
         }
         self.client.post(url, data)
         response = self.client.get(url)
-        self.assertContains(response, 'name="_user_datum" checked')
-
+        form_id = f"{self.profile._meta.model_name}_form"
+        self.assertContains(
+            response, f'name="_user_datum" form="{form_id}" checked'
+        )
+        
     def test_fixture_created_and_loaded_on_env_refresh(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
         data = {

@@ -120,6 +120,8 @@ class UserDatumAdminMixin(admin.ModelAdmin):
                 user=request.user, content_type=ct, object_id=obj.pk
             )
             dump_user_fixture(obj, request.user)
+            path = _fixture_path(request.user, obj)
+            self.message_user(request, f"User datum saved to {path}")
         else:
             qs = UserDatum.objects.filter(
                 user=request.user, content_type=ct, object_id=obj.pk
