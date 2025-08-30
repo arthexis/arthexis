@@ -86,6 +86,17 @@ def _current_commit() -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
 
 
+def _current_branch() -> str:
+    return (
+        subprocess.check_output([
+            "git",
+            "rev-parse",
+            "--abbrev-ref",
+            "HEAD",
+        ]).decode().strip()
+    )
+
+
 def run_tests(log_path: Optional[Path] = None) -> subprocess.CompletedProcess:
     """Run the project's test suite and write output to ``log_path``.
 
@@ -320,3 +331,51 @@ def build(
 
     if stashed:
         _run(["git", "stash", "pop"], check=False)
+
+
+def promote(*, package: Package = DEFAULT_PACKAGE, version: str, creds: Optional[Credentials] = None) -> None:
+    """Create a release branch and build the package without tests."""
+    current = _current_branch()
+    branch = f"release/{version}"
+    try:
+        _run(["git", "checkout", "-b", branch])
+        build(
+            package=package,
+            creds=creds,
+            tests=False,
+            dist=True,
+            git=False,
+            tag=False,
+        )
+        _run(["git", "add", "."])  # add all changes
+        _run(["git", "commit", "-m", f"Release v{version}"])
+        _run(["git", "push", "-u", "origin", branch])
+    finally:
+        _run(["git", "checkout", current])
+
+
+def publish(*, package: Package = DEFAULT_PACKAGE, creds: Optional[Credentials] = None) -> None:
+    """Upload the existing distribution to PyPI."""
+    version = Path("VERSION").read_text().strip()
+    if requires_network():
+        try:  # pragma: no cover - requests optional
+            import requests  # type: ignore
+        except Exception:
+            requests = None  # type: ignore
+        if requests is not None:
+            resp = requests.get(f"https://pypi.org/pypi/{package.name}/json")
+            if resp.ok and version in resp.json().get("releases", {}):
+                raise ReleaseError(f"Version {version} already on PyPI")
+    if not Path("dist").exists():
+        raise ReleaseError("dist directory not found")
+    token = os.environ.get("PYPI_API_TOKEN") if creds is None else creds.token
+    user = os.environ.get("PYPI_USERNAME") if creds is None else creds.username
+    pwd = os.environ.get("PYPI_PASSWORD") if creds is None else creds.password
+    cmd = [sys.executable, "-m", "twine", "upload", "dist/*"]
+    if token:
+        cmd += ["--username", "__token__", "--password", token]
+    elif user and pwd:
+        cmd += ["--username", user, "--password", pwd]
+    else:
+        raise ReleaseError("Missing PyPI credentials")
+    _run(cmd)
