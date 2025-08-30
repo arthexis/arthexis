@@ -9,7 +9,7 @@ exec > >(tee "$LOG_FILE") 2>&1
 cd "$BASE_DIR"
 
 FORCE=0
-CLEAN_DB=0
+CLEAN=0
 NO_RESTART=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -17,8 +17,8 @@ while [[ $# -gt 0 ]]; do
       FORCE=1
       shift
       ;;
-    --clean-db)
-      CLEAN_DB=1
+    --clean)
+      CLEAN=1
       shift
       ;;
     --no-restart)
@@ -26,7 +26,8 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
-      break
+      echo "Unknown option: $1" >&2
+      exit 1
       ;;
   esac
 done
@@ -83,7 +84,7 @@ if [ $VENV_PRESENT -eq 0 ]; then
 fi
 
 # Remove existing database if requested
-if [ "$CLEAN_DB" -eq 1 ]; then
+if [ "$CLEAN" -eq 1 ]; then
   DB_FILE="db.sqlite3"
   rm -f "$DB_FILE"
 fi
