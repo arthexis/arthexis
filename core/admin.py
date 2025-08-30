@@ -31,6 +31,7 @@ from .models import (
     RFID,
     Reference,
     OdooProfile,
+    EmailInbox,
     PackageHub,
     PackageRelease,
     PackagerProfile,
@@ -178,6 +179,53 @@ class OdooProfileAdmin(admin.ModelAdmin):
                 self.message_user(
                     request, f"{profile.user}: {exc}", level=messages.ERROR
                 )
+
+
+class EmailInboxAdminForm(forms.ModelForm):
+    """Admin form for :class:`core.models.EmailInbox` with hidden password."""
+
+    password = forms.CharField(
+        widget=forms.PasswordInput(render_value=True),
+        required=False,
+        help_text="Leave blank to keep the current password.",
+    )
+
+    class Meta:
+        model = EmailInbox
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["password"].initial = ""
+            self.initial["password"] = ""
+        else:
+            self.fields["password"].required = True
+
+    def clean_password(self):
+        pwd = self.cleaned_data.get("password")
+        if not pwd and self.instance.pk:
+            return self.instance.password
+        return pwd
+
+
+@admin.register(EmailInbox)
+class EmailInboxAdmin(admin.ModelAdmin):
+    form = EmailInboxAdminForm
+    list_display = ("user", "host", "protocol", "username")
+    actions = ["test_connection"]
+    fieldsets = (
+        (None, {"fields": ("user", "host", "port", "username", "password", "protocol", "use_ssl")}),
+    )
+
+    @admin.action(description="Test selected inboxes")
+    def test_connection(self, request, queryset):
+        for inbox in queryset:
+            try:
+                inbox.test_connection()
+                self.message_user(request, f"{inbox} connection successful")
+            except Exception as exc:  # pragma: no cover - admin feedback
+                self.message_user(request, f"{inbox}: {exc}", level=messages.ERROR)
 
 
 class CreditInline(admin.TabularInline):

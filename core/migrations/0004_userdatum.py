@@ -48,4 +48,44 @@ class Migration(migrations.Migration):
                 "unique_together": {("user", "content_type", "object_id")},
             },
         ),
+        migrations.CreateModel(
+            name="EmailInbox",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                ("host", models.CharField(max_length=255)),
+                ("port", models.PositiveIntegerField(default=993)),
+                ("username", models.CharField(max_length=255)),
+                ("password", models.CharField(max_length=255)),
+                (
+                    "protocol",
+                    models.CharField(
+                        choices=[("imap", "IMAP"), ("pop3", "POP3")],
+                        max_length=5,
+                    ),
+                ),
+                ("use_ssl", models.BooleanField(default=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="email_inboxes",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+            ],
+            options={
+                "verbose_name": "Email Inbox",
+                "verbose_name_plural": "Email Inboxes",
+            },
+        ),
     ]

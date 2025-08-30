@@ -262,6 +262,64 @@ class OdooProfile(Entity):
         return f"{self.user} @ {self.host}"
 
 
+class EmailInbox(Entity):
+    """Credentials and configuration for connecting to an email mailbox."""
+
+    IMAP = "imap"
+    POP3 = "pop3"
+    PROTOCOL_CHOICES = [
+        (IMAP, "IMAP"),
+        (POP3, "POP3"),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="email_inboxes",
+        on_delete=models.CASCADE,
+    )
+    host = models.CharField(max_length=255)
+    port = models.PositiveIntegerField(default=993)
+    username = models.CharField(max_length=255)
+    password = models.CharField(max_length=255)
+    protocol = models.CharField(max_length=5, choices=PROTOCOL_CHOICES)
+    use_ssl = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Email Inbox"
+        verbose_name_plural = "Email Inboxes"
+
+    def test_connection(self):
+        """Attempt to connect to the configured mailbox."""
+        try:
+            if self.protocol == self.IMAP:
+                import imaplib
+
+                conn = (
+                    imaplib.IMAP4_SSL(self.host, self.port)
+                    if self.use_ssl
+                    else imaplib.IMAP4(self.host, self.port)
+                )
+                conn.login(self.username, self.password)
+                conn.logout()
+            else:
+                import poplib
+
+                conn = (
+                    poplib.POP3_SSL(self.host, self.port)
+                    if self.use_ssl
+                    else poplib.POP3(self.host, self.port)
+                )
+                conn.user(self.username)
+                conn.pass_(self.password)
+                conn.quit()
+            return True
+        except Exception as exc:
+            raise ValidationError(str(exc))
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return f"{self.username}@{self.host}"
+
+
 class Reference(Entity):
     """Store a piece of reference content which can be text or an image."""
 
