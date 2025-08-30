@@ -64,5 +64,49 @@
       "include_in_footer": true,
       "created": "2024-01-01T00:00:00Z"
     }
+  },
+  {
+    "model": "core.reference",
+    "pk": 7,
+    "fields": {
+      "value": "https://docs.celeryq.dev/en/stable/",
+      "alt_text": "Celery",
+      "method": "link",
+      "include_in_footer": true,
+      "created": "2024-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "core.reference",
+    "pk": 8,
+    "fields": {
+      "value": "https://github.com/arthexis/arthexis",
+      "alt_text": "GitHub Repo",
+      "method": "link",
+      "include_in_footer": true,
+      "created": "2024-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "core.reference",
+    "pk": 9,
+    "fields": {
+      "value": "https://www.odoo.com/partners",
+      "alt_text": "Odoo Ready",
+      "method": "link",
+      "include_in_footer": true,
+      "created": "2024-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "core.reference",
+    "pk": 10,
+    "fields": {
+      "value": "https://porschemonterrey.com",
+      "alt_text": "Porsche Monterrey",
+      "method": "link",
+      "include_in_footer": true,
+      "created": "2024-01-01T00:00:00Z"
+    }
   }
 ]
