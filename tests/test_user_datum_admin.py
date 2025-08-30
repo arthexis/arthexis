@@ -80,6 +80,7 @@ class UserDatumAdminTests(TestCase):
             any(str(self.fixture_path) in msg for msg in messages),
         )
 
+
     def test_userdatum_persists_after_save(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
         data = {
@@ -97,7 +98,7 @@ class UserDatumAdminTests(TestCase):
         self.assertContains(
             response, f'name="_user_datum" form="{form_id}" checked'
         )
-
+        
     def test_fixture_created_and_loaded_on_env_refresh(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
         data = {

@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 def test_install_script_runs_migrate():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
@@ -23,4 +24,27 @@ def test_install_script_requires_nginx_for_roles():
     content = script_path.read_text()
     for role in ("satellite", "control", "constellation"):
         assert f'require_nginx "{role}"' in content
+
+
+def test_install_script_role_defaults():
+    script_path = Path(__file__).resolve().parent.parent / "install.sh"
+    content = script_path.read_text()
+
+    def block(flag: str) -> str:
+        pattern = rf"--{flag}\)(.*?)\n\s*;;"
+        match = re.search(pattern, content, re.S)
+        assert match, f"block for {flag} not found"
+        return match.group(1)
+
+    satellite = block("satellite")
+    assert "AUTO_UPGRADE=true" in satellite
+    assert "LATEST=false" in satellite
+
+    constellation = block("constellation")
+    assert "AUTO_UPGRADE=true" in constellation
+    assert "LATEST=false" in constellation
+
+    control = block("control")
+    assert "AUTO_UPGRADE=true" in control
+    assert "LATEST=true" in control
 
