@@ -20,6 +20,18 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
   if systemctl list-unit-files | grep -Fq "${SERVICE_NAME}.service"; then
     sudo systemctl stop "$SERVICE_NAME"
     sudo systemctl status "$SERVICE_NAME" --no-pager || true
+    if [ -f "$LOCK_DIR/celery.lck" ]; then
+      CELERY_SERVICE="celery-$SERVICE_NAME"
+      CELERY_BEAT_SERVICE="celery-beat-$SERVICE_NAME"
+      if systemctl list-unit-files | grep -Fq "${CELERY_BEAT_SERVICE}.service"; then
+        sudo systemctl stop "$CELERY_BEAT_SERVICE" || true
+        sudo systemctl status "$CELERY_BEAT_SERVICE" --no-pager || true
+      fi
+      if systemctl list-unit-files | grep -Fq "${CELERY_SERVICE}.service"; then
+        sudo systemctl stop "$CELERY_SERVICE" || true
+        sudo systemctl status "$CELERY_SERVICE" --no-pager || true
+      fi
+    fi
     if [ -f "$LCD_LOCK" ]; then
       LCD_SERVICE="lcd-$SERVICE_NAME"
       "$PYTHON" - <<'PY'

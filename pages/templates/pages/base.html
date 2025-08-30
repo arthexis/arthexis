@@ -203,6 +203,9 @@
           return;
         }
         const apply = () => {
+          if (localStorage.getItem('theme')) {
+            return;
+          }
           const djdtTheme = localStorage.getItem('djdt.user-theme');
           if (!djdtTheme) {
             return;

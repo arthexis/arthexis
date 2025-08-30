@@ -96,7 +96,85 @@ if [[ $FORCE -eq 1 ]]; then
 fi
 echo "Refreshing environment..."
 ./env-refresh.sh $ENV_ARGS
+
+# Migrate existing systemd unit to dedicated Celery services if needed
+LOCK_DIR="$BASE_DIR/locks"
+if [ -f "$LOCK_DIR/service.lck" ]; then
+  SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
+  SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+  if [ -f "$SERVICE_FILE" ] && grep -Fq "celery -A" "$SERVICE_FILE"; then
+    echo "Migrating service configuration for Celery..."
+    MODE="internal"
+    if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
+      MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
+    fi
+    if [ "$MODE" = "public" ]; then
+      PORT=8000
+    else
+      PORT=8888
+    fi
+    EXEC_CMD="$BASE_DIR/.venv/bin/python manage.py runserver 0.0.0.0:$PORT"
+    sudo bash -c "cat > '$SERVICE_FILE'" <<SERVICEEOF
+[Unit]
+Description=Arthexis Constellation Django service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$BASE_DIR
+EnvironmentFile=-$BASE_DIR/redis.env
+ExecStart=$EXEC_CMD
+Restart=always
+User=$(id -un)
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+    # Ensure Celery units exist and are enabled
+    touch "$LOCK_DIR/celery.lck"
+    CELERY_SERVICE="celery-$SERVICE_NAME"
+    CELERY_BEAT_SERVICE="celery-beat-$SERVICE_NAME"
+    CELERY_SERVICE_FILE="/etc/systemd/system/${CELERY_SERVICE}.service"
+    CELERY_BEAT_SERVICE_FILE="/etc/systemd/system/${CELERY_BEAT_SERVICE}.service"
+    sudo bash -c "cat > '$CELERY_SERVICE_FILE'" <<CELERYSERVICEEOF
+[Unit]
+Description=Celery Worker for $SERVICE_NAME
+After=network.target redis.service
+
+[Service]
+Type=simple
+WorkingDirectory=$BASE_DIR
+EnvironmentFile=-$BASE_DIR/redis.env
+ExecStart=$BASE_DIR/.venv/bin/celery -A config worker -l info
+Restart=always
+User=$(id -un)
+
+[Install]
+WantedBy=multi-user.target
+CELERYSERVICEEOF
+    sudo bash -c "cat > '$CELERY_BEAT_SERVICE_FILE'" <<BEATSERVICEEOF
+[Unit]
+Description=Celery Beat for $SERVICE_NAME
+After=network.target redis.service
+
+[Service]
+Type=simple
+WorkingDirectory=$BASE_DIR
+EnvironmentFile=-$BASE_DIR/redis.env
+ExecStart=$BASE_DIR/.venv/bin/celery -A config beat -l info
+Restart=always
+User=$(id -un)
+
+[Install]
+WantedBy=multi-user.target
+BEATSERVICEEOF
+    sudo systemctl daemon-reload
+    sudo systemctl enable "$SERVICE_NAME" "$CELERY_SERVICE" "$CELERY_BEAT_SERVICE"
+  fi
+fi
+
 if [[ $NO_RESTART -eq 0 ]]; then
   echo "Restarting services..."
-  ./start.sh
+  ./start.sh >/dev/null 2>&1
+  echo "Services restarted"
 fi
