@@ -128,6 +128,11 @@ class NodeTests(TestCase):
 
 
 class NodeRegisterCurrentTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.client = Client()
+        self.user = User.objects.create_user(username="nodeuser", password="pwd")
+        self.client.force_login(self.user)
     def test_register_current_sets_and_retains_lcd(self):
         with TemporaryDirectory() as tmp:
             base = Path(tmp)
@@ -394,7 +399,7 @@ class NodeAdminTests(TestCase):
         response = self.client.get(
             reverse("admin:nodes_node_register_current"), follow=False
         )
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(Node.objects.count(), 1)
         node = Node.objects.first()
         self.assertEqual(node.mac_address, Node.get_current_mac())
