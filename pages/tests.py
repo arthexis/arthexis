@@ -449,6 +449,7 @@ class LandingFixtureTests(TestCase):
     def test_constellation_fixture_loads_without_duplicates(self):
         fixture = Path(settings.BASE_DIR, "pages", "fixtures", "constellation.json")
         call_command("loaddata", str(fixture))
+        call_command("loaddata", str(fixture))
         module = Module.objects.get(path="/ocpp/", node_role__name="Constellation")
         self.assertEqual(module.landings.filter(path="/ocpp/rfid/").count(), 1)
 
