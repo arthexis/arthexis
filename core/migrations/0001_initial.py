@@ -575,7 +575,10 @@ class Migration(migrations.Migration):
             model_name="energyaccount",
             name="rfids",
             field=models.ManyToManyField(
-                blank=True, related_name="energy_accounts", to="core.rfid"
+                blank=True,
+                related_name="energy_accounts",
+                to="core.rfid",
+                db_table="core_account_rfids",
             ),
         ),
         migrations.CreateModel(

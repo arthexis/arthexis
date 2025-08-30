@@ -502,7 +502,12 @@ class EnergyAccount(Entity):
         null=True,
         blank=True,
     )
-    rfids = models.ManyToManyField("RFID", blank=True, related_name="energy_accounts")
+    rfids = models.ManyToManyField(
+        "RFID",
+        blank=True,
+        related_name="energy_accounts",
+        db_table="core_account_rfids",
+    )
     service_account = models.BooleanField(
         default=False,
         help_text="Allow transactions even when the balance is zero or negative",
