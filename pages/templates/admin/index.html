@@ -88,6 +88,10 @@
 {% block content_title %}
 <div id="admin-home-header" style="display:flex; justify-content:space-between; align-items:center;">
   <h1>Home</h1>
+  <div>
+    <a class="button" href="{% url 'admin:seed_data' %}">{% translate 'Seed Data' %}</a>
+    <a class="button" href="{% url 'admin:user_data' %}">{% translate 'User Data' %}</a>
+  </div>
  </div>
 {% endblock %}
 
