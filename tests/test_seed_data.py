@@ -15,6 +15,9 @@ from django.test import TestCase
 from django.conf import settings
 from nodes.models import Node, NodeRole
 from django.contrib.sites.models import Site
+from django.urls import reverse
+from django.contrib.auth import get_user_model
+from django.core.management import call_command
 import socket
 
 
@@ -25,6 +28,9 @@ class SeedDataEntityTests(TestCase):
 
 
 class EnvRefreshFixtureTests(TestCase):
+    def setUp(self):
+        call_command("flush", verbosity=0, interactive=False)
+
     def test_env_refresh_marks_seed_data(self):
         base_dir = Path(settings.BASE_DIR)
         tmp_dir = base_dir / "temp_fixture"
@@ -98,3 +104,16 @@ class EnvRefreshNodeTests(TestCase):
             )
         finally:
             control_lock.unlink(missing_ok=True)
+
+
+class SeedDataViewTests(TestCase):
+    def setUp(self):
+        call_command("loaddata", "nodes/fixtures/node_roles.json")
+        NodeRole.objects.filter(pk=1).update(is_seed_data=True)
+        User = get_user_model()
+        self.user = User.objects.create_superuser("sdadmin", password="pw")
+        self.client.login(username="sdadmin", password="pw")
+
+    def test_seed_data_view_shows_fixture(self):
+        response = self.client.get(reverse("admin:seed_data"))
+        self.assertContains(response, "node_roles.json")
