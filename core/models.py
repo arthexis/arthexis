@@ -1,4 +1,8 @@
-from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
+from django.contrib.auth.models import (
+    AbstractUser,
+    Group,
+    UserManager as DjangoUserManager,
+)
 from django.db import models
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -21,6 +25,20 @@ import uuid
 from .entity import Entity, EntityUserManager
 from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
 from .user_data import UserDatum  # noqa: F401 - ensure model registration
+
+
+class SecurityGroup(Group):
+    parent = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="children",
+    )
+
+    class Meta:
+        verbose_name = "Security Group"
+        verbose_name_plural = "Security Groups"
 
 
 class Address(Entity):

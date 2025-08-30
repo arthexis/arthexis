@@ -38,14 +38,8 @@ from .models import (
     Package,
     PackageRelease,
     PackagerProfile,
+    SecurityGroup,
 )
-
-
-class SecurityGroup(Group):
-    class Meta:
-        proxy = True
-        verbose_name = "Security Group"
-        verbose_name_plural = "Security Groups"
 
 
 admin.site.unregister(Group)
@@ -129,9 +123,37 @@ class PackageAdmin(admin.ModelAdmin):
     list_display = ("name", "description", "homepage_url", "release_manager")
 
 
+class SecurityGroupAdminForm(forms.ModelForm):
+    users = forms.ModelMultipleChoiceField(
+        queryset=get_user_model().objects.all(),
+        required=False,
+        widget=admin.widgets.FilteredSelectMultiple("users", False),
+    )
+
+    class Meta:
+        model = SecurityGroup
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["users"].initial = self.instance.user_set.all()
+
+    def save(self, commit=True):
+        instance = super().save(commit)
+        users = self.cleaned_data.get("users")
+        if commit:
+            instance.user_set.set(users)
+        else:
+            self.save_m2m = lambda: instance.user_set.set(users)
+        return instance
+
+
 @admin.register(SecurityGroup)
 class SecurityGroupAdmin(DjangoGroupAdmin):
-    pass
+    form = SecurityGroupAdminForm
+    fieldsets = ((None, {"fields": ("name", "parent", "users", "permissions")}),)
+    filter_horizontal = ("permissions",)
 
 
 class EnergyAccountRFIDForm(forms.ModelForm):

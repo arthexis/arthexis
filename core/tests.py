@@ -21,6 +21,7 @@ from .models import (
     Brand,
     EVModel,
     RFID,
+    SecurityGroup,
 )
 from ocpp.models import Transaction, Charger
 
@@ -435,5 +436,15 @@ class RFIDKeyVerificationFlagTests(TestCase):
         tag.key_b = "B1B1B1B1B1B1"
         tag.save()
         self.assertFalse(tag.key_b_verified)
+
+
+class SecurityGroupTests(TestCase):
+    def test_parent_and_user_assignment(self):
+        parent = SecurityGroup.objects.create(name="Parents")
+        child = SecurityGroup.objects.create(name="Children", parent=parent)
+        user = User.objects.create_user(username="sg_user", password="secret")
+        child.user_set.add(user)
+        self.assertEqual(child.parent, parent)
+        self.assertIn(user, child.user_set.all())
 
 
