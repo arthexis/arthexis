@@ -158,6 +158,7 @@ class UserDataViewTests(TestCase):
         url = reverse("admin:user_data")
         response = self.client.get(url)
         self.assertContains(response, str(self.profile))
+        self.assertContains(response, self.fixture_path.name)
 
     def test_admin_index_shows_buttons(self):
         response = self.client.get(reverse("admin:index"))

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from io import BytesIO
 from zipfile import ZipFile
+import json
 
 from django.conf import settings
 from django.contrib import admin
@@ -47,6 +48,30 @@ def _fixture_path(user, instance) -> Path:
     ct = ContentType.objects.get_for_model(instance)
     filename = f"{user.pk}_{ct.app_label}_{ct.model}_{instance.pk}.json"
     return _data_dir() / filename
+
+
+_seed_fixture_cache: dict[tuple[str, int], Path] | None = None
+
+
+def _seed_fixture_path(instance) -> Path | None:
+    """Return the fixture file containing the given seed datum."""
+    global _seed_fixture_cache
+    if _seed_fixture_cache is None:
+        _seed_fixture_cache = {}
+        base = Path(settings.BASE_DIR)
+        for path in base.rglob("fixtures/*.json"):
+            try:
+                with path.open() as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+            for obj in data:
+                model = obj.get("model")
+                pk = obj.get("pk")
+                if model and pk is not None:
+                    _seed_fixture_cache[(model, pk)] = path
+    key = (f"{instance._meta.app_label}.{instance._meta.model_name}", instance.pk)
+    return _seed_fixture_cache.get(key)
 
 
 def dump_user_fixture(instance, user) -> None:
@@ -173,7 +198,14 @@ def _seed_data_view(request):
                 f"admin:{obj._meta.app_label}_{obj._meta.model_name}_change",
                 args=[obj.pk],
             )
-            items.append({"url": url, "label": str(obj)})
+            fixture_path = _seed_fixture_path(obj)
+            items.append(
+                {
+                    "url": url,
+                    "label": str(obj),
+                    "fixture": fixture_path.name if fixture_path else "",
+                }
+            )
         sections.append({"opts": model._meta, "items": items})
     context = admin.site.each_context(request)
     context.update({"title": _("Seed Data"), "sections": sections})
@@ -192,7 +224,10 @@ def _user_data_view(request):
             args=[obj.pk],
         )
         section = sections.setdefault(model._meta, [])
-        section.append({"url": url, "label": str(obj)})
+        fixture = _fixture_path(request.user, obj)
+        section.append(
+            {"url": url, "label": str(obj), "fixture": fixture.name}
+        )
     section_list = [{"opts": opts, "items": items} for opts, items in sections.items()]
     context = admin.site.each_context(request)
     context.update(
