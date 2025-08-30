@@ -82,12 +82,12 @@ class ReferenceAdmin(admin.ModelAdmin):
 
 @admin.register(PackagerProfile)
 class PackagerProfileAdmin(admin.ModelAdmin):
-    list_display = ("name",)
+    list_display = ("user", "username", "pypi_url")
 
 
 @admin.register(PackageHub)
 class PackageHubAdmin(admin.ModelAdmin):
-    list_display = ("name",)
+    list_display = ("name", "release_manager")
 
 
 @admin.register(SecurityGroup)

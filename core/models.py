@@ -663,8 +663,13 @@ class Message(Entity):
 class PackagerProfile(Entity):
     """Store credentials for publishing packages."""
 
-    name = models.CharField(max_length=100)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="packager_profile"
+    )
+    username = models.CharField(max_length=100, blank=True)
     token = models.CharField(max_length=200, blank=True)
+    password = models.CharField(max_length=200, blank=True)
+    pypi_url = models.URLField(blank=True)
 
     class Meta:
         verbose_name = "Packager Profile"
@@ -673,10 +678,16 @@ class PackagerProfile(Entity):
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name
 
+    @property
+    def name(self) -> str:  # pragma: no cover - simple proxy
+        return self.user.get_username()
+
     def to_credentials(self) -> Credentials | None:
         """Return credentials for this profile."""
         if self.token:
             return Credentials(token=self.token)
+        if self.username and self.password:
+            return Credentials(username=self.username, password=self.password)
         return None
 
 
@@ -695,6 +706,9 @@ class PackageHub(Entity):
     license = models.CharField(max_length=100, default=DEFAULT_PACKAGE.license)
     repository_url = models.URLField(default=DEFAULT_PACKAGE.repository_url)
     homepage_url = models.URLField(default=DEFAULT_PACKAGE.homepage_url)
+    release_manager = models.ForeignKey(
+        PackagerProfile, on_delete=models.SET_NULL, null=True, blank=True
+    )
 
     class Meta:
         verbose_name = "Package Hub"
@@ -745,8 +759,9 @@ class PackageRelease(Entity):
 
     def to_credentials(self) -> Credentials | None:
         """Return :class:`Credentials` from the associated profile."""
-        if self.profile:
-            return self.profile.to_credentials()
+        profile = self.profile or self.hub.release_manager
+        if profile:
+            return profile.to_credentials()
         return None
 
     @property

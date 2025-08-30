@@ -3,8 +3,11 @@
     "model": "core.packagerprofile",
     "pk": 1,
     "fields": {
-      "name": "default",
-      "token": ""
+      "user": 2,
+      "username": "arthexis",
+      "token": "",
+      "password": "",
+      "pypi_url": "https://pypi.org/user/arthexis/"
     }
   },
   {
@@ -18,7 +21,8 @@
       "python_requires": ">=3.10",
       "license": "MIT",
       "repository_url": "https://github.com/arthexis/arthexis",
-      "homepage_url": "https://arthexis.com"
+      "homepage_url": "https://arthexis.com",
+      "release_manager": 1
     }
   },
   {
