@@ -748,7 +748,7 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
-            name='PackageHub',
+            name='Package',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('is_seed_data', models.BooleanField(default=False, editable=False)),
@@ -764,8 +764,8 @@ class Migration(migrations.Migration):
                 ('release_manager', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='core.packagerprofile')),
             ],
             options={
-                'verbose_name': 'Package Hub',
-                'verbose_name_plural': 'Package Hubs',
+                'verbose_name': 'Package',
+                'verbose_name_plural': 'Packages',
             },
         ),
         migrations.CreateModel(
@@ -780,7 +780,7 @@ class Migration(migrations.Migration):
                 ('is_published', models.BooleanField(default=False)),
                 ('is_promoted', models.BooleanField(default=False, editable=False)),
                 ('is_certified', models.BooleanField(default=False, editable=False)),
-                ('hub', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='releases', to='core.packagehub')),
+                ('package', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='releases', to='core.package')),
                 ('profile', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='core.packagerprofile')),
             ],
             options={

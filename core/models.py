@@ -19,7 +19,7 @@ from django.utils import timezone
 import uuid
 
 from .entity import Entity, EntityUserManager
-from .release import Package, Credentials, DEFAULT_PACKAGE
+from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
 from .user_data import UserDatum  # noqa: F401 - ensure model registration
 
 
@@ -753,7 +753,7 @@ class PackagerProfile(Entity):
         return None
 
 
-class PackageHub(Entity):
+class Package(Entity):
     """Package details shared across releases."""
 
     name = models.CharField(max_length=100, default=DEFAULT_PACKAGE.name)
@@ -773,15 +773,15 @@ class PackageHub(Entity):
     )
 
     class Meta:
-        verbose_name = "Package Hub"
-        verbose_name_plural = "Package Hubs"
+        verbose_name = "Package"
+        verbose_name_plural = "Packages"
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name
 
-    def to_package(self) -> Package:
-        """Return a :class:`Package` instance from hub data."""
-        return Package(
+    def to_package(self) -> ReleasePackage:
+        """Return a :class:`ReleasePackage` instance from package data."""
+        return ReleasePackage(
             name=self.name,
             description=self.description,
             author=self.author,
@@ -792,12 +792,11 @@ class PackageHub(Entity):
             homepage_url=self.homepage_url,
         )
 
-
 class PackageRelease(Entity):
     """Store metadata for a specific package version."""
 
-    hub = models.ForeignKey(
-        PackageHub, on_delete=models.CASCADE, related_name="releases"
+    package = models.ForeignKey(
+        Package, on_delete=models.CASCADE, related_name="releases"
     )
     profile = models.ForeignKey(
         PackagerProfile, on_delete=models.SET_NULL, null=True, blank=True
@@ -815,15 +814,15 @@ class PackageRelease(Entity):
         get_latest_by = "version"
 
     def __str__(self) -> str:  # pragma: no cover - trivial
-        return f"{self.hub.name} {self.version}"
+        return f"{self.package.name} {self.version}"
 
-    def to_package(self) -> Package:
-        """Return a :class:`Package` built from the hub."""
-        return self.hub.to_package()
+    def to_package(self) -> ReleasePackage:
+        """Return a :class:`ReleasePackage` built from the package."""
+        return self.package.to_package()
 
     def to_credentials(self) -> Credentials | None:
         """Return :class:`Credentials` from the associated profile."""
-        profile = self.profile or self.hub.release_manager
+        profile = self.profile or self.package.release_manager
         if profile:
             return profile.to_credentials()
         return None
@@ -845,7 +844,9 @@ class PackageRelease(Entity):
         return f"{major}.{minor}.{patch}"
 
     def save(self, *args, **kwargs):
-        self.pypi_url = f"https://pypi.org/project/{self.hub.name}/{self.version}/"
+        self.pypi_url = (
+            f"https://pypi.org/project/{self.package.name}/{self.version}/"
+        )
         try:  # pragma: no cover - network check best effort
             import requests
 

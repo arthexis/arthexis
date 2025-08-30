@@ -34,7 +34,7 @@ from .models import (
     Reference,
     OdooProfile,
     EmailInbox,
-    PackageHub,
+    Package,
     PackageRelease,
     PackagerProfile,
 )
@@ -123,9 +123,9 @@ class PackagerProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "username", "pypi_url")
 
 
-@admin.register(PackageHub)
-class PackageHubAdmin(admin.ModelAdmin):
-    list_display = ("name", "release_manager")
+@admin.register(Package)
+class PackageAdmin(admin.ModelAdmin):
+    list_display = ("name", "description", "homepage_url", "release_manager")
 
 
 @admin.register(SecurityGroup)
@@ -549,14 +549,15 @@ class RFIDAdmin(ImportExportModelAdmin):
 @admin.register(PackageRelease)
 class PackageReleaseAdmin(admin.ModelAdmin):
     list_display = (
-        "hub",
         "version",
+        "package",
         "pypi_url",
         "revision_short",
         "is_promoted",
         "is_certified",
         "is_published",
     )
+    list_display_links = ("version",)
     actions = ["promote_release", "publish_to_index"]
 
     def revision_short(self, obj):
@@ -572,7 +573,7 @@ class PackageReleaseAdmin(admin.ModelAdmin):
                 cfg.promote()
                 cfg.is_promoted = True
                 cfg.save(update_fields=["is_promoted"])
-                self.message_user(request, f"Promoted {cfg.hub.name}", messages.SUCCESS)
+                self.message_user(request, f"Promoted {cfg.package.name}", messages.SUCCESS)
             except ValidationError as exc:
                 self.message_user(request, "; ".join(exc.messages), messages.ERROR)
             except Exception as exc:
@@ -584,7 +585,7 @@ class PackageReleaseAdmin(admin.ModelAdmin):
             if not cfg.is_certified:
                 self.message_user(
                     request,
-                    f"{cfg.hub.name} {cfg.version} is not certified",
+                    f"{cfg.package.name} {cfg.version} is not certified",
                     messages.ERROR,
                 )
                 continue
@@ -592,6 +593,6 @@ class PackageReleaseAdmin(admin.ModelAdmin):
                 cfg.publish()
                 cfg.is_published = True
                 cfg.save(update_fields=["is_published"])
-                self.message_user(request, f"Published {cfg.hub.name}", messages.SUCCESS)
+                self.message_user(request, f"Published {cfg.package.name}", messages.SUCCESS)
             except Exception as exc:
                 self.message_user(request, str(exc), messages.ERROR)
