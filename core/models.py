@@ -723,6 +723,8 @@ class PackageRelease(Entity):
     revision = models.CharField(max_length=40, blank=True)
     pypi_url = models.URLField(blank=True)
     is_live = models.BooleanField(default=False)
+    is_promoted = models.BooleanField(default=False, editable=False)
+    is_certified = models.BooleanField(default=False, editable=False)
 
     class Meta:
         verbose_name = "Package Release"
@@ -785,6 +787,24 @@ class PackageRelease(Entity):
         from . import release as release_utils
 
         release_utils.build(package=self.to_package(), creds=self.to_credentials(), **kwargs)
+
+    def promote(self) -> None:
+        """Run the promotion workflow for this release."""
+        from . import release as release_utils
+
+        release_utils.promote(
+            package=self.to_package(),
+            version=self.version,
+            creds=self.to_credentials(),
+        )
+
+    def publish(self) -> None:
+        """Upload the pre-built distribution to the package index."""
+        from . import release as release_utils
+
+        release_utils.publish(
+            package=self.to_package(), creds=self.to_credentials()
+        )
 
 # Ensure each RFID can only be linked to one account
 @receiver(m2m_changed, sender=Account.rfids.through)

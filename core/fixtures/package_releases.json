@@ -34,7 +34,9 @@
       "version": "0.0.0",
       "revision": "",
       "pypi_url": "https://pypi.org/project/arthexis/0.0.0/",
-      "is_live": false
+      "is_live": false,
+      "is_promoted": false,
+      "is_certified": false
     }
   },
   {
@@ -46,7 +48,9 @@
       "version": "0.0.1",
       "revision": "",
       "pypi_url": "https://pypi.org/project/arthexis/0.0.1/",
-      "is_live": false
+      "is_live": false,
+      "is_promoted": false,
+      "is_certified": false
     }
   },
   {
@@ -58,7 +62,9 @@
       "version": "0.1.0",
       "revision": "",
       "pypi_url": "https://pypi.org/project/arthexis/0.1.0/",
-      "is_live": false
+      "is_live": false,
+      "is_promoted": false,
+      "is_certified": false
     }
   },
   {
@@ -70,7 +76,9 @@
       "version": "0.1.1",
       "revision": "",
       "pypi_url": "https://pypi.org/project/arthexis/0.1.1/",
-      "is_live": false
+      "is_live": false,
+      "is_promoted": false,
+      "is_certified": false
     }
   },
   {
@@ -82,7 +90,9 @@
       "version": "0.1.2",
       "revision": "",
       "pypi_url": "https://pypi.org/project/arthexis/0.1.2/",
-      "is_live": false
+      "is_live": false,
+      "is_promoted": false,
+      "is_certified": false
     }
   },
   {
@@ -94,7 +104,9 @@
       "version": "1.0.0",
       "revision": "",
       "pypi_url": "https://pypi.org/project/arthexis/1.0.0/",
-      "is_live": false
+      "is_live": false,
+      "is_promoted": false,
+      "is_certified": false
     }
   }
 ]

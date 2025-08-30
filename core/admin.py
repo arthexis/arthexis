@@ -2,9 +2,7 @@ from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
 from django.urls import path, reverse
-from pathlib import Path
 from django.shortcuts import redirect, render
-from django.template.response import TemplateResponse
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
@@ -37,7 +35,6 @@ from .models import (
     PackageRelease,
     PackagerProfile,
 )
-from . import release
 
 
 class SecurityGroup(Group):
@@ -459,94 +456,46 @@ class RFIDAdmin(ImportExportModelAdmin):
         return JsonResponse(result, status=status)
 
 
-class BuildReleaseForm(forms.Form):
-    bump = forms.BooleanField(initial=True, required=False, label="Bump version")
-    upload = forms.BooleanField(initial=False, required=False, label="Upload to PyPI")
-    tests = forms.BooleanField(initial=True, required=False, label="Run tests")
-    stash = forms.BooleanField(initial=False, required=False, label="Auto stash before building")
-
-    def __init__(self, *args, **kwargs):
-        current_version = kwargs.pop("current_version", "")
-        super().__init__(*args, **kwargs)
-        if current_version:
-            self.fields["bump"].help_text = f"Current version: {current_version}"
-
-
 @admin.register(PackageRelease)
 class PackageReleaseAdmin(admin.ModelAdmin):
-    list_display = ("hub", "version", "pypi_url", "is_live")
-    actions = ["build_release", "create_next_release"]
+    list_display = (
+        "hub",
+        "version",
+        "pypi_url",
+        "is_live",
+        "is_promoted",
+        "is_certified",
+    )
+    actions = ["promote_release", "publish_to_index"]
 
-    @admin.action(description="Build selected packages")
-    def build_release(self, request, queryset):
-        if "apply" in request.POST:
-            form = BuildReleaseForm(request.POST)
-            if form.is_valid():
-                bump = form.cleaned_data["bump"]
-                upload = form.cleaned_data["upload"]
-                tests_opt = form.cleaned_data["tests"]
-                stash_opt = form.cleaned_data["stash"]
-                for cfg in queryset:
-                    try:
-                        cfg.full_clean()
-                        cfg.build(
-                            bump=bump,
-                            tests=tests_opt,
-                            dist=True,
-                            twine=upload,
-                            git=True,
-                            tag=True,
-                            stash=stash_opt,
-                        )
-                        self.message_user(
-                            request, f"Built {cfg.hub.name}", messages.SUCCESS
-                        )
-                    except ValidationError as exc:
-                        self.message_user(
-                            request, "; ".join(exc.messages), messages.ERROR
-                        )
-                    except release.TestsFailed as exc:
-                        log_text = (
-                            Path(exc.log_path).read_text(encoding="utf-8")
-                            if Path(exc.log_path).exists()
-                            else exc.output
-                        )
-                        return TemplateResponse(
-                            request,
-                            "admin/core/packagerelease/test_logs.html",
-                            {"log": log_text, "log_path": exc.log_path},
-                        )
-                    except Exception as exc:
-                        self.message_user(request, str(exc), messages.ERROR)
-                return None
-        else:
-            version = (
-                Path("VERSION").read_text().strip()
-                if Path("VERSION").exists()
-                else ""
-            )
-            form = BuildReleaseForm(current_version=version)
-        context = {
-            "form": form,
-            "queryset": queryset,
-            "action": "build_release",
-        }
-        return TemplateResponse(
-            request, "admin/core/packagerelease/build_release.html", context
-        )
-
-    @admin.action(description="Create next release")
-    def create_next_release(self, request, queryset):
+    @admin.action(description="Promote selected releases")
+    def promote_release(self, request, queryset):
         for cfg in queryset:
-            number = cfg.migration_number + 1
-            new_version = cfg.version_from_migration(number)
-            cfg.pk = None
-            cfg.version = new_version
-            cfg.revision = ""
-            cfg.is_live = False
-            cfg.save()
-            self.message_user(
-                request,
-                f"Created release {new_version}",
-                messages.SUCCESS,
-            )
+            try:
+                cfg.full_clean()
+                cfg.promote()
+                cfg.is_promoted = True
+                cfg.save(update_fields=["is_promoted"])
+                self.message_user(request, f"Promoted {cfg.hub.name}", messages.SUCCESS)
+            except ValidationError as exc:
+                self.message_user(request, "; ".join(exc.messages), messages.ERROR)
+            except Exception as exc:
+                self.message_user(request, str(exc), messages.ERROR)
+
+    @admin.action(description="Publish to Index")
+    def publish_to_index(self, request, queryset):
+        for cfg in queryset:
+            if not cfg.is_certified:
+                self.message_user(
+                    request,
+                    f"{cfg.hub.name} {cfg.version} is not certified",
+                    messages.ERROR,
+                )
+                continue
+            try:
+                cfg.publish()
+                cfg.is_live = True
+                cfg.save(update_fields=["is_live"])
+                self.message_user(request, f"Published {cfg.hub.name}", messages.SUCCESS)
+            except Exception as exc:
+                self.message_user(request, str(exc), messages.ERROR)
