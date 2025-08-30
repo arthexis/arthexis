@@ -13,10 +13,6 @@ import threading
 from pathlib import Path
 
 try:  # pragma: no cover - optional dependency
-    from win10toast import ToastNotifier
-except Exception:  # pragma: no cover - win10toast may not be installed
-    ToastNotifier = None
-try:  # pragma: no cover - optional dependency
     from plyer import notification as plyer_notification
 except Exception:  # pragma: no cover - plyer may not be installed
     plyer_notification = None
@@ -31,17 +27,9 @@ class NotificationManager:
         base_dir = Path(__file__).resolve().parents[1]
         self.lock_file = lock_file or base_dir / "locks" / "lcd_screen.lck"
         self.lock_file.parent.mkdir(parents=True, exist_ok=True)
-        # ``win10toast`` is only available on Windows and can fail when used in
-        # a non-interactive environment (e.g. service or CI). Any failure will
-        # disable further toast attempts so the application falls back to
-        # logging quietly.
-        self._toaster = None
-        if sys.platform.startswith("win") and ToastNotifier:
-            try:  # pragma: no cover - depends on platform
-                self._toaster = ToastNotifier()
-            except Exception as exc:  # pragma: no cover - depends on platform
-                logger.warning("Windows toast notifier unavailable: %s", exc)
-                self._toaster = None
+        # ``plyer`` is only available on Windows and can fail when used in
+        # a non-interactive environment (e.g. service or CI).
+        # Any failure will fallback to logging quietly.
 
     def _write_lock_file(self, subject: str, body: str) -> None:
         self.lock_file.write_text(f"{subject}\n{body}\n", encoding="utf-8")
@@ -80,25 +68,14 @@ class NotificationManager:
 
     # GUI/log fallback ------------------------------------------------
     def _gui_display(self, subject: str, body: str) -> None:
-        if sys.platform.startswith("win"):
-            if self._toaster:
-                try:  # pragma: no cover - depends on platform
-                    self._toaster.show_toast(
-                        "Arthexis", f"{subject}\n{body}", duration=6, threaded=True
-                    )
-                    return
-                except Exception as exc:  # pragma: no cover - depends on platform
-                    logger.warning("Windows toast notification failed: %s", exc)
-                    # Disable further toast attempts; the log fallback will be used
-                    # instead to avoid repeated errors in headless environments.
-                    self._toaster = None
-            if plyer_notification:
-                try:  # pragma: no cover - depends on platform
-                    plyer_notification.notify(
-                        title="Arthexis", message=f"{subject}\n{body}", timeout=6
-                    )
-                except Exception as exc:  # pragma: no cover - depends on platform
-                    logger.warning("Windows notification failed: %s", exc)
+        if sys.platform.startswith("win") and plyer_notification:
+            try:  # pragma: no cover - depends on platform
+                plyer_notification.notify(
+                    title="Arthexis", message=f"{subject}\n{body}", timeout=6
+                )
+                return
+            except Exception as exc:  # pragma: no cover - depends on platform
+                logger.warning("Windows notification failed: %s", exc)
         logger.info("%s %s", subject, body)
 
 

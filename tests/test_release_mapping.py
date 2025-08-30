@@ -8,10 +8,12 @@ class ReleaseMappingTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        user = get_user_model().objects.create(username="arthexis")
-        profile = PackagerProfile.objects.create(user=user, username="arthexis")
-        package = Package.objects.create(release_manager=profile)
-        PackageRelease.objects.create(package=package, profile=profile, version="0.1.1")
+        user = get_user_model().objects.get(username="arthexis")
+        profile = PackagerProfile.objects.get(user=user)
+        package = Package.objects.get(name="arthexis")
+        PackageRelease.objects.get_or_create(
+            version="0.1.1", defaults={"package": package, "profile": profile}
+        )
 
     def test_migration_number_formula(self):
         release = PackageRelease.objects.get(version="0.1.1")
