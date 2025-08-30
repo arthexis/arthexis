@@ -1,0 +1,35 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{% trans "Register Local Node" %}</h1>
+<p>{% trans "Attempting to register a node running on this computer." %}</p>
+<p id="result"></p>
+<script>
+(async function() {
+    const token = "{{ token }}";
+    const infoUrl = "http://localhost:8000/nodes/info/?token=" + token;
+    try {
+        const infoResp = await fetch(infoUrl);
+        const info = await infoResp.json();
+        const resp = await fetch("{{ register_url }}", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                hostname: info.hostname,
+                address: info.address,
+                port: info.port,
+                mac_address: info.mac_address,
+                public_key: info.public_key,
+                token: token,
+                signature: info.token_signature
+            })
+        });
+        const result = await resp.json();
+        document.getElementById("result").textContent = result.detail || ("Registered node ID " + result.id);
+    } catch(err) {
+        document.getElementById("result").textContent = err;
+    }
+})();
+</script>
+{% endblock %}
