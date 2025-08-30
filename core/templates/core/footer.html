@@ -1,12 +1,9 @@
-<footer class="container mt-5 mt-auto border-top pt-3">
-  <div class="row">
-    {% for column in footer_columns %}
-      <div class="col-6 col-md-2">
-        <ul class="list-unstyled">
-          {% for ref in column %}
-            <li><a href="{{ ref.value }}">{{ ref.alt_text|default:ref.value }}</a></li>
-          {% endfor %}
-        </ul>
+
+<footer class="container mt-5 border-top pt-3">
+  <div class="row row-cols-2 row-cols-md-6">
+    {% for ref in footer_refs %}
+      <div class="col mb-2">
+        <a href="{{ ref.value }}">{{ ref.alt_text|default:ref.value }}</a>
       </div>
     {% endfor %}
   </div>

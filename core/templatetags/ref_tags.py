@@ -30,7 +30,6 @@ def ref_img(value, size=200, alt=None):
 def render_footer():
     """Render footer links for references marked to appear there."""
     refs = list(Reference.objects.filter(include_in_footer=True))
-    columns = [refs[i::6] for i in range(6)]
 
     version = ""
     ver_path = Path(settings.BASE_DIR) / "VERSION"
@@ -41,7 +40,7 @@ def render_footer():
     rev_short = revision_value[-6:] if revision_value else ""
 
     return {
-        "footer_columns": columns,
+        "footer_refs": refs,
         "version": version,
         "revision": rev_short,
     }
