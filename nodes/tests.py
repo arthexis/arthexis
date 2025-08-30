@@ -26,9 +26,9 @@ from .models import (
     Node,
     ContentSample,
     NodeRole,
+    NetMessage,
 )
 from .tasks import capture_node_screenshot, sample_clipboard
-from core.models import Message
 
 
 class NodeTests(TestCase):
@@ -172,10 +172,9 @@ class NodeTests(TestCase):
             url, data="hello", content_type="text/plain"
         )
         self.assertEqual(post_resp.status_code, 200)
-        self.assertEqual(Message.objects.count(), 1)
-        msg = Message.objects.first()
+        self.assertEqual(NetMessage.objects.count(), 1)
+        msg = NetMessage.objects.first()
         self.assertEqual(msg.body, "hello")
-        self.assertEqual(msg.node, node)
 
     def test_public_api_disabled(self):
         node = Node.objects.create(

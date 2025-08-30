@@ -220,6 +220,107 @@ class Node(Entity):
             PeriodicTask.objects.filter(name=task_name).delete()
 
 
+class NetMessage(Entity):
+    """Message propagated across nodes."""
+
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    subject = models.CharField(max_length=64, blank=True)
+    body = models.CharField(max_length=256, blank=True)
+    propagated_to = models.ManyToManyField(
+        Node, blank=True, related_name="received_net_messages"
+    )
+    created = models.DateTimeField(auto_now_add=True)
+    complete = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created"]
+
+    @classmethod
+    def broadcast(cls, subject: str, body: str, seen: list[str] | None = None):
+        msg = cls.objects.create(subject=subject[:64], body=body[:256])
+        msg.propagate(seen=seen or [])
+        return msg
+
+    def propagate(self, seen: list[str] | None = None):
+        from core.notifications import notify
+        import random
+        import requests
+
+        notify(self.subject, self.body)
+        local = Node.get_local()
+        seen = list(seen or [])
+        if local:
+            local_id = str(local.uuid)
+            if local_id not in seen:
+                seen.append(local_id)
+        for node_id in seen:
+            node = Node.objects.filter(uuid=node_id).first()
+            if node and (not local or node.pk != local.pk):
+                self.propagated_to.add(node)
+
+        all_nodes = Node.objects.all()
+        if local:
+            all_nodes = all_nodes.exclude(pk=local.pk)
+        total_known = all_nodes.count()
+        target_limit = total_known if total_known < 2 else 3
+
+        if self.propagated_to.count() >= target_limit:
+            self.complete = True
+            self.save(update_fields=["complete"])
+            return
+
+        remaining = list(
+            all_nodes.exclude(pk__in=self.propagated_to.values_list("pk", flat=True))
+        )
+        if not remaining:
+            self.complete = True
+            self.save(update_fields=["complete"])
+            return
+
+        role_order = ["Control", "Constellation", "Gateway", "Terminal"]
+        selected: list[Node] = []
+        for role_name in role_order:
+            role_nodes = [n for n in remaining if n.role and n.role.name == role_name]
+            random.shuffle(role_nodes)
+            for n in role_nodes:
+                selected.append(n)
+                remaining.remove(n)
+                if len(selected) + self.propagated_to.count() >= target_limit:
+                    break
+            if len(selected) + self.propagated_to.count() >= target_limit:
+                break
+        if len(selected) + self.propagated_to.count() < target_limit:
+            random.shuffle(remaining)
+            for n in remaining:
+                selected.append(n)
+                if len(selected) + self.propagated_to.count() >= target_limit:
+                    break
+
+        seen_list = seen.copy()
+        for node in selected:
+            seen_list.append(str(node.uuid))
+            try:
+                requests.post(
+                    f"http://{node.address}:{node.port}/nodes/net-message/",
+                    json={
+                        "uuid": str(self.uuid),
+                        "subject": self.subject,
+                        "body": self.body,
+                        "seen": seen_list,
+                    },
+                    timeout=1,
+                )
+            except Exception:
+                pass
+            self.propagated_to.add(node)
+
+        if self.propagated_to.count() >= target_limit or (
+            total_known and self.propagated_to.count() >= total_known
+        ):
+            self.complete = True
+        self.save(update_fields=["complete"] if self.complete else [])
+
+
 class ContentSample(Entity):
     """Collected content such as text snippets or screenshots."""
 

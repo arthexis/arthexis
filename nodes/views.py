@@ -6,9 +6,8 @@ from django.shortcuts import get_object_or_404
 
 from utils.api import api_login_required
 
-from .models import Node
+from .models import Node, NetMessage
 from .utils import capture_screenshot, save_screenshot
-from core.models import Message
 
 
 @api_login_required
@@ -82,7 +81,7 @@ def public_node_endpoint(request, endpoint):
     """Public API endpoint for a node.
 
     - ``GET`` returns information about the node.
-    - ``POST`` stores the request as a :class:`core.models.Message`.
+    - ``POST`` broadcasts the request body as a :class:`NetMessage`.
     """
 
     node = get_object_or_404(
@@ -100,11 +99,39 @@ def public_node_endpoint(request, endpoint):
         return JsonResponse(data)
 
     if request.method == "POST":
-        Message.objects.create(
-            node=node,
+        NetMessage.broadcast(
             subject=request.method,
             body=request.body.decode("utf-8") if request.body else "",
+            seen=[str(node.uuid)],
         )
         return JsonResponse({"status": "stored"})
 
     return JsonResponse({"detail": "Method not allowed"}, status=405)
+
+
+@csrf_exempt
+def net_message(request):
+    """Receive a network message and continue propagation."""
+
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required"}, status=400)
+    try:
+        data = json.loads(request.body.decode())
+    except json.JSONDecodeError:
+        data = request.POST
+    msg_uuid = data.get("uuid")
+    subject = data.get("subject", "")
+    body = data.get("body", "")
+    seen = data.get("seen", [])
+    if not msg_uuid:
+        return JsonResponse({"detail": "uuid required"}, status=400)
+    msg, created = NetMessage.objects.get_or_create(
+        uuid=msg_uuid,
+        defaults={"subject": subject[:64], "body": body[:256]},
+    )
+    if not created:
+        msg.subject = subject[:64]
+        msg.body = body[:256]
+        msg.save(update_fields=["subject", "body"])
+    msg.propagate(seen=seen)
+    return JsonResponse({"status": "propagated", "complete": msg.complete})

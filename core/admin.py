@@ -32,13 +32,11 @@ from .models import (
     EVModel,
     RFID,
     Reference,
-    Message,
     OdooProfile,
     PackageHub,
     PackageRelease,
     PackagerProfile,
 )
-from .notifications import notify
 from . import release
 
 
@@ -107,20 +105,6 @@ class AccountRFIDForm(forms.ModelForm):
         if rfid.accounts.exclude(pk=self.instance.account_id).exists():
             raise forms.ValidationError("RFID is already assigned to another account")
         return rfid
-
-
-@admin.register(Message)
-class MessageAdmin(admin.ModelAdmin):
-    list_display = ("subject", "body", "node", "created")
-    search_fields = ("subject", "body")
-    ordering = ("-created",)
-    actions = ["send_messages"]
-
-    @admin.action(description="Send selected messages")
-    def send_messages(self, request, queryset):
-        for msg in queryset:
-            notify(msg.subject, msg.body)
-        self.message_user(request, f"{queryset.count()} messages sent")
 
 
 class AccountRFIDInline(admin.TabularInline):
