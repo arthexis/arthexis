@@ -188,17 +188,23 @@ def run_database_tasks(*, latest: bool = False) -> None:
                 source = Path(settings.BASE_DIR, name)
                 with source.open() as f:
                     data = json.load(f)
+                patched_data: list[dict] = []
                 for obj in data:
                     model_label = obj.get("model", "")
                     try:
                         model = apps.get_model(model_label)
                     except LookupError:
                         continue
+                    if model is PackageRelease:
+                        version = obj.get("fields", {}).get("version")
+                        if version and PackageRelease.objects.filter(version=version).exists():
+                            continue
                     if any(f.name == "is_seed_data" for f in model._meta.fields):
                         obj.setdefault("fields", {})["is_seed_data"] = True
+                    patched_data.append(obj)
                 dest = Path(tmpdir, Path(name).name)
                 with dest.open("w") as f:
-                    json.dump(data, f)
+                    json.dump(patched_data, f)
                 patched.append(str(dest))
             post_save.disconnect(_create_landings, sender=Module)
             try:
