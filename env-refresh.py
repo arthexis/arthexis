@@ -21,6 +21,8 @@ from django.core.management.base import CommandError
 from django.db import connections, connection
 from django.db.migrations.exceptions import InconsistentMigrationHistory
 from django.db.utils import OperationalError
+from django.db.migrations.recorder import MigrationRecorder
+from django.db.migrations.loader import MigrationLoader
 
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -138,13 +140,25 @@ def run_database_tasks(*, latest: bool = False) -> None:
     new_hash = _migration_hash(local_apps)
     stored_hash = hash_file.read_text().strip() if hash_file.exists() else ""
 
-    if latest and stored_hash and stored_hash != new_hash:
-        if using_sqlite:
-            connections.close_all()
-            Path(default_db["NAME"]).unlink(missing_ok=True)
-        else:  # pragma: no cover - unreachable in sqlite
-            for label in reversed(local_apps):
-                call_command("migrate", label, "zero", interactive=False)
+    if latest:
+        if stored_hash and stored_hash != new_hash:
+            if using_sqlite:
+                connections.close_all()
+                Path(default_db["NAME"]).unlink(missing_ok=True)
+            else:  # pragma: no cover - unreachable in sqlite
+                for label in reversed(local_apps):
+                    call_command("migrate", label, "zero", interactive=False)
+        else:
+            recorder = MigrationRecorder(connection)
+            loader = MigrationLoader(connection)
+            for label in local_apps:
+                qs = recorder.migration_qs.filter(app=label).order_by("-applied")
+                if qs.exists():
+                    last = qs.first().name
+                    node = loader.graph.node_map.get((label, last))
+                    parents = list(node.parents) if node else []
+                    prev = parents[0][1] if parents else "zero"
+                    call_command("migrate", label, prev, interactive=False)
 
     if not connection.in_atomic_block:
         try:

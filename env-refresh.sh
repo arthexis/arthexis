@@ -28,6 +28,12 @@ if [ ! -f "$PYTHON" ]; then
   exit 1
 fi
 
+RUNNING=0
+if pgrep -f "manage.py runserver" >/dev/null 2>&1; then
+  RUNNING=1
+  "$SCRIPT_DIR/stop.sh" --all >/dev/null 2>&1 || true
+fi
+
 if [ -f requirements.txt ]; then
   REQ_FILE="requirements.txt"
   MD5_FILE="requirements.md5"
@@ -44,4 +50,8 @@ if [ "$LATEST" -eq 1 ]; then
   "$PYTHON" env-refresh.py --latest database
 else
   "$PYTHON" env-refresh.py database
+fi
+
+if [ "$RUNNING" -eq 1 ]; then
+  nohup "$SCRIPT_DIR/start.sh" --reload >/dev/null 2>&1 &
 fi
