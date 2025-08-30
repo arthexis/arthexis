@@ -13,6 +13,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from core.models import Reference
+from core.release import DEFAULT_PACKAGE
 from utils import revision
 
 TMP_MEDIA_ROOT = tempfile.mkdtemp()
@@ -36,6 +37,7 @@ class FooterRenderTests(TestCase):
         self.assertContains(response, "https://example.com")
         version = Path("VERSION").read_text().strip()
         rev_short = revision.get_revision()[-6:]
-        self.assertContains(response, f"v{version}")
+        release_name = f"{DEFAULT_PACKAGE.name}-{version}"
         if rev_short:
-            self.assertContains(response, f"r{rev_short}")
+            release_name = f"{release_name}-{rev_short}"
+        self.assertContains(response, release_name)
