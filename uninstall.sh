@@ -61,6 +61,27 @@ if [ -n "$SERVICE" ] && systemctl list-unit-files | grep -Fq "${SERVICE}.service
         fi
         rm -f "$LOCK_DIR/lcd_screen.lck"
     fi
+    if [ -f "$LOCK_DIR/celery.lck" ]; then
+        CELERY_SERVICE="celery-$SERVICE"
+        CELERY_SERVICE_FILE="/etc/systemd/system/${CELERY_SERVICE}.service"
+        if systemctl list-unit-files | grep -Fq "${CELERY_SERVICE}.service"; then
+            sudo systemctl stop "$CELERY_SERVICE" || true
+            sudo systemctl disable "$CELERY_SERVICE" || true
+            if [ -f "$CELERY_SERVICE_FILE" ]; then
+                sudo rm "$CELERY_SERVICE_FILE"
+            fi
+        fi
+        CELERY_BEAT_SERVICE="celery-beat-$SERVICE"
+        CELERY_BEAT_SERVICE_FILE="/etc/systemd/system/${CELERY_BEAT_SERVICE}.service"
+        if systemctl list-unit-files | grep -Fq "${CELERY_BEAT_SERVICE}.service"; then
+            sudo systemctl stop "$CELERY_BEAT_SERVICE" || true
+            sudo systemctl disable "$CELERY_BEAT_SERVICE" || true
+            if [ -f "$CELERY_BEAT_SERVICE_FILE" ]; then
+                sudo rm "$CELERY_BEAT_SERVICE_FILE"
+            fi
+        fi
+        rm -f "$LOCK_DIR/celery.lck"
+    fi
     rm -f "$LOCK_DIR/service.lck"
 else
     pkill -f "manage.py runserver" || true
