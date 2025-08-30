@@ -196,6 +196,29 @@
           setTheme('dark');
         }
       })();
+
+      function syncDebugToolbarTheme() {
+        const button = document.getElementById('djToggleThemeButton');
+        if (!button) {
+          return;
+        }
+        const apply = () => {
+          const djdtTheme = localStorage.getItem('djdt.user-theme');
+          if (!djdtTheme) {
+            return;
+          }
+          const resolved = djdtTheme === 'auto'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : djdtTheme;
+          setTheme(resolved);
+        };
+        button.addEventListener('click', () => {
+          setTimeout(apply);
+        });
+        apply();
+      }
+
+      window.addEventListener('load', syncDebugToolbarTheme);
     </script>
     <script>
       document.querySelectorAll('.nav-item.dropdown').forEach(item => {
