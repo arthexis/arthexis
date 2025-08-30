@@ -36,6 +36,7 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD)
 LOCAL_VERSION="0"
 [ -f VERSION ] && LOCAL_VERSION=$(cat VERSION)
 
+echo "Checking repository for updates..."
 git fetch origin "$BRANCH"
 REMOTE_VERSION="$LOCAL_VERSION"
 if git cat-file -e "origin/$BRANCH:VERSION" 2>/dev/null; then
@@ -57,14 +58,17 @@ fi
 
 # Stop running instance (if any)
 if [[ $NO_RESTART -eq 0 ]]; then
+  echo "Stopping running instance..."
   ./stop.sh --all >/dev/null 2>&1 || true
 fi
 
 # Pull latest changes
+echo "Pulling latest changes..."
 git pull --rebase
 
 # Restore stashed changes
 if [ "$STASHED" -eq 1 ]; then
+  echo "Restoring local changes..."
   git stash pop || true
 fi
 
@@ -85,7 +89,9 @@ ENV_ARGS=""
 if [[ $FORCE -eq 1 ]]; then
   ENV_ARGS="--latest"
 fi
+echo "Refreshing environment..."
 ./env-refresh.sh $ENV_ARGS
 if [[ $NO_RESTART -eq 0 ]]; then
+  echo "Restarting services..."
   ./start.sh
 fi
