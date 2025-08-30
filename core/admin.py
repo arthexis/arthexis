@@ -4,6 +4,7 @@ from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
 from django.urls import path, reverse
 from django.shortcuts import redirect, render
 from django.http import JsonResponse
+from django.template.response import TemplateResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
 from django.contrib import messages
@@ -251,11 +252,17 @@ class EmailInboxAdminForm(forms.ModelForm):
         return pwd
 
 
+class EmailSearchForm(forms.Form):
+    subject = forms.CharField(required=False)
+    from_address = forms.CharField(label="From", required=False)
+    body = forms.CharField(required=False)
+
+
 @admin.register(EmailInbox)
 class EmailInboxAdmin(admin.ModelAdmin):
     form = EmailInboxAdminForm
     list_display = ("user", "host", "protocol", "username")
-    actions = ["test_connection"]
+    actions = ["test_connection", "search_inbox"]
     fieldsets = (
         (None, {"fields": ("user", "host", "port", "username", "password", "protocol", "use_ssl")}),
     )
@@ -268,6 +275,40 @@ class EmailInboxAdmin(admin.ModelAdmin):
                 self.message_user(request, f"{inbox} connection successful")
             except Exception as exc:  # pragma: no cover - admin feedback
                 self.message_user(request, f"{inbox}: {exc}", level=messages.ERROR)
+
+    @admin.action(description="Search selected inbox")
+    def search_inbox(self, request, queryset):
+        if queryset.count() != 1:
+            self.message_user(
+                request, "Please select exactly one inbox.", level=messages.ERROR
+            )
+            return None
+        inbox = queryset.first()
+        if request.POST.get("apply"):
+            form = EmailSearchForm(request.POST)
+            if form.is_valid():
+                results = inbox.search_messages(
+                    subject=form.cleaned_data["subject"],
+                    from_address=form.cleaned_data["from_address"],
+                    body=form.cleaned_data["body"],
+                )
+                context = {
+                    "form": form,
+                    "results": results,
+                    "queryset": queryset,
+                    "action": "search_inbox",
+                }
+                return TemplateResponse(
+                    request, "admin/core/emailinbox/search.html", context
+                )
+        else:
+            form = EmailSearchForm()
+        context = {
+            "form": form,
+            "queryset": queryset,
+            "action": "search_inbox",
+        }
+        return TemplateResponse(request, "admin/core/emailinbox/search.html", context)
 
 
 class EnergyCreditInline(admin.TabularInline):

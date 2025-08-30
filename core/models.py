@@ -324,6 +324,89 @@ class EmailInbox(Entity):
         except Exception as exc:
             raise ValidationError(str(exc))
 
+    def search_messages(self, subject="", from_address="", body="", limit: int = 10):
+        """Retrieve up to ``limit`` recent messages matching the filters.
+
+        Parameters are case-insensitive fragments. Results are returned as a list
+        of dictionaries with ``subject``, ``from`` and ``body`` keys.
+        """
+
+        def _get_body(msg):
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain" and not part.get_filename():
+                        charset = part.get_content_charset() or "utf-8"
+                        return part.get_payload(decode=True).decode(charset, errors="ignore")
+                return ""
+            charset = msg.get_content_charset() or "utf-8"
+            return msg.get_payload(decode=True).decode(charset, errors="ignore")
+
+        if self.protocol == self.IMAP:
+            import imaplib
+            import email
+
+            conn = (
+                imaplib.IMAP4_SSL(self.host, self.port)
+                if self.use_ssl
+                else imaplib.IMAP4(self.host, self.port)
+            )
+            conn.login(self.username, self.password)
+            conn.select("INBOX")
+            criteria = []
+            if subject:
+                criteria.extend(["SUBJECT", f'"{subject}"'])
+            if from_address:
+                criteria.extend(["FROM", f'"{from_address}"'])
+            if body:
+                criteria.extend(["TEXT", f'"{body}"'])
+            if not criteria:
+                criteria = ["ALL"]
+            typ, data = conn.search(None, *criteria)
+            ids = data[0].split()[-limit:]
+            messages = []
+            for mid in ids:
+                typ, msg_data = conn.fetch(mid, "(RFC822)")
+                msg = email.message_from_bytes(msg_data[0][1])
+                messages.append(
+                    {
+                        "subject": msg.get("Subject", ""),
+                        "from": msg.get("From", ""),
+                        "body": _get_body(msg),
+                    }
+                )
+            conn.logout()
+            return list(reversed(messages))
+
+        import poplib
+        import email
+
+        conn = (
+            poplib.POP3_SSL(self.host, self.port)
+            if self.use_ssl
+            else poplib.POP3(self.host, self.port)
+        )
+        conn.user(self.username)
+        conn.pass_(self.password)
+        count = len(conn.list()[1])
+        messages = []
+        for i in range(count, 0, -1):
+            resp, lines, octets = conn.retr(i)
+            msg = email.message_from_bytes(b"\n".join(lines))
+            subj = msg.get("Subject", "")
+            frm = msg.get("From", "")
+            body_text = _get_body(msg)
+            if subject and subject.lower() not in subj.lower():
+                continue
+            if from_address and from_address.lower() not in frm.lower():
+                continue
+            if body and body.lower() not in body_text.lower():
+                continue
+            messages.append({"subject": subj, "from": frm, "body": body_text})
+            if len(messages) >= limit:
+                break
+        conn.quit()
+        return messages
+
     def __str__(self):  # pragma: no cover - simple representation
         return f"{self.username}@{self.host}"
 
