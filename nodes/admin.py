@@ -51,7 +51,7 @@ class NodeAdmin(admin.ModelAdmin):
     change_list_template = "admin/nodes/node/change_list.html"
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
-    actions = ["run_task"]
+    actions = ["run_task", "take_screenshots"]
 
     def api(self, obj):
         return obj.enable_public_api
@@ -138,6 +138,31 @@ class NodeAdmin(admin.ModelAdmin):
         return render(request, "admin/nodes/node/run_task.html", context)
 
     run_task.short_description = "Run task"
+
+    @admin.action(description="Take Screenshots")
+    def take_screenshots(self, request, queryset):
+        tx = uuid.uuid4()
+        sources = getattr(settings, "SCREENSHOT_SOURCES", ["/"])
+        count = 0
+        for node in queryset:
+            for source in sources:
+                try:
+                    url = source.format(node=node, address=node.address, port=node.port)
+                except Exception:
+                    url = source
+                if not url.startswith("http"):
+                    url = f"http://{node.address}:{node.port}{url}"
+                try:
+                    path = capture_screenshot(url)
+                except Exception as exc:  # pragma: no cover - selenium issues
+                    self.message_user(request, f"{node}: {exc}", messages.ERROR)
+                    continue
+                sample = save_screenshot(
+                    path, node=node, method="ADMIN", transaction_uuid=tx
+                )
+                if sample:
+                    count += 1
+        self.message_user(request, f"{count} screenshots captured", messages.SUCCESS)
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}

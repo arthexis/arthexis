@@ -111,6 +111,10 @@ class Migration(migrations.Migration):
                 ('path', models.CharField(blank=True, max_length=255)),
                 ('method', models.CharField(blank=True, default='', max_length=10)),
                 ('hash', models.CharField(blank=True, max_length=64, null=True, unique=True)),
+                (
+                    'transaction_uuid',
+                    models.UUIDField(default=uuid.uuid4, editable=True, db_index=True),
+                ),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('node', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='nodes.node')),
             ],
