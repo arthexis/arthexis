@@ -1,9 +1,38 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  #content-main {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  #content-main .module {
+    flex: 1 0 calc(50% - 1rem);
+    box-sizing: border-box;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <h1>{{ title }}</h1>
 <div id="content-main">
+  {% if import_export %}
+    <div class="module">
+      <h2>{% trans "User Data" %}</h2>
+      <div class="form-row">
+        <a class="button" href="{% url 'admin:user_data_export' %}">{% trans "Export" %}</a>
+        <form action="{% url 'admin:user_data_import' %}" method="post" enctype="multipart/form-data" style="margin-top:1rem;">
+          {% csrf_token %}
+          <input type="file" name="data_zip" accept=".zip" />
+          <input type="submit" class="button" value="{% trans 'Import' %}" />
+        </form>
+      </div>
+    </div>
+  {% endif %}
   {% if sections %}
     {% for section in sections %}
       <div class="module">

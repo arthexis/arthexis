@@ -1,4 +1,6 @@
 from pathlib import Path
+from io import BytesIO
+from zipfile import ZipFile
 
 from django.test import TestCase, TransactionTestCase
 from django.contrib.auth import get_user_model
@@ -6,6 +8,7 @@ from django.urls import reverse
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
 from django.core.management import call_command
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.messages import get_messages
 
 import importlib.util
@@ -132,6 +135,9 @@ class UserDataViewTests(TestCase):
         User = get_user_model()
         self.user = User.objects.create_superuser("udadmin", password="pw")
         self.client.login(username="udadmin", password="pw")
+        self.data_dir = Path(settings.BASE_DIR) / "data"
+        for f in self.data_dir.glob("*.json"):
+            f.unlink()
         self.profile = OdooProfile.objects.create(
             user=self.user,
             host="http://test",
@@ -143,6 +149,10 @@ class UserDataViewTests(TestCase):
         UserDatum.objects.create(
             user=self.user, content_type=ct, object_id=self.profile.pk
         )
+        self.fixture_path = (
+            self.data_dir
+            / f"{self.user.pk}_core_odooprofile_{self.profile.pk}.json"
+        )
 
     def test_user_data_view_lists_items(self):
         url = reverse("admin:user_data")
@@ -153,3 +163,35 @@ class UserDataViewTests(TestCase):
         response = self.client.get(reverse("admin:index"))
         self.assertContains(response, reverse("admin:seed_data"))
         self.assertContains(response, reverse("admin:user_data"))
+
+    def test_user_data_page_has_import_export_links(self):
+        response = self.client.get(reverse("admin:user_data"))
+        self.assertContains(response, reverse("admin:user_data_export"))
+        self.assertContains(response, reverse("admin:user_data_import"))
+        self.assertContains(response, 'type="file"')
+
+    def test_export_and_import_roundtrip(self):
+        export_url = reverse("admin:user_data_export")
+        response = self.client.get(export_url)
+        self.assertEqual(response.status_code, 200)
+        with ZipFile(BytesIO(response.content)) as zf:
+            self.assertIn(self.fixture_path.name, zf.namelist())
+
+        profile_pk = self.profile.pk
+        ct = ContentType.objects.get_for_model(OdooProfile)
+        UserDatum.objects.all().delete()
+        self.profile.delete()
+        self.fixture_path.unlink(missing_ok=True)
+
+        upload = SimpleUploadedFile(
+            "user_data.zip", response.content, content_type="application/zip"
+        )
+        self.client.post(
+            reverse("admin:user_data_import"), {"data_zip": upload}, follow=True
+        )
+        self.assertTrue(OdooProfile.objects.filter(pk=profile_pk).exists())
+        self.assertTrue(
+            UserDatum.objects.filter(
+                user=self.user, content_type=ct, object_id=profile_pk
+            ).exists()
+        )
