@@ -22,7 +22,9 @@ from .models import (
     ContentSample,
     NodeTask,
     NetMessage,
+    User,
 )
+from core.admin import UserAdmin as CoreUserAdmin
 
 
 class NodeAdminForm(forms.ModelForm):
@@ -363,3 +365,6 @@ class NodeTaskAdmin(admin.ModelAdmin):
         return render(request, "admin/nodes/nodetask/run.html", context)
 
     execute.short_description = "Run task on nodes"
+
+
+admin.site.register(User, CoreUserAdmin)

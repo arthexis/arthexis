@@ -19,9 +19,22 @@ def ensure_connector_id(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
+        ("core", "0006_securitygroup_parent"),
         ("ocpp", "0002_initial"),
     ]
 
     operations = [
         migrations.RunPython(ensure_connector_id, migrations.RunPython.noop),
+        migrations.CreateModel(
+            name="ElectricVehicle",
+            fields=[],
+            options={
+                "verbose_name": "Electric Vehicle",
+                "verbose_name_plural": "Electric Vehicles",
+                "proxy": True,
+                "indexes": [],
+                "constraints": [],
+            },
+            bases=("core.vehicle",),
+        ),
     ]
