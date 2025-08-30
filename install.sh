@@ -313,11 +313,7 @@ deactivate
 if [ -n "$SERVICE" ]; then
     SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
     echo "$SERVICE" > "$LOCK_DIR/service.lck"
-    if [ "$ENABLE_CELERY" = true ]; then
-        EXEC_CMD="/bin/sh -c 'cd $BASE_DIR && .venv/bin/celery -A config worker -l info & .venv/bin/celery -A config beat -l info & exec .venv/bin/python manage.py runserver 0.0.0.0:$PORT'"
-    else
-        EXEC_CMD="$BASE_DIR/.venv/bin/python manage.py runserver 0.0.0.0:$PORT"
-    fi
+    EXEC_CMD="$BASE_DIR/.venv/bin/python manage.py runserver 0.0.0.0:$PORT"
     sudo bash -c "cat > '$SERVICE_FILE'" <<SERVICEEOF
 [Unit]
 Description=Arthexis Constellation Django service
@@ -334,8 +330,49 @@ User=$(id -un)
 [Install]
 WantedBy=multi-user.target
 SERVICEEOF
+    if [ "$ENABLE_CELERY" = true ]; then
+        CELERY_SERVICE="celery-$SERVICE"
+        CELERY_SERVICE_FILE="/etc/systemd/system/${CELERY_SERVICE}.service"
+        sudo bash -c "cat > '$CELERY_SERVICE_FILE'" <<CELERYSERVICEEOF
+[Unit]
+Description=Celery Worker for $SERVICE
+After=network.target redis.service
+
+[Service]
+Type=simple
+WorkingDirectory=$BASE_DIR
+EnvironmentFile=-$BASE_DIR/redis.env
+ExecStart=$BASE_DIR/.venv/bin/celery -A config worker -l info
+Restart=always
+User=$(id -un)
+
+[Install]
+WantedBy=multi-user.target
+CELERYSERVICEEOF
+        CELERY_BEAT_SERVICE="celery-beat-$SERVICE"
+        CELERY_BEAT_SERVICE_FILE="/etc/systemd/system/${CELERY_BEAT_SERVICE}.service"
+        sudo bash -c "cat > '$CELERY_BEAT_SERVICE_FILE'" <<BEATSERVICEEOF
+[Unit]
+Description=Celery Beat for $SERVICE
+After=network.target redis.service
+
+[Service]
+Type=simple
+WorkingDirectory=$BASE_DIR
+EnvironmentFile=-$BASE_DIR/redis.env
+ExecStart=$BASE_DIR/.venv/bin/celery -A config beat -l info
+Restart=always
+User=$(id -un)
+
+[Install]
+WantedBy=multi-user.target
+BEATSERVICEEOF
+    fi
     sudo systemctl daemon-reload
     sudo systemctl enable "$SERVICE"
+    if [ "$ENABLE_CELERY" = true ]; then
+        sudo systemctl enable "$CELERY_SERVICE" "$CELERY_BEAT_SERVICE"
+    fi
 fi
 
 if [ "$ENABLE_LCD_SCREEN" = true ] && [ -n "$SERVICE" ]; then
@@ -411,5 +448,9 @@ elif [ "$UPGRADE" = true ]; then
     fi
 elif [ -n "$SERVICE" ]; then
     sudo systemctl restart "$SERVICE"
+    if [ "$ENABLE_CELERY" = true ]; then
+        sudo systemctl restart "celery-$SERVICE"
+        sudo systemctl restart "celery-beat-$SERVICE"
+    fi
 fi
 
