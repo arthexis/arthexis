@@ -233,7 +233,7 @@ class NetMessage(Entity):
         Node, blank=True, related_name="received_net_messages"
     )
     created = models.DateTimeField(auto_now_add=True)
-    complete = models.BooleanField(default=False)
+    complete = models.BooleanField(default=False, editable=False)
 
     class Meta:
         ordering = ["-created"]
@@ -293,7 +293,7 @@ class NetMessage(Entity):
             self.save(update_fields=["complete"])
             return
 
-        role_order = ["Control", "Constellation", "Gateway", "Terminal"]
+        role_order = ["Control", "Constellation", "Satellite", "Terminal"]
         selected: list[Node] = []
         for role_name in role_order:
             role_nodes = [n for n in remaining if n.role and n.role.name == role_name]
@@ -313,13 +313,14 @@ class NetMessage(Entity):
                     break
 
         seen_list = seen.copy()
+        selected_ids = [str(n.uuid) for n in selected]
+        payload_seen = seen_list + selected_ids
         for node in selected:
-            seen_list.append(str(node.uuid))
             payload = {
                 "uuid": str(self.uuid),
                 "subject": self.subject,
                 "body": self.body,
-                "seen": seen_list,
+                "seen": payload_seen,
                 "sender": local_id,
             }
             payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
