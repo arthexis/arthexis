@@ -1,10 +1,14 @@
 import json
+import base64
 
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
 
 from utils.api import api_login_required
+
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import padding
 
 from .models import Node, NetMessage
 from .utils import capture_screenshot, save_screenshot
@@ -118,7 +122,26 @@ def net_message(request):
     try:
         data = json.loads(request.body.decode())
     except json.JSONDecodeError:
-        data = request.POST
+        return JsonResponse({"detail": "invalid json"}, status=400)
+
+    signature = request.headers.get("X-Signature")
+    sender_id = data.get("sender")
+    if not signature or not sender_id:
+        return JsonResponse({"detail": "signature required"}, status=403)
+    node = Node.objects.filter(uuid=sender_id).first()
+    if not node or not node.public_key:
+        return JsonResponse({"detail": "unknown sender"}, status=403)
+    try:
+        public_key = serialization.load_pem_public_key(node.public_key.encode())
+        public_key.verify(
+            base64.b64decode(signature),
+            request.body,
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+    except Exception:
+        return JsonResponse({"detail": "invalid signature"}, status=403)
+
     msg_uuid = data.get("uuid")
     subject = data.get("subject", "")
     body = data.get("body", "")

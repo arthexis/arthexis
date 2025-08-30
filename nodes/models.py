@@ -1,6 +1,8 @@
 from django.db import models
 from core.entity import Entity
 import re
+import json
+import base64
 from django.utils.text import slugify
 from django.conf import settings
 from django.contrib.sites.models import Site
@@ -11,7 +13,8 @@ from pathlib import Path
 from utils import revision
 from django.db import models
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import padding
 
 
 class NodeRoleManager(models.Manager):
@@ -248,11 +251,24 @@ class NetMessage(Entity):
 
         notify(self.subject, self.body)
         local = Node.get_local()
+        private_key = None
         seen = list(seen or [])
+        local_id = None
         if local:
             local_id = str(local.uuid)
             if local_id not in seen:
                 seen.append(local_id)
+            priv_path = (
+                Path(local.base_path or settings.BASE_DIR)
+                / "security"
+                / f"{local.public_endpoint}"
+            )
+            try:
+                private_key = serialization.load_pem_private_key(
+                    priv_path.read_bytes(), password=None
+                )
+            except Exception:
+                private_key = None
         for node_id in seen:
             node = Node.objects.filter(uuid=node_id).first()
             if node and (not local or node.pk != local.pk):
@@ -299,15 +315,30 @@ class NetMessage(Entity):
         seen_list = seen.copy()
         for node in selected:
             seen_list.append(str(node.uuid))
+            payload = {
+                "uuid": str(self.uuid),
+                "subject": self.subject,
+                "body": self.body,
+                "seen": seen_list,
+                "sender": local_id,
+            }
+            payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+            headers = {"Content-Type": "application/json"}
+            if private_key:
+                try:
+                    signature = private_key.sign(
+                        payload_json.encode(),
+                        padding.PKCS1v15(),
+                        hashes.SHA256(),
+                    )
+                    headers["X-Signature"] = base64.b64encode(signature).decode()
+                except Exception:
+                    pass
             try:
                 requests.post(
                     f"http://{node.address}:{node.port}/nodes/net-message/",
-                    json={
-                        "uuid": str(self.uuid),
-                        "subject": self.subject,
-                        "body": self.body,
-                        "seen": seen_list,
-                    },
+                    data=payload_json,
+                    headers=headers,
                     timeout=1,
                 )
             except Exception:
