@@ -1,3 +1,5 @@
+import copy
+
 from django.db import models
 from django.contrib.auth.models import UserManager as DjangoUserManager
 
@@ -32,6 +34,12 @@ class Entity(models.Model):
 
     class Meta:
         abstract = True
+
+    def clone(self):
+        """Return an unsaved copy of this instance."""
+        new = copy.copy(self)
+        new.pk = None
+        return new
 
     def save(self, *args, **kwargs):
         if self.pk:
