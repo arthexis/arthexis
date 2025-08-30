@@ -34,6 +34,7 @@ from .models import (
     RFID,
     Reference,
     OdooProfile,
+    FediverseProfile,
     EmailInbox,
     Package,
     PackageRelease,
@@ -244,6 +245,64 @@ class OdooProfileAdmin(admin.ModelAdmin):
                 self.message_user(
                     request, f"{profile.user}: {exc}", level=messages.ERROR
                 )
+
+
+class FediverseProfileAdminForm(forms.ModelForm):
+    """Admin form for :class:`core.models.FediverseProfile` with hidden token."""
+
+    access_token = forms.CharField(
+        widget=forms.PasswordInput(render_value=True),
+        required=False,
+        help_text="Leave blank to keep the current token.",
+    )
+
+    class Meta:
+        model = FediverseProfile
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["access_token"].initial = ""
+            self.initial["access_token"] = ""
+        
+    def clean_access_token(self):
+        token = self.cleaned_data.get("access_token")
+        if not token and self.instance.pk:
+            return self.instance.access_token
+        return token
+
+
+@admin.register(FediverseProfile)
+class FediverseProfileAdmin(admin.ModelAdmin):
+    form = FediverseProfileAdminForm
+    list_display = ("user", "service", "host", "handle", "verified_on")
+    readonly_fields = ("verified_on",)
+    actions = ["test_connection"]
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "user",
+                    "service",
+                    "host",
+                    "handle",
+                    "access_token",
+                    "verified_on",
+                )
+            },
+        ),
+    )
+
+    @admin.action(description="Test selected profiles")
+    def test_connection(self, request, queryset):
+        for profile in queryset:
+            try:
+                profile.test_connection()
+                self.message_user(request, f"{profile} connection successful")
+            except Exception as exc:  # pragma: no cover - admin feedback
+                self.message_user(request, f"{profile}: {exc}", level=messages.ERROR)
 
 
 class EmailInboxAdminForm(forms.ModelForm):

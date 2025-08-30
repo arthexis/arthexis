@@ -8,6 +8,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.http import HttpRequest
 import json
+from unittest import mock
 
 from django.utils import timezone
 from .models import (
@@ -21,6 +22,7 @@ from .models import (
     Brand,
     EVModel,
     RFID,
+    FediverseProfile,
     SecurityGroup,
 )
 from ocpp.models import Transaction, Charger
@@ -447,4 +449,34 @@ class SecurityGroupTests(TestCase):
         self.assertEqual(child.parent, parent)
         self.assertIn(user, child.user_set.all())
 
+
+class FediverseProfileTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="fed", password="secret")
+
+    @mock.patch("requests.get")
+    def test_connection_success_sets_verified(self, mock_get):
+        mock_get.return_value.ok = True
+        mock_get.return_value.raise_for_status.return_value = None
+        profile = FediverseProfile.objects.create(
+            user=self.user,
+            service=FediverseProfile.MASTODON,
+            host="example.com",
+            handle="fed",
+            access_token="tok",
+        )
+        self.assertTrue(profile.test_connection())
+        self.assertIsNotNone(profile.verified_on)
+
+    @mock.patch("requests.get", side_effect=Exception("boom"))
+    def test_connection_failure_raises(self, mock_get):
+        profile = FediverseProfile.objects.create(
+            user=self.user,
+            service=FediverseProfile.MASTODON,
+            host="example.com",
+            handle="fed",
+        )
+        with self.assertRaises(ValidationError):
+            profile.test_connection()
+        self.assertIsNone(profile.verified_on)
 
