@@ -342,15 +342,19 @@ def promote(
     package: Package = DEFAULT_PACKAGE,
     version: str,
     creds: Optional[Credentials] = None,
-) -> str:
-    """Create a release branch and build the package without tests."""
+) -> tuple[str, str, str]:
+    """Create a release branch and build the package without tests.
+
+    Returns a tuple of the release commit hash, the new branch name and the
+    original branch so the caller can switch back after pushing.
+    """
     current = _current_branch()
-    branch = f"release/{version}"
+    tmp_branch = f"release/{version}"
     try:
         try:
-            _run(["git", "checkout", "-b", branch])
+            _run(["git", "checkout", "-b", tmp_branch])
         except subprocess.CalledProcessError:
-            _run(["git", "checkout", branch])
+            _run(["git", "checkout", tmp_branch])
         build(
             package=package,
             creds=creds,
@@ -359,13 +363,20 @@ def promote(
             git=False,
             tag=False,
         )
+        try:  # best effort
+            _run([sys.executable, "manage.py", "squashmigrations", "core", "0001"], check=False)
+        except Exception:
+            pass
         _run(["git", "add", "."])  # add all changes
         _run(["git", "commit", "-m", f"Release v{version}"])
         commit_hash = _current_commit()
-        _run(["git", "push", "-u", "origin", branch])
-    finally:
+        release_name = f"{package.name}-{version}-{commit_hash[:7]}"
+        branch = f"release-{release_name}"
+        _run(["git", "branch", "-m", branch])
+    except Exception:
         _run(["git", "checkout", current])
-    return commit_hash
+        raise
+    return commit_hash, branch, current
 
 
 def publish(*, package: Package = DEFAULT_PACKAGE, creds: Optional[Credentials] = None) -> None:

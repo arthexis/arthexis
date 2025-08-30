@@ -5,6 +5,7 @@ from django.conf import settings
 from django.utils.safestring import mark_safe
 
 from core.models import Reference
+from core.release import DEFAULT_PACKAGE
 from utils import revision
 
 register = template.Library()
@@ -38,9 +39,13 @@ def render_footer():
 
     revision_value = revision.get_revision()
     rev_short = revision_value[-6:] if revision_value else ""
+    release_name = DEFAULT_PACKAGE.name
+    if version:
+        release_name = f"{release_name}-{version}"
+        if rev_short:
+            release_name = f"{release_name}-{rev_short}"
 
     return {
         "footer_refs": refs,
-        "version": version,
-        "revision": rev_short,
+        "release_name": release_name,
     }

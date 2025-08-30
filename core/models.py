@@ -959,7 +959,7 @@ class PackageRelease(Entity):
     version = models.CharField(max_length=20, unique=True, default="0.0.0")
     revision = models.CharField(max_length=40, blank=True)
     pypi_url = models.URLField(blank=True)
-    is_published = models.BooleanField(default=False)
+    is_published = models.BooleanField(default=False, editable=False)
     is_promoted = models.BooleanField(default=False, editable=False)
     is_certified = models.BooleanField(default=False, editable=False)
 
@@ -1040,14 +1040,32 @@ class PackageRelease(Entity):
     def promote(self) -> None:
         """Run the promotion workflow for this release."""
         from . import release as release_utils
+        from django.core.management import call_command
+        from pathlib import Path
+        import subprocess
 
-        commit_hash = release_utils.promote(
+        commit_hash, branch, current = release_utils.promote(
             package=self.to_package(),
             version=self.version,
             creds=self.to_credentials(),
         )
         self.revision = commit_hash
         self.save(update_fields=["revision"])
+        fixture_path = Path("core/fixtures/releases.json")
+        call_command(
+            "dumpdata",
+            "core.packagerelease",
+            format="json",
+            indent=2,
+            output=str(fixture_path),
+        )
+        subprocess.run(["git", "add", str(fixture_path)], check=True)
+        subprocess.run(
+            ["git", "commit", "-m", f"Add fixture for {self.version}"],
+            check=True,
+        )
+        subprocess.run(["git", "push", "-u", "origin", branch], check=True)
+        subprocess.run(["git", "checkout", current], check=True)
 
     def publish(self) -> None:
         """Upload the pre-built distribution to the package index."""
