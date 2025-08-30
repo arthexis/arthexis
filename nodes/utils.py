@@ -31,7 +31,7 @@ def capture_screenshot(url: str) -> Path:
     return filename
 
 
-def save_screenshot(path: Path, node=None, method: str = ""):
+def save_screenshot(path: Path, node=None, method: str = "", transaction_uuid=None):
     """Save screenshot file info if not already recorded.
 
     Returns the created :class:`ContentSample` or ``None`` if duplicate.
@@ -52,4 +52,5 @@ def save_screenshot(path: Path, node=None, method: str = ""):
         method=method,
         hash=digest,
         kind=ContentSample.IMAGE,
+        transaction_uuid=transaction_uuid,
     )

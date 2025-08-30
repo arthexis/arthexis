@@ -11,7 +11,7 @@ import os
 import socket
 from pathlib import Path
 from utils import revision
-from django.db import models
+from django.core.exceptions import ValidationError
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -366,6 +366,9 @@ class ContentSample(Entity):
     path = models.CharField(max_length=255, blank=True)
     method = models.CharField(max_length=10, default="", blank=True)
     hash = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    transaction_uuid = models.UUIDField(
+        default=uuid.uuid4, editable=True, db_index=True
+    )
     node = models.ForeignKey(
         Node, on_delete=models.SET_NULL, null=True, blank=True
     )
@@ -380,6 +383,12 @@ class ContentSample(Entity):
         verbose_name_plural = "Content Samples"
 
     def save(self, *args, **kwargs):
+        if self.pk:
+            original = type(self).all_objects.get(pk=self.pk)
+            if original.transaction_uuid != self.transaction_uuid:
+                raise ValidationError(
+                    {"transaction_uuid": "Cannot modify transaction UUID"}
+                )
         if self.node_id is None:
             self.node = Node.get_local()
         super().save(*args, **kwargs)

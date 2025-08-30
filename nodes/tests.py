@@ -15,7 +15,7 @@ from tempfile import TemporaryDirectory
 import shutil
 import time
 
-from django.test import Client, TestCase, TransactionTestCase
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
@@ -394,6 +394,38 @@ class NodeAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data:image/png;base64")
 
+    @override_settings(SCREENSHOT_SOURCES=["/one", "/two"])
+    @patch("nodes.admin.capture_screenshot")
+    def test_take_screenshots_action(self, mock_capture):
+        screenshot_dir = settings.LOG_DIR / "screenshots"
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        file1 = screenshot_dir / "one.png"
+        file1.write_bytes(b"1")
+        file2 = screenshot_dir / "two.png"
+        file2.write_bytes(b"2")
+        mock_capture.side_effect = [
+            Path("screenshots/one.png"),
+            Path("screenshots/two.png"),
+        ]
+        node = Node.objects.create(
+            hostname="host",
+            address="127.0.0.1",
+            port=80,
+            mac_address=Node.get_current_mac(),
+        )
+        url = reverse("admin:nodes_node_changelist")
+        resp = self.client.post(
+            url,
+            {"action": "take_screenshots", "_selected_action": [str(node.pk)]},
+            follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            ContentSample.objects.filter(kind=ContentSample.IMAGE).count(), 2
+        )
+        samples = list(ContentSample.objects.filter(kind=ContentSample.IMAGE))
+        self.assertEqual(samples[0].transaction_uuid, samples[1].transaction_uuid)
+
 
 class NetMessageAdminTests(TransactionTestCase):
     reset_sequences = True
@@ -585,6 +617,21 @@ class NotificationManagerTests(TestCase):
                     manager = NotificationManager()
                     manager._gui_display("hi", "there")
         mock_logger.info.assert_called_once_with("%s %s", "hi", "there")
+
+
+class ContentSampleTransactionTests(TestCase):
+    def test_transaction_uuid_behaviour(self):
+        sample1 = ContentSample.objects.create(content="a", kind=ContentSample.TEXT)
+        self.assertIsNotNone(sample1.transaction_uuid)
+        sample2 = ContentSample.objects.create(
+            content="b",
+            kind=ContentSample.TEXT,
+            transaction_uuid=sample1.transaction_uuid,
+        )
+        self.assertEqual(sample1.transaction_uuid, sample2.transaction_uuid)
+        with self.assertRaises(Exception):
+            sample1.transaction_uuid = uuid.uuid4()
+            sample1.save()
 
 
 class ContentSampleAdminTests(TestCase):
