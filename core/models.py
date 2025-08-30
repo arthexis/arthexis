@@ -935,11 +935,16 @@ class PackageRelease(Entity):
         self.pypi_url = (
             f"https://pypi.org/project/{self.package.name}/{self.version}/"
         )
+        self.is_published = False
         try:  # pragma: no cover - network check best effort
             import requests
 
-            resp = requests.head(self.pypi_url, timeout=5)
-            self.is_published = resp.status_code == 200
+            resp = requests.get(
+                f"https://pypi.org/pypi/{self.package.name}/json", timeout=5
+            )
+            if resp.ok:
+                releases = resp.json().get("releases", {})
+                self.is_published = self.version in releases
         except Exception:
             self.is_published = False
         super().save(*args, **kwargs)
