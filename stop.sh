@@ -70,25 +70,26 @@ while [[ $# -gt 0 ]]; do
 done
 
 PATTERN="manage.py runserver"
+# Assumes passwordless sudo for process management
 if [ "$ALL" = true ]; then
-  pkill -f "$PATTERN" || true
+  sudo pkill -f "$PATTERN" || true
 else
-  pkill -f "$PATTERN 0.0.0.0:$PORT" || true
+  sudo pkill -f "$PATTERN 0.0.0.0:$PORT" || true
 fi
 # Also stop any Celery components started by start.sh
-pkill -f "celery -A config" || true
+sudo pkill -f "celery -A config" || true
 
 # Wait for processes to fully terminate
 if [ "$ALL" = true ]; then
-  while pgrep -f "$PATTERN" > /dev/null; do
+  while sudo pgrep -f "$PATTERN" > /dev/null; do
     sleep 0.5
   done
 else
-  while pgrep -f "$PATTERN 0.0.0.0:$PORT" > /dev/null; do
+  while sudo pgrep -f "$PATTERN 0.0.0.0:$PORT" > /dev/null; do
     sleep 0.5
   done
 fi
-while pgrep -f "celery -A config" > /dev/null; do
+while sudo pgrep -f "celery -A config" > /dev/null; do
   sleep 0.5
 done
 
