@@ -777,7 +777,23 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('is_seed_data', models.BooleanField(default=False, editable=False)),
                 ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('version', models.CharField(default='0.0.0', max_length=20, unique=True)),
+                (
+                    'version',
+                    models.CharField(
+                        choices=[
+                            ('0.0.1', '0.0.1'),
+                            ('0.1.0', '0.1.0'),
+                            ('0.1.1', '0.1.1'),
+                            ('1.0.0', '1.0.0'),
+                            ('1.0.1', '1.0.1'),
+                            ('1.1.0', '1.1.0'),
+                            ('1.1.1', '1.1.1')
+                        ],
+                        default='0.0.0',
+                        max_length=20
+                    )
+                ),
+                ('release', models.CharField(blank=True, default='', max_length=40)),
                 ('revision', models.CharField(blank=True, max_length=40)),
                 ('pypi_url', models.URLField(blank=True)),
                 ('is_published', models.BooleanField(default=False)),
@@ -789,6 +805,7 @@ class Migration(migrations.Migration):
             options={
                 'verbose_name': 'Package Release',
                 'verbose_name_plural': 'Package Releases',
+                'unique_together': {('package', 'version', 'release')},
                 'get_latest_by': 'version',
             },
         ),

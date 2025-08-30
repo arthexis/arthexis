@@ -32,6 +32,7 @@ from .models import (
     NodeRole,
     NetMessage,
 )
+from core.models import PackageRelease
 from .tasks import capture_node_screenshot, sample_clipboard
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
@@ -128,6 +129,14 @@ class NodeTests(TestCase):
 
 
 class NodeRegisterCurrentTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="nodeuser2", password="pwd"
+        )
+        self.client.force_login(self.user)
+
     def test_register_current_sets_and_retains_lcd(self):
         with TemporaryDirectory() as tmp:
             base = Path(tmp)
@@ -143,24 +152,29 @@ class NodeRegisterCurrentTests(TestCase):
                     "nodes.models.revision.get_revision", return_value="rev"
                 ), patch.object(Node, "ensure_keys"):
                     node, created = Node.register_current()
-            self.assertTrue(created)
-            self.assertTrue(node.has_lcd_screen)
+        self.assertTrue(created)
+        self.assertTrue(node.has_lcd_screen)
 
-            node.has_lcd_screen = False
-            node.save(update_fields=["has_lcd_screen"])
+        self.assertEqual(PackageRelease.objects.count(), 1)
+        release = PackageRelease.objects.first()
+        self.assertEqual(release.version, "1.0.1")
+        self.assertEqual(release.release, "rev")
 
-            with override_settings(BASE_DIR=base):
-                with patch("nodes.models.Node.get_current_mac", return_value="00:ff:ee:dd:cc:bb"), patch(
-                    "nodes.models.socket.gethostname", return_value="testhost"
-                ), patch(
-                    "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
-                ), patch(
-                    "nodes.models.revision.get_revision", return_value="rev"
-                ), patch.object(Node, "ensure_keys"):
-                    node2, created2 = Node.register_current()
-            self.assertFalse(created2)
-            node.refresh_from_db()
-            self.assertFalse(node.has_lcd_screen)
+        node.has_lcd_screen = False
+        node.save(update_fields=["has_lcd_screen"])
+
+        with override_settings(BASE_DIR=base):
+            with patch("nodes.models.Node.get_current_mac", return_value="00:ff:ee:dd:cc:bb"), patch(
+                "nodes.models.socket.gethostname", return_value="testhost"
+            ), patch(
+                "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
+            ), patch(
+                "nodes.models.revision.get_revision", return_value="rev"
+            ), patch.object(Node, "ensure_keys"):
+                node2, created2 = Node.register_current()
+        self.assertFalse(created2)
+        node.refresh_from_db()
+        self.assertFalse(node.has_lcd_screen)
 
     @patch("nodes.views.capture_screenshot")
     def test_capture_screenshot(self, mock_capture):
@@ -394,7 +408,7 @@ class NodeAdminTests(TestCase):
         response = self.client.get(
             reverse("admin:nodes_node_register_current"), follow=False
         )
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(Node.objects.count(), 1)
         node = Node.objects.first()
         self.assertEqual(node.mac_address, Node.get_current_mac())

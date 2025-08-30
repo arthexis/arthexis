@@ -99,17 +99,19 @@ def _remove_integrator_from_auth_migration() -> None:
     path.write_text(patched + ("\n" if not patched.endswith("\n") else ""))
 
 
-def _refresh_next_release(version: str = "0.1.2") -> None:
+def _refresh_next_release(version: str = "1.1.1") -> None:
     """Recreate the pending package release for the given version."""
     package = Package.objects.first()
     if not package:
         return
+    release_hash = revision_utils.get_revision()
     PackageRelease.all_objects.filter(version=version).delete()
     PackageRelease.objects.create(
         package=package,
         profile=package.release_manager,
         version=version,
-        revision=revision_utils.get_revision(),
+        release=release_hash,
+        revision=release_hash,
         is_seed_data=True,
     )
 
@@ -210,8 +212,16 @@ def run_database_tasks(*, latest: bool = False) -> None:
                     except LookupError:
                         continue
                     if model is PackageRelease:
-                        version = obj.get("fields", {}).get("version")
-                        if version and PackageRelease.objects.filter(version=version).exists():
+                        fields = obj.get("fields", {})
+                        version = fields.get("version")
+                        release = fields.get("release")
+                        if (
+                            version
+                            and release
+                            and PackageRelease.objects.filter(
+                                version=version, release=release
+                            ).exists()
+                        ):
                             continue
                     if any(f.name == "is_seed_data" for f in model._meta.fields):
                         obj.setdefault("fields", {})["is_seed_data"] = True

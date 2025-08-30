@@ -136,6 +136,7 @@ class Node(Entity):
                 node.save(update_fields=["role"])
         Site.objects.get_or_create(domain=hostname, defaults={"name": "host"})
         node.ensure_keys()
+        node.ensure_release()
         return node, created
 
     def ensure_keys(self):
@@ -163,6 +164,40 @@ class Node(Entity):
         elif not self.public_key:
             self.public_key = pub_path.read_text()
             self.save(update_fields=["public_key"])
+
+    def ensure_release(self):
+        """Ensure a package release exists for this node's revision."""
+        from core.models import Package, PackageRelease
+        from core.release import DEFAULT_PACKAGE
+
+        version_map = {
+            "Satellite": "1.0.0",
+            "Constellation": "1.0.1",
+            "Terminal": "1.0.1",
+            "Control": "1.1.1",
+        }
+        role_name = self.role.name if self.role else "Terminal"
+        version = version_map.get(role_name, "1.1.1")
+        release_hash = self.installed_revision or revision.get_revision() or ""
+
+        defaults = {
+            "description": DEFAULT_PACKAGE.description,
+            "author": DEFAULT_PACKAGE.author,
+            "email": DEFAULT_PACKAGE.email,
+            "python_requires": DEFAULT_PACKAGE.python_requires,
+            "license": DEFAULT_PACKAGE.license,
+            "repository_url": DEFAULT_PACKAGE.repository_url,
+            "homepage_url": DEFAULT_PACKAGE.homepage_url,
+        }
+        package, _ = Package.objects.get_or_create(
+            name=DEFAULT_PACKAGE.name, defaults=defaults
+        )
+        PackageRelease.objects.get_or_create(
+            package=package,
+            version=version,
+            release=release_hash,
+            defaults={"revision": release_hash},
+        )
 
     @property
     def is_local(self):

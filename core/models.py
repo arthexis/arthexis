@@ -949,6 +949,15 @@ class Package(Entity):
 
 class PackageRelease(Entity):
     """Store metadata for a specific package version."""
+    ALLOWED_VERSIONS = [
+        "0.0.1",
+        "0.1.0",
+        "0.1.1",
+        "1.0.0",
+        "1.0.1",
+        "1.1.0",
+        "1.1.1",
+    ]
 
     package = models.ForeignKey(
         Package, on_delete=models.CASCADE, related_name="releases"
@@ -956,7 +965,12 @@ class PackageRelease(Entity):
     profile = models.ForeignKey(
         PackagerProfile, on_delete=models.SET_NULL, null=True, blank=True
     )
-    version = models.CharField(max_length=20, unique=True, default="0.0.0")
+    version = models.CharField(
+        max_length=20,
+        choices=[(v, v) for v in ALLOWED_VERSIONS],
+        default="0.0.0",
+    )
+    release = models.CharField(max_length=40, default="", blank=True)
     revision = models.CharField(max_length=40, blank=True)
     pypi_url = models.URLField(blank=True)
     is_published = models.BooleanField(default=False)
@@ -966,10 +980,11 @@ class PackageRelease(Entity):
     class Meta:
         verbose_name = "Package Release"
         verbose_name_plural = "Package Releases"
+        unique_together = ("package", "version", "release")
         get_latest_by = "version"
 
     def __str__(self) -> str:  # pragma: no cover - trivial
-        return f"{self.package.name} {self.version}"
+        return f"{self.package.name} {self.tag}"
 
     def to_package(self) -> ReleasePackage:
         """Return a :class:`ReleasePackage` built from the package."""
@@ -981,6 +996,11 @@ class PackageRelease(Entity):
         if profile:
             return profile.to_credentials()
         return None
+
+    @property
+    def tag(self) -> str:
+        """Return version string including release hash."""
+        return f"{self.version}+{self.release}" if self.release else self.version
 
     @property
     def migration_number(self) -> int:
@@ -1000,7 +1020,7 @@ class PackageRelease(Entity):
 
     def save(self, *args, **kwargs):
         self.pypi_url = (
-            f"https://pypi.org/project/{self.package.name}/{self.version}/"
+            f"https://pypi.org/project/{self.package.name}/{self.tag}/"
         )
         self.is_published = False
         try:  # pragma: no cover - network check best effort
@@ -1011,7 +1031,7 @@ class PackageRelease(Entity):
             )
             if resp.ok:
                 releases = resp.json().get("releases", {})
-                self.is_published = self.version in releases
+                self.is_published = self.tag in releases
         except Exception:
             self.is_published = False
         super().save(*args, **kwargs)
@@ -1024,7 +1044,7 @@ class PackageRelease(Entity):
         releases = list(cls.objects.all())
         if not releases:
             return None
-        return max(releases, key=lambda r: Version(r.version))
+        return max(releases, key=lambda r: (Version(r.version), r.release))
 
     def build(self, **kwargs) -> None:
         """Wrapper around :func:`core.release.build` for convenience."""
@@ -1043,7 +1063,7 @@ class PackageRelease(Entity):
 
         commit_hash = release_utils.promote(
             package=self.to_package(),
-            version=self.version,
+            version=self.tag,
             creds=self.to_credentials(),
         )
         self.revision = commit_hash

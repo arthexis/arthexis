@@ -670,7 +670,7 @@ class RFIDAdmin(ImportExportModelAdmin):
 @admin.register(PackageRelease)
 class PackageReleaseAdmin(admin.ModelAdmin):
     list_display = (
-        "version",
+        "display_version",
         "package",
         "pypi_url",
         "revision_short",
@@ -678,13 +678,18 @@ class PackageReleaseAdmin(admin.ModelAdmin):
         "is_certified",
         "is_published",
     )
-    list_display_links = ("version",)
+    list_display_links = ("display_version",)
     actions = ["promote_release", "publish_to_index"]
 
     def revision_short(self, obj):
         return obj.revision_short
 
     revision_short.short_description = "revision"
+
+    def display_version(self, obj):
+        return obj.tag
+
+    display_version.short_description = "version"
 
     @admin.action(description="Promote selected releases")
     def promote_release(self, request, queryset):
