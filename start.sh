@@ -23,6 +23,18 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
         sudo systemctl status "$LCD_SERVICE" --no-pager || true
       fi
     fi
+    if [ -f "$LOCK_DIR/celery.lck" ]; then
+      CELERY_SERVICE="celery-$SERVICE_NAME"
+      CELERY_BEAT_SERVICE="celery-beat-$SERVICE_NAME"
+      if systemctl list-unit-files | grep -Fq "${CELERY_SERVICE}.service"; then
+        sudo systemctl restart "$CELERY_SERVICE"
+        sudo systemctl status "$CELERY_SERVICE" --no-pager || true
+      fi
+      if systemctl list-unit-files | grep -Fq "${CELERY_BEAT_SERVICE}.service"; then
+        sudo systemctl restart "$CELERY_BEAT_SERVICE"
+        sudo systemctl status "$CELERY_BEAT_SERVICE" --no-pager || true
+      fi
+    fi
     exit 0
   fi
 fi
