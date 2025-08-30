@@ -80,17 +80,20 @@ pkill -f "celery -A config" || true
 
 # Wait for processes to fully terminate
 if [ "$ALL" = true ]; then
-  while pgrep -f "$PATTERN" > /dev/null; do
-    sleep 0.5
-  done
+  if ! timeout 30s sh -c "while pgrep -f '$PATTERN' >/dev/null; do sleep 0.5; done"; then
+    echo "Error: Timed out waiting for server processes to terminate" >&2
+    exit 1
+  fi
 else
-  while pgrep -f "$PATTERN 0.0.0.0:$PORT" > /dev/null; do
-    sleep 0.5
-  done
+  if ! timeout 30s sh -c "while pgrep -f '$PATTERN 0.0.0.0:$PORT' >/dev/null; do sleep 0.5; done"; then
+    echo "Error: Timed out waiting for server process on port $PORT to terminate" >&2
+    exit 1
+  fi
 fi
-while pgrep -f "celery -A config" > /dev/null; do
-  sleep 0.5
-done
+if ! timeout 30s sh -c 'while pgrep -f "celery -A config" >/dev/null; do sleep 0.5; done'; then
+  echo "Error: Timed out waiting for Celery processes to terminate" >&2
+  exit 1
+fi
 
 if [ -f "$LCD_LOCK" ]; then
   "$PYTHON" - <<'PY'
