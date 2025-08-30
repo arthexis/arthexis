@@ -1,5 +1,6 @@
 import asyncio
 import json
+import base64
 from datetime import datetime
 from django.utils import timezone
 from core.models import Account
@@ -163,12 +164,15 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         )
 
     async def receive(self, text_data=None, bytes_data=None):
-        if text_data is None:
+        raw = text_data
+        if raw is None and bytes_data is not None:
+            raw = base64.b64encode(bytes_data).decode("ascii")
+        if raw is None:
             return
-        store.add_log(self.charger_id, text_data, log_type="charger")
-        store.add_session_message(self.charger_id, text_data)
+        store.add_log(self.charger_id, raw, log_type="charger")
+        store.add_session_message(self.charger_id, raw)
         try:
-            msg = json.loads(text_data)
+            msg = json.loads(raw)
         except json.JSONDecodeError:
             return
         if isinstance(msg, list) and msg and msg[0] == 2:
