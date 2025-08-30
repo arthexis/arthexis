@@ -61,7 +61,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "django-insecure-16%ed9hv^gg!jj5ff6d4w=t$50k^abkq75+vwl44%^+qyq!m#w"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+
+# Enable DEBUG and related tooling when running in Terminal mode.
+NODE_ROLE = os.environ.get("NODE_ROLE")
+if NODE_ROLE is None:
+    role_lock = BASE_DIR / "locks" / "role.lck"
+    NODE_ROLE = role_lock.read_text().strip() if role_lock.exists() else "Terminal"
+
+DEBUG = NODE_ROLE == "Terminal"
 
 ALLOWED_HOSTS = [
     "localhost",
@@ -137,6 +144,9 @@ INSTALLED_APPS = [
     "django_celery_beat",
 ] + LOCAL_APPS
 
+if DEBUG:
+    INSTALLED_APPS += ["debug_toolbar"]
+
 SITE_ID = 1
 
 MIDDLEWARE = [
@@ -151,6 +161,10 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+if DEBUG:
+    MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
+    INTERNAL_IPS = ["127.0.0.1", "localhost"]
 
 CSRF_FAILURE_VIEW = "pages.views.csrf_failure"
 
