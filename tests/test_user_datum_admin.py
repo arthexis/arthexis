@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
 from django.core.management import call_command
+from django.contrib.messages import get_messages
 
 import importlib.util
 
@@ -22,6 +23,7 @@ from core.user_data import UserDatum
 
 class UserDatumAdminTests(TestCase):
     def setUp(self):
+        call_command("flush", verbosity=0, interactive=False)
         User = get_user_model()
         self.user = User.objects.create_superuser("udadmin", password="pw")
         self.client.login(username="udadmin", password="pw")
@@ -75,7 +77,7 @@ class UserDatumAdminTests(TestCase):
                 user=self.user, content_type=ct, object_id=self.profile.pk
             ).exists()
         )
-        messages = [m.message for m in response.context["messages"]]
+        messages = [m.message for m in get_messages(response.wsgi_request)]
         self.assertTrue(
             any(str(self.fixture_path) in msg for msg in messages),
         )
