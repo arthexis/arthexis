@@ -1,0 +1,9 @@
+<footer class="container mt-5 mt-auto">
+  <div class="row">
+    {% for ref in footer_refs %}
+      <div class="col">
+        <a href="{{ ref.value }}">{{ ref.alt_text|default:ref.value }}</a>
+      </div>
+    {% endfor %}
+  </div>
+</footer>
