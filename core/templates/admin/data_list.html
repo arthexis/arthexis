@@ -1,0 +1,26 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+<div id="content-main">
+  {% if sections %}
+    {% for section in sections %}
+      <div class="module">
+        <table>
+          <caption>{{ section.opts.verbose_name_plural|capfirst }}</caption>
+          <tbody>
+            {% for item in section.items %}
+            <tr>
+              <th scope="row"><a href="{{ item.url }}">{{ item.label }}</a></th>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p>{% trans 'None available' %}</p>
+  {% endif %}
+</div>
+{% endblock %}

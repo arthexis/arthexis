@@ -124,3 +124,32 @@ class UserDatumAdminTests(TestCase):
                 user_id=self.user.pk, content_type=ct, object_id=self.profile.pk
             ).exists()
         )
+
+
+class UserDataViewTests(TestCase):
+    def setUp(self):
+        call_command("flush", verbosity=0, interactive=False)
+        User = get_user_model()
+        self.user = User.objects.create_superuser("udadmin", password="pw")
+        self.client.login(username="udadmin", password="pw")
+        self.profile = OdooProfile.objects.create(
+            user=self.user,
+            host="http://test",
+            database="db",
+            username="odoo",
+            password="secret",
+        )
+        ct = ContentType.objects.get_for_model(OdooProfile)
+        UserDatum.objects.create(
+            user=self.user, content_type=ct, object_id=self.profile.pk
+        )
+
+    def test_user_data_view_lists_items(self):
+        url = reverse("admin:user_data")
+        response = self.client.get(url)
+        self.assertContains(response, str(self.profile))
+
+    def test_admin_index_shows_buttons(self):
+        response = self.client.get(reverse("admin:index"))
+        self.assertContains(response, reverse("admin:seed_data"))
+        self.assertContains(response, reverse("admin:user_data"))
