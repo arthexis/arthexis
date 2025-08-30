@@ -1,6 +1,6 @@
 [
   {
-    "model": "core.account",
+    "model": "core.energyaccount",
     "pk": 1,
     "fields": {
       "name": "GELECTRIIC",

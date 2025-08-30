@@ -172,6 +172,13 @@ class User(Entity, AbstractUser):
         on_delete=models.SET_NULL,
     )
     has_charger = models.BooleanField(default=False)
+    is_active = models.BooleanField(
+        _("active"),
+        default=True,
+        help_text=(
+            "Designates whether this user should be treated as active. Unselect this instead of deleting energy accounts."
+        ),
+    )
 
     def __str__(self):
         return self.username
@@ -456,19 +463,19 @@ class RFID(Entity):
             self.key_b = self.key_b.upper()
         super().save(*args, **kwargs)
         if not self.allowed:
-            self.accounts.clear()
+            self.energy_accounts.clear()
 
     def __str__(self):  # pragma: no cover - simple representation
         return str(self.label_id)
 
     @staticmethod
     def get_account_by_rfid(value):
-        """Return the account associated with an RFID code if it exists."""
+        """Return the energy account associated with an RFID code if it exists."""
         try:
-            Account = apps.get_model("core", "Account")
-        except LookupError:  # pragma: no cover - accounts app optional
+            EnergyAccount = apps.get_model("core", "EnergyAccount")
+        except LookupError:  # pragma: no cover - energy accounts app optional
             return None
-        return Account.objects.filter(
+        return EnergyAccount.objects.filter(
             rfids__rfid=value.upper(), rfids__allowed=True
         ).first()
 
@@ -478,18 +485,18 @@ class RFID(Entity):
         db_table = "core_rfid"
 
 
-class Account(Entity):
-    """Track kW credits for a user."""
+class EnergyAccount(Entity):
+    """Track kW energy credits for a user."""
 
     name = models.CharField(max_length=100, unique=True)
     user = models.OneToOneField(
         get_user_model(),
         on_delete=models.CASCADE,
-        related_name="account",
+        related_name="energy_account",
         null=True,
         blank=True,
     )
-    rfids = models.ManyToManyField("RFID", blank=True, related_name="accounts")
+    rfids = models.ManyToManyField("RFID", blank=True, related_name="energy_accounts")
     service_account = models.BooleanField(
         default=False,
         help_text="Allow transactions even when the balance is zero or negative",
@@ -501,7 +508,7 @@ class Account(Entity):
 
     @property
     def credits_kw(self):
-        """Total kW credits added to the account."""
+        """Total kW energy credits added to the energy account."""
         from django.db.models import Sum
         from decimal import Decimal
 
@@ -526,7 +533,7 @@ class Account(Entity):
 
     @property
     def balance_kw(self):
-        """Remaining kW available for the account."""
+        """Remaining kW available for the energy account."""
         return self.credits_kw - self.total_kw_spent
 
     def save(self, *args, **kwargs):
@@ -537,12 +544,17 @@ class Account(Entity):
     def __str__(self):  # pragma: no cover - simple representation
         return self.name
 
+    class Meta:
+        verbose_name = "Energy Account"
+        verbose_name_plural = "Energy Accounts"
+        db_table = "core_account"
 
-class Credit(Entity):
-    """Credits added to an account."""
+
+class EnergyCredit(Entity):
+    """Energy credits added to an energy account."""
 
     account = models.ForeignKey(
-        Account, on_delete=models.CASCADE, related_name="credits"
+        EnergyAccount, on_delete=models.CASCADE, related_name="credits"
     )
     amount_kw = models.DecimalField(
         max_digits=10, decimal_places=2, verbose_name="Energy (kW)"
@@ -557,8 +569,17 @@ class Credit(Entity):
     created_on = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        user = self.account.user if self.account.user else f"Account {self.account_id}"
+        user = (
+            self.account.user
+            if self.account.user
+            else f"Energy Account {self.account_id}"
+        )
         return f"{self.amount_kw} kW for {user}"
+
+    class Meta:
+        verbose_name = "Energy Credit"
+        verbose_name_plural = "Energy Credits"
+        db_table = "core_credit"
 
 
 class Brand(Entity):
@@ -612,10 +633,10 @@ class EVModel(Entity):
 
 
 class Vehicle(Entity):
-    """Vehicle associated with an Account."""
+    """Vehicle associated with an Energy Account."""
 
     account = models.ForeignKey(
-        Account, on_delete=models.CASCADE, related_name="vehicles"
+        EnergyAccount, on_delete=models.CASCADE, related_name="vehicles"
     )
     brand = models.ForeignKey(
         Brand,
@@ -657,9 +678,9 @@ class Product(Entity):
 
 
 class Subscription(Entity):
-    """An account's subscription to a product."""
+    """An energy account's subscription to a product."""
 
-    account = models.ForeignKey(Account, on_delete=models.CASCADE)
+    account = models.ForeignKey(EnergyAccount, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     start_date = models.DateField(auto_now_add=True)
     next_renewal = models.DateField(blank=True)
@@ -873,17 +894,17 @@ class PackageRelease(Entity):
     def revision_short(self) -> str:
         return self.revision[-6:] if self.revision else ""
 
-# Ensure each RFID can only be linked to one account
-@receiver(m2m_changed, sender=Account.rfids.through)
-def _rfid_unique_account(sender, instance, action, reverse, model, pk_set, **kwargs):
-    """Prevent associating an RFID with more than one account."""
+# Ensure each RFID can only be linked to one energy account
+@receiver(m2m_changed, sender=EnergyAccount.rfids.through)
+def _rfid_unique_energy_account(sender, instance, action, reverse, model, pk_set, **kwargs):
+    """Prevent associating an RFID with more than one energy account."""
     if action == "pre_add":
-        if reverse:  # adding accounts to an RFID
-            if instance.accounts.exclude(pk__in=pk_set).exists():
-                raise ValidationError("RFID tags may only be assigned to one account.")
-        else:  # adding RFIDs to an account
+        if reverse:  # adding energy accounts to an RFID
+            if instance.energy_accounts.exclude(pk__in=pk_set).exists():
+                raise ValidationError("RFID tags may only be assigned to one energy account.")
+        else:  # adding RFIDs to an energy account
             conflict = model.objects.filter(
-                pk__in=pk_set, accounts__isnull=False
-            ).exclude(accounts=instance)
+                pk__in=pk_set, energy_accounts__isnull=False
+            ).exclude(energy_accounts=instance)
             if conflict.exists():
-                raise ValidationError("RFID tags may only be assigned to one account.")
+                raise ValidationError("RFID tags may only be assigned to one energy account.")

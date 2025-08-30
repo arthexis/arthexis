@@ -12,9 +12,9 @@ import json
 from django.utils import timezone
 from .models import (
     User,
-    Account,
+    EnergyAccount,
     Vehicle,
-    Credit,
+    EnergyCredit,
     Address,
     Product,
     Subscription,
@@ -72,7 +72,7 @@ class RFIDLoginTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(username="alice", password="secret")
-        self.account = Account.objects.create(user=self.user, name="ALICE")
+        self.account = EnergyAccount.objects.create(user=self.user, name="ALICE")
         tag = RFID.objects.create(rfid="CARD123")
         self.account.rfids.add(tag)
 
@@ -98,7 +98,7 @@ class RFIDBatchApiTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(username="bob", password="secret")
-        self.account = Account.objects.create(user=self.user, name="BOB")
+        self.account = EnergyAccount.objects.create(user=self.user, name="BOB")
         self.client.force_login(self.user)
 
     def test_export_rfids(self):
@@ -113,7 +113,7 @@ class RFIDBatchApiTests(TestCase):
                 "rfids": [
                     {
                         "rfid": "CARD999",
-                        "accounts": [self.account.id],
+                        "energy_accounts": [self.account.id],
                         "allowed": True,
                         "color": "B",
                         "released": False,
@@ -131,7 +131,7 @@ class RFIDBatchApiTests(TestCase):
                 "rfids": [
                     {
                         "rfid": "CARD111",
-                        "accounts": [],
+                        "energy_accounts": [],
                         "allowed": True,
                         "color": "W",
                         "released": False,
@@ -150,7 +150,7 @@ class RFIDBatchApiTests(TestCase):
                 "rfids": [
                     {
                         "rfid": "CARD112",
-                        "accounts": [],
+                        "energy_accounts": [],
                         "allowed": True,
                         "color": "B",
                         "released": True,
@@ -164,7 +164,7 @@ class RFIDBatchApiTests(TestCase):
             "rfids": [
                 {
                     "rfid": "A1B2C3D4",
-                    "accounts": [self.account.id],
+                    "energy_accounts": [self.account.id],
                     "allowed": True,
                     "color": "W",
                     "released": True,
@@ -181,7 +181,7 @@ class RFIDBatchApiTests(TestCase):
         self.assertTrue(
             RFID.objects.filter(
                 rfid="A1B2C3D4",
-                accounts=self.account,
+                energy_accounts=self.account,
                 color=RFID.WHITE,
                 released=True,
             ).exists()
@@ -191,7 +191,7 @@ class RFIDBatchApiTests(TestCase):
 class AllowedRFIDTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="eve", password="secret")
-        self.account = Account.objects.create(user=self.user, name="EVE")
+        self.account = EnergyAccount.objects.create(user=self.user, name="EVE")
         self.rfid = RFID.objects.create(rfid="BAD123")
         self.account.rfids.add(self.rfid)
 
@@ -221,7 +221,7 @@ class RFIDValidationTests(TestCase):
 
     def test_find_user_by_rfid(self):
         user = User.objects.create_user(username="finder", password="pwd")
-        acc = Account.objects.create(user=user, name="FINDER")
+        acc = EnergyAccount.objects.create(user=user, name="FINDER")
         tag = RFID.objects.create(rfid="ABCD1234")
         acc.rfids.add(tag)
         found = RFID.get_account_by_rfid("abcd1234")
@@ -232,8 +232,8 @@ class RFIDAssignmentTests(TestCase):
     def setUp(self):
         self.user1 = User.objects.create_user(username="user1", password="x")
         self.user2 = User.objects.create_user(username="user2", password="x")
-        self.acc1 = Account.objects.create(user=self.user1, name="USER1")
-        self.acc2 = Account.objects.create(user=self.user2, name="USER2")
+        self.acc1 = EnergyAccount.objects.create(user=self.user1, name="USER1")
+        self.acc2 = EnergyAccount.objects.create(user=self.user2, name="USER2")
         self.tag = RFID.objects.create(rfid="ABCDEF12")
 
     def test_rfid_can_only_attach_to_one_account(self):
@@ -242,11 +242,11 @@ class RFIDAssignmentTests(TestCase):
             self.acc2.rfids.add(self.tag)
 
 
-class AccountTests(TestCase):
+class EnergyAccountTests(TestCase):
     def test_balance_calculation(self):
         user = User.objects.create_user(username="balance", password="x")
-        acc = Account.objects.create(user=user, name="BALANCE")
-        Credit.objects.create(account=acc, amount_kw=50)
+        acc = EnergyAccount.objects.create(user=user, name="BALANCE")
+        EnergyCredit.objects.create(account=acc, amount_kw=50)
         charger = Charger.objects.create(charger_id="T1")
         Transaction.objects.create(
             charger=charger,
@@ -261,19 +261,19 @@ class AccountTests(TestCase):
 
     def test_authorization_requires_positive_balance(self):
         user = User.objects.create_user(username="auth", password="x")
-        acc = Account.objects.create(user=user, name="AUTH")
+        acc = EnergyAccount.objects.create(user=user, name="AUTH")
         self.assertFalse(acc.can_authorize())
 
-        Credit.objects.create(account=acc, amount_kw=5)
+        EnergyCredit.objects.create(account=acc, amount_kw=5)
         self.assertTrue(acc.can_authorize())
 
     def test_service_account_ignores_balance(self):
         user = User.objects.create_user(username="service", password="x")
-        acc = Account.objects.create(user=user, service_account=True, name="SERVICE")
+        acc = EnergyAccount.objects.create(user=user, service_account=True, name="SERVICE")
         self.assertTrue(acc.can_authorize())
 
     def test_account_without_user(self):
-        acc = Account.objects.create(name="NOUSER")
+        acc = EnergyAccount.objects.create(name="NOUSER")
         tag = RFID.objects.create(rfid="NOUSER1")
         acc.rfids.add(tag)
         self.assertIsNone(acc.user)
@@ -283,7 +283,7 @@ class AccountTests(TestCase):
 class VehicleTests(TestCase):
     def test_account_can_have_multiple_vehicles(self):
         user = User.objects.create_user(username="cars", password="x")
-        acc = Account.objects.create(user=user, name="CARS")
+        acc = EnergyAccount.objects.create(user=user, name="CARS")
         tesla = Brand.objects.create(name="Tesla")
         nissan = Brand.objects.create(name="Nissan")
         model_s = EVModel.objects.create(brand=tesla, name="Model S")
@@ -325,7 +325,7 @@ class SubscriptionTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(username="bob", password="pwd")
-        self.account = Account.objects.create(user=self.user, name="SUBSCRIBER")
+        self.account = EnergyAccount.objects.create(user=self.user, name="SUBSCRIBER")
         self.product = Product.objects.create(name="Gold", renewal_period=30)
         self.client.force_login(self.user)
 
@@ -361,7 +361,7 @@ class OnboardingWizardTests(TestCase):
         self.client.force_login(User.objects.get(username="super"))
 
     def test_onboarding_flow_creates_account(self):
-        details_url = reverse("admin:core_account_onboard_details")
+        details_url = reverse("admin:core_energyaccount_onboard_details")
         response = self.client.get(details_url)
         self.assertEqual(response.status_code, 200)
         data = {
@@ -372,10 +372,10 @@ class OnboardingWizardTests(TestCase):
         }
         resp = self.client.post(details_url, data)
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(resp.url, reverse("admin:core_account_changelist"))
+        self.assertEqual(resp.url, reverse("admin:core_energyaccount_changelist"))
         user = User.objects.get(first_name="John", last_name="Doe")
         self.assertFalse(user.is_active)
-        account = Account.objects.get(user=user)
+        account = EnergyAccount.objects.get(user=user)
         self.assertTrue(account.rfids.filter(rfid="ABCD1234").exists())
         self.assertTrue(account.vehicles.filter(vin="VIN12345678901234").exists())
 
@@ -414,14 +414,14 @@ class RFIDFixtureTests(TestCase):
     def test_fixture_assigns_gelectriic_rfid(self):
         call_command(
             "loaddata",
-            "core/fixtures/accounts.json",
+            "core/fixtures/energy_accounts.json",
             "core/fixtures/rfids.json",
             verbosity=0,
         )
-        account = Account.objects.get(name="GELECTRIIC")
+        account = EnergyAccount.objects.get(name="GELECTRIIC")
         tag = RFID.objects.get(rfid="FFFFFFFF")
-        self.assertIn(account, tag.accounts.all())
-        self.assertEqual(tag.accounts.count(), 1)
+        self.assertIn(account, tag.energy_accounts.all())
+        self.assertEqual(tag.energy_accounts.count(), 1)
 
 
 class RFIDKeyVerificationFlagTests(TestCase):

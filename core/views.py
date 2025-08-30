@@ -7,7 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from utils.api import api_login_required
 
-from .models import Product, Subscription, Account
+from .models import Product, Subscription, EnergyAccount
 from .models import RFID
 
 
@@ -48,7 +48,7 @@ def product_list(request):
 @csrf_exempt
 @api_login_required
 def add_subscription(request):
-    """Create a subscription for an account from POSTed JSON."""
+    """Create a subscription for an energy account from POSTed JSON."""
 
     if request.method != "POST":
         return JsonResponse({"detail": "POST required"}, status=400)
@@ -117,7 +117,7 @@ def rfid_batch(request):
         tags = [
             {
                 "rfid": t.rfid,
-                "accounts": list(t.accounts.values_list("id", flat=True)),
+                "energy_accounts": list(t.energy_accounts.values_list("id", flat=True)),
                 "allowed": t.allowed,
                 "color": t.color,
                 "released": t.released,
@@ -142,7 +142,7 @@ def rfid_batch(request):
             if not rfid:
                 continue
             allowed = row.get("allowed", True)
-            accounts = row.get("accounts") or []
+            energy_accounts = row.get("energy_accounts") or []
             color = (
                 (row.get("color") or RFID.BLACK).strip().upper() or RFID.BLACK
             )
@@ -158,10 +158,10 @@ def rfid_batch(request):
                     "released": released,
                 },
             )
-            if accounts:
-                tag.accounts.set(Account.objects.filter(id__in=accounts))
+            if energy_accounts:
+                tag.energy_accounts.set(EnergyAccount.objects.filter(id__in=energy_accounts))
             else:
-                tag.accounts.clear()
+                tag.energy_accounts.clear()
             count += 1
 
         return JsonResponse({"imported": count})

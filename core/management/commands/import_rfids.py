@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand, CommandError
-from core.models import Account, RFID
+from core.models import EnergyAccount, RFID
 import csv
 
 
@@ -31,7 +31,7 @@ class Command(BaseCommand):
                 count = 0
                 for row in reader:
                     rfid = row.get("rfid", "").strip()
-                    accounts = row.get("accounts", "").strip()
+                    energy_accounts = row.get("energy_accounts", "").strip()
                     allowed = row.get("allowed", "True").strip().lower() != "false"
                     color = (
                         row.get("color", RFID.BLACK).strip().upper() or RFID.BLACK
@@ -53,11 +53,11 @@ class Command(BaseCommand):
                             "released": released,
                         },
                     )
-                    if accounts:
-                        ids = [int(a) for a in accounts.split(",") if a]
-                        tag.accounts.set(Account.objects.filter(id__in=ids))
+                    if energy_accounts:
+                        ids = [int(a) for a in energy_accounts.split(",") if a]
+                        tag.energy_accounts.set(EnergyAccount.objects.filter(id__in=ids))
                     else:
-                        tag.accounts.clear()
+                        tag.energy_accounts.clear()
                     count += 1
         except FileNotFoundError as exc:
             raise CommandError(str(exc))

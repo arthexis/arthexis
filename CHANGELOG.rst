@@ -269,7 +269,7 @@ Unreleased
 - 59dfa29 Log simulator traffic and wait for connection
 - d12fc5b Show systemd unit status in admin
 - a8bdc17 Add README sections model
-- 52355e7 Add unique name field to accounts
+- 52355e7 Add unique name field to energy accounts
 - 592c8b3 feat(awg): show templates when no results
 - 19cc2c7 Add Django command wrapper script
 - 90c6448 Add color copy button to admin badge fields
@@ -353,7 +353,7 @@ Unreleased
 - 5a97366 Add SeedData snapshot management
 - 731f8c7 Auto migrations
 - 74161ba test: update odoo tests
-- 0d77e30 Move RFID functionality to accounts app
+- 0d77e30 Move RFID functionality to energy accounts app
 - 066c13d Move TODO features into release app
 - 124603e Capitalise EV Models in admin
 - 7ecaf69 Enable markdown tables
@@ -444,7 +444,7 @@ Unreleased
 - a88f4a9 Allow charger log view for unknown chargers
 - 74e1c7b feat: auto sync git during dev reload
 - 68d80b9 Add admin clipboard button to capture system clipboard
-- 0514b62 Add customer onboarding wizard to account admin
+- 0514b62 Add customer onboarding wizard to energy account admin
 - 9593914 Remove gway dependency from OCPP
 - 65de02d Add RC522 RFID reader interface
 - 55a4ef6 Restrict default admin login to localhost
@@ -489,7 +489,7 @@ Unreleased
 - d6ce7f1 Add configurable badge colors for sites and nodes
 - b3e0cb1 feat(ocpp): expose simulator landing page
 - e308cc9 Add admin interface for PyPI release configuration
-- c91802d Merge subscriptions into accounts module
+- c91802d Merge subscriptions into energy accounts module
 - 46a678a Auto migrations
 - 49bce17 feat(ocpp): add advanced simulator features
 - 27dd2dc feat: add Bluesky integration
@@ -545,7 +545,7 @@ Unreleased
 - 0fe368d Move RFID model under auth app
 - 5a39479 feat(pages): add navigation bar and sitemap
 - 6304ad6 feat(pages): add navigation bar and sitemap
-- 03843a7 Simplify Account string representation
+- 03843a7 Simplify Energy Account string representation
 - ad20082 Add AWG reference app
 - 35db6d3 Improve charger labels and QR code
 - 904e0b0 Add Address model and link to User
@@ -570,19 +570,19 @@ Unreleased
 - dd7e878 Ignore additional log files
 - b5527eb Accept chargers at any path and record URL
 - d9462a5 Add rotating file logger
-- 0178a06 Add service account flag and balance authorization
+- 0178a06 Add service energy account flag and balance authorization
 - 58fd862 merge db
 - 305b5c3 Add location fields with map selection
 - 7259355 Align simulator defaults with local CSMS
-- 2692ef5 Link subscriptions to accounts
+- 2692ef5 Link subscriptions to energy accounts
 - 49b71e0 Show websocket URLs at server startup
-- c4ee526 Add admin interface for credit adjustments
+- c4ee526 Add admin interface for energy credit adjustments
 - d96c197 Add Spanish translation
 - 5afd184 Add charger log views and admin links
 - bf06121 merge db
 - 1ea7e88 Fix simulator start without running event loop
 - 0f16968 Rename qr_links app to qrcodes and add charger landing pages
-- ad02cdc Add credit tracking model and account transaction link
+- ad02cdc Add energy credit tracking model and energy account transaction link
 - a9043ae Add dark mode toggle
 - 3fc9338 merge db
 - 2ed7363 Add simulator model with admin controls
@@ -595,14 +595,14 @@ Unreleased
 - fd7fbd5 Add Bootstrap styling for readme pages
 - b50c748 Add WebSocket charge point simulator
 - 31238cd merge db
-- 266e60a Add vehicles linked to accounts
+- 266e60a Add vehicles linked to energy accounts
 - 44e618f merge
 - 527668b Add RFID model and support multiple tags
 - b01960c merge
 - f9c28db Create readme and pages apps with site routing
 - cc93399 Add RFID enforcement option for chargers
 - 13116ce ocpp: record last heartbeat and metervalues
-- b984410 Add account model for tracking energy credits
+- b984410 Add energy account model for tracking energy credits
 - 1727c49 Add Charger model and auto registration
 - 2f51f62 Persist OCPP transactions
 - 5259263 Remove OCPP refs from base README and update app docs
