@@ -145,7 +145,12 @@ INSTALLED_APPS = [
 ] + LOCAL_APPS
 
 if DEBUG:
-    INSTALLED_APPS += ["debug_toolbar"]
+    try:
+        import debug_toolbar  # type: ignore
+    except ModuleNotFoundError:  # pragma: no cover - optional dependency
+        pass
+    else:
+        INSTALLED_APPS += ["debug_toolbar"]
 
 SITE_ID = 1
 
@@ -163,8 +168,13 @@ MIDDLEWARE = [
 ]
 
 if DEBUG:
-    MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
-    INTERNAL_IPS = ["127.0.0.1", "localhost"]
+    try:
+        import debug_toolbar  # type: ignore
+    except ModuleNotFoundError:  # pragma: no cover - optional dependency
+        pass
+    else:
+        MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
+        INTERNAL_IPS = ["127.0.0.1", "localhost"]
 
 CSRF_FAILURE_VIEW = "pages.views.csrf_failure"
 

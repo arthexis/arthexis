@@ -69,8 +69,12 @@ urlpatterns = [
 urlpatterns += autodiscovered_urlpatterns()
 
 if settings.DEBUG:
-    import debug_toolbar
+    try:
+        import debug_toolbar
+    except ModuleNotFoundError:  # pragma: no cover - optional dependency
+        pass
+    else:
+        urlpatterns = [path("__debug__/", include(debug_toolbar.urls))] + urlpatterns
 
-    urlpatterns = [path("__debug__/", include(debug_toolbar.urls))] + urlpatterns
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
