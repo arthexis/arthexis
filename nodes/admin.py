@@ -12,6 +12,7 @@ from django.http import HttpResponse
 import base64
 import pyperclip
 from pyperclip import PyperclipException
+import uuid
 from .utils import capture_screenshot, save_screenshot
 from .actions import NodeAction
 
@@ -93,19 +94,18 @@ class NodeAdmin(admin.ModelAdmin):
         return custom + urls
 
     def register_current(self, request):
-        """Create or update the Node entry for this host."""
+        """Create or update this host and offer browser node registration."""
         node, created = Node.register_current()
         if created:
             self.message_user(
                 request, f"Current host registered as {node}", messages.SUCCESS
             )
-        else:
-            self.message_user(
-                request,
-                f"Current host already registered as {node}",
-                messages.INFO,
-            )
-        return redirect("..")
+        token = uuid.uuid4().hex
+        context = {
+            "token": token,
+            "register_url": reverse("register-node"),
+        }
+        return render(request, "admin/nodes/node/register_remote.html", context)
 
     def public_key(self, request, node_id):
         node = self.get_object(request, node_id)

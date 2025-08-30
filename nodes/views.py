@@ -4,6 +4,8 @@ import base64
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
+from django.conf import settings
+from pathlib import Path
 
 from utils.api import api_login_required
 
@@ -25,6 +27,47 @@ def node_list(request):
 
 
 @csrf_exempt
+def node_info(request):
+    """Return information about the local node and sign ``token`` if provided."""
+
+    node = Node.get_local()
+    if node is None:
+        node, _ = Node.register_current()
+
+    token = request.GET.get("token", "")
+    data = {
+        "hostname": node.hostname,
+        "address": node.address,
+        "port": node.port,
+        "mac_address": node.mac_address,
+        "public_key": node.public_key,
+    }
+
+    if token:
+        try:
+            priv_path = (
+                Path(node.base_path or settings.BASE_DIR)
+                / "security"
+                / f"{node.public_endpoint}"
+            )
+            private_key = serialization.load_pem_private_key(
+                priv_path.read_bytes(), password=None
+            )
+            signature = private_key.sign(
+                token.encode(),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+            data["token_signature"] = base64.b64encode(signature).decode()
+        except Exception:
+            pass
+
+    response = JsonResponse(data)
+    response["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
+@csrf_exempt
 @api_login_required
 def register_node(request):
     """Register or update a node from POSTed JSON data."""
@@ -41,22 +84,48 @@ def register_node(request):
     address = data.get("address")
     port = data.get("port", 8000)
     mac_address = data.get("mac_address")
+    public_key = data.get("public_key")
+    token = data.get("token")
+    signature = data.get("signature")
 
     if not hostname or not address or not mac_address:
         return JsonResponse(
             {"detail": "hostname, address and mac_address required"}, status=400
         )
 
+    verified = False
+    if public_key and token and signature:
+        try:
+            pub = serialization.load_pem_public_key(public_key.encode())
+            pub.verify(
+                base64.b64decode(signature),
+                token.encode(),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+            verified = True
+        except Exception:
+            return JsonResponse({"detail": "invalid signature"}, status=403)
+
     mac_address = mac_address.lower()
+    defaults = {"hostname": hostname, "address": address, "port": port}
+    if verified:
+        defaults["public_key"] = public_key
+
     node, created = Node.objects.get_or_create(
         mac_address=mac_address,
-        defaults={"hostname": hostname, "address": address, "port": port},
+        defaults=defaults,
     )
     if not created:
         node.hostname = hostname
         node.address = address
         node.port = port
-        node.save(update_fields=["hostname", "address", "port"])
+        if verified:
+            node.public_key = public_key
+            update_fields = ["hostname", "address", "port", "public_key"]
+        else:
+            update_fields = ["hostname", "address", "port"]
+        node.save(update_fields=update_fields)
         return JsonResponse(
             {"id": node.id, "detail": f"Node already exists (id: {node.id})"}
         )
