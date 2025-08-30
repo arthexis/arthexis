@@ -19,6 +19,7 @@ DISABLE_LCD_SCREEN=false
 CLEAN=false
 ENABLE_CONTROL=false
 NODE_ROLE="Terminal"
+REQUIRES_REDIS=false
 
 usage() {
     echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--terminal] [--control] [--constellation] [--celery] [--lcd-screen|--no-lcd-screen] [--clean]" >&2
@@ -32,6 +33,25 @@ require_nginx() {
         echo "  sudo apt-get update && sudo apt-get install nginx"
         exit 1
     fi
+}
+
+require_redis() {
+    if ! command -v redis-cli >/dev/null 2>&1; then
+        echo "Redis is required for the $1 role but is not installed."
+        echo "Install redis-server and re-run this script. For Debian/Ubuntu:"
+        echo "  sudo apt-get update && sudo apt-get install redis-server"
+        exit 1
+    fi
+    if ! redis-cli ping >/dev/null 2>&1; then
+        echo "Redis is required for the $1 role but does not appear to be running."
+        echo "Start redis and re-run this script. For Debian/Ubuntu:"
+        echo "  sudo systemctl start redis-server"
+        exit 1
+    fi
+    cat > "$BASE_DIR/redis.env" <<'EOF'
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+EOF
 }
 
 while [[ $# -gt 0 ]]; do
@@ -92,6 +112,7 @@ while [[ $# -gt 0 ]]; do
             LATEST=false
             ENABLE_CELERY=true
             NODE_ROLE="Gateway"
+            REQUIRES_REDIS=true
             shift
             ;;
         --terminal)
@@ -114,6 +135,7 @@ while [[ $# -gt 0 ]]; do
             DISABLE_LCD_SCREEN=false
             ENABLE_CONTROL=true
             NODE_ROLE="Control"
+            REQUIRES_REDIS=true
             shift
             ;;
         --constellation)
@@ -124,6 +146,7 @@ while [[ $# -gt 0 ]]; do
             ENABLE_CELERY=true
             LATEST=false
             NODE_ROLE="Constellation"
+            REQUIRES_REDIS=true
             shift
             ;;
         *)
@@ -153,6 +176,10 @@ if [ -f "$DB_FILE" ]; then
 fi
 LOCK_DIR="$BASE_DIR/locks"
 mkdir -p "$LOCK_DIR"
+
+if [ "$REQUIRES_REDIS" = true ]; then
+    require_redis "$NODE_ROLE"
+fi
 
 if [ "$ENABLE_CELERY" = true ]; then
     touch "$LOCK_DIR/celery.lck"
@@ -292,6 +319,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$BASE_DIR
+EnvironmentFile=-$BASE_DIR/redis.env
 ExecStart=$EXEC_CMD
 Restart=always
 User=$(id -un)

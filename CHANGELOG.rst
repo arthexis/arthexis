@@ -14,6 +14,7 @@ Unreleased
 - Hide Odoo profile passwords in admin forms unless updated
 - Provide progress feedback during upgrade
 - Adjust install defaults: Control uses --latest with auto-upgrade; Satellite and Constellation omit --latest
+- Require Redis for non-terminal installs and configure Celery broker
 
 0.1.1 [revision 76f70b6a72c78fcdf143a19ddcc88a0fbd209b3d]
 ---------------------------------------------------------

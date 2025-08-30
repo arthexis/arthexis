@@ -34,6 +34,14 @@ if [ ! -d .venv ]; then
 fi
 source .venv/bin/activate
 
+# Load any .env files to configure environment variables
+for env_file in *.env; do
+  [ -f "$env_file" ] || continue
+  set -a
+  . "$env_file"
+  set +a
+done
+
 # Determine default port based on nginx mode if present
 PORT=""
 RELOAD=false
