@@ -16,6 +16,7 @@ from django.core.files.base import ContentFile
 import qrcode
 import xmlrpc.client
 from django.utils import timezone
+import uuid
 
 from .entity import Entity, EntityUserManager
 from .release import Package, Credentials, DEFAULT_PACKAGE
@@ -342,6 +343,7 @@ class Reference(Entity):
     include_in_footer = models.BooleanField(
         default=False, verbose_name="Include in Footer"
     )
+    transaction_uuid = models.UUIDField(default=uuid.uuid4, editable=True, db_index=True)
     created = models.DateTimeField(auto_now_add=True)
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -352,6 +354,10 @@ class Reference(Entity):
     )
 
     def save(self, *args, **kwargs):
+        if self.pk:
+            original = type(self).all_objects.get(pk=self.pk)
+            if original.transaction_uuid != self.transaction_uuid:
+                raise ValidationError({"transaction_uuid": "Cannot modify transaction UUID"})
         if not self.image and self.value:
             qr = qrcode.QRCode(box_size=10, border=4)
             qr.add_data(self.value)

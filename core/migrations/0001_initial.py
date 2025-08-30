@@ -8,6 +8,7 @@ import django.utils.timezone
 import core.entity
 from django.conf import settings
 from django.db import migrations, models
+import uuid
 
 
 class Migration(migrations.Migration):
@@ -350,6 +351,7 @@ class Migration(migrations.Migration):
                     "include_in_footer",
                     models.BooleanField(default=False, verbose_name="Include in Footer"),
                 ),
+                ("transaction_uuid", models.UUIDField(default=uuid.uuid4, editable=True, db_index=True)),
                 ("created", models.DateTimeField(auto_now_add=True)),
                 (
                     "author",
