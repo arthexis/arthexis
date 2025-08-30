@@ -33,10 +33,6 @@ if [ ! -f "$PYTHON" ]; then
   exit 1
 fi
 
-if pgrep -f "manage.py runserver" >/dev/null 2>&1; then
-  echo "Development server is running. Stop it before refreshing." >&2
-  exit 1
-fi
 
 if [ "$CLEAN" -eq 1 ]; then
   rm -f "$SCRIPT_DIR/db.sqlite3"

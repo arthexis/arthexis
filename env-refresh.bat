@@ -20,12 +20,7 @@ if not exist %VENV%\Scripts\python.exe (
     echo Virtual environment not found. Run install.sh first.
     exit /b 1
 )
-set RUNNING=0
-for /f %%p in ('powershell -NoProfile -Command "Get-CimInstance Win32_Process ^| Where-Object { $_.CommandLine -match 'manage.py runserver' } ^| Select-Object -First 1 -ExpandProperty ProcessId"') do set RUNNING=1
-if %RUNNING%==1 (
-    echo Development server is running. Stop it before refreshing.
-    exit /b 1
-)
+
 if %CLEAN%==1 (
     del /f /q "%~dp0db.sqlite3" 2>nul
 )
