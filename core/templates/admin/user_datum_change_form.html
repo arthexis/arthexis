@@ -7,7 +7,7 @@
     <li>
         <label style="color: var(--body-quiet-color);">
             {% trans "User Datum" %}
-            <input type="checkbox" name="_user_datum"{% if is_user_datum %} checked{% endif %}>
+            <input type="checkbox" name="_user_datum" form="{{ opts.model_name }}_form"{% if is_user_datum %} checked{% endif %}>
         </label>
     </li>
     {% endif %}
