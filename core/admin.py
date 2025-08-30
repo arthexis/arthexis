@@ -17,6 +17,8 @@ from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
 from django.contrib.auth.models import Group
 from django.utils.html import format_html
+import json
+import uuid
 from .models import (
     User,
     Account,
@@ -50,7 +52,7 @@ admin.site.unregister(Group)
 
 @admin.register(Reference)
 class ReferenceAdmin(admin.ModelAdmin):
-    list_display = ("alt_text", "content_type", "include_in_footer", "author")
+    list_display = ("alt_text", "content_type", "include_in_footer", "author", "transaction_uuid")
     readonly_fields = ("uses", "qr_code", "author")
     fields = (
         "alt_text",
@@ -59,10 +61,50 @@ class ReferenceAdmin(admin.ModelAdmin):
         "file",
         "method",
         "include_in_footer",
+        "transaction_uuid",
         "author",
         "uses",
         "qr_code",
     )
+
+    def get_readonly_fields(self, request, obj=None):
+        ro = list(super().get_readonly_fields(request, obj))
+        if obj:
+            ro.append("transaction_uuid")
+        return ro
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "bulk/",
+                self.admin_site.admin_view(csrf_exempt(self.bulk_create)),
+                name="core_reference_bulk",
+            ),
+        ]
+        return custom + urls
+
+    def bulk_create(self, request):
+        if request.method != "POST":
+            return JsonResponse({"error": "POST required"}, status=405)
+        try:
+            payload = json.loads(request.body or "{}")
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        refs = payload.get("references", [])
+        transaction_uuid = payload.get("transaction_uuid") or uuid.uuid4()
+        created_ids = []
+        for data in refs:
+            ref = Reference.objects.create(
+                alt_text=data.get("alt_text", ""),
+                value=data.get("value", ""),
+                transaction_uuid=transaction_uuid,
+                author=request.user if request.user.is_authenticated else None,
+            )
+            created_ids.append(ref.id)
+        return JsonResponse(
+            {"transaction_uuid": str(transaction_uuid), "ids": created_ids}
+        )
 
     def qr_code(self, obj):
         if obj.image:
