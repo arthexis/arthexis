@@ -361,7 +361,8 @@ class NodeAdminTests(TestCase):
         hostname = socket.gethostname()
         with patch("utils.revision.get_revision", return_value="abcdef123456"):
             response = self.client.get(url)
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "admin/nodes/node/register_remote.html")
         self.assertEqual(Node.objects.count(), 1)
         node = Node.objects.first()
         ver = Path('VERSION').read_text().strip()
