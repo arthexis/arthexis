@@ -6,8 +6,10 @@
 <style>
   #content-main table {
     width: 100%;
+    clear: both;
   }
   #content-main .actions {
+    float: right;
     margin-bottom: 1rem;
   }
   #content-main .actions form {
@@ -18,15 +20,14 @@
 {% endblock %}
 
 {% block content %}
-<h1>{{ title }}</h1>
 <div id="content-main">
   {% if import_export %}
     <div class="actions">
-      <a class="button" href="{% url 'admin:user_data_export' %}">{% trans "Export" %}</a>
+      <a href="{% url 'admin:user_data_export' %}">{% trans "Export" %}</a>
       <form action="{% url 'admin:user_data_import' %}" method="post" enctype="multipart/form-data">
         {% csrf_token %}
         <input type="file" name="data_zip" accept=".zip" />
-        <input type="submit" class="button" value="{% trans 'Import' %}" />
+        <a href="#" onclick="this.closest('form').submit(); return false;">{% trans 'Import' %}</a>
       </form>
     </div>
   {% endif %}
@@ -34,6 +35,7 @@
     <table>
       <thead>
         <tr>
+          <th>{% trans "App" %}</th>
           <th>{% trans "Model" %}</th>
           <th>{% trans "Entity" %}</th>
         </tr>
@@ -42,6 +44,7 @@
         {% for section in sections %}
           {% for item in section.items %}
           <tr>
+            <td>{{ section.opts.app_config.verbose_name|capfirst }}</td>
             <td>{{ section.opts.verbose_name|capfirst }}</td>
             <td><a href="{{ item.url }}">{{ item.label }}</a></td>
           </tr>
