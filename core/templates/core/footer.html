@@ -1,9 +1,18 @@
-<footer class="container mt-5 mt-auto">
+<footer class="container mt-5 mt-auto border-top pt-3">
   <div class="row">
-    {% for ref in footer_refs %}
-      <div class="col">
-        <a href="{{ ref.value }}">{{ ref.alt_text|default:ref.value }}</a>
+    {% for column in footer_columns %}
+      <div class="col-6 col-md-2">
+        <ul class="list-unstyled">
+          {% for ref in column %}
+            <li><a href="{{ ref.value }}">{{ ref.alt_text|default:ref.value }}</a></li>
+          {% endfor %}
+        </ul>
       </div>
     {% endfor %}
+  </div>
+  <div class="row mt-3">
+    <div class="col text-center">
+      <small class="text-muted">v{{ version }}{% if revision %} r{{ revision }}{% endif %}</small>
+    </div>
   </div>
 </footer>
