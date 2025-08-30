@@ -32,6 +32,14 @@
     }
   },
   {
+    "model": "pages.landing",
+    "fields": {
+      "module": ["Gateway", "/ocpp/"],
+      "path": "/ocpp/efficiency/",
+      "label": "EV Efficiency"
+    }
+  },
+  {
     "model": "pages.module",
     "fields": {
       "node_role": ["Gateway"],

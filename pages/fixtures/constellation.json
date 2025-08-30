@@ -49,6 +49,14 @@
     }
   },
   {
+    "model": "pages.landing",
+    "fields": {
+      "module": ["Constellation", "/ocpp/"],
+      "path": "/ocpp/efficiency/",
+      "label": "EV Efficiency"
+    }
+  },
+  {
     "model": "pages.module",
     "fields": {
       "node_role": [

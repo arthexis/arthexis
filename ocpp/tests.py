@@ -1208,3 +1208,22 @@ class ChargerSessionPaginationTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(resp.context["transactions"]), 15)
+
+
+class EfficiencyCalculatorViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="eff", password="secret", email="eff@example.com"
+        )
+        self.client.force_login(self.user)
+
+    def test_get_view(self):
+        url = reverse("ev-efficiency")
+        resp = self.client.get(url)
+        self.assertContains(resp, "EV Efficiency Calculator")
+
+    def test_post_calculation(self):
+        url = reverse("ev-efficiency")
+        resp = self.client.post(url, {"distance": "100", "energy": "20"})
+        self.assertContains(resp, "5.00")
