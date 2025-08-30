@@ -5,7 +5,7 @@ from django.contrib.sites.models import Site
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 
-from core.models import Account, Reference, RFID as CoreRFID
+from core.models import EnergyAccount, Reference, RFID as CoreRFID
 
 
 class Location(Entity):
@@ -134,7 +134,7 @@ class Transaction(Entity):
         Charger, on_delete=models.CASCADE, related_name="transactions", null=True
     )
     account = models.ForeignKey(
-        Account, on_delete=models.PROTECT, related_name="transactions", null=True
+        EnergyAccount, on_delete=models.PROTECT, related_name="transactions", null=True
     )
     rfid = models.CharField(max_length=20, blank=True)
     vin = models.CharField(max_length=17, blank=True)

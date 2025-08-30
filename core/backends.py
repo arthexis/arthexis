@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
 import ipaddress
 
-from .models import Account
+from .models import EnergyAccount
 
 
 class RFIDBackend:
@@ -14,7 +14,7 @@ class RFIDBackend:
         if not rfid:
             return None
         account = (
-            Account.objects.filter(
+            EnergyAccount.objects.filter(
                 rfids__rfid=rfid.upper(), rfids__allowed=True, user__isnull=False
             )
             .select_related("user")

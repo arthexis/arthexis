@@ -266,7 +266,7 @@ class Migration(migrations.Migration):
                     "is_active",
                     models.BooleanField(
                         default=True,
-                        help_text="Designates whether this user should be treated as active. Unselect this instead of deleting accounts.",
+                        help_text="Designates whether this user should be treated as active. Unselect this instead of deleting energy accounts.",
                         verbose_name="active",
                     ),
                 ),
@@ -367,7 +367,7 @@ class Migration(migrations.Migration):
             options={"abstract": False},
         ),
         migrations.CreateModel(
-            name="Account",
+            name="EnergyAccount",
             fields=[
                 (
                     "id",
@@ -394,17 +394,20 @@ class Migration(migrations.Migration):
                         blank=True,
                         null=True,
                         on_delete=django.db.models.deletion.CASCADE,
-                        related_name="account",
+                        related_name="energy_account",
                         to=settings.AUTH_USER_MODEL,
                     ),
                 ),
             ],
             options={
                 "abstract": False,
+                "db_table": "core_account",
+                "verbose_name": "Energy Account",
+                "verbose_name_plural": "Energy Accounts",
             },
         ),
         migrations.CreateModel(
-            name="Credit",
+            name="EnergyCredit",
             fields=[
                 (
                     "id",
@@ -429,7 +432,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="credits",
-                        to="core.account",
+                        to="core.energyaccount",
                     ),
                 ),
                 (
@@ -445,6 +448,9 @@ class Migration(migrations.Migration):
             ],
             options={
                 "abstract": False,
+                "db_table": "core_credit",
+                "verbose_name": "Energy Credit",
+                "verbose_name_plural": "Energy Credits",
             },
         ),
         migrations.CreateModel(
@@ -566,10 +572,10 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.AddField(
-            model_name="account",
+            model_name="energyaccount",
             name="rfids",
             field=models.ManyToManyField(
-                blank=True, related_name="accounts", to="core.rfid"
+                blank=True, related_name="energy_accounts", to="core.rfid"
             ),
         ),
         migrations.CreateModel(
@@ -592,7 +598,7 @@ class Migration(migrations.Migration):
                     "account",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
-                        to="core.account",
+                        to="core.energyaccount",
                     ),
                 ),
                 (
@@ -630,7 +636,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="vehicles",
-                        to="core.account",
+                        to="core.energyaccount",
                     ),
                 ),
                 (

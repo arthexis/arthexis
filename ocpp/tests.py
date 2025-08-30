@@ -14,7 +14,7 @@ from nodes.models import Node, NodeRole
 from config.asgi import application
 
 from .models import Transaction, Charger, Simulator, MeterReading, Location
-from core.models import Account, Credit
+from core.models import EnergyAccount, EnergyCredit
 from core.models import RFID
 from . import store
 from django.db.models.deletion import ProtectedError
@@ -645,10 +645,10 @@ class SimulatorAdminTests(TestCase):
         user = await database_sync_to_async(User.objects.create_user)(
             username="bob", password="pwd"
         )
-        acc = await database_sync_to_async(Account.objects.create)(
+        acc = await database_sync_to_async(EnergyAccount.objects.create)(
             user=user, name="BOB"
         )
-        await database_sync_to_async(Credit.objects.create)(
+        await database_sync_to_async(EnergyCredit.objects.create)(
             account=acc, amount_kw=10
         )
         tag = await database_sync_to_async(RFID.objects.create)(rfid="CARDX")
@@ -669,7 +669,7 @@ class SimulatorAdminTests(TestCase):
         tx_id = response[2]["transactionId"]
 
         tx = await database_sync_to_async(Transaction.objects.get)(pk=tx_id, charger__charger_id="RFIDOK")
-        self.assertEqual(tx.account_id, user.account.id)
+        self.assertEqual(tx.account_id, user.energy_account.id)
 
     async def test_status_fields_updated(self):
         communicator = WebsocketCommunicator(application, "/STAT/")

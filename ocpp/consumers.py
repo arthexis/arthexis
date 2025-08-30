@@ -2,7 +2,7 @@ import asyncio
 import json
 from datetime import datetime
 from django.utils import timezone
-from core.models import Account
+from core.models import EnergyAccount
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -69,12 +69,12 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             self.charger_id, location_name or self.charger_id, log_type="charger"
         )
 
-    async def _get_account(self, id_tag: str) -> Account | None:
-        """Return the account for the provided RFID if valid."""
+    async def _get_account(self, id_tag: str) -> EnergyAccount | None:
+        """Return the energy account for the provided RFID if valid."""
         if not id_tag:
             return None
         return await database_sync_to_async(
-            Account.objects.filter(
+            EnergyAccount.objects.filter(
                 rfids__rfid=id_tag.upper(), rfids__allowed=True
             ).first
         )()
