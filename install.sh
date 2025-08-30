@@ -267,6 +267,11 @@ fi
 
 python manage.py migrate --noinput
 
+# Load personal user data fixtures if present
+if ls data/*.json >/dev/null 2>&1; then
+    python manage.py loaddata data/*.json
+fi
+
 deactivate
 
 

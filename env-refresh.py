@@ -30,6 +30,9 @@ from django.db.models.signals import post_save
 from pages.models import Module, Landing, _create_landings
 from nodes.models import Node
 from django.contrib.sites.models import Site
+from django.contrib.contenttypes.models import ContentType
+
+from core.user_data import UserDatum
 
 
 def _local_app_labels() -> list[str]:
@@ -207,6 +210,15 @@ def run_database_tasks(*, latest: bool = False) -> None:
         personal = sorted(data_dir.glob("*.json"))
         if personal:
             call_command("loaddata", *[str(p) for p in personal])
+            for p in personal:
+                try:
+                    user_id, app_label, model, obj_id = p.stem.split("_", 3)
+                    ct = ContentType.objects.get_by_natural_key(app_label, model)
+                    UserDatum.objects.get_or_create(
+                        user_id=int(user_id), content_type=ct, object_id=int(obj_id)
+                    )
+                except Exception:
+                    continue
 
     # Update migrations hash file after successful run
     hash_file.write_text(new_hash)
