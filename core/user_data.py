@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from io import BytesIO
+from zipfile import ZipFile
 
 from django.conf import settings
 from django.contrib import admin
@@ -12,6 +14,7 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from django.http import HttpResponse, HttpResponseRedirect
 from django.utils.translation import gettext as _
 
 from .entity import Entity
@@ -192,8 +195,55 @@ def _user_data_view(request):
         section.append({"url": url, "label": str(obj)})
     section_list = [{"opts": opts, "items": items} for opts, items in sections.items()]
     context = admin.site.each_context(request)
-    context.update({"title": _("User Data"), "sections": section_list})
+    context.update(
+        {
+            "title": _("User Data"),
+            "sections": section_list,
+            "import_export": True,
+        }
+    )
     return TemplateResponse(request, "admin/data_list.html", context)
+
+
+def _user_data_export(request):
+    """Return a zip file containing all fixtures for the current user."""
+    buffer = BytesIO()
+    with ZipFile(buffer, "w") as zf:
+        for path in _data_dir().glob(f"{request.user.pk}_*.json"):
+            zf.write(path, arcname=path.name)
+    buffer.seek(0)
+    response = HttpResponse(buffer.getvalue(), content_type="application/zip")
+    response["Content-Disposition"] = (
+        f"attachment; filename=user_data_{request.user.pk}.zip"
+    )
+    return response
+
+
+def _user_data_import(request):
+    """Import fixtures from an uploaded zip file."""
+    if request.method == "POST" and request.FILES.get("data_zip"):
+        with ZipFile(request.FILES["data_zip"]) as zf:
+            paths = []
+            data_dir = _data_dir()
+            for name in zf.namelist():
+                if not name.endswith(".json"):
+                    continue
+                target = data_dir / name
+                with target.open("wb") as f:
+                    f.write(zf.read(name))
+                paths.append(target)
+        if paths:
+            call_command("loaddata", *[str(p) for p in paths])
+            for p in paths:
+                try:
+                    user_id, app_label, model, obj_id = p.stem.split("_", 3)
+                    ct = ContentType.objects.get_by_natural_key(app_label, model)
+                    UserDatum.objects.get_or_create(
+                        user_id=int(user_id), content_type=ct, object_id=int(obj_id)
+                    )
+                except Exception:
+                    continue
+    return HttpResponseRedirect(reverse("admin:user_data"))
 
 
 def patch_admin_user_data_views() -> None:
@@ -205,6 +255,16 @@ def patch_admin_user_data_views() -> None:
         custom = [
             path("seed-data/", admin.site.admin_view(_seed_data_view), name="seed_data"),
             path("user-data/", admin.site.admin_view(_user_data_view), name="user_data"),
+            path(
+                "user-data/export/",
+                admin.site.admin_view(_user_data_export),
+                name="user_data_export",
+            ),
+            path(
+                "user-data/import/",
+                admin.site.admin_view(_user_data_import),
+                name="user_data_import",
+            ),
         ]
         return custom + urls
 
