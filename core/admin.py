@@ -462,11 +462,17 @@ class PackageReleaseAdmin(admin.ModelAdmin):
         "hub",
         "version",
         "pypi_url",
-        "is_live",
+        "revision_short",
         "is_promoted",
         "is_certified",
+        "is_published",
     )
     actions = ["promote_release", "publish_to_index"]
+
+    def revision_short(self, obj):
+        return obj.revision_short
+
+    revision_short.short_description = "revision"
 
     @admin.action(description="Promote selected releases")
     def promote_release(self, request, queryset):
@@ -494,8 +500,8 @@ class PackageReleaseAdmin(admin.ModelAdmin):
                 continue
             try:
                 cfg.publish()
-                cfg.is_live = True
-                cfg.save(update_fields=["is_live"])
+                cfg.is_published = True
+                cfg.save(update_fields=["is_published"])
                 self.message_user(request, f"Published {cfg.hub.name}", messages.SUCCESS)
             except Exception as exc:
                 self.message_user(request, str(exc), messages.ERROR)

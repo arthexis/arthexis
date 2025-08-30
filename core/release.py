@@ -287,6 +287,10 @@ def build(
             for p in Path("dist").glob("*"):
                 p.unlink()
             Path("dist").rmdir()
+        try:
+            import build  # type: ignore
+        except Exception:
+            _run([sys.executable, "-m", "pip", "install", "build"])
         _run([sys.executable, "-m", "build"])
 
     if git:
@@ -333,7 +337,12 @@ def build(
         _run(["git", "stash", "pop"], check=False)
 
 
-def promote(*, package: Package = DEFAULT_PACKAGE, version: str, creds: Optional[Credentials] = None) -> None:
+def promote(
+    *,
+    package: Package = DEFAULT_PACKAGE,
+    version: str,
+    creds: Optional[Credentials] = None,
+) -> str:
     """Create a release branch and build the package without tests."""
     current = _current_branch()
     branch = f"release/{version}"
@@ -349,9 +358,11 @@ def promote(*, package: Package = DEFAULT_PACKAGE, version: str, creds: Optional
         )
         _run(["git", "add", "."])  # add all changes
         _run(["git", "commit", "-m", f"Release v{version}"])
+        commit_hash = _current_commit()
         _run(["git", "push", "-u", "origin", branch])
     finally:
         _run(["git", "checkout", current])
+    return commit_hash
 
 
 def publish(*, package: Package = DEFAULT_PACKAGE, creds: Optional[Credentials] = None) -> None:
