@@ -23,6 +23,8 @@ from django.contrib.sites.models import Site
 from django_celery_beat.models import PeriodicTask
 from django.conf import settings
 from .actions import NodeAction
+from selenium.common.exceptions import WebDriverException
+from .utils import capture_screenshot
 
 from .models import (
     Node,
@@ -810,6 +812,20 @@ class ClipboardTaskTests(TestCase):
         self.assertEqual(
             ContentSample.objects.filter(kind=ContentSample.IMAGE).count(), 0
         )
+
+
+class CaptureScreenshotTests(TestCase):
+    @patch("nodes.utils.webdriver.Firefox")
+    def test_connection_failure_does_not_raise(self, mock_firefox):
+        browser = MagicMock()
+        mock_firefox.return_value.__enter__.return_value = browser
+        browser.get.side_effect = WebDriverException("boom")
+        browser.save_screenshot.return_value = True
+        screenshot_dir = settings.LOG_DIR / "screenshots"
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        result = capture_screenshot("http://example.com")
+        self.assertEqual(result.parent, screenshot_dir)
+        browser.save_screenshot.assert_called_once()
 
 
 class NodeRoleAdminTests(TestCase):

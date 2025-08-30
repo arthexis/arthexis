@@ -21,14 +21,18 @@ def capture_screenshot(url: str) -> Path:
     try:
         with webdriver.Firefox(options=options) as browser:
             browser.set_window_size(1280, 720)
-            browser.get(url)
             SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
             filename = SCREENSHOT_DIR / f"{datetime.utcnow():%Y%m%d%H%M%S}.png"
-            browser.save_screenshot(str(filename))
+            try:
+                browser.get(url)
+            except WebDriverException as exc:
+                logger.error("Failed to load %s: %s", url, exc)
+            if not browser.save_screenshot(str(filename)):
+                raise RuntimeError("Screenshot capture failed")
+            return filename
     except WebDriverException as exc:
         logger.error("Failed to capture screenshot from %s: %s", url, exc)
         raise RuntimeError(f"Screenshot capture failed: {exc}") from exc
-    return filename
 
 
 def save_screenshot(path: Path, node=None, method: str = "", transaction_uuid=None):
@@ -46,11 +50,13 @@ def save_screenshot(path: Path, node=None, method: str = "", transaction_uuid=No
         logger.info("Duplicate screenshot content; record not created")
         return None
     stored_path = (original if not original.is_absolute() else path).as_posix()
-    return ContentSample.objects.create(
-        node=node,
-        path=stored_path,
-        method=method,
-        hash=digest,
-        kind=ContentSample.IMAGE,
-        transaction_uuid=transaction_uuid,
-    )
+    data = {
+        "node": node,
+        "path": stored_path,
+        "method": method,
+        "hash": digest,
+        "kind": ContentSample.IMAGE,
+    }
+    if transaction_uuid is not None:
+        data["transaction_uuid"] = transaction_uuid
+    return ContentSample.objects.create(**data)
