@@ -14,9 +14,9 @@
         {
             "label": "Dev: refresh clean",
             "type": "shell",
-            "command": "rm -f ${workspaceFolder}/db.sqlite3 && ${workspaceFolder}/env-refresh.sh --latest",
+            "command": "${workspaceFolder}/env-refresh.sh --latest --clean",
             "windows": {
-                "command": "Remove-Item -ErrorAction SilentlyContinue \"${workspaceFolder}\\db.sqlite3\"; ${workspaceFolder}\\env-refresh.bat --latest"
+                "command": "${workspaceFolder}\\env-refresh.bat --latest --clean"
             },
             "problemMatcher": [],
             "detail": "Delete database file and refresh virtual environment and database"

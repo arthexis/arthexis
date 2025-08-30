@@ -6,6 +6,7 @@ from pathlib import Path
 
 from django.apps import AppConfig
 from django.conf import settings
+from django.db.models.signals import post_migrate
 from utils import revision
 
 
@@ -47,6 +48,23 @@ def _startup_notification() -> None:
     threading.Thread(target=_worker, name="startup-notify", daemon=True).start()
 
 
+def _ensure_release(**kwargs) -> None:
+    """Create a package release for the current version if missing."""
+
+    try:  # import lazily to avoid app loading issues
+        from core.models import Package, PackageRelease
+
+        ver_path = Path(settings.BASE_DIR) / "VERSION"
+        if not ver_path.exists():  # pragma: no cover - no version file
+            return
+        version = ver_path.read_text().strip()
+
+        package, _ = Package.objects.get_or_create(name="arthexis")
+        PackageRelease.objects.get_or_create(package=package, version=version)
+    except Exception:  # pragma: no cover - best effort only
+        return
+
+
 class NodesConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "nodes"
@@ -54,3 +72,6 @@ class NodesConfig(AppConfig):
 
     def ready(self):  # pragma: no cover - exercised on app start
         _startup_notification()
+        post_migrate.connect(
+            _ensure_release, dispatch_uid="nodes.ensure_release"
+        )
