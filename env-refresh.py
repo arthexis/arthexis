@@ -31,6 +31,7 @@ from pages.models import Module, Landing, _create_landings
 from nodes.models import Node
 from django.contrib.sites.models import Site
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.auth import get_user_model
 
 from core.user_data import UserDatum
 
@@ -209,6 +210,15 @@ def run_database_tasks(*, latest: bool = False) -> None:
     if data_dir.is_dir():
         personal = sorted(data_dir.glob("*.json"))
         if personal:
+            User = get_user_model()
+            for p in personal:
+                try:
+                    user_id = int(p.stem.split("_", 1)[0])
+                    User.objects.get_or_create(
+                        pk=user_id, defaults={"username": f"user{user_id}"}
+                    )
+                except Exception:
+                    pass
             call_command("loaddata", *[str(p) for p in personal])
             for p in personal:
                 try:

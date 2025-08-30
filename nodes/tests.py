@@ -15,7 +15,7 @@ from tempfile import TemporaryDirectory
 import shutil
 import time
 
-from django.test import Client, TestCase
+from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
@@ -394,6 +394,36 @@ class NodeAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data:image/png;base64")
 
+
+class NetMessageAdminTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="netmsg-admin", password="adminpass", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+
+    def test_complete_flag_not_editable(self):
+        msg = NetMessage.objects.create(subject="s", body="b")
+        url = reverse("admin:nodes_netmessage_change", args=[msg.pk])
+        data = {"subject": "s2", "body": "b2", "complete": "on", "_save": "Save"}
+        self.client.post(url, data)
+        msg.refresh_from_db()
+        self.assertFalse(msg.complete)
+        self.assertEqual(msg.subject, "s2")
+
+    def test_send_action_calls_propagate(self):
+        msg = NetMessage.objects.create(subject="s", body="b")
+        with patch.object(NetMessage, "propagate") as mock_propagate:
+            response = self.client.post(
+                reverse("admin:nodes_netmessage_changelist"),
+                {"action": "send_messages", "_selected_action": [str(msg.pk)]},
+            )
+        self.assertEqual(response.status_code, 302)
+        mock_propagate.assert_called_once()
 
 class NodeActionTests(TestCase):
     def setUp(self):

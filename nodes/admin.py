@@ -283,6 +283,15 @@ class NetMessageAdmin(admin.ModelAdmin):
     search_fields = ("subject", "body")
     list_filter = ("complete",)
     ordering = ("-created",)
+    readonly_fields = ("complete",)
+    actions = ["send_messages"]
+
+    def send_messages(self, request, queryset):
+        for msg in queryset:
+            msg.propagate()
+        self.message_user(request, f"{queryset.count()} messages sent")
+
+    send_messages.short_description = "Send selected messages"
 
 
 class NodeTaskForm(forms.ModelForm):

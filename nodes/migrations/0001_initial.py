@@ -85,7 +85,7 @@ class Migration(migrations.Migration):
                 ('subject', models.CharField(blank=True, max_length=64)),
                 ('body', models.CharField(blank=True, max_length=256)),
                 ('created', models.DateTimeField(auto_now_add=True)),
-                ('complete', models.BooleanField(default=False)),
+                ('complete', models.BooleanField(default=False, editable=False)),
                 (
                     'propagated_to',
                     models.ManyToManyField(
