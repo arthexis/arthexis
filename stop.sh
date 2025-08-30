@@ -70,30 +70,29 @@ while [[ $# -gt 0 ]]; do
 done
 
 PATTERN="manage.py runserver"
+# Assumes passwordless sudo for process management
 if [ "$ALL" = true ]; then
-  pkill -f "$PATTERN" || true
+  sudo pkill -f "$PATTERN" || true
 else
-  pkill -f "$PATTERN 0.0.0.0:$PORT" || true
+  sudo pkill -f "$PATTERN 0.0.0.0:$PORT" || true
 fi
 # Also stop any Celery components started by start.sh
-pkill -f "celery -A config" || true
+sudo pkill -f "celery -A config" || true
 
 # Wait for processes to fully terminate
 if [ "$ALL" = true ]; then
-  if ! timeout 30s sh -c "while pgrep -f '$PATTERN' >/dev/null; do sleep 0.5; done"; then
-    echo "Error: Timed out waiting for server processes to terminate" >&2
-    exit 1
-  fi
+  while sudo pgrep -f "$PATTERN" > /dev/null; do
+    sleep 0.5
+  done
 else
-  if ! timeout 30s sh -c "while pgrep -f '$PATTERN 0.0.0.0:$PORT' >/dev/null; do sleep 0.5; done"; then
-    echo "Error: Timed out waiting for server process on port $PORT to terminate" >&2
-    exit 1
-  fi
+  while sudo pgrep -f "$PATTERN 0.0.0.0:$PORT" > /dev/null; do
+    sleep 0.5
+  done
 fi
-if ! timeout 30s sh -c 'while pgrep -f "celery -A config" >/dev/null; do sleep 0.5; done'; then
-  echo "Error: Timed out waiting for Celery processes to terminate" >&2
-  exit 1
-fi
+while sudo pgrep -f "celery -A config" > /dev/null; do
+  sleep 0.5
+done
+
 
 if [ -f "$LCD_LOCK" ]; then
   "$PYTHON" - <<'PY'
