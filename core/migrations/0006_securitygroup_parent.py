@@ -71,6 +71,42 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
+            name='EmailCollector',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('is_seed_data', models.BooleanField(default=False, editable=False)),
+                ('is_deleted', models.BooleanField(default=False, editable=False)),
+                ('subject', models.CharField(blank=True, max_length=255)),
+                ('sender', models.CharField(blank=True, max_length=255)),
+                ('body', models.CharField(blank=True, max_length=255)),
+                ('fragment', models.CharField(blank=True, max_length=255)),
+                ('inbox', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='collectors', to='core.emailinbox')),
+            ],
+            options={
+                'verbose_name': 'Email Collector',
+                'verbose_name_plural': 'Email Collectors',
+            },
+        ),
+        migrations.CreateModel(
+            name='EmailArtifact',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('is_seed_data', models.BooleanField(default=False, editable=False)),
+                ('is_deleted', models.BooleanField(default=False, editable=False)),
+                ('subject', models.CharField(max_length=255)),
+                ('sender', models.CharField(max_length=255)),
+                ('body', models.TextField(blank=True)),
+                ('sigils', models.JSONField(default=dict)),
+                ('fingerprint', models.CharField(max_length=32)),
+                ('collector', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='artifacts', to='core.emailcollector')),
+            ],
+            options={
+                'verbose_name': 'Email Artifact',
+                'verbose_name_plural': 'Email Artifacts',
+                'unique_together': {('collector', 'fingerprint')},
+            },
+        ),
+        migrations.CreateModel(
             name='SecurityGroup',
             fields=[
                 (

@@ -86,3 +86,15 @@ def check_github_updates() -> None:
     else:
         subprocess.run(["pkill", "-f", "manage.py runserver"])
 
+
+@shared_task
+def poll_email_collectors() -> None:
+    """Poll all configured email collectors for new messages."""
+    try:
+        from .models import EmailCollector
+    except Exception:  # pragma: no cover - app not ready
+        return
+
+    for collector in EmailCollector.objects.all():
+        collector.collect()
+
