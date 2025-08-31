@@ -9,5 +9,11 @@
   </div>
 </footer>
 <div class="text-center mt-1">
-  <small class="text-muted">{{ release_name }}</small>
+  <small class="text-muted">
+    {% if request.user.is_authenticated and request.user.is_staff and release_url %}
+      <a href="{{ release_url }}">{{ release_name }}</a>
+    {% else %}
+      {{ release_name }}
+    {% endif %}
+  </small>
 </div>
