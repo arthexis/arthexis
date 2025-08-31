@@ -14,6 +14,7 @@ class CoreConfig(AppConfig):
             patch_admin_user_datum,
             patch_admin_user_data_views,
         )
+        from .system import patch_admin_system_view
 
         def create_default_admin(**kwargs):
             User = get_user_model()
@@ -23,6 +24,7 @@ class CoreConfig(AppConfig):
         post_migrate.connect(create_default_admin, sender=self)
         patch_admin_user_datum()
         patch_admin_user_data_views()
+        patch_admin_system_view()
 
         from pathlib import Path
         from django.conf import settings

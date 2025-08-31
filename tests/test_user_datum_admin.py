@@ -202,6 +202,11 @@ class UserDataViewTests(TestCase):
         response = self.client.get(reverse("admin:index"))
         self.assertContains(response, reverse("admin:seed_data"))
         self.assertContains(response, reverse("admin:user_data"))
+        self.assertContains(response, reverse("admin:system"))
+
+    def test_system_page_loads(self):
+        response = self.client.get(reverse("admin:system"))
+        self.assertContains(response, "Hostname")
 
     def test_user_data_page_has_import_export_links(self):
         response = self.client.get(reverse("admin:user_data"))
