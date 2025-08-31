@@ -1,15 +1,21 @@
+from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 
 from django import template
 from django.conf import settings
 from django.urls import reverse
 from django.utils.safestring import mark_safe
+from django.utils import timezone
+from django.utils.timesince import timesince
 
 from core.models import Reference, PackageRelease
 from core.release import DEFAULT_PACKAGE
 from utils import revision
 
 register = template.Library()
+
+
+INSTANCE_START = timezone.now()
 
 
 @register.simple_tag
@@ -58,3 +64,4 @@ def render_footer(context):
         "release_url": release_url,
         "request": context.get("request"),
     }
+
