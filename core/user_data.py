@@ -145,7 +145,8 @@ class UserDatumAdminMixin(admin.ModelAdmin):
         return super().render_change_form(request, context, add, change, form_url, obj)
 
     def save_model(self, request, obj, form, change):
-        if "_saveacopy" in request.POST:
+        copied = "_saveacopy" in request.POST
+        if copied:
             obj = obj.clone()
             form.instance = obj
             try:
@@ -160,6 +161,8 @@ class UserDatumAdminMixin(admin.ModelAdmin):
         else:
             super().save_model(request, obj, form, change)
         if not issubclass(self.model, Entity):
+            return
+        if copied:
             return
         ct = ContentType.objects.get_for_model(obj)
         if request.POST.get("_user_datum") == "on":

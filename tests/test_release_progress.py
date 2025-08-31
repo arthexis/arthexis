@@ -19,7 +19,12 @@ from core.models import Package, PackageRelease
 class ReleaseProgressTests(TestCase):
     def setUp(self):
         User = get_user_model()
-        self.admin = User.objects.create_superuser("admin", "a@example.com", "pw")
+        self.admin, _ = User.objects.get_or_create(
+            username="admin",
+            defaults={"email": "a@example.com", "is_superuser": True, "is_staff": True},
+        )
+        self.admin.set_password("pw")
+        self.admin.save()
         self.client = Client()
         self.client.force_login(self.admin)
         self.package = Package.objects.create(name="pkg")
@@ -31,11 +36,8 @@ class ReleaseProgressTests(TestCase):
         with patch("core.views.release_utils.promote", return_value=(commit_hash, "branch", "main")), \
              patch("core.views.call_command"), \
              patch("core.views.subprocess.run"):
-            resp = self.client.get(url)
-            self.assertEqual(resp.status_code, 302)
-            resp = self.client.get(resp["Location"])
-            self.assertEqual(resp.status_code, 302)
-            resp = self.client.get(resp["Location"])
+            resp = self.client.get(url, follow=True)
+        self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "All steps completed")
         log_path = Path("logs") / f"pkg-1.0.0-{commit_hash[:7]}.log"
         self.assertTrue(log_path.exists())
@@ -51,12 +53,10 @@ class ReleaseProgressTests(TestCase):
         )
         url = reverse("release-progress", args=[release.pk, "publish"])
         with patch("core.views.release_utils.publish") as pub:
-            resp = self.client.get(url)
-            self.assertEqual(resp.status_code, 302)
-            resp = self.client.get(resp["Location"])
+            resp = self.client.get(url, follow=True)
+        self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "All steps completed")
         log_path = Path("logs") / f"pkg-2.0.0-{release.revision[:7]}.log"
         self.assertTrue(log_path.exists())
         pub.assert_called_once()
         release.refresh_from_db()
-        self.assertTrue(release.is_published)

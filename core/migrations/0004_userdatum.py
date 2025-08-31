@@ -62,14 +62,43 @@ class Migration(migrations.Migration):
                 ),
                 ("is_seed_data", models.BooleanField(default=False, editable=False)),
                 ("is_deleted", models.BooleanField(default=False, editable=False)),
-                ("host", models.CharField(max_length=255)),
-                ("port", models.PositiveIntegerField(default=993)),
-                ("username", models.CharField(max_length=255)),
+                (
+                    "username",
+                    models.CharField(
+                        max_length=255,
+                        help_text="Login name for the mailbox",
+                    ),
+                ),
+                (
+                    "host",
+                    models.CharField(
+                        max_length=255,
+                        help_text=(
+                            "Examples: Gmail IMAP 'imap.gmail.com', Gmail POP3 'pop.gmail.com',"
+                            " GoDaddy IMAP 'imap.secureserver.net', GoDaddy POP3 'pop.secureserver.net'"
+                        ),
+                    ),
+                ),
+                (
+                    "port",
+                    models.PositiveIntegerField(
+                        default=993,
+                        help_text=(
+                            "Common ports: Gmail IMAP 993, Gmail POP3 995, "
+                            "GoDaddy IMAP 993, GoDaddy POP3 995"
+                        ),
+                    ),
+                ),
                 ("password", models.CharField(max_length=255)),
                 (
                     "protocol",
                     models.CharField(
                         choices=[("imap", "IMAP"), ("pop3", "POP3")],
+                        default="imap",
+                        help_text=(
+                            "IMAP keeps emails on the server for access across devices; "
+                            "POP3 downloads messages to a single device and may remove them from the server"
+                        ),
                         max_length=5,
                     ),
                 ),

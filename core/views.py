@@ -9,11 +9,13 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from pathlib import Path
 import subprocess
+from django.core.management import call_command
 
 from utils.api import api_login_required
 
 from .models import Product, Subscription, EnergyAccount, PackageRelease
 from .models import RFID
+from . import release as release_utils
 
 
 def _append_log(path: Path, message: str) -> None:
@@ -43,8 +45,6 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
 
 
 def _step_dump_fixture(release, ctx, log_path: Path) -> None:
-    from django.core.management import call_command
-
     _append_log(log_path, "Dumping fixture")
     call_command(
         "dumpdata",
