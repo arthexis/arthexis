@@ -28,6 +28,7 @@ Django==5.2.4
 django-celery-beat==2.8.1
 django-debug-toolbar==6.0.0
 django-import-export==4.3.9
+django-object-actions==5.0.0
 django-post_office==3.10.1
 django-timezone-field==7.1
 dnspython==2.7.0
