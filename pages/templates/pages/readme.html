@@ -15,4 +15,20 @@
     {{ content|safe }}
   </div>
 </div>
+<script>
+  (function () {
+    const RELOAD_DELAY = 5 * 60 * 1000;
+    let timer;
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        window.location.reload();
+      }, RELOAD_DELAY);
+    };
+    ["click", "mousemove", "keydown", "scroll", "touchstart"].forEach((evt) => {
+      document.addEventListener(evt, resetTimer, { passive: true });
+    });
+    resetTimer();
+  })();
+</script>
 {% endblock %}
