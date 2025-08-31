@@ -20,6 +20,7 @@ from .actions import NodeAction
 
 from .models import (
     Node,
+    EmailOutbox,
     NodeRole,
     ContentSample,
     NodeTask,
@@ -262,6 +263,12 @@ class OperatorAdmin(admin.ModelAdmin):
 
     def putty_help(self, request):
         return render(request, "admin/nodes/operator/putty_help.html")
+
+
+
+@admin.register(EmailOutbox)
+class EmailOutboxAdmin(admin.ModelAdmin):
+    list_display = ("node", "host", "port", "username", "use_tls", "use_ssl")
 
 
 class NodeRoleAdminForm(forms.ModelForm):
