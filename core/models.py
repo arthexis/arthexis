@@ -287,6 +287,10 @@ class OdooProfile(Entity):
     def __str__(self):  # pragma: no cover - simple representation
         return f"{self.user} @ {self.host}"
 
+    class Meta:
+        verbose_name = _("Odoo Profile")
+        verbose_name_plural = _("Odoo Profiles")
+
 
 class EmailInbox(Entity):
     """Credentials and configuration for connecting to an email mailbox."""
@@ -514,6 +518,10 @@ class EmailCollector(Entity):
                 fingerprint=fp,
             )
 
+    class Meta:
+        verbose_name = _("Email Collector")
+        verbose_name_plural = _("Email Collectors")
+
 
 class EmailArtifact(Entity):
     """Store messages discovered by :class:`EmailCollector`."""
@@ -588,6 +596,10 @@ class FediverseProfile(Entity):
     def __str__(self):  # pragma: no cover - simple representation
         return f"{self.user} @ {self.host}"
 
+    class Meta:
+        verbose_name = _("Fediverse Profile")
+        verbose_name_plural = _("Fediverse Profiles")
+
 
 class Reference(Entity):
     """Store a piece of reference content which can be text or an image."""
@@ -610,6 +622,20 @@ class Reference(Entity):
     method = models.CharField(max_length=50, default="qr")
     include_in_footer = models.BooleanField(
         default=False, verbose_name="Include in Footer"
+    )
+    FOOTER_PUBLIC = "public"
+    FOOTER_PRIVATE = "private"
+    FOOTER_STAFF = "staff"
+    FOOTER_VISIBILITY_CHOICES = [
+        (FOOTER_PUBLIC, "Public"),
+        (FOOTER_PRIVATE, "Private"),
+        (FOOTER_STAFF, "Staff"),
+    ]
+    footer_visibility = models.CharField(
+        max_length=7,
+        choices=FOOTER_VISIBILITY_CHOICES,
+        default=FOOTER_PUBLIC,
+        verbose_name="Footer visibility",
     )
     transaction_uuid = models.UUIDField(default=uuid.uuid4, editable=True, db_index=True)
     created = models.DateTimeField(auto_now_add=True)
@@ -904,8 +930,8 @@ class EVModel(Entity):
         return f"{self.brand} {self.name}" if self.brand else self.name
 
 
-class Vehicle(Entity):
-    """Vehicle associated with an Energy Account."""
+class ElectricVehicle(Entity):
+    """Electric vehicle associated with an Energy Account."""
 
     account = models.ForeignKey(
         EnergyAccount, on_delete=models.CASCADE, related_name="vehicles"
@@ -939,6 +965,10 @@ class Vehicle(Entity):
         model_name = self.model.name if self.model else ""
         parts = " ".join(p for p in [brand_name, model_name] if p)
         return f"{parts} ({self.vin})" if parts else self.vin
+
+    class Meta:
+        verbose_name = _("Electric Vehicle")
+        verbose_name_plural = _("Electric Vehicles")
 
 
 class Product(Entity):

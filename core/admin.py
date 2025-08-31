@@ -23,7 +23,7 @@ import uuid
 from .models import (
     User,
     EnergyAccount,
-    Vehicle,
+    ElectricVehicle,
     EnergyCredit,
     Address,
     Product,
@@ -48,7 +48,14 @@ admin.site.unregister(Group)
 
 @admin.register(Reference)
 class ReferenceAdmin(admin.ModelAdmin):
-    list_display = ("alt_text", "content_type", "include_in_footer", "author", "transaction_uuid")
+    list_display = (
+        "alt_text",
+        "content_type",
+        "include_in_footer",
+        "footer_visibility",
+        "author",
+        "transaction_uuid",
+    )
     readonly_fields = ("uses", "qr_code", "author")
     fields = (
         "alt_text",
@@ -57,6 +64,7 @@ class ReferenceAdmin(admin.ModelAdmin):
         "file",
         "method",
         "include_in_footer",
+        "footer_visibility",
         "transaction_uuid",
         "author",
         "uses",
@@ -504,7 +512,7 @@ class EnergyAccountAdmin(admin.ModelAdmin):
             allow_login = forms.BooleanField(
                 required=False, initial=False, label="Allow login"
             )
-            vehicle_id = forms.CharField(required=False, label="Vehicle ID")
+            vehicle_id = forms.CharField(required=False, label="Electric Vehicle ID")
 
         if request.method == "POST":
             form = OnboardForm(request.POST)
@@ -527,7 +535,7 @@ class EnergyAccountAdmin(admin.ModelAdmin):
                     account.rfids.add(tag)
                 vehicle_vin = form.cleaned_data["vehicle_id"]
                 if vehicle_vin:
-                    Vehicle.objects.create(account=account, vin=vehicle_vin)
+                    ElectricVehicle.objects.create(account=account, vin=vehicle_vin)
                 self.message_user(request, "Customer onboarded")
                 return redirect("admin:core_energyaccount_changelist")
         else:
@@ -538,8 +546,8 @@ class EnergyAccountAdmin(admin.ModelAdmin):
         return render(request, "core/onboard_details.html", context)
 
 
-@admin.register(Vehicle)
-class VehicleAdmin(admin.ModelAdmin):
+@admin.register(ElectricVehicle)
+class ElectricVehicleAdmin(admin.ModelAdmin):
     list_display = ("vin", "license_plate", "brand", "model", "account")
     fields = ("account", "vin", "license_plate", "brand", "model")
 

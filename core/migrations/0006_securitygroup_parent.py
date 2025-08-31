@@ -70,6 +70,27 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.AddField(
+            model_name='reference',
+            name='footer_visibility',
+            field=models.CharField(
+                choices=[('public', 'Public'), ('private', 'Private'), ('staff', 'Staff')],
+                default='public',
+                max_length=7,
+                verbose_name='Footer visibility',
+            ),
+        ),
+        migrations.RenameModel(
+            old_name='Vehicle',
+            new_name='ElectricVehicle',
+        ),
+        migrations.AlterModelOptions(
+            name='electricvehicle',
+            options={
+                'verbose_name': 'Electric Vehicle',
+                'verbose_name_plural': 'Electric Vehicles',
+            },
+        ),
         migrations.CreateModel(
             name='EmailCollector',
             fields=[
@@ -79,7 +100,14 @@ class Migration(migrations.Migration):
                 ('subject', models.CharField(blank=True, max_length=255)),
                 ('sender', models.CharField(blank=True, max_length=255)),
                 ('body', models.CharField(blank=True, max_length=255)),
-                ('fragment', models.CharField(blank=True, max_length=255)),
+                (
+                    'fragment',
+                    models.CharField(
+                        blank=True,
+                        max_length=255,
+                        help_text='Pattern with [sigils] to extract values from the body.',
+                    ),
+                ),
                 ('inbox', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='collectors', to='core.emailinbox')),
             ],
             options={

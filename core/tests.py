@@ -14,7 +14,7 @@ from django.utils import timezone
 from .models import (
     User,
     EnergyAccount,
-    Vehicle,
+    ElectricVehicle,
     EnergyCredit,
     Address,
     Product,
@@ -283,7 +283,7 @@ class EnergyAccountTests(TestCase):
         self.assertTrue(acc.rfids.filter(rfid="NOUSER1").exists())
 
 
-class VehicleTests(TestCase):
+class ElectricVehicleTests(TestCase):
     def test_account_can_have_multiple_vehicles(self):
         user = User.objects.create_user(username="cars", password="x")
         acc = EnergyAccount.objects.create(user=user, name="CARS")
@@ -291,10 +291,10 @@ class VehicleTests(TestCase):
         nissan = Brand.objects.create(name="Nissan")
         model_s = EVModel.objects.create(brand=tesla, name="Model S")
         leaf = EVModel.objects.create(brand=nissan, name="Leaf")
-        Vehicle.objects.create(
+        ElectricVehicle.objects.create(
             account=acc, brand=tesla, model=model_s, vin="VIN12345678901234"
         )
-        Vehicle.objects.create(
+        ElectricVehicle.objects.create(
             account=acc, brand=nissan, model=leaf, vin="VIN23456789012345"
         )
         self.assertEqual(acc.vehicles.count(), 2)
