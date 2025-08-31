@@ -3,6 +3,10 @@ Changelog
 
 Unreleased
 ----------
+
+0.1.1 [revision 795ee9c781bb241a50713e15bba4737534906ca4]
+---------------------------------------------------------
+
 - Run migrations during install to avoid missing tables after database removal
 - Add --satellite flag to install script
 - Add --control flag to install script to create Control site
