@@ -13,6 +13,8 @@ import base64
 import pyperclip
 from pyperclip import PyperclipException
 import uuid
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
 from .utils import capture_screenshot, save_screenshot
 from .actions import NodeAction
 
@@ -23,6 +25,7 @@ from .models import (
     NodeTask,
     NetMessage,
     User,
+    Operator,
 )
 from core.admin import UserAdmin as CoreUserAdmin
 
@@ -207,7 +210,59 @@ class NodeAdmin(admin.ModelAdmin):
             )
         except Exception as exc:  # pragma: no cover - unexpected errors
             self.message_user(request, str(exc), messages.ERROR)
-        return redirect(reverse("admin:nodes_node_change", args=[node_id]))
+            return redirect(reverse("admin:nodes_node_change", args=[node_id]))
+
+
+@admin.register(Operator)
+class OperatorAdmin(admin.ModelAdmin):
+    list_display = ("user",)
+    change_list_template = "admin/nodes/operator/change_list.html"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "register/",
+                self.admin_site.admin_view(self.register),
+                name="nodes_operator_register",
+            ),
+            path(
+                "putty/",
+                self.admin_site.admin_view(self.putty_help),
+                name="nodes_operator_putty_help",
+            ),
+        ]
+        return custom + urls
+
+    def register(self, request):
+        if Operator.objects.filter(user=request.user).exists():
+            self.message_user(request, "Operator already registered", messages.ERROR)
+            return redirect("..")
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        private_bytes = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        public_bytes = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.OpenSSH,
+            format=serialization.PublicFormat.OpenSSH,
+        )
+        auth_dir = Path(settings.BASE_DIR) / "security" / "authorized_keys"
+        auth_dir.mkdir(parents=True, exist_ok=True)
+        pub_path = auth_dir / f"{request.user.username}.pub"
+        pub_path.write_bytes(public_bytes)
+        Operator.objects.create(user=request.user, public_key=public_bytes.decode())
+        self.message_user(request, "Operator registered", messages.SUCCESS)
+        response = HttpResponse(private_bytes, content_type="text/plain")
+        response[
+            "Content-Disposition"
+        ] = f'attachment; filename="{request.user.username}.key"'
+        return response
+
+    def putty_help(self, request):
+        return render(request, "admin/nodes/operator/putty_help.html")
+
 
 class NodeRoleAdminForm(forms.ModelForm):
     nodes = forms.ModelMultipleChoiceField(

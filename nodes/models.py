@@ -230,6 +230,28 @@ class Node(Entity):
             PeriodicTask.objects.filter(name=task_name).delete()
 
 
+class Operator(Entity):
+    """User allowed to access this node."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE
+    )
+    public_key = models.TextField(blank=True)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return str(self.user)
+
+    def key_path(self) -> Path:
+        auth_dir = Path(settings.BASE_DIR) / "security" / "authorized_keys"
+        return auth_dir / f"{self.user.username}.pub"
+
+    def delete(self, using=None, keep_parents=False):
+        path = self.key_path()
+        if path.exists():
+            path.unlink()
+        super().delete(using=using, keep_parents=keep_parents)
+
+
 class NetMessage(Entity):
     """Message propagated across nodes."""
 

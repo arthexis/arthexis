@@ -31,6 +31,7 @@ from .models import (
     ContentSample,
     NodeRole,
     NetMessage,
+    Operator,
 )
 from .tasks import capture_node_screenshot, sample_clipboard
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -502,6 +503,42 @@ class NodeAdminTests(TestCase):
         self.assertEqual(samples[0].transaction_uuid, samples[1].transaction_uuid)
 
 
+class OperatorAdminTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.client = Client()
+        self.admin = User.objects.create_superuser(
+            username="operator-admin", password="adminpass", email="op@example.com"
+        )
+        self.client.force_login(self.admin)
+
+    def tearDown(self):
+        security_dir = Path(settings.BASE_DIR) / "security"
+        if security_dir.exists():
+            shutil.rmtree(security_dir)
+
+    def test_register_as_operator_creates_key(self):
+        url = reverse("admin:nodes_operator_register")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Operator.objects.count(), 1)
+        operator = Operator.objects.first()
+        self.assertEqual(operator.user, self.admin)
+        auth_dir = Path(settings.BASE_DIR) / "security" / "authorized_keys"
+        pub_path = auth_dir / f"{self.admin.username}.pub"
+        self.assertTrue(pub_path.exists())
+        self.assertEqual(pub_path.read_text().strip(), operator.public_key.strip())
+        self.assertIn("attachment", response["Content-Disposition"])
+
+    def test_delete_operator_removes_key(self):
+        self.client.get(reverse("admin:nodes_operator_register"))
+        operator = Operator.objects.first()
+        pub_path = operator.key_path()
+        self.assertTrue(pub_path.exists())
+        operator.delete()
+        self.assertFalse(pub_path.exists())
+
+
 class NetMessageAdminTests(TransactionTestCase):
     reset_sequences = True
 
@@ -675,19 +712,19 @@ class NotificationManagerTests(TestCase):
         from core.notifications import NotificationManager
 
         with patch("core.notifications.sys.platform", "win32"):
-            mock_toast = MagicMock()
-            with patch("core.notifications.ToastNotifier", return_value=mock_toast):
+            mock_notify = MagicMock()
+            with patch("core.notifications.plyer_notification", mock_notify):
                 manager = NotificationManager()
                 manager._gui_display("hi", "there")
-        mock_toast.show_toast.assert_called_once_with(
-            "Arthexis", "hi\nthere", duration=6, threaded=True
+        mock_notify.notify.assert_called_once_with(
+            title="Arthexis", message="hi\nthere", timeout=6
         )
 
     def test_gui_display_logs_when_toast_unavailable(self):
         from core.notifications import NotificationManager
 
         with patch("core.notifications.sys.platform", "win32"):
-            with patch("core.notifications.ToastNotifier", None):
+            with patch("core.notifications.plyer_notification", None):
                 with patch("core.notifications.logger") as mock_logger:
                     manager = NotificationManager()
                     manager._gui_display("hi", "there")

@@ -1,0 +1,14 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{% trans "Using PuTTY with your operator key" %}</h1>
+<ol>
+    <li>{% trans "Register as operator and download the provided .key file." %}</li>
+    <li>{% trans "Open PuTTYgen, click 'Load', and select the downloaded key file." %}</li>
+    <li>{% trans "Save the converted key as a .ppk file." %}</li>
+    <li>{% trans "Open PuTTY and enter the host name and port of your instance." %}</li>
+    <li>{% trans "Under Connection → SSH → Auth, browse for the .ppk file and connect." %}</li>
+</ol>
+<p>{% trans "You will then have access using your operator credentials." %}</p>
+{% endblock %}
