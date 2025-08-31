@@ -203,41 +203,60 @@ for dev in eth0 wlan0; do
     done
 done
 
+# Add persistent Hyperline connection on wlan0
+nmcli connection add type wifi ifname wlan0 con-name hyperline \
+    ssid "Hyperline" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "arthexis" \
+    autoconnect yes ipv4.method auto ipv6.method ignore
+
 # Configure eth0 shared connection
 nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect yes \
     ipv4.method shared ipv4.addresses 192.168.129.10/16 ipv4.never-default yes \
     ipv6.method ignore ipv6.never-default yes
 
-# Obtain or prompt for WiFi password
-if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
-    while true; do
-        read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
-        read -rsp "Confirm password: " WIFI_PASS2; echo
-        if [[ "$WIFI_PASS1" == "$WIFI_PASS2" && -n "$WIFI_PASS1" ]]; then
-            WIFI_PASS="$WIFI_PASS1"
-            break
-        else
-            echo "Passwords do not match or are empty." >&2
-        fi
-    done
+# Attempt to connect to Hyperline network
+HYPERLINE_CONNECTED=false
+if nmcli connection up hyperline; then
+    HYPERLINE_CONNECTED=true
 else
-    WIFI_PASS="$EXISTING_PASS"
+    echo "Failed to activate Hyperline connection; falling back to access point." >&2
+    nmcli connection delete hyperline || true
 fi
 
-# Configure wlan0 access point
-nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" autoconnect yes \
-    ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
-    ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
-    wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
+if [[ "$HYPERLINE_CONNECTED" != true ]]; then
+    # Obtain or prompt for WiFi password
+    if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
+        while true; do
+            read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
+            read -rsp "Confirm password: " WIFI_PASS2; echo
+            if [[ "$WIFI_PASS1" == "$WIFI_PASS2" && -n "$WIFI_PASS1" ]]; then
+                WIFI_PASS="$WIFI_PASS1"
+                break
+            else
+                echo "Passwords do not match or are empty." >&2
+            fi
+        done
+    else
+        WIFI_PASS="$EXISTING_PASS"
+    fi
 
-# Bring up connections
-nmcli connection up eth0-shared
-nmcli connection up "$AP_NAME"
+    # Configure wlan0 access point
+    nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" autoconnect yes \
+        ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
+        ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
+        wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
 
-# Allow wlan0 clients to reach local services on 10.42.0.1
-if command -v iptables >/dev/null 2>&1; then
-    iptables -C INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT 2>/dev/null || \
-        iptables -A INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT
+    # Bring up connections
+    nmcli connection up eth0-shared
+    nmcli connection up "$AP_NAME"
+
+    # Allow wlan0 clients to reach local services on 10.42.0.1
+    if command -v iptables >/dev/null 2>&1; then
+        iptables -C INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT 2>/dev/null || \
+            iptables -A INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT
+    fi
+else
+    # Bring up shared ethernet and already-connected Hyperline WiFi
+    nmcli connection up eth0-shared
 fi
 
 # Show final status

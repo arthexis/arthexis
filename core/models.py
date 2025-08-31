@@ -1063,7 +1063,7 @@ class PackageRelease(Entity):
     def promote(self) -> None:
         """Run the promotion workflow for this release."""
         from . import release as release_utils
-        from django.core.management import call_command
+        from django.core import serializers
         from pathlib import Path
         import subprocess
 
@@ -1075,13 +1075,10 @@ class PackageRelease(Entity):
         self.revision = commit_hash
         self.save(update_fields=["revision"])
         fixture_path = Path("core/fixtures/releases.json")
-        call_command(
-            "dumpdata",
-            "core.packagerelease",
-            format="json",
-            indent=2,
-            output=str(fixture_path),
+        data = serializers.serialize(
+            "json", PackageRelease.objects.filter(is_promoted=True), indent=2
         )
+        fixture_path.write_text(data)
         subprocess.run(["git", "add", str(fixture_path)], check=True)
         subprocess.run(
             ["git", "commit", "-m", f"Add fixture for {self.version}"],

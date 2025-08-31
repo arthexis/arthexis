@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from pathlib import Path
 import subprocess
-from django.core.management import call_command
+from django.core import serializers
 
 from utils.api import api_login_required
 
@@ -46,14 +46,12 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
 
 def _step_dump_fixture(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Dumping fixture")
-    call_command(
-        "dumpdata",
-        "core.packagerelease",
-        format="json",
-        indent=2,
-        output="core/fixtures/releases.json",
+    data = serializers.serialize(
+        "json", PackageRelease.objects.filter(is_promoted=True), indent=2
     )
-    subprocess.run(["git", "add", "core/fixtures/releases.json"], check=True)
+    fixture_path = Path("core/fixtures/releases.json")
+    fixture_path.write_text(data)
+    subprocess.run(["git", "add", str(fixture_path)], check=True)
     subprocess.run(
         ["git", "commit", "-m", f"Add fixture for {release.version}"], check=True
     )

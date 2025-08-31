@@ -54,6 +54,8 @@ def nav_links(request):
                 if current_module is None or len(module.path) > len(current_module.path):
                     current_module = module
 
+    valid_modules.sort(key=lambda m: m.menu_label.lower())
+
     if current_module and current_module.favicon:
         favicon_url = current_module.favicon.url
     else:

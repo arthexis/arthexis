@@ -6,7 +6,6 @@ import base64
 class GameConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "game"
-
     def ready(self):
         static_dir = Path(__file__).resolve().parent / "static"
         for b64_file in static_dir.rglob("*.b64"):
