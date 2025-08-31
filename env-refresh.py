@@ -267,7 +267,7 @@ def run_database_tasks(*, latest: bool = False) -> None:
                     )
                 except Exception:
                     pass
-            call_command("loaddata", *[str(p) for p in personal])
+            call_command("loaddata", *[str(p) for p in personal], ignorenonexistent=True)
             for p in personal:
                 try:
                     user_id, app_label, model, obj_id = p.stem.split("_", 3)
