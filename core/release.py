@@ -354,7 +354,8 @@ def promote(
         try:
             _run(["git", "checkout", "-b", tmp_branch])
         except subprocess.CalledProcessError:
-            _run(["git", "checkout", tmp_branch])
+            _run(["git", "branch", "-D", tmp_branch], check=False)
+            _run(["git", "checkout", "-b", tmp_branch])
         build(
             package=package,
             creds=creds,
