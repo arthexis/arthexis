@@ -1,4 +1,18 @@
 {% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block nav-breadcrumbs %}
+<nav aria-label="{% translate 'Breadcrumbs' %}">
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
+    <a href="{% url 'admin:app_list' 'core' %}">{% trans 'Business Models' %}</a> ›
+    <a href="{% url 'admin:core_packagerelease_changelist' %}">{% trans 'Package Releases' %}</a> ›
+    <a href="{% url 'admin:core_packagerelease_change' release.pk %}">{{ release }}</a> ›
+    {{ action|capfirst }}
+  </div>
+</nav>
+{% endblock %}
+
 {% block content %}
 <h1>{{ action|capfirst }} {{ release.package.name }} {{ release.version }}</h1>
 <ol>
