@@ -1,0 +1,28 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Games" %} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="row">
+  {% for game in games %}
+  <div class="col-md-4 mb-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">{{ game.title }}</h5>
+        <p class="card-text">{{ game.description }}</p>
+      </div>
+      <div class="card-footer">
+        {% if game.play_url %}<a class="btn btn-primary btn-sm" href="{{ game.play_url }}">{% trans "Play" %}</a>{% endif %}
+        {% if game.download_url %}<a class="btn btn-secondary btn-sm" href="{{ game.download_url }}">{% trans "Download" %}</a>{% endif %}
+      </div>
+    </div>
+  </div>
+  {% if forloop.counter|divisibleby:3 %}
+</div><div class="row">
+  {% endif %}
+  {% empty %}
+  <p>{% trans "No games available." %}</p>
+  {% endfor %}
+</div>
+{% endblock %}
