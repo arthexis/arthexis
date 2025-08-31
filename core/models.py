@@ -1028,8 +1028,8 @@ class PackagerProfile(Entity):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="packager_profile"
     )
-    username = models.CharField(max_length=100, blank=True)
-    token = models.CharField(max_length=200, blank=True)
+    pypi_username = models.CharField("PyPI username", max_length=100, blank=True)
+    pypi_token = models.CharField("PyPI token", max_length=200, blank=True)
     github_token = models.CharField(
         max_length=200,
         blank=True,
@@ -1038,8 +1038,8 @@ class PackagerProfile(Entity):
             "Used before the GITHUB_TOKEN environment variable."
         ),
     )
-    password = models.CharField(max_length=200, blank=True)
-    pypi_url = models.URLField(blank=True)
+    pypi_password = models.CharField("PyPI password", max_length=200, blank=True)
+    pypi_url = models.URLField("PyPI URL", blank=True)
 
     class Meta:
         verbose_name = "Packager Profile"
@@ -1054,10 +1054,12 @@ class PackagerProfile(Entity):
 
     def to_credentials(self) -> Credentials | None:
         """Return credentials for this profile."""
-        if self.token:
-            return Credentials(token=self.token)
-        if self.username and self.password:
-            return Credentials(username=self.username, password=self.password)
+        if self.pypi_token:
+            return Credentials(token=self.pypi_token)
+        if self.pypi_username and self.pypi_password:
+            return Credentials(
+                username=self.pypi_username, password=self.pypi_password
+            )
         return None
 
 
