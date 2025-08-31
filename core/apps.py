@@ -34,13 +34,18 @@ class CoreConfig(AppConfig):
         if PeriodicTask:
             lock = Path(settings.BASE_DIR) / "locks" / "celery.lck"
             if lock.exists():
-                schedule, _ = IntervalSchedule.objects.get_or_create(
-                    every=1, period=IntervalSchedule.HOURS
-                )
-                PeriodicTask.objects.get_or_create(
-                    name="poll_email_collectors",
-                    defaults={
-                        "interval": schedule,
-                        "task": "core.tasks.poll_email_collectors",
-                    },
-                )
+                from django.db.utils import OperationalError
+
+                try:
+                    schedule, _ = IntervalSchedule.objects.get_or_create(
+                        every=1, period=IntervalSchedule.HOURS
+                    )
+                    PeriodicTask.objects.get_or_create(
+                        name="poll_email_collectors",
+                        defaults={
+                            "interval": schedule,
+                            "task": "core.tasks.poll_email_collectors",
+                        },
+                    )
+                except OperationalError:  # pragma: no cover - tables not ready
+                    pass
