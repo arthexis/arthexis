@@ -1,13 +1,13 @@
 [
   {
-    "model": "games.gameportal",
+    "model": "game.gameportal",
     "pk": 1,
     "fields": {
       "slug": "demo",
       "title": "Demo Ren'Py Game",
       "description": "A simple Ren'Py game.",
-      "play_url": "/static/games/demo/index.html",
-      "download_url": "/static/games/demo/index.html"
+      "play_url": "/static/game/demo/index.html",
+      "download_url": "/static/game/demo/index.html"
     }
   }
 ]
