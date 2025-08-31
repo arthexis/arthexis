@@ -36,11 +36,12 @@ class ReleaseProgressTests(TestCase):
         commit_hash = "abcdef1234567890"
 
         def run_side_effect(cmd, check=True, capture_output=False, text=False):
-            stdout = "http://example.com/pr/1\n" if cmd[:3] == ["gh", "pr", "create"] else ""
+            stdout = "http://example.com/pr/1\n" if cmd[:3] == ["/usr/bin/gh", "pr", "create"] else ""
             return subprocess.CompletedProcess(cmd, 0, stdout, "")
 
         with patch("core.views.release_utils.promote", return_value=(commit_hash, "branch", "main")), \
              patch("core.views.serializers.serialize", return_value="[]"), \
+             patch("core.views.shutil.which", return_value="/usr/bin/gh"), \
              patch("core.views.subprocess.run", side_effect=run_side_effect):
             resp = self.client.get(url)
             for i in range(3):
@@ -53,6 +54,32 @@ class ReleaseProgressTests(TestCase):
         self.assertTrue(log_path.exists())
         release.refresh_from_db()
         self.assertTrue(release.is_promoted)
+
+    def test_promote_progress_without_gh_skips_pr(self):
+        release = PackageRelease.objects.create(package=self.package, version="1.1.0")
+        url = reverse("release-progress", args=[release.pk, "promote"])
+        commit_hash = "1234567890abcdef"
+
+        def run_side_effect(cmd, check=True, capture_output=False, text=False):
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        with patch("core.views.release_utils.promote", return_value=(commit_hash, "branch", "main")), \
+             patch("core.views.serializers.serialize", return_value="[]"), \
+             patch("core.views.shutil.which", return_value=None), \
+             patch("core.views.subprocess.run", side_effect=run_side_effect):
+            resp = self.client.get(url)
+            for i in range(3):
+                resp = self.client.get(f"{url}?step={i}")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "All steps completed")
+        self.assertIsNone(resp.context["pr_url"])
+        log_path = Path("logs") / f"pkg-1.1.0-{commit_hash[:7]}.log"
+        self.assertTrue(log_path.exists())
+        self.assertIn(
+            "PR creation skipped",
+            log_path.read_text(),
+        )
 
     def test_publish_progress_creates_log(self):
         release = PackageRelease.objects.create(

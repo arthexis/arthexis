@@ -1,15 +1,18 @@
 import json
+import os
+import shutil
 from datetime import date, timedelta
 
-from django.contrib.auth import authenticate, login
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+import requests
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth import authenticate, login
+from django.core import serializers
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.views.decorators.csrf import csrf_exempt
 from pathlib import Path
 import subprocess
-from django.core import serializers
 
 from utils.api import api_login_required
 
@@ -62,21 +65,66 @@ def _step_push_branch(release, ctx, log_path: Path) -> None:
     _append_log(log_path, f"Pushing branch {branch}")
     subprocess.run(["git", "push", "-u", "origin", branch], check=True)
     pr_url = None
-    try:
-        proc = subprocess.run(
-            ["gh", "pr", "create", "--fill", "--base", "main", "--head", branch],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        pr_url = proc.stdout.strip()
-        ctx["pr_url"] = pr_url
-        _append_log(log_path, f"PR created: {pr_url}")
-        cert_log = Path("logs") / "certifications.log"
-        _append_log(cert_log, f"{release.version} {branch} {pr_url}")
-        ctx["cert_log"] = str(cert_log)
-    except Exception as exc:  # pragma: no cover - best effort
-        _append_log(log_path, f"PR creation failed: {exc}")
+    gh_path = shutil.which("gh")
+    if gh_path:
+        try:
+            proc = subprocess.run(
+                [gh_path, "pr", "create", "--fill", "--base", "main", "--head", branch],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            pr_url = proc.stdout.strip()
+            ctx["pr_url"] = pr_url
+            _append_log(log_path, f"PR created: {pr_url}")
+            cert_log = Path("logs") / "certifications.log"
+            _append_log(cert_log, f"{release.version} {branch} {pr_url}")
+            ctx["cert_log"] = str(cert_log)
+        except Exception as exc:  # pragma: no cover - best effort
+            _append_log(log_path, f"PR creation failed: {exc}")
+    else:
+        token = os.environ.get("GITHUB_TOKEN")
+        if token:
+            try:  # pragma: no cover - best effort
+                remote = subprocess.run(
+                    ["git", "config", "--get", "remote.origin.url"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+                repo = remote.rsplit(":", 1)[-1].split("github.com/")[-1].removesuffix(".git")
+                commit_msg = subprocess.run(
+                    ["git", "log", "-1", "--pretty=%B"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+                title, _, body = commit_msg.partition("\n\n")
+                resp = requests.post(
+                    f"https://api.github.com/repos/{repo}/pulls",
+                    json={
+                        "title": title or branch,
+                        "head": branch,
+                        "base": "main",
+                        "body": body,
+                    },
+                    headers={"Authorization": f"token {token}"},
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                pr_url = resp.json().get("html_url")
+                if pr_url:
+                    ctx["pr_url"] = pr_url
+                    _append_log(log_path, f"PR created: {pr_url}")
+                    cert_log = Path("logs") / "certifications.log"
+                    _append_log(cert_log, f"{release.version} {branch} {pr_url}")
+                    ctx["cert_log"] = str(cert_log)
+                else:
+                    _append_log(log_path, "PR creation failed: no URL returned")
+            except Exception as exc:
+                _append_log(log_path, f"PR creation failed: {exc}")
+        else:
+            _append_log(log_path, "PR creation skipped: gh not installed and GITHUB_TOKEN not set")
     subprocess.run(["git", "checkout", "main"], check=True)
     _append_log(log_path, "Branch pushed")
 
