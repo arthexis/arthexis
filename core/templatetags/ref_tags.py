@@ -2,9 +2,10 @@ from pathlib import Path
 
 from django import template
 from django.conf import settings
+from django.urls import reverse
 from django.utils.safestring import mark_safe
 
-from core.models import Reference
+from core.models import Reference, PackageRelease
 from core.release import DEFAULT_PACKAGE
 from utils import revision
 
@@ -27,8 +28,8 @@ def ref_img(value, size=200, alt=None):
     )
 
 
-@register.inclusion_tag("core/footer.html")
-def render_footer():
+@register.inclusion_tag("core/footer.html", takes_context=True)
+def render_footer(context):
     """Render footer links for references marked to appear there."""
     refs = list(Reference.objects.filter(include_in_footer=True))
 
@@ -40,12 +41,22 @@ def render_footer():
     revision_value = revision.get_revision()
     rev_short = revision_value[-6:] if revision_value else ""
     release_name = DEFAULT_PACKAGE.name
+    release_url = None
     if version:
         release_name = f"{release_name}-{version}"
         if rev_short:
             release_name = f"{release_name}-{rev_short}"
+        release = PackageRelease.objects.filter(version=version).first()
+        if release:
+            release_url = reverse(
+                "admin:core_packagerelease_change", args=[release.pk]
+            )
 
-    return {
-        "footer_refs": refs,
-        "release_name": release_name,
-    }
+    context.update(
+        {
+            "footer_refs": refs,
+            "release_name": release_name,
+            "release_url": release_url,
+        }
+    )
+    return context
