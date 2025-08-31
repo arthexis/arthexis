@@ -81,6 +81,15 @@ class ReleaseProgressTests(TestCase):
             log_path.read_text(),
         )
 
+    def test_promote_progress_breadcrumbs(self):
+        release = PackageRelease.objects.create(package=self.package, version="3.0.0")
+        url = reverse("release-progress", args=[release.pk, "promote"])
+        resp = self.client.get(url)
+        app_url = reverse("admin:app_list", args=("core",))
+        self.assertContains(resp, f'<a href="{app_url}">Business Models</a>')
+        list_url = reverse("admin:core_packagerelease_changelist")
+        self.assertContains(resp, f'<a href="{list_url}">Package Releases</a>')
+
     def test_publish_progress_creates_log(self):
         release = PackageRelease.objects.create(
             package=self.package,
