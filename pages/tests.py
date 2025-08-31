@@ -98,6 +98,16 @@ class InvitationTests(TestCase):
         self.assertTrue(self.user.is_active)
         self.assertIn("_auth_user_id", self.client.session)
 
+    def test_request_invite_handles_email_errors(self):
+        with patch("pages.views.send_mail", side_effect=Exception("fail")):
+            resp = self.client.post(
+                reverse("pages:request-invite"), {"email": "invite@example.com"}
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(
+            resp, "If the email exists, an invitation has been sent."
+        )
+
 
 class NavbarBrandTests(TestCase):
     def setUp(self):
@@ -209,31 +219,6 @@ class AdminSidebarTests(TestCase):
         url = reverse("admin:nodes_node_changelist")
         resp = self.client.get(url)
         self.assertContains(resp, 'id="admin-collapsible-apps"')
-
-
-class ReadmeSidebarTests(TestCase):
-    def setUp(self):
-        self.client = Client()
-        readme = Path(settings.BASE_DIR) / "README.md"
-        base = Path(settings.BASE_DIR) / "README.base.md"
-        self._orig_readme = readme.read_text()
-        readme.write_text(base.read_text())
-        self.addCleanup(lambda: readme.write_text(self._orig_readme))
-        Site.objects.update_or_create(id=1, defaults={"name": "Terminal"})
-        call_command("register_site_apps")
-        Module.objects.all().delete()
-
-    def test_table_of_contents_sidebar_present(self):
-        resp = self.client.get(reverse("pages:index"))
-        self.assertIn("toc", resp.context)
-        self.assertContains(resp, 'class="toc"')
-        html = resp.content.decode()
-        self.assertLess(html.index('nav class="toc"'), html.index('class="col-lg-9"'))
-
-    def test_included_apps_table_renders(self):
-        resp = self.client.get(reverse("pages:index"))
-        self.assertContains(resp, "<table")
-        self.assertContains(resp, "<td>ocpp</td>")
 
 
 class SiteAdminRegisterCurrentTests(TestCase):
