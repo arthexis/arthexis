@@ -1,5 +1,4 @@
 import json
-import os
 import shutil
 from datetime import date, timedelta
 
@@ -83,7 +82,7 @@ def _step_push_branch(release, ctx, log_path: Path) -> None:
         except Exception as exc:  # pragma: no cover - best effort
             _append_log(log_path, f"PR creation failed: {exc}")
     else:
-        token = os.environ.get("GITHUB_TOKEN")
+        token = release.get_github_token()
         if token:
             try:  # pragma: no cover - best effort
                 remote = subprocess.run(
@@ -124,7 +123,10 @@ def _step_push_branch(release, ctx, log_path: Path) -> None:
             except Exception as exc:
                 _append_log(log_path, f"PR creation failed: {exc}")
         else:
-            _append_log(log_path, "PR creation skipped: gh not installed and GITHUB_TOKEN not set")
+            _append_log(
+                log_path,
+                "PR creation skipped: gh not installed and no GitHub token available",
+            )
     subprocess.run(["git", "checkout", "main"], check=True)
     _append_log(log_path, "Branch pushed")
 

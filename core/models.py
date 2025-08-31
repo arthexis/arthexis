@@ -15,6 +15,7 @@ from django.dispatch import receiver
 from datetime import timedelta
 from django.contrib.contenttypes.models import ContentType
 import hashlib
+import os
 from io import BytesIO
 from django.core.files.base import ContentFile
 import qrcode
@@ -1029,6 +1030,14 @@ class PackagerProfile(Entity):
     )
     username = models.CharField(max_length=100, blank=True)
     token = models.CharField(max_length=200, blank=True)
+    github_token = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text=(
+            "Personal access token used to create GitHub pull requests. "
+            "Used before the GITHUB_TOKEN environment variable."
+        ),
+    )
     password = models.CharField(max_length=200, blank=True)
     pypi_url = models.URLField(blank=True)
 
@@ -1125,6 +1134,13 @@ class PackageRelease(Entity):
         if profile:
             return profile.to_credentials()
         return None
+
+    def get_github_token(self) -> str | None:
+        """Return GitHub token from the associated profile or environment."""
+        profile = self.profile or self.package.release_manager
+        if profile and profile.github_token:
+            return profile.github_token
+        return os.environ.get("GITHUB_TOKEN")
 
     @property
     def migration_number(self) -> int:
