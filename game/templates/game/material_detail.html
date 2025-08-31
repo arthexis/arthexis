@@ -1,0 +1,35 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ material.slug }} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-8">
+    <div class="position-relative">
+      <img src="data:image/png;base64,{{ material.image }}" class="img-fluid" alt="" />
+      {% for region in material.regions.all %}
+      <a href="{% url 'game:region-follow' region.pk %}"
+         class="position-absolute d-block"
+         style="left:{{ region.x }}px; top:{{ region.y }}px; width:{{ region.width }}px; height:{{ region.height }}px;">
+        <span class="visually-hidden">{{ region.name }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    <div class="mt-3">
+      <strong>{% trans "Choose one --" %}</strong>
+      <ul class="list-unstyled">
+        {% for region in material.regions.all %}
+        <li><a href="{% url 'game:region-follow' region.pk %}">{{ region.name }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="border-start ps-3">
+      {{ material.description|linebreaks }}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
