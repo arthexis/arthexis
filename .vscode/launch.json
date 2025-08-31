@@ -10,7 +10,10 @@
                 "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
             },
             "program": "${workspaceFolder}/vscode_manage.py",
-            "args": ["runserver"],
+            "args": [
+                "runserver",
+                "--noreload"
+            ],
             "django": true,
             "noDebug": true
         },
@@ -23,7 +26,9 @@
                 "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
             },
             "program": "${workspaceFolder}/vscode_manage.py",
-            "args": ["runserver"],
+            "args": [
+                "runserver"
+            ],
             "subProcess": true
         }
     ]
