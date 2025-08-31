@@ -23,3 +23,29 @@ class CoreConfig(AppConfig):
         post_migrate.connect(create_default_admin, sender=self)
         patch_admin_user_datum()
         patch_admin_user_data_views()
+
+        from pathlib import Path
+        from django.conf import settings
+        try:  # pragma: no cover - optional dependency
+            from django_celery_beat.models import IntervalSchedule, PeriodicTask
+        except Exception:  # pragma: no cover - optional dependency
+            IntervalSchedule = PeriodicTask = None
+
+        if PeriodicTask:
+            lock = Path(settings.BASE_DIR) / "locks" / "celery.lck"
+            if lock.exists():
+                from django.db.utils import OperationalError
+
+                try:
+                    schedule, _ = IntervalSchedule.objects.get_or_create(
+                        every=1, period=IntervalSchedule.HOURS
+                    )
+                    PeriodicTask.objects.get_or_create(
+                        name="poll_email_collectors",
+                        defaults={
+                            "interval": schedule,
+                            "task": "core.tasks.poll_email_collectors",
+                        },
+                    )
+                except OperationalError:  # pragma: no cover - tables not ready
+                    pass
