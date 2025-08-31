@@ -1,10 +1,23 @@
 import os
 import webbrowser
 
-from daphne.management.commands.runserver import Command as RunserverCommand
+from django.apps import apps
+from django.contrib.staticfiles.handlers import ASGIStaticFilesHandler
+from daphne.management.commands.runserver import (
+    Command as RunserverCommand,
+    get_default_application,
+)
 
 class Command(RunserverCommand):
     """Extended runserver command that also prints WebSocket URLs and admin link."""
+
+    def get_application(self, options):
+        """Serve static files even when DEBUG is False."""
+        staticfiles_installed = apps.is_installed("django.contrib.staticfiles")
+        use_static_handler = options.get("use_static_handler", staticfiles_installed)
+        if use_static_handler:
+            return ASGIStaticFilesHandler(get_default_application())
+        return get_default_application()
 
     def on_bind(self, server_port):
         super().on_bind(server_port)
