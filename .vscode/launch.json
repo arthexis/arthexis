@@ -23,7 +23,7 @@
                 "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
             },
             "program": "${workspaceFolder}/vscode_manage.py",
-            "args": ["runserver", "--noreload"],
+            "args": ["runserver"],
             "django": true
         }
     ]
