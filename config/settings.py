@@ -126,7 +126,7 @@ LOCAL_APPS = [
     "awg",
     "pages",
     "app",
-    "games",
+    "game",
 ]
 
 INSTALLED_APPS = [

@@ -3,9 +3,9 @@ from pathlib import Path
 import base64
 
 
-class GamesConfig(AppConfig):
+class GameConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "games"
+    name = "game"
 
     def ready(self):
         static_dir = Path(__file__).resolve().parent / "static"
