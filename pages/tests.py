@@ -119,6 +119,22 @@ class NavbarBrandTests(TestCase):
             resp, '<a class="navbar-brand" href="/">Arthexis</a>'
         )
 
+    @override_settings(ALLOWED_HOSTS=["127.0.0.1", "testserver"])
+    def test_brand_uses_role_name_when_site_name_blank(self):
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": "localhost",
+                "address": "127.0.0.1",
+                "role": role,
+            },
+        )
+        Site.objects.filter(id=1).update(name="", domain="127.0.0.1")
+        resp = self.client.get(reverse("pages:index"), HTTP_HOST="127.0.0.1")
+        self.assertEqual(resp.context["badge_site_name"], "Terminal")
+        self.assertContains(resp, '<a class="navbar-brand" href="/">Terminal</a>')
+
 
 class AdminBadgesTests(TestCase):
     def setUp(self):
@@ -198,6 +214,11 @@ class AdminSidebarTests(TestCase):
 class ReadmeSidebarTests(TestCase):
     def setUp(self):
         self.client = Client()
+        readme = Path(settings.BASE_DIR) / "README.md"
+        base = Path(settings.BASE_DIR) / "README.base.md"
+        self._orig_readme = readme.read_text()
+        readme.write_text(base.read_text())
+        self.addCleanup(lambda: readme.write_text(self._orig_readme))
         Site.objects.update_or_create(id=1, defaults={"name": "Terminal"})
         call_command("register_site_apps")
         Module.objects.all().delete()
