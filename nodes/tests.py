@@ -676,19 +676,22 @@ class NotificationManagerTests(TestCase):
         from core.notifications import NotificationManager
 
         with patch("core.notifications.sys.platform", "win32"):
-            mock_toast = MagicMock()
-            with patch("core.notifications.ToastNotifier", return_value=mock_toast):
+            mock_notify = MagicMock()
+            with patch(
+                "core.notifications.plyer_notification",
+                MagicMock(notify=mock_notify),
+            ):
                 manager = NotificationManager()
                 manager._gui_display("hi", "there")
-        mock_toast.show_toast.assert_called_once_with(
-            "Arthexis", "hi\nthere", duration=6, threaded=True
+        mock_notify.assert_called_once_with(
+            title="Arthexis", message="hi\nthere", timeout=6
         )
 
     def test_gui_display_logs_when_toast_unavailable(self):
         from core.notifications import NotificationManager
 
         with patch("core.notifications.sys.platform", "win32"):
-            with patch("core.notifications.ToastNotifier", None):
+            with patch("core.notifications.plyer_notification", None):
                 with patch("core.notifications.logger") as mock_logger:
                     manager = NotificationManager()
                     manager._gui_display("hi", "there")
