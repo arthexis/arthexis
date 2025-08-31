@@ -129,14 +129,16 @@ def request_invite(request):
             link = request.build_absolute_uri(
                 reverse("pages:invitation-login", args=[uid, token])
             )
+            subject = _("Your invitation link")
+            body = _(
+                "Use the following link to access your account: %(link)s"
+            ) % {"link": link}
             try:
-                send_mail(
-                    _("Your invitation link"),
-                    _("Use the following link to access your account: %(link)s")
-                    % {"link": link},
-                    settings.DEFAULT_FROM_EMAIL,
-                    [email],
-                )
+                node = Node.get_local()
+                if node:
+                    node.send_mail(subject, body, [email])
+                else:
+                    send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [email])
             except Exception:
                 logger.exception("Failed to send invitation email to %s", email)
         sent = True

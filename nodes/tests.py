@@ -28,6 +28,7 @@ from .utils import capture_screenshot
 
 from .models import (
     Node,
+    EmailOutbox,
     ContentSample,
     NodeRole,
     NetMessage,
@@ -755,6 +756,40 @@ class ContentSampleAdminTests(TestCase):
             ContentSample.objects.filter(kind=ContentSample.TEXT).count(), 1
         )
         self.assertContains(resp, "Duplicate sample not created")
+
+
+class EmailOutboxTests(TestCase):
+    def test_node_send_mail_uses_outbox(self):
+        node = Node.objects.create(
+            hostname="outboxhost",
+            address="127.0.0.1",
+            port=8000,
+            mac_address="00:11:22:33:aa:bb",
+        )
+        EmailOutbox.objects.create(
+            node=node, host="smtp.example.com", port=25, username="u", password="p"
+        )
+        with patch("nodes.models.get_connection") as gc, patch(
+            "nodes.models.send_mail"
+        ) as sm:
+            conn = MagicMock()
+            gc.return_value = conn
+            node.send_mail("sub", "msg", ["to@example.com"])
+            gc.assert_called_once_with(
+                host="smtp.example.com",
+                port=25,
+                username="u",
+                password="p",
+                use_tls=True,
+                use_ssl=False,
+            )
+            sm.assert_called_once_with(
+                "sub",
+                "msg",
+                settings.DEFAULT_FROM_EMAIL,
+                ["to@example.com"],
+                connection=conn,
+            )
 
 
 class ClipboardTaskTests(TestCase):
