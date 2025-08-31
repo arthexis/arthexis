@@ -2,19 +2,19 @@ from django.views.generic import DetailView, ListView
 from .models import GamePortal, GameMaterial
 
 
-class GameListView(ListView):
+class GamePortalListView(ListView):
     model = GamePortal
-    template_name = "game/game_list.html"
+    template_name = "beta/portal_list.html"
     context_object_name = "games"
 
 
-class GameDetailView(DetailView):
+class GamePortalDetailView(DetailView):
     model = GamePortal
-    template_name = "game/game_detail.html"
+    template_name = "beta/portal_detail.html"
     context_object_name = "game"
 
 
 class GameMaterialView(DetailView):
     model = GameMaterial
-    template_name = "game/material_detail.html"
+    template_name = "beta/material_detail.html"
     context_object_name = "material"

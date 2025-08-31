@@ -1,6 +1,6 @@
 [
   {
-    "model": "game.gamematerial",
+    "model": "beta.gamematerial",
     "pk": 1,
     "fields": {
       "slug": "start",
@@ -9,7 +9,7 @@
     }
   },
   {
-    "model": "game.gamematerial",
+    "model": "beta.gamematerial",
     "pk": 2,
     "fields": {
       "slug": "left",
@@ -18,7 +18,7 @@
     }
   },
   {
-    "model": "game.gameportal",
+    "model": "beta.gameportal",
     "pk": 1,
     "fields": {
       "slug": "simple",
@@ -28,7 +28,7 @@
     }
   },
   {
-    "model": "game.materialregion",
+    "model": "beta.materialregion",
     "pk": 1,
     "fields": {
       "material": 1,
@@ -41,7 +41,7 @@
     }
   },
   {
-    "model": "game.materialregion",
+    "model": "beta.materialregion",
     "pk": 2,
     "fields": {
       "material": 1,
