@@ -1,7 +1,7 @@
 {% extends "pages/base.html" %}
 {% load i18n %}
 
-{% block title %}{% trans "Games" %} - {{ block.super }}{% endblock %}
+{% block title %}{% trans "Game Portals" %} - {{ block.super }}{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -13,7 +13,7 @@
         <p class="card-text">{{ game.description }}</p>
       </div>
       <div class="card-footer">
-        {% if game.entry_material %}<a class="btn btn-primary btn-sm" href="{% url 'game:material-detail' game.entry_material.slug %}">{% trans "Start" %}</a>{% endif %}
+        {% if game.entry_material %}<a class="btn btn-primary btn-sm" href="{% url 'beta:material-detail' game.entry_material.slug %}">{% trans "Start" %}</a>{% endif %}
       </div>
     </div>
   </div>
@@ -21,7 +21,7 @@
 </div><div class="row">
   {% endif %}
   {% empty %}
-  <p>{% trans "No games available." %}</p>
+  <p>{% trans "No game portals available." %}</p>
   {% endfor %}
 </div>
 {% endblock %}

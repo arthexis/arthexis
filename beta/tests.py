@@ -5,23 +5,23 @@ from django.urls import reverse
 from pathlib import Path
 
 
-class GameTests(TestCase):
+class BetaTests(TestCase):
     def setUp(self):
-        fixture = Path(settings.BASE_DIR, "game", "fixtures", "game.json")
+        fixture = Path(settings.BASE_DIR, "beta", "fixtures", "beta.json")
         call_command("loaddata", str(fixture))
         self.client = Client()
 
-    def test_game_list_displays_fixture(self):
-        resp = self.client.get(reverse("game:game-list"))
+    def test_portal_list_displays_fixture(self):
+        resp = self.client.get(reverse("beta:portal-list"))
         self.assertContains(resp, "Simple Demo Game")
 
-    def test_game_detail_view(self):
-        resp = self.client.get(reverse("game:game-detail", args=["simple"]))
+    def test_portal_detail_view(self):
+        resp = self.client.get(reverse("beta:portal-detail", args=["simple"]))
         self.assertContains(resp, "Simple Demo Game")
-        self.assertContains(resp, reverse("game:material-detail", args=["start"]))
+        self.assertContains(resp, reverse("beta:material-detail", args=["start"]))
 
     def test_game_material_view(self):
-        resp = self.client.get(reverse("game:material-detail", args=["start"]))
+        resp = self.client.get(reverse("beta:material-detail", args=["start"]))
         self.assertContains(resp, "Choose one")
         self.assertContains(resp, "Go Left")
         self.assertContains(resp, "Go Right")

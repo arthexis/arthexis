@@ -23,8 +23,8 @@ class GamePortal(models.Model):
     )
 
     class Meta:
-        verbose_name = _("Game")
-        verbose_name_plural = _("Games")
+        verbose_name = _("Game Portal")
+        verbose_name_plural = _("Game Portals")
         ordering = ["title"]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
