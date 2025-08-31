@@ -3,7 +3,7 @@
     "model": "sites.site",
     "fields": {
       "domain": "localhost",
-      "name": "localhost"
+      "name": ""
     }
   }
 ]
