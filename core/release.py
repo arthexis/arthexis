@@ -366,6 +366,7 @@ def promote(
             dist=True,
             git=False,
             tag=False,
+            stash=True,
         )
         try:  # best effort
             _run([sys.executable, "manage.py", "squashmigrations", "core", "0001"], check=False)
