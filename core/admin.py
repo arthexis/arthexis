@@ -125,7 +125,7 @@ class ReferenceAdmin(admin.ModelAdmin):
 
 @admin.register(PackagerProfile)
 class PackagerProfileAdmin(admin.ModelAdmin):
-    list_display = ("user", "username", "pypi_url")
+    list_display = ("user", "pypi_username", "pypi_url")
 
 
 @admin.register(Package)

@@ -44,7 +44,7 @@ def create_packaging_defaults(apps, schema_editor):
     profile, _ = PackagerProfile.objects.get_or_create(
         user=user,
         defaults={
-            "username": "arthexis",
+            "pypi_username": "arthexis",
             "pypi_url": "https://pypi.org/user/arthexis/",
         },
     )
@@ -70,6 +70,41 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RenameField(
+            model_name='packagerprofile',
+            old_name='token',
+            new_name='pypi_token',
+        ),
+        migrations.RenameField(
+            model_name='packagerprofile',
+            old_name='username',
+            new_name='pypi_username',
+        ),
+        migrations.RenameField(
+            model_name='packagerprofile',
+            old_name='password',
+            new_name='pypi_password',
+        ),
+        migrations.AlterField(
+            model_name='packagerprofile',
+            name='pypi_token',
+            field=models.CharField("PyPI token", blank=True, max_length=200),
+        ),
+        migrations.AlterField(
+            model_name='packagerprofile',
+            name='pypi_username',
+            field=models.CharField("PyPI username", blank=True, max_length=100),
+        ),
+        migrations.AlterField(
+            model_name='packagerprofile',
+            name='pypi_password',
+            field=models.CharField("PyPI password", blank=True, max_length=200),
+        ),
+        migrations.AlterField(
+            model_name='packagerprofile',
+            name='pypi_url',
+            field=models.URLField(blank=True, verbose_name='PyPI URL'),
+        ),
         migrations.AddField(
             model_name='reference',
             name='footer_visibility',
