@@ -1,15 +1,21 @@
+from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 
 from django import template
 from django.conf import settings
 from django.urls import reverse
 from django.utils.safestring import mark_safe
+from django.utils import timezone
+from django.utils.timesince import timesince
 
 from core.models import Reference, PackageRelease
 from core.release import DEFAULT_PACKAGE
 from utils import revision
 
 register = template.Library()
+
+
+INSTANCE_START = timezone.now()
 
 
 @register.simple_tag
@@ -52,11 +58,28 @@ def render_footer(context):
                 "admin:core_packagerelease_change", args=[release.pk]
             )
 
+    base_dir = Path(settings.BASE_DIR)
+    fresh_since = None
+    if (base_dir / "AUTO_UPGRADE").exists() and (base_dir / "locks/celery.lck").exists():
+        log_file = base_dir / "logs/auto-upgrade.log"
+        last_run = INSTANCE_START
+        if log_file.exists():
+            try:
+                last_line = log_file.read_text().strip().splitlines()[-1]
+                timestamp = last_line.split()[0]
+                last_run = datetime.fromisoformat(timestamp)
+                if timezone.is_naive(last_run):
+                    last_run = last_run.replace(tzinfo=dt_timezone.utc)
+            except Exception:
+                last_run = INSTANCE_START
+        fresh_since = timesince(last_run, timezone.now()) + " ago"
+
     context.update(
         {
             "footer_refs": refs,
             "release_name": release_name,
             "release_url": release_url,
+            "fresh_since": fresh_since,
         }
     )
     return context
