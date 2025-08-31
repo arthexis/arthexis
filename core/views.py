@@ -61,6 +61,22 @@ def _step_push_branch(release, ctx, log_path: Path) -> None:
     branch = ctx.get("branch")
     _append_log(log_path, f"Pushing branch {branch}")
     subprocess.run(["git", "push", "-u", "origin", branch], check=True)
+    pr_url = None
+    try:
+        proc = subprocess.run(
+            ["gh", "pr", "create", "--fill", "--base", "main", "--head", branch],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        pr_url = proc.stdout.strip()
+        ctx["pr_url"] = pr_url
+        _append_log(log_path, f"PR created: {pr_url}")
+        cert_log = Path("logs") / "certifications.log"
+        _append_log(cert_log, f"{release.version} {branch} {pr_url}")
+        ctx["cert_log"] = str(cert_log)
+    except Exception as exc:  # pragma: no cover - best effort
+        _append_log(log_path, f"PR creation failed: {exc}")
     subprocess.run(["git", "checkout", "main"], check=True)
     _append_log(log_path, "Branch pushed")
 
@@ -246,8 +262,9 @@ def rfid_batch(request):
 def release_progress(request, pk: int, action: str):
     release = get_object_or_404(PackageRelease, pk=pk)
     session_key = f"release_{action}_{pk}"
-    ctx = request.session.get(session_key, {})
-    step = int(request.GET.get("step", ctx.get("step", 0)))
+    ctx = request.session.get(session_key, {"step": 0})
+    step_count = ctx.get("step", 0)
+    step_param = request.GET.get("step")
 
     identifier = f"{release.package.name}-{release.version}"
     if release.revision:
@@ -259,22 +276,21 @@ def release_progress(request, pk: int, action: str):
     steps = PROMOTE_STEPS if action == "promote" else PUBLISH_STEPS
     error = ctx.get("error")
 
-    if step < len(steps) and not error:
-        name, func = steps[step]
-        try:
-            func(release, ctx, log_path)
-            step += 1
-            ctx["step"] = step
-            request.session[session_key] = ctx
-            return redirect(
-                f"{reverse('release-progress', args=[pk, action])}?step={step}"
-            )
-        except Exception as exc:  # pragma: no cover - best effort logging
-            _append_log(log_path, f"{name} failed: {exc}")
-            ctx["error"] = str(exc)
-            request.session[session_key] = ctx
+    if step_param is not None and not error and step_count < len(steps):
+        to_run = int(step_param)
+        if to_run == step_count:
+            name, func = steps[to_run]
+            try:
+                func(release, ctx, log_path)
+                step_count += 1
+                ctx["step"] = step_count
+                request.session[session_key] = ctx
+            except Exception as exc:  # pragma: no cover - best effort logging
+                _append_log(log_path, f"{name} failed: {exc}")
+                ctx["error"] = str(exc)
+                request.session[session_key] = ctx
 
-    done = step >= len(steps) and not error
+    done = step_count >= len(steps) and not ctx.get("error")
     if done:
         if action == "promote" and not release.is_promoted:
             release.is_promoted = True
@@ -284,14 +300,19 @@ def release_progress(request, pk: int, action: str):
             release.save(update_fields=["is_published"])
 
     log_content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+    next_step = step_count if not done and not ctx.get("error") else None
     context = {
         "release": release,
         "action": action,
         "steps": [s[0] for s in steps],
-        "current_step": step,
+        "current_step": step_count,
+        "next_step": next_step,
         "done": done,
-        "error": error,
+        "error": ctx.get("error"),
         "log_content": log_content,
         "log_path": str(log_path),
+        "pr_url": ctx.get("pr_url"),
+        "cert_log": ctx.get("cert_log"),
     }
+    request.session[session_key] = ctx
     return render(request, "core/release_progress.html", context)
