@@ -346,7 +346,7 @@ def promote(
     """Create a release branch and build the package without tests.
 
     Returns a tuple of the release commit hash, the new branch name and the
-    original branch so the caller can switch back after pushing.
+    original branch name.
     """
     current = _current_branch()
     tmp_branch = f"release/{version}"

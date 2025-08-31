@@ -28,7 +28,7 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
 
     _append_log(log_path, "Generating build files")
-    commit_hash, branch, current = release_utils.promote(
+    commit_hash, branch, _current = release_utils.promote(
         package=release.to_package(),
         version=release.version,
         creds=release.to_credentials(),
@@ -36,7 +36,6 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
     release.revision = commit_hash
     release.save(update_fields=["revision"])
     ctx["branch"] = branch
-    ctx["current"] = current
     release_name = f"{release.package.name}-{release.version}-{commit_hash[:7]}"
     new_log = log_path.with_name(f"{release_name}.log")
     log_path.rename(new_log)
@@ -60,10 +59,9 @@ def _step_dump_fixture(release, ctx, log_path: Path) -> None:
 
 def _step_push_branch(release, ctx, log_path: Path) -> None:
     branch = ctx.get("branch")
-    current = ctx.get("current")
     _append_log(log_path, f"Pushing branch {branch}")
     subprocess.run(["git", "push", "-u", "origin", branch], check=True)
-    subprocess.run(["git", "checkout", current], check=True)
+    subprocess.run(["git", "checkout", "main"], check=True)
     _append_log(log_path, "Branch pushed")
 
 
