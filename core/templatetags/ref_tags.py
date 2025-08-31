@@ -52,11 +52,9 @@ def render_footer(context):
                 "admin:core_packagerelease_change", args=[release.pk]
             )
 
-    context.update(
-        {
-            "footer_refs": refs,
-            "release_name": release_name,
-            "release_url": release_url,
-        }
-    )
-    return context
+    return {
+        "footer_refs": refs,
+        "release_name": release_name,
+        "release_url": release_url,
+        "request": context.get("request"),
+    }
