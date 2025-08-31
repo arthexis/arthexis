@@ -6,6 +6,11 @@ mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 cd "$BASE_DIR"
+PYTHON="$BASE_DIR/.venv/bin/python"
+if [ ! -f "$PYTHON" ]; then
+  echo "Virtual environment not found. Run ./install.sh first." >&2
+  exit 1
+fi
 
 read -rp "SMTP host: " HOST
 read -rp "SMTP port [587]: " PORT
@@ -13,11 +18,13 @@ PORT=${PORT:-587}
 read -rp "SMTP username: " USERNAME
 read -rsp "SMTP password: " PASSWORD
 echo
-read -rp "Use TLS? [y/N]: " USE_TLS
-read -rp "Use SSL? [y/N]: " USE_SSL
+read -rp "Use TLS? [Y/n]: " USE_TLS
+USE_TLS=${USE_TLS:-y}
+read -rp "Use SSL? [Y/n]: " USE_SSL
+USE_SSL=${USE_SSL:-y}
 read -rp "From email (leave blank to use default): " FROM_EMAIL
 
-python manage.py shell <<PYTHON
+"$PYTHON" manage.py shell <<PYTHON
 from nodes.models import Node, EmailOutbox
 node, _ = Node.register_current()
 outbox, _ = EmailOutbox.objects.update_or_create(
@@ -38,7 +45,7 @@ PYTHON
 read -rp "Save this outbox as a User Datum? [y/N]: " SAVE_UD
 if [[ "${SAVE_UD,,}" == "y" ]]; then
     read -rp "Username: " UD_USER
-    python manage.py shell <<PYTHON
+    "$PYTHON" manage.py shell <<PYTHON
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from core.user_data import UserDatum
