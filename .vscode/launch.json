@@ -24,7 +24,7 @@
             },
             "program": "${workspaceFolder}/vscode_manage.py",
             "args": ["runserver"],
-            "django": true
+            "subProcess": true
         }
     ]
 }
