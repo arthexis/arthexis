@@ -1,15 +1,38 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
+  <a href="{% url 'admin:app_list' 'core' %}">{% trans 'Business Models' %}</a> ›
+  <a href="{% url 'admin:core_emailinbox_changelist' %}">{% trans 'Email Inboxes' %}</a> ›
+  {% trans 'Search Email Inboxes' %}
+</div>
+{% endblock %}
+
 {% block content %}
+{% if queryset %}
+<p><strong>{% trans 'Selected inboxes' %}:</strong>
+  {% for obj in queryset %}{% if not forloop.first %}, {% endif %}{{ obj }}{% endfor %}
+</p>
+{% endif %}
 <form action="" method="post">{% csrf_token %}
-  {{ form.as_p }}
-  {% for obj in queryset %}
-    <input type="hidden" name="_selected_action" value="{{ obj.pk }}">
-  {% endfor %}
-  <input type="hidden" name="action" value="{{ action }}">
-  <input type="hidden" name="apply" value="yes">
-  <input type="submit" value="{% trans 'Search' %}">
+  <fieldset class="module aligned">
+    {% for field in form %}
+      <div class="form-row">
+        {{ field.errors }}
+        {{ field.label_tag }} {{ field }}
+      </div>
+    {% endfor %}
+    {% for obj in queryset %}
+      <input type="hidden" name="_selected_action" value="{{ obj.pk }}">
+    {% endfor %}
+    <input type="hidden" name="action" value="{{ action }}">
+    <input type="hidden" name="apply" value="yes">
+  </fieldset>
+  <div class="submit-row">
+    <input type="submit" class="default" value="{% trans 'Search' %}">
+  </div>
 </form>
 
 {% if results is not None %}

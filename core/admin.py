@@ -333,18 +333,40 @@ class EmailInboxAdminForm(forms.ModelForm):
 
 
 class EmailSearchForm(forms.Form):
-    subject = forms.CharField(required=False)
-    from_address = forms.CharField(label="From", required=False)
-    body = forms.CharField(required=False)
+    subject = forms.CharField(
+        required=False, widget=forms.TextInput(attrs={"style": "width: 40em;"})
+    )
+    from_address = forms.CharField(
+        label="From",
+        required=False,
+        widget=forms.TextInput(attrs={"style": "width: 40em;"}),
+    )
+    body = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"style": "width: 40em; height: 10em;"}),
+    )
 
 
 @admin.register(EmailInbox)
 class EmailInboxAdmin(admin.ModelAdmin):
     form = EmailInboxAdminForm
-    list_display = ("user", "host", "protocol", "username")
+    list_display = ("user", "username", "host", "protocol")
     actions = ["test_connection", "search_inbox"]
     fieldsets = (
-        (None, {"fields": ("user", "host", "port", "username", "password", "protocol", "use_ssl")}),
+        (
+            None,
+            {
+                "fields": (
+                    "user",
+                    "username",
+                    "host",
+                    "port",
+                    "password",
+                    "protocol",
+                    "use_ssl",
+                )
+            },
+        ),
     )
 
     @admin.action(description="Test selected inboxes")
