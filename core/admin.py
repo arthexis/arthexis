@@ -711,8 +711,8 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
         "is_published",
     )
     list_display_links = ("version",)
-    actions = ["promote_release", "publish_to_index"]
-    change_actions = ["promote_release_action", "publish_to_index_action"]
+    actions = ["promote_release"]
+    change_actions = ["promote_release_action"]
 
     def revision_short(self, obj):
         return obj.revision_short
@@ -742,27 +742,3 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
     promote_release_action.label = "Promote release"
     promote_release_action.short_description = "Promote this release"
 
-    def _publish_to_index(self, request, release):
-        if not release.is_certified:
-            self.message_user(
-                request,
-                f"{release.package.name} {release.version} is not certified",
-                messages.ERROR,
-            )
-            return
-        return redirect(reverse("release-progress", args=[release.pk, "publish"]))
-
-    @admin.action(description="Publish to Index")
-    def publish_to_index(self, request, queryset):
-        if queryset.count() != 1:
-            self.message_user(
-                request, "Select exactly one release to publish", messages.ERROR
-            )
-            return
-        return self._publish_to_index(request, queryset.first())
-
-    def publish_to_index_action(self, request, obj):
-        return self._publish_to_index(request, obj)
-
-    publish_to_index_action.label = "Publish to index"
-    publish_to_index_action.short_description = "Publish this release to index"

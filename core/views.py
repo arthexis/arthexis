@@ -6,7 +6,7 @@ import requests
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, login
 from django.core import serializers
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
@@ -24,6 +24,23 @@ def _append_log(path: Path, message: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(message + "\n")
+
+
+def _changelog_notes(version: str) -> str:
+    path = Path("CHANGELOG.rst")
+    if not path.exists():
+        return ""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    prefix = f"{version} "
+    for i, line in enumerate(lines):
+        if line.startswith(prefix):
+            j = i + 2
+            items = []
+            while j < len(lines) and lines[j].startswith("- "):
+                items.append(lines[j])
+                j += 1
+            return "\n".join(items)
+    return ""
 
 
 def _step_promote_build(release, ctx, log_path: Path) -> None:
@@ -67,8 +84,22 @@ def _step_push_branch(release, ctx, log_path: Path) -> None:
     gh_path = shutil.which("gh")
     if gh_path:
         try:
+            title = f"Release candidate for {release.version}"
+            body = _changelog_notes(release.version)
             proc = subprocess.run(
-                [gh_path, "pr", "create", "--fill", "--base", "main", "--head", branch],
+                [
+                    gh_path,
+                    "pr",
+                    "create",
+                    "--title",
+                    title,
+                    "--body",
+                    body,
+                    "--base",
+                    "main",
+                    "--head",
+                    branch,
+                ],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -92,17 +123,12 @@ def _step_push_branch(release, ctx, log_path: Path) -> None:
                     text=True,
                 ).stdout.strip()
                 repo = remote.rsplit(":", 1)[-1].split("github.com/")[-1].removesuffix(".git")
-                commit_msg = subprocess.run(
-                    ["git", "log", "-1", "--pretty=%B"],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                ).stdout.strip()
-                title, _, body = commit_msg.partition("\n\n")
+                title = f"Release candidate for {release.version}"
+                body = _changelog_notes(release.version)
                 resp = requests.post(
                     f"https://api.github.com/repos/{repo}/pulls",
                     json={
-                        "title": title or branch,
+                        "title": title,
                         "head": branch,
                         "base": "main",
                         "body": body,
@@ -311,7 +337,10 @@ def rfid_batch(request):
 @staff_member_required
 def release_progress(request, pk: int, action: str):
     release = get_object_or_404(PackageRelease, pk=pk)
-    session_key = f"release_{action}_{pk}"
+    if action != "promote":
+        raise Http404("Unknown action")
+    action_name = "publish" if release.is_certified else "promote"
+    session_key = f"release_{action_name}_{pk}"
     ctx = request.session.get(session_key, {"step": 0})
     step_count = ctx.get("step", 0)
     step_param = request.GET.get("step")
@@ -323,7 +352,7 @@ def release_progress(request, pk: int, action: str):
     log_path = Path("logs") / log_name
     ctx.setdefault("log", log_name)
 
-    steps = PROMOTE_STEPS if action == "promote" else PUBLISH_STEPS
+    steps = PUBLISH_STEPS if release.is_certified else PROMOTE_STEPS
     error = ctx.get("error")
 
     if step_param is not None and not error and step_count < len(steps):
@@ -342,18 +371,19 @@ def release_progress(request, pk: int, action: str):
 
     done = step_count >= len(steps) and not ctx.get("error")
     if done:
-        if action == "promote" and not release.is_promoted:
+        if release.is_certified:
+            if not release.is_published:
+                release.is_published = True
+                release.save(update_fields=["is_published"])
+        elif not release.is_promoted:
             release.is_promoted = True
             release.save(update_fields=["is_promoted"])
-        if action == "publish" and not release.is_published:
-            release.is_published = True
-            release.save(update_fields=["is_published"])
 
     log_content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
     next_step = step_count if not done and not ctx.get("error") else None
     context = {
         "release": release,
-        "action": action,
+        "action": action_name,
         "steps": [s[0] for s in steps],
         "current_step": step_count,
         "next_step": next_step,

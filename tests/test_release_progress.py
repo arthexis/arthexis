@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -49,6 +50,11 @@ class ReleaseProgressTests(TestCase):
 
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "All steps completed")
+        self.assertContains(
+            resp,
+            '<a href="http://example.com/pr/1" target="_blank">http://example.com/pr/1</a>',
+            html=True,
+        )
         self.assertEqual(resp.context["pr_url"], "http://example.com/pr/1")
         log_path = Path("logs") / f"pkg-1.0.0-{commit_hash[:7]}.log"
         self.assertTrue(log_path.exists())
@@ -90,15 +96,20 @@ class ReleaseProgressTests(TestCase):
         list_url = reverse("admin:core_packagerelease_changelist")
         self.assertContains(resp, f'<a href="{list_url}">Package Releases</a>')
 
-    def test_publish_progress_creates_log(self):
+    def test_repromote_publishes_release(self):
         release = PackageRelease.objects.create(
             package=self.package,
             version="2.0.0",
             revision="1234567abcdef",
             is_certified=True,
+            is_promoted=True,
         )
-        url = reverse("release-progress", args=[release.pk, "publish"])
-        with patch("core.views.release_utils.publish") as pub:
+        url = reverse("release-progress", args=[release.pk, "promote"])
+        with patch("core.views.release_utils.publish") as pub, \
+             patch("requests.get") as req:
+            req.return_value = SimpleNamespace(
+                ok=True, json=lambda: {"releases": {"2.0.0": []}}
+            )
             resp = self.client.get(url)
             resp = self.client.get(f"{url}?step=0")
         self.assertEqual(resp.status_code, 200)
@@ -107,3 +118,4 @@ class ReleaseProgressTests(TestCase):
         self.assertTrue(log_path.exists())
         pub.assert_called_once()
         release.refresh_from_db()
+        self.assertTrue(release.is_published)
