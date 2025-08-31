@@ -407,8 +407,8 @@ msgid "Next 10"
 msgstr ""
 
 #: ocpp/templates/ocpp/dashboard.html:4 ocpp/templates/ocpp/dashboard.html:7 ocpp/models.py:45
-msgid "Chargers"
-msgstr "Cargadores"
+msgid "Charge Points"
+msgstr "Puntos de Carga"
 
 #: ocpp/templates/ocpp/dashboard.html:11
 msgid "Name"
@@ -419,8 +419,8 @@ msgid "Serial Number"
 msgstr "Número de serie"
 
 #: ocpp/templates/ocpp/dashboard.html:24
-msgid "No chargers found."
-msgstr ""
+msgid "No charge points found."
+msgstr "No se encontraron puntos de carga."
 
 #: refs/forms.py:14
 msgid "Value / URL"
@@ -594,16 +594,16 @@ msgid "Calculator Templates"
 msgstr "Plantillas de calculadora"
 
 #: ocpp/models.py:22
-msgid "Location"
-msgstr "Ubicación"
+msgid "Charge Location"
+msgstr "Ubicación de Carga"
 
 #: ocpp/models.py:23
-msgid "Locations"
-msgstr "Ubicaciones"
+msgid "Charge Locations"
+msgstr "Ubicaciones de Carga"
 
 #: ocpp/models.py:44
-msgid "Charger"
-msgstr "Cargador"
+msgid "Charge Point"
+msgstr "Punto de Carga"
 
 #: ocpp/models.py:31
 msgid "Require RFID Authorization"
@@ -634,9 +634,13 @@ msgid "Delay"
 msgstr "Retardo"
 
 #: ocpp/models.py:219
-msgid "Simulator"
-msgstr "Simulador"
+msgid "CP Simulator"
+msgstr "Simulador CP"
 
 #: ocpp/models.py:220
-msgid "Simulators"
-msgstr "Simuladores"
+msgid "CP Simulators"
+msgstr "Simuladores CP"
+
+#: core/models.py:921
+msgid "License Plate"
+msgstr "Placa"

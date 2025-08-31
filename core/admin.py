@@ -540,7 +540,8 @@ class EnergyAccountAdmin(admin.ModelAdmin):
 
 @admin.register(Vehicle)
 class VehicleAdmin(admin.ModelAdmin):
-    list_display = ("vin", "brand", "model", "account")
+    list_display = ("vin", "license_plate", "brand", "model", "account")
+    fields = ("account", "vin", "license_plate", "brand", "model")
 
 
 @admin.register(EnergyCredit)

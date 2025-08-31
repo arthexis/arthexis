@@ -103,8 +103,8 @@
     {% if cp.last_error %}
     <div class="error mt-2"><b>Error:</b><pre>{{ cp.last_error }}</pre></div>
     {% endif %}
-    <details class="simulator-panel"><summary>Show Simulator Params</summary><pre>{{ params_json|safe }}</pre></details>
-    <details class="simulator-panel"><summary>Show Simulator State JSON</summary><pre>{{ state_json|safe }}</pre></details>
+    <details class="simulator-panel"><summary>Show CP Simulator Params</summary><pre>{{ params_json|safe }}</pre></details>
+    <details class="simulator-panel"><summary>Show CP Simulator State JSON</summary><pre>{{ state_json|safe }}</pre></details>
     {% if prev_tab or next_tab %}
     <div class="d-flex justify-content-between mt-3">
       {% if prev_tab %}<a class="btn btn-outline-secondary" data-bs-toggle="tab" href="#{{ prev_tab }}">Prev</a>{% endif %}

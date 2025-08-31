@@ -136,7 +136,7 @@ def dashboard(request):
 
 
 @login_required
-@landing("Simulator")
+@landing("CP Simulator")
 def cp_simulator(request):
     """Public landing page to control the OCPP charge point simulator."""
     default_host = "127.0.0.1"
