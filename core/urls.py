@@ -8,9 +8,4 @@ urlpatterns = [
     path("products/", views.product_list, name="product-list"),
     path("subscribe/", views.add_subscription, name="add-subscription"),
     path("list/", views.subscription_list, name="subscription-list"),
-    path(
-        "releases/<int:pk>/<str:action>/",
-        views.release_progress,
-        name="release-progress",
-    ),
 ]
