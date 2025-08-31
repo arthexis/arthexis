@@ -2,14 +2,25 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
+from pathlib import Path
 
 from config.loadenv import loadenv
+from utils import revision
 
 
 def main() -> None:
     """Run administrative tasks."""
     loadenv()
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
+    ver_path = Path(__file__).resolve().parent / "VERSION"
+    version = ver_path.read_text().strip() if ver_path.exists() else ""
+    rev_value = revision.get_revision()
+    rev_short = rev_value[-6:] if rev_value else ""
+    msg = f"Version: v{version}"
+    if rev_short:
+        msg += f" r{rev_short}"
+    print(msg)
     try:
         from django.core.management import execute_from_command_line
         from daphne.management.commands.runserver import (
@@ -41,19 +52,6 @@ def main() -> None:
             self.stdout.write(
                 f"Admin available at {http_scheme}://{host}:{server_port}/admin/"
             )
-
-            from pathlib import Path
-            from django.conf import settings
-            from utils import revision
-
-            ver_path = Path(settings.BASE_DIR) / "VERSION"
-            version = ver_path.read_text().strip() if ver_path.exists() else ""
-            rev_value = revision.get_revision()
-            rev_short = rev_value[-6:] if rev_value else ""
-            msg = f"Version: v{version}"
-            if rev_short:
-                msg += f" r{rev_short}"
-            self.stdout.write(msg)
 
         original_on_bind = core_runserver.Command.on_bind
         core_runserver.Command.on_bind = patched_on_bind
