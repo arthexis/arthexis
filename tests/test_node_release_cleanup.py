@@ -16,6 +16,15 @@ from utils import revision
 
 
 class EnsureReleaseTests(TestCase):
+    def setUp(self):
+        self._orig_release = os.environ.pop("RELEASE", None)
+
+    def tearDown(self):
+        if self._orig_release is not None:
+            os.environ["RELEASE"] = self._orig_release
+        else:
+            os.environ.pop("RELEASE", None)
+
     def test_ensure_release_updates_and_cleans(self):
         package, _ = Package.objects.get_or_create(name="arthexis")
         stale = PackageRelease.objects.create(package=package, version="0.0.0")
@@ -33,3 +42,13 @@ class EnsureReleaseTests(TestCase):
         self.assertEqual(
             PackageRelease.objects.filter(package=package).count(), 1
         )
+
+    def test_ensure_release_uses_env_var(self):
+        package, _ = Package.objects.get_or_create(name="arthexis")
+        PackageRelease.objects.all().delete()
+        os.environ["RELEASE"] = "9.9.9"
+
+        _ensure_release()
+
+        release = PackageRelease.objects.get(package=package, version="9.9.9")
+        self.assertEqual(release.revision, revision.get_revision())

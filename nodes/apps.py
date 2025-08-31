@@ -54,10 +54,12 @@ def _ensure_release(**kwargs) -> None:
     try:  # import lazily to avoid app loading issues
         from core.models import Package, PackageRelease
 
-        ver_path = Path(settings.BASE_DIR) / "VERSION"
-        if not ver_path.exists():  # pragma: no cover - no version file
-            return
-        version = ver_path.read_text().strip()
+        version = os.environ.get("RELEASE")
+        if not version:
+            ver_path = Path(settings.BASE_DIR) / "VERSION"
+            if not ver_path.exists():  # pragma: no cover - no version file
+                return
+            version = ver_path.read_text().strip()
         revision_value = revision.get_revision()
 
         package, _ = Package.objects.get_or_create(name="arthexis")
