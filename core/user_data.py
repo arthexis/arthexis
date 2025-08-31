@@ -97,19 +97,27 @@ def delete_user_fixture(instance, user) -> None:
 
 @receiver(post_save)
 def _entity_saved(sender, instance, **kwargs):
-    if not isinstance(instance, Entity):
+    if isinstance(instance, UserDatum):
         return
-    ct = ContentType.objects.get_for_model(instance)
-    for ud in UserDatum.objects.filter(content_type=ct, object_id=instance.pk):
+    try:
+        ct = ContentType.objects.get_for_model(instance)
+        qs = list(UserDatum.objects.filter(content_type=ct, object_id=instance.pk))
+    except Exception:
+        return
+    for ud in qs:
         dump_user_fixture(instance, ud.user)
 
 
 @receiver(post_delete)
 def _entity_deleted(sender, instance, **kwargs):
-    if not isinstance(instance, Entity):
+    if isinstance(instance, UserDatum):
         return
-    ct = ContentType.objects.get_for_model(instance)
-    for ud in UserDatum.objects.filter(content_type=ct, object_id=instance.pk):
+    try:
+        ct = ContentType.objects.get_for_model(instance)
+        qs = list(UserDatum.objects.filter(content_type=ct, object_id=instance.pk))
+    except Exception:
+        return
+    for ud in qs:
         delete_user_fixture(instance, ud.user)
         ud.delete()
 
@@ -132,21 +140,22 @@ class UserDatumAdminMixin(admin.ModelAdmin):
     def render_change_form(
         self, request, context, add=False, change=False, form_url="", obj=None
     ):
-        if issubclass(self.model, Entity):
-            context["show_user_datum"] = True
-            context["show_save_as_copy"] = True
-            if obj is not None:
-                ct = ContentType.objects.get_for_model(obj)
-                context["is_user_datum"] = UserDatum.objects.filter(
-                    user=request.user, content_type=ct, object_id=obj.pk
-                ).exists()
-            else:
-                context["is_user_datum"] = False
+        context["show_user_datum"] = True
+        context["show_save_as_copy"] = issubclass(self.model, Entity) or hasattr(
+            self.model, "clone"
+        )
+        if obj is not None:
+            ct = ContentType.objects.get_for_model(obj)
+            context["is_user_datum"] = UserDatum.objects.filter(
+                user=request.user, content_type=ct, object_id=obj.pk
+            ).exists()
+        else:
+            context["is_user_datum"] = False
         return super().render_change_form(request, context, add, change, form_url, obj)
 
     def save_model(self, request, obj, form, change):
         copied = "_saveacopy" in request.POST
-        if copied:
+        if copied and hasattr(obj, "clone"):
             obj = obj.clone()
             form.instance = obj
             try:
@@ -160,8 +169,6 @@ class UserDatumAdminMixin(admin.ModelAdmin):
                 raise ValidationError("save_as_copy")
         else:
             super().save_model(request, obj, form, change)
-        if not issubclass(self.model, Entity):
-            return
         if copied:
             return
         ct = ContentType.objects.get_for_model(obj)
@@ -182,9 +189,9 @@ class UserDatumAdminMixin(admin.ModelAdmin):
 
 
 def patch_admin_user_datum() -> None:
-    """Mixin all registered admin classes for :class:`Entity` models."""
+    """Mixin all registered admin classes."""
     for model, model_admin in list(admin.site._registry.items()):
-        if not issubclass(model, Entity):
+        if model is UserDatum:
             continue
         if isinstance(model_admin, UserDatumAdminMixin):
             continue

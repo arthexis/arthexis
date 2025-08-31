@@ -22,6 +22,7 @@ run_database_tasks = env_refresh.run_database_tasks
 
 from core.models import Address, OdooProfile
 from core.user_data import UserDatum
+from beta.models import GameMaterial, GamePortal
 
 
 class UserDatumAdminTests(TransactionTestCase):
@@ -163,6 +164,37 @@ class UserDatumAdminTests(TransactionTestCase):
         self.assertFalse(
             UserDatum.objects.filter(
                 user=self.user, content_type=ct, object_id=new_addr.pk
+            ).exists()
+        )
+
+    def test_checkbox_and_creation_for_non_entity_model(self):
+        material = GameMaterial.objects.create(
+            slug="start",
+            image="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PjoMnAAAAABJRU5ErkJggg==",
+            description="",
+        )
+        portal = GamePortal.objects.create(
+            slug="baseline",
+            title="Eternal Return",
+            description="Players explore the infinite Baseline, a post-temporal space built by the enigmatic Workgroup to house a Tribe of Gods.",
+            entry_material=material,
+        )
+        url = reverse("admin:beta_gameportal_change", args=[portal.pk])
+        response = self.client.get(url)
+        self.assertContains(response, 'name="_user_datum"')
+        data = {
+            "slug": portal.slug,
+            "title": portal.title,
+            "description": portal.description,
+            "entry_material": material.pk,
+            "_user_datum": "on",
+            "_save": "Save",
+        }
+        self.client.post(url, data, follow=True)
+        ct = ContentType.objects.get_for_model(GamePortal)
+        self.assertTrue(
+            UserDatum.objects.filter(
+                user=self.user, content_type=ct, object_id=portal.pk
             ).exists()
         )
 
