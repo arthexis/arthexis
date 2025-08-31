@@ -149,16 +149,23 @@ def run_database_tasks(*, latest: bool = False) -> None:
                 for label in reversed(local_apps):
                     call_command("migrate", label, "zero", interactive=False)
         else:
-            recorder = MigrationRecorder(connection)
-            loader = MigrationLoader(connection)
-            for label in local_apps:
-                qs = recorder.migration_qs.filter(app=label).order_by("-applied")
-                if qs.exists():
-                    last = qs.first().name
-                    node = loader.graph.node_map.get((label, last))
-                    parents = list(node.parents) if node else []
-                    prev = parents[0][1] if parents else "zero"
-                    call_command("migrate", label, prev, interactive=False)
+            try:
+                recorder = MigrationRecorder(connection)
+                loader = MigrationLoader(connection)
+            except OperationalError:
+                recorder = loader = None
+            if recorder and loader:
+                for label in local_apps:
+                    try:
+                        qs = recorder.migration_qs.filter(app=label).order_by("-applied")
+                        if qs.exists():
+                            last = qs.first().name
+                            node = loader.graph.node_map.get((label, last))
+                            parents = list(node.parents) if node else []
+                            prev = parents[0][1] if parents else "zero"
+                            call_command("migrate", label, prev, interactive=False)
+                    except OperationalError:
+                        continue
 
     if not connection.in_atomic_block:
         try:
