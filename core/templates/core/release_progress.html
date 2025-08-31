@@ -1,4 +1,14 @@
 {% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">Home</a> ›
+  <a href="{% url 'admin:core_packagerelease_changelist' %}">Package Releases</a> ›
+  <a href="{% url 'admin:core_packagerelease_change' release.pk %}">{{ release }}</a> ›
+  {{ action|capfirst }}
+</div>
+{% endblock %}
+
 {% block content %}
 <h1>{{ action|capfirst }} {{ release.package.name }} {{ release.version }}</h1>
 <ol>
@@ -10,13 +20,22 @@
 {% if error %}
 <p class="error">{{ error }}</p>
 {% elif not done %}
-<meta http-equiv="refresh" content="1; url={{ request.path }}?step={{ current_step }}">
+{% if next_step is not None %}
+<meta http-equiv="refresh" content="1; url={{ request.path }}?step={{ next_step }}">
+{% endif %}
 <p>Running...</p>
 {% else %}
 <p>All steps completed.</p>
+{% if pr_url %}
+<p><a href="{{ pr_url }}" target="_blank">View pull request</a></p>
+{% endif %}
 <div>
   <input type="text" id="logpath" value="{{ log_path }}" readonly>
   <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('logpath').value)">Copy log path</button>
 </div>
+{% if cert_log %}
+<p>Certification logged in {{ cert_log }}</p>
+{% endif %}
 {% endif %}
 {% endblock %}
+
