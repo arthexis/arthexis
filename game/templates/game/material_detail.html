@@ -1,0 +1,41 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ material.slug }} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-8">
+    <div class="position-relative">
+      <img src="data:image/png;base64,{{ material.image }}" class="img-fluid" alt="" />
+      {% for region in material.regions.all %}
+      {% if region.target %}
+      <a href="{% url 'game:material-detail' region.target.slug %}"
+         class="position-absolute d-block"
+         style="left:{{ region.x }}px; top:{{ region.y }}px; width:{{ region.width }}px; height:{{ region.height }}px;">
+        <span class="visually-hidden">{{ region.name }}</span>
+      </a>
+      {% endif %}
+      {% endfor %}
+    </div>
+    <div class="mt-3">
+      <strong>{% trans "Choose one --" %}</strong>
+      <ul class="list-unstyled">
+        {% for region in material.regions.all %}
+        {% if region.target %}
+        <li><a href="{% url 'game:material-detail' region.target.slug %}">{{ region.name }}</a></li>
+        {% else %}
+        <li><span class="text-muted">{{ region.name }}</span></li>
+        {% endif %}
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="border-start ps-3">
+      {{ material.description|linebreaks }}
+    </div>
+  </div>
+</div>
+{% endblock %}
+

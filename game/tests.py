@@ -5,7 +5,7 @@ from django.urls import reverse
 from pathlib import Path
 
 
-class GameListTests(TestCase):
+class GameTests(TestCase):
     def setUp(self):
         fixture = Path(settings.BASE_DIR, "game", "fixtures", "game.json")
         call_command("loaddata", str(fixture))
@@ -13,8 +13,16 @@ class GameListTests(TestCase):
 
     def test_game_list_displays_fixture(self):
         resp = self.client.get(reverse("game:game-list"))
-        self.assertContains(resp, "Demo Ren&#x27;Py Game")
+        self.assertContains(resp, "Simple Demo Game")
 
     def test_game_detail_view(self):
-        resp = self.client.get(reverse("game:game-detail", args=["demo"]))
-        self.assertContains(resp, "Demo Ren&#x27;Py Game")
+        resp = self.client.get(reverse("game:game-detail", args=["simple"]))
+        self.assertContains(resp, "Simple Demo Game")
+        self.assertContains(resp, reverse("game:material-detail", args=["start"]))
+
+    def test_game_material_view(self):
+        resp = self.client.get(reverse("game:material-detail", args=["start"]))
+        self.assertContains(resp, "Choose one")
+        self.assertContains(resp, "Go Left")
+        self.assertContains(resp, "Go Right")
+

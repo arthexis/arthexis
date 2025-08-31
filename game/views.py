@@ -1,5 +1,5 @@
 from django.views.generic import DetailView, ListView
-from .models import GamePortal
+from .models import GamePortal, GameMaterial
 
 
 class GameListView(ListView):
@@ -12,3 +12,9 @@ class GameDetailView(DetailView):
     model = GamePortal
     template_name = "game/game_detail.html"
     context_object_name = "game"
+
+
+class GameMaterialView(DetailView):
+    model = GameMaterial
+    template_name = "game/material_detail.html"
+    context_object_name = "material"
