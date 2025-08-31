@@ -19,8 +19,8 @@ class Location(Entity):
         return self.name
 
     class Meta:
-        verbose_name = _("Location")
-        verbose_name_plural = _("Locations")
+        verbose_name = _("Charge Location")
+        verbose_name_plural = _("Charge Locations")
 
 
 class Charger(Entity):
@@ -58,8 +58,8 @@ class Charger(Entity):
         return self.charger_id
 
     class Meta:
-        verbose_name = _("Charger")
-        verbose_name_plural = _("Chargers")
+        verbose_name = _("Charge Point")
+        verbose_name_plural = _("Charge Points")
 
     def get_absolute_url(self):
         return reverse("charger-page", args=[self.charger_id])
@@ -241,8 +241,8 @@ class Simulator(Entity):
         return self.name
 
     class Meta:
-        verbose_name = _("Simulator")
-        verbose_name_plural = _("Simulators")
+        verbose_name = _("CP Simulator")
+        verbose_name_plural = _("CP Simulators")
 
     def as_config(self):
         from .simulator import SimulatorConfig

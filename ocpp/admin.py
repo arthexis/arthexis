@@ -377,9 +377,15 @@ class MeterReadingAdmin(admin.ModelAdmin):
 
 @admin.register(ElectricVehicle)
 class ElectricVehicleAdmin(admin.ModelAdmin):
-    list_display = ("vin", "brand", "model", "account")
-    search_fields = ("vin", "brand__name", "model__name", "account__name")
-    fields = ("account", "vin", "brand", "model")
+    list_display = ("vin", "license_plate", "brand", "model", "account")
+    search_fields = (
+        "vin",
+        "license_plate",
+        "brand__name",
+        "model__name",
+        "account__name",
+    )
+    fields = ("account", "vin", "license_plate", "brand", "model")
 
 
 admin.site.register(RFID, RFIDAdmin)

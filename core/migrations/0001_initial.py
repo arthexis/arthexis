@@ -635,6 +635,10 @@ class Migration(migrations.Migration):
                     models.CharField(max_length=17, unique=True, verbose_name="VIN"),
                 ),
                 (
+                    "license_plate",
+                    models.CharField(blank=True, max_length=20, verbose_name="License Plate"),
+                ),
+                (
                     "account",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,

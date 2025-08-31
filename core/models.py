@@ -925,6 +925,9 @@ class Vehicle(Entity):
         related_name="vehicles",
     )
     vin = models.CharField(max_length=17, unique=True, verbose_name="VIN")
+    license_plate = models.CharField(
+        _("License Plate"), max_length=20, blank=True
+    )
 
     def save(self, *args, **kwargs):
         if self.model and not self.brand:

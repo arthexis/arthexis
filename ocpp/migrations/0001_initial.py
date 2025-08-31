@@ -42,8 +42,8 @@ class Migration(migrations.Migration):
                 ('last_path', models.CharField(blank=True, max_length=255)),
             ],
             options={
-                'verbose_name': 'Charger',
-                'verbose_name_plural': 'Chargers',
+                'verbose_name': 'Charge Point',
+                'verbose_name_plural': 'Charge Points',
             },
         ),
         migrations.CreateModel(
@@ -57,8 +57,8 @@ class Migration(migrations.Migration):
                 ('longitude', models.DecimalField(blank=True, decimal_places=6, max_digits=9, null=True)),
             ],
             options={
-                'verbose_name': 'Location',
-                'verbose_name_plural': 'Locations',
+                'verbose_name': 'Charge Location',
+                'verbose_name_plural': 'Charge Locations',
             },
         ),
         migrations.CreateModel(
@@ -99,8 +99,8 @@ class Migration(migrations.Migration):
                 ('password', models.CharField(blank=True, max_length=100)),
             ],
             options={
-                'verbose_name': 'Simulator',
-                'verbose_name_plural': 'Simulators',
+                'verbose_name': 'CP Simulator',
+                'verbose_name_plural': 'CP Simulators',
             },
         ),
         migrations.CreateModel(
