@@ -13,8 +13,7 @@
         <p class="card-text">{{ game.description }}</p>
       </div>
       <div class="card-footer">
-        {% if game.play_url %}<a class="btn btn-primary btn-sm" href="{{ game.play_url }}">{% trans "Play" %}</a>{% endif %}
-        {% if game.download_url %}<a class="btn btn-secondary btn-sm" href="{{ game.download_url }}">{% trans "Download" %}</a>{% endif %}
+        {% if game.entry_material %}<a class="btn btn-primary btn-sm" href="{% url 'game:material-detail' game.entry_material.slug %}">{% trans "Start" %}</a>{% endif %}
       </div>
     </div>
   </div>

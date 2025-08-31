@@ -1,13 +1,57 @@
 [
   {
+    "model": "game.gamematerial",
+    "pk": 1,
+    "fields": {
+      "slug": "start",
+      "image": "iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAYAAACtWK6eAAADW0lEQVR4nO3dwW7aQBRAUbf//8/tIq0q0nAxYBPsd84+kufN3LGVDcsCAAAAAAAAAAAAAAAAAAAAX/vx3Q8w2K8H/sZ+vZiBv84jQdxi/3ZmwPvaI4pr7OUODHV7r4ziGvu6EYPczjuE8Zn9fZIBPu8dw/jMPj/o53c/wMEdIY5lOc5zvh03y2OOfODs+R28Qe535DiW5fjP/1ICuc9ZDtdZ1rE7r9t1znygnIHgDXLbmeNYlvOv7ykCaVMOz5R13k0g1007NNPWu4pAIAjka1Nv06nrvkog/5t+SKav/4JALjkcH8zhD4FAEMg/bs1L5rEI5C+H4Wvj5yIQCAJxS94yej4CgTA9kNG34x3Gzml6IJAEAmFyIGM/Gx40cl6TA4GbBAJhaiAjPxc2MG5uUwOBVQQCQSAQJgYy7jt6Y6PmNzEQWE0gEAQCQSAQBAJBIBAEAkEgEAQCQSAQBAJBIBAmBuJHK58zan4TA4HVBAJBIBCmBjLqO3pD4+Y2NRBYRSAQJgcy7nPhSSPnNTkQuEkgEKYHMvKz4QFj5zQ9EEgCGXw7rjR6PgKBIJAPo2/JMH4uAvln/GH4xDwWgUASyCW35gdz+EMg/5t+OKav/4JAvjb1kExd91UCgSCQ66bdptPWu4pA2pRDM2WddxPIbWc/PGdf31MM5z5n+gFLe7+CN8h9znKozrKO3Qnkfkc/XEd//pcyrOcc6ZPLXj/AG+Q5Rzl0R3nOt2Nw23nHt4n9fZIBbu8dQrGvGzHIfb0yFnu5A0N9nT1isX87mzjgd/gEOrox58Z/sSAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEwpgfhN/Rr+9+gBXs84O8QSAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEwm9OYDFZNERIcQAAAABJRU5ErkJggg==",
+      "description": "This is the starting screen. You see two paths."
+    }
+  },
+  {
+    "model": "game.gamematerial",
+    "pk": 2,
+    "fields": {
+      "slug": "left",
+      "image": "iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAYAAACtWK6eAAADW0lEQVR4nO3dwW7aQBRAUbf//8/tIq0q0nAxYBPsd84+kufN3LGVDcsCAAAAAAAAAAAAAAAAAAAAX/vx3Q8w2K8H/sZ+vZiBv84jQdxi/3ZmwPvaI4pr7OUODHV7r4ziGvu6EYPczjuE8Zn9fZIBPu8dw/jMPj/o53c/wMEdIY5lOc5zvh03y2OOfODs+R28Qe535DiW5fjP/1ICuc9ZDtdZ1rE7r9t1znygnIHgDXLbmeNYlvOv7ykCaVMOz5R13k0g1007NNPWu4pAIAjka1Nv06nrvkog/5t+SKav/4JALjkcH8zhD4FAEMg/bs1L5rEI5C+H4Wvj5yIQCAJxS94yej4CgTA9kNG34x3Gzml6IJAEAmFyIGM/Gx40cl6TA4GbBAJhaiAjPxc2MG5uUwOBVQQCQSAQJgYy7jt6Y6PmNzEQWE0gEAQCQSAQBAJBIBAEAkEgEAQCQSAQBAJBIBAmBuJHK58zan4TA4HVBAJBIBCmBjLqO3pD4+Y2NRBYRSAQJgcy7nPhSSPnNTkQuEkgEKYHMvKz4QFj5zQ9EEgCGXw7rjR6PgKBIJAPo2/JMH4uAvln/GH4xDwWgUASyCW35gdz+EMg/5t+OKav/4JAvjb1kExd91UCgSCQ66bdptPWu4pA2pRDM2WddxPIbWc/PGdf31MM5z5n+gFLe7+CN8h9znKozrKO3Qnkfkc/XEd//pcyrOcc6ZPLXj/AG+Q5Rzl0R3nOt2Nw23nHt4n9fZIBbu8dQrGvGzHIfb0yFnu5A0N9nT1isX87mzjgd/gEOrox58Z/sSAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEwpgfhN/Rr+9+gBXs84O8QSAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEgkAgCASCQCAIBIJAIAgEwm9OYDFZNERIcQAAAABJRU5ErkJggg==",
+      "description": "You went left."
+    }
+  },
+  {
     "model": "game.gameportal",
     "pk": 1,
     "fields": {
-      "slug": "demo",
-      "title": "Demo Ren'Py Game",
-      "description": "A simple Ren'Py game.",
-      "play_url": "/static/game/demo/index.html",
-      "download_url": "/static/game/demo/game.zip"
+      "slug": "simple",
+      "title": "Simple Demo Game",
+      "description": "A simple choice-based demo.",
+      "entry_material": 1
+    }
+  },
+  {
+    "model": "game.materialregion",
+    "pk": 1,
+    "fields": {
+      "material": 1,
+      "name": "Go Left",
+      "x": 10,
+      "y": 10,
+      "width": 100,
+      "height": 100,
+      "target": 2
+    }
+  },
+  {
+    "model": "game.materialregion",
+    "pk": 2,
+    "fields": {
+      "material": 1,
+      "name": "Go Right",
+      "x": 120,
+      "y": 10,
+      "width": 100,
+      "height": 100,
+      "target": null
     }
   }
 ]
+
