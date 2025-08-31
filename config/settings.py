@@ -138,6 +138,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "import_export",
+    "django_object_actions",
     "django.contrib.sites",
     "channels",
     "post_office",

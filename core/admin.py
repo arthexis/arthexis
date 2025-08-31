@@ -20,6 +20,7 @@ from django.contrib.auth.models import Group
 from django.utils.html import format_html
 import json
 import uuid
+from django_object_actions import DjangoObjectActions
 from .models import (
     User,
     EnergyAccount,
@@ -699,7 +700,7 @@ class RFIDAdmin(ImportExportModelAdmin):
 
 
 @admin.register(PackageRelease)
-class PackageReleaseAdmin(admin.ModelAdmin):
+class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
     list_display = (
         "version",
         "package",
@@ -711,11 +712,20 @@ class PackageReleaseAdmin(admin.ModelAdmin):
     )
     list_display_links = ("version",)
     actions = ["promote_release", "publish_to_index"]
+    change_actions = ["promote_release_action", "publish_to_index_action"]
 
     def revision_short(self, obj):
         return obj.revision_short
 
     revision_short.short_description = "revision"
+
+    def _promote_release(self, request, release):
+        try:
+            release.full_clean()
+        except ValidationError as exc:
+            self.message_user(request, "; ".join(exc.messages), messages.ERROR)
+            return
+        return redirect(reverse("release-progress", args=[release.pk, "promote"]))
 
     @admin.action(description="Promote selected releases")
     def promote_release(self, request, queryset):
@@ -724,15 +734,23 @@ class PackageReleaseAdmin(admin.ModelAdmin):
                 request, "Select exactly one release to promote", messages.ERROR
             )
             return
-        cfg = queryset.first()
-        try:
-            cfg.full_clean()
-        except ValidationError as exc:
-            self.message_user(request, "; ".join(exc.messages), messages.ERROR)
+        return self._promote_release(request, queryset.first())
+
+    def promote_release_action(self, request, obj):
+        return self._promote_release(request, obj)
+
+    promote_release_action.label = "Promote release"
+    promote_release_action.short_description = "Promote this release"
+
+    def _publish_to_index(self, request, release):
+        if not release.is_certified:
+            self.message_user(
+                request,
+                f"{release.package.name} {release.version} is not certified",
+                messages.ERROR,
+            )
             return
-        return redirect(
-            reverse("release-progress", args=[cfg.pk, "promote"])
-        )
+        return redirect(reverse("release-progress", args=[release.pk, "publish"]))
 
     @admin.action(description="Publish to Index")
     def publish_to_index(self, request, queryset):
@@ -741,12 +759,10 @@ class PackageReleaseAdmin(admin.ModelAdmin):
                 request, "Select exactly one release to publish", messages.ERROR
             )
             return
-        cfg = queryset.first()
-        if not cfg.is_certified:
-            self.message_user(
-                request,
-                f"{cfg.package.name} {cfg.version} is not certified",
-                messages.ERROR,
-            )
-            return
-        return redirect(reverse("release-progress", args=[cfg.pk, "publish"]))
+        return self._publish_to_index(request, queryset.first())
+
+    def publish_to_index_action(self, request, obj):
+        return self._publish_to_index(request, obj)
+
+    publish_to_index_action.label = "Publish to index"
+    publish_to_index_action.short_description = "Publish this release to index"
