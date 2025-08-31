@@ -24,6 +24,30 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.CreateModel(
+            name="EmailOutbox",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                ("host", models.CharField(max_length=100)),
+                ("port", models.PositiveIntegerField(default=587)),
+                ("username", models.CharField(blank=True, max_length=100)),
+                ("password", models.CharField(blank=True, max_length=100)),
+                ("use_tls", models.BooleanField(default=True)),
+                ("use_ssl", models.BooleanField(default=False)),
+                ("from_email", models.EmailField(blank=True, max_length=254)),
+                (
+                    "node",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="email_outbox",
+                        to="nodes.node",
+                    ),
+                ),
+            ],
+            bases=(core.entity.Entity,),
+        ),
+        migrations.CreateModel(
             name="User",
             fields=[],
             options={

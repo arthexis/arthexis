@@ -18,6 +18,7 @@ from .actions import NodeAction
 
 from .models import (
     Node,
+    EmailOutbox,
     NodeRole,
     ContentSample,
     NodeTask,
@@ -208,6 +209,12 @@ class NodeAdmin(admin.ModelAdmin):
         except Exception as exc:  # pragma: no cover - unexpected errors
             self.message_user(request, str(exc), messages.ERROR)
         return redirect(reverse("admin:nodes_node_change", args=[node_id]))
+
+
+@admin.register(EmailOutbox)
+class EmailOutboxAdmin(admin.ModelAdmin):
+    list_display = ("node", "host", "port", "username", "use_tls", "use_ssl")
+
 
 class NodeRoleAdminForm(forms.ModelForm):
     nodes = forms.ModelMultipleChoiceField(

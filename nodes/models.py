@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from django.contrib.auth import get_user_model
+from django.core.mail import get_connection, send_mail
 
 
 class NodeRoleManager(models.Manager):
@@ -228,6 +229,52 @@ class Node(Entity):
             )
         else:
             PeriodicTask.objects.filter(name=task_name).delete()
+
+
+    def send_mail(self, subject: str, message: str, recipient_list: list[str], from_email: str | None = None, **kwargs):
+        """Send an email using this node's configured outbox if available."""
+        outbox = getattr(self, "email_outbox", None)
+        if outbox:
+            return outbox.send_mail(subject, message, recipient_list, from_email, **kwargs)
+        from_email = from_email or settings.DEFAULT_FROM_EMAIL
+        return send_mail(subject, message, from_email, recipient_list, **kwargs)
+
+
+class EmailOutbox(Entity):
+    """SMTP credentials for sending mail from a node."""
+
+    node = models.OneToOneField(
+        Node, on_delete=models.CASCADE, related_name="email_outbox"
+    )
+    host = models.CharField(max_length=100)
+    port = models.PositiveIntegerField(default=587)
+    username = models.CharField(max_length=100, blank=True)
+    password = models.CharField(max_length=100, blank=True)
+    use_tls = models.BooleanField(default=True)
+    use_ssl = models.BooleanField(default=False)
+    from_email = models.EmailField(blank=True)
+
+    def get_connection(self):
+        return get_connection(
+            host=self.host,
+            port=self.port,
+            username=self.username or None,
+            password=self.password or None,
+            use_tls=self.use_tls,
+            use_ssl=self.use_ssl,
+        )
+
+    def send_mail(self, subject, message, recipient_list, from_email=None, **kwargs):
+        connection = self.get_connection()
+        from_email = from_email or self.from_email or settings.DEFAULT_FROM_EMAIL
+        return send_mail(
+            subject,
+            message,
+            from_email,
+            recipient_list,
+            connection=connection,
+            **kwargs,
+        )
 
 
 class NetMessage(Entity):
