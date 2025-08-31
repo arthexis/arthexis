@@ -7,14 +7,14 @@ from pathlib import Path
 
 class GameListTests(TestCase):
     def setUp(self):
-        fixture = Path(settings.BASE_DIR, "games", "fixtures", "games.json")
+        fixture = Path(settings.BASE_DIR, "game", "fixtures", "game.json")
         call_command("loaddata", str(fixture))
         self.client = Client()
 
-    def test_games_list_displays_fixture(self):
-        resp = self.client.get(reverse("games:game-list"))
+    def test_game_list_displays_fixture(self):
+        resp = self.client.get(reverse("game:game-list"))
         self.assertContains(resp, "Demo Ren&#x27;Py Game")
 
     def test_game_detail_view(self):
-        resp = self.client.get(reverse("games:game-detail", args=["demo"]))
+        resp = self.client.get(reverse("game:game-detail", args=["demo"]))
         self.assertContains(resp, "Demo Ren&#x27;Py Game")
