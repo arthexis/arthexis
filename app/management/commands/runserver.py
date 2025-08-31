@@ -1,12 +1,16 @@
 import os
 import webbrowser
+from pathlib import Path
 
 from django.apps import apps
 from django.contrib.staticfiles.handlers import ASGIStaticFilesHandler
+from django.conf import settings
 from daphne.management.commands.runserver import (
     Command as RunserverCommand,
     get_default_application,
 )
+
+from utils import revision
 
 class Command(RunserverCommand):
     """Extended runserver command that also prints WebSocket URLs and admin link."""
@@ -33,6 +37,15 @@ class Command(RunserverCommand):
         self.stdout.write(
             f"Admin available at {http_scheme}://{host}:{server_port}/admin/"
         )
+
+        ver_path = Path(settings.BASE_DIR) / "VERSION"
+        version = ver_path.read_text().strip() if ver_path.exists() else ""
+        rev_value = revision.get_revision()
+        rev_short = rev_value[-6:] if rev_value else ""
+        msg = f"Version: v{version}"
+        if rev_short:
+            msg += f" r{rev_short}"
+        self.stdout.write(msg)
 
         if os.environ.get("DJANGO_DEV_RELOAD") and os.environ.get("RUN_MAIN") == "true":
             webbrowser.open(f"{http_scheme}://{host}:{server_port}/")
