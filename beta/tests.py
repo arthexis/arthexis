@@ -13,11 +13,11 @@ class BetaTests(TestCase):
 
     def test_portal_list_displays_fixture(self):
         resp = self.client.get(reverse("beta:portal-list"))
-        self.assertContains(resp, "Simple Demo Game")
+        self.assertContains(resp, "Eternal Return")
 
     def test_portal_detail_view(self):
-        resp = self.client.get(reverse("beta:portal-detail", args=["simple"]))
-        self.assertContains(resp, "Simple Demo Game")
+        resp = self.client.get(reverse("beta:portal-detail", args=["baseline"]))
+        self.assertContains(resp, "Eternal Return")
         self.assertContains(resp, reverse("beta:material-detail", args=["start"]))
 
     def test_game_material_view(self):

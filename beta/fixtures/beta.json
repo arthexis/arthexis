@@ -21,9 +21,9 @@
     "model": "beta.gameportal",
     "pk": 1,
     "fields": {
-      "slug": "simple",
-      "title": "Simple Demo Game",
-      "description": "A simple choice-based demo.",
+      "slug": "baseline",
+      "title": "Eternal Return",
+      "description": "Players explore the infinite Baseline, a post-temporal space built by the enigmatic Workgroup to house a Tribe of Gods.",
       "entry_material": 1
     }
   },
