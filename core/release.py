@@ -369,8 +369,21 @@ def promote(
             stash=True,
         )
         try:  # best effort
-            _run([sys.executable, "manage.py", "squashmigrations", "core", "0001"], check=False)
+            _run(
+                [
+                    sys.executable,
+                    "manage.py",
+                    "squashmigrations",
+                    "core",
+                    "0001",
+                    "--noinput",
+                ],
+                check=False,
+            )
         except Exception:
+            # The squashmigrations command may not be available or could fail
+            # (e.g. when no migrations exist). Any errors should not interrupt
+            # the release promotion flow.
             pass
         _run(["git", "add", "."])  # add all changes
         _run(["git", "commit", "-m", f"Release v{version}"])
