@@ -34,7 +34,7 @@ class ReleaseProgressTests(TestCase):
         url = reverse("release-progress", args=[release.pk, "promote"])
         commit_hash = "abcdef1234567890"
         with patch("core.views.release_utils.promote", return_value=(commit_hash, "branch", "main")), \
-             patch("core.views.call_command"), \
+             patch("core.views.serializers.serialize", return_value="[]"), \
              patch("core.views.subprocess.run"):
             resp = self.client.get(url, follow=True)
         self.assertEqual(resp.status_code, 200)

@@ -49,7 +49,7 @@ def _startup_notification() -> None:
 
 
 def _ensure_release(**kwargs) -> None:
-    """Create a package release for the current version if missing."""
+    """Ensure a release for the current version exists and clean old ones."""
 
     try:  # import lazily to avoid app loading issues
         from core.models import Package, PackageRelease
@@ -58,9 +58,21 @@ def _ensure_release(**kwargs) -> None:
         if not ver_path.exists():  # pragma: no cover - no version file
             return
         version = ver_path.read_text().strip()
+        revision_value = revision.get_revision()
 
         package, _ = Package.objects.get_or_create(name="arthexis")
-        PackageRelease.objects.get_or_create(package=package, version=version)
+        release, created = PackageRelease.objects.get_or_create(
+            package=package,
+            version=version,
+            defaults={"revision": revision_value},
+        )
+        if not created and release.revision != revision_value:
+            release.revision = revision_value
+            release.save(update_fields=["revision"])
+
+        PackageRelease.objects.filter(
+            package=package, is_promoted=False
+        ).exclude(version=version).delete()
     except Exception:  # pragma: no cover - best effort only
         return
 
@@ -72,6 +84,7 @@ class NodesConfig(AppConfig):
 
     def ready(self):  # pragma: no cover - exercised on app start
         _startup_notification()
+        _ensure_release()
         post_migrate.connect(
             _ensure_release, dispatch_uid="nodes.ensure_release"
         )
