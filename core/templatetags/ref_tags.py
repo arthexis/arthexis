@@ -37,7 +37,25 @@ def ref_img(value, size=200, alt=None):
 @register.inclusion_tag("core/footer.html", takes_context=True)
 def render_footer(context):
     """Render footer links for references marked to appear there."""
-    refs = list(Reference.objects.filter(include_in_footer=True))
+    refs = Reference.objects.filter(include_in_footer=True)
+    request = context.get("request")
+    visible_refs = []
+    for ref in refs:
+        if ref.footer_visibility == Reference.FOOTER_PUBLIC:
+            visible_refs.append(ref)
+        elif (
+            ref.footer_visibility == Reference.FOOTER_PRIVATE
+            and request
+            and request.user.is_authenticated
+        ):
+            visible_refs.append(ref)
+        elif (
+            ref.footer_visibility == Reference.FOOTER_STAFF
+            and request
+            and request.user.is_authenticated
+            and request.user.is_staff
+        ):
+            visible_refs.append(ref)
 
     version = ""
     ver_path = Path(settings.BASE_DIR) / "VERSION"
@@ -75,7 +93,7 @@ def render_footer(context):
             fresh_since = None
 
     return {
-        "footer_refs": refs,
+        "footer_refs": visible_refs,
         "release_name": release_name,
         "release_url": release_url,
         "request": context.get("request"),

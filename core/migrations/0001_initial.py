@@ -351,6 +351,19 @@ class Migration(migrations.Migration):
                     "include_in_footer",
                     models.BooleanField(default=False, verbose_name="Include in Footer"),
                 ),
+                (
+                    "footer_visibility",
+                    models.CharField(
+                        choices=[
+                            ("public", "Public"),
+                            ("private", "Private"),
+                            ("staff", "Staff"),
+                        ],
+                        default="public",
+                        max_length=7,
+                        verbose_name="Footer visibility",
+                    ),
+                ),
                 ("transaction_uuid", models.UUIDField(default=uuid.uuid4, editable=True, db_index=True)),
                 ("created", models.DateTimeField(auto_now_add=True)),
                 (
@@ -812,5 +825,9 @@ class Migration(migrations.Migration):
                 ('email', models.EmailField(blank=True, editable=False, max_length=254)),
                 ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='odoo_profile', to=settings.AUTH_USER_MODEL)),
             ],
+            options={
+                'verbose_name': 'Odoo Profile',
+                'verbose_name_plural': 'Odoo Profiles',
+            },
         ),
     ]

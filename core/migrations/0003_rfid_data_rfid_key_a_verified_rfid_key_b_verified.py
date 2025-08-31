@@ -63,5 +63,9 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
+            options={
+                "verbose_name": "Fediverse Profile",
+                "verbose_name_plural": "Fediverse Profiles",
+            },
         ),
     ]

@@ -35,6 +35,6 @@ class Migration(migrations.Migration):
                 "indexes": [],
                 "constraints": [],
             },
-            bases=("core.vehicle",),
+            bases=("core.electricvehicle",),
         ),
     ]
