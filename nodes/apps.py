@@ -1,5 +1,6 @@
 import os
 import socket
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -68,9 +69,36 @@ def _ensure_release(**kwargs) -> None:
             version=version,
             defaults={"revision": revision_value},
         )
+        fields: list[str] = []
         if not created and release.revision != revision_value:
             release.revision = revision_value
-            release.save(update_fields=["revision"])
+            fields.append("revision")
+
+        merged = False
+        if release.revision:
+            try:
+                proc = subprocess.run(
+                    [
+                        "git",
+                        "merge-base",
+                        "--is-ancestor",
+                        release.revision,
+                        "origin/main",
+                    ],
+                    capture_output=True,
+                )
+                merged = proc.returncode == 0
+            except Exception:
+                merged = False
+
+        if not release.is_certified and merged:
+            release.is_certified = True
+            fields.extend(["is_certified", "is_published"])
+        elif release.is_certified:
+            fields.append("is_published")
+
+        if fields:
+            release.save(update_fields=fields)
 
         PackageRelease.objects.filter(
             package=package, is_promoted=False

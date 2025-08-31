@@ -1,6 +1,9 @@
 import os
 import sys
+import subprocess
+from types import SimpleNamespace
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -52,3 +55,24 @@ class EnsureReleaseTests(TestCase):
 
         release = PackageRelease.objects.get(package=package, version="9.9.9")
         self.assertEqual(release.revision, revision.get_revision())
+
+    def test_ensure_release_marks_certified_and_published(self):
+        package, _ = Package.objects.get_or_create(name="arthexis")
+        version = Path("VERSION").read_text().strip()
+        release = PackageRelease.objects.get(package=package, version=version)
+        release.is_certified = False
+        release.is_published = False
+        release.save(update_fields=["is_certified", "is_published"])
+
+        def fake_json():
+            return {"releases": {version: []}}
+
+        with patch("nodes.apps.subprocess.run") as run, \
+             patch("requests.get") as req:
+            run.return_value = subprocess.CompletedProcess([], 0)
+            req.return_value = SimpleNamespace(ok=True, json=fake_json)
+            _ensure_release()
+
+        release.refresh_from_db()
+        self.assertTrue(release.is_certified)
+        self.assertTrue(release.is_published)
