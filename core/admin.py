@@ -714,6 +714,22 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
     list_display_links = ("version",)
     actions = ["promote_release"]
     change_actions = ["promote_release_action"]
+    readonly_fields = (
+        "is_promoted",
+        "is_certified",
+        "is_published",
+    )
+    fields = (
+        "package",
+        "release_manager",
+        "version",
+        "revision",
+        "pypi_url",
+        "pr_url",
+        "is_promoted",
+        "is_certified",
+        "is_published",
+    )
 
     def revision_short(self, obj):
         return obj.revision_short
