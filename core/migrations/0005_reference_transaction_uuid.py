@@ -18,7 +18,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="reference",
             name="transaction_uuid",
-            field=models.UUIDField(default=uuid.uuid4, editable=True, db_index=True),
+            field=models.UUIDField(
+                default=uuid.uuid4,
+                editable=True,
+                db_index=True,
+                verbose_name="transaction UUID",
+            ),
         ),
         migrations.RunPython(assign_transaction_uuids, migrations.RunPython.noop),
     ]

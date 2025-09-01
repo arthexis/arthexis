@@ -592,6 +592,7 @@ class Migration(migrations.Migration):
                 related_name="energy_accounts",
                 to="core.rfid",
                 db_table="core_account_rfids",
+                verbose_name="RFIDs",
             ),
         ),
         migrations.CreateModel(
