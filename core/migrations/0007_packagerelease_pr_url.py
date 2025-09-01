@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="packagerelease",
             name="pr_url",
-            field=models.URLField(blank=True, verbose_name="PR URL"),
+            field=models.URLField("PR URL", blank=True, editable=False),
         ),
     ]

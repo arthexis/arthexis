@@ -740,6 +740,7 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
     list_display = (
         "version",
         "package",
+        "is_current",
         "pypi_url",
         "pr_link",
         "revision_short",
@@ -748,12 +749,13 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
     list_display_links = ("version",)
     actions = ["publish_release"]
     change_actions = ["publish_release_action"]
-    readonly_fields = ("pypi_url", "pr_url")
+    readonly_fields = ("pypi_url", "pr_url", "is_current")
     fields = (
         "package",
         "release_manager",
         "version",
         "revision",
+        "is_current",
         "pypi_url",
         "pr_url",
     )
@@ -795,6 +797,10 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
     @admin.display(description="Published")
     def published_status(self, obj):
         return self._checkbox(obj.is_published)
+
+    @admin.display(description="Is current")
+    def is_current(self, obj):
+        return self._checkbox(obj.is_current)
 
     def pr_link(self, obj):
         if obj.pr_url:

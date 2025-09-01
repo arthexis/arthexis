@@ -36,6 +36,7 @@ from .models import (
 from .tasks import capture_node_screenshot, sample_clipboard
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
+from core.models import PackageRelease
 
 
 class NodeTests(TestCase):
@@ -46,6 +47,23 @@ class NodeTests(TestCase):
             username="nodeuser", password="pwd"
         )
         self.client.force_login(self.user)
+
+    def test_register_current_does_not_create_release(self):
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with override_settings(BASE_DIR=base):
+                with patch(
+                    "nodes.models.Node.get_current_mac",
+                    return_value="00:ff:ee:dd:cc:bb",
+                ), patch(
+                    "nodes.models.socket.gethostname", return_value="testhost"
+                ), patch(
+                    "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
+                ), patch(
+                    "nodes.models.revision.get_revision", return_value="rev"
+                ), patch.object(Node, "ensure_keys"):
+                    Node.register_current()
+        self.assertEqual(PackageRelease.objects.count(), 0)
 
     def test_register_and_list_node(self):
         response = self.client.post(

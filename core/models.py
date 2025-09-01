@@ -1121,15 +1121,27 @@ class PackageRelease(Entity):
     release_manager = models.ForeignKey(
         ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
     )
-    version = models.CharField(max_length=20, unique=True, default="0.0.0")
+    version = models.CharField(max_length=20, default="0.0.0")
     revision = models.CharField(max_length=40, blank=True)
-    pypi_url = models.URLField(blank=True, editable=False)
-    pr_url = models.URLField(blank=True, verbose_name="PR URL")
+    pypi_url = models.URLField("PyPI URL", blank=True, editable=False)
+    pr_url = models.URLField("PR URL", blank=True, editable=False)
 
     class Meta:
         verbose_name = "Package Release"
         verbose_name_plural = "Package Releases"
         get_latest_by = "version"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("package", "version"), name="unique_package_version"
+            )
+        ]
+
+    @classmethod
+    def dump_fixture(cls) -> None:
+        path = Path("core/fixtures/releases.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = serializers.serialize("json", cls.objects.all())
+        path.write_text(data)
 
     @classmethod
     def dump_fixture(cls) -> None:
@@ -1179,6 +1191,14 @@ class PackageRelease(Entity):
     def is_published(self) -> bool:
         """Return ``True`` if this release has been published."""
         return bool(self.pypi_url)
+
+    @property
+    def is_current(self) -> bool:
+        """Return ``True`` if this release matches the current revision."""
+        from utils import revision as revision_utils
+
+        current = revision_utils.get_revision()
+        return bool(current) and current == self.revision
 
     @classmethod
     def latest(cls):
