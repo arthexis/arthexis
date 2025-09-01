@@ -5,10 +5,8 @@ from datetime import date, timedelta
 import requests
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, login
-from django.core import serializers
 from django.http import Http404, JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
+from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import csrf_exempt
 from pathlib import Path
 import subprocess
@@ -45,7 +43,11 @@ def _changelog_notes(version: str) -> str:
 
 def _step_promote_build(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
-
+    ver_path = Path("VERSION")
+    ver_path.write_text(release.version + "\n")
+    release.pypi_url = f"https://pypi.org/project/{release.package.name}/{release.version}/"
+    release.save(update_fields=["pypi_url"])
+    PackageRelease.dump_fixture()
     _append_log(log_path, "Generating build files")
     commit_hash, branch, _current = release_utils.promote(
         package=release.to_package(),
@@ -60,20 +62,6 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
     log_path.rename(new_log)
     ctx["log"] = new_log.name
     _append_log(new_log, "Build complete")
-
-
-def _step_dump_fixture(release, ctx, log_path: Path) -> None:
-    _append_log(log_path, "Dumping fixture")
-    data = serializers.serialize(
-        "json", PackageRelease.objects.filter(is_promoted=True), indent=2
-    )
-    fixture_path = Path("core/fixtures/releases.json")
-    fixture_path.write_text(data)
-    subprocess.run(["git", "add", str(fixture_path)], check=True)
-    subprocess.run(
-        ["git", "commit", "-m", f"Add fixture for {release.version}"], check=True
-    )
-    _append_log(log_path, "Fixture committed")
 
 
 def _step_push_branch(release, ctx, log_path: Path) -> None:
@@ -161,23 +149,48 @@ def _step_push_branch(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Branch pushed")
 
 
-def _step_publish(release, ctx, log_path: Path) -> None:
+def _step_merge_publish(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
+    import time
+
+    gh_path = shutil.which("gh")
+    pr_url = ctx.get("pr_url") or release.pr_url
+    if gh_path and pr_url:
+        _append_log(log_path, "Waiting for PR checks")
+        for _ in range(60):
+            try:
+                proc = subprocess.run(
+                    [gh_path, "pr", "view", pr_url, "--json", "mergeable"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                state = json.loads(proc.stdout or "{}").get("mergeable")
+                if state == "MERGEABLE":
+                    break
+            except Exception:
+                pass
+            time.sleep(1)
+        _append_log(log_path, "Merging PR")
+        try:
+            subprocess.run(
+                [gh_path, "pr", "merge", pr_url, "--merge", "--delete-branch"],
+                check=True,
+            )
+            subprocess.run(["git", "pull", "--ff-only", "origin", "main"], check=True)
+        except Exception as exc:
+            _append_log(log_path, f"PR merge failed: {exc}")
 
     _append_log(log_path, "Uploading distribution")
-    release_utils.publish(
-        package=release.to_package(), creds=release.to_credentials()
-    )
+    release_utils.publish(package=release.to_package(), creds=release.to_credentials())
     _append_log(log_path, "Upload complete")
 
 
-PROMOTE_STEPS = [
+PUBLISH_STEPS = [
     ("Generate build", _step_promote_build),
-    ("Dump fixture", _step_dump_fixture),
     ("Push branch", _step_push_branch),
+    ("Merge and publish", _step_merge_publish),
 ]
-
-PUBLISH_STEPS = [("Upload to index", _step_publish)]
 
 
 @csrf_exempt
@@ -341,10 +354,9 @@ def rfid_batch(request):
 @staff_member_required
 def release_progress(request, pk: int, action: str):
     release = get_object_or_404(PackageRelease, pk=pk)
-    if action != "promote":
+    if action != "publish":
         raise Http404("Unknown action")
-    action_name = "publish" if release.is_certified else "promote"
-    session_key = f"release_{action_name}_{pk}"
+    session_key = f"release_publish_{pk}"
     ctx = request.session.get(session_key, {"step": 0})
     step_count = ctx.get("step", 0)
     step_param = request.GET.get("step")
@@ -356,7 +368,7 @@ def release_progress(request, pk: int, action: str):
     log_path = Path("logs") / log_name
     ctx.setdefault("log", log_name)
 
-    steps = PUBLISH_STEPS if release.is_certified else PROMOTE_STEPS
+    steps = PUBLISH_STEPS
     error = ctx.get("error")
 
     if step_param is not None and not error and step_count < len(steps):
@@ -374,26 +386,12 @@ def release_progress(request, pk: int, action: str):
                 request.session[session_key] = ctx
 
     done = step_count >= len(steps) and not ctx.get("error")
-    if done:
-        if release.is_certified:
-            fields = []
-            if not release.is_promoted:
-                release.is_promoted = True
-                fields.append("is_promoted")
-            if not release.is_published:
-                release.is_published = True
-                fields.append("is_published")
-            if fields:
-                release.save(update_fields=fields)
-        elif not release.is_promoted:
-            release.is_promoted = True
-            release.save(update_fields=["is_promoted"])
 
     log_content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
     next_step = step_count if not done and not ctx.get("error") else None
     context = {
         "release": release,
-        "action": action_name,
+        "action": "publish",
         "steps": [s[0] for s in steps],
         "current_step": step_count,
         "next_step": next_step,

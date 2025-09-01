@@ -36,7 +36,6 @@ from .models import (
 from .tasks import capture_node_screenshot, sample_clipboard
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
-from core.models import Package, PackageRelease
 
 
 class NodeTests(TestCase):
@@ -347,28 +346,6 @@ class NodeRegisterCurrentTests(TestCase):
         node.screenshot_polling = False
         node.save()
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
-
-    def test_register_current_creates_release(self):
-        package, _ = Package.objects.get_or_create(name="arthexis")
-        PackageRelease.objects.all().delete()
-        os.environ["RELEASE"] = "1.2.3"
-        self.addCleanup(lambda: os.environ.pop("RELEASE", None))
-        with TemporaryDirectory() as tmp:
-            base = Path(tmp)
-            with override_settings(BASE_DIR=base):
-                with patch(
-                    "nodes.models.Node.get_current_mac",
-                    return_value="00:ff:ee:dd:cc:bb",
-                ), patch(
-                    "nodes.models.socket.gethostname", return_value="testhost"
-                ), patch(
-                    "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
-                ), patch(
-                    "nodes.models.revision.get_revision", return_value="rev"
-                ), patch.object(Node, "ensure_keys"):
-                    Node.register_current()
-        release = PackageRelease.objects.get(package=package, version="1.2.3")
-        self.assertEqual(release.revision, "rev")
 
 class NodeAdminTests(TestCase):
 

@@ -4,14 +4,17 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from core.models import PackageRelease, ReleaseManager
+from core.models import Package, PackageRelease, ReleaseManager
 
 
 class GitHubTokenTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.get(username="arthexis")
         self.manager = ReleaseManager.objects.get(user=self.user)
-        self.release = PackageRelease.objects.get(version="0.1.1")
+        package, _ = Package.objects.get_or_create(name="arthexis")
+        self.release, _ = PackageRelease.objects.get_or_create(
+            package=package, version="0.1.1"
+        )
 
     def test_profile_token_preferred_over_env(self):
         self.manager.github_token = "profile-token"
