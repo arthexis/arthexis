@@ -143,7 +143,7 @@ class PackageAdmin(DjangoObjectActions, admin.ModelAdmin):
         versions = [Version(repo_version)]
         versions += [Version(r.version) for r in package.releases.all()]
         highest = max(versions)
-        next_version = f"{highest.major}.{highest.minor + 1}.0"
+        next_version = f"{highest.major}.{highest.minor}.{highest.micro + 1}"
         release, _created = PackageRelease.objects.get_or_create(
             package=package,
             version=next_version,

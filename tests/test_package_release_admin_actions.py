@@ -49,7 +49,7 @@ class PackageReleaseAdminActionsTests(TestCase):
             args=[self.package.pk, "prepare_next_release_action"],
         )
         resp = self.client.post(action_url)
-        new_release = PackageRelease.objects.get(package=self.package, version="1.1.0")
+        new_release = PackageRelease.objects.get(package=self.package, version="1.0.1")
         self.assertRedirects(
             resp, reverse("admin:core_packagerelease_change", args=[new_release.pk])
         )
