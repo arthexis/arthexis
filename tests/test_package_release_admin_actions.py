@@ -1,7 +1,11 @@
+from pathlib import Path
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from unittest.mock import patch
+
+from packaging.version import Version
 
 from core.models import Package, PackageRelease
 
@@ -79,6 +83,30 @@ class PackageReleaseAdminActionsTests(TestCase):
         )
         resp = self.client.post(action_url)
         new_release = PackageRelease.objects.get(package=self.package, version="1.0.1")
+        self.assertRedirects(
+            resp, reverse("admin:core_packagerelease_change", args=[new_release.pk])
+        )
+
+    def test_prepare_next_release_uses_repo_version_when_higher(self):
+        version_path = Path("VERSION")
+        original_version = version_path.read_text()
+        self.addCleanup(lambda: version_path.write_text(original_version))
+        version_path.write_text("2.0.0")
+
+        pkg = Package.objects.create(name="pkgrepo")
+        PackageRelease.objects.create(package=pkg, version="1.5.0")
+
+        action_url = reverse(
+            "admin:core_package_actions",
+            args=[pkg.pk, "prepare_next_release_action"],
+        )
+        resp = self.client.post(action_url)
+
+        expected_version = Version("2.0.0")
+        expected_version = f"{expected_version.major}.{expected_version.minor}.{expected_version.micro + 1}"
+        new_release = PackageRelease.objects.get(
+            package=pkg, version=expected_version
+        )
         self.assertRedirects(
             resp, reverse("admin:core_packagerelease_change", args=[new_release.pk])
         )
