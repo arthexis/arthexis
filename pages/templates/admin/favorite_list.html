@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{% translate "Favorites" %}</h1>
+{% if favorites %}
+<table class="listing">
+  <thead>
+    <tr>
+      <th>{% translate "Model" %}</th>
+      <th>{% translate "Custom Label" %}</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for fav in favorites %}
+    <tr>
+      <td>{{ fav.content_type.name }}</td>
+      <td>{{ fav.custom_label }}</td>
+      <td><a href="{% url 'admin:favorite_delete' fav.pk %}">{% translate "Remove" %}</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p><a href="{% url 'admin:favorite_clear' %}">{% translate "Remove all favorites" %}</a></p>
+{% else %}
+<p>{% translate "No favorites." %}</p>
+{% endif %}
+{% endblock %}

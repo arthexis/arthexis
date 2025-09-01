@@ -7,6 +7,8 @@ from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 from importlib import import_module
 from django.urls import URLPattern
+from django.conf import settings
+from django.contrib.contenttypes.models import ContentType
 
 
 class ApplicationManager(models.Manager):
@@ -194,6 +196,19 @@ class Landing(Entity):
         return (self.module.node_role.name, self.module.path, self.path)
 
     natural_key.dependencies = ["nodes.NodeRole", "pages.Module"]
+
+
+class Favorite(Entity):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="favorites",
+    )
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    custom_label = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        unique_together = ("user", "content_type")
 
 
 from django.db.models.signals import post_save
