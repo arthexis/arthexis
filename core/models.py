@@ -29,6 +29,7 @@ from utils import revision as revision_utils
 from .entity import Entity, EntityUserManager
 from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
 from .user_data import UserDatum  # noqa: F401 - ensure model registration
+from .fields import SigilShortAutoField
 
 
 class SecurityGroup(Group):
@@ -43,6 +44,22 @@ class SecurityGroup(Group):
     class Meta:
         verbose_name = "Security Group"
         verbose_name_plural = "Security Groups"
+
+
+class SigilRoot(Entity):
+    class Context(models.TextChoices):
+        CONFIG = "config", "Configuration"
+        ENTITY = "entity", "Entity"
+
+    prefix = models.CharField(max_length=50, unique=True)
+    context_type = models.CharField(max_length=20, choices=Context.choices)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.prefix
+
+    class Meta:
+        verbose_name = "Sigil Root"
+        verbose_name_plural = "Sigil Roots"
 
 
 class Address(Entity):
@@ -215,10 +232,10 @@ class OdooProfile(Entity):
         related_name="odoo_profile",
         on_delete=models.CASCADE,
     )
-    host = models.CharField(max_length=255)
-    database = models.CharField(max_length=255)
-    username = models.CharField(max_length=255)
-    password = models.CharField(max_length=255)
+    host = SigilShortAutoField(max_length=255)
+    database = SigilShortAutoField(max_length=255)
+    username = SigilShortAutoField(max_length=255)
+    password = SigilShortAutoField(max_length=255)
     verified_on = models.DateTimeField(null=True, blank=True)
     odoo_uid = models.PositiveIntegerField(null=True, blank=True, editable=False)
     name = models.CharField(max_length=255, blank=True, editable=False)
@@ -311,11 +328,11 @@ class EmailInbox(Entity):
         related_name="email_inboxes",
         on_delete=models.CASCADE,
     )
-    username = models.CharField(
+    username = SigilShortAutoField(
         max_length=255,
         help_text="Login name for the mailbox",
     )
-    host = models.CharField(
+    host = SigilShortAutoField(
         max_length=255,
         help_text=(
             "Examples: Gmail IMAP 'imap.gmail.com', Gmail POP3 'pop.gmail.com',"
@@ -329,8 +346,8 @@ class EmailInbox(Entity):
             "GoDaddy IMAP 993, GoDaddy POP3 995"
         ),
     )
-    password = models.CharField(max_length=255)
-    protocol = models.CharField(
+    password = SigilShortAutoField(max_length=255)
+    protocol = SigilShortAutoField(
         max_length=5,
         choices=PROTOCOL_CHOICES,
         default=IMAP,
@@ -1039,9 +1056,9 @@ class ReleaseManager(Entity):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="release_manager"
     )
-    pypi_username = models.CharField("PyPI username", max_length=100, blank=True)
-    pypi_token = models.CharField("PyPI token", max_length=200, blank=True)
-    github_token = models.CharField(
+    pypi_username = SigilShortAutoField("PyPI username", max_length=100, blank=True)
+    pypi_token = SigilShortAutoField("PyPI token", max_length=200, blank=True)
+    github_token = SigilShortAutoField(
         max_length=200,
         blank=True,
         help_text=(
@@ -1049,8 +1066,8 @@ class ReleaseManager(Entity):
             "Used before the GITHUB_TOKEN environment variable."
         ),
     )
-    pypi_password = models.CharField("PyPI password", max_length=200, blank=True)
-    pypi_url = models.URLField("PyPI URL", blank=True)
+    pypi_password = SigilShortAutoField("PyPI password", max_length=200, blank=True)
+    pypi_url = SigilShortAutoField("PyPI URL", max_length=200, blank=True)
 
     class Meta:
         verbose_name = "Release Manager"
