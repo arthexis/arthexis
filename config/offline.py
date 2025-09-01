@@ -38,4 +38,10 @@ def requires_network(func):
     return sync_wrapper
 
 
-__all__ = ["OfflineError", "requires_network"]
+def network_available() -> bool:
+    """Return ``True`` if network operations are permitted."""
+
+    return not _is_offline()
+
+
+__all__ = ["OfflineError", "requires_network", "network_available"]

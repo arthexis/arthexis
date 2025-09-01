@@ -1114,6 +1114,7 @@ class PackageRelease(Entity):
     version = models.CharField(max_length=20, unique=True, default="0.0.0")
     revision = models.CharField(max_length=40, blank=True)
     pypi_url = models.URLField(blank=True)
+    pr_url = models.URLField(blank=True)
     is_published = models.BooleanField(default=False, editable=False)
     is_promoted = models.BooleanField(default=False, editable=False)
     is_certified = models.BooleanField(default=False, editable=False)

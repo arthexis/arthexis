@@ -106,6 +106,8 @@ def _step_push_branch(release, ctx, log_path: Path) -> None:
             )
             pr_url = proc.stdout.strip()
             ctx["pr_url"] = pr_url
+            release.pr_url = pr_url
+            release.save(update_fields=["pr_url"])
             _append_log(log_path, f"PR created: {pr_url}")
             cert_log = Path("logs") / "certifications.log"
             _append_log(cert_log, f"{release.version} {branch} {pr_url}")
@@ -140,6 +142,8 @@ def _step_push_branch(release, ctx, log_path: Path) -> None:
                 pr_url = resp.json().get("html_url")
                 if pr_url:
                     ctx["pr_url"] = pr_url
+                    release.pr_url = pr_url
+                    release.save(update_fields=["pr_url"])
                     _append_log(log_path, f"PR created: {pr_url}")
                     cert_log = Path("logs") / "certifications.log"
                     _append_log(cert_log, f"{release.version} {branch} {pr_url}")
@@ -372,9 +376,15 @@ def release_progress(request, pk: int, action: str):
     done = step_count >= len(steps) and not ctx.get("error")
     if done:
         if release.is_certified:
+            fields = []
+            if not release.is_promoted:
+                release.is_promoted = True
+                fields.append("is_promoted")
             if not release.is_published:
                 release.is_published = True
-                release.save(update_fields=["is_published"])
+                fields.append("is_published")
+            if fields:
+                release.save(update_fields=fields)
         elif not release.is_promoted:
             release.is_promoted = True
             release.save(update_fields=["is_promoted"])

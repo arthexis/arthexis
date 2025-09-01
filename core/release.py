@@ -12,7 +12,7 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # pragma: no cover - fallback when missing
     toml = None  # type: ignore
 
-from config.offline import requires_network
+from config.offline import requires_network, network_available
 
 
 @dataclass
@@ -403,7 +403,7 @@ def promote(
 def publish(*, package: Package = DEFAULT_PACKAGE, creds: Optional[Credentials] = None) -> None:
     """Upload the existing distribution to PyPI."""
     version = Path("VERSION").read_text().strip()
-    if requires_network():
+    if network_available():
         try:  # pragma: no cover - requests optional
             import requests  # type: ignore
         except Exception:
