@@ -195,7 +195,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='energyaccount',
             name='rfids',
-            field=models.ManyToManyField(blank=True, db_table='core_account_rfids', related_name='energy_accounts', to='core.rfid'),
+            field=models.ManyToManyField(blank=True, db_table='core_account_rfids', related_name='energy_accounts', to='core.rfid', verbose_name='RFIDs'),
         ),
         migrations.CreateModel(
             name='Subscription',

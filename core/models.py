@@ -640,7 +640,12 @@ class Reference(Entity):
         default=FOOTER_PUBLIC,
         verbose_name="Footer visibility",
     )
-    transaction_uuid = models.UUIDField(default=uuid.uuid4, editable=True, db_index=True)
+    transaction_uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=True,
+        db_index=True,
+        verbose_name="transaction UUID",
+    )
     created = models.DateTimeField(auto_now_add=True)
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -797,6 +802,7 @@ class EnergyAccount(Entity):
         blank=True,
         related_name="energy_accounts",
         db_table="core_account_rfids",
+        verbose_name="RFIDs",
     )
     service_account = models.BooleanField(
         default=False,
@@ -1118,7 +1124,7 @@ class PackageRelease(Entity):
     version = models.CharField(max_length=20, unique=True, default="0.0.0")
     revision = models.CharField(max_length=40, blank=True)
     pypi_url = models.URLField(blank=True, editable=False)
-    pr_url = models.URLField(blank=True)
+    pr_url = models.URLField(blank=True, verbose_name="PR URL")
 
     class Meta:
         verbose_name = "Package Release"
