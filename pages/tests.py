@@ -5,7 +5,7 @@ from django.contrib.sites.models import Site
 from django.contrib import admin
 from django.core.exceptions import DisallowedHost
 import socket
-from pages.models import Application, Module, SiteBadge
+from pages.models import Application, Module, SiteBadge, Favorite
 from pages.admin import ApplicationAdmin
 from django.apps import apps as django_apps
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -18,6 +18,7 @@ from unittest.mock import patch
 from django.core import mail
 from django.core.management import call_command
 import re
+from django.contrib.contenttypes.models import ContentType
 
 from nodes.models import Node, ContentSample, NodeRole
 
@@ -576,3 +577,31 @@ class FaviconTests(TestCase):
                 .strip()
             )
             self.assertContains(resp, b64)
+
+
+class FavoriteTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="favadmin", password="pwd", email="fav@example.com"
+        )
+        self.client.force_login(self.user)
+        Site.objects.update_or_create(id=1, defaults={"name": "test", "domain": "testserver"})
+
+    def test_add_favorite(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        url = reverse("admin:favorite_toggle", args=[ct.id])
+        resp = self.client.post(url, {"custom_label": "Apps"})
+        self.assertRedirects(resp, reverse("admin:index"))
+        fav = Favorite.objects.get(user=self.user, content_type=ct)
+        self.assertEqual(fav.custom_label, "Apps")
+
+    def test_existing_favorite_redirects_to_list(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        Favorite.objects.create(user=self.user, content_type=ct)
+        url = reverse("admin:favorite_toggle", args=[ct.id])
+        resp = self.client.get(url)
+        self.assertRedirects(resp, reverse("admin:favorite_list"))
+        resp = self.client.get(reverse("admin:favorite_list"))
+        self.assertContains(resp, ct.name)
