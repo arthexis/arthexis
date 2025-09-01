@@ -39,14 +39,19 @@ class PackageReleaseAdminActionsTests(TestCase):
     def test_change_page_shows_status_checkboxes(self):
         change_url = reverse("admin:core_packagerelease_change", args=[self.release.pk])
         resp = self.client.get(change_url)
-        self.assertContains(resp, '<input type="checkbox" disabled', count=3, html=False)
+        content = resp.content.decode()
+        for field in ("promoted", "certified", "published"):
+            self.assertRegex(
+                content,
+                rf'id="id_is_{field}"[^>]*type="checkbox"[^>]*disabled',
+            )
+            self.assertNotRegex(content, rf'id="id_is_{field}"[^>]*checked')
         PackageRelease.objects.filter(pk=self.release.pk).update(
             is_promoted=True, is_certified=True, is_published=True
         )
         resp = self.client.get(change_url)
-        self.assertContains(
-            resp,
-            '<input type="checkbox" checked disabled',
-            count=3,
-            html=False,
-        )
+        content = resp.content.decode()
+        for field in ("promoted", "certified", "published"):
+            self.assertRegex(
+                content, rf'id="id_is_{field}"[^>]*checked[^>]*disabled'
+            )
