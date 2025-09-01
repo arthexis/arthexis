@@ -40,7 +40,15 @@ class PackageReleaseAdminActionsTests(TestCase):
         change_url = reverse("admin:core_packagerelease_change", args=[self.release.pk])
         resp = self.client.get(change_url)
         content = resp.content.decode()
+        self.assertIn("PyPI URL", content)
         self.assertNotIn('name="pypi_url"', content)
+
+    def test_change_page_pr_url_readonly(self):
+        change_url = reverse("admin:core_packagerelease_change", args=[self.release.pk])
+        resp = self.client.get(change_url)
+        content = resp.content.decode()
+        self.assertIn("PR URL", content)
+        self.assertNotIn('name="pr_url"', content)
 
     def test_prepare_next_release_action_creates_release(self):
         change_url = reverse("admin:core_package_change", args=[self.package.pk])
