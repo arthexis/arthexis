@@ -246,13 +246,47 @@ class EmailOutbox(Entity):
     node = models.OneToOneField(
         Node, on_delete=models.CASCADE, related_name="email_outbox"
     )
-    host = models.CharField(max_length=100)
-    port = models.PositiveIntegerField(default=587)
-    username = models.CharField(max_length=100, blank=True)
-    password = models.CharField(max_length=100, blank=True)
-    use_tls = models.BooleanField(default=True)
-    use_ssl = models.BooleanField(default=False)
-    from_email = models.EmailField(blank=True)
+    host = models.CharField(
+        max_length=100,
+        help_text=(
+            "Gmail: smtp.gmail.com. "
+            "GoDaddy: smtpout.secureserver.net"
+        ),
+    )
+    port = models.PositiveIntegerField(
+        default=587,
+        help_text=(
+            "Gmail: 587 (TLS). "
+            "GoDaddy: 587 (TLS) or 465 (SSL)"
+        ),
+    )
+    username = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Full email address for Gmail or GoDaddy",
+    )
+    password = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Email account password or app password",
+    )
+    use_tls = models.BooleanField(
+        default=True,
+        help_text="Check for Gmail or GoDaddy on port 587",
+    )
+    use_ssl = models.BooleanField(
+        default=False,
+        help_text="Check for GoDaddy on port 465; Gmail does not use SSL",
+    )
+    from_email = models.EmailField(
+        blank=True,
+        verbose_name="From Email",
+        help_text="Default From address; usually the same as username",
+    )
+
+    class Meta:
+        verbose_name = "Email Outbox"
+        verbose_name_plural = "Email Outboxes"
 
     def get_connection(self):
         return get_connection(
