@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from unittest import mock
 
 from django.test import TestCase
@@ -12,6 +13,7 @@ class PyPITokenTests(TestCase):
         with (
             mock.patch("core.release.network_available", return_value=False),
             mock.patch.object(release.Path, "exists", return_value=True),
+            mock.patch.object(release.Path, "glob", return_value=[Path("dist/fake.whl")]),
             mock.patch.object(release.Path, "read_text", return_value="0.1.1"),
             mock.patch("core.release._run") as run,
         ):
@@ -32,6 +34,7 @@ class PyPITokenTests(TestCase):
             mock.patch.dict(os.environ, env, clear=False),
             mock.patch("core.release.network_available", return_value=False),
             mock.patch.object(release.Path, "exists", return_value=True),
+            mock.patch.object(release.Path, "glob", return_value=[Path("dist/fake.whl")]),
             mock.patch.object(release.Path, "read_text", return_value="0.1.1"),
             mock.patch("core.release._run") as run,
             mock.patch("core.release._manager_credentials", return_value=profile),
