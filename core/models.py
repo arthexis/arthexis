@@ -1143,13 +1143,6 @@ class PackageRelease(Entity):
         data = serializers.serialize("json", cls.objects.all())
         path.write_text(data)
 
-    @classmethod
-    def dump_fixture(cls) -> None:
-        path = Path("core/fixtures/releases.json")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        data = serializers.serialize("json", cls.objects.all())
-        path.write_text(data)
-
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.package.name} {self.version}"
 

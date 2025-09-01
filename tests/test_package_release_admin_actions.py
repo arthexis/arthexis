@@ -83,7 +83,25 @@ class PackageReleaseAdminActionsTests(TestCase):
             resp, reverse("admin:core_packagerelease_change", args=[new_release.pk])
         )
 
-        
+    def test_prepare_next_release_skips_deleted_seed_versions(self):
+        pkg = Package.objects.create(name="seedpkg")
+        seed = PackageRelease.objects.create(
+            package=pkg, version="0.1.2", is_seed_data=True
+        )
+        seed.delete()
+        action_url = reverse(
+            "admin:core_package_actions",
+            args=[pkg.pk, "prepare_next_release_action"],
+        )
+        resp = self.client.post(action_url)
+        new_release = PackageRelease.objects.get(
+            package=pkg, version="0.1.3"
+        )
+        self.assertRedirects(
+            resp, reverse("admin:core_packagerelease_change", args=[new_release.pk])
+        )
+
+
 class PackageReleaseUniquePerPackageTests(TestCase):
     def setUp(self):
         self.package1 = Package.objects.create(name="pkg1")

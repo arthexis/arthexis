@@ -141,13 +141,19 @@ class PackageAdmin(DjangoObjectActions, admin.ModelAdmin):
         ver_file = Path("VERSION")
         repo_version = ver_file.read_text().strip() if ver_file.exists() else "0.0.0"
         versions = [Version(repo_version)]
-        versions += [Version(r.version) for r in package.releases.all()]
+        versions += [
+            Version(r.version)
+            for r in PackageRelease.all_objects.filter(package=package)
+        ]
         highest = max(versions)
         next_version = f"{highest.major}.{highest.minor}.{highest.micro + 1}"
-        release, _created = PackageRelease.objects.get_or_create(
+        release, _created = PackageRelease.all_objects.update_or_create(
             package=package,
             version=next_version,
-            defaults={"release_manager": package.release_manager},
+            defaults={
+                "release_manager": package.release_manager,
+                "is_deleted": False,
+            },
         )
         return redirect(
             reverse("admin:core_packagerelease_change", args=[release.pk])
