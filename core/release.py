@@ -97,6 +97,19 @@ def _current_branch() -> str:
     )
 
 
+def _manager_credentials() -> Optional[Credentials]:
+    """Return credentials from the Package's release manager if available."""
+    try:  # pragma: no cover - optional dependency
+        from core.models import Package as PackageModel
+
+        package_obj = PackageModel.objects.select_related("release_manager").first()
+        if package_obj and package_obj.release_manager:
+            return package_obj.release_manager.to_credentials()
+    except Exception:
+        return None
+    return None
+
+
 def run_tests(log_path: Optional[Path] = None) -> subprocess.CompletedProcess:
     """Run the project's test suite and write output to ``log_path``.
 
@@ -321,15 +334,15 @@ def build(
                         raise ReleaseError(
                             f"Version {version} already on PyPI"
                         )
-        token = os.environ.get("PYPI_API_TOKEN") if creds is None else creds.token
-        user = os.environ.get("PYPI_USERNAME") if creds is None else creds.username
-        pwd = os.environ.get("PYPI_PASSWORD") if creds is None else creds.password
+        creds = creds or _manager_credentials() or Credentials(
+            token=os.environ.get("PYPI_API_TOKEN"),
+            username=os.environ.get("PYPI_USERNAME"),
+            password=os.environ.get("PYPI_PASSWORD"),
+        )
         cmd = [sys.executable, "-m", "twine", "upload", "dist/*"]
-        if token:
-            cmd += ["--username", "__token__", "--password", token]
-        elif user and pwd:
-            cmd += ["--username", user, "--password", pwd]
-        else:
+        try:
+            cmd += creds.twine_args()
+        except ValueError:
             raise ReleaseError("Missing PyPI credentials")
         _run(cmd)
 
@@ -414,14 +427,14 @@ def publish(*, package: Package = DEFAULT_PACKAGE, creds: Optional[Credentials] 
                 raise ReleaseError(f"Version {version} already on PyPI")
     if not Path("dist").exists():
         raise ReleaseError("dist directory not found")
-    token = os.environ.get("PYPI_API_TOKEN") if creds is None else creds.token
-    user = os.environ.get("PYPI_USERNAME") if creds is None else creds.username
-    pwd = os.environ.get("PYPI_PASSWORD") if creds is None else creds.password
+    creds = creds or _manager_credentials() or Credentials(
+        token=os.environ.get("PYPI_API_TOKEN"),
+        username=os.environ.get("PYPI_USERNAME"),
+        password=os.environ.get("PYPI_PASSWORD"),
+    )
     cmd = [sys.executable, "-m", "twine", "upload", "dist/*"]
-    if token:
-        cmd += ["--username", "__token__", "--password", token]
-    elif user and pwd:
-        cmd += ["--username", user, "--password", pwd]
-    else:
+    try:
+        cmd += creds.twine_args()
+    except ValueError:
         raise ReleaseError("Missing PyPI credentials")
     _run(cmd)

@@ -751,13 +751,13 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
-            name='PackagerProfile',
+            name='ReleaseManager',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('is_seed_data', models.BooleanField(default=False, editable=False)),
                 ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('username', models.CharField(blank=True, max_length=100)),
-                ('token', models.CharField(blank=True, max_length=200)),
+                ('pypi_username', models.CharField('PyPI username', blank=True, max_length=100)),
+                ('pypi_token', models.CharField('PyPI token', blank=True, max_length=200)),
                 (
                     'github_token',
                     models.CharField(
@@ -769,13 +769,13 @@ class Migration(migrations.Migration):
                         ),
                     ),
                 ),
-                ('password', models.CharField(blank=True, max_length=200)),
-                ('pypi_url', models.URLField(blank=True)),
-                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='packager_profile', to=settings.AUTH_USER_MODEL)),
+                ('pypi_password', models.CharField('PyPI password', blank=True, max_length=200)),
+                ('pypi_url', models.URLField('PyPI URL', blank=True)),
+                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='release_manager', to=settings.AUTH_USER_MODEL)),
             ],
             options={
-                'verbose_name': 'Packager Profile',
-                'verbose_name_plural': 'Packager Profiles',
+                'verbose_name': 'Release Manager',
+                'verbose_name_plural': 'Release Managers',
             },
         ),
         migrations.CreateModel(
@@ -792,7 +792,7 @@ class Migration(migrations.Migration):
                 ('license', models.CharField(default='MIT', max_length=100)),
                 ('repository_url', models.URLField(default='https://github.com/arthexis/arthexis')),
                 ('homepage_url', models.URLField(default='https://arthexis.com')),
-                ('release_manager', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='core.packagerprofile')),
+                ('release_manager', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='core.releasemanager')),
             ],
             options={
                 'verbose_name': 'Package',
@@ -812,7 +812,7 @@ class Migration(migrations.Migration):
                 ('is_promoted', models.BooleanField(default=False, editable=False)),
                 ('is_certified', models.BooleanField(default=False, editable=False)),
                 ('package', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='releases', to='core.package')),
-                ('profile', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='core.packagerprofile')),
+                ('release_manager', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='core.releasemanager')),
             ],
             options={
                 'verbose_name': 'Package Release',
