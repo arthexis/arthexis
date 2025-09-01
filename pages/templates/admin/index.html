@@ -1,10 +1,6 @@
 {% extends "admin/base_site.html" %}
 {% load i18n static %}
 
-{% block extrahead %}
-  {{ block.super }}
-{% endblock %}
-
 {% block extrastyle %}
   {{ block.super }}
   <link rel="stylesheet" href="{% static 'admin/css/dashboard.css' %}">
@@ -88,7 +84,8 @@
 {% block content_title %}
 <div id="admin-home-header" style="display:flex; justify-content:space-between; align-items:center;">
   <h1>Home</h1>
-  <div>
+  <div style="display:flex; align-items:center; gap:8px;">
+    <span id="last-netmessage" style="display:none; font-family:monospace; white-space:nowrap; margin-right:8px;"></span>
     <a class="button" href="{% url 'admin:seed_data' %}">{% translate 'Seed Data' %}</a>
     <a class="button" href="{% url 'admin:user_data' %}">{% translate 'User Data' %}</a>
     <a class="button" href="{% url 'admin:system' %}">{% translate 'System' %}</a>
@@ -148,8 +145,35 @@
             </ul>
             {% endif %}
     </div>
-  </div>
+</div>
 </div>
 {% endblock %}
 
 {% block sidebar %}{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <script>
+    (function () {
+      const label = document.getElementById('last-netmessage');
+      let last = '';
+      async function fetchMessage() {
+        try {
+          const resp = await fetch('{% url 'last-net-message' %}');
+          if (!resp.ok) return;
+          const data = await resp.json();
+          const text = `${data.subject || ''} - ${data.body || ''}`.replace(/[\r\n]+/g, ' ').trim();
+          if (text && text !== last) {
+            label.textContent = text;
+            label.style.display = 'inline';
+            last = text;
+          }
+        } catch (e) {
+          // ignore errors
+        }
+      }
+      fetchMessage();
+      setInterval(fetchMessage, 6000);
+    })();
+  </script>
+{% endblock %}

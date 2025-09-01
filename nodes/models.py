@@ -45,6 +45,11 @@ class NodeRole(Entity):
         return self.name
 
 
+def get_terminal_role():
+    """Return the NodeRole representing a Terminal if it exists."""
+    return NodeRole.objects.filter(name="Terminal").first()
+
+
 class Node(Entity):
     """Information about a running node in the network."""
 
@@ -338,6 +343,13 @@ class NetMessage(Entity):
     )
     subject = models.CharField(max_length=64, blank=True)
     body = models.CharField(max_length=256, blank=True)
+    reach = models.ForeignKey(
+        NodeRole,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        default=get_terminal_role,
+    )
     propagated_to = models.ManyToManyField(
         Node, blank=True, related_name="received_net_messages"
     )
@@ -350,8 +362,24 @@ class NetMessage(Entity):
         verbose_name_plural = "Net Messages"
 
     @classmethod
-    def broadcast(cls, subject: str, body: str, seen: list[str] | None = None):
-        msg = cls.objects.create(subject=subject[:64], body=body[:256])
+    def broadcast(
+        cls,
+        subject: str,
+        body: str,
+        reach: NodeRole | str | None = None,
+        seen: list[str] | None = None,
+    ):
+        role = None
+        if reach:
+            if isinstance(reach, NodeRole):
+                role = reach
+            else:
+                role = NodeRole.objects.filter(name=reach).first()
+        msg = cls.objects.create(
+            subject=subject[:64],
+            body=body[:256],
+            reach=role or get_terminal_role(),
+        )
         msg.propagate(seen=seen or [])
         return msg
 
@@ -404,7 +432,14 @@ class NetMessage(Entity):
             self.save(update_fields=["complete"])
             return
 
-        role_order = ["Control", "Constellation", "Satellite", "Terminal"]
+        reach_name = self.reach.name if self.reach else "Terminal"
+        role_map = {
+            "Terminal": ["Terminal"],
+            "Control": ["Control", "Terminal"],
+            "Satellite": ["Satellite", "Control", "Terminal"],
+            "Constellation": ["Constellation", "Satellite", "Control", "Terminal"],
+        }
+        role_order = role_map.get(reach_name, ["Terminal"])
         selected: list[Node] = []
         for role_name in role_order:
             role_nodes = [n for n in remaining if n.role and n.role.name == role_name]
@@ -416,12 +451,6 @@ class NetMessage(Entity):
                     break
             if len(selected) + self.propagated_to.count() >= target_limit:
                 break
-        if len(selected) + self.propagated_to.count() < target_limit:
-            random.shuffle(remaining)
-            for n in remaining:
-                selected.append(n)
-                if len(selected) + self.propagated_to.count() >= target_limit:
-                    break
 
         seen_list = seen.copy()
         selected_ids = [str(n.uuid) for n in selected]
@@ -432,6 +461,7 @@ class NetMessage(Entity):
                 "subject": self.subject,
                 "body": self.body,
                 "seen": payload_seen,
+                "reach": reach_name,
                 "sender": local_id,
             }
             payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)

@@ -3,6 +3,7 @@
 import django.db.models.deletion
 import uuid
 from django.db import migrations, models
+import nodes.models
 
 
 class Migration(migrations.Migration):
@@ -108,6 +109,16 @@ class Migration(migrations.Migration):
                 ),
                 ('subject', models.CharField(blank=True, max_length=64)),
                 ('body', models.CharField(blank=True, max_length=256)),
+                (
+                    'reach',
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        default=nodes.models.get_terminal_role,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to='nodes.noderole',
+                    ),
+                ),
                 ('created', models.DateTimeField(auto_now_add=True)),
                 ('complete', models.BooleanField(default=False, editable=False)),
                 (
