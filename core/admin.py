@@ -714,6 +714,20 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
     list_display_links = ("version",)
     actions = ["promote_release"]
     change_actions = ["promote_release_action"]
+    readonly_fields = (
+        "promoted_status",
+        "certified_status",
+        "published_status",
+    )
+    fields = (
+        ("promoted_status", "certified_status", "published_status"),
+        "package",
+        "release_manager",
+        "version",
+        "revision",
+        "pypi_url",
+        "pr_url",
+    )
 
     def revision_short(self, obj):
         return obj.revision_short
@@ -742,6 +756,24 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
 
     promote_release_action.label = "Promote release to public"
     promote_release_action.short_description = "Promote this release to public"
+
+    @staticmethod
+    def _checkbox(value: bool) -> str:
+        return format_html(
+            '<input type="checkbox"{} disabled>', " checked" if value else ""
+        )
+
+    @admin.display(description="Promoted")
+    def promoted_status(self, obj):
+        return self._checkbox(obj.is_promoted)
+
+    @admin.display(description="Certified")
+    def certified_status(self, obj):
+        return self._checkbox(obj.is_certified)
+
+    @admin.display(description="Published")
+    def published_status(self, obj):
+        return self._checkbox(obj.is_published)
 
     def pr_link(self, obj):
         if obj.pr_url:

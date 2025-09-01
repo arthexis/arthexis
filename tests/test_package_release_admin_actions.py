@@ -35,3 +35,18 @@ class PackageReleaseAdminActionsTests(TestCase):
         self.assertRedirects(
             resp, reverse("release-progress", args=[self.release.pk, "promote"])
         )
+
+    def test_change_page_shows_status_checkboxes(self):
+        change_url = reverse("admin:core_packagerelease_change", args=[self.release.pk])
+        resp = self.client.get(change_url)
+        self.assertContains(resp, '<input type="checkbox" disabled', count=3, html=False)
+        PackageRelease.objects.filter(pk=self.release.pk).update(
+            is_promoted=True, is_certified=True, is_published=True
+        )
+        resp = self.client.get(change_url)
+        self.assertContains(
+            resp,
+            '<input type="checkbox" checked disabled',
+            count=3,
+            html=False,
+        )
