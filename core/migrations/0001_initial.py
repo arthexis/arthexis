@@ -592,6 +592,7 @@ class Migration(migrations.Migration):
                 related_name="energy_accounts",
                 to="core.rfid",
                 db_table="core_account_rfids",
+                verbose_name="RFIDs",
             ),
         ),
         migrations.CreateModel(
@@ -709,8 +710,8 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "verbose_name": "WMI code",
-                "verbose_name_plural": "WMI codes",
+                "verbose_name": "WMI Code",
+                "verbose_name_plural": "WMI Codes",
             },
         ),
         migrations.CreateModel(
@@ -748,6 +749,8 @@ class Migration(migrations.Migration):
             options={
                 "ordering": ["-visited_at"],
                 "unique_together": {("user", "url")},
+                "verbose_name": "Admin History",
+                "verbose_name_plural": "Admin Histories",
             },
         ),
         migrations.CreateModel(

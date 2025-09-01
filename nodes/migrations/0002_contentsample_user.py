@@ -29,13 +29,59 @@ class Migration(migrations.Migration):
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("is_seed_data", models.BooleanField(default=False, editable=False)),
                 ("is_deleted", models.BooleanField(default=False, editable=False)),
-                ("host", models.CharField(max_length=100)),
-                ("port", models.PositiveIntegerField(default=587)),
-                ("username", models.CharField(blank=True, max_length=100)),
-                ("password", models.CharField(blank=True, max_length=100)),
-                ("use_tls", models.BooleanField(default=True)),
-                ("use_ssl", models.BooleanField(default=False)),
-                ("from_email", models.EmailField(blank=True, max_length=254)),
+                (
+                    "host",
+                    models.CharField(
+                        max_length=100,
+                        help_text="Gmail: smtp.gmail.com. GoDaddy: smtpout.secureserver.net",
+                    ),
+                ),
+                (
+                    "port",
+                    models.PositiveIntegerField(
+                        default=587,
+                        help_text="Gmail: 587 (TLS). GoDaddy: 587 (TLS) or 465 (SSL)",
+                    ),
+                ),
+                (
+                    "username",
+                    models.CharField(
+                        blank=True,
+                        max_length=100,
+                        help_text="Full email address for Gmail or GoDaddy",
+                    ),
+                ),
+                (
+                    "password",
+                    models.CharField(
+                        blank=True,
+                        max_length=100,
+                        help_text="Email account password or app password",
+                    ),
+                ),
+                (
+                    "use_tls",
+                    models.BooleanField(
+                        default=True,
+                        help_text="Check for Gmail or GoDaddy on port 587",
+                    ),
+                ),
+                (
+                    "use_ssl",
+                    models.BooleanField(
+                        default=False,
+                        help_text="Check for GoDaddy on port 465; Gmail does not use SSL",
+                    ),
+                ),
+                (
+                    "from_email",
+                    models.EmailField(
+                        blank=True,
+                        max_length=254,
+                        verbose_name="From Email",
+                        help_text="Default From address; usually the same as username",
+                    ),
+                ),
                 (
                     "node",
                     models.OneToOneField(
@@ -45,6 +91,10 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
+            options={
+                "verbose_name": "Email Outbox",
+                "verbose_name_plural": "Email Outboxes",
+            },
             bases=(core.entity.Entity,),
         ),
         migrations.CreateModel(

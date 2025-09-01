@@ -640,7 +640,12 @@ class Reference(Entity):
         default=FOOTER_PUBLIC,
         verbose_name="Footer visibility",
     )
-    transaction_uuid = models.UUIDField(default=uuid.uuid4, editable=True, db_index=True)
+    transaction_uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=True,
+        db_index=True,
+        verbose_name="transaction UUID",
+    )
     created = models.DateTimeField(auto_now_add=True)
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -797,6 +802,7 @@ class EnergyAccount(Entity):
         blank=True,
         related_name="energy_accounts",
         db_table="core_account_rfids",
+        verbose_name="RFIDs",
     )
     service_account = models.BooleanField(
         default=False,
@@ -911,8 +917,8 @@ class WMICode(Entity):
     code = models.CharField(max_length=3, unique=True)
 
     class Meta:
-        verbose_name = _("WMI code")
-        verbose_name_plural = _("WMI codes")
+        verbose_name = _("WMI Code")
+        verbose_name_plural = _("WMI Codes")
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.code
@@ -1017,6 +1023,8 @@ class AdminHistory(Entity):
     class Meta:
         ordering = ["-visited_at"]
         unique_together = ("user", "url")
+        verbose_name = "Admin History"
+        verbose_name_plural = "Admin Histories"
 
     @property
     def admin_label(self) -> str:  # pragma: no cover - simple representation

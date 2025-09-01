@@ -174,6 +174,8 @@ class Migration(migrations.Migration):
             ],
             options={
                 "abstract": False,
+                "verbose_name": "Site Badge",
+                "verbose_name_plural": "Site Badges",
             },
         ),
     ]
