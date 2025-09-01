@@ -24,6 +24,8 @@ class Migration(migrations.Migration):
             ],
             options={
                 'ordering': ['name'],
+                'verbose_name': 'Node Role',
+                'verbose_name_plural': 'Node Roles',
             },
         ),
         migrations.CreateModel(
@@ -74,6 +76,8 @@ class Migration(migrations.Migration):
             ],
             options={
                 'ordering': ['-created'],
+                'verbose_name': 'Node Task',
+                'verbose_name_plural': 'Node Tasks',
             },
         ),
         migrations.CreateModel(
@@ -98,6 +102,8 @@ class Migration(migrations.Migration):
             ],
             options={
                 'ordering': ['-created'],
+                'verbose_name': 'Net Message',
+                'verbose_name_plural': 'Net Messages',
             },
         ),
         migrations.CreateModel(

@@ -911,8 +911,8 @@ class WMICode(Entity):
     code = models.CharField(max_length=3, unique=True)
 
     class Meta:
-        verbose_name = _("WMI code")
-        verbose_name_plural = _("WMI codes")
+        verbose_name = _("WMI Code")
+        verbose_name_plural = _("WMI Codes")
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.code
@@ -1017,6 +1017,8 @@ class AdminHistory(Entity):
     class Meta:
         ordering = ["-visited_at"]
         unique_together = ("user", "url")
+        verbose_name = "Admin History"
+        verbose_name_plural = "Admin Histories"
 
     @property
     def admin_label(self) -> str:  # pragma: no cover - simple representation

@@ -45,6 +45,10 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
+            options={
+                "verbose_name": "Email Outbox",
+                "verbose_name_plural": "Email Outboxes",
+            },
             bases=(core.entity.Entity,),
         ),
         migrations.CreateModel(
