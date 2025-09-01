@@ -748,7 +748,7 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
     list_display_links = ("version",)
     actions = ["publish_release"]
     change_actions = ["publish_release_action"]
-    readonly_fields = ("pypi_url",)
+    readonly_fields = ("pypi_url", "pr_url")
     fields = (
         "package",
         "release_manager",

@@ -1117,8 +1117,8 @@ class PackageRelease(Entity):
     )
     version = models.CharField(max_length=20, unique=True, default="0.0.0")
     revision = models.CharField(max_length=40, blank=True)
-    pypi_url = models.URLField(blank=True, editable=False)
-    pr_url = models.URLField(blank=True)
+    pypi_url = models.URLField("PyPI URL", blank=True, editable=False)
+    pr_url = models.URLField("PR URL", blank=True, editable=False)
 
     class Meta:
         verbose_name = "Package Release"
