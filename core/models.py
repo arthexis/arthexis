@@ -10,7 +10,7 @@ from django.utils.translation import gettext_lazy as _
 from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
 from django.apps import apps
-from django.db.models.signals import m2m_changed
+from django.db.models.signals import m2m_changed, post_delete
 from django.dispatch import receiver
 from datetime import timedelta
 from django.contrib.contenttypes.models import ContentType
@@ -22,6 +22,8 @@ import qrcode
 import xmlrpc.client
 from django.utils import timezone
 import uuid
+from pathlib import Path
+from django.core import serializers
 
 from .entity import Entity, EntityUserManager
 from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
@@ -1111,18 +1113,27 @@ class PackageRelease(Entity):
     release_manager = models.ForeignKey(
         ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
     )
-    version = models.CharField(max_length=20, unique=True, default="0.0.0")
+    version = models.CharField(max_length=20, default="0.0.0")
     revision = models.CharField(max_length=40, blank=True)
-    pypi_url = models.URLField(blank=True)
-    pr_url = models.URLField(blank=True)
-    is_published = models.BooleanField(default=False, editable=False)
-    is_promoted = models.BooleanField(default=False, editable=False)
-    is_certified = models.BooleanField(default=False, editable=False)
+    pypi_url = models.URLField("PyPI URL", blank=True, editable=False)
+    pr_url = models.URLField("PR URL", blank=True, editable=False)
 
     class Meta:
         verbose_name = "Package Release"
         verbose_name_plural = "Package Releases"
         get_latest_by = "version"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("package", "version"), name="unique_package_version"
+            )
+        ]
+
+    @classmethod
+    def dump_fixture(cls) -> None:
+        path = Path("core/fixtures/releases.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = serializers.serialize("json", cls.objects.all())
+        path.write_text(data)
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.package.name} {self.version}"
@@ -1161,23 +1172,18 @@ class PackageRelease(Entity):
         patch = number & 0x1
         return f"{major}.{minor}.{patch}"
 
-    def save(self, *args, **kwargs):
-        self.pypi_url = (
-            f"https://pypi.org/project/{self.package.name}/{self.version}/"
-        )
-        self.is_published = False
-        try:  # pragma: no cover - network check best effort
-            import requests
+    @property
+    def is_published(self) -> bool:
+        """Return ``True`` if this release has been published."""
+        return bool(self.pypi_url)
 
-            resp = requests.get(
-                f"https://pypi.org/pypi/{self.package.name}/json", timeout=5
-            )
-            if resp.ok:
-                releases = resp.json().get("releases", {})
-                self.is_published = self.version in releases
-        except Exception:
-            self.is_published = False
-        super().save(*args, **kwargs)
+    @property
+    def is_current(self) -> bool:
+        """Return ``True`` if this release matches the current revision."""
+        from utils import revision as revision_utils
+
+        current = revision_utils.get_revision()
+        return bool(current) and current == self.revision
 
     @classmethod
     def latest(cls):
@@ -1200,44 +1206,14 @@ class PackageRelease(Entity):
         self.revision = revision_utils.get_revision()
         self.save(update_fields=["revision"])
 
-    def promote(self) -> None:
-        """Run the promotion workflow for this release."""
-        from . import release as release_utils
-        from django.core import serializers
-        from pathlib import Path
-        import subprocess
-
-        commit_hash, branch, current = release_utils.promote(
-            package=self.to_package(),
-            version=self.version,
-            creds=self.to_credentials(),
-        )
-        self.revision = commit_hash
-        self.save(update_fields=["revision"])
-        fixture_path = Path("core/fixtures/releases.json")
-        data = serializers.serialize(
-            "json", PackageRelease.objects.filter(is_promoted=True), indent=2
-        )
-        fixture_path.write_text(data)
-        subprocess.run(["git", "add", str(fixture_path)], check=True)
-        subprocess.run(
-            ["git", "commit", "-m", f"Add fixture for {self.version}"],
-            check=True,
-        )
-        subprocess.run(["git", "push", "-u", "origin", branch], check=True)
-        subprocess.run(["git", "checkout", current], check=True)
-
-    def publish(self) -> None:
-        """Upload the pre-built distribution to the package index."""
-        from . import release as release_utils
-
-        release_utils.publish(
-            package=self.to_package(), creds=self.to_credentials()
-        )
-
     @property
     def revision_short(self) -> str:
         return self.revision[-6:] if self.revision else ""
+
+
+@receiver(post_delete, sender=PackageRelease)
+def _delete_release_fixture(sender, instance, **kwargs) -> None:
+    PackageRelease.dump_fixture()
 
 # Ensure each RFID can only be linked to one energy account
 @receiver(m2m_changed, sender=EnergyAccount.rfids.through)

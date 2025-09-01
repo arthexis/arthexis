@@ -129,8 +129,50 @@ class ReleaseManagerAdmin(admin.ModelAdmin):
 
 
 @admin.register(Package)
-class PackageAdmin(admin.ModelAdmin):
+class PackageAdmin(DjangoObjectActions, admin.ModelAdmin):
     list_display = ("name", "description", "homepage_url", "release_manager")
+    actions = ["prepare_next_release"]
+    change_actions = ["prepare_next_release_action"]
+
+    def _prepare(self, request, package):
+        from pathlib import Path
+        from packaging.version import Version
+
+        ver_file = Path("VERSION")
+        repo_version = ver_file.read_text().strip() if ver_file.exists() else "0.0.0"
+        versions = [Version(repo_version)]
+        versions += [
+            Version(r.version)
+            for r in PackageRelease.all_objects.filter(package=package)
+        ]
+        highest = max(versions)
+        next_version = f"{highest.major}.{highest.minor}.{highest.micro + 1}"
+        release, _created = PackageRelease.all_objects.update_or_create(
+            package=package,
+            version=next_version,
+            defaults={
+                "release_manager": package.release_manager,
+                "is_deleted": False,
+            },
+        )
+        return redirect(
+            reverse("admin:core_packagerelease_change", args=[release.pk])
+        )
+
+    @admin.action(description="Prepare next Release")
+    def prepare_next_release(self, request, queryset):
+        if queryset.count() != 1:
+            self.message_user(
+                request, "Select exactly one package", messages.ERROR
+            )
+            return
+        return self._prepare(request, queryset.first())
+
+    def prepare_next_release_action(self, request, obj):
+        return self._prepare(request, obj)
+
+    prepare_next_release_action.label = "Prepare next Release"
+    prepare_next_release_action.short_description = "Prepare next release"
 
 
 class SecurityGroupAdminForm(forms.ModelForm):
@@ -704,31 +746,24 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
     list_display = (
         "version",
         "package",
+        "is_current",
         "pypi_url",
         "pr_link",
         "revision_short",
-        "is_promoted",
-        "is_certified",
-        "is_published",
+        "published_status",
     )
     list_display_links = ("version",)
-    actions = ["promote_release"]
-    change_actions = ["promote_release_action"]
-    readonly_fields = (
-        "is_promoted",
-        "is_certified",
-        "is_published",
-    )
+    actions = ["publish_release"]
+    change_actions = ["publish_release_action"]
+    readonly_fields = ("pypi_url", "pr_url", "is_current")
     fields = (
         "package",
         "release_manager",
         "version",
         "revision",
+        "is_current",
         "pypi_url",
         "pr_url",
-        "is_promoted",
-        "is_certified",
-        "is_published",
     )
 
     def revision_short(self, obj):
@@ -736,28 +771,28 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
 
     revision_short.short_description = "revision"
 
-    def _promote_release(self, request, release):
+    def _publish_release(self, request, release):
         try:
             release.full_clean()
         except ValidationError as exc:
             self.message_user(request, "; ".join(exc.messages), messages.ERROR)
             return
-        return redirect(reverse("release-progress", args=[release.pk, "promote"]))
+        return redirect(reverse("release-progress", args=[release.pk, "publish"]))
 
-    @admin.action(description="Promote selected release(s)")
-    def promote_release(self, request, queryset):
+    @admin.action(description="Publish selected release(s)")
+    def publish_release(self, request, queryset):
         if queryset.count() != 1:
             self.message_user(
-                request, "Select exactly one release to promote", messages.ERROR
+                request, "Select exactly one release to publish", messages.ERROR
             )
             return
-        return self._promote_release(request, queryset.first())
+        return self._publish_release(request, queryset.first())
 
-    def promote_release_action(self, request, obj):
-        return self._promote_release(request, obj)
+    def publish_release_action(self, request, obj):
+        return self._publish_release(request, obj)
 
-    promote_release_action.label = "Promote release to public"
-    promote_release_action.short_description = "Promote this release to public"
+    publish_release_action.label = "Publish selected Release"
+    publish_release_action.short_description = "Publish this release"
 
     @staticmethod
     def _checkbox(value: bool) -> str:
@@ -765,17 +800,13 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
             '<input type="checkbox"{} disabled>', " checked" if value else ""
         )
 
-    @admin.display(description="Promoted")
-    def promoted_status(self, obj):
-        return self._checkbox(obj.is_promoted)
-
-    @admin.display(description="Certified")
-    def certified_status(self, obj):
-        return self._checkbox(obj.is_certified)
-
     @admin.display(description="Published")
     def published_status(self, obj):
         return self._checkbox(obj.is_published)
+
+    @admin.display(description="Is current")
+    def is_current(self, obj):
+        return self._checkbox(obj.is_current)
 
     def pr_link(self, obj):
         if obj.pr_url:
