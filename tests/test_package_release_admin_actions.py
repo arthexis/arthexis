@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from unittest.mock import patch
 
 from core.models import Package, PackageRelease
 
@@ -17,41 +18,103 @@ class PackageReleaseAdminActionsTests(TestCase):
         )
         self.client.login(username="staff", password="pw")
 
-    def test_change_page_contains_promote_action(self):
+    def test_change_page_contains_publish_action(self):
         change_url = reverse("admin:core_packagerelease_change", args=[self.release.pk])
         action_url = reverse(
             "admin:core_packagerelease_actions",
-            args=[self.release.pk, "promote_release_action"],
+            args=[self.release.pk, "publish_release_action"],
         )
         resp = self.client.get(change_url)
         self.assertContains(resp, action_url)
 
-    def test_promote_action_redirects(self):
+    def test_publish_action_redirects(self):
         url = reverse(
             "admin:core_packagerelease_actions",
-            args=[self.release.pk, "promote_release_action"],
+            args=[self.release.pk, "publish_release_action"],
         )
         resp = self.client.post(url)
         self.assertRedirects(
-            resp, reverse("release-progress", args=[self.release.pk, "promote"])
+            resp, reverse("release-progress", args=[self.release.pk, "publish"])
         )
 
-    def test_change_page_shows_status_checkboxes(self):
+    def test_change_page_pypi_url_readonly(self):
         change_url = reverse("admin:core_packagerelease_change", args=[self.release.pk])
         resp = self.client.get(change_url)
         content = resp.content.decode()
-        for field in ("promoted", "certified", "published"):
-            self.assertRegex(
-                content,
-                rf'id="id_is_{field}"[^>]*type="checkbox"[^>]*disabled',
-            )
-            self.assertNotRegex(content, rf'id="id_is_{field}"[^>]*checked')
-        PackageRelease.objects.filter(pk=self.release.pk).update(
-            is_promoted=True, is_certified=True, is_published=True
-        )
+        self.assertIn("PyPI URL", content)
+        self.assertNotIn('name="pypi_url"', content)
+
+    def test_change_page_pr_url_readonly(self):
+        change_url = reverse("admin:core_packagerelease_change", args=[self.release.pk])
         resp = self.client.get(change_url)
         content = resp.content.decode()
-        for field in ("promoted", "certified", "published"):
-            self.assertRegex(
-                content, rf'id="id_is_{field}"[^>]*checked[^>]*disabled'
-            )
+        self.assertIn("PR URL", content)
+        self.assertNotIn('name="pr_url"', content)
+
+    def test_change_page_is_current_readonly(self):
+        change_url = reverse("admin:core_packagerelease_change", args=[self.release.pk])
+        with patch("utils.revision.get_revision", return_value="rev"):
+            self.release.revision = "rev"
+            self.release.save(update_fields=["revision"])
+            resp = self.client.get(change_url)
+        content = resp.content.decode()
+        self.assertIn("Is current", content)
+        self.assertNotIn('name="is_current"', content)
+
+    def test_list_page_shows_is_current(self):
+        list_url = reverse("admin:core_packagerelease_changelist")
+        with patch("utils.revision.get_revision", return_value="rev"):
+            self.release.revision = "rev"
+            self.release.save(update_fields=["revision"])
+            resp = self.client.get(list_url)
+        content = resp.content.decode()
+        self.assertIn("Is current", content)
+        self.assertIn('<input type="checkbox" checked disabled>', content)
+
+    def test_prepare_next_release_action_creates_release(self):
+        change_url = reverse("admin:core_package_change", args=[self.package.pk])
+        action_url = reverse(
+            "admin:core_package_actions",
+            args=[self.package.pk, "prepare_next_release_action"],
+        )
+        resp = self.client.post(action_url)
+        new_release = PackageRelease.objects.get(package=self.package, version="1.0.1")
+        self.assertRedirects(
+            resp, reverse("admin:core_packagerelease_change", args=[new_release.pk])
+        )
+
+
+class PackageReleaseUniquePerPackageTests(TestCase):
+    def setUp(self):
+        self.package1 = Package.objects.create(name="pkg1")
+        self.package2 = Package.objects.create(name="pkg2")
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="staff2", password="pw", is_staff=True, is_superuser=True
+        )
+        self.client.login(username="staff2", password="pw")
+
+    def test_prepare_allows_same_version_for_different_packages(self):
+        release1 = PackageRelease.objects.create(
+            package=self.package1, version="0.1.2"
+        )
+
+        url2 = reverse(
+            "admin:core_package_actions",
+            args=[self.package2.pk, "prepare_next_release_action"],
+        )
+        resp2 = self.client.post(url2)
+        self.assertTrue(
+            PackageRelease.objects.filter(
+                package=self.package2, version=release1.version
+            ).exists()
+        )
+        release2 = PackageRelease.objects.get(
+            package=self.package2, version=release1.version
+        )
+        self.assertRedirects(
+            resp2, reverse("admin:core_packagerelease_change", args=[release2.pk])
+        )
+        self.assertEqual(
+            PackageRelease.objects.filter(version=release1.version).count(), 2
+        )

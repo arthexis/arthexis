@@ -805,12 +805,9 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('is_seed_data', models.BooleanField(default=False, editable=False)),
                 ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('version', models.CharField(default='0.0.0', max_length=20, unique=True)),
+                ('version', models.CharField(default='0.0.0', max_length=20)),
                 ('revision', models.CharField(blank=True, max_length=40)),
-                ('pypi_url', models.URLField(blank=True)),
-                ('is_published', models.BooleanField(default=False, editable=False)),
-                ('is_promoted', models.BooleanField(default=False, editable=False)),
-                ('is_certified', models.BooleanField(default=False, editable=False)),
+                ('pypi_url', models.URLField('PyPI URL', blank=True, editable=False)),
                 ('package', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='releases', to='core.package')),
                 ('release_manager', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='core.releasemanager')),
             ],
@@ -818,6 +815,11 @@ class Migration(migrations.Migration):
                 'verbose_name': 'Package Release',
                 'verbose_name_plural': 'Package Releases',
                 'get_latest_by': 'version',
+                'constraints': [
+                    models.UniqueConstraint(
+                        fields=('package', 'version'), name='unique_package_version'
+                    )
+                ],
             },
         ),
         migrations.CreateModel(

@@ -137,8 +137,6 @@ class Node(Entity):
                 node.save(update_fields=["role"])
         Site.objects.get_or_create(domain=hostname, defaults={"name": "host"})
         node.ensure_keys()
-        from .apps import _ensure_release
-        _ensure_release()
         return node, created
 
     def ensure_keys(self):
