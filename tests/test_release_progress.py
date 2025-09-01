@@ -60,6 +60,7 @@ class ReleaseProgressTests(TestCase):
         self.assertTrue(log_path.exists())
         release.refresh_from_db()
         self.assertTrue(release.is_promoted)
+        self.assertEqual(release.pr_url, "http://example.com/pr/1")
 
     def test_promote_progress_without_gh_skips_pr(self):
         release = PackageRelease.objects.create(package=self.package, version="1.1.0")
@@ -97,19 +98,19 @@ class ReleaseProgressTests(TestCase):
         self.assertContains(resp, f'<a href="{list_url}">Package Releases</a>')
 
     def test_repromote_publishes_release(self):
-        release = PackageRelease.objects.create(
-            package=self.package,
-            version="2.0.0",
-            revision="1234567abcdef",
-            is_certified=True,
-            is_promoted=True,
-        )
-        url = reverse("release-progress", args=[release.pk, "promote"])
-        with patch("core.views.release_utils.publish") as pub, \
+        with patch("core.release.publish") as pub, \
              patch("requests.get") as req:
             req.return_value = SimpleNamespace(
                 ok=True, json=lambda: {"releases": {"2.0.0": []}}
             )
+            release = PackageRelease.objects.create(
+                package=self.package,
+                version="2.0.0",
+                revision="1234567abcdef",
+                is_certified=True,
+                is_promoted=True,
+            )
+            url = reverse("release-progress", args=[release.pk, "promote"])
             resp = self.client.get(url)
             resp = self.client.get(f"{url}?step=0")
         self.assertEqual(resp.status_code, 200)
@@ -119,3 +120,24 @@ class ReleaseProgressTests(TestCase):
         pub.assert_called_once()
         release.refresh_from_db()
         self.assertTrue(release.is_published)
+
+    def test_certified_release_marked_promoted(self):
+        with patch("core.release.publish") as pub, patch("requests.get") as req:
+            req.return_value = SimpleNamespace(
+                ok=True, json=lambda: {"releases": {"4.0.0": []}}
+            )
+            release = PackageRelease.objects.create(
+                package=self.package,
+                version="4.0.0",
+                revision="abcdef1234567",
+                is_certified=True,
+                is_promoted=False,
+            )
+            url = reverse("release-progress", args=[release.pk, "promote"])
+            resp = self.client.get(url)
+            resp = self.client.get(f"{url}?step=0")
+        self.assertEqual(resp.status_code, 200)
+        release.refresh_from_db()
+        self.assertTrue(release.is_promoted)
+        self.assertTrue(release.is_published)
+        pub.assert_called_once()

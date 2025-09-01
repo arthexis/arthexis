@@ -705,6 +705,7 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
         "version",
         "package",
         "pypi_url",
+        "pr_link",
         "revision_short",
         "is_promoted",
         "is_certified",
@@ -727,7 +728,7 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
             return
         return redirect(reverse("release-progress", args=[release.pk, "promote"]))
 
-    @admin.action(description="Promote selected releases")
+    @admin.action(description="Promote selected release(s)")
     def promote_release(self, request, queryset):
         if queryset.count() != 1:
             self.message_user(
@@ -739,6 +740,13 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
     def promote_release_action(self, request, obj):
         return self._promote_release(request, obj)
 
-    promote_release_action.label = "Promote release"
-    promote_release_action.short_description = "Promote this release"
+    promote_release_action.label = "Promote release to public"
+    promote_release_action.short_description = "Promote this release to public"
+
+    def pr_link(self, obj):
+        if obj.pr_url:
+            return format_html('<a href="{0}" target="_blank">{0}</a>', obj.pr_url)
+        return ""
+
+    pr_link.short_description = "PR URL"
 
