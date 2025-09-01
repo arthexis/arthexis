@@ -107,7 +107,7 @@ def _refresh_next_release(version: str = "0.1.2") -> None:
     PackageRelease.all_objects.filter(version=version).delete()
     PackageRelease.objects.create(
         package=package,
-        profile=package.release_manager,
+        release_manager=package.release_manager,
         version=version,
         revision=revision_utils.get_revision(),
         is_seed_data=True,

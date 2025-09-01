@@ -339,7 +339,10 @@ def build(
             username=os.environ.get("PYPI_USERNAME"),
             password=os.environ.get("PYPI_PASSWORD"),
         )
-        cmd = [sys.executable, "-m", "twine", "upload", "dist/*"]
+        files = sorted(str(p) for p in Path("dist").glob("*"))
+        if not files:
+            raise ReleaseError("dist directory is empty")
+        cmd = [sys.executable, "-m", "twine", "upload", *files]
         try:
             cmd += creds.twine_args()
         except ValueError:
@@ -432,7 +435,10 @@ def publish(*, package: Package = DEFAULT_PACKAGE, creds: Optional[Credentials] 
         username=os.environ.get("PYPI_USERNAME"),
         password=os.environ.get("PYPI_PASSWORD"),
     )
-    cmd = [sys.executable, "-m", "twine", "upload", "dist/*"]
+    files = sorted(str(p) for p in Path("dist").glob("*"))
+    if not files:
+        raise ReleaseError("dist directory is empty")
+    cmd = [sys.executable, "-m", "twine", "upload", *files]
     try:
         cmd += creds.twine_args()
     except ValueError:
