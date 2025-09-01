@@ -144,6 +144,10 @@ class SiteBadge(Entity):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"Badge for {self.site.domain}"
 
+    class Meta:
+        verbose_name = "Site Badge"
+        verbose_name_plural = "Site Badges"
+
 
 class SiteProxy(Site):
     class Meta:

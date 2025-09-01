@@ -24,6 +24,8 @@ class Migration(migrations.Migration):
             ],
             options={
                 'ordering': ['name'],
+                'verbose_name': 'Node Role',
+                'verbose_name_plural': 'Node Roles',
             },
         ),
         migrations.CreateModel(
@@ -38,11 +40,22 @@ class Migration(migrations.Migration):
                 ('port', models.PositiveIntegerField(default=8000)),
                 ('badge_color', models.CharField(default='#28a745', max_length=7)),
                 ('last_seen', models.DateTimeField(auto_now=True)),
-                ('enable_public_api', models.BooleanField(default=False)),
+                (
+                    'enable_public_api',
+                    models.BooleanField(default=False, verbose_name='enable public API'),
+                ),
                 ('public_endpoint', models.SlugField(blank=True, unique=True)),
                 ('clipboard_polling', models.BooleanField(default=False)),
                 ('screenshot_polling', models.BooleanField(default=False)),
-                ('uuid', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
+                (
+                    'uuid',
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        unique=True,
+                        verbose_name='UUID',
+                    ),
+                ),
                 ('public_key', models.TextField(blank=True)),
                 ('base_path', models.CharField(blank=True, max_length=255)),
                 ('installed_version', models.CharField(blank=True, max_length=20)),
@@ -74,6 +87,8 @@ class Migration(migrations.Migration):
             ],
             options={
                 'ordering': ['-created'],
+                'verbose_name': 'Node Task',
+                'verbose_name_plural': 'Node Tasks',
             },
         ),
         migrations.CreateModel(
@@ -82,7 +97,15 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('is_seed_data', models.BooleanField(default=False, editable=False)),
                 ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('uuid', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
+                (
+                    'uuid',
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        unique=True,
+                        verbose_name='UUID',
+                    ),
+                ),
                 ('subject', models.CharField(blank=True, max_length=64)),
                 ('body', models.CharField(blank=True, max_length=256)),
                 ('created', models.DateTimeField(auto_now_add=True)),
@@ -98,6 +121,8 @@ class Migration(migrations.Migration):
             ],
             options={
                 'ordering': ['-created'],
+                'verbose_name': 'Net Message',
+                'verbose_name_plural': 'Net Messages',
             },
         ),
         migrations.CreateModel(
@@ -114,7 +139,12 @@ class Migration(migrations.Migration):
                 ('hash', models.CharField(blank=True, max_length=64, null=True, unique=True)),
                 (
                     'transaction_uuid',
-                    models.UUIDField(default=uuid.uuid4, editable=True, db_index=True),
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=True,
+                        db_index=True,
+                        verbose_name='transaction UUID',
+                    ),
                 ),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('node', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='nodes.node')),

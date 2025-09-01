@@ -195,7 +195,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='energyaccount',
             name='rfids',
-            field=models.ManyToManyField(blank=True, db_table='core_account_rfids', related_name='energy_accounts', to='core.rfid'),
+            field=models.ManyToManyField(blank=True, db_table='core_account_rfids', related_name='energy_accounts', to='core.rfid', verbose_name='RFIDs'),
         ),
         migrations.CreateModel(
             name='Subscription',
@@ -238,8 +238,8 @@ class Migration(migrations.Migration):
                 ('brand', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='wmi_codes', to='core.brand')),
             ],
             options={
-                'verbose_name': 'WMI code',
-                'verbose_name_plural': 'WMI codes',
+                'verbose_name': 'WMI Code',
+                'verbose_name_plural': 'WMI Codes',
             },
         ),
         migrations.CreateModel(
@@ -256,6 +256,8 @@ class Migration(migrations.Migration):
             options={
                 'ordering': ['-visited_at'],
                 'unique_together': {('user', 'url')},
+                'verbose_name': 'Admin History',
+                'verbose_name_plural': 'Admin Histories',
             },
         ),
         migrations.CreateModel(

@@ -83,7 +83,7 @@ class PackageReleaseAdminActionsTests(TestCase):
             resp, reverse("admin:core_packagerelease_change", args=[new_release.pk])
         )
 
-
+        
 class PackageReleaseUniquePerPackageTests(TestCase):
     def setUp(self):
         self.package1 = Package.objects.create(name="pkg1")

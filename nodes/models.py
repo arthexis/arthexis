@@ -34,6 +34,8 @@ class NodeRole(Entity):
 
     class Meta:
         ordering = ["name"]
+        verbose_name = "Node Role"
+        verbose_name_plural = "Node Roles"
 
     def natural_key(self):  # pragma: no cover - simple representation
         return (self.name,)
@@ -54,11 +56,19 @@ class Node(Entity):
     badge_color = models.CharField(max_length=7, default="#28a745")
     role = models.ForeignKey(NodeRole, on_delete=models.SET_NULL, null=True, blank=True)
     last_seen = models.DateTimeField(auto_now=True)
-    enable_public_api = models.BooleanField(default=False)
+    enable_public_api = models.BooleanField(
+        default=False,
+        verbose_name="enable public API",
+    )
     public_endpoint = models.SlugField(blank=True, unique=True)
     clipboard_polling = models.BooleanField(default=False)
     screenshot_polling = models.BooleanField(default=False)
-    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        editable=False,
+        verbose_name="UUID",
+    )
     public_key = models.TextField(blank=True)
     base_path = models.CharField(max_length=255, blank=True)
     installed_version = models.CharField(max_length=20, blank=True)
@@ -246,13 +256,51 @@ class EmailOutbox(Entity):
     node = models.OneToOneField(
         Node, on_delete=models.CASCADE, related_name="email_outbox"
     )
-    host = models.CharField(max_length=100)
-    port = models.PositiveIntegerField(default=587)
-    username = models.CharField(max_length=100, blank=True)
-    password = models.CharField(max_length=100, blank=True)
-    use_tls = models.BooleanField(default=True)
-    use_ssl = models.BooleanField(default=False)
-    from_email = models.EmailField(blank=True)
+    host = models.CharField(
+        max_length=100,
+        help_text=(
+            "Gmail: smtp.gmail.com. "
+            "GoDaddy: smtpout.secureserver.net"
+        ),
+    )
+    port = models.PositiveIntegerField(
+        default=587,
+        help_text=(
+            "Gmail: 587 (TLS). "
+            "GoDaddy: 587 (TLS) or 465 (SSL)"
+        ),
+    )
+    username = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Full email address for Gmail or GoDaddy",
+    )
+    password = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Email account password or app password",
+    )
+    use_tls = models.BooleanField(
+        default=True,
+        help_text="Check for Gmail or GoDaddy on port 587",
+    )
+    use_ssl = models.BooleanField(
+        default=False,
+        help_text="Check for GoDaddy on port 465; Gmail does not use SSL",
+    )
+    from_email = models.EmailField(
+        blank=True,
+        verbose_name="From Email",
+        help_text="Default From address; usually the same as username",
+    )
+
+    class Meta:
+        verbose_name = "Email Outbox"
+        verbose_name_plural = "Email Outboxes"
+
+    class Meta:
+        verbose_name = "Email Outbox"
+        verbose_name_plural = "Email Outboxes"
 
     def get_connection(self):
         return get_connection(
@@ -280,7 +328,12 @@ class EmailOutbox(Entity):
 class NetMessage(Entity):
     """Message propagated across nodes."""
 
-    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        editable=False,
+        verbose_name="UUID",
+    )
     subject = models.CharField(max_length=64, blank=True)
     body = models.CharField(max_length=256, blank=True)
     propagated_to = models.ManyToManyField(
@@ -291,6 +344,8 @@ class NetMessage(Entity):
 
     class Meta:
         ordering = ["-created"]
+        verbose_name = "Net Message"
+        verbose_name_plural = "Net Messages"
 
     @classmethod
     def broadcast(cls, subject: str, body: str, seen: list[str] | None = None):
@@ -421,7 +476,10 @@ class ContentSample(Entity):
     method = models.CharField(max_length=10, default="", blank=True)
     hash = models.CharField(max_length=64, unique=True, null=True, blank=True)
     transaction_uuid = models.UUIDField(
-        default=uuid.uuid4, editable=True, db_index=True
+        default=uuid.uuid4,
+        editable=True,
+        db_index=True,
+        verbose_name="transaction UUID",
     )
     node = models.ForeignKey(
         Node, on_delete=models.SET_NULL, null=True, blank=True
@@ -460,6 +518,8 @@ class NodeTask(Entity):
 
     class Meta:
         ordering = ["-created"]
+        verbose_name = "Node Task"
+        verbose_name_plural = "Node Tasks"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.recipe
