@@ -1,7 +1,13 @@
+from pathlib import Path
+
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from unittest.mock import patch
+from utils import revision as revision_utils
+
+from packaging.version import Version
 
 from core.models import Package, PackageRelease
 
@@ -71,6 +77,14 @@ class PackageReleaseAdminActionsTests(TestCase):
         self.assertIn("Is current", content)
         self.assertIn('<input type="checkbox" checked disabled>', content)
 
+    def test_release_revision_defaults_to_repo_revision(self):
+        expected = revision_utils.get_revision()
+        release = PackageRelease.objects.create(
+            package=self.package, version="1.2.3"
+        )
+        self.assertEqual(release.revision, expected)
+        self.assertTrue(release.is_current)
+
     def test_prepare_next_release_action_creates_release(self):
         change_url = reverse("admin:core_package_change", args=[self.package.pk])
         action_url = reverse(
@@ -79,6 +93,30 @@ class PackageReleaseAdminActionsTests(TestCase):
         )
         resp = self.client.post(action_url)
         new_release = PackageRelease.objects.get(package=self.package, version="1.0.1")
+        self.assertRedirects(
+            resp, reverse("admin:core_packagerelease_change", args=[new_release.pk])
+        )
+
+    def test_prepare_next_release_uses_repo_version_when_higher(self):
+        version_path = Path("VERSION")
+        original_version = version_path.read_text()
+        self.addCleanup(lambda: version_path.write_text(original_version))
+        version_path.write_text("2.0.0")
+
+        pkg = Package.objects.create(name="pkgrepo")
+        PackageRelease.objects.create(package=pkg, version="1.5.0")
+
+        action_url = reverse(
+            "admin:core_package_actions",
+            args=[pkg.pk, "prepare_next_release_action"],
+        )
+        resp = self.client.post(action_url)
+
+        expected_version = Version("2.0.0")
+        expected_version = f"{expected_version.major}.{expected_version.minor}.{expected_version.micro + 1}"
+        new_release = PackageRelease.objects.get(
+            package=pkg, version=expected_version
+        )
         self.assertRedirects(
             resp, reverse("admin:core_packagerelease_change", args=[new_release.pk])
         )
@@ -136,3 +174,11 @@ class PackageReleaseUniquePerPackageTests(TestCase):
         self.assertEqual(
             PackageRelease.objects.filter(version=release1.version).count(), 2
         )
+
+
+class PackageModelTests(TestCase):
+    def test_package_name_unique(self):
+        Package.objects.create(name="unique")
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Package.objects.create(name="unique")

@@ -24,6 +24,7 @@ from django.utils import timezone
 import uuid
 from pathlib import Path
 from django.core import serializers
+from utils import revision as revision_utils
 
 from .entity import Entity, EntityUserManager
 from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
@@ -1076,7 +1077,9 @@ class ReleaseManager(Entity):
 class Package(Entity):
     """Package details shared across releases."""
 
-    name = models.CharField(max_length=100, default=DEFAULT_PACKAGE.name)
+    name = models.CharField(
+        max_length=100, default=DEFAULT_PACKAGE.name, unique=True
+    )
     description = models.CharField(
         max_length=255, default=DEFAULT_PACKAGE.description
     )
@@ -1122,7 +1125,9 @@ class PackageRelease(Entity):
         ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
     )
     version = models.CharField(max_length=20, default="0.0.0")
-    revision = models.CharField(max_length=40, blank=True)
+    revision = models.CharField(
+        max_length=40, blank=True, default=revision_utils.get_revision, editable=False
+    )
     pypi_url = models.URLField("PyPI URL", blank=True, editable=False)
     pr_url = models.URLField("PR URL", blank=True, editable=False)
 
