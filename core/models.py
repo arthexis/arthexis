@@ -1022,11 +1022,11 @@ class AdminHistory(Entity):
         return model._meta.verbose_name_plural if model else self.content_type.name
 
 
-class PackagerProfile(Entity):
+class ReleaseManager(Entity):
     """Store credentials for publishing packages."""
 
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="packager_profile"
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="release_manager"
     )
     pypi_username = models.CharField("PyPI username", max_length=100, blank=True)
     pypi_token = models.CharField("PyPI token", max_length=200, blank=True)
@@ -1042,8 +1042,8 @@ class PackagerProfile(Entity):
     pypi_url = models.URLField("PyPI URL", blank=True)
 
     class Meta:
-        verbose_name = "Packager Profile"
-        verbose_name_plural = "Packager Profiles"
+        verbose_name = "Release Manager"
+        verbose_name_plural = "Release Managers"
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name
@@ -1053,7 +1053,7 @@ class PackagerProfile(Entity):
         return self.user.get_username()
 
     def to_credentials(self) -> Credentials | None:
-        """Return credentials for this profile."""
+        """Return credentials for this release manager."""
         if self.pypi_token:
             return Credentials(token=self.pypi_token)
         if self.pypi_username and self.pypi_password:
@@ -1079,7 +1079,7 @@ class Package(Entity):
     repository_url = models.URLField(default=DEFAULT_PACKAGE.repository_url)
     homepage_url = models.URLField(default=DEFAULT_PACKAGE.homepage_url)
     release_manager = models.ForeignKey(
-        PackagerProfile, on_delete=models.SET_NULL, null=True, blank=True
+        ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
     )
 
     class Meta:
@@ -1108,8 +1108,8 @@ class PackageRelease(Entity):
     package = models.ForeignKey(
         Package, on_delete=models.CASCADE, related_name="releases"
     )
-    profile = models.ForeignKey(
-        PackagerProfile, on_delete=models.SET_NULL, null=True, blank=True
+    release_manager = models.ForeignKey(
+        ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
     )
     version = models.CharField(max_length=20, unique=True, default="0.0.0")
     revision = models.CharField(max_length=40, blank=True)
@@ -1132,17 +1132,17 @@ class PackageRelease(Entity):
         return self.package.to_package()
 
     def to_credentials(self) -> Credentials | None:
-        """Return :class:`Credentials` from the associated profile."""
-        profile = self.profile or self.package.release_manager
-        if profile:
-            return profile.to_credentials()
+        """Return :class:`Credentials` from the associated release manager."""
+        manager = self.release_manager or self.package.release_manager
+        if manager:
+            return manager.to_credentials()
         return None
 
     def get_github_token(self) -> str | None:
-        """Return GitHub token from the associated profile or environment."""
-        profile = self.profile or self.package.release_manager
-        if profile and profile.github_token:
-            return profile.github_token
+        """Return GitHub token from the associated release manager or environment."""
+        manager = self.release_manager or self.package.release_manager
+        if manager and manager.github_token:
+            return manager.github_token
         return os.environ.get("GITHUB_TOKEN")
 
     @property

@@ -39,7 +39,7 @@ from .models import (
     EmailInbox,
     Package,
     PackageRelease,
-    PackagerProfile,
+    ReleaseManager,
     SecurityGroup,
 )
 
@@ -123,8 +123,8 @@ class ReferenceAdmin(admin.ModelAdmin):
     qr_code.short_description = "QR Code"
 
 
-@admin.register(PackagerProfile)
-class PackagerProfileAdmin(admin.ModelAdmin):
+@admin.register(ReleaseManager)
+class ReleaseManagerAdmin(admin.ModelAdmin):
     list_display = ("user", "pypi_username", "pypi_url")
 
 

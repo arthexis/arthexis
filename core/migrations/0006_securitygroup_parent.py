@@ -16,11 +16,11 @@ def create_securitygroups(apps, schema_editor):
 
 
 def create_packaging_defaults(apps, schema_editor):
-    """Ensure default package and packager profile exist."""
+    """Ensure default package and release manager exist."""
 
     app_label, model_name = settings.AUTH_USER_MODEL.split('.')
     User = apps.get_model(app_label, model_name)
-    PackagerProfile = apps.get_model('core', 'PackagerProfile')
+    ReleaseManager = apps.get_model('core', 'ReleaseManager')
     Package = apps.get_model('core', 'Package')
 
     User.objects.get_or_create(
@@ -41,7 +41,7 @@ def create_packaging_defaults(apps, schema_editor):
             "is_superuser": True,
         },
     )
-    profile, _ = PackagerProfile.objects.get_or_create(
+    manager, _ = ReleaseManager.objects.get_or_create(
         user=user,
         defaults={
             "pypi_username": "arthexis",
@@ -58,7 +58,7 @@ def create_packaging_defaults(apps, schema_editor):
             "license": "MIT",
             "repository_url": "https://github.com/arthexis/arthexis",
             "homepage_url": "https://arthexis.com",
-            "release_manager": profile,
+            "release_manager": manager,
         },
     )
 
@@ -70,38 +70,23 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RenameField(
-            model_name='packagerprofile',
-            old_name='token',
-            new_name='pypi_token',
-        ),
-        migrations.RenameField(
-            model_name='packagerprofile',
-            old_name='username',
-            new_name='pypi_username',
-        ),
-        migrations.RenameField(
-            model_name='packagerprofile',
-            old_name='password',
-            new_name='pypi_password',
-        ),
         migrations.AlterField(
-            model_name='packagerprofile',
+            model_name='releasemanager',
             name='pypi_token',
             field=models.CharField("PyPI token", blank=True, max_length=200),
         ),
         migrations.AlterField(
-            model_name='packagerprofile',
+            model_name='releasemanager',
             name='pypi_username',
             field=models.CharField("PyPI username", blank=True, max_length=100),
         ),
         migrations.AlterField(
-            model_name='packagerprofile',
+            model_name='releasemanager',
             name='pypi_password',
             field=models.CharField("PyPI password", blank=True, max_length=200),
         ),
         migrations.AlterField(
-            model_name='packagerprofile',
+            model_name='releasemanager',
             name='pypi_url',
             field=models.URLField(blank=True, verbose_name='PyPI URL'),
         ),
