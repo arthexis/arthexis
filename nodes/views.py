@@ -12,7 +12,7 @@ from utils.api import api_login_required
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
-from .models import Node, NetMessage
+from .models import Node, NetMessage, NodeRole
 from .utils import capture_screenshot, save_screenshot
 
 
@@ -229,16 +229,34 @@ def net_message(request):
     msg_uuid = data.get("uuid")
     subject = data.get("subject", "")
     body = data.get("body", "")
+    reach_name = data.get("reach")
+    reach_role = None
+    if reach_name:
+        reach_role = NodeRole.objects.filter(name=reach_name).first()
     seen = data.get("seen", [])
     if not msg_uuid:
         return JsonResponse({"detail": "uuid required"}, status=400)
     msg, created = NetMessage.objects.get_or_create(
         uuid=msg_uuid,
-        defaults={"subject": subject[:64], "body": body[:256]},
+        defaults={"subject": subject[:64], "body": body[:256], "reach": reach_role},
     )
     if not created:
         msg.subject = subject[:64]
         msg.body = body[:256]
-        msg.save(update_fields=["subject", "body"])
+        update_fields = ["subject", "body"]
+        if reach_role and msg.reach_id != reach_role.id:
+            msg.reach = reach_role
+            update_fields.append("reach")
+        msg.save(update_fields=update_fields)
     msg.propagate(seen=seen)
     return JsonResponse({"status": "propagated", "complete": msg.complete})
+
+
+@api_login_required
+def last_net_message(request):
+    """Return the most recent :class:`NetMessage`."""
+
+    msg = NetMessage.objects.order_by("-created").first()
+    if not msg:
+        return JsonResponse({"subject": "", "body": ""})
+    return JsonResponse({"subject": msg.subject, "body": msg.body})

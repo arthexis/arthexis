@@ -47,6 +47,7 @@ class NodeTests(TestCase):
             username="nodeuser", password="pwd"
         )
         self.client.force_login(self.user)
+        NodeRole.objects.get_or_create(name="Terminal")
 
     def test_register_current_does_not_create_release(self):
         with TemporaryDirectory() as tmp:
@@ -152,6 +153,7 @@ class NodeRegisterCurrentTests(TestCase):
         self.client = Client()
         self.user = User.objects.create_user(username="nodeuser", password="pwd")
         self.client.force_login(self.user)
+        NodeRole.objects.get_or_create(name="Terminal")
     def test_register_current_sets_and_retains_lcd(self):
         with TemporaryDirectory() as tmp:
             base = Path(tmp)
@@ -272,6 +274,7 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertEqual(NetMessage.objects.count(), 1)
         msg = NetMessage.objects.first()
         self.assertEqual(msg.body, "hello")
+        self.assertEqual(msg.reach.name, "Terminal")
 
     def test_public_api_disabled(self):
         node = Node.objects.create(
@@ -531,6 +534,7 @@ class NetMessageAdminTests(TransactionTestCase):
             username="netmsg-admin", password="adminpass", email="admin@example.com"
         )
         self.client.force_login(self.admin)
+        NodeRole.objects.get_or_create(name="Terminal")
 
     def test_complete_flag_not_editable(self):
         msg = NetMessage.objects.create(subject="s", body="b")
@@ -550,6 +554,76 @@ class NetMessageAdminTests(TransactionTestCase):
             )
         self.assertEqual(response.status_code, 302)
         mock_propagate.assert_called_once()
+
+
+class LastNetMessageViewTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="lastmsg", password="pwd"
+        )
+        self.client.force_login(self.user)
+        NodeRole.objects.get_or_create(name="Terminal")
+
+    def test_returns_latest_message(self):
+        NetMessage.objects.create(subject="old", body="msg1")
+        NetMessage.objects.create(subject="new", body="msg2")
+        resp = self.client.get(reverse("last-net-message"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"subject": "new", "body": "msg2"})
+
+
+class NetMessageReachTests(TestCase):
+    def setUp(self):
+        self.roles = {}
+        for name in ["Terminal", "Control", "Satellite", "Constellation"]:
+            self.roles[name], _ = NodeRole.objects.get_or_create(name=name)
+        self.nodes = {}
+        for idx, name in enumerate(["Terminal", "Control", "Satellite", "Constellation"], start=1):
+            self.nodes[name] = Node.objects.create(
+                hostname=name.lower(),
+                address=f"10.0.0.{idx}",
+                port=8000 + idx,
+                mac_address=f"00:11:22:33:44:{idx:02x}",
+                role=self.roles[name],
+            )
+
+    @patch("requests.post")
+    def test_terminal_reach_limits_nodes(self, mock_post):
+        msg = NetMessage.objects.create(subject="s", body="b", reach=self.roles["Terminal"])
+        with patch.object(Node, "get_local", return_value=None):
+            msg.propagate()
+        roles = set(msg.propagated_to.values_list("role__name", flat=True))
+        self.assertEqual(roles, {"Terminal"})
+        self.assertEqual(mock_post.call_count, 1)
+
+    @patch("requests.post")
+    def test_control_reach_includes_control_and_terminal(self, mock_post):
+        msg = NetMessage.objects.create(subject="s", body="b", reach=self.roles["Control"])
+        with patch.object(Node, "get_local", return_value=None):
+            msg.propagate()
+        roles = set(msg.propagated_to.values_list("role__name", flat=True))
+        self.assertEqual(roles, {"Control", "Terminal"})
+        self.assertEqual(mock_post.call_count, 2)
+
+    @patch("requests.post")
+    def test_satellite_reach_includes_lower_roles(self, mock_post):
+        msg = NetMessage.objects.create(subject="s", body="b", reach=self.roles["Satellite"])
+        with patch.object(Node, "get_local", return_value=None):
+            msg.propagate()
+        roles = set(msg.propagated_to.values_list("role__name", flat=True))
+        self.assertEqual(roles, {"Satellite", "Control", "Terminal"})
+        self.assertEqual(mock_post.call_count, 3)
+
+    @patch("requests.post")
+    def test_constellation_reach_prioritizes_constellation(self, mock_post):
+        msg = NetMessage.objects.create(subject="s", body="b", reach=self.roles["Constellation"])
+        with patch.object(Node, "get_local", return_value=None):
+            msg.propagate()
+        roles = set(msg.propagated_to.values_list("role__name", flat=True))
+        self.assertEqual(roles, {"Constellation", "Satellite", "Control"})
+        self.assertEqual(mock_post.call_count, 3)
 
 class NodeActionTests(TestCase):
     def setUp(self):

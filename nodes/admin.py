@@ -320,9 +320,9 @@ class ContentSampleAdmin(admin.ModelAdmin):
 
 @admin.register(NetMessage)
 class NetMessageAdmin(admin.ModelAdmin):
-    list_display = ("subject", "body", "created", "complete")
+    list_display = ("subject", "body", "reach", "created", "complete")
     search_fields = ("subject", "body")
-    list_filter = ("complete",)
+    list_filter = ("complete", "reach")
     ordering = ("-created",)
     readonly_fields = ("complete",)
     actions = ["send_messages"]
