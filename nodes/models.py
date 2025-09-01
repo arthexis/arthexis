@@ -1,5 +1,6 @@
 from django.db import models
 from core.entity import Entity
+from core.fields import SigilShortAutoField
 import re
 import json
 import base64
@@ -248,7 +249,7 @@ class EmailOutbox(Entity):
     node = models.OneToOneField(
         Node, on_delete=models.CASCADE, related_name="email_outbox"
     )
-    host = models.CharField(
+    host = SigilShortAutoField(
         max_length=100,
         help_text=(
             "Gmail: smtp.gmail.com. "
@@ -262,12 +263,12 @@ class EmailOutbox(Entity):
             "GoDaddy: 587 (TLS) or 465 (SSL)"
         ),
     )
-    username = models.CharField(
+    username = SigilShortAutoField(
         max_length=100,
         blank=True,
         help_text="Full email address for Gmail or GoDaddy",
     )
-    password = models.CharField(
+    password = SigilShortAutoField(
         max_length=100,
         blank=True,
         help_text="Email account password or app password",
@@ -280,9 +281,10 @@ class EmailOutbox(Entity):
         default=False,
         help_text="Check for GoDaddy on port 465; Gmail does not use SSL",
     )
-    from_email = models.EmailField(
+    from_email = SigilShortAutoField(
         blank=True,
         verbose_name="From Email",
+        max_length=254,
         help_text="Default From address; usually the same as username",
     )
 

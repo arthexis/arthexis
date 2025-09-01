@@ -3,6 +3,7 @@ import django.db.models.deletion
 from django.db import migrations, models
 import core.entity
 import django.contrib.auth.models
+import core.fields
 
 
 class Migration(migrations.Migration):
@@ -31,7 +32,7 @@ class Migration(migrations.Migration):
                 ("is_deleted", models.BooleanField(default=False, editable=False)),
                 (
                     "host",
-                    models.CharField(
+                    core.fields.SigilShortAutoField(
                         max_length=100,
                         help_text="Gmail: smtp.gmail.com. GoDaddy: smtpout.secureserver.net",
                     ),
@@ -45,7 +46,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "username",
-                    models.CharField(
+                    core.fields.SigilShortAutoField(
                         blank=True,
                         max_length=100,
                         help_text="Full email address for Gmail or GoDaddy",
@@ -53,7 +54,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "password",
-                    models.CharField(
+                    core.fields.SigilShortAutoField(
                         blank=True,
                         max_length=100,
                         help_text="Email account password or app password",
@@ -75,7 +76,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "from_email",
-                    models.EmailField(
+                    core.fields.SigilShortAutoField(
                         blank=True,
                         max_length=254,
                         verbose_name="From Email",

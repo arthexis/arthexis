@@ -1,0 +1,19 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 1,
+    "fields": {
+      "prefix": "ENV",
+      "context_type": "config"
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 2,
+    "fields": {
+      "prefix": "SYS",
+      "context_type": "config"
+    }
+  }
+]
+
