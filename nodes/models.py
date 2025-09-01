@@ -34,6 +34,8 @@ class NodeRole(Entity):
 
     class Meta:
         ordering = ["name"]
+        verbose_name = "Node Role"
+        verbose_name_plural = "Node Roles"
 
     def natural_key(self):  # pragma: no cover - simple representation
         return (self.name,)
@@ -288,6 +290,10 @@ class EmailOutbox(Entity):
         verbose_name = "Email Outbox"
         verbose_name_plural = "Email Outboxes"
 
+    class Meta:
+        verbose_name = "Email Outbox"
+        verbose_name_plural = "Email Outboxes"
+
     def get_connection(self):
         return get_connection(
             host=self.host,
@@ -325,6 +331,8 @@ class NetMessage(Entity):
 
     class Meta:
         ordering = ["-created"]
+        verbose_name = "Net Message"
+        verbose_name_plural = "Net Messages"
 
     @classmethod
     def broadcast(cls, subject: str, body: str, seen: list[str] | None = None):
@@ -494,6 +502,8 @@ class NodeTask(Entity):
 
     class Meta:
         ordering = ["-created"]
+        verbose_name = "Node Task"
+        verbose_name_plural = "Node Tasks"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.recipe
