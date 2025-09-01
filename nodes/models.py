@@ -57,11 +57,19 @@ class Node(Entity):
     badge_color = models.CharField(max_length=7, default="#28a745")
     role = models.ForeignKey(NodeRole, on_delete=models.SET_NULL, null=True, blank=True)
     last_seen = models.DateTimeField(auto_now=True)
-    enable_public_api = models.BooleanField(default=False)
+    enable_public_api = models.BooleanField(
+        default=False,
+        verbose_name="enable public API",
+    )
     public_endpoint = models.SlugField(blank=True, unique=True)
     clipboard_polling = models.BooleanField(default=False)
     screenshot_polling = models.BooleanField(default=False)
-    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        editable=False,
+        verbose_name="UUID",
+    )
     public_key = models.TextField(blank=True)
     base_path = models.CharField(max_length=255, blank=True)
     installed_version = models.CharField(max_length=20, blank=True)
@@ -322,7 +330,12 @@ class EmailOutbox(Entity):
 class NetMessage(Entity):
     """Message propagated across nodes."""
 
-    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        editable=False,
+        verbose_name="UUID",
+    )
     subject = models.CharField(max_length=64, blank=True)
     body = models.CharField(max_length=256, blank=True)
     propagated_to = models.ManyToManyField(
@@ -465,7 +478,10 @@ class ContentSample(Entity):
     method = models.CharField(max_length=10, default="", blank=True)
     hash = models.CharField(max_length=64, unique=True, null=True, blank=True)
     transaction_uuid = models.UUIDField(
-        default=uuid.uuid4, editable=True, db_index=True
+        default=uuid.uuid4,
+        editable=True,
+        db_index=True,
+        verbose_name="transaction UUID",
     )
     node = models.ForeignKey(
         Node, on_delete=models.SET_NULL, null=True, blank=True

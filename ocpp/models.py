@@ -156,7 +156,11 @@ class Transaction(Entity):
     account = models.ForeignKey(
         EnergyAccount, on_delete=models.PROTECT, related_name="transactions", null=True
     )
-    rfid = models.CharField(max_length=20, blank=True)
+    rfid = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name=_("RFID"),
+    )
     vin = models.CharField(max_length=17, blank=True)
     meter_start = models.IntegerField(null=True, blank=True)
     meter_stop = models.IntegerField(null=True, blank=True)
@@ -229,10 +233,14 @@ class Simulator(Entity):
     """Preconfigured simulator that can be started from the admin."""
 
     name = models.CharField(max_length=100, unique=True)
-    cp_path = models.CharField(max_length=100)
+    cp_path = models.CharField(_("CP Path"), max_length=100)
     host = models.CharField(max_length=100, default="127.0.0.1")
     ws_port = models.IntegerField(_("WS Port"), default=8000)
-    rfid = models.CharField(max_length=255, default="FFFFFFFF")
+    rfid = models.CharField(
+        max_length=255,
+        default="FFFFFFFF",
+        verbose_name=_("RFID"),
+    )
     vin = models.CharField(max_length=17, blank=True)
     duration = models.IntegerField(default=600)
     interval = models.FloatField(default=5.0)

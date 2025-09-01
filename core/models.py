@@ -24,6 +24,7 @@ from django.utils import timezone
 import uuid
 from pathlib import Path
 from django.core import serializers
+from utils import revision as revision_utils
 
 from .entity import Entity, EntityUserManager
 from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
@@ -657,7 +658,12 @@ class Reference(Entity):
         default=FOOTER_PUBLIC,
         verbose_name="Footer visibility",
     )
-    transaction_uuid = models.UUIDField(default=uuid.uuid4, editable=True, db_index=True)
+    transaction_uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=True,
+        db_index=True,
+        verbose_name="transaction UUID",
+    )
     created = models.DateTimeField(auto_now_add=True)
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -814,6 +820,7 @@ class EnergyAccount(Entity):
         blank=True,
         related_name="energy_accounts",
         db_table="core_account_rfids",
+        verbose_name="RFIDs",
     )
     service_account = models.BooleanField(
         default=False,
@@ -1087,7 +1094,9 @@ class ReleaseManager(Entity):
 class Package(Entity):
     """Package details shared across releases."""
 
-    name = models.CharField(max_length=100, default=DEFAULT_PACKAGE.name)
+    name = models.CharField(
+        max_length=100, default=DEFAULT_PACKAGE.name, unique=True
+    )
     description = models.CharField(
         max_length=255, default=DEFAULT_PACKAGE.description
     )
@@ -1132,8 +1141,10 @@ class PackageRelease(Entity):
     release_manager = models.ForeignKey(
         ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
     )
-    version = models.CharField(max_length=20, unique=True, default="0.0.0")
-    revision = models.CharField(max_length=40, blank=True)
+    version = models.CharField(max_length=20, default="0.0.0")
+    revision = models.CharField(
+        max_length=40, blank=True, default=revision_utils.get_revision, editable=False
+    )
     pypi_url = models.URLField("PyPI URL", blank=True, editable=False)
     pr_url = models.URLField("PR URL", blank=True, editable=False)
 
@@ -1141,6 +1152,11 @@ class PackageRelease(Entity):
         verbose_name = "Package Release"
         verbose_name_plural = "Package Releases"
         get_latest_by = "version"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("package", "version"), name="unique_package_version"
+            )
+        ]
 
     @classmethod
     def dump_fixture(cls) -> None:
@@ -1190,6 +1206,14 @@ class PackageRelease(Entity):
     def is_published(self) -> bool:
         """Return ``True`` if this release has been published."""
         return bool(self.pypi_url)
+
+    @property
+    def is_current(self) -> bool:
+        """Return ``True`` if this release matches the current revision."""
+        from utils import revision as revision_utils
+
+        current = revision_utils.get_revision()
+        return bool(current) and current == self.revision
 
     @classmethod
     def latest(cls):

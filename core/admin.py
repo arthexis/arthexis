@@ -141,13 +141,19 @@ class PackageAdmin(DjangoObjectActions, admin.ModelAdmin):
         ver_file = Path("VERSION")
         repo_version = ver_file.read_text().strip() if ver_file.exists() else "0.0.0"
         versions = [Version(repo_version)]
-        versions += [Version(r.version) for r in package.releases.all()]
+        versions += [
+            Version(r.version)
+            for r in PackageRelease.all_objects.filter(package=package)
+        ]
         highest = max(versions)
         next_version = f"{highest.major}.{highest.minor}.{highest.micro + 1}"
-        release, _created = PackageRelease.objects.get_or_create(
+        release, _created = PackageRelease.all_objects.update_or_create(
             package=package,
             version=next_version,
-            defaults={"release_manager": package.release_manager},
+            defaults={
+                "release_manager": package.release_manager,
+                "is_deleted": False,
+            },
         )
         return redirect(
             reverse("admin:core_packagerelease_change", args=[release.pk])
@@ -740,6 +746,7 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
     list_display = (
         "version",
         "package",
+        "is_current",
         "pypi_url",
         "pr_link",
         "revision_short",
@@ -748,12 +755,13 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
     list_display_links = ("version",)
     actions = ["publish_release"]
     change_actions = ["publish_release_action"]
-    readonly_fields = ("pypi_url", "pr_url")
+    readonly_fields = ("pypi_url", "pr_url", "is_current", "revision")
     fields = (
         "package",
         "release_manager",
         "version",
         "revision",
+        "is_current",
         "pypi_url",
         "pr_url",
     )
@@ -795,6 +803,10 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
     @admin.display(description="Published")
     def published_status(self, obj):
         return self._checkbox(obj.is_published)
+
+    @admin.display(description="Is current")
+    def is_current(self, obj):
+        return self._checkbox(obj.is_current)
 
     def pr_link(self, obj):
         if obj.pr_url:

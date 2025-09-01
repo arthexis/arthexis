@@ -3,6 +3,7 @@
 import django.contrib.sites.models
 import django.db.models.deletion
 from django.db import migrations, models
+from django.conf import settings
 
 
 class Migration(migrations.Migration):
@@ -12,6 +13,8 @@ class Migration(migrations.Migration):
     dependencies = [
         ("sites", "0002_alter_domain_unique"),
         ("nodes", "0001_initial"),
+        ("contenttypes", "0002_remove_content_type_name"),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
@@ -176,6 +179,42 @@ class Migration(migrations.Migration):
                 "abstract": False,
                 "verbose_name": "Site Badge",
                 "verbose_name_plural": "Site Badges",
+            },
+        ),
+        migrations.CreateModel(
+            name="Favorite",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                ("custom_label", models.CharField(blank=True, max_length=100)),
+                (
+                    "content_type",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="contenttypes.contenttype",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="favorites",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+            ],
+            options={
+                "abstract": False,
+                "unique_together": {("user", "content_type")},
             },
         ),
     ]

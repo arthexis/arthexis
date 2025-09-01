@@ -71,6 +71,8 @@ logs/*
 logs/old/*
 !logs/old/.gitkeep
 data/
+!config/data/
+!config/data/ACRONYMS.txt
 local_settings.py
 db.sqlite3
 db.sqlite3-journal

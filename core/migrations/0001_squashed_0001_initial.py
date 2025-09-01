@@ -195,7 +195,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='energyaccount',
             name='rfids',
-            field=models.ManyToManyField(blank=True, db_table='core_account_rfids', related_name='energy_accounts', to='core.rfid'),
+            field=models.ManyToManyField(blank=True, db_table='core_account_rfids', related_name='energy_accounts', to='core.rfid', verbose_name='RFIDs'),
         ),
         migrations.CreateModel(
             name='Subscription',
@@ -305,7 +305,7 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('is_seed_data', models.BooleanField(default=False, editable=False)),
                 ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('version', models.CharField(default='0.0.0', max_length=20, unique=True)),
+                ('version', models.CharField(default='0.0.0', max_length=20)),
                 ('revision', models.CharField(blank=True, max_length=40)),
                 ('pypi_url', models.URLField('PyPI URL', blank=True, editable=False)),
                 ('package', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='releases', to='core.package')),
@@ -315,6 +315,11 @@ class Migration(migrations.Migration):
                 'verbose_name': 'Package Release',
                 'verbose_name_plural': 'Package Releases',
                 'get_latest_by': 'version',
+                'constraints': [
+                    models.UniqueConstraint(
+                        fields=('package', 'version'), name='unique_package_version'
+                    )
+                ],
             },
         ),
         migrations.CreateModel(
