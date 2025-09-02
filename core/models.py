@@ -10,7 +10,7 @@ from django.utils.translation import gettext_lazy as _
 from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
 from django.apps import apps
-from django.db.models.signals import m2m_changed, post_delete
+from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
 from datetime import timedelta
 from django.contrib.contenttypes.models import ContentType
@@ -1257,8 +1257,9 @@ class PackageRelease(Entity):
         return self.revision[-6:] if self.revision else ""
 
 
-@receiver(post_delete, sender=PackageRelease)
-def _delete_release_fixture(sender, instance, **kwargs) -> None:
+@receiver([post_save, post_delete], sender=PackageRelease)
+def _update_release_fixture(sender, instance, **kwargs) -> None:
+    """Keep the release fixture in sync with the database."""
     PackageRelease.dump_fixture()
 
 # Ensure each RFID can only be linked to one energy account

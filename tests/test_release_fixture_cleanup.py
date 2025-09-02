@@ -30,3 +30,8 @@ class ReleaseFixtureCleanupTests(TestCase):
         data = self.fixture_path.read_text()
         self.assertNotIn("1.0.0", data)
 
+    def test_create_updates_fixture(self):
+        PackageRelease.objects.create(package=self.package, version="2.0.0")
+        data = self.fixture_path.read_text()
+        self.assertIn("2.0.0", data)
+
