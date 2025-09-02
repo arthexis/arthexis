@@ -218,6 +218,27 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
 .favorite-star.favorited {
     color: gold;
 }
+
+/* Ensure related object buttons match theme */
+.related-widget-wrapper-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--button-bg);
+    color: var(--button-fg);
+}
+
+.related-widget-wrapper-link:hover {
+    background: var(--button-hover-bg);
+}
+
+/* Align delete button with other submit-row buttons */
+.submit-row a.deletelink {
+    margin-left: 0;
+}
 </style>
 {% endblock %}
 {% block branding %}
