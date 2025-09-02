@@ -292,15 +292,31 @@ def run_database_tasks(*, latest: bool = False) -> None:
         personal = sorted(data_dir.glob("*.json"))
         if personal:
             User = get_user_model()
-            for p in personal:
-                try:
-                    user_id = int(p.stem.split("_", 1)[0])
-                    User.objects.get_or_create(
-                        pk=user_id, defaults={"username": f"user{user_id}"}
-                    )
-                except Exception:
-                    pass
-            call_command("loaddata", *[str(p) for p in personal], ignorenonexistent=True)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                patched: list[str] = []
+                for p in personal:
+                    dest = Path(tmpdir, p.name)
+                    try:
+                        data = json.load(p.open())
+                    except Exception:
+                        dest.write_text(p.read_text())
+                        patched.append(str(dest))
+                        continue
+                    try:
+                        user_id = int(p.stem.split("_", 1)[0])
+                        User.objects.get_or_create(
+                            pk=user_id, defaults={"username": f"user{user_id}"}
+                        )
+                    except Exception:
+                        pass
+                    for obj in data:
+                        fields = obj.get("fields", {})
+                        uid = fields.get("user")
+                        if isinstance(uid, int) and not User.all_objects.filter(pk=uid).exists():
+                            fields["user"] = 1
+                    dest.write_text(json.dumps(data))
+                    patched.append(str(dest))
+                call_command("loaddata", *patched, ignorenonexistent=True)
             for p in personal:
                 try:
                     user_id, app_label, model, obj_id = p.stem.split("_", 3)
