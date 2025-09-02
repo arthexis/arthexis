@@ -4,6 +4,22 @@ Changelog
 Unreleased
 ----------
 
+0.1.8 [revision 236d6357a6854f5cca8e96792227456368bdbdaf]
+---------------------------------------------------------
+
+- d2525af fix(release): commit release fixture after build
+- 17aac32 theme admin relation buttons and align delete
+- be4168e Rename AWG admin group to Power Calculators
+- ab13409 chore(admin): fix email inbox breadcrumb
+- 61f3621 Allow anonymous access to last message API
+- 3a90ca0 Reset release progress session when version changes
+- 5b541d5 Save object before executing admin change actions
+- bd6fdd4 Use icon semaphores for readonly booleans
+- 186f316 Update release fixture on save
+- 44ce1e0 Show PyPI link after release
+- c8d51a6 docs: link support page
+- c9ef1c1 Release v0.1.4
+
 0.1.4 [revision 0dbfd4b21c7e365772a3afd0e2c9cb15020c018b]
 ---------------------------------------------------------
 
