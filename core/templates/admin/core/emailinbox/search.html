@@ -4,8 +4,8 @@
 {% block breadcrumbs %}
 <div class="breadcrumbs">
   <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
-  <a href="{% url 'admin:app_list' 'core' %}">{% trans 'Business Models' %}</a> ›
-  <a href="{% url 'admin:core_emailinbox_changelist' %}">{% trans 'Email Inboxes' %}</a> ›
+  <a href="{% url 'admin:app_list' 'post_office' %}">{% trans 'Post Office' %}</a> ›
+  <a href="{% url 'admin:post_office_emailinbox_changelist' %}">{% trans 'Email Inboxes' %}</a> ›
   {% trans 'Search Email Inboxes' %}
 </div>
 {% endblock %}

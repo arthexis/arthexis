@@ -18,7 +18,7 @@ from .actions import NodeAction
 
 from .models import (
     Node,
-    EmailOutbox,
+    EmailOutbox as NodeEmailOutbox,
     NodeRole,
     ContentSample,
     NodeTask,
@@ -181,9 +181,21 @@ class NodeAdmin(admin.ModelAdmin):
         return redirect(reverse("admin:nodes_node_change", args=[node_id]))
 
 
+class EmailOutbox(NodeEmailOutbox):
+    class Meta:
+        proxy = True
+        app_label = "post_office"
+        verbose_name = NodeEmailOutbox._meta.verbose_name
+        verbose_name_plural = NodeEmailOutbox._meta.verbose_name_plural
+
+
 @admin.register(EmailOutbox)
 class EmailOutboxAdmin(admin.ModelAdmin):
     list_display = ("node", "host", "port", "username", "use_tls", "use_ssl")
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        obj.__class__ = EmailOutbox
 
 
 class NodeRoleAdminForm(forms.ModelForm):
