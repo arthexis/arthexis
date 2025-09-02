@@ -43,6 +43,16 @@ def _changelog_notes(version: str) -> str:
 
 def _step_check_pypi(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
+    from packaging.version import Version
+
+    version_path = Path("VERSION")
+    if version_path.exists():
+        current = version_path.read_text(encoding="utf-8").strip()
+        if current and Version(release.version) < Version(current):
+            raise Exception(
+                f"Version {release.version} is older than existing {current}"
+            )
+    version_path.write_text(release.version + "\n", encoding="utf-8")
 
     _append_log(log_path, f"Checking if version {release.version} exists on PyPI")
     if release_utils.network_available():

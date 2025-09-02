@@ -138,3 +138,46 @@ def future_action_items(context):
             seen.add(ct.id)
 
     return items
+
+
+@register.simple_tag(takes_context=True)
+def filtered_app_list(context, app_list):
+    """Filter ``app_list`` to exclude models already shown in future actions.
+
+    Models that appear in the user's admin history, favorites or user data are
+    removed from the list to avoid duplicate links on the dashboard.
+    """
+
+    request = context.get("request")
+    user = getattr(request, "user", None)
+    if not user or not user.is_authenticated:
+        return app_list
+
+    seen = set(
+        user.admin_history.values_list("content_type_id", flat=True)[:10]
+    )
+    seen.update(user.favorites.values_list("content_type_id", flat=True))
+    seen.update(
+        UserDatum.objects.filter(user=user).values_list("content_type_id", flat=True)
+    )
+
+    filtered = []
+    for app in app_list:
+        models = []
+        for model in app.get("models", []):
+            try:
+                ct = ContentType.objects.get_by_natural_key(
+                    app["app_label"], model["object_name"].lower()
+                )
+            except ContentType.DoesNotExist:
+                models.append(model)
+                continue
+            if ct.id in seen:
+                continue
+            models.append(model)
+        if models:
+            new_app = app.copy()
+            new_app["models"] = models
+            filtered.append(new_app)
+
+    return filtered
