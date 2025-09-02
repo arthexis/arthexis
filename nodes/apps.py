@@ -12,11 +12,6 @@ from utils import revision
 def _startup_notification() -> None:
     """Queue a notification with host:port and version on a background thread."""
 
-    try:  # import here to avoid circular import during app loading
-        from core.notifications import notify
-    except Exception:  # pragma: no cover - failure shouldn't break startup
-        return
-
     host = socket.gethostname()
     try:
         address = socket.gethostbyname(host)
@@ -40,9 +35,13 @@ def _startup_notification() -> None:
     def _worker() -> None:  # pragma: no cover - background thread
         # Allow the LCD a moment to become ready and retry a few times
         for _ in range(5):
-            if notify(f"{address}:{port}", body):
+            try:
+                from nodes.models import NetMessage
+
+                NetMessage.broadcast(subject=f"{address}:{port}", body=body)
                 break
-            time.sleep(1)
+            except Exception:
+                time.sleep(1)
 
     threading.Thread(target=_worker, name="startup-notify", daemon=True).start()
 

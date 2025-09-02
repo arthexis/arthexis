@@ -417,12 +417,6 @@ class NetMessage(Entity):
         if local:
             all_nodes = all_nodes.exclude(pk=local.pk)
         total_known = all_nodes.count()
-        target_limit = total_known if total_known < 2 else 3
-
-        if self.propagated_to.count() >= target_limit:
-            self.complete = True
-            self.save(update_fields=["complete"])
-            return
 
         remaining = list(
             all_nodes.exclude(pk__in=self.propagated_to.values_list("pk", flat=True))
@@ -431,6 +425,8 @@ class NetMessage(Entity):
             self.complete = True
             self.save(update_fields=["complete"])
             return
+
+        target_limit = min(3, len(remaining))
 
         reach_name = self.reach.name if self.reach else "Terminal"
         role_map = {
@@ -447,9 +443,9 @@ class NetMessage(Entity):
             for n in role_nodes:
                 selected.append(n)
                 remaining.remove(n)
-                if len(selected) + self.propagated_to.count() >= target_limit:
+                if len(selected) >= target_limit:
                     break
-            if len(selected) + self.propagated_to.count() >= target_limit:
+            if len(selected) >= target_limit:
                 break
 
         seen_list = seen.copy()
@@ -487,9 +483,7 @@ class NetMessage(Entity):
                 pass
             self.propagated_to.add(node)
 
-        if self.propagated_to.count() >= target_limit or (
-            total_known and self.propagated_to.count() >= total_known
-        ):
+        if total_known and self.propagated_to.count() >= total_known:
             self.complete = True
         self.save(update_fields=["complete"] if self.complete else [])
 
