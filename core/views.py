@@ -86,6 +86,22 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
     )
     release.revision = commit_hash
     release.save(update_fields=["revision"])
+    diff = subprocess.run(
+        ["git", "status", "--porcelain", "core/fixtures/releases.json"],
+        capture_output=True,
+        text=True,
+    )
+    if diff.stdout.strip():
+        subprocess.run(["git", "add", "core/fixtures/releases.json"], check=True)
+        subprocess.run(
+            [
+                "git",
+                "commit",
+                "-m",
+                f"chore: update release fixture for v{release.version}",
+            ],
+            check=True,
+        )
     ctx["branch"] = branch
     release_name = f"{release.package.name}-{release.version}-{commit_hash[:7]}"
     new_log = log_path.with_name(f"{release_name}.log")
