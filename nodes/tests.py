@@ -769,6 +769,32 @@ class StartupNotificationTests(TestCase):
         self.assertTrue(kwargs["body"].startswith("v1.2.3 r"))
 
 
+class StartupHandlerTests(TestCase):
+    def test_handler_logs_db_errors(self):
+        from nodes.apps import _trigger_startup_notification
+        from django.db.utils import OperationalError
+
+        with patch("nodes.apps._startup_notification") as mock_start:
+            with patch("nodes.apps.connections") as mock_connections:
+                mock_connections.__getitem__.return_value.ensure_connection.side_effect = OperationalError(
+                    "fail"
+                )
+                with self.assertLogs("nodes.apps", level="ERROR") as log:
+                    _trigger_startup_notification()
+
+        mock_start.assert_not_called()
+        self.assertTrue(any("Startup notification skipped" in m for m in log.output))
+
+    def test_handler_calls_startup_notification(self):
+        from nodes.apps import _trigger_startup_notification
+
+        with patch("nodes.apps._startup_notification") as mock_start:
+            with patch("nodes.apps.connections") as mock_connections:
+                mock_connections.__getitem__.return_value.ensure_connection.return_value = None
+                _trigger_startup_notification()
+
+        mock_start.assert_called_once()
+
 class NotificationManagerTests(TestCase):
     def test_send_writes_trimmed_lines(self):
         from core.notifications import NotificationManager
