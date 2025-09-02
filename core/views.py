@@ -79,30 +79,41 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
     release.save(update_fields=["pypi_url"])
     PackageRelease.dump_fixture()
     _append_log(log_path, "Generating build files")
-    commit_hash, branch, _current = release_utils.promote(
+    commit_hash, branch, current = release_utils.promote(
         package=release.to_package(),
         version=release.version,
         creds=release.to_credentials(),
     )
     release.revision = commit_hash
     release.save(update_fields=["revision"])
+    subprocess.run(["git", "checkout", current], check=True)
+    subprocess.run(["git", "merge", "--ff-only", branch], check=True)
+    subprocess.run(["git", "branch", "-d", branch], check=True)
     diff = subprocess.run(
-        ["git", "status", "--porcelain", "core/fixtures/releases.json"],
+        [
+            "git",
+            "status",
+            "--porcelain",
+            "VERSION",
+            "core/fixtures/releases.json",
+        ],
         capture_output=True,
         text=True,
     )
     if diff.stdout.strip():
-        subprocess.run(["git", "add", "core/fixtures/releases.json"], check=True)
+        subprocess.run(
+            ["git", "add", "VERSION", "core/fixtures/releases.json"],
+            check=True,
+        )
         subprocess.run(
             [
                 "git",
                 "commit",
                 "-m",
-                f"chore: update release fixture for v{release.version}",
+                f"chore: update release metadata for v{release.version}",
             ],
             check=True,
         )
-    ctx["branch"] = branch
     release_name = f"{release.package.name}-{release.version}-{commit_hash[:7]}"
     new_log = log_path.with_name(f"{release_name}.log")
     log_path.rename(new_log)
@@ -110,122 +121,8 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
     _append_log(new_log, "Build complete")
 
 
-def _step_push_branch(release, ctx, log_path: Path) -> None:
-    branch = ctx.get("branch")
-    _append_log(log_path, f"Pushing branch {branch}")
-    subprocess.run(["git", "push", "-u", "origin", branch], check=True)
-    pr_url = None
-    gh_path = shutil.which("gh")
-    if gh_path:
-        try:
-            title = f"Release candidate for {release.version}"
-            body = _changelog_notes(release.version)
-            proc = subprocess.run(
-                [
-                    gh_path,
-                    "pr",
-                    "create",
-                    "--title",
-                    title,
-                    "--body",
-                    body,
-                    "--base",
-                    "main",
-                    "--head",
-                    branch,
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            pr_url = proc.stdout.strip()
-            ctx["pr_url"] = pr_url
-            release.pr_url = pr_url
-            release.save(update_fields=["pr_url"])
-            _append_log(log_path, f"PR created: {pr_url}")
-            cert_log = Path("logs") / "certifications.log"
-            _append_log(cert_log, f"{release.version} {branch} {pr_url}")
-            ctx["cert_log"] = str(cert_log)
-        except Exception as exc:  # pragma: no cover - best effort
-            _append_log(log_path, f"PR creation failed: {exc}")
-    else:
-        token = release.get_github_token()
-        if token:
-            try:  # pragma: no cover - best effort
-                remote = subprocess.run(
-                    ["git", "config", "--get", "remote.origin.url"],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                ).stdout.strip()
-                repo = remote.rsplit(":", 1)[-1].split("github.com/")[-1].removesuffix(".git")
-                title = f"Release candidate for {release.version}"
-                body = _changelog_notes(release.version)
-                resp = requests.post(
-                    f"https://api.github.com/repos/{repo}/pulls",
-                    json={
-                        "title": title,
-                        "head": branch,
-                        "base": "main",
-                        "body": body,
-                    },
-                    headers={"Authorization": f"token {token}"},
-                    timeout=10,
-                )
-                resp.raise_for_status()
-                pr_url = resp.json().get("html_url")
-                if pr_url:
-                    ctx["pr_url"] = pr_url
-                    release.pr_url = pr_url
-                    release.save(update_fields=["pr_url"])
-                    _append_log(log_path, f"PR created: {pr_url}")
-                    cert_log = Path("logs") / "certifications.log"
-                    _append_log(cert_log, f"{release.version} {branch} {pr_url}")
-                    ctx["cert_log"] = str(cert_log)
-                else:
-                    _append_log(log_path, "PR creation failed: no URL returned")
-            except Exception as exc:
-                _append_log(log_path, f"PR creation failed: {exc}")
-        else:
-            _append_log(
-                log_path,
-                "PR creation skipped: gh not installed and no GitHub token available",
-            )
-    subprocess.run(["git", "checkout", "main"], check=True)
-    _append_log(log_path, "Branch pushed")
-
-
-def _step_merge_publish(release, ctx, log_path: Path) -> None:
+def _step_publish(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
-    import time
-
-    gh_path = shutil.which("gh")
-    pr_url = ctx.get("pr_url") or release.pr_url
-    if gh_path and pr_url:
-        _append_log(log_path, "Waiting for PR checks")
-        for _ in range(60):
-            try:
-                proc = subprocess.run(
-                    [gh_path, "pr", "view", pr_url, "--json", "mergeable"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                state = json.loads(proc.stdout or "{}").get("mergeable")
-                if state == "MERGEABLE":
-                    break
-            except Exception:
-                pass
-            time.sleep(1)
-        _append_log(log_path, "Merging PR")
-        try:
-            subprocess.run(
-                [gh_path, "pr", "merge", pr_url, "--merge", "--delete-branch"],
-                check=True,
-            )
-            subprocess.run(["git", "pull", "--ff-only", "origin", "main"], check=True)
-        except Exception as exc:
-            _append_log(log_path, f"PR merge failed: {exc}")
 
     _append_log(log_path, "Uploading distribution")
     release_utils.publish(
@@ -239,8 +136,7 @@ def _step_merge_publish(release, ctx, log_path: Path) -> None:
 PUBLISH_STEPS = [
     ("Check version availability", _step_check_pypi),
     ("Generate build", _step_promote_build),
-    ("Push branch", _step_push_branch),
-    ("Merge and publish", _step_merge_publish),
+    ("Publish", _step_publish),
 ]
 
 
