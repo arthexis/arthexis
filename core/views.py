@@ -41,10 +41,30 @@ def _changelog_notes(version: str) -> str:
     return ""
 
 
+def _step_check_pypi(release, ctx, log_path: Path) -> None:
+    from . import release as release_utils
+
+    _append_log(log_path, f"Checking if version {release.version} exists on PyPI")
+    if release_utils.network_available():
+        try:
+            resp = requests.get(
+                f"https://pypi.org/pypi/{release.package.name}/json"
+            )
+            if resp.ok and release.version in resp.json().get("releases", {}):
+                raise Exception(
+                    f"Version {release.version} already on PyPI"
+                )
+        except Exception as exc:
+            # network errors should be logged but not crash
+            if "already on PyPI" in str(exc):
+                raise
+            _append_log(log_path, f"PyPI check failed: {exc}")
+    else:
+        _append_log(log_path, "Network unavailable, skipping PyPI check")
+
+
 def _step_promote_build(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
-    ver_path = Path("VERSION")
-    ver_path.write_text(release.version + "\n")
     release.pypi_url = f"https://pypi.org/project/{release.package.name}/{release.version}/"
     release.save(update_fields=["pypi_url"])
     PackageRelease.dump_fixture()
@@ -182,11 +202,16 @@ def _step_merge_publish(release, ctx, log_path: Path) -> None:
             _append_log(log_path, f"PR merge failed: {exc}")
 
     _append_log(log_path, "Uploading distribution")
-    release_utils.publish(package=release.to_package(), creds=release.to_credentials())
+    release_utils.publish(
+        package=release.to_package(),
+        version=release.version,
+        creds=release.to_credentials(),
+    )
     _append_log(log_path, "Upload complete")
 
 
 PUBLISH_STEPS = [
+    ("Check version availability", _step_check_pypi),
     ("Generate build", _step_promote_build),
     ("Push branch", _step_push_branch),
     ("Merge and publish", _step_merge_publish),

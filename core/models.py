@@ -1231,7 +1231,10 @@ class PackageRelease(Entity):
         from utils import revision as revision_utils
 
         release_utils.build(
-            package=self.to_package(), creds=self.to_credentials(), **kwargs
+            package=self.to_package(),
+            version=self.version,
+            creds=self.to_credentials(),
+            **kwargs,
         )
         self.revision = revision_utils.get_revision()
         self.save(update_fields=["revision"])

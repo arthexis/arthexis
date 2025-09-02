@@ -14,10 +14,12 @@ class PyPITokenTests(TestCase):
             mock.patch("core.release.network_available", return_value=False),
             mock.patch.object(release.Path, "exists", return_value=True),
             mock.patch.object(release.Path, "glob", return_value=[Path("dist/fake.whl")]),
-            mock.patch.object(release.Path, "read_text", return_value="0.1.1"),
-            mock.patch("core.release._run") as run,
+            mock.patch("core.release.subprocess.run") as run,
         ):
-            release.publish(creds=creds)
+            run.return_value.returncode = 0
+            run.return_value.stdout = ""
+            run.return_value.stderr = ""
+            release.publish(version="0.1.1", creds=creds)
         cmd = run.call_args[0][0]
         assert "__token__" in cmd
         assert "pypi-token" in cmd
@@ -35,11 +37,13 @@ class PyPITokenTests(TestCase):
             mock.patch("core.release.network_available", return_value=False),
             mock.patch.object(release.Path, "exists", return_value=True),
             mock.patch.object(release.Path, "glob", return_value=[Path("dist/fake.whl")]),
-            mock.patch.object(release.Path, "read_text", return_value="0.1.1"),
-            mock.patch("core.release._run") as run,
+            mock.patch("core.release.subprocess.run") as run,
             mock.patch("core.release._manager_credentials", return_value=profile),
         ):
-            release.publish()
+            run.return_value.returncode = 0
+            run.return_value.stdout = ""
+            run.return_value.stderr = ""
+            release.publish(version="0.1.1")
         cmd = run.call_args[0][0]
         assert "__token__" in cmd
         assert "profile-token" in cmd
