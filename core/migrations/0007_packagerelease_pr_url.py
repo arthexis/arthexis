@@ -137,4 +137,13 @@ class Migration(migrations.Migration):
                 max_length=40,
             ),
         ),
+        migrations.AddField(
+            model_name="rfid",
+            name="kind",
+            field=models.CharField(
+                default="CLASSIC",
+                max_length=8,
+                choices=[("CLASSIC", "MIFARE Classic"), ("NTAG215", "NTAG215")],
+            ),
+        ),
     ]

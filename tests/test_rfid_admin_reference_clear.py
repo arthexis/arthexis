@@ -38,6 +38,7 @@ class RFIDAdminReferenceClearTests(TestCase):
             "key_b": self.rfid.key_b,
             "allowed": "on" if self.rfid.allowed else "",
             "color": self.rfid.color,
+            "kind": self.rfid.kind,
             "released": "on" if self.rfid.released else "",
             "reference": "",
             "_save": "Save",
