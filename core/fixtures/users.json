@@ -1,7 +1,7 @@
 [
   {
     "model": "core.user",
-    "pk": 2,
+    "pk": 1,
     "fields": {
       "username": "arthexis",
       "email": "arthexis@gmail.com",

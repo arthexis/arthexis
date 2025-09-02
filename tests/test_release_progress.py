@@ -20,7 +20,7 @@ from core.models import Package, PackageRelease
 class ReleaseProgressTests(TestCase):
     def setUp(self):
         User = get_user_model()
-        self.admin, _ = User.objects.get_or_create(
+        self.admin, _ = User.all_objects.get_or_create(
             username="admin",
             defaults={"email": "a@example.com", "is_superuser": True, "is_staff": True},
         )

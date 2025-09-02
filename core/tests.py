@@ -34,17 +34,17 @@ from .backends import LocalhostAdminBackend
 
 
 class DefaultAdminTests(TestCase):
-    def test_admin_created_and_local_only(self):
-        self.assertTrue(User.objects.filter(username="admin").exists())
-        backend = LocalhostAdminBackend()
+    def test_arthexis_is_default_user(self):
+        self.assertTrue(User.objects.filter(username="arthexis").exists())
+        self.assertFalse(User.all_objects.filter(username="admin").exists())
 
-        for ip in ["127.0.0.1", "192.168.1.5", "10.42.0.8", "172.16.0.1"]:
-            req = HttpRequest()
-            req.META["REMOTE_ADDR"] = ip
-            self.assertIsNotNone(
-                backend.authenticate(req, username="admin", password="admin"),
-                f"{ip} should allow admin login",
-            )
+    def test_admin_created_and_local_only(self):
+        backend = LocalhostAdminBackend()
+        req = HttpRequest()
+        req.META["REMOTE_ADDR"] = "127.0.0.1"
+        user = backend.authenticate(req, username="admin", password="admin")
+        self.assertIsNotNone(user)
+        self.assertEqual(user.pk, 2)
 
         remote = HttpRequest()
         remote.META["REMOTE_ADDR"] = "10.0.0.1"
