@@ -62,7 +62,12 @@ class ReleaseProgressTests(TestCase):
         self.assertContains(resp, "All steps completed")
         self.assertContains(
             resp,
-            '<a href="http://example.com/pr/1" target="_blank">http://example.com/pr/1</a>',
+            '<a href="http://example.com/pr/1" target="_blank" rel="noopener">http://example.com/pr/1</a>',
+            html=True,
+        )
+        self.assertContains(
+            resp,
+            '<a href="https://pypi.org/project/pkg/1.0.0/" target="_blank" rel="noopener">https://pypi.org/project/pkg/1.0.0/</a>',
             html=True,
         )
         release.refresh_from_db()
@@ -94,6 +99,11 @@ class ReleaseProgressTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "All steps completed")
         self.assertIsNone(resp.context["pr_url"])
+        self.assertContains(
+            resp,
+            '<a href="https://pypi.org/project/pkg/1.1.0/" target="_blank" rel="noopener">https://pypi.org/project/pkg/1.1.0/</a>',
+            html=True,
+        )
         release.refresh_from_db()
         self.assertTrue(release.is_published)
         pub.assert_called_once()
