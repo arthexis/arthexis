@@ -16,7 +16,7 @@ from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.core.mail import send_mail
 from django.utils.translation import gettext as _
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 
 import markdown
 from pages.utils import landing
@@ -116,6 +116,7 @@ login_view = CustomLoginView.as_view()
 class InvitationRequestForm(forms.Form):
     email = forms.EmailField()
 
+@csrf_exempt
 @ensure_csrf_cookie
 def request_invite(request):
     form = InvitationRequestForm(request.POST if request.method == "POST" else None)

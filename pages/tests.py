@@ -87,6 +87,13 @@ class InvitationTests(TestCase):
         resp = self.client.get(reverse("pages:request-invite"))
         self.assertIn("csrftoken", resp.cookies)
 
+    def test_request_invite_allows_post_without_csrf(self):
+        client = Client(enforce_csrf_checks=True)
+        resp = client.post(
+            reverse("pages:request-invite"), {"email": "invite@example.com"}
+        )
+        self.assertEqual(resp.status_code, 200)
+
     def test_invitation_flow(self):
         resp = self.client.post(
             reverse("pages:request-invite"), {"email": "invite@example.com"}
