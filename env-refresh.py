@@ -216,8 +216,11 @@ def run_database_tasks(*, latest: bool = False) -> None:
 
     fixtures = _fixture_files()
     if fixtures:
+        # Process user fixtures first so foreign key references can be updated
+        fixtures.sort(key=lambda n: 0 if n.endswith("users.json") else 1)
         with tempfile.TemporaryDirectory() as tmpdir:
             patched: list[str] = []
+            user_pk_map: dict[int, int] = {}
             for name in fixtures:
                 source = Path(settings.BASE_DIR, name)
                 with source.open() as f:
@@ -229,6 +232,22 @@ def run_database_tasks(*, latest: bool = False) -> None:
                         model = apps.get_model(model_label)
                     except LookupError:
                         continue
+                    # Update existing users instead of loading duplicates and
+                    # record their primary key mapping for later references.
+                    if model is get_user_model():
+                        username = obj.get("fields", {}).get("username")
+                        existing = None
+                        if username:
+                            existing = get_user_model().objects.filter(username=username).first()
+                        if existing:
+                            user_pk_map[obj.get("pk")] = existing.pk
+                            for field, value in obj.get("fields", {}).items():
+                                setattr(existing, field, value)
+                            existing.save()
+                            continue
+                    fields = obj.get("fields", {})
+                    if "user" in fields and isinstance(fields["user"], int):
+                        fields["user"] = user_pk_map.get(fields["user"], fields["user"])
                     if model is PackageRelease:
                         version = obj.get("fields", {}).get("version")
                         if version and PackageRelease.objects.filter(version=version).exists():
@@ -239,7 +258,8 @@ def run_database_tasks(*, latest: bool = False) -> None:
                 dest = Path(tmpdir, Path(name).name)
                 with dest.open("w") as f:
                     json.dump(patched_data, f)
-                patched.append(str(dest))
+                if patched_data:
+                    patched.append(str(dest))
             post_save.disconnect(_create_landings, sender=Module)
             try:
                 call_command("loaddata", *patched)
