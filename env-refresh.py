@@ -130,7 +130,7 @@ def _refresh_next_release(version: str = "0.1.2") -> None:
     )
 
 
-def run_database_tasks(*, latest: bool = False) -> None:
+def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     """Run all database related maintenance steps."""
     default_db = settings.DATABASES["default"]
     using_sqlite = default_db["ENGINE"] == "django.db.backends.sqlite3"
@@ -155,7 +155,7 @@ def run_database_tasks(*, latest: bool = False) -> None:
     new_hash = _migration_hash(local_apps)
     stored_hash = hash_file.read_text().strip() if hash_file.exists() else ""
 
-    if latest:
+    if clean:
         if stored_hash and stored_hash != new_hash:
             if using_sqlite:
                 _unlink_sqlite_db(Path(default_db["NAME"]))
@@ -334,11 +334,11 @@ def run_database_tasks(*, latest: bool = False) -> None:
 TASKS = {"database": run_database_tasks}
 
 
-def main(selected: list[str] | None = None, *, latest: bool = False) -> None:
+def main(selected: list[str] | None = None, *, latest: bool = False, clean: bool = False) -> None:
     """Run the selected maintenance tasks."""
     to_run = selected or list(TASKS)
     for name in to_run:
-        TASKS[name](latest=latest)
+        TASKS[name](latest=latest, clean=clean)
 
 
 if __name__ == "__main__":
@@ -349,6 +349,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--latest", action="store_true", help="Force rebuild if migrations changed"
     )
+    parser.add_argument(
+        "--clean", action="store_true", help="Reset database before applying migrations"
+    )
     args = parser.parse_args()
-    main(args.tasks, latest=args.latest)
+    main(args.tasks, latest=args.latest, clean=args.clean)
 
