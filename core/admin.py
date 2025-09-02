@@ -17,6 +17,7 @@ from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
 from django.contrib.auth.models import Group
+from django.templatetags.static import static
 from django.utils.html import format_html
 import json
 import uuid
@@ -808,18 +809,18 @@ class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
     publish_release_action.short_description = "Publish this release"
 
     @staticmethod
-    def _checkbox(value: bool) -> str:
-        return format_html(
-            '<input type="checkbox"{} disabled>', " checked" if value else ""
-        )
+    def _boolean_icon(value: bool) -> str:
+        icon = static("admin/img/icon-yes.svg" if value else "admin/img/icon-no.svg")
+        alt = "True" if value else "False"
+        return format_html('<img src="{}" alt="{}">', icon, alt)
 
     @admin.display(description="Published")
     def published_status(self, obj):
-        return self._checkbox(obj.is_published)
+        return self._boolean_icon(obj.is_published)
 
     @admin.display(description="Is current")
     def is_current(self, obj):
-        return self._checkbox(obj.is_current)
+        return self._boolean_icon(obj.is_current)
 
     def pr_link(self, obj):
         if obj.pr_url:
