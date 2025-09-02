@@ -21,6 +21,7 @@ from django.utils.html import format_html
 import json
 import uuid
 from django_object_actions import DjangoObjectActions
+from .user_data import UserDatumAdminMixin
 from .models import (
     User,
     EnergyAccount,
@@ -241,7 +242,8 @@ class UserAdmin(DjangoUserAdmin):
 
 
 @admin.register(Address)
-class AddressAdmin(admin.ModelAdmin):
+class AddressAdmin(UserDatumAdminMixin, admin.ModelAdmin):
+    change_form_template = "admin/user_datum_change_form.html"
     list_display = ("street", "number", "municipality", "state", "postal_code")
     search_fields = ("street", "municipality", "postal_code")
 
@@ -275,7 +277,8 @@ class OdooProfileAdminForm(forms.ModelForm):
 
 
 @admin.register(OdooProfile)
-class OdooProfileAdmin(admin.ModelAdmin):
+class OdooProfileAdmin(UserDatumAdminMixin, admin.ModelAdmin):
+    change_form_template = "admin/user_datum_change_form.html"
     form = OdooProfileAdminForm
     list_display = ("user", "host", "database", "verified_on")
     readonly_fields = ("verified_on", "odoo_uid", "name", "email")

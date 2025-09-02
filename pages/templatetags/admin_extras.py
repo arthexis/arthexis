@@ -5,7 +5,10 @@ import textwrap
 from django import template
 from django.apps import apps
 from django.contrib import admin
+from django.contrib.contenttypes.models import ContentType
 from django.urls import NoReverseMatch, reverse
+
+from core.user_data import UserDatum
 
 register = template.Library()
 
@@ -72,3 +75,23 @@ def model_admin_actions(context, app_label, model_name):
                 )
         actions.append({"url": url, "label": description or _name.replace("_", " ")})
     return actions
+
+
+@register.simple_tag
+def admin_changelist_url(ct: ContentType) -> str:
+    """Return the admin changelist URL for the given content type."""
+    try:
+        return reverse(f"admin:{ct.app_label}_{ct.model}_changelist")
+    except NoReverseMatch:
+        return ""
+
+
+@register.simple_tag(takes_context=True)
+def user_data_content_types(context):
+    """Return content types for which the current user has User Data."""
+    request = context.get("request")
+    user = getattr(request, "user", None)
+    if not user or not user.is_authenticated:
+        return []
+    ct_ids = UserDatum.objects.filter(user=user).values_list("content_type_id", flat=True)
+    return ContentType.objects.filter(id__in=ct_ids)
