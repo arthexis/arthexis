@@ -28,12 +28,10 @@ class PackageReleaseAdminActionsTests(TestCase):
 
     def test_change_page_contains_publish_action(self):
         change_url = reverse("admin:core_packagerelease_change", args=[self.release.pk])
-        action_url = reverse(
-            "admin:core_packagerelease_actions",
-            args=[self.release.pk, "publish_release_action"],
-        )
         resp = self.client.get(change_url)
-        self.assertContains(resp, action_url)
+        self.assertContains(
+            resp, 'name="_action" value="publish_release_action"'
+        )
 
     def test_publish_action_redirects(self):
         url = reverse(
@@ -44,6 +42,21 @@ class PackageReleaseAdminActionsTests(TestCase):
         self.assertRedirects(
             resp, reverse("release-progress", args=[self.release.pk, "publish"])
         )
+
+    def test_publish_action_saves_changes_before_execution(self):
+        change_url = reverse("admin:core_packagerelease_change", args=[self.release.pk])
+        data = {
+            "package": self.package.pk,
+            "release_manager": "",
+            "version": "1.0.1",
+            "_action": "publish_release_action",
+        }
+        resp = self.client.post(change_url, data)
+        self.assertRedirects(
+            resp, reverse("release-progress", args=[self.release.pk, "publish"])
+        )
+        self.release.refresh_from_db()
+        self.assertEqual(self.release.version, "1.0.1")
 
     def test_change_page_pypi_url_readonly(self):
         change_url = reverse("admin:core_packagerelease_change", args=[self.release.pk])

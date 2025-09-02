@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
 from django.urls import path, reverse
 from django.shortcuts import redirect, render
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseBase
 from django.template.response import TemplateResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
@@ -48,6 +48,19 @@ from .user_data import UserDatumAdminMixin
 
 
 admin.site.unregister(Group)
+
+
+class SaveBeforeChangeAction(DjangoObjectActions):
+    def response_change(self, request, obj):
+        action = request.POST.get("_action")
+        if action:
+            allowed = self.get_change_actions(request, str(obj.pk), None)
+            if action in allowed and hasattr(self, action):
+                response = getattr(self, action)(request, obj)
+                if isinstance(response, HttpResponseBase):
+                    return response
+                return redirect(request.path)
+        return super().response_change(request, obj)
 
 
 @admin.register(Reference)
@@ -132,7 +145,7 @@ class ReleaseManagerAdmin(admin.ModelAdmin):
 
 
 @admin.register(Package)
-class PackageAdmin(DjangoObjectActions, admin.ModelAdmin):
+class PackageAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
     list_display = ("name", "description", "homepage_url", "release_manager")
     actions = ["prepare_next_release"]
     change_actions = ["prepare_next_release_action"]
@@ -756,7 +769,7 @@ class RFIDAdmin(ImportExportModelAdmin):
 
 
 @admin.register(PackageRelease)
-class PackageReleaseAdmin(DjangoObjectActions, admin.ModelAdmin):
+class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
     list_display = (
         "version",
         "package",
