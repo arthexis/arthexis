@@ -206,6 +206,7 @@ class Favorite(Entity):
     )
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     custom_label = models.CharField(max_length=100, blank=True)
+    user_data = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ("user", "content_type")
