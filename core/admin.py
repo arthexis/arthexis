@@ -660,6 +660,7 @@ class RFIDResource(resources.ModelResource):
             "reference",
             "allowed",
             "color",
+            "kind",
             "released",
             "last_seen_on",
         )
@@ -696,6 +697,7 @@ class RFIDAdmin(ImportExportModelAdmin):
         "label_id",
         "rfid",
         "color",
+        "kind",
         "released",
         "energy_accounts_display",
         "allowed",

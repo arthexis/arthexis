@@ -754,6 +754,17 @@ class RFID(Entity):
         choices=COLOR_CHOICES,
         default=BLACK,
     )
+    CLASSIC = "CLASSIC"
+    NTAG215 = "NTAG215"
+    KIND_CHOICES = [
+        (CLASSIC, "MIFARE Classic"),
+        (NTAG215, "NTAG215"),
+    ]
+    kind = models.CharField(
+        max_length=8,
+        choices=KIND_CHOICES,
+        default=CLASSIC,
+    )
     reference = models.ForeignKey(
         "Reference",
         null=True,
@@ -780,6 +791,8 @@ class RFID(Entity):
             self.key_a = self.key_a.upper()
         if self.key_b:
             self.key_b = self.key_b.upper()
+        if self.kind:
+            self.kind = self.kind.upper()
         super().save(*args, **kwargs)
         if not self.allowed:
             self.energy_accounts.clear()

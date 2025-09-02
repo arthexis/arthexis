@@ -50,8 +50,16 @@ def read_rfid(
             if status == mfrc.MI_OK:
                 (status, uid) = mfrc.MFRC522_Anticoll()
                 if status == mfrc.MI_OK:
-                    rfid = "".join(f"{x:02X}" for x in uid[:5])
-                    tag, created = RFID.objects.get_or_create(rfid=rfid)
+                    uid_bytes = uid or []
+                    rfid = "".join(f"{x:02X}" for x in uid_bytes)
+                    kind = RFID.NTAG215 if len(uid_bytes) > 5 else RFID.CLASSIC
+                    defaults = {"kind": kind}
+                    tag, created = RFID.objects.get_or_create(
+                        rfid=rfid, defaults=defaults
+                    )
+                    if tag.kind != kind:
+                        tag.kind = kind
+                        tag.save(update_fields=["kind"])
                     tag.last_seen_on = timezone.now()
                     tag.save(update_fields=["last_seen_on"])
                     result = {
@@ -62,8 +70,9 @@ def read_rfid(
                         "allowed": tag.allowed,
                         "released": tag.released,
                         "reference": tag.reference.value if tag.reference else None,
+                        "kind": tag.kind,
                     }
-                    if time.time() < _deep_read_until:
+                    if tag.kind == RFID.CLASSIC and time.time() < _deep_read_until:
                         dump = []
                         default_key = [0xFF] * 6
                         for block in range(64):

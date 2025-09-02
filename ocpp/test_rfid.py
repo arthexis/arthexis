@@ -21,11 +21,27 @@ from ocpp.rfid.reader import read_rfid, enable_deep_read
 class ScanNextViewTests(SimpleTestCase):
     @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")
-    @patch("ocpp.rfid.views.scan_sources", return_value={"rfid": "ABCD1234", "label_id": 1, "created": False})
+    @patch(
+        "ocpp.rfid.views.scan_sources",
+        return_value={
+            "rfid": "ABCD1234",
+            "label_id": 1,
+            "created": False,
+            "kind": RFID.CLASSIC,
+        },
+    )
     def test_scan_next_success(self, mock_scan, mock_site, mock_node):
         resp = self.client.get(reverse("rfid-scan-next"))
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json(), {"rfid": "ABCD1234", "label_id": 1, "created": False})
+        self.assertEqual(
+            resp.json(),
+            {
+                "rfid": "ABCD1234",
+                "label_id": 1,
+                "created": False,
+                "kind": RFID.CLASSIC,
+            },
+        )
 
     @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")
@@ -66,6 +82,7 @@ class ReaderNotificationTests(TestCase):
 
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
         self.assertEqual(result["label_id"], 1)
+        self.assertEqual(result["kind"], RFID.CLASSIC)
         self.assertEqual(result["reference"], "https://example.com")
         self.assertEqual(mock_notify.call_count, 1)
         mock_notify.assert_has_calls(
@@ -86,10 +103,34 @@ class ReaderNotificationTests(TestCase):
         mock_get.return_value = (tag, False)
 
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
+        self.assertEqual(result["kind"], RFID.CLASSIC)
         self.assertEqual(mock_notify.call_count, 1)
         mock_notify.assert_has_calls(
             [call("RFID 2 BAD", f"{result['rfid']} B")]
         )
+
+
+class CardTypeDetectionTests(TestCase):
+    def _mock_ntag_reader(self):
+        class MockReader:
+            MI_OK = 1
+            PICC_REQIDL = 0
+
+            def MFRC522_Request(self, _):
+                return (self.MI_OK, None)
+
+            def MFRC522_Anticoll(self):
+                return (
+                    self.MI_OK,
+                    [0x04, 0xD3, 0x2A, 0x1B, 0x5F, 0x23, 0x19],
+                )
+
+        return MockReader()
+
+    @patch("ocpp.rfid.reader.notify_async")
+    def test_detects_ntag215(self, _mock_notify):
+        result = read_rfid(mfrc=self._mock_ntag_reader(), cleanup=False)
+        self.assertEqual(result["kind"], RFID.NTAG215)
 
 
 class RFIDLastSeenTests(TestCase):
@@ -109,9 +150,10 @@ class RFIDLastSeenTests(TestCase):
     @patch("ocpp.rfid.reader.notify_async")
     def test_last_seen_updated_on_read(self, _mock_notify):
         tag = RFID.objects.create(rfid="ABCD1234")
-        read_rfid(mfrc=self._mock_reader(), cleanup=False)
+        result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
         tag.refresh_from_db()
         self.assertIsNotNone(tag.last_seen_on)
+        self.assertEqual(result["kind"], RFID.CLASSIC)
 
 
 class RestartViewTests(SimpleTestCase):
@@ -183,12 +225,14 @@ class ScannerTemplateTests(TestCase):
         staff = User.objects.create_user("staff2", password="pwd", is_staff=True)
         self.client.force_login(staff)
         resp = self.client.get(self.url)
+        self.assertContains(resp, 'id="rfid-kind"')
         self.assertContains(resp, 'id="rfid-rfid"')
         self.assertContains(resp, 'id="rfid-released"')
         self.assertContains(resp, 'id="rfid-reference"')
 
     def test_basic_fields_for_public(self):
         resp = self.client.get(self.url)
+        self.assertContains(resp, 'id="rfid-kind"')
         self.assertNotContains(resp, 'id="rfid-rfid"')
         self.assertNotContains(resp, 'id="rfid-released"')
         self.assertNotContains(resp, 'id="rfid-reference"')

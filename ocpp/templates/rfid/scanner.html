@@ -9,6 +9,7 @@
     {% endif %}
   </p>
   <div class="field"><span class="label">Label:</span><span class="value" id="{{ prefix }}-label"></span></div>
+  <div class="field"><span class="label">Type:</span><span class="value" id="{{ prefix }}-kind"></span></div>
   <div class="field"><span class="label">Color:</span><span class="value" id="{{ prefix }}-color"></span></div>
   <div class="field"><span class="label">Valid:</span><span class="value" id="{{ prefix }}-allowed"></span></div>
   {% if request.user.is_staff %}
@@ -39,6 +40,7 @@
 (function(){
   const statusEl = document.getElementById('{{ prefix }}-status');
   const labelEl = document.getElementById('{{ prefix }}-label');
+  const kindEl = document.getElementById('{{ prefix }}-kind');
   const colorEl = document.getElementById('{{ prefix }}-color');
   const allowedEl = document.getElementById('{{ prefix }}-allowed');
   const rfidEl = document.getElementById('{{ prefix }}-rfid');
@@ -63,6 +65,7 @@
         return;
       } else if(data.rfid){
         labelEl.textContent = data.label_id;
+        if(kindEl){ kindEl.textContent = data.kind || ''; }
         if(rfidEl){ rfidEl.textContent = data.rfid || ''; }
         colorEl.textContent = data.color || '';
         allowedEl.textContent = data.allowed === undefined ? '' : (data.allowed ? 'Yes' : 'No');
