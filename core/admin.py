@@ -38,7 +38,7 @@ from .models import (
     Reference,
     OdooProfile,
     FediverseProfile,
-    EmailInbox,
+    EmailInbox as CoreEmailInbox,
     Package,
     PackageRelease,
     ReleaseManager,
@@ -380,6 +380,14 @@ class FediverseProfileAdmin(admin.ModelAdmin):
                 self.message_user(request, f"{profile}: {exc}", level=messages.ERROR)
 
 
+class EmailInbox(CoreEmailInbox):
+    class Meta:
+        proxy = True
+        app_label = "post_office"
+        verbose_name = CoreEmailInbox._meta.verbose_name
+        verbose_name_plural = CoreEmailInbox._meta.verbose_name_plural
+
+
 class EmailInboxAdminForm(forms.ModelForm):
     """Admin form for :class:`core.models.EmailInbox` with hidden password."""
 
@@ -390,7 +398,7 @@ class EmailInboxAdminForm(forms.ModelForm):
     )
 
     class Meta:
-        model = EmailInbox
+        model = CoreEmailInbox
         fields = "__all__"
 
     def __init__(self, *args, **kwargs):
@@ -444,6 +452,10 @@ class EmailInboxAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        obj.__class__ = EmailInbox
 
     @admin.action(description="Test selected inboxes")
     def test_connection(self, request, queryset):
