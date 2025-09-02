@@ -50,9 +50,12 @@ class ReleaseProgressTests(TestCase):
         with patch("core.views.release_utils.promote", return_value=(commit_hash, "branch", "main")), \
              patch("core.views.release_utils.publish") as pub, \
              patch("core.views.shutil.which", return_value="/usr/bin/gh"), \
+             patch("core.views.requests.get") as req_get, \
              patch("core.views.subprocess.run", side_effect=run_side_effect):
+            req_get.return_value.ok = True
+            req_get.return_value.json.return_value = {"releases": {}}
             resp = self.client.get(url)
-            for i in range(3):
+            for i in range(4):
                 resp = self.client.get(f"{url}?step={i}")
 
         self.assertEqual(resp.status_code, 200)
@@ -80,9 +83,12 @@ class ReleaseProgressTests(TestCase):
         with patch("core.views.release_utils.promote", return_value=(commit_hash, "branch", "main")), \
              patch("core.views.release_utils.publish") as pub, \
              patch("core.views.shutil.which", return_value=None), \
+             patch("core.views.requests.get") as req_get, \
              patch("core.views.subprocess.run", side_effect=run_side_effect):
+            req_get.return_value.ok = True
+            req_get.return_value.json.return_value = {"releases": {}}
             resp = self.client.get(url)
-            for i in range(3):
+            for i in range(4):
                 resp = self.client.get(f"{url}?step={i}")
 
         self.assertEqual(resp.status_code, 200)

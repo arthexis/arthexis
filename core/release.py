@@ -242,6 +242,7 @@ def update_changelog(version: str, revision: str, prev_revision: Optional[str] =
 @requires_network
 def build(
     *,
+    version: Optional[str] = None,
     bump: bool = False,
     tests: bool = False,
     dist: bool = False,
@@ -267,16 +268,16 @@ def build(
                 "Git repository is not clean. Commit, stash, or enable auto stash before building."
             )
 
-    version_path = Path("VERSION")
-    if not version_path.exists():
-        raise ReleaseError("VERSION file not found")
-    current_version = version_path.read_text().strip()
-    if bump:
-        major, minor, patch = map(int, current_version.split("."))
-        patch += 1
-        current_version = f"{major}.{minor}.{patch}"
-        version_path.write_text(current_version + "\n")
-    version = current_version
+    if version is None:
+        version_path = Path("VERSION")
+        if not version_path.exists():
+            raise ReleaseError("VERSION file not found")
+        version = version_path.read_text().strip()
+        if bump:
+            major, minor, patch = map(int, version.split("."))
+            patch += 1
+            version = f"{major}.{minor}.{patch}"
+            version_path.write_text(version + "\n")
 
     requirements = [
         line.strip()
@@ -377,6 +378,7 @@ def promote(
             stashed = True
         build(
             package=package,
+            version=version,
             creds=creds,
             tests=False,
             dist=True,
@@ -416,9 +418,10 @@ def promote(
     return commit_hash, branch, current
 
 
-def publish(*, package: Package = DEFAULT_PACKAGE, creds: Optional[Credentials] = None) -> None:
+def publish(
+    *, package: Package = DEFAULT_PACKAGE, version: str, creds: Optional[Credentials] = None
+) -> None:
     """Upload the existing distribution to PyPI."""
-    version = Path("VERSION").read_text().strip()
     if network_available():
         try:  # pragma: no cover - requests optional
             import requests  # type: ignore
@@ -443,4 +446,6 @@ def publish(*, package: Package = DEFAULT_PACKAGE, creds: Optional[Credentials] 
         cmd += creds.twine_args()
     except ValueError:
         raise ReleaseError("Missing PyPI credentials")
-    _run(cmd)
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise ReleaseError(proc.stdout + proc.stderr)
