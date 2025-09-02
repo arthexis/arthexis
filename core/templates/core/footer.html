@@ -7,14 +7,14 @@
       </div>
     {% endfor %}
   </div>
+  <div class="text-center border-top mt-3 pt-3 pb-3">
+    <div class="text-muted fs-6">
+      {% if request.user.is_staff and release_url %}
+        <a href="{{ release_url }}">{{ release_name }}</a>
+      {% else %}
+        {{ release_name }}
+      {% endif %}
+      {% if fresh_since %} fresh since {{ fresh_since }}{% endif %}
+    </div>
+  </div>
 </footer>
-<div class="text-center mt-1">
-  <small class="text-muted">
-    {% if request.user.is_staff and release_url %}
-      <a href="{{ release_url }}">{{ release_name }}</a>
-    {% else %}
-      {{ release_name }}
-    {% endif %}
-    {% if fresh_since %} fresh since {{ fresh_since }}{% endif %}
-  </small>
-</div>
