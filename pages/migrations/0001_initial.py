@@ -196,6 +196,7 @@ class Migration(migrations.Migration):
                 ("is_seed_data", models.BooleanField(default=False, editable=False)),
                 ("is_deleted", models.BooleanField(default=False, editable=False)),
                 ("custom_label", models.CharField(blank=True, max_length=100)),
+                ("user_data", models.BooleanField(default=False)),
                 (
                     "content_type",
                     models.ForeignKey(

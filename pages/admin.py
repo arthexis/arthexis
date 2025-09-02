@@ -174,13 +174,25 @@ def favorite_toggle(request, ct_id):
         return redirect("admin:favorite_list")
     if request.method == "POST":
         label = request.POST.get("custom_label", "").strip()
-        Favorite.objects.create(user=request.user, content_type=ct, custom_label=label)
+        user_data = request.POST.get("user_data") == "on"
+        Favorite.objects.create(
+            user=request.user,
+            content_type=ct,
+            custom_label=label,
+            user_data=user_data,
+        )
         return redirect("admin:index")
     return render(request, "admin/favorite_confirm.html", {"content_type": ct})
 
 
 def favorite_list(request):
     favorites = Favorite.objects.filter(user=request.user).select_related("content_type")
+    if request.method == "POST":
+        selected = request.POST.getlist("user_data")
+        for fav in favorites:
+            fav.user_data = str(fav.pk) in selected
+            fav.save(update_fields=["user_data"])
+        return redirect("admin:favorite_list")
     return render(request, "admin/favorite_list.html", {"favorites": favorites})
 
 

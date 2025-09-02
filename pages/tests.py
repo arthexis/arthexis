@@ -593,10 +593,11 @@ class FavoriteTests(TestCase):
     def test_add_favorite(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
         url = reverse("admin:favorite_toggle", args=[ct.id])
-        resp = self.client.post(url, {"custom_label": "Apps"})
+        resp = self.client.post(url, {"custom_label": "Apps", "user_data": "on"})
         self.assertRedirects(resp, reverse("admin:index"))
         fav = Favorite.objects.get(user=self.user, content_type=ct)
         self.assertEqual(fav.custom_label, "Apps")
+        self.assertTrue(fav.user_data)
 
     def test_existing_favorite_redirects_to_list(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
@@ -606,6 +607,15 @@ class FavoriteTests(TestCase):
         self.assertRedirects(resp, reverse("admin:favorite_list"))
         resp = self.client.get(reverse("admin:favorite_list"))
         self.assertContains(resp, ct.name)
+
+    def test_update_user_data_from_list(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        fav = Favorite.objects.create(user=self.user, content_type=ct)
+        url = reverse("admin:favorite_list")
+        resp = self.client.post(url, {"user_data": [str(fav.pk)]})
+        self.assertRedirects(resp, url)
+        fav.refresh_from_db()
+        self.assertTrue(fav.user_data)
 
     def test_dashboard_includes_favorites_and_user_data(self):
         fav_ct = ContentType.objects.get_by_natural_key("pages", "application")
