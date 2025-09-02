@@ -4,6 +4,53 @@ Changelog
 Unreleased
 ----------
 
+0.1.3 [revision b5cb8bcb149e8dabd3a9cd14f8c196950cadd132]
+---------------------------------------------------------
+
+- 2c66556 Add user data flag to favorites
+- 29d052f fix: add twine to release requirements
+- 1414209 Handle missing users in personal fixtures
+- bfce09a Replace default admin with arthexis user
+- e2ae47d Fix duplicate user fixture during env refresh
+- d253c6f Add RFID card type support
+- 6bc9023 Refactor Celery task setup
+- 1087002 Defer startup notification until request
+- fbd12da Create admin with privileges in backend test
+- ddb1765 Mock subprocess run in publish tests
+- 98baeb9 Remove unused node list columns from admin
+- 53fa536 Propagate NetMessage to three peers and local display
+- f19100c Rename PostgreSQL setup script to db-setup
+- f2893cf Handle SQLite file locks during env refresh
+- 1f3d6a4 fix: enable save-as-copy and user datum admin
+- 5bd6f5b fix(admin): display user datum controls
+- cb4e300 Use NetMessage for startup notification
+- ca6f9aa feat(admin): display last network message
+- 937b630 feat: auto-resolving sigil fields
+- 46d6a57 Add admin favorites
+- 98625e8 fix: enforce unique package name and auto revision
+- be6f981 test: cover prepare next release version
+- 404269b Handle deleted release versions when preparing next
+- d502c4d Add environment view and template
+- a175d80 Expose release currency indicator
+- a6c4b8a Expand acronym list and allow plural capitalization
+- 7fe8278 Mark PyPI and PR URLs read-only
+- 44b558d fix: clean up NetMessage metadata
+- d706f5c Add detailed Email Outbox guidance
+- 9c3f3e2 Prepare release bumps patch version
+- 636a767 Store releases as fixtures and add deletion cleanup
+- 9dbc795 Display release status fields as read-only
+- bfdb0b3 admin: show release status checkboxes
+- 1f364dc Fix twine upload file handling
+- 4a22fae Remove beta application
+- 325858b Rename Packager Profile model to Release Manager
+- 39213db Ensure releases retain PR link and promotion status
+- 65dd958 Add system status admin page
+- 2396ca5 Clarify PyPI credentials in packager profile
+- c9ff100 Improve release promotion workflow and certification
+- f4f2afa Enable user data for all models and update sample game
+- edeaa58 Add fixture for 0.1.1
+- 17598dc Release v0.1.1
+
 0.1.1 [revision 795ee9c781bb241a50713e15bba4737534906ca4]
 ---------------------------------------------------------
 
