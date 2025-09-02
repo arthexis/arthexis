@@ -11,6 +11,7 @@ from pathlib import Path
 import json
 import tempfile
 import hashlib
+import time
 
 import django
 import importlib.util
@@ -38,6 +39,21 @@ from django.contrib.auth import get_user_model
 from core.user_data import UserDatum
 from core.models import Package, PackageRelease
 from utils import revision as revision_utils
+
+
+def _unlink_sqlite_db(path: Path) -> None:
+    """Close database connections and remove SQLite files with retry."""
+    connections.close_all()
+    # Windows may keep SQLite files locked briefly after closing. Retry a few times.
+    for suffix in ("", "-journal", "-wal", "-shm"):
+        db_file = Path(str(path) + suffix)
+        for _ in range(5):
+            try:
+                db_file.unlink(missing_ok=True)
+                break
+            except PermissionError:
+                time.sleep(0.1)
+                connections.close_all()
 
 
 def _local_app_labels() -> list[str]:
@@ -129,8 +145,7 @@ def run_database_tasks(*, latest: bool = False) -> None:
         call_command("makemigrations", *local_apps, merge=True, interactive=False)
     except InconsistentMigrationHistory:
         if using_sqlite:
-            connections.close_all()
-            Path(default_db["NAME"]).unlink(missing_ok=True)
+            _unlink_sqlite_db(Path(default_db["NAME"]))
             call_command("makemigrations", *local_apps, interactive=False)
         else:  # pragma: no cover - unreachable in sqlite
             raise
@@ -143,8 +158,7 @@ def run_database_tasks(*, latest: bool = False) -> None:
     if latest:
         if stored_hash and stored_hash != new_hash:
             if using_sqlite:
-                connections.close_all()
-                Path(default_db["NAME"]).unlink(missing_ok=True)
+                _unlink_sqlite_db(Path(default_db["NAME"]))
             else:  # pragma: no cover - unreachable in sqlite
                 for label in reversed(local_apps):
                     call_command("migrate", label, "zero", interactive=False)
@@ -175,8 +189,7 @@ def run_database_tasks(*, latest: bool = False) -> None:
             call_command("migrate", interactive=False)
         except OperationalError as exc:
             if using_sqlite:
-                connections.close_all()
-                Path(default_db["NAME"]).unlink(missing_ok=True)
+                _unlink_sqlite_db(Path(default_db["NAME"]))
                 call_command("migrate", interactive=False)
             else:  # pragma: no cover - unreachable in sqlite
                 try:
