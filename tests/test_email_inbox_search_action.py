@@ -82,7 +82,7 @@ class EmailInboxSearchTests(TestCase):
 
     @patch.object(EmailInbox, "search_messages", return_value=[{"subject": "S", "from": "F", "body": "B"}])
     def test_admin_action(self, mock_search):
-        admin = User.objects.get(username="admin")
+        admin = User.objects.create(username="admin", is_staff=True, is_superuser=True)
         inbox = EmailInbox.objects.create(
             user=admin,
             host="imap.test",

@@ -7,9 +7,10 @@ from core.backends import LocalhostAdminBackend
 
 
 def test_docker_network_allowed(tmp_path):
-    # Ensure the default admin exists
     User = get_user_model()
-    assert User.objects.filter(username="admin").exists()
+    User.objects.create_user(
+        username="admin", password="admin", is_staff=True, is_superuser=True
+    )
     backend = LocalhostAdminBackend()
     req = HttpRequest()
     req.META["REMOTE_ADDR"] = "172.16.5.4"

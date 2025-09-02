@@ -7,7 +7,6 @@ from django.contrib.auth.hashers import make_password
 # NOTE: Prefer rewriting this latest migration over creating new ones.
 # Earlier migrations must be preserved to maintain compatibility.
 
-
 def create_securitygroups(apps, schema_editor):
     Group = apps.get_model('auth', 'Group')
     SecurityGroup = apps.get_model('core', 'SecurityGroup')
@@ -22,16 +21,6 @@ def create_packaging_defaults(apps, schema_editor):
     User = apps.get_model(app_label, model_name)
     ReleaseManager = apps.get_model('core', 'ReleaseManager')
     Package = apps.get_model('core', 'Package')
-
-    User.objects.get_or_create(
-        username="admin",
-        defaults={
-            "email": "",
-            "is_staff": True,
-            "is_superuser": True,
-            "password": make_password("admin"),
-        },
-    )
 
     user, _ = User.objects.get_or_create(
         username="arthexis",
