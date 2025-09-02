@@ -560,11 +560,6 @@ class NetMessageAdminTests(TransactionTestCase):
 class LastNetMessageViewTests(TestCase):
     def setUp(self):
         self.client = Client()
-        User = get_user_model()
-        self.user = User.objects.create_user(
-            username="lastmsg", password="pwd"
-        )
-        self.client.force_login(self.user)
         NodeRole.objects.get_or_create(name="Terminal")
 
     def test_returns_latest_message(self):
