@@ -626,6 +626,48 @@ class NetMessageReachTests(TestCase):
         self.assertEqual(roles, {"Constellation", "Satellite", "Control"})
         self.assertEqual(mock_post.call_count, 3)
 
+
+class NetMessagePropagationTests(TestCase):
+    def setUp(self):
+        self.role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.local = Node.objects.create(
+            hostname="local",
+            address="10.0.0.1",
+            port=8001,
+            mac_address="00:11:22:33:44:00",
+            role=self.role,
+            public_endpoint="local",
+        )
+        self.remotes = []
+        for idx in range(2, 6):
+            self.remotes.append(
+                Node.objects.create(
+                    hostname=f"n{idx}",
+                    address=f"10.0.0.{idx}",
+                    port=8000 + idx,
+                    mac_address=f"00:11:22:33:44:{idx:02x}",
+                    role=self.role,
+                    public_endpoint=f"n{idx}",
+                )
+            )
+
+    @patch("requests.post")
+    @patch("core.notifications.notify")
+    def test_propagate_forwards_to_three_and_notifies_local(self, mock_notify, mock_post):
+        msg = NetMessage.objects.create(subject="s", body="b", reach=self.role)
+        with patch.object(Node, "get_local", return_value=self.local):
+            msg.propagate(seen=[str(self.remotes[0].uuid)])
+        mock_notify.assert_called_once_with("s", "b")
+        self.assertEqual(mock_post.call_count, 3)
+        targets = {
+            call.args[0].split("//")[1].split("/")[0]
+            for call in mock_post.call_args_list
+        }
+        sender_addr = f"{self.remotes[0].address}:{self.remotes[0].port}"
+        self.assertNotIn(sender_addr, targets)
+        self.assertEqual(msg.propagated_to.count(), 4)
+        self.assertTrue(msg.complete)
+
 class NodeActionTests(TestCase):
     def setUp(self):
         self.client = Client()
