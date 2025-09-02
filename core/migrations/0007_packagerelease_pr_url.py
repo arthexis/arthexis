@@ -2,6 +2,7 @@
 
 from django.db import migrations, models
 import core.fields
+import utils.revision
 
 
 class Migration(migrations.Migration):
@@ -119,6 +120,21 @@ class Migration(migrations.Migration):
                 default="imap",
                 help_text="IMAP keeps emails on the server for access across devices; POP3 downloads messages to a single device and may remove them from the server",
                 max_length=5,
+            ),
+        ),
+        migrations.AlterField(
+            model_name="package",
+            name="name",
+            field=models.CharField(default="arthexis", max_length=100, unique=True),
+        ),
+        migrations.AlterField(
+            model_name="packagerelease",
+            name="revision",
+            field=models.CharField(
+                blank=True,
+                default=utils.revision.get_revision,
+                editable=False,
+                max_length=40,
             ),
         ),
     ]

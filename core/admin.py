@@ -42,6 +42,7 @@ from .models import (
     ReleaseManager,
     SecurityGroup,
 )
+from .user_data import UserDatumAdminMixin
 
 
 admin.site.unregister(Group)
@@ -241,9 +242,17 @@ class UserAdmin(DjangoUserAdmin):
 
 
 @admin.register(Address)
-class AddressAdmin(admin.ModelAdmin):
+class AddressAdmin(UserDatumAdminMixin, admin.ModelAdmin):
+    change_form_template = "admin/user_datum_change_form.html"
     list_display = ("street", "number", "municipality", "state", "postal_code")
     search_fields = ("street", "municipality", "postal_code")
+
+    def save_model(self, request, obj, form, change):
+        if "_saveacopy" in request.POST:
+            obj.pk = None
+            super().save_model(request, obj, form, False)
+        else:
+            super().save_model(request, obj, form, change)
 
 
 class OdooProfileAdminForm(forms.ModelForm):
@@ -275,7 +284,8 @@ class OdooProfileAdminForm(forms.ModelForm):
 
 
 @admin.register(OdooProfile)
-class OdooProfileAdmin(admin.ModelAdmin):
+class OdooProfileAdmin(UserDatumAdminMixin, admin.ModelAdmin):
+    change_form_template = "admin/user_datum_change_form.html"
     form = OdooProfileAdminForm
     list_display = ("user", "host", "database", "verified_on")
     readonly_fields = ("verified_on", "odoo_uid", "name", "email")
