@@ -16,6 +16,7 @@ from datetime import timedelta
 from django.contrib.contenttypes.models import ContentType
 import hashlib
 import os
+import subprocess
 from io import BytesIO
 from django.core.files.base import ContentFile
 import qrcode
@@ -1251,6 +1252,23 @@ class PackageRelease(Entity):
         )
         self.revision = revision_utils.get_revision()
         self.save(update_fields=["revision"])
+        if kwargs.get("git"):
+            diff = subprocess.run(
+                ["git", "status", "--porcelain", "core/fixtures/releases.json"],
+                capture_output=True,
+                text=True,
+            )
+            if diff.stdout.strip():
+                release_utils._run(["git", "add", "core/fixtures/releases.json"])
+                release_utils._run(
+                    [
+                        "git",
+                        "commit",
+                        "-m",
+                        f"chore: update release fixture for v{self.version}",
+                    ]
+                )
+                release_utils._run(["git", "push"])
 
     @property
     def revision_short(self) -> str:
