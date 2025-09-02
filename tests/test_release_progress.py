@@ -39,32 +39,20 @@ class ReleaseProgressTests(TestCase):
         commit_hash = "abcdef1234567890"
 
         def run_side_effect(cmd, check=True, capture_output=False, text=False):
-            if cmd[:3] == ["/usr/bin/gh", "pr", "create"]:
-                stdout = "http://example.com/pr/1\n"
-            elif cmd[:3] == ["/usr/bin/gh", "pr", "view"]:
-                stdout = "{\"mergeable\":\"MERGEABLE\"}"
-            else:
-                stdout = ""
-            return subprocess.CompletedProcess(cmd, 0, stdout, "")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
 
         with patch("core.views.release_utils.promote", return_value=(commit_hash, "branch", "main")), \
              patch("core.views.release_utils.publish") as pub, \
-             patch("core.views.shutil.which", return_value="/usr/bin/gh"), \
              patch("core.views.requests.get") as req_get, \
              patch("core.views.subprocess.run", side_effect=run_side_effect):
             req_get.return_value.ok = True
             req_get.return_value.json.return_value = {"releases": {}}
             resp = self.client.get(url)
-            for i in range(4):
+            for i in range(3):
                 resp = self.client.get(f"{url}?step={i}")
 
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "All steps completed")
-        self.assertContains(
-            resp,
-            '<a href="http://example.com/pr/1" target="_blank" rel="noopener">http://example.com/pr/1</a>',
-            html=True,
-        )
         self.assertContains(
             resp,
             '<a href="https://pypi.org/project/pkg/1.0.0/" target="_blank" rel="noopener">https://pypi.org/project/pkg/1.0.0/</a>',
@@ -77,7 +65,7 @@ class ReleaseProgressTests(TestCase):
         log_path = Path("logs") / f"pkg-1.0.0-{commit_hash[:7]}.log"
         self.assertTrue(log_path.exists())
 
-    def test_publish_progress_without_gh_skips_pr(self):
+    def test_publish_progress_logs_without_pr_step(self):
         release = PackageRelease.objects.create(package=self.package, version="1.1.0")
         url = reverse("release-progress", args=[release.pk, "publish"])
         commit_hash = "1234567890abcdef"
@@ -87,18 +75,17 @@ class ReleaseProgressTests(TestCase):
 
         with patch("core.views.release_utils.promote", return_value=(commit_hash, "branch", "main")), \
              patch("core.views.release_utils.publish") as pub, \
-             patch("core.views.shutil.which", return_value=None), \
              patch("core.views.requests.get") as req_get, \
              patch("core.views.subprocess.run", side_effect=run_side_effect):
             req_get.return_value.ok = True
             req_get.return_value.json.return_value = {"releases": {}}
             resp = self.client.get(url)
-            for i in range(4):
+            for i in range(3):
                 resp = self.client.get(f"{url}?step={i}")
 
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "All steps completed")
-        self.assertIsNone(resp.context["pr_url"])
+        self.assertIsNone(resp.context.get("pr_url"))
         self.assertContains(
             resp,
             '<a href="https://pypi.org/project/pkg/1.1.0/" target="_blank" rel="noopener">https://pypi.org/project/pkg/1.1.0/</a>',
@@ -109,10 +96,7 @@ class ReleaseProgressTests(TestCase):
         pub.assert_called_once()
         log_path = Path("logs") / f"pkg-1.1.0-{commit_hash[:7]}.log"
         self.assertTrue(log_path.exists())
-        self.assertIn(
-            "PR creation skipped",
-            log_path.read_text(),
-        )
+        self.assertNotIn("PR", log_path.read_text())
 
     def test_publish_progress_breadcrumbs(self):
         release = PackageRelease.objects.create(package=self.package, version="3.0.0")
