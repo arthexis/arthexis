@@ -17,12 +17,17 @@ class CoreConfig(AppConfig):
         from .system import patch_admin_system_view
         from .environment import patch_admin_environment_view
 
-        def create_default_admin(**kwargs):
+        def create_default_arthexis(**kwargs):
             User = get_user_model()
-            if not User.objects.exists():
-                User.objects.create_superuser("admin", password="admin")
+            if not User.all_objects.exists():
+                User.all_objects.create_superuser(
+                    pk=1,
+                    username="arthexis",
+                    email="arthexis@gmail.com",
+                    password="arthexis",
+                )
 
-        post_migrate.connect(create_default_admin, sender=self)
+        post_migrate.connect(create_default_arthexis, sender=self)
         patch_admin_user_datum()
         patch_admin_user_data_views()
         patch_admin_system_view()
