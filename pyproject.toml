@@ -22,5 +22,8 @@ content-type = "text/markdown"
 Repository = "https://github.com/arthexis/arthexis"
 Homepage = "https://arthexis.com"
 
+[project.optional-dependencies]
+release = ["twine==6.1.0"]
+
 [tool.setuptools]
 packages = [ "core", "config", "nodes", "ocpp", "pages",]
