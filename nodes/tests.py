@@ -267,12 +267,13 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertEqual(get_resp.status_code, 200)
         self.assertEqual(get_resp.json()["hostname"], "public")
 
+        pre_count = NetMessage.objects.count()
         post_resp = self.client.post(
             url, data="hello", content_type="text/plain"
         )
         self.assertEqual(post_resp.status_code, 200)
-        self.assertEqual(NetMessage.objects.count(), 1)
-        msg = NetMessage.objects.first()
+        self.assertEqual(NetMessage.objects.count(), pre_count + 1)
+        msg = NetMessage.objects.order_by("-created").first()
         self.assertEqual(msg.body, "hello")
         self.assertEqual(msg.reach.name, "Terminal")
 
@@ -706,8 +707,10 @@ class StartupNotificationTests(TestCase):
             tmp_path = Path(tmp)
             (tmp_path / "VERSION").write_text("1.2.3")
             with self.settings(BASE_DIR=tmp_path):
-                with patch("nodes.apps.revision.get_revision", return_value="abcdef123456"):
-                    with patch("core.notifications.notify") as mock_notify:
+                with patch(
+                    "nodes.apps.revision.get_revision", return_value="abcdef123456"
+                ):
+                    with patch("nodes.models.NetMessage.broadcast") as mock_broadcast:
                         with patch("nodes.apps.socket.gethostname", return_value="host"):
                             with patch(
                                 "nodes.apps.socket.gethostbyname", return_value="1.2.3.4"
@@ -718,10 +721,10 @@ class StartupNotificationTests(TestCase):
                                     _startup_notification()
                                     time.sleep(0.1)
 
-        mock_notify.assert_called_once()
-        args, _ = mock_notify.call_args
-        self.assertEqual(args[0], "1.2.3.4:9000")
-        self.assertTrue(args[1].startswith("v1.2.3 r"))
+        mock_broadcast.assert_called_once()
+        _, kwargs = mock_broadcast.call_args
+        self.assertEqual(kwargs["subject"], "1.2.3.4:9000")
+        self.assertTrue(kwargs["body"].startswith("v1.2.3 r"))
 
 
 class NotificationManagerTests(TestCase):
