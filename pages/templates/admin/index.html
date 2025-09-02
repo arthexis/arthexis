@@ -100,7 +100,8 @@
 {% block content %}
 <div class="dashboard" id="admin-dashboard">
   <div id="content-main" class="dashboard-main">
-    {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
+    {% filtered_app_list app_list as filtered_app_list %}
+    {% include "admin/app_list.html" with app_list=filtered_app_list show_changelinks=True %}
 </div>
 <div class="dashboard-side" id="recent-boxes">
     <div class="module" id="future-actions-module">
