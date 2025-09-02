@@ -141,3 +141,25 @@ class ReleaseProgressTests(TestCase):
             resp = self.client.get(f"{url}?step=0")
         self.assertEqual(resp.context["error"], "Version 2.0.0 is older than existing 3.0.0")
         self.assertEqual(self.version_path.read_text().strip(), "3.0.0")
+
+    def test_session_resets_when_version_changes(self):
+        release = PackageRelease.objects.create(package=self.package, version="1.2.0")
+        url = reverse("release-progress", args=[release.pk, "publish"])
+        self.client.get(url)
+        with patch("core.views.release_utils.network_available", return_value=False):
+            self.client.get(f"{url}?step=0")
+
+        release.version = "1.3.0"
+        release.save()
+
+        resp = self.client.get(url)
+        expected_log = f"logs/pkg-1.3.0-{release.revision[:7]}.log"
+        self.assertEqual(resp.context["log_path"], expected_log)
+        self.assertEqual(resp.context["current_step"], 0)
+
+        with patch("core.views.release_utils.network_available", return_value=False):
+            self.client.get(f"{url}?step=0")
+
+        log_content = Path(expected_log).read_text()
+        self.assertIn("Checking if version 1.3.0 exists on PyPI", log_content)
+        self.assertNotIn("1.2.0", log_content)

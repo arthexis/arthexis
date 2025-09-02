@@ -399,7 +399,10 @@ def release_progress(request, pk: int, action: str):
     identifier = f"{release.package.name}-{release.version}"
     if release.revision:
         identifier = f"{identifier}-{release.revision[:7]}"
-    log_name = ctx.get("log") or f"{identifier}.log"
+    log_name = f"{identifier}.log"
+    if ctx.get("log") != log_name:
+        ctx = {"step": 0, "log": log_name}
+        step_count = 0
     log_path = Path("logs") / log_name
     ctx.setdefault("log", log_name)
 
