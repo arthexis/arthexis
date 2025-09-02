@@ -42,12 +42,6 @@ class NodeAdmin(admin.ModelAdmin):
         "mac_address",
         "address",
         "port",
-        "api",
-        "public_endpoint",
-        "clipboard",
-        "screenshot",
-        "lcd",
-        "installed_version",
         "role",
         "last_seen",
     )
@@ -56,30 +50,6 @@ class NodeAdmin(admin.ModelAdmin):
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
     actions = ["run_task", "take_screenshots"]
-
-    def api(self, obj):
-        return obj.enable_public_api
-
-    api.boolean = True
-    api.short_description = "API"
-
-    def clipboard(self, obj):
-        return obj.clipboard_polling
-
-    clipboard.boolean = True
-    clipboard.short_description = "Clipboard"
-
-    def screenshot(self, obj):
-        return obj.screenshot_polling
-
-    screenshot.boolean = True
-    screenshot.short_description = "Screenshot"
-
-    def lcd(self, obj):
-        return obj.has_lcd_screen
-
-    lcd.boolean = True
-    lcd.short_description = "LCD"
 
 
     def get_urls(self):
