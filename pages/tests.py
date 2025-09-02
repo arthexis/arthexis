@@ -6,6 +6,7 @@ from django.contrib import admin
 from django.core.exceptions import DisallowedHost
 import socket
 from pages.models import Application, Module, SiteBadge, Favorite
+from core.user_data import UserDatum
 from pages.admin import ApplicationAdmin
 from django.apps import apps as django_apps
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -605,3 +606,13 @@ class FavoriteTests(TestCase):
         self.assertRedirects(resp, reverse("admin:favorite_list"))
         resp = self.client.get(reverse("admin:favorite_list"))
         self.assertContains(resp, ct.name)
+
+    def test_dashboard_includes_favorites_and_user_data(self):
+        fav_ct = ContentType.objects.get_by_natural_key("pages", "application")
+        Favorite.objects.create(user=self.user, content_type=fav_ct, custom_label="Apps")
+        role = NodeRole.objects.create(name="DataRole")
+        ud_ct = ContentType.objects.get_for_model(NodeRole)
+        UserDatum.objects.create(user=self.user, content_type=ud_ct, object_id=role.pk)
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, reverse("admin:pages_application_changelist"))
+        self.assertContains(resp, reverse("admin:nodes_noderole_changelist"))

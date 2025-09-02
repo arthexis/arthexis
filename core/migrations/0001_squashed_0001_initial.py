@@ -7,6 +7,7 @@ import django.core.validators
 import django.db.models.deletion
 import django.utils.timezone
 import uuid
+import utils.revision
 from django.conf import settings
 from django.db import migrations, models
 
@@ -284,7 +285,7 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('is_seed_data', models.BooleanField(default=False, editable=False)),
                 ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('name', models.CharField(default='arthexis', max_length=100)),
+                ('name', models.CharField(default='arthexis', max_length=100, unique=True)),
                 ('description', models.CharField(default='Django-based MESH system', max_length=255)),
                 ('author', models.CharField(default='Rafael J. Guillén-Osorio', max_length=100)),
                 ('email', models.EmailField(default='tecnologia@gelectriic.com', max_length=254)),
@@ -306,7 +307,7 @@ class Migration(migrations.Migration):
                 ('is_seed_data', models.BooleanField(default=False, editable=False)),
                 ('is_deleted', models.BooleanField(default=False, editable=False)),
                 ('version', models.CharField(default='0.0.0', max_length=20)),
-                ('revision', models.CharField(blank=True, max_length=40)),
+                ('revision', models.CharField(blank=True, max_length=40, default=utils.revision.get_revision, editable=False)),
                 ('pypi_url', models.URLField('PyPI URL', blank=True, editable=False)),
                 ('package', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='releases', to='core.package')),
                 ('release_manager', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='core.releasemanager')),

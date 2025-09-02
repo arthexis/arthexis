@@ -503,9 +503,9 @@ msgstr ""
 msgid "Django administration"
 msgstr ""
 
-#: pages/templates/admin/index.html:131
-msgid "Recent admin lists"
-msgstr ""
+#: pages/templates/admin/index.html:109
+msgid "Future actions"
+msgstr "Acciones futuras"
 
 #: pages/templates/admin/index.html:140
 #: pages/templates/admin/index.html:150
