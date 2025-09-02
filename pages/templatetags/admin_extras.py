@@ -87,11 +87,54 @@ def admin_changelist_url(ct: ContentType) -> str:
 
 
 @register.simple_tag(takes_context=True)
-def user_data_content_types(context):
-    """Return content types for which the current user has User Data."""
+def future_action_items(context):
+    """Return deduplicated dashboard links for the current user.
+
+    The list includes recent admin history entries, favorites and models with
+    user data.  Each model appears at most once and is displayed using its
+    plural name.
+    """
+
     request = context.get("request")
     user = getattr(request, "user", None)
     if not user or not user.is_authenticated:
         return []
-    ct_ids = UserDatum.objects.filter(user=user).values_list("content_type_id", flat=True)
-    return ContentType.objects.filter(id__in=ct_ids)
+
+    items = []
+    seen = set()
+
+    # Recently visited changelists (history)
+    for entry in user.admin_history.all()[:10]:
+        if entry.content_type_id in seen or not entry.url:
+            continue
+        items.append({"url": entry.url, "label": entry.admin_label})
+        seen.add(entry.content_type_id)
+
+    # Favorites
+    favorites = user.favorites.select_related("content_type")
+    for fav in favorites:
+        ct = fav.content_type
+        if ct.id in seen:
+            continue
+        model = ct.model_class()
+        label = fav.custom_label or (
+            model._meta.verbose_name_plural if model else ct.name
+        )
+        url = admin_changelist_url(ct)
+        if url:
+            items.append({"url": url, "label": label})
+            seen.add(ct.id)
+
+    # Models with user data
+    ct_ids = UserDatum.objects.filter(user=user).values_list(
+        "content_type_id", flat=True
+    )
+    for ct in ContentType.objects.filter(id__in=ct_ids).exclude(id__in=seen):
+        model = ct.model_class()
+        label = model._meta.verbose_name_plural if model else ct.name
+        url = admin_changelist_url(ct)
+        if url:
+            items.append({"url": url, "label": label})
+            seen.add(ct.id)
+
+    return items
