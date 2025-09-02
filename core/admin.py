@@ -43,6 +43,7 @@ from .models import (
     ReleaseManager,
     SecurityGroup,
 )
+from .user_data import UserDatumAdminMixin
 
 
 admin.site.unregister(Group)
@@ -246,6 +247,13 @@ class AddressAdmin(UserDatumAdminMixin, admin.ModelAdmin):
     change_form_template = "admin/user_datum_change_form.html"
     list_display = ("street", "number", "municipality", "state", "postal_code")
     search_fields = ("street", "municipality", "postal_code")
+
+    def save_model(self, request, obj, form, change):
+        if "_saveacopy" in request.POST:
+            obj.pk = None
+            super().save_model(request, obj, form, False)
+        else:
+            super().save_model(request, obj, form, change)
 
 
 class OdooProfileAdminForm(forms.ModelForm):

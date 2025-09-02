@@ -155,8 +155,9 @@ class UserDatumAdminMixin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         copied = "_saveacopy" in request.POST
-        if copied and hasattr(obj, "clone"):
-            obj = obj.clone()
+        if copied:
+            obj = obj.clone() if hasattr(obj, "clone") else obj
+            obj.pk = None
             form.instance = obj
             try:
                 super().save_model(request, obj, form, False)
