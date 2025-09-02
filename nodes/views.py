@@ -252,7 +252,6 @@ def net_message(request):
     return JsonResponse({"status": "propagated", "complete": msg.complete})
 
 
-@api_login_required
 def last_net_message(request):
     """Return the most recent :class:`NetMessage`."""
 
