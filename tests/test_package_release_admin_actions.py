@@ -77,7 +77,7 @@ class PackageReleaseAdminActionsTests(TestCase):
             resp = self.client.get(list_url)
         content = resp.content.decode()
         self.assertIn("Is current", content)
-        self.assertIn('<input type="checkbox" checked disabled>', content)
+        self.assertIn('icon-yes.svg', content)
 
     def test_release_revision_defaults_to_repo_revision(self):
         expected = revision_utils.get_revision()
