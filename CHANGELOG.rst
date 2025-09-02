@@ -4,6 +4,41 @@ Changelog
 Unreleased
 ----------
 
+0.1.1 [revision d793d4f8b03b9ad2d2b6dc8ef2e623224a5ae414]
+---------------------------------------------------------
+
+- f19100c Rename PostgreSQL setup script to db-setup
+- f2893cf Handle SQLite file locks during env refresh
+- 1f3d6a4 fix: enable save-as-copy and user datum admin
+- 5bd6f5b fix(admin): display user datum controls
+- cb4e300 Use NetMessage for startup notification
+- ca6f9aa feat(admin): display last network message
+- 937b630 feat: auto-resolving sigil fields
+- 46d6a57 Add admin favorites
+- 98625e8 fix: enforce unique package name and auto revision
+- be6f981 test: cover prepare next release version
+- 404269b Handle deleted release versions when preparing next
+- d502c4d Add environment view and template
+- a175d80 Expose release currency indicator
+- a6c4b8a Expand acronym list and allow plural capitalization
+- 7fe8278 Mark PyPI and PR URLs read-only
+- 44b558d fix: clean up NetMessage metadata
+- d706f5c Add detailed Email Outbox guidance
+- 9c3f3e2 Prepare release bumps patch version
+- 636a767 Store releases as fixtures and add deletion cleanup
+- 9dbc795 Display release status fields as read-only
+- bfdb0b3 admin: show release status checkboxes
+- 1f364dc Fix twine upload file handling
+- 4a22fae Remove beta application
+- 325858b Rename Packager Profile model to Release Manager
+- 39213db Ensure releases retain PR link and promotion status
+- 65dd958 Add system status admin page
+- 2396ca5 Clarify PyPI credentials in packager profile
+- c9ff100 Improve release promotion workflow and certification
+- f4f2afa Enable user data for all models and update sample game
+- edeaa58 Add fixture for 0.1.1
+- 17598dc Release v0.1.1
+
 0.1.1 [revision 795ee9c781bb241a50713e15bba4737534906ca4]
 ---------------------------------------------------------
 
