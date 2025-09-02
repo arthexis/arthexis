@@ -50,8 +50,11 @@ if [ -f requirements.txt ]; then
   fi
 fi
 
+ARGS=""
 if [ "$LATEST" -eq 1 ]; then
-  "$PYTHON" env-refresh.py --latest database
-else
-  "$PYTHON" env-refresh.py database
+  ARGS="$ARGS --latest"
 fi
+if [ "$CLEAN" -eq 1 ]; then
+  ARGS="$ARGS --clean"
+fi
+"$PYTHON" env-refresh.py $ARGS database

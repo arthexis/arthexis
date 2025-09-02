@@ -36,8 +36,7 @@ if exist requirements.txt (
         echo %REQ_HASH%>requirements.md5
     )
 )
-if %LATEST%==1 (
-    %VENV%\Scripts\python.exe env-refresh.py --latest database
-) else (
-    %VENV%\Scripts\python.exe env-refresh.py database
-)
+set "ARGS="
+if %LATEST%==1 set "ARGS=%ARGS% --latest"
+if %CLEAN%==1 set "ARGS=%ARGS% --clean"
+%VENV%\Scripts\python.exe env-refresh.py %ARGS% database
