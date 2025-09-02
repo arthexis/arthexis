@@ -4,6 +4,17 @@ Changelog
 Unreleased
 ----------
 
+0.1.5 [revision 4bba71d2e845b5113cf066445bc1263ee01356c2]
+---------------------------------------------------------
+
+- 3a90ca0 Reset release progress session when version changes
+- 5b541d5 Save object before executing admin change actions
+- bd6fdd4 Use icon semaphores for readonly booleans
+- 186f316 Update release fixture on save
+- 44ce1e0 Show PyPI link after release
+- c8d51a6 docs: link support page
+- c9ef1c1 Release v0.1.4
+
 0.1.4 [revision 0dbfd4b21c7e365772a3afd0e2c9cb15020c018b]
 ---------------------------------------------------------
 
