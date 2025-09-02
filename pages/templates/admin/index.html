@@ -105,30 +105,16 @@
 <div class="dashboard-side" id="recent-boxes">
     <div class="module" id="future-actions-module">
         <h2>{% translate 'Future actions' %}</h2>
-        {% with history=user.admin_history.all|slice:":10" favorites=user.favorites.all %}
-        {% user_data_content_types as user_data_cts %}
-            {% if history or favorites or user_data_cts %}
+        {% future_action_items as future_items %}
+            {% if future_items %}
             <ul class="actionlist">
-                {% for item in history %}
-                <li class="changelink"><a href="{{ item.url }}">{{ item.admin_label }}</a></li>
-                {% endfor %}
-                {% for fav in favorites %}
-                {% admin_changelist_url fav.content_type as url %}
-                {% if url %}
-                <li class="changelink"><a href="{{ url }}">{{ fav.custom_label|default:fav.content_type.name }}</a></li>
-                {% endif %}
-                {% endfor %}
-                {% for ct in user_data_cts %}
-                {% admin_changelist_url ct as url %}
-                {% if url %}
-                <li class="changelink"><a href="{{ url }}">{{ ct.name }}</a></li>
-                {% endif %}
+                {% for item in future_items %}
+                <li class="changelink"><a href="{{ item.url }}">{{ item.label }}</a></li>
                 {% endfor %}
             </ul>
             {% else %}
             <p>{% translate 'None available' %}</p>
             {% endif %}
-        {% endwith %}
     </div>
     <div class="module" id="recent-actions-module">
         <h2>{% translate 'Recent actions' %}</h2>

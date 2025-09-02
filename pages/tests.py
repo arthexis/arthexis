@@ -9,6 +9,7 @@ from pages.models import Application, Module, SiteBadge, Favorite
 from core.user_data import UserDatum
 from pages.admin import ApplicationAdmin
 from django.apps import apps as django_apps
+from core.models import AdminHistory
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
 import tempfile
@@ -626,3 +627,18 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, reverse("admin:pages_application_changelist"))
         self.assertContains(resp, reverse("admin:nodes_noderole_changelist"))
+
+    def test_dashboard_merges_duplicate_future_actions(self):
+        ct = ContentType.objects.get_for_model(NodeRole)
+        Favorite.objects.create(user=self.user, content_type=ct)
+        role = NodeRole.objects.create(name="DataRole2")
+        UserDatum.objects.create(user=self.user, content_type=ct, object_id=role.pk)
+        AdminHistory.objects.create(
+            user=self.user,
+            content_type=ct,
+            url=reverse("admin:nodes_noderole_changelist"),
+        )
+        resp = self.client.get(reverse("admin:index"))
+        url = reverse("admin:nodes_noderole_changelist")
+        self.assertEqual(resp.content.decode().count(url), 1)
+        self.assertContains(resp, NodeRole._meta.verbose_name_plural)
