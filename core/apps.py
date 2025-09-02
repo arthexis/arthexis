@@ -30,15 +30,20 @@ class CoreConfig(AppConfig):
 
         from pathlib import Path
         from django.conf import settings
-        try:  # pragma: no cover - optional dependency
-            from django_celery_beat.models import IntervalSchedule, PeriodicTask
-        except Exception:  # pragma: no cover - optional dependency
-            IntervalSchedule = PeriodicTask = None
 
-        if PeriodicTask:
-            lock = Path(settings.BASE_DIR) / "locks" / "celery.lck"
-            if lock.exists():
-                from django.db.utils import OperationalError
+        lock = Path(settings.BASE_DIR) / "locks" / "celery.lck"
+
+        if lock.exists():
+
+            def ensure_email_collector_task(**kwargs):
+                try:  # pragma: no cover - optional dependency
+                    from django_celery_beat.models import (
+                        IntervalSchedule,
+                        PeriodicTask,
+                    )
+                    from django.db.utils import OperationalError, ProgrammingError
+                except Exception:  # pragma: no cover - tables or module not ready
+                    return
 
                 try:
                     schedule, _ = IntervalSchedule.objects.get_or_create(
@@ -51,5 +56,7 @@ class CoreConfig(AppConfig):
                             "task": "core.tasks.poll_email_collectors",
                         },
                     )
-                except OperationalError:  # pragma: no cover - tables not ready
+                except (OperationalError, ProgrammingError):
                     pass
+
+            post_migrate.connect(ensure_email_collector_task, sender=self)
