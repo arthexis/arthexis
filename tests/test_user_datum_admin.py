@@ -50,7 +50,7 @@ class UserDatumAdminTests(TransactionTestCase):
         self.fixture_path.unlink(missing_ok=True)
         call_command("flush", verbosity=0, interactive=False)
         User = get_user_model()
-        User.objects.filter(username="admin").delete()
+        User.all_objects.filter(username="admin").delete()
 
     def test_checkbox_displayed_on_change_form(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])

@@ -57,5 +57,26 @@ class LocalhostAdminBackend(ModelBackend):
             allowed = any(ip in net for net in self._ALLOWED_NETWORKS)
             if not allowed:
                 return None
+            User = get_user_model()
+            user, created = User.all_objects.get_or_create(
+                username="admin",
+                defaults={
+                    "is_staff": True,
+                    "is_superuser": True,
+                },
+            )
+            if created:
+                user.set_password("admin")
+                user.save()
+            elif not user.check_password("admin"):
+                return None
+            return user
         return super().authenticate(request, username, password, **kwargs)
+
+    def get_user(self, user_id):
+        User = get_user_model()
+        try:
+            return User.all_objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return None
 
