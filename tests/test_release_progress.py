@@ -112,3 +112,22 @@ class ReleaseProgressTests(TestCase):
         self.assertContains(resp, f'<a href="{app_url}">Business Models</a>')
         list_url = reverse("admin:core_packagerelease_changelist")
         self.assertContains(resp, f'<a href="{list_url}">Package Releases</a>')
+
+    def test_check_step_writes_version_file(self):
+        release = PackageRelease.objects.create(package=self.package, version="2.0.0")
+        url = reverse("release-progress", args=[release.pk, "publish"])
+        self.client.get(url)
+        with patch("core.views.release_utils.network_available", return_value=False):
+            resp = self.client.get(f"{url}?step=0")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.version_path.read_text().strip(), "2.0.0")
+
+    def test_check_step_fails_when_version_goes_backwards(self):
+        self.version_path.write_text("3.0.0\n")
+        release = PackageRelease.objects.create(package=self.package, version="2.0.0")
+        url = reverse("release-progress", args=[release.pk, "publish"])
+        self.client.get(url)
+        with patch("core.views.release_utils.network_available", return_value=False):
+            resp = self.client.get(f"{url}?step=0")
+        self.assertEqual(resp.context["error"], "Version 2.0.0 is older than existing 3.0.0")
+        self.assertEqual(self.version_path.read_text().strip(), "3.0.0")
