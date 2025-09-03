@@ -19,6 +19,10 @@
         <label for="id_email" class="form-label">{% trans "Email" %}</label>
         <input type="email" name="email" class="form-control" id="id_email" required>
       </div>
+      <div class="mb-3">
+        <label for="id_comment" class="form-label">{% trans "Comment" %}</label>
+        <textarea name="comment" class="form-control" id="id_comment"></textarea>
+      </div>
       <button type="submit" class="btn btn-primary w-100">{% trans "Send invitation" %}</button>
     </form>
     {% endif %}

@@ -10,7 +10,7 @@ from pages.models import Application, Module, SiteBadge, Favorite
 from core.user_data import UserDatum
 from pages.admin import ApplicationAdmin
 from django.apps import apps as django_apps
-from core.models import AdminHistory
+from core.models import AdminHistory, InviteLead
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
 import tempfile
@@ -118,6 +118,16 @@ class InvitationTests(TestCase):
         self.assertContains(
             resp, "If the email exists, an invitation has been sent."
         )
+
+    def test_request_invite_creates_lead_with_comment(self):
+        resp = self.client.post(
+            reverse("pages:request-invite"),
+            {"email": "new@example.com", "comment": "Hello"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        lead = InviteLead.objects.get()
+        self.assertEqual(lead.email, "new@example.com")
+        self.assertEqual(lead.comment, "Hello")
 
 
 class NavbarBrandTests(TestCase):

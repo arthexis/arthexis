@@ -17,6 +17,7 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.core.mail import send_mail
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from core.models import InviteLead
 
 import markdown
 from pages.utils import landing
@@ -115,6 +116,7 @@ login_view = CustomLoginView.as_view()
 
 class InvitationRequestForm(forms.Form):
     email = forms.EmailField()
+    comment = forms.CharField(required=False, widget=forms.Textarea, label=_("Comment"))
 
 @csrf_exempt
 @ensure_csrf_cookie
@@ -123,6 +125,8 @@ def request_invite(request):
     sent = False
     if request.method == "POST" and form.is_valid():
         email = form.cleaned_data["email"]
+        comment = form.cleaned_data.get("comment", "")
+        InviteLead.objects.create(email=email, comment=comment)
         logger.info("Invitation requested for %s", email)
         User = get_user_model()
         users = list(User.objects.filter(email__iexact=email))

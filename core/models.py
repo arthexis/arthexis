@@ -63,6 +63,19 @@ class SigilRoot(Entity):
         verbose_name_plural = "Sigil Roots"
 
 
+class InviteLead(models.Model):
+    email = models.EmailField()
+    comment = models.TextField(blank=True)
+    created_on = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Invite Lead"
+        verbose_name_plural = "Invite Leads"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.email
+
+
 class Address(Entity):
     """Physical location information for a user."""
 
