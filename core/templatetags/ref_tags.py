@@ -6,7 +6,6 @@ from django.conf import settings
 from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.utils import timezone
-from django.utils.timesince import timesince
 
 from core.models import Reference, PackageRelease
 from core.release import DEFAULT_PACKAGE
@@ -92,7 +91,7 @@ def render_footer(context):
         except Exception:
             pass
 
-    fresh_since = timesince(latest, timezone.now())
+    fresh_since = timezone.localtime(latest).strftime("%Y-%m-%d %H:%M")
 
     return {
         "footer_refs": visible_refs,

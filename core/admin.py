@@ -43,6 +43,7 @@ from .models import (
     PackageRelease,
     ReleaseManager,
     SecurityGroup,
+    InviteLead,
 )
 from .user_data import UserDatumAdminMixin
 
@@ -222,6 +223,13 @@ class SecurityGroupAdmin(DjangoGroupAdmin):
     form = SecurityGroupAdminForm
     fieldsets = ((None, {"fields": ("name", "parent", "users", "permissions")}),)
     filter_horizontal = ("permissions",)
+
+
+@admin.register(InviteLead)
+class InviteLeadAdmin(admin.ModelAdmin):
+    list_display = ("email", "created_on")
+    search_fields = ("email", "comment")
+    readonly_fields = ("created_on",)
 
 
 class EnergyAccountRFIDForm(forms.ModelForm):
@@ -784,7 +792,7 @@ class RFIDAdmin(ImportExportModelAdmin):
 class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
     list_display = (
         "version",
-        "package",
+        "package_link",
         "is_current",
         "pypi_url",
         "revision_short",
@@ -802,6 +810,11 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
         "is_current",
         "pypi_url",
     )
+
+    @admin.display(description="package", ordering="package")
+    def package_link(self, obj):
+        url = reverse("admin:core_package_change", args=[obj.package_id])
+        return format_html('<a href="{}">{}</a>', url, obj.package)
 
     def revision_short(self, obj):
         return obj.revision_short

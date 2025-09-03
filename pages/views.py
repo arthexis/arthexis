@@ -17,6 +17,7 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.core.mail import send_mail
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from core.models import InviteLead
 
 import markdown
 from pages.utils import landing
@@ -115,6 +116,7 @@ login_view = CustomLoginView.as_view()
 
 class InvitationRequestForm(forms.Form):
     email = forms.EmailField()
+    comment = forms.CharField(required=False, widget=forms.Textarea, label=_("Comment"))
 
 @csrf_exempt
 @ensure_csrf_cookie
@@ -123,8 +125,14 @@ def request_invite(request):
     sent = False
     if request.method == "POST" and form.is_valid():
         email = form.cleaned_data["email"]
+        comment = form.cleaned_data.get("comment", "")
+        InviteLead.objects.create(email=email, comment=comment)
+        logger.info("Invitation requested for %s", email)
         User = get_user_model()
-        for user in User.objects.filter(email__iexact=email):
+        users = list(User.objects.filter(email__iexact=email))
+        if not users:
+            logger.warning("Invitation requested for unknown email %s", email)
+        for user in users:
             uid = urlsafe_base64_encode(force_bytes(user.pk))
             token = default_token_generator.make_token(user)
             link = request.build_absolute_uri(
@@ -137,9 +145,12 @@ def request_invite(request):
             try:
                 node = Node.get_local()
                 if node:
-                    node.send_mail(subject, body, [email])
+                    result = node.send_mail(subject, body, [email])
                 else:
-                    send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [email])
+                    result = send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [email])
+                logger.info(
+                    "Invitation email sent to %s (user %s): %s", email, user.pk, result
+                )
             except Exception:
                 logger.exception("Failed to send invitation email to %s", email)
         sent = True

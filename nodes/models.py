@@ -18,6 +18,10 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from django.contrib.auth import get_user_model
 from django.core.mail import get_connection, send_mail
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class NodeRoleManager(models.Manager):
@@ -250,10 +254,20 @@ class Node(Entity):
     def send_mail(self, subject: str, message: str, recipient_list: list[str], from_email: str | None = None, **kwargs):
         """Send an email using this node's configured outbox if available."""
         outbox = getattr(self, "email_outbox", None)
+        logger.info(
+            "Node %s sending email to %s using %s backend",
+            self.pk,
+            recipient_list,
+            "outbox" if outbox else "default",
+        )
         if outbox:
-            return outbox.send_mail(subject, message, recipient_list, from_email, **kwargs)
+            result = outbox.send_mail(subject, message, recipient_list, from_email, **kwargs)
+            logger.info("Outbox send_mail result: %s", result)
+            return result
         from_email = from_email or settings.DEFAULT_FROM_EMAIL
-        return send_mail(subject, message, from_email, recipient_list, **kwargs)
+        result = send_mail(subject, message, from_email, recipient_list, **kwargs)
+        logger.info("Default send_mail result: %s", result)
+        return result
 
 
 class EmailOutbox(Entity):

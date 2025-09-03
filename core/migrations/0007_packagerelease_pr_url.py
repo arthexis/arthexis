@@ -40,6 +40,27 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Sigil Roots",
             },
         ),
+        migrations.CreateModel(
+            name="InviteLead",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("email", models.EmailField(max_length=254)),
+                ("comment", models.TextField(blank=True)),
+                ("created_on", models.DateTimeField(auto_now_add=True)),
+            ],
+            options={
+                "verbose_name": "Invite Lead",
+                "verbose_name_plural": "Invite Leads",
+            },
+        ),
         migrations.AlterField(
             model_name="odooprofile",
             name="host",

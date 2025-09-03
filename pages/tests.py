@@ -1,5 +1,6 @@
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from urllib.parse import quote
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.contrib import admin
@@ -9,7 +10,7 @@ from pages.models import Application, Module, SiteBadge, Favorite
 from core.user_data import UserDatum
 from pages.admin import ApplicationAdmin
 from django.apps import apps as django_apps
-from core.models import AdminHistory
+from core.models import AdminHistory, InviteLead
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
 import tempfile
@@ -117,6 +118,16 @@ class InvitationTests(TestCase):
         self.assertContains(
             resp, "If the email exists, an invitation has been sent."
         )
+
+    def test_request_invite_creates_lead_with_comment(self):
+        resp = self.client.post(
+            reverse("pages:request-invite"),
+            {"email": "new@example.com", "comment": "Hello"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        lead = InviteLead.objects.get()
+        self.assertEqual(lead.email, "new@example.com")
+        self.assertEqual(lead.comment, "Hello")
 
 
 class NavbarBrandTests(TestCase):
@@ -600,12 +611,20 @@ class FavoriteTests(TestCase):
 
     def test_add_favorite(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
-        url = reverse("admin:favorite_toggle", args=[ct.id])
+        next_url = reverse("admin:pages_application_changelist")
+        url = reverse("admin:favorite_toggle", args=[ct.id]) + f"?next={quote(next_url)}"
         resp = self.client.post(url, {"custom_label": "Apps", "user_data": "on"})
-        self.assertRedirects(resp, reverse("admin:index"))
+        self.assertRedirects(resp, next_url)
         fav = Favorite.objects.get(user=self.user, content_type=ct)
         self.assertEqual(fav.custom_label, "Apps")
         self.assertTrue(fav.user_data)
+
+    def test_cancel_link_uses_next(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        next_url = reverse("admin:pages_application_changelist")
+        url = reverse("admin:favorite_toggle", args=[ct.id]) + f"?next={quote(next_url)}"
+        resp = self.client.get(url)
+        self.assertContains(resp, f'href="{next_url}"')
 
     def test_existing_favorite_redirects_to_list(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
