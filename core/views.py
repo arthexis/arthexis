@@ -101,6 +101,7 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
         release.save(update_fields=["revision"])
         PackageRelease.dump_fixture()
         subprocess.run(["git", "checkout", current], check=True)
+        subprocess.run(["git", "pull", "--rebase"], check=True)
         subprocess.run(["git", "merge", "--ff-only", branch], check=True)
         subprocess.run(["git", "branch", "-d", branch], check=True)
         diff = subprocess.run(

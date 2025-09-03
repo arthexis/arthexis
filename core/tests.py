@@ -516,3 +516,21 @@ class ReleaseProcessTests(TestCase):
         run.assert_any_call(["git", "reset", "--hard"], check=False)
         run.assert_any_call(["git", "clean", "-fd"], check=False)
 
+    @mock.patch("core.views.subprocess.run")
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    @mock.patch(
+        "core.views.release_utils.promote",
+        return_value=("deadbeef", "release-branch", "main"),
+    )
+    def test_promote_pulls_rebase_before_merge(self, promote, dump_fixture, run):
+        import subprocess as sp
+
+        def fake_run(cmd, check=True, capture_output=False, text=False):
+            if capture_output:
+                return sp.CompletedProcess(cmd, 0, stdout="", stderr="")
+            return sp.CompletedProcess(cmd, 0)
+
+        run.side_effect = fake_run
+        _step_promote_build(self.release, {}, Path("rel.log"))
+        run.assert_any_call(["git", "pull", "--rebase"], check=True)
+
