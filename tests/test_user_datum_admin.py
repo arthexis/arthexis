@@ -33,7 +33,6 @@ class UserDatumAdminTests(TransactionTestCase):
         self.data_dir = Path(settings.BASE_DIR) / "data"
         for f in self.data_dir.glob("*.json"):
             f.unlink()
-        Path("core/fixtures/releases.json").write_text("[]")
         self.profile = OdooProfile.objects.create(
             user=self.user,
             host="http://test",
