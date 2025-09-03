@@ -94,6 +94,10 @@ class ChargePointSimulator:
                         log_type="simulator",
                     )
                     raise
+                except websockets.exceptions.ConnectionClosed:
+                    self.status = "stopped"
+                    self._stop_event.set()
+                    raise
                 except Exception:
                     self.status = "error"
                     raise

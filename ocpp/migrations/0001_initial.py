@@ -124,7 +124,7 @@ class Migration(migrations.Migration):
             ],
             options={
                 'verbose_name': 'Transaction',
-                'verbose_name_plural': 'Transactions',
+                'verbose_name_plural': 'CP Transactions',
             },
         ),
         migrations.CreateModel(
