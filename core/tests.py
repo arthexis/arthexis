@@ -636,6 +636,25 @@ class ReleaseProcessTests(TestCase):
             lock_file = Path("locks") / f"release_publish_{self.release.pk}.json"
             self.assertFalse(lock_file.exists())
 
+    def test_release_progress_restart(self):
+        run = []
+
+        def step_fail(release, ctx, log_path):
+            run.append("step")
+            raise Exception("boom")
+
+        steps = [("Fail", step_fail)]
+        user = User.objects.create_superuser("admin", "admin@example.com", "pw")
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        with mock.patch("core.views.PUBLISH_STEPS", steps):
+            self.client.force_login(user)
+            self.client.get(f"{url}?step=0")
+            self.client.get(f"{url}?step=0")
+            self.assertEqual(run, ["step"])
+            self.client.get(f"{url}?restart=1")
+            self.client.get(f"{url}?step=0")
+            self.assertEqual(run, ["step", "step"])
+
 
 class PackageReleaseAdminActionTests(TestCase):
     def setUp(self):

@@ -6,7 +6,7 @@ import requests
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, login
 from django.http import Http404, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, render, redirect
 from django.views.decorators.csrf import csrf_exempt
 from pathlib import Path
 import subprocess
@@ -364,6 +364,19 @@ def release_progress(request, pk: int, action: str):
         raise Http404("Unknown action")
     session_key = f"release_publish_{pk}"
     lock_path = Path("locks") / f"release_publish_{pk}.json"
+
+    if request.GET.get("restart"):
+        _clean_repo()
+        release.revision = ""
+        release.pypi_url = ""
+        release.save(update_fields=["revision", "pypi_url"])
+        request.session.pop(session_key, None)
+        if lock_path.exists():
+            lock_path.unlink()
+        log_dir = Path("logs")
+        for f in log_dir.glob(f"{release.package.name}-{release.version}*.log"):
+            f.unlink()
+        return redirect(request.path)
     ctx = request.session.get(session_key)
     if ctx is None and lock_path.exists():
         try:
