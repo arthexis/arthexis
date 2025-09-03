@@ -6,7 +6,7 @@ from django.conf import settings
 class OcppConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "ocpp"
-    verbose_name = "OCPP"
+    verbose_name = "3. Protocols"
 
     def ready(self):  # pragma: no cover - startup side effects
         lock = Path(settings.BASE_DIR) / "locks" / "control.lck"

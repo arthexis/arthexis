@@ -19,9 +19,9 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? "
 "1 : 2;\n"
 
-#: core/apps.py:8
-msgid "Business Models"
-msgstr "Modelos de negocio"
+#: core/apps.py:8 core/templates/core/release_progress.html:9 pages/templates/core/release_progress.html:9
+msgid "2. Business"
+msgstr "2. Negocio"
 
 #: core/models.py:140
 msgid "Invalid municipality for the selected state"
@@ -267,9 +267,9 @@ msgstr "Español"
 msgid "Constellation"
 msgstr "Constellation"
 
-#: emails/apps.py:8
-msgid "Post Office"
-msgstr "Oficina de correos"
+#: core/templates/admin/core/emailinbox/search.html:8
+msgid "6. Workgroup"
+msgstr "6. Grupo de trabajo"
 
 #: emails/models.py:25
 msgid "Email Pattern"
