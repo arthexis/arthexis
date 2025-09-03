@@ -14,7 +14,8 @@
   </p>
   <div class="submit-row">
     <input type="submit" value="{% translate 'Save' %}" class="default">
-    <a href="{% url 'admin:index' %}">{% translate "Cancel" %}</a>
+    {% url 'admin:index' as admin_index %}
+    <a href="{{ next|default:admin_index }}">{% translate "Cancel" %}</a>
   </div>
 </form>
 {% endblock %}
