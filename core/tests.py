@@ -611,3 +611,26 @@ class ReleaseProcessTests(TestCase):
         )
         version_path.write_text(original, encoding="utf-8")
 
+    def test_release_progress_uses_lockfile(self):
+        run = []
+
+        def step1(release, ctx, log_path):
+            run.append("step1")
+
+        def step2(release, ctx, log_path):
+            run.append("step2")
+
+        steps = [("One", step1), ("Two", step2)]
+        user = User.objects.create_superuser("admin", "admin@example.com", "pw")
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        with mock.patch("core.views.PUBLISH_STEPS", steps):
+            self.client.force_login(user)
+            self.client.get(f"{url}?step=0")
+            self.assertEqual(run, ["step1"])
+            client2 = Client()
+            client2.force_login(user)
+            client2.get(f"{url}?step=1")
+            self.assertEqual(run, ["step1", "step2"])
+            lock_file = Path("locks") / f"release_publish_{self.release.pk}.json"
+            self.assertFalse(lock_file.exists())
+
