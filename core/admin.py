@@ -43,6 +43,7 @@ from .models import (
     PackageRelease,
     ReleaseManager,
     SecurityGroup,
+    InviteLead,
 )
 from .user_data import UserDatumAdminMixin
 
@@ -222,6 +223,13 @@ class SecurityGroupAdmin(DjangoGroupAdmin):
     form = SecurityGroupAdminForm
     fieldsets = ((None, {"fields": ("name", "parent", "users", "permissions")}),)
     filter_horizontal = ("permissions",)
+
+
+@admin.register(InviteLead)
+class InviteLeadAdmin(admin.ModelAdmin):
+    list_display = ("email", "created_on")
+    search_fields = ("email", "comment")
+    readonly_fields = ("created_on",)
 
 
 class EnergyAccountRFIDForm(forms.ModelForm):
