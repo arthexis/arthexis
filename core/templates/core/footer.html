@@ -7,7 +7,7 @@
       </div>
     {% endfor %}
   </div>
-  <div class="text-center border-top mt-3 pt-3 pb-3">
+  <div class="text-center border-top mt-3 pt-4 pb-2">
     <div class="text-muted fs-6">
       {% if request.user.is_staff and release_url %}
         <a href="{{ release_url }}">{{ release_name }}</a>

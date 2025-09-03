@@ -50,7 +50,8 @@ class FooterAdminLinkTests(TestCase):
             now = timezone.now()
             log_file.write_text(f"{now.isoformat()} check_github_updates triggered\n")
             html = self._render(self.user)
-            self.assertIn("fresh since", html)
+            expected = timezone.localtime(now).strftime("%Y-%m-%d %H:%M")
+            self.assertIn(f"fresh since {expected}", html)
         finally:
             if log_file.exists():
                 log_file.unlink()
@@ -73,7 +74,8 @@ class FooterAdminLinkTests(TestCase):
                 with patch("django.utils.timezone.now", return_value=now):
                     html = self._render(self.user)
             html = html.replace("\xa0", " ")
-            self.assertIn("fresh since 1 hour", html)
+            expected = timezone.localtime(now - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
+            self.assertIn(f"fresh since {expected}", html)
         finally:
             if log_file.exists():
                 log_file.unlink()
