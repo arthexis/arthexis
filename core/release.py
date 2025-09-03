@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -301,9 +302,7 @@ def build(
     _write_pyproject(package, version, requirements)
     if dist:
         if Path("dist").exists():
-            for p in Path("dist").glob("*"):
-                p.unlink()
-            Path("dist").rmdir()
+            shutil.rmtree("dist")
         try:
             import build  # type: ignore
         except Exception:
