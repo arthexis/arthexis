@@ -21,6 +21,7 @@ from django.templatetags.static import static
 from django.utils.html import format_html
 import json
 import uuid
+import requests
 from django_object_actions import DjangoObjectActions
 from .user_data import UserDatumAdminMixin
 from .models import (
@@ -806,7 +807,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
         "published_status",
     )
     list_display_links = ("version",)
-    actions = ["publish_release"]
+    actions = ["publish_release", "validate_releases"]
     change_actions = ["publish_release_action"]
     readonly_fields = ("pypi_url", "is_current", "revision")
     fields = (
@@ -850,6 +851,37 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
 
     publish_release_action.label = "Publish selected Release"
     publish_release_action.short_description = "Publish this release"
+
+    @admin.action(description="Validate selected Releases")
+    def validate_releases(self, request, queryset):
+        deleted = False
+        for release in queryset:
+            if not release.pypi_url:
+                self.message_user(
+                    request,
+                    f"{release} has not been published yet",
+                    messages.WARNING,
+                )
+                continue
+            url = (
+                f"https://pypi.org/pypi/{release.package.name}/{release.version}/json"
+            )
+            try:
+                resp = requests.get(url, timeout=10)
+            except Exception as exc:  # pragma: no cover - network failure
+                self.message_user(request, f"{release}: {exc}", messages.ERROR)
+                continue
+            if resp.status_code == 200:
+                continue
+            release.delete()
+            deleted = True
+            self.message_user(
+                request,
+                f"Deleted {release} as it was not found on PyPI",
+                messages.WARNING,
+            )
+        if deleted:
+            PackageRelease.dump_fixture()
 
     @staticmethod
     def _boolean_icon(value: bool) -> str:
