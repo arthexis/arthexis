@@ -3,6 +3,6 @@
   {"model": "nodes.noderole", "pk": 2, "fields": {"name": "Control", "description": "Single-Device Testing & Special Task Appliances"}},
   {"model": "nodes.noderole", "pk": 3, "fields": {"name": "Gateway", "description": "Multi-Device Edge, Network & Data Acquisition"}},
   {"model": "nodes.noderole", "pk": 4, "fields": {"name": "Constellation", "description": "Multi-User Cloud & Orchestration"}},
-  {"model": "nodes.noderole", "pk": 5, "fields": {"name": "Virtual", "description": "Multi-User Cloud Micro-services"}},
-  {"model": "nodes.noderole", "pk": 6, "fields": {"name": "Particle", "description": "Single-User Personal Wearable"}}
+  {"model": "nodes.noderole", "pk": 5, "fields": {"name": "Virtual", "description": "Micro-services"}},
+  {"model": "nodes.noderole", "pk": 6, "fields": {"name": "Particle", "description": "Single-User Personal Wearables"}}
 ]
