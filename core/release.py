@@ -268,8 +268,8 @@ def build(
                 "Git repository is not clean. Commit, stash, or enable auto stash before building."
             )
 
+    version_path = Path("VERSION")
     if version is None:
-        version_path = Path("VERSION")
         if not version_path.exists():
             raise ReleaseError("VERSION file not found")
         version = version_path.read_text().strip()
@@ -278,6 +278,9 @@ def build(
             patch += 1
             version = f"{major}.{minor}.{patch}"
             version_path.write_text(version + "\n")
+    else:
+        # Ensure the VERSION file reflects the provided release version
+        version_path.write_text(version + "\n")
 
     requirements = [
         line.strip()
