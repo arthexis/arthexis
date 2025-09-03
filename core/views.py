@@ -62,29 +62,24 @@ def _step_check_pypi(release, ctx, log_path: Path) -> None:
             raise Exception(
                 f"Version {release.version} is older than existing {current}"
             )
-    try:
-        version_path.write_text(release.version + "\n", encoding="utf-8")
 
-        _append_log(log_path, f"Checking if version {release.version} exists on PyPI")
-        if release_utils.network_available():
-            try:
-                resp = requests.get(
-                    f"https://pypi.org/pypi/{release.package.name}/json"
+    _append_log(log_path, f"Checking if version {release.version} exists on PyPI")
+    if release_utils.network_available():
+        try:
+            resp = requests.get(
+                f"https://pypi.org/pypi/{release.package.name}/json"
+            )
+            if resp.ok and release.version in resp.json().get("releases", {}):
+                raise Exception(
+                    f"Version {release.version} already on PyPI"
                 )
-                if resp.ok and release.version in resp.json().get("releases", {}):
-                    raise Exception(
-                        f"Version {release.version} already on PyPI"
-                    )
-            except Exception as exc:
-                # network errors should be logged but not crash
-                if "already on PyPI" in str(exc):
-                    raise
-                _append_log(log_path, f"PyPI check failed: {exc}")
-        else:
-            _append_log(log_path, "Network unavailable, skipping PyPI check")
-    except Exception:
-        _clean_repo()
-        raise
+        except Exception as exc:
+            # network errors should be logged but not crash
+            if "already on PyPI" in str(exc):
+                raise
+            _append_log(log_path, f"PyPI check failed: {exc}")
+    else:
+        _append_log(log_path, "Network unavailable, skipping PyPI check")
 
 
 def _step_promote_build(release, ctx, log_path: Path) -> None:

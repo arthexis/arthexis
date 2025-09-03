@@ -10,6 +10,7 @@ from django.http import HttpRequest
 import json
 from unittest import mock
 from pathlib import Path
+import subprocess
 
 from django.utils import timezone
 from .models import (
@@ -498,6 +499,20 @@ class ReleaseProcessTests(TestCase):
         with self.assertRaises(Exception):
             _step_check_pypi(self.release, {}, Path("rel.log"))
 
+    @mock.patch("core.views.release_utils._git_clean", return_value=True)
+    @mock.patch("core.views.release_utils.network_available", return_value=False)
+    def test_step_check_keeps_repo_clean(self, network_available, git_clean):
+        version_path = Path("VERSION")
+        original = version_path.read_text(encoding="utf-8")
+        _step_check_pypi(self.release, {}, Path("rel.log"))
+        proc = subprocess.run(
+            ["git", "status", "--porcelain", str(version_path)],
+            capture_output=True,
+            text=True,
+        )
+        self.assertFalse(proc.stdout.strip())
+        self.assertEqual(version_path.read_text(encoding="utf-8"), original)
+
     @mock.patch("core.models.PackageRelease.dump_fixture")
     def test_save_does_not_dump_fixture(self, dump):
         self.release.pypi_url = "https://example.com"
@@ -565,4 +580,34 @@ class ReleaseProcessTests(TestCase):
         dump_fixture.assert_called_once()
         self.release.refresh_from_db()
         self.assertEqual(self.release.revision, "cafebabe")
+
+    @mock.patch("core.views.revision.get_revision", return_value="cafebabe")
+    @mock.patch("core.views.subprocess.run")
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    def test_promote_advances_version(self, dump_fixture, run, get_rev):
+        import subprocess as sp
+
+        def fake_run(cmd, check=True, capture_output=False, text=False):
+            if capture_output:
+                return sp.CompletedProcess(cmd, 0, stdout="", stderr="")
+            return sp.CompletedProcess(cmd, 0)
+
+        run.side_effect = fake_run
+
+        version_path = Path("VERSION")
+        original = version_path.read_text(encoding="utf-8")
+        version_path.write_text("0.0.1\n", encoding="utf-8")
+
+        def fake_promote(*args, **kwargs):
+            version_path.write_text(self.release.version + "\n", encoding="utf-8")
+            return ("deadbeef", "release-branch", "main")
+
+        with mock.patch("core.views.release_utils.promote", side_effect=fake_promote):
+            _step_promote_build(self.release, {}, Path("rel.log"))
+
+        self.assertEqual(
+            version_path.read_text(encoding="utf-8"),
+            self.release.version + "\n",
+        )
+        version_path.write_text(original, encoding="utf-8")
 
