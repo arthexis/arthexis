@@ -4,6 +4,18 @@ Changelog
 Unreleased
 ----------
 
+0.1.11 [revision 4fc2d82cd74fc026db510025103978692c612cd0]
+----------------------------------------------------------
+
+- 4fc2d82 omni
+- c1e2ba3 microservices
+- 248ba81 Add Virtual and Particle node roles
+- d4524bf test: cover dist cleanup in build
+- f14bc47 regress version test
+- bae58ca Add PyPI validation admin action
+- 033f958 Release v0.1.10
+- 63b1437 fix: persist release progress through reload
+
 0.1.10 [revision c4639560ca7bccb8d967ed706c25595e47fa786d]
 ----------------------------------------------------------
 
