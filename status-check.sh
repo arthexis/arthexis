@@ -38,8 +38,8 @@ fi
 
 echo "Nginx mode: $MODE"
 
-ROLE="unknown"
-if [ -f "$LOCK_DIR/role.lck" ]; then
+ROLE="${NODE_ROLE:-Terminal}"
+if [ -z "$NODE_ROLE" ] && [ -f "$LOCK_DIR/role.lck" ]; then
   ROLE="$(cat "$LOCK_DIR/role.lck")"
 fi
 echo "Node role: $ROLE"

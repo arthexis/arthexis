@@ -31,8 +31,8 @@ def _gather_info() -> dict:
     info["mode"] = mode
     info["port"] = 8000 if mode == "public" else 8888
 
-    role_file = lock_dir / "role.lck"
-    info["role"] = role_file.read_text().strip() if role_file.exists() else "unknown"
+    # Use settings.NODE_ROLE as the single source of truth for the node role.
+    info["role"] = getattr(settings, "NODE_ROLE", "Terminal")
 
     info["features"] = {
         "celery": (lock_dir / "celery.lck").exists(),
