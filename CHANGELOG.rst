@@ -4,6 +4,13 @@ Changelog
 Unreleased
 ----------
 
+0.1.9 [revision 156153114e6355e354add0ff6c9ad6312eae4203]
+---------------------------------------------------------
+
+- 67e9179 Update references fixtures
+- 80f96da feat: auto-commit fixture changes during release
+- 9184bce Release v0.1.8
+
 0.1.8 [revision c31210175bda8ee03a581826f0744676a7a1016f]
 ---------------------------------------------------------
 
