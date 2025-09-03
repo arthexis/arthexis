@@ -7,9 +7,9 @@ from celery import Celery
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
-# When running on Constellation or Satellite nodes, avoid Celery debug mode.
+# When running on production-oriented nodes, avoid Celery debug mode.
 NODE_ROLE = os.environ.get("NODE_ROLE", "")
-if NODE_ROLE in {"Constellation", "Satellite"}:
+if NODE_ROLE in {"Constellation", "Satellite", "Virtual"}:
     for var in ["CELERY_TRACE_APP", "CELERY_DEBUG"]:
         os.environ.pop(var, None)
     os.environ.setdefault("CELERY_LOG_LEVEL", "INFO")
