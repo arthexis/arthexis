@@ -269,7 +269,7 @@ class Migration(migrations.Migration):
                 ('is_deleted', models.BooleanField(default=False, editable=False)),
                 ('pypi_username', models.CharField('PyPI username', blank=True, max_length=100)),
                 ('pypi_token', models.CharField('PyPI token', blank=True, max_length=200)),
-                ('github_token', models.CharField(blank=True, help_text='Personal access token used to create GitHub pull requests. Used before the GITHUB_TOKEN environment variable.', max_length=200)),
+                ('github_token', models.CharField(blank=True, help_text='Personal access token for GitHub operations. Used before the GITHUB_TOKEN environment variable.', max_length=200)),
                 ('pypi_password', models.CharField('PyPI password', blank=True, max_length=200)),
                 ('pypi_url', models.URLField('PyPI URL', blank=True)),
                 ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='release_manager', to=settings.AUTH_USER_MODEL)),

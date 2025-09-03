@@ -768,7 +768,7 @@ class Migration(migrations.Migration):
                         blank=True,
                         max_length=200,
                         help_text=(
-                            'Personal access token used to create GitHub pull requests. '
+                            'Personal access token for GitHub operations. '
                             'Used before the GITHUB_TOKEN environment variable.'
                         ),
                     ),

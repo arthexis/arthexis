@@ -787,14 +787,13 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
         "package",
         "is_current",
         "pypi_url",
-        "pr_link",
         "revision_short",
         "published_status",
     )
     list_display_links = ("version",)
     actions = ["publish_release"]
     change_actions = ["publish_release_action"]
-    readonly_fields = ("pypi_url", "pr_url", "is_current", "revision")
+    readonly_fields = ("pypi_url", "is_current", "revision")
     fields = (
         "package",
         "release_manager",
@@ -802,7 +801,6 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
         "revision",
         "is_current",
         "pypi_url",
-        "pr_url",
     )
 
     def revision_short(self, obj):
@@ -847,10 +845,4 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
     def is_current(self, obj):
         return self._boolean_icon(obj.is_current)
 
-    def pr_link(self, obj):
-        if obj.pr_url:
-            return format_html('<a href="{0}" target="_blank">{0}</a>', obj.pr_url)
-        return ""
-
-    pr_link.short_description = "PR URL"
 
