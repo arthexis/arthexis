@@ -34,6 +34,9 @@ class ReleaseProgressViewTests(TestCase):
         )
         self.log_dir = Path("logs")
         self.log_dir.mkdir(exist_ok=True)
+        lock_path = Path("locks") / f"release_publish_{self.release.pk}.json"
+        if lock_path.exists():
+            lock_path.unlink()
 
     def tearDown(self):
         shutil.rmtree(self.log_dir, ignore_errors=True)

@@ -4,7 +4,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
 django.setup()
 
-from django.test import Client, TestCase
+from django.test import Client, TestCase, RequestFactory
 from django.urls import reverse
 from django.http import HttpRequest
 import json
@@ -29,6 +29,8 @@ from .models import (
     Package,
     PackageRelease,
 )
+from django.contrib.admin.sites import AdminSite
+from core.admin import PackageReleaseAdmin
 from ocpp.models import Transaction, Charger
 
 from django.core.exceptions import ValidationError
@@ -633,4 +635,35 @@ class ReleaseProcessTests(TestCase):
             self.assertEqual(run, ["step1", "step2"])
             lock_file = Path("locks") / f"release_publish_{self.release.pk}.json"
             self.assertFalse(lock_file.exists())
+
+
+class PackageReleaseAdminActionTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.site = AdminSite()
+        self.admin = PackageReleaseAdmin(PackageRelease, self.site)
+        self.admin.message_user = lambda *args, **kwargs: None
+        self.package = Package.objects.create(name="pkg")
+        self.release = PackageRelease.objects.create(
+            package=self.package,
+            version="1.0.0",
+            pypi_url="https://pypi.org/project/pkg/1.0.0/",
+        )
+        self.request = self.factory.get("/")
+
+    @mock.patch("core.admin.PackageRelease.dump_fixture")
+    @mock.patch("core.admin.requests.get")
+    def test_validate_deletes_missing_release(self, mock_get, dump):
+        mock_get.return_value.status_code = 404
+        self.admin.validate_releases(self.request, PackageRelease.objects.all())
+        self.assertEqual(PackageRelease.objects.count(), 0)
+        dump.assert_called_once()
+
+    @mock.patch("core.admin.PackageRelease.dump_fixture")
+    @mock.patch("core.admin.requests.get")
+    def test_validate_keeps_existing_release(self, mock_get, dump):
+        mock_get.return_value.status_code = 200
+        self.admin.validate_releases(self.request, PackageRelease.objects.all())
+        self.assertEqual(PackageRelease.objects.count(), 1)
+        dump.assert_not_called()
 
