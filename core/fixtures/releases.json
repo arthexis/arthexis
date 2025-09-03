@@ -1,0 +1,1 @@
+[{"model": "core.packagerelease", "pk": 1, "fields": {"is_seed_data": false, "is_deleted": false, "package": 1, "release_manager": 1, "version": "0.1.7", "revision": "06d9078d16f0c7a02be5f7e4702532d47bda27d2", "pypi_url": "https://pypi.org/project/arthexis/0.1.7/"}}]
