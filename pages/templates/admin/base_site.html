@@ -235,6 +235,27 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
     background: var(--button-hover-bg);
 }
 
+/* Style object action buttons like history links */
+.object-tools li button {
+    border: none;
+    border-radius: 15px;
+    display: block;
+    float: left;
+    padding: 3px 12px;
+    background: var(--object-tools-bg);
+    color: var(--object-tools-fg);
+    font-weight: 400;
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+}
+
+.object-tools li button:focus,
+.object-tools li button:hover {
+    background-color: var(--object-tools-hover-bg);
+}
+
 /* Align delete button with other submit-row buttons */
 .submit-row a.deletelink {
     margin-left: 0;
