@@ -68,7 +68,7 @@ def _trigger_startup_notification(**_: object) -> None:
 class NodesConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "nodes"
-    verbose_name = "4. Infraestructure"
+    verbose_name = "2. Infrastructure"
 
     def ready(self):  # pragma: no cover - exercised on app start
         request_started.connect(
