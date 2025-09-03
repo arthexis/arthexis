@@ -4,6 +4,38 @@ Changelog
 Unreleased
 ----------
 
+0.1.7 [revision 2ec6a5bf9d68e973b752a58d060ce59c4c7f93b5]
+---------------------------------------------------------
+
+- d25ba8c Add app config overrides
+- 7dce0e2 Update VERSION and enforce sync with releases
+- 487127e style: match action button padding with history link
+- dd8aeac Track invitation requests via InviteLead model
+- 609bf8d chore: remove release tests and fixture
+- 5a10980 Add logging for invitation requests and node email sending
+- 924d97b Test Celery debug configuration
+- 9089840 Format footer fresh since date
+- bcaa981 chore: tidy env-refresh clean test
+- 8a56463 Make package column clickable in PackageRelease admin
+- 8bc89dc Redirect favorite setup actions back
+- 2a4e03d style: match admin object action buttons
+- 64230ce feat: show freshness timestamp in footer
+- 6b99295 Show all models in app list
+- 910d1a2 Remove pull request references from release
+- 4d601d9 test: update release progress expectations
+- d2525af fix(release): commit release fixture after build
+- 17aac32 theme admin relation buttons and align delete
+- be4168e Rename AWG admin group to Power Calculators
+- ab13409 chore(admin): fix email inbox breadcrumb
+- 61f3621 Allow anonymous access to last message API
+- 3a90ca0 Reset release progress session when version changes
+- 5b541d5 Save object before executing admin change actions
+- bd6fdd4 Use icon semaphores for readonly booleans
+- 186f316 Update release fixture on save
+- 44ce1e0 Show PyPI link after release
+- c8d51a6 docs: link support page
+- c9ef1c1 Release v0.1.4
+
 0.1.4 [revision 0dbfd4b21c7e365772a3afd0e2c9cb15020c018b]
 ---------------------------------------------------------
 
