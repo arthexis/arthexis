@@ -123,8 +123,12 @@ def request_invite(request):
     sent = False
     if request.method == "POST" and form.is_valid():
         email = form.cleaned_data["email"]
+        logger.info("Invitation requested for %s", email)
         User = get_user_model()
-        for user in User.objects.filter(email__iexact=email):
+        users = list(User.objects.filter(email__iexact=email))
+        if not users:
+            logger.warning("Invitation requested for unknown email %s", email)
+        for user in users:
             uid = urlsafe_base64_encode(force_bytes(user.pk))
             token = default_token_generator.make_token(user)
             link = request.build_absolute_uri(
@@ -137,9 +141,12 @@ def request_invite(request):
             try:
                 node = Node.get_local()
                 if node:
-                    node.send_mail(subject, body, [email])
+                    result = node.send_mail(subject, body, [email])
                 else:
-                    send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [email])
+                    result = send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [email])
+                logger.info(
+                    "Invitation email sent to %s (user %s): %s", email, user.pk, result
+                )
             except Exception:
                 logger.exception("Failed to send invitation email to %s", email)
         sent = True
