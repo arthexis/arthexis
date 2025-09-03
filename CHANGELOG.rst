@@ -4,6 +4,21 @@ Changelog
 Unreleased
 ----------
 
+0.1.8 [revision c31210175bda8ee03a581826f0744676a7a1016f]
+---------------------------------------------------------
+
+- 96ce074 Rename infrastructure app
+- 1893403 test: ensure VERSION updated during publish
+- b9d88c7 fix(core): remove duplicate initial migration
+- 9d7e95b Handle closed connection and remove test warning
+- 3e2ffb1 Ensure release fixture uses current revision
+- 2930eb9 Use settings for node role
+- 2e82647 Add PowerLead tracking and shared Lead base
+- 08b35b5 fix: rebase before pushing release metadata
+- f9ab1d0 chore: update release metadata for v0.1.7
+- 06d9078 Release v0.1.7
+- f44c3f8 Delay release fixture until commit
+
 0.1.7 [revision 2ec6a5bf9d68e973b752a58d060ce59c4c7f93b5]
 ---------------------------------------------------------
 
