@@ -534,3 +534,35 @@ class ReleaseProcessTests(TestCase):
         _step_promote_build(self.release, {}, Path("rel.log"))
         run.assert_any_call(["git", "pull", "--rebase"], check=True)
 
+    @mock.patch("core.views.revision.get_revision", return_value="cafebabe")
+    @mock.patch("core.views.subprocess.run")
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    @mock.patch(
+        "core.views.release_utils.promote",
+        return_value=("deadbeef", "release-branch", "main"),
+    )
+    def test_promote_updates_revision_before_dump(
+        self, promote, dump_fixture, run, get_rev
+    ):
+        import subprocess as sp
+
+        def fake_run(cmd, check=True, capture_output=False, text=False):
+            if capture_output:
+                return sp.CompletedProcess(cmd, 0, stdout="", stderr="")
+            return sp.CompletedProcess(cmd, 0)
+
+        run.side_effect = fake_run
+
+        def fake_dump():
+            self.assertEqual(
+                PackageRelease.objects.get(pk=self.release.pk).revision, "cafebabe"
+            )
+
+        dump_fixture.side_effect = fake_dump
+
+        _step_promote_build(self.release, {}, Path("rel.log"))
+
+        dump_fixture.assert_called_once()
+        self.release.refresh_from_db()
+        self.assertEqual(self.release.revision, "cafebabe")
+
