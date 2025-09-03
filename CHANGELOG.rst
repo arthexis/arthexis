@@ -4,6 +4,13 @@ Changelog
 Unreleased
 ----------
 
+0.1.10 [revision 4ae09ecac2af7594298b0d1966ecc110d47cf5a2]
+----------------------------------------------------------
+
+- 4ae09ec readme
+- eb244d4 docs: update features section in README
+- f5c88ba Release v0.1.9
+
 0.1.9 [revision 90f8a2c5cd97aebbf7d87622a876d61af235fb11]
 ---------------------------------------------------------
 
