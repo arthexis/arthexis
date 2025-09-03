@@ -20,6 +20,27 @@
   <li>{% if forloop.counter0 < current_step %}✅{% elif forloop.counter0 == current_step and not done and not error %}⏳{% else %}⬜{% endif %} {{ step }}</li>
 {% endfor %}
 </ol>
+{% if fixtures %}
+<h2>{% trans 'Fixture changes' %}</h2>
+<table>
+  <thead>
+    <tr>
+      <th>{% trans 'Fixture' %}</th>
+      <th>{% trans 'Entries' %}</th>
+      <th>{% trans 'Models' %}</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for fx in fixtures %}
+    <tr>
+      <td>{{ fx.path }}</td>
+      <td>{{ fx.count }}</td>
+      <td>{{ fx.models|join:', ' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
 <pre>{{ log_content }}</pre>
 {% if error %}
 <p class="error">{{ error }}</p>
