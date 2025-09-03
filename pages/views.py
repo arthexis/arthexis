@@ -126,7 +126,15 @@ def request_invite(request):
     if request.method == "POST" and form.is_valid():
         email = form.cleaned_data["email"]
         comment = form.cleaned_data.get("comment", "")
-        InviteLead.objects.create(email=email, comment=comment)
+        InviteLead.objects.create(
+            email=email,
+            comment=comment,
+            user=request.user if request.user.is_authenticated else None,
+            path=request.path,
+            referer=request.META.get("HTTP_REFERER", ""),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            ip_address=request.META.get("REMOTE_ADDR"),
+        )
         logger.info("Invitation requested for %s", email)
         User = get_user_model()
         users = list(User.objects.filter(email__iexact=email))

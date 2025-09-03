@@ -63,10 +63,25 @@ class SigilRoot(Entity):
         verbose_name_plural = "Sigil Roots"
 
 
-class InviteLead(models.Model):
+class Lead(models.Model):
+    """Common request lead information."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
+    )
+    path = models.TextField(blank=True)
+    referer = models.TextField(blank=True)
+    user_agent = models.TextField(blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_on = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        abstract = True
+
+
+class InviteLead(Lead):
     email = models.EmailField()
     comment = models.TextField(blank=True)
-    created_on = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = "Invite Lead"

@@ -1,6 +1,7 @@
 from django.db import models
 from core.entity import Entity
 from django.utils.translation import gettext_lazy as _
+from core.models import Lead
 
 
 class CableSize(Entity):
@@ -121,3 +122,16 @@ class CalculatorTemplate(Entity):
 
         base = reverse("awg:calculator")
         return f"{base}?{urlencode(params)}" if params else base
+
+
+class PowerLead(Lead):
+    """Lead generated from AWG calculator usage."""
+
+    values = models.JSONField()
+
+    class Meta:
+        verbose_name = _("Power Lead")
+        verbose_name_plural = _("Power Leads")
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return f"{self.user or 'anonymous'} @ {self.created_on}"

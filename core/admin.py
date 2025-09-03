@@ -229,7 +229,14 @@ class SecurityGroupAdmin(DjangoGroupAdmin):
 class InviteLeadAdmin(admin.ModelAdmin):
     list_display = ("email", "created_on")
     search_fields = ("email", "comment")
-    readonly_fields = ("created_on",)
+    readonly_fields = (
+        "created_on",
+        "user",
+        "path",
+        "referer",
+        "user_agent",
+        "ip_address",
+    )
 
 
 class EnergyAccountRFIDForm(forms.ModelForm):

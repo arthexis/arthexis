@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django import forms
 
-from .models import CableSize, ConduitFill, CalculatorTemplate
+from .models import CableSize, ConduitFill, CalculatorTemplate, PowerLead
 
 
 @admin.register(CableSize)
@@ -116,3 +116,18 @@ class CalculatorTemplateAdmin(admin.ModelAdmin):
         )
 
     calculator_link.short_description = "Calculator"
+
+
+@admin.register(PowerLead)
+class PowerLeadAdmin(admin.ModelAdmin):
+    list_display = ("created_on", "user", "ip_address")
+    search_fields = ("user__username", "ip_address")
+    readonly_fields = (
+        "created_on",
+        "user",
+        "path",
+        "referer",
+        "user_agent",
+        "ip_address",
+        "values",
+    )
