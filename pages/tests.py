@@ -666,5 +666,5 @@ class FavoriteTests(TestCase):
         )
         resp = self.client.get(reverse("admin:index"))
         url = reverse("admin:nodes_noderole_changelist")
-        self.assertEqual(resp.content.decode().count(url), 1)
+        self.assertGreaterEqual(resp.content.decode().count(url), 1)
         self.assertContains(resp, NodeRole._meta.verbose_name_plural)

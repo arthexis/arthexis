@@ -3,6 +3,8 @@
 from django.db import migrations, models
 import core.fields
 import utils.revision
+from django.conf import settings
+import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
@@ -54,6 +56,22 @@ class Migration(migrations.Migration):
                 ),
                 ("email", models.EmailField(max_length=254)),
                 ("comment", models.TextField(blank=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                ("path", models.TextField(blank=True)),
+                ("referer", models.TextField(blank=True)),
+                ("user_agent", models.TextField(blank=True)),
+                (
+                    "ip_address",
+                    models.GenericIPAddressField(blank=True, null=True),
+                ),
                 ("created_on", models.DateTimeField(auto_now_add=True)),
             ],
             options={

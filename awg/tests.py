@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import CableSize, ConduitFill, CalculatorTemplate
+from .models import CableSize, ConduitFill, CalculatorTemplate, PowerLead
 
 
 class AWGCalculatorTests(TestCase):
@@ -52,6 +52,24 @@ class AWGCalculatorTests(TestCase):
         self.assertContains(resp, "Voltage Drop")
         self.assertContains(resp, "EMT")
         self.assertContains(resp, "Calculate Again")
+
+    def test_power_lead_created(self):
+        url = reverse("awg:calculator")
+        data = {
+            "meters": "10",
+            "amps": "40",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "1",
+        }
+        self.client.post(url, data, HTTP_USER_AGENT="tester")
+        lead = PowerLead.objects.get()
+        self.assertEqual(lead.values["meters"], "10")
+        self.assertEqual(lead.user_agent, "tester")
 
     def test_no_cable_found(self):
         url = reverse("awg:calculator")

@@ -11,7 +11,7 @@ from django.utils.translation import gettext as _, gettext_lazy as _lazy
 
 from pages.utils import landing
 
-from .models import CableSize, ConduitFill, CalculatorTemplate
+from .models import CableSize, ConduitFill, CalculatorTemplate, PowerLead
 
 
 class AWG(int):
@@ -255,6 +255,17 @@ def calculator(request):
             form.setdefault(key, value)
     context: dict[str, object] = {"form": form}
     if request.method == "POST" and request.POST.get("meters"):
+        lead_values = {
+            k: v for k, v in request.POST.items() if k != "csrfmiddlewaretoken"
+        }
+        PowerLead.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            values=lead_values,
+            path=request.path,
+            referer=request.META.get("HTTP_REFERER", ""),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            ip_address=request.META.get("REMOTE_ADDR"),
+        )
         max_awg = request.POST.get("max_awg") or None
         conduit_field = request.POST.get("conduit")
         conduit_arg = None if conduit_field in (None, "") else conduit_field
