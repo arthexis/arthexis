@@ -644,3 +644,19 @@ msgstr "Simuladores CP"
 #: core/models.py:921
 msgid "License Plate"
 msgstr "Placa"
+
+#: core/templates/core/release_progress.html:24 pages/templates/core/release_progress.html:24
+msgid "Fixture changes"
+msgstr "Cambios de fixtures"
+
+#: core/templates/core/release_progress.html:28 pages/templates/core/release_progress.html:28
+msgid "Fixture"
+msgstr "Fixture"
+
+#: core/templates/core/release_progress.html:29 pages/templates/core/release_progress.html:29
+msgid "Entries"
+msgstr "Entradas"
+
+#: core/templates/core/release_progress.html:30 pages/templates/core/release_progress.html:30
+msgid "Models"
+msgstr "Modelos"

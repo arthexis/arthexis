@@ -53,7 +53,49 @@ def _step_check_pypi(release, ctx, log_path: Path) -> None:
     from packaging.version import Version
 
     if not release_utils._git_clean():
-        raise Exception("Git repository is not clean")
+        proc = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+        )
+        files = [line[3:] for line in proc.stdout.splitlines()]
+        fixture_files = [
+            f
+            for f in files
+            if "fixtures" in Path(f).parts and Path(f).suffix == ".json"
+        ]
+        if not files or len(fixture_files) != len(files):
+            raise Exception("Git repository is not clean")
+
+        summary = []
+        for f in fixture_files:
+            path = Path(f)
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                count = 0
+                models: list[str] = []
+            else:
+                if isinstance(data, list):
+                    count = len(data)
+                    models = sorted(
+                        {obj.get("model", "") for obj in data if isinstance(obj, dict)}
+                    )
+                elif isinstance(data, dict):
+                    count = 1
+                    models = [data.get("model", "")]
+                else:  # pragma: no cover - unexpected structure
+                    count = 0
+                    models = []
+            summary.append({"path": f, "count": count, "models": models})
+
+        ctx["fixtures"] = summary
+        _append_log(
+            log_path,
+            "Committing fixture changes: " + ", ".join(fixture_files),
+        )
+        subprocess.run(["git", "add", *fixture_files], check=True)
+        subprocess.run(["git", "commit", "-m", "chore: update fixtures"], check=True)
 
     version_path = Path("VERSION")
     if version_path.exists():
@@ -371,6 +413,7 @@ def release_progress(request, pk: int, action: str):
         "log_content": log_content,
         "log_path": str(log_path),
         "cert_log": ctx.get("cert_log"),
+        "fixtures": ctx.get("fixtures"),
     }
     request.session[session_key] = ctx
     return render(request, "core/release_progress.html", context)
