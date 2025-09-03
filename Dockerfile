@@ -21,6 +21,9 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # Copy project files
 COPY . .
 
+# Default to the Virtual node role inside the container
+RUN mkdir -p locks && echo "Virtual" > locks/role.lck
+
 # Expose default Django port
 EXPOSE 8000
 

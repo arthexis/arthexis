@@ -22,7 +22,7 @@ NODE_ROLE="Terminal"
 REQUIRES_REDIS=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--terminal] [--control] [--constellation] [--celery] [--lcd-screen|--no-lcd-screen] [--clean]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--terminal] [--control] [--constellation] [--virtual] [--particle] [--celery] [--lcd-screen|--no-lcd-screen] [--clean]" >&2
     exit 1
 }
 
@@ -147,6 +147,26 @@ while [[ $# -gt 0 ]]; do
             LATEST=false
             NODE_ROLE="Constellation"
             REQUIRES_REDIS=true
+            shift
+            ;;
+        --virtual)
+            require_nginx "virtual"
+            AUTO_UPGRADE=true
+            NGINX_MODE="public"
+            SERVICE="arthexis"
+            ENABLE_CELERY=true
+            LATEST=false
+            NODE_ROLE="Virtual"
+            REQUIRES_REDIS=true
+            shift
+            ;;
+        --particle)
+            AUTO_UPGRADE=false
+            NGINX_MODE="internal"
+            SERVICE="arthexis"
+            LATEST=true
+            ENABLE_CELERY=false
+            NODE_ROLE="Particle"
             shift
             ;;
         *)
