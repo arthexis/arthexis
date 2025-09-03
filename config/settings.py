@@ -148,8 +148,8 @@ INSTALLED_APPS = [
     "django_object_actions",
     "django.contrib.sites",
     "channels",
-    "post_office",
-    "django_celery_beat",
+    "config.workgroup_app.WorkgroupConfig",
+    "config.horologia_app.HorologiaConfig",
 ] + LOCAL_APPS
 
 if DEBUG:

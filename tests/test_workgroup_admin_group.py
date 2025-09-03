@@ -7,7 +7,7 @@ from core.admin import EmailInbox as PostOfficeEmailInbox
 from nodes.admin import EmailOutbox as PostOfficeEmailOutbox
 
 
-class PostOfficeAdminGroupTests(TestCase):
+class WorkgroupAdminGroupTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.admin = User.objects.create_superuser(
@@ -28,6 +28,6 @@ class PostOfficeAdminGroupTests(TestCase):
 
     def test_admin_index_shows_post_office_group(self):
         response = self.client.get(reverse("admin:index"))
-        self.assertContains(response, "Post Office")
+        self.assertContains(response, "6. Workgroup")
         self.assertContains(response, "Email Inboxes")
         self.assertContains(response, "Email Outboxes")
