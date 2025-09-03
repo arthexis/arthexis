@@ -24,6 +24,12 @@ def _append_log(path: Path, message: str) -> None:
         fh.write(message + "\n")
 
 
+def _clean_repo() -> None:
+    """Return the git repository to a clean state."""
+    subprocess.run(["git", "reset", "--hard"], check=False)
+    subprocess.run(["git", "clean", "-fd"], check=False)
+
+
 def _changelog_notes(version: str) -> str:
     path = Path("CHANGELOG.rst")
     if not path.exists():
@@ -45,6 +51,9 @@ def _step_check_pypi(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
     from packaging.version import Version
 
+    if not release_utils._git_clean():
+        raise Exception("Git repository is not clean")
+
     version_path = Path("VERSION")
     if version_path.exists():
         current = version_path.read_text(encoding="utf-8").strip()
@@ -52,69 +61,78 @@ def _step_check_pypi(release, ctx, log_path: Path) -> None:
             raise Exception(
                 f"Version {release.version} is older than existing {current}"
             )
-    version_path.write_text(release.version + "\n", encoding="utf-8")
+    try:
+        version_path.write_text(release.version + "\n", encoding="utf-8")
 
-    _append_log(log_path, f"Checking if version {release.version} exists on PyPI")
-    if release_utils.network_available():
-        try:
-            resp = requests.get(
-                f"https://pypi.org/pypi/{release.package.name}/json"
-            )
-            if resp.ok and release.version in resp.json().get("releases", {}):
-                raise Exception(
-                    f"Version {release.version} already on PyPI"
+        _append_log(log_path, f"Checking if version {release.version} exists on PyPI")
+        if release_utils.network_available():
+            try:
+                resp = requests.get(
+                    f"https://pypi.org/pypi/{release.package.name}/json"
                 )
-        except Exception as exc:
-            # network errors should be logged but not crash
-            if "already on PyPI" in str(exc):
-                raise
-            _append_log(log_path, f"PyPI check failed: {exc}")
-    else:
-        _append_log(log_path, "Network unavailable, skipping PyPI check")
+                if resp.ok and release.version in resp.json().get("releases", {}):
+                    raise Exception(
+                        f"Version {release.version} already on PyPI"
+                    )
+            except Exception as exc:
+                # network errors should be logged but not crash
+                if "already on PyPI" in str(exc):
+                    raise
+                _append_log(log_path, f"PyPI check failed: {exc}")
+        else:
+            _append_log(log_path, "Network unavailable, skipping PyPI check")
+    except Exception:
+        _clean_repo()
+        raise
 
 
 def _step_promote_build(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
     release.pypi_url = f"https://pypi.org/project/{release.package.name}/{release.version}/"
     release.save(update_fields=["pypi_url"])
-    PackageRelease.dump_fixture()
     _append_log(log_path, "Generating build files")
-    commit_hash, branch, current = release_utils.promote(
-        package=release.to_package(),
-        version=release.version,
-        creds=release.to_credentials(),
-    )
-    release.revision = commit_hash
-    release.save(update_fields=["revision"])
-    subprocess.run(["git", "checkout", current], check=True)
-    subprocess.run(["git", "merge", "--ff-only", branch], check=True)
-    subprocess.run(["git", "branch", "-d", branch], check=True)
-    diff = subprocess.run(
-        [
-            "git",
-            "status",
-            "--porcelain",
-            "VERSION",
-            "core/fixtures/releases.json",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if diff.stdout.strip():
-        subprocess.run(
-            ["git", "add", "VERSION", "core/fixtures/releases.json"],
-            check=True,
+    try:
+        commit_hash, branch, current = release_utils.promote(
+            package=release.to_package(),
+            version=release.version,
+            creds=release.to_credentials(),
         )
-        subprocess.run(
+        release.revision = commit_hash
+        release.save(update_fields=["revision"])
+        PackageRelease.dump_fixture()
+        subprocess.run(["git", "checkout", current], check=True)
+        subprocess.run(["git", "pull", "--rebase"], check=True)
+        subprocess.run(["git", "merge", "--ff-only", branch], check=True)
+        subprocess.run(["git", "branch", "-d", branch], check=True)
+        diff = subprocess.run(
             [
                 "git",
-                "commit",
-                "-m",
-                f"chore: update release metadata for v{release.version}",
+                "status",
+                "--porcelain",
+                "VERSION",
+                "core/fixtures/releases.json",
             ],
-            check=True,
+            capture_output=True,
+            text=True,
         )
-    subprocess.run(["git", "push"], check=True)
+        if diff.stdout.strip():
+            subprocess.run(
+                ["git", "add", "VERSION", "core/fixtures/releases.json"],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "commit",
+                    "-m",
+                    f"chore: update release metadata for v{release.version}",
+                ],
+                check=True,
+            )
+        subprocess.run(["git", "push"], check=True)
+    except Exception:
+        _clean_repo()
+        raise
     release_name = f"{release.package.name}-{release.version}-{commit_hash[:7]}"
     new_log = log_path.with_name(f"{release_name}.log")
     log_path.rename(new_log)
