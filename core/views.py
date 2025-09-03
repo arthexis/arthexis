@@ -12,6 +12,7 @@ from pathlib import Path
 import subprocess
 
 from utils.api import api_login_required
+from utils import revision
 
 from .models import Product, Subscription, EnergyAccount, PackageRelease
 from .models import RFID
@@ -99,7 +100,6 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
         )
         release.revision = commit_hash
         release.save(update_fields=["revision"])
-        PackageRelease.dump_fixture()
         subprocess.run(["git", "checkout", current], check=True)
         subprocess.run(["git", "pull", "--rebase"], check=True)
         subprocess.run(["git", "merge", "--ff-only", branch], check=True)
@@ -130,6 +130,9 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
                 check=True,
             )
         subprocess.run(["git", "push"], check=True)
+        release.revision = revision.get_revision()
+        release.save(update_fields=["revision"])
+        PackageRelease.dump_fixture()
     except Exception:
         _clean_repo()
         raise
@@ -336,6 +339,10 @@ def release_progress(request, pk: int, action: str):
         step_count = 0
     log_path = Path("logs") / log_name
     ctx.setdefault("log", log_name)
+
+    if step_count == 0 and (step_param is None or step_param == "0"):
+        if log_path.exists():
+            log_path.unlink()
 
     steps = PUBLISH_STEPS
     error = ctx.get("error")
