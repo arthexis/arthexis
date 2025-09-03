@@ -114,6 +114,7 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
             ],
             check=True,
         )
+    subprocess.run(["git", "push"], check=True)
     release_name = f"{release.package.name}-{release.version}-{commit_hash[:7]}"
     new_log = log_path.with_name(f"{release_name}.log")
     log_path.rename(new_log)
@@ -349,7 +350,6 @@ def release_progress(request, pk: int, action: str):
         "error": ctx.get("error"),
         "log_content": log_content,
         "log_path": str(log_path),
-        "pr_url": ctx.get("pr_url"),
         "cert_log": ctx.get("cert_log"),
     }
     request.session[session_key] = ctx

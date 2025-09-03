@@ -40,11 +40,6 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Sigil Roots",
             },
         ),
-        migrations.AddField(
-            model_name="packagerelease",
-            name="pr_url",
-            field=models.URLField("PR URL", blank=True, editable=False),
-        ),
         migrations.AlterField(
             model_name="odooprofile",
             name="host",
@@ -80,7 +75,7 @@ class Migration(migrations.Migration):
             name="github_token",
             field=core.fields.SigilShortAutoField(
                 blank=True,
-                help_text="Personal access token used to create GitHub pull requests. Used before the GITHUB_TOKEN environment variable.",
+                help_text="Personal access token for GitHub operations. Used before the GITHUB_TOKEN environment variable.",
                 max_length=200,
             ),
         ),

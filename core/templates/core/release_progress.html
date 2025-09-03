@@ -30,9 +30,6 @@
 <p>Running...</p>
 {% else %}
 <p>All steps completed.</p>
-{% if pr_url %}
-<p><a href="{{ pr_url }}" target="_blank" rel="noopener">{{ pr_url }}</a></p>
-{% endif %}
 {% if release.pypi_url %}
 <p><a href="{{ release.pypi_url }}" target="_blank" rel="noopener">{{ release.pypi_url }}</a></p>
 {% endif %}

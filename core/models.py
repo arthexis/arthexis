@@ -1076,7 +1076,7 @@ class ReleaseManager(Entity):
         max_length=200,
         blank=True,
         help_text=(
-            "Personal access token used to create GitHub pull requests. "
+            "Personal access token for GitHub operations. "
             "Used before the GITHUB_TOKEN environment variable."
         ),
     )
@@ -1160,7 +1160,6 @@ class PackageRelease(Entity):
         max_length=40, blank=True, default=revision_utils.get_revision, editable=False
     )
     pypi_url = models.URLField("PyPI URL", blank=True, editable=False)
-    pr_url = models.URLField("PR URL", blank=True, editable=False)
 
     class Meta:
         verbose_name = "Package Release"

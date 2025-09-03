@@ -65,13 +65,6 @@ class PackageReleaseAdminActionsTests(TestCase):
         self.assertIn("PyPI URL", content)
         self.assertNotIn('name="pypi_url"', content)
 
-    def test_change_page_pr_url_readonly(self):
-        change_url = reverse("admin:core_packagerelease_change", args=[self.release.pk])
-        resp = self.client.get(change_url)
-        content = resp.content.decode()
-        self.assertIn("PR URL", content)
-        self.assertNotIn('name="pr_url"', content)
-
     def test_change_page_is_current_readonly(self):
         change_url = reverse("admin:core_packagerelease_change", args=[self.release.pk])
         with patch("utils.revision.get_revision", return_value="rev"):
