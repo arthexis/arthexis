@@ -85,6 +85,12 @@ class PackageReleaseAdminActionsTests(TestCase):
         self.assertIn("Is current", content)
         self.assertIn('icon-yes.svg', content)
 
+    def test_list_page_package_links_to_package_admin(self):
+        list_url = reverse("admin:core_packagerelease_changelist")
+        resp = self.client.get(list_url)
+        pkg_url = reverse("admin:core_package_change", args=[self.package.pk])
+        self.assertContains(resp, f'href="{pkg_url}"')
+
     def test_release_revision_defaults_to_repo_revision(self):
         expected = revision_utils.get_revision()
         release = PackageRelease.objects.create(

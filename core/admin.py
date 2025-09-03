@@ -784,7 +784,7 @@ class RFIDAdmin(ImportExportModelAdmin):
 class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
     list_display = (
         "version",
-        "package",
+        "package_link",
         "is_current",
         "pypi_url",
         "revision_short",
@@ -802,6 +802,11 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
         "is_current",
         "pypi_url",
     )
+
+    @admin.display(description="package", ordering="package")
+    def package_link(self, obj):
+        url = reverse("admin:core_package_change", args=[obj.package_id])
+        return format_html('<a href="{}">{}</a>', url, obj.package)
 
     def revision_short(self, obj):
         return obj.revision_short
