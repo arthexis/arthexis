@@ -1,5 +1,6 @@
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from urllib.parse import quote
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.contrib import admin
@@ -600,12 +601,20 @@ class FavoriteTests(TestCase):
 
     def test_add_favorite(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
-        url = reverse("admin:favorite_toggle", args=[ct.id])
+        next_url = reverse("admin:pages_application_changelist")
+        url = reverse("admin:favorite_toggle", args=[ct.id]) + f"?next={quote(next_url)}"
         resp = self.client.post(url, {"custom_label": "Apps", "user_data": "on"})
-        self.assertRedirects(resp, reverse("admin:index"))
+        self.assertRedirects(resp, next_url)
         fav = Favorite.objects.get(user=self.user, content_type=ct)
         self.assertEqual(fav.custom_label, "Apps")
         self.assertTrue(fav.user_data)
+
+    def test_cancel_link_uses_next(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        next_url = reverse("admin:pages_application_changelist")
+        url = reverse("admin:favorite_toggle", args=[ct.id]) + f"?next={quote(next_url)}"
+        resp = self.client.get(url)
+        self.assertContains(resp, f'href="{next_url}"')
 
     def test_existing_favorite_redirects_to_list(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
