@@ -10,7 +10,7 @@ from django.utils.translation import gettext_lazy as _
 from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
 from django.apps import apps
-from django.db.models.signals import m2m_changed, post_delete, post_save
+from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
 from datetime import timedelta
 from django.contrib.contenttypes.models import ContentType
@@ -1264,6 +1264,7 @@ class PackageRelease(Entity):
         )
         self.revision = revision_utils.get_revision()
         self.save(update_fields=["revision"])
+        PackageRelease.dump_fixture()
         if kwargs.get("git"):
             diff = subprocess.run(
                 ["git", "status", "--porcelain", "core/fixtures/releases.json"],
@@ -1285,12 +1286,6 @@ class PackageRelease(Entity):
     @property
     def revision_short(self) -> str:
         return self.revision[-6:] if self.revision else ""
-
-
-@receiver([post_save, post_delete], sender=PackageRelease)
-def _update_release_fixture(sender, instance, **kwargs) -> None:
-    """Keep the release fixture in sync with the database."""
-    PackageRelease.dump_fixture()
 
 # Ensure each RFID can only be linked to one energy account
 @receiver(m2m_changed, sender=EnergyAccount.rfids.through)

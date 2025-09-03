@@ -370,15 +370,13 @@ def promote(
     """
     current = _current_branch()
     tmp_branch = f"release/{version}"
-    stashed = False
+    if not _git_clean():
+        raise ReleaseError("Git repository is not clean")
     try:
         try:
             _run(["git", "checkout", "-b", tmp_branch])
         except subprocess.CalledProcessError:
             _run(["git", "checkout", tmp_branch])
-        if not _git_clean():
-            _run(["git", "stash", "--include-untracked"])
-            stashed = True
         build(
             package=package,
             version=version,
@@ -387,7 +385,7 @@ def promote(
             dist=True,
             git=False,
             tag=False,
-            stash=True,
+            stash=False,
         )
         try:  # best effort
             _run(
@@ -415,9 +413,6 @@ def promote(
     except Exception:
         _run(["git", "checkout", current])
         raise
-    finally:
-        if stashed:
-            _run(["git", "stash", "pop"], check=False)
     return commit_hash, branch, current
 
 

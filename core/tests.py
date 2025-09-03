@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.http import HttpRequest
 import json
 from unittest import mock
+from pathlib import Path
 
 from django.utils import timezone
 from .models import (
@@ -24,6 +25,8 @@ from .models import (
     RFID,
     FediverseProfile,
     SecurityGroup,
+    Package,
+    PackageRelease,
 )
 from ocpp.models import Transaction, Charger
 
@@ -31,6 +34,7 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import IntegrityError
 from .backends import LocalhostAdminBackend
+from core.views import _step_check_pypi, _step_promote_build
 
 
 class DefaultAdminTests(TestCase):
@@ -480,4 +484,35 @@ class FediverseProfileTests(TestCase):
         with self.assertRaises(ValidationError):
             profile.test_connection()
         self.assertIsNone(profile.verified_on)
+
+
+class ReleaseProcessTests(TestCase):
+    def setUp(self):
+        self.package = Package.objects.create(name="pkg")
+        self.release = PackageRelease.objects.create(
+            package=self.package, version="1.0.0"
+        )
+
+    @mock.patch("core.views.release_utils._git_clean", return_value=False)
+    def test_step_check_requires_clean_repo(self, git_clean):
+        with self.assertRaises(Exception):
+            _step_check_pypi(self.release, {}, Path("rel.log"))
+
+    @mock.patch("core.models.PackageRelease.dump_fixture")
+    def test_save_does_not_dump_fixture(self, dump):
+        self.release.pypi_url = "https://example.com"
+        self.release.save()
+        dump.assert_not_called()
+
+    @mock.patch("core.views.subprocess.run")
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    @mock.patch("core.views.release_utils.promote", side_effect=Exception("boom"))
+    def test_promote_cleans_repo_on_failure(
+        self, promote, dump_fixture, run
+    ):
+        with self.assertRaises(Exception):
+            _step_promote_build(self.release, {}, Path("rel.log"))
+        dump_fixture.assert_not_called()
+        run.assert_any_call(["git", "reset", "--hard"], check=False)
+        run.assert_any_call(["git", "clean", "-fd"], check=False)
 
