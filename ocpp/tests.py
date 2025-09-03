@@ -1027,7 +1027,11 @@ class ChargePointSimulatorTests(TransactionTestCase):
         sim = ChargePointSimulator(cfg)
         store.simulators[99] = sim
         try:
-            with patch("ocpp.simulator.asyncio.wait_for", side_effect=asyncio.TimeoutError):
+            async def fake_wait_for(coro, timeout):
+                coro.close()
+                raise asyncio.TimeoutError
+
+            with patch("ocpp.simulator.asyncio.wait_for", fake_wait_for):
                 started, status, _ = await asyncio.to_thread(sim.start)
             await asyncio.to_thread(sim._thread.join)
             self.assertFalse(started)

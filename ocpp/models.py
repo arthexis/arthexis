@@ -172,7 +172,7 @@ class Transaction(Entity):
 
     class Meta:
         verbose_name = _("Transaction")
-        verbose_name_plural = _("Transactions")
+        verbose_name_plural = _("CP Transactions")
 
     @property
     def kw(self) -> float:

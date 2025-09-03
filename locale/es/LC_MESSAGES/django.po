@@ -613,9 +613,9 @@ msgstr "Requiere autorización RFID"
 msgid "Transaction"
 msgstr "Transacción"
 
-#: ocpp/models.py:141
-msgid "Transactions"
-msgstr "Transacciones"
+#: ocpp/models.py:175
+msgid "CP Transactions"
+msgstr "Transacciones CP"
 
 #: ocpp/models.py:194
 msgid "Meter Reading"
