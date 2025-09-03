@@ -4,5 +4,5 @@
   {"model": "nodes.noderole", "pk": 3, "fields": {"name": "Gateway", "description": "Multi-Device Edge, Network & Data Acquisition"}},
   {"model": "nodes.noderole", "pk": 4, "fields": {"name": "Constellation", "description": "Multi-User Cloud & Orchestration"}},
   {"model": "nodes.noderole", "pk": 5, "fields": {"name": "Virtual", "description": "Micro-services"}},
-  {"model": "nodes.noderole", "pk": 6, "fields": {"name": "Particle", "description": "Single-User Personal Wearables"}}
+  {"model": "nodes.noderole", "pk": 6, "fields": {"name": "Particle", "description": "Single-User Personal Omni-Wearable"}}
 ]
