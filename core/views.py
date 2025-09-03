@@ -363,7 +363,15 @@ def release_progress(request, pk: int, action: str):
     if action != "publish":
         raise Http404("Unknown action")
     session_key = f"release_publish_{pk}"
-    ctx = request.session.get(session_key, {"step": 0})
+    lock_path = Path("locks") / f"release_publish_{pk}.json"
+    ctx = request.session.get(session_key)
+    if ctx is None and lock_path.exists():
+        try:
+            ctx = json.loads(lock_path.read_text(encoding="utf-8"))
+        except Exception:
+            ctx = {"step": 0}
+    if ctx is None:
+        ctx = {"step": 0}
     step_count = ctx.get("step", 0)
     step_param = request.GET.get("step")
 
@@ -393,10 +401,14 @@ def release_progress(request, pk: int, action: str):
                 step_count += 1
                 ctx["step"] = step_count
                 request.session[session_key] = ctx
+                lock_path.parent.mkdir(parents=True, exist_ok=True)
+                lock_path.write_text(json.dumps(ctx), encoding="utf-8")
             except Exception as exc:  # pragma: no cover - best effort logging
                 _append_log(log_path, f"{name} failed: {exc}")
                 ctx["error"] = str(exc)
                 request.session[session_key] = ctx
+                lock_path.parent.mkdir(parents=True, exist_ok=True)
+                lock_path.write_text(json.dumps(ctx), encoding="utf-8")
 
     done = step_count >= len(steps) and not ctx.get("error")
 
@@ -416,4 +428,10 @@ def release_progress(request, pk: int, action: str):
         "fixtures": ctx.get("fixtures"),
     }
     request.session[session_key] = ctx
+    if done or ctx.get("error"):
+        if lock_path.exists():
+            lock_path.unlink()
+    else:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text(json.dumps(ctx), encoding="utf-8")
     return render(request, "core/release_progress.html", context)
