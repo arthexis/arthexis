@@ -76,21 +76,23 @@ def render_footer(context):
                 "admin:core_packagerelease_change", args=[release.pk]
             )
 
-    fresh_since = None
     base_dir = Path(settings.BASE_DIR)
-    auto_upgrade = base_dir / "AUTO_UPGRADE"
-    lock_file = base_dir / "locks" / "celery.lck"
     log_file = base_dir / "logs" / "auto-upgrade.log"
-    if auto_upgrade.exists() and lock_file.exists() and log_file.exists():
+
+    latest = INSTANCE_START
+    if log_file.exists():
         try:
-            first_line = log_file.read_text().splitlines()[0]
-            timestamp = first_line.split(" ", 1)[0]
+            last_line = log_file.read_text().splitlines()[-1]
+            timestamp = last_line.split(" ", 1)[0]
             dt = datetime.fromisoformat(timestamp)
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=dt_timezone.utc)
-            fresh_since = timesince(dt, timezone.now())
+            if dt > latest:
+                latest = dt
         except Exception:
-            fresh_since = None
+            pass
+
+    fresh_since = timesince(latest, timezone.now())
 
     return {
         "footer_refs": visible_refs,
