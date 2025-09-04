@@ -647,7 +647,8 @@ class ReleaseProcessTests(TestCase):
             self.client.get(f"{url}?step=0")
             self.assertEqual(run, ["step", "step"])
             self.client.get(f"{url}?restart=1")
-            self.assertEqual(count_file.read_text(), "2")
+            # Restart counter resets after running a step
+            self.assertEqual(count_file.read_text(), "1")
 
 
 class PackageReleaseAdminActionTests(TestCase):
@@ -679,4 +680,42 @@ class PackageReleaseAdminActionTests(TestCase):
         self.admin.validate_releases(self.request, PackageRelease.objects.all())
         self.assertEqual(PackageRelease.objects.count(), 1)
         dump.assert_not_called()
+
+
+class PackageActiveTests(TestCase):
+    def test_only_one_active_package(self):
+        default = Package.objects.get(name="arthexis")
+        self.assertTrue(default.is_active)
+        other = Package.objects.create(name="pkg", is_active=True)
+        default.refresh_from_db()
+        other.refresh_from_db()
+        self.assertFalse(default.is_active)
+        self.assertTrue(other.is_active)
+
+
+class PackageReleaseCurrentTests(TestCase):
+    def setUp(self):
+        self.package = Package.objects.get(name="arthexis")
+        self.version_path = Path("VERSION")
+        self.original = self.version_path.read_text()
+        self.version_path.write_text("1.0.0")
+        self.release = PackageRelease.objects.create(
+            package=self.package, version="1.0.0"
+        )
+
+    def tearDown(self):
+        self.version_path.write_text(self.original)
+
+    def test_is_current_true_when_version_matches_and_package_active(self):
+        self.assertTrue(self.release.is_current)
+
+    def test_is_current_false_when_package_inactive(self):
+        self.package.is_active = False
+        self.package.save()
+        self.assertFalse(self.release.is_current)
+
+    def test_is_current_false_when_version_differs(self):
+        self.release.version = "2.0.0"
+        self.release.save()
+        self.assertFalse(self.release.is_current)
 

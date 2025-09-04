@@ -1153,13 +1153,29 @@ class Package(Entity):
     release_manager = models.ForeignKey(
         ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
     )
+    is_active = models.BooleanField(
+        default=False,
+        help_text="Designates the active package for version comparisons",
+    )
 
     class Meta:
         verbose_name = "Package"
         verbose_name_plural = "Packages"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("is_active",),
+                condition=models.Q(is_active=True),
+                name="unique_active_package",
+            )
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name
+
+    def save(self, *args, **kwargs):
+        if self.is_active:
+            type(self).objects.exclude(pk=self.pk).update(is_active=False)
+        super().save(*args, **kwargs)
 
     def to_package(self) -> ReleasePackage:
         """Return a :class:`ReleasePackage` instance from package data."""
@@ -1250,11 +1266,13 @@ class PackageRelease(Entity):
 
     @property
     def is_current(self) -> bool:
-        """Return ``True`` if this release matches the current revision."""
-        from utils import revision as revision_utils
-
-        current = revision_utils.get_revision()
-        return bool(current) and current == self.revision
+        """Return ``True`` when this release's version matches the VERSION file
+        and its package is active."""
+        version_path = Path("VERSION")
+        if not version_path.exists():
+            return False
+        current_version = version_path.read_text().strip()
+        return current_version == self.version and self.package.is_active
 
     @classmethod
     def latest(cls):
