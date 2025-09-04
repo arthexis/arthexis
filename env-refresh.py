@@ -87,6 +87,11 @@ def _fixture_hash(files: list[str]) -> str:
     return md5.hexdigest()
 
 
+def _write_fixture_hash(value: str) -> None:
+    """Persist the fixtures hash to disk."""
+    (Path(settings.BASE_DIR) / "fixtures.md5").write_text(value)
+
+
 def _migration_hash(app_labels: list[str]) -> str:
     """Return an md5 hash of all migration files for the given apps."""
     md5 = hashlib.md5()
@@ -318,7 +323,8 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                 except Exception:
                     continue
 
-    # Update the migrations hash file after a successful run.
+    # Update the fixtures and migrations hash files after a successful run.
+    _write_fixture_hash(fixture_hash)
     hash_file.write_text(new_hash)
 
 
