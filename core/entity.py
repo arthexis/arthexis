@@ -1,4 +1,5 @@
 import copy
+import logging
 import os
 import re
 
@@ -6,6 +7,8 @@ from django.apps import apps
 from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import UserManager as DjangoUserManager
+
+logger = logging.getLogger(__name__)
 
 
 class EntityQuerySet(models.QuerySet):
@@ -78,14 +81,33 @@ class Entity(models.Model):
             root_name, key = match.group(1), match.group(2)
             try:
                 root = SigilRoot.objects.get(prefix__iexact=root_name)
+                if root.context_type == SigilRoot.Context.CONFIG:
+                    if root.prefix.upper() == "ENV":
+                        if key in os.environ:
+                            return os.environ[key]
+                        logger.warning(
+                            "Missing environment variable for sigil [%s.%s]",
+                            root_name,
+                            key,
+                        )
+                        return match.group(0)
+                    if root.prefix.upper() == "SYS":
+                        if hasattr(settings, key):
+                            return str(getattr(settings, key))
+                        logger.warning(
+                            "Missing settings attribute for sigil [%s.%s]",
+                            root_name,
+                            key,
+                        )
+                        return match.group(0)
+                logger.warning(
+                    "Unresolvable sigil [%s.%s]: unsupported context", root_name, key
+                )
             except SigilRoot.DoesNotExist:
-                return ""
-            if root.context_type == SigilRoot.Context.CONFIG:
-                if root.prefix.upper() == "ENV":
-                    return os.environ.get(key, "")
-                if root.prefix.upper() == "SYS":
-                    return str(getattr(settings, key, ""))
-            return ""
+                logger.warning("Unknown sigil root [%s]", root_name)
+            except Exception:
+                logger.exception("Error resolving sigil [%s.%s]", root_name, key)
+            return match.group(0)
 
         return pattern.sub(repl, text)
 
