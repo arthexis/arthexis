@@ -148,7 +148,13 @@ class ReleaseManagerAdmin(admin.ModelAdmin):
 
 @admin.register(Package)
 class PackageAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
-    list_display = ("name", "description", "homepage_url", "release_manager")
+    list_display = (
+        "name",
+        "description",
+        "homepage_url",
+        "release_manager",
+        "is_active",
+    )
     actions = ["prepare_next_release"]
     change_actions = ["prepare_next_release_action"]
 
