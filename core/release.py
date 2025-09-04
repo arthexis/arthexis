@@ -83,6 +83,12 @@ def _git_clean() -> bool:
     return not proc.stdout.strip()
 
 
+def _git_has_staged_changes() -> bool:
+    """Return True if there are staged changes ready to commit."""
+    proc = subprocess.run(["git", "diff", "--cached", "--quiet"])
+    return proc.returncode != 0
+
+
 
 def _manager_credentials() -> Optional[Credentials]:
     """Return credentials from the Package's release manager if available."""
@@ -232,7 +238,8 @@ def build(
         files = ["VERSION", "pyproject.toml"]
         _run(["git", "add"] + files)
         msg = f"PyPI Release v{version}" if twine else f"Release v{version}"
-        _run(["git", "commit", "-m", msg])
+        if _git_has_staged_changes():
+            _run(["git", "commit", "-m", msg])
         _run(["git", "push"])
 
     if tag:
@@ -295,7 +302,8 @@ def promote(
         stash=False,
     )
     _run(["git", "add", "."])  # add all changes
-    _run(["git", "commit", "-m", f"Release v{version}"])
+    if _git_has_staged_changes():
+        _run(["git", "commit", "-m", f"Release v{version}"])
 
 
 def publish(
