@@ -83,19 +83,6 @@ def _git_clean() -> bool:
     return not proc.stdout.strip()
 
 
-def _current_commit() -> str:
-    return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
-
-
-def _current_branch() -> str:
-    return (
-        subprocess.check_output([
-            "git",
-            "rev-parse",
-            "--abbrev-ref",
-            "HEAD",
-        ]).decode().strip()
-    )
 
 def _manager_credentials() -> Optional[Credentials]:
     """Return credentials from the Package's release manager if available."""
@@ -174,69 +161,6 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
     Path("pyproject.toml").write_text(_dump_toml(content), encoding="utf-8")
 
 
-def _ensure_changelog() -> str:
-    header = "Changelog\n=========\n\n"
-    path = Path("CHANGELOG.rst")
-    text = path.read_text(encoding="utf-8") if path.exists() else ""
-    if not text.startswith("Changelog"):
-        text = header + text
-    if "Unreleased" not in text:
-        text = text[: len(header)] + "Unreleased\n----------\n\n" + text[len(header):]
-    return text
-
-
-def _pop_unreleased(text: str) -> tuple[str, str]:
-    lines = text.splitlines()
-    try:
-        idx = lines.index("Unreleased")
-    except ValueError:
-        return "", text
-    body = []
-    i = idx + 2
-    while i < len(lines) and lines[i].startswith("- "):
-        body.append(lines[i])
-        i += 1
-    if i < len(lines) and lines[i] == "":
-        i += 1
-    new_lines = lines[:idx] + lines[i:]
-    return "\n".join(body), "\n".join(new_lines) + ("\n" if text.endswith("\n") else "")
-
-
-def _last_changelog_revision() -> Optional[str]:
-    path = Path("CHANGELOG.rst")
-    if not path.exists():
-        return None
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if "[revision" in line:
-            try:
-                return line.split("[revision", 1)[1].split("]", 1)[0].strip()
-            except Exception:
-                return None
-    return None
-
-
-def update_changelog(version: str, revision: str, prev_revision: Optional[str] = None) -> None:
-    text = _ensure_changelog()
-    body, text = _pop_unreleased(text)
-    if not body:
-        prev_revision = prev_revision or _last_changelog_revision()
-        log_range = f"{prev_revision}..HEAD" if prev_revision else "HEAD"
-        proc = subprocess.run(
-            ["git", "log", "--pretty=%h %s", "--no-merges", log_range],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        body = "\n".join(
-            f"- {l.strip()}" for l in proc.stdout.splitlines() if l.strip()
-        )
-    header = f"{version} [revision {revision}]"
-    underline = "-" * len(header)
-    entry = "\n".join([header, underline, "", body, ""]).rstrip() + "\n\n"
-    base_header = "Changelog\n=========\n\n"
-    remaining = text[len(base_header):]
-    new_text = base_header + "Unreleased\n----------\n\n" + entry + remaining
-    Path("CHANGELOG.rst").write_text(new_text, encoding="utf-8")
 
 
 @requires_network
@@ -294,10 +218,6 @@ def build(
         if proc.returncode != 0:
             raise TestsFailed(log_path, proc.stdout + proc.stderr)
 
-    commit_hash = _current_commit()
-    prev_revision = _last_changelog_revision()
-    update_changelog(version, commit_hash, prev_revision)
-
     _write_pyproject(package, version, requirements)
     if dist:
         if Path("dist").exists():
@@ -309,7 +229,7 @@ def build(
         _run([sys.executable, "-m", "build"])
 
     if git:
-        files = ["VERSION", "pyproject.toml", "CHANGELOG.rst"]
+        files = ["VERSION", "pyproject.toml"]
         _run(["git", "add"] + files)
         msg = f"PyPI Release v{version}" if twine else f"Release v{version}"
         _run(["git", "commit", "-m", msg])
@@ -360,13 +280,8 @@ def promote(
     package: Package = DEFAULT_PACKAGE,
     version: str,
     creds: Optional[Credentials] = None,
-) -> tuple[str, str, str]:
-    """Build the package and commit the release on the current branch.
-
-    Returns a tuple of the release commit hash, the current branch name and the
-    original branch name (identical since no branching occurs).
-    """
-    current = _current_branch()
+) -> None:
+    """Build the package and commit the release on the current branch."""
     if not _git_clean():
         raise ReleaseError("Git repository is not clean")
     build(
@@ -381,8 +296,6 @@ def promote(
     )
     _run(["git", "add", "."])  # add all changes
     _run(["git", "commit", "-m", f"Release v{version}"])
-    commit_hash = _current_commit()
-    return commit_hash, current, current
 
 
 def publish(

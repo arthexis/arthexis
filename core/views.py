@@ -12,7 +12,6 @@ from pathlib import Path
 import subprocess
 
 from utils.api import api_login_required
-from utils import revision
 
 from .models import Product, Subscription, EnergyAccount, PackageRelease
 from .models import RFID
@@ -136,13 +135,11 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
         except subprocess.CalledProcessError as exc:
             subprocess.run(["git", "rebase", "--abort"], check=False)
             raise Exception("Rebase onto main failed") from exc
-        commit_hash, _, _ = release_utils.promote(
+        release_utils.promote(
             package=release.to_package(),
             version=release.version,
             creds=release.to_credentials(),
         )
-        release.revision = commit_hash
-        release.save(update_fields=["revision"])
         diff = subprocess.run(
             [
                 "git",
@@ -169,13 +166,11 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
                 check=True,
             )
         subprocess.run(["git", "push"], check=True)
-        release.revision = revision.get_revision()
-        release.save(update_fields=["revision"])
         PackageRelease.dump_fixture()
     except Exception:
         _clean_repo()
         raise
-    release_name = f"{release.package.name}-{release.version}-{commit_hash[:7]}"
+    release_name = f"{release.package.name}-{release.version}"
     new_log = log_path.with_name(f"{release_name}.log")
     log_path.rename(new_log)
     ctx["log"] = new_log.name
@@ -378,9 +373,8 @@ def release_progress(request, pk: int, action: str):
         restart_path.parent.mkdir(parents=True, exist_ok=True)
         restart_path.write_text(str(count + 1), encoding="utf-8")
         _clean_repo()
-        release.revision = ""
         release.pypi_url = ""
-        release.save(update_fields=["revision", "pypi_url"])
+        release.save(update_fields=["pypi_url"])
         request.session.pop(session_key, None)
         if lock_path.exists():
             lock_path.unlink()
@@ -408,8 +402,6 @@ def release_progress(request, pk: int, action: str):
     step_param = request.GET.get("step")
 
     identifier = f"{release.package.name}-{release.version}"
-    if release.revision:
-        identifier = f"{identifier}-{release.revision[:7]}"
     log_name = f"{identifier}.log"
     if ctx.get("log") != log_name:
         ctx = {"step": 0, "log": log_name}

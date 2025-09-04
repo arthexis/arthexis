@@ -535,10 +535,7 @@ class ReleaseProcessTests(TestCase):
 
     @mock.patch("core.views.subprocess.run")
     @mock.patch("core.views.PackageRelease.dump_fixture")
-    @mock.patch(
-        "core.views.release_utils.promote",
-        return_value=("deadbeef", "main", "main"),
-    )
+    @mock.patch("core.views.release_utils.promote")
     def test_promote_rebases_and_pushes_main(self, promote, dump_fixture, run):
         import subprocess as sp
 
@@ -553,42 +550,9 @@ class ReleaseProcessTests(TestCase):
         run.assert_any_call(["git", "rebase", "origin/main"], check=True)
         run.assert_any_call(["git", "push"], check=True)
 
-    @mock.patch("core.views.revision.get_revision", return_value="cafebabe")
     @mock.patch("core.views.subprocess.run")
     @mock.patch("core.views.PackageRelease.dump_fixture")
-    @mock.patch(
-        "core.views.release_utils.promote",
-        return_value=("deadbeef", "main", "main"),
-    )
-    def test_promote_updates_revision_before_dump(
-        self, promote, dump_fixture, run, get_rev
-    ):
-        import subprocess as sp
-
-        def fake_run(cmd, check=True, capture_output=False, text=False):
-            if capture_output:
-                return sp.CompletedProcess(cmd, 0, stdout="", stderr="")
-            return sp.CompletedProcess(cmd, 0)
-
-        run.side_effect = fake_run
-
-        def fake_dump():
-            self.assertEqual(
-                PackageRelease.objects.get(pk=self.release.pk).revision, "cafebabe"
-            )
-
-        dump_fixture.side_effect = fake_dump
-
-        _step_promote_build(self.release, {}, Path("rel.log"))
-
-        dump_fixture.assert_called_once()
-        self.release.refresh_from_db()
-        self.assertEqual(self.release.revision, "cafebabe")
-
-    @mock.patch("core.views.revision.get_revision", return_value="cafebabe")
-    @mock.patch("core.views.subprocess.run")
-    @mock.patch("core.views.PackageRelease.dump_fixture")
-    def test_promote_advances_version(self, dump_fixture, run, get_rev):
+    def test_promote_advances_version(self, dump_fixture, run):
         import subprocess as sp
 
         def fake_run(cmd, check=True, capture_output=False, text=False):
@@ -604,7 +568,6 @@ class ReleaseProcessTests(TestCase):
 
         def fake_promote(*args, **kwargs):
             version_path.write_text(self.release.version + "\n", encoding="utf-8")
-            return ("deadbeef", "main", "main")
 
         with mock.patch("core.views.release_utils.promote", side_effect=fake_promote):
             _step_promote_build(self.release, {}, Path("rel.log"))

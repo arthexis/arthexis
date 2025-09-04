@@ -15,7 +15,6 @@ from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from core.models import Package, PackageRelease
-from utils import revision
 
 
 class ReleaseProgressViewTests(TestCase):
@@ -30,7 +29,7 @@ class ReleaseProgressViewTests(TestCase):
         self.release = PackageRelease.objects.create(
             package=self.package,
             version="1.0",
-            revision=revision.get_revision(),
+            revision="",
         )
         self.log_dir = Path("logs")
         self.log_dir.mkdir(exist_ok=True)
@@ -43,7 +42,7 @@ class ReleaseProgressViewTests(TestCase):
 
     def test_stale_log_removed_on_start(self):
         log_path = self.log_dir / (
-            f"{self.package.name}-{self.release.version}-{self.release.revision[:7]}.log"
+            f"{self.package.name}-{self.release.version}.log"
         )
         log_path.write_text("old data")
 
