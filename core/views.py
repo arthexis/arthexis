@@ -137,11 +137,18 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
         )
         release.revision = commit_hash
         release.save(update_fields=["revision"])
+        try:
+            subprocess.run(["git", "fetch", "origin", "main"], check=True)
+            subprocess.run(["git", "rebase", "origin/main"], check=True)
+        except subprocess.CalledProcessError as exc:
+            subprocess.run(["git", "rebase", "--abort"], check=False)
+            raise Exception("Rebase onto main failed") from exc
         subprocess.run(["git", "checkout", current], check=True)
         subprocess.run(["git", "pull", "--rebase"], check=True)
         # Allow merging even when the release branch and main have diverged
         # by creating a merge commit instead of requiring a fast-forward.
-        subprocess.run(["git", "merge", "--no-ff", branch], check=True)
+        # Use --no-edit to avoid prompting for a commit message.
+        subprocess.run(["git", "merge", "--no-ff", "--no-edit", branch], check=True)
         subprocess.run(["git", "branch", "-d", branch], check=True)
         diff = subprocess.run(
             [
