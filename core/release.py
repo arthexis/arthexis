@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import shutil
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -97,6 +98,31 @@ def _current_branch() -> str:
         ]).decode().strip()
     )
 
+
+def _normalize_initial_migration() -> None:
+    """Ensure the initial migration is not marked as squashed.
+
+    Django's ``squashmigrations`` command produces a file named
+    ``0001_squashed_0001_initial.py`` with a ``replaces`` declaration. If that
+    file exists, or if ``0001_initial.py`` contains a ``replaces`` line from a
+    previous squashing, convert it into a normal initial migration so that
+    future squashing runs cleanly.
+    """
+
+    migrations_dir = Path("core/migrations")
+    squashed = migrations_dir / "0001_squashed_0001_initial.py"
+    initial = migrations_dir / "0001_initial.py"
+
+    if squashed.exists():
+        text = squashed.read_text(encoding="utf-8")
+        text = re.sub(r"^\s*replaces = .*$\n", "", text, flags=re.MULTILINE)
+        initial.write_text(text, encoding="utf-8")
+        squashed.unlink()
+    elif initial.exists():
+        text = initial.read_text(encoding="utf-8")
+        if "replaces" in text:
+            text = re.sub(r"^\s*replaces = .*$\n", "", text, flags=re.MULTILINE)
+            initial.write_text(text, encoding="utf-8")
 
 def _manager_credentials() -> Optional[Credentials]:
     """Return credentials from the Package's release manager if available."""
@@ -386,6 +412,7 @@ def promote(
             tag=False,
             stash=False,
         )
+        _normalize_initial_migration()
         try:  # best effort
             _run(
                 [
@@ -403,6 +430,7 @@ def promote(
             # (e.g. when no migrations exist). Any errors should not interrupt
             # the release promotion flow.
             pass
+        _normalize_initial_migration()
         _run(["git", "add", "."])  # add all changes
         _run(["git", "commit", "-m", f"Release v{version}"])
         commit_hash = _current_commit()
