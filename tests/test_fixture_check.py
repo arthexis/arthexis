@@ -1,7 +1,7 @@
 import os
 import sys
 import json
-import hashlib
+import importlib.util
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -50,9 +50,13 @@ class FixtureCheckTests(TestCase):
         self.assertTrue(any(m.id == "core.W001" for m in msgs))
 
     def test_no_warning_after_hash_update(self):
-        md5 = hashlib.md5()
-        for p in sorted(self.base_dir.glob("**/fixtures/*.json")):
-            md5.update(p.read_bytes())
-        self.hash_file.write_text(md5.hexdigest())
+        spec = importlib.util.spec_from_file_location(
+            "env_refresh", self.base_dir / "env-refresh.py"
+        )
+        env_refresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(env_refresh)
+        env_refresh._write_fixture_hash(
+            env_refresh._fixture_hash(env_refresh._fixture_files())
+        )
         msgs = self.run_check()
         self.assertFalse(any(m.id == "core.W001" for m in msgs))
