@@ -537,9 +537,9 @@ class ReleaseProcessTests(TestCase):
     @mock.patch("core.views.PackageRelease.dump_fixture")
     @mock.patch(
         "core.views.release_utils.promote",
-        return_value=("deadbeef", "release-branch", "main"),
+        return_value=("deadbeef", "main", "main"),
     )
-    def test_promote_pulls_rebase_before_merge(self, promote, dump_fixture, run):
+    def test_promote_rebases_and_pushes_main(self, promote, dump_fixture, run):
         import subprocess as sp
 
         def fake_run(cmd, check=True, capture_output=False, text=False):
@@ -549,14 +549,16 @@ class ReleaseProcessTests(TestCase):
 
         run.side_effect = fake_run
         _step_promote_build(self.release, {}, Path("rel.log"))
-        run.assert_any_call(["git", "pull", "--rebase"], check=True)
+        run.assert_any_call(["git", "fetch", "origin", "main"], check=True)
+        run.assert_any_call(["git", "rebase", "origin/main"], check=True)
+        run.assert_any_call(["git", "push"], check=True)
 
     @mock.patch("core.views.revision.get_revision", return_value="cafebabe")
     @mock.patch("core.views.subprocess.run")
     @mock.patch("core.views.PackageRelease.dump_fixture")
     @mock.patch(
         "core.views.release_utils.promote",
-        return_value=("deadbeef", "release-branch", "main"),
+        return_value=("deadbeef", "main", "main"),
     )
     def test_promote_updates_revision_before_dump(
         self, promote, dump_fixture, run, get_rev
@@ -602,7 +604,7 @@ class ReleaseProcessTests(TestCase):
 
         def fake_promote(*args, **kwargs):
             version_path.write_text(self.release.version + "\n", encoding="utf-8")
-            return ("deadbeef", "release-branch", "main")
+            return ("deadbeef", "main", "main")
 
         with mock.patch("core.views.release_utils.promote", side_effect=fake_promote):
             _step_promote_build(self.release, {}, Path("rel.log"))
