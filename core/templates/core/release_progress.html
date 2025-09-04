@@ -44,6 +44,9 @@
 <pre>{{ log_content }}</pre>
 {% if error %}
 <p class="error">{{ error }}</p>
+<form method="get">
+  <button type="submit" name="restart" value="1">{% trans 'Restart' %}</button>
+</form>
 {% elif not done %}
 {% if next_step is not None %}
 <meta http-equiv="refresh" content="1; url={{ request.path }}?step={{ next_step }}">
