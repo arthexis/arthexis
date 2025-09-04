@@ -125,8 +125,6 @@ def _step_check_pypi(release, ctx, log_path: Path) -> None:
 
 def _step_promote_build(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
-    release.pypi_url = f"https://pypi.org/project/{release.package.name}/{release.version}/"
-    release.save(update_fields=["pypi_url"])
     _append_log(log_path, "Generating build files")
     try:
         try:
@@ -186,6 +184,9 @@ def _step_publish(release, ctx, log_path: Path) -> None:
         version=release.version,
         creds=release.to_credentials(),
     )
+    release.pypi_url = f"https://pypi.org/project/{release.package.name}/{release.version}/"
+    release.save(update_fields=["pypi_url"])
+    PackageRelease.dump_fixture()
     _append_log(log_path, "Upload complete")
 
 
