@@ -4,6 +4,84 @@ Changelog
 Unreleased
 ----------
 
+0.1.7 [revision 3cb8bf8ab2694089fabf090d29fbf2e3f83462ae]
+---------------------------------------------------------
+
+- 47ad15b feat: allow release retry
+- 538d315 ver
+- c2493d6 py
+- 0d45ad2 mysteric
+- eaec76b chore: restore log placeholders
+- 73dda0c Release v0.1.11
+- b7e6b69 Release v0.1.11
+- 82b094b Release v0.1.11
+- 5c4941c Release v0.1.11
+- ca765c2 Release v0.1.11
+- 02c6af1 Release v0.1.11
+- 847ebe5 chore: update fixtures
+- 703e22f Release v0.1.11
+- 4fc2d82 omni
+- c1e2ba3 microservices
+- 248ba81 Add Virtual and Particle node roles
+- d4524bf test: cover dist cleanup in build
+- f14bc47 regress version test
+- bae58ca Add PyPI validation admin action
+- 033f958 Release v0.1.10
+- 63b1437 fix: persist release progress through reload
+- c463956 Release v0.1.10
+- c049ab9 Release v0.1.10
+- 3a5fc86 chore: update fixtures
+- 4c440ab Release v0.1.10
+- 4ae09ec readme
+- eb244d4 docs: update features section in README
+- f5c88ba Release v0.1.9
+- 90f8a2c Release v0.1.9
+- 9adc379 Release v0.1.9
+- e57f315 chore: update fixtures
+- 64d472b Release v0.1.9
+- 67e9179 Update references fixtures
+- 80f96da feat: auto-commit fixture changes during release
+- 9184bce Release v0.1.8
+- 96ce074 Rename infrastructure app
+- 1893403 test: ensure VERSION updated during publish
+- b9d88c7 fix(core): remove duplicate initial migration
+- 9d7e95b Handle closed connection and remove test warning
+- 3e2ffb1 Ensure release fixture uses current revision
+- 2930eb9 Use settings for node role
+- 2e82647 Add PowerLead tracking and shared Lead base
+- 08b35b5 fix: rebase before pushing release metadata
+- f9ab1d0 chore: update release metadata for v0.1.7
+- 06d9078 Release v0.1.7
+- f44c3f8 Delay release fixture until commit
+- d25ba8c Add app config overrides
+- 7dce0e2 Update VERSION and enforce sync with releases
+- 487127e style: match action button padding with history link
+- dd8aeac Track invitation requests via InviteLead model
+- 609bf8d chore: remove release tests and fixture
+- 5a10980 Add logging for invitation requests and node email sending
+- 924d97b Test Celery debug configuration
+- 9089840 Format footer fresh since date
+- bcaa981 chore: tidy env-refresh clean test
+- 8a56463 Make package column clickable in PackageRelease admin
+- 8bc89dc Redirect favorite setup actions back
+- 2a4e03d style: match admin object action buttons
+- 64230ce feat: show freshness timestamp in footer
+- 6b99295 Show all models in app list
+- 910d1a2 Remove pull request references from release
+- 4d601d9 test: update release progress expectations
+- d2525af fix(release): commit release fixture after build
+- 17aac32 theme admin relation buttons and align delete
+- be4168e Rename AWG admin group to Power Calculators
+- ab13409 chore(admin): fix email inbox breadcrumb
+- 61f3621 Allow anonymous access to last message API
+- 3a90ca0 Reset release progress session when version changes
+- 5b541d5 Save object before executing admin change actions
+- bd6fdd4 Use icon semaphores for readonly booleans
+- 186f316 Update release fixture on save
+- 44ce1e0 Show PyPI link after release
+- c8d51a6 docs: link support page
+- c9ef1c1 Release v0.1.4
+
 - fix: remove duplicate initial migration causing release loop
 
 - c9ef1c1 Release v0.1.4
