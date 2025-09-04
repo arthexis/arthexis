@@ -4,6 +4,13 @@ Changelog
 Unreleased
 ----------
 
+0.1.7 [revision 3588f471f6d6430b6dff457bafa69713b90e9add]
+---------------------------------------------------------
+
+- 3588f47 ver
+- 0be2575 refactor: simplify release promotion
+- fb29e42 Release v0.1.7
+
 0.1.7 [revision a7b962b71a8665aa7b52022d78dbbcfaf2a6e232]
 ---------------------------------------------------------
 
