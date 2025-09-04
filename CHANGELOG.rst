@@ -10,36 +10,14 @@ Unreleased
 ---------------------------------------------------------
 
 - 4dcd62e Release v0.1.7
-
-
-
-
-
-
-
-
-
-
-
-
 - c47020c chore: update fixtures
-
-
 - 43cf2a9 restore fixture hash after env refresh
 - 07c27ea Ignore MD5 checksum files and handle missing fixture hash
 - 0a9b746 Preserve unresolved sigils and log resolution errors
 - 851d2f0 fix: improve release restart and migration squashing
 - 6c06a41 feat: add fixture application check
-
-
-
-
 - 3684320 chore: update fixtures
-
-
 - 47ad15b feat: allow release retry
-- 538d315 ver
-- c2493d6 py
 - 0d45ad2 mysteric
 - eaec76b chore: restore log placeholders
 - 73dda0c Release v0.1.11
@@ -99,8 +77,6 @@ Unreleased
 - c8d51a6 docs: link support page
 - c9ef1c1 Release v0.1.4
 
-- fix: remove duplicate initial migration causing release loop
-
 
 0.1.4 [revision 0dbfd4b21c7e365772a3afd0e2c9cb15020c018b]
 ---------------------------------------------------------
@@ -157,20 +133,6 @@ Unreleased
 
 0.1.1 [revision 795ee9c781bb241a50713e15bba4737534906ca4]
 ---------------------------------------------------------
-
-- Run migrations during install to avoid missing tables after database removal
-- Add --satellite flag to install script
-- Add --control flag to install script to create Control site
-- Add --terminal flag to install script
-- Add msg app for LCD/Windows notifications
-- Remove environment sigils integration
-- Show full date and timezone in admin clock tooltip
-- Fallback to site domain in admin badge when display name missing
-- Hide Odoo profile passwords in admin forms unless updated
-- Provide progress feedback during upgrade
-- Adjust install defaults: Control uses --latest with auto-upgrade; Satellite and Constellation omit --latest
-- Require Redis for non-terminal installs and configure Celery broker
-
 
 - 4d9c2bd Revamp webshell terminal UI
 - a526f62 Prune site app fixtures and update README
@@ -349,9 +311,7 @@ Unreleased
 - 187ec89 Replace login link with toolbar icons
 - f1e909a Rename energy fields migrations
 - 3a0fb63 Add admin console mode toggle with webshell
-- 78cc231 desc
 - 648aa42 fix: avoid duplicate site apps
-- 0c22615 desc
 - fa624a5 Handle untracked files in upgrade script
 - 6dfe0ba Handle untracked files in upgrade script
 - 4d9c03f Improve footer layout and admin links
