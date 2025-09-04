@@ -183,6 +183,24 @@ class PackageAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
             reverse("admin:core_packagerelease_change", args=[release.pk])
         )
 
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "prepare-next-release/",
+                self.admin_site.admin_view(self.prepare_next_release_active),
+                name="core_package_prepare_next_release",
+            )
+        ]
+        return custom + urls
+
+    def prepare_next_release_active(self, request):
+        package = Package.objects.filter(is_active=True).first()
+        if not package:
+            self.message_user(request, "No active package", messages.ERROR)
+            return redirect("admin:core_package_changelist")
+        return self._prepare(request, package)
+
     @admin.action(description="Prepare next Release")
     def prepare_next_release(self, request, queryset):
         if queryset.count() != 1:
