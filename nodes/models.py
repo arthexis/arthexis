@@ -1,6 +1,10 @@
 from django.db import models
 from core.entity import Entity
-from core.fields import SigilShortAutoField
+from core.fields import (
+    SigilShortAutoField,
+    SigilLongCheckField,
+    SigilLongAutoField,
+)
 import re
 import json
 import base64
@@ -576,6 +580,97 @@ class NodeTask(Entity):
             self.recipe, shell=True, capture_output=True, text=True
         )
         return result.stdout + result.stderr
+
+
+class Operation(Entity):
+    """Action that can change node or constellation state."""
+
+    name = models.SlugField(unique=True)
+    template = SigilLongCheckField(blank=True)
+    next_operations = models.ManyToManyField(
+        "self",
+        through="Interrupt",
+        through_fields=("from_operation", "to_operation"),
+        symmetrical=False,
+        related_name="previous_operations",
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+
+class Interrupt(Entity):
+    """Intermediate transition between operations."""
+
+    name = models.CharField(max_length=100)
+    preview = SigilLongAutoField(blank=True)
+    priority = models.PositiveIntegerField(default=0)
+    from_operation = models.ForeignKey(
+        Operation,
+        on_delete=models.CASCADE,
+        related_name="outgoing_interrupts",
+    )
+    to_operation = models.ForeignKey(
+        Operation,
+        on_delete=models.CASCADE,
+        related_name="incoming_interrupts",
+    )
+
+    class Meta:
+        ordering = ["-priority"]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+
+class Effect(Entity):
+    """Shell or Django command executed by an operation."""
+
+    operation = models.ForeignKey(
+        Operation, on_delete=models.CASCADE, related_name="effects"
+    )
+    command = SigilLongAutoField()
+    order = models.PositiveIntegerField(default=0)
+    is_django = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["order"]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.operation}: {self.command[:20]}"
+
+
+class Logbook(Entity):
+    """Record of executed effects."""
+
+    effect = models.ForeignKey(
+        Effect, on_delete=models.CASCADE, related_name="logs"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    input_text = models.TextField(blank=True)
+    output = models.TextField(blank=True)
+    error = models.TextField(blank=True)
+    interrupted = models.BooleanField(default=False)
+    interrupt = models.ForeignKey(
+        Interrupt, null=True, blank=True, on_delete=models.SET_NULL
+    )
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created"]
+        verbose_name = "Logbook Entry"
+        verbose_name_plural = "Logbook"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.effect} @ {self.created:%Y-%m-%d %H:%M:%S}"
 
 
 UserModel = get_user_model()
