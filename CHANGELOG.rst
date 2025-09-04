@@ -4,6 +4,11 @@ Changelog
 Unreleased
 ----------
 
+0.1.7 [revision cde2bffbf34a4099db8de250b7385fff2783198b]
+---------------------------------------------------------
+
+- cde2bff Release v0.1.7
+
 0.1.7 [revision a49aaabb30796da440dd0a2beeaec5be974ef9c9]
 ---------------------------------------------------------
 
