@@ -4,6 +4,12 @@ Changelog
 Unreleased
 ----------
 
+0.1.7 [revision 42666767cc218749c09540f2488d3614d4c64d61]
+---------------------------------------------------------
+
+- 2101034 Skip fixture checks during migration squash
+- ecf09eb Release v0.1.7
+
 0.1.7 [revision 62768b3b5722648f6ab9fafc2e4710b8b143a304]
 ---------------------------------------------------------
 
