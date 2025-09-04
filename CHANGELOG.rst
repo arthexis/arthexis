@@ -4,6 +4,16 @@ Changelog
 Unreleased
 ----------
 
+0.1.7 [revision 50fb1bd7f55d1a204b3012cc86165b935e5dfb4b]
+---------------------------------------------------------
+
+- 43cf2a9 restore fixture hash after env refresh
+- 07c27ea Ignore MD5 checksum files and handle missing fixture hash
+- 0a9b746 Preserve unresolved sigils and log resolution errors
+- 851d2f0 fix: improve release restart and migration squashing
+- 6c06a41 feat: add fixture application check
+- 61ba970 Release v0.1.7
+
 0.1.7 [revision 962e52759e114d537c2d15864a545118a0451d11]
 ---------------------------------------------------------
 
