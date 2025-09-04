@@ -4,6 +4,12 @@ Changelog
 Unreleased
 ----------
 
+0.1.7 [revision a7b962b71a8665aa7b52022d78dbbcfaf2a6e232]
+---------------------------------------------------------
+
+- a7b962b chore: update fixtures
+- 832e0ab Release v0.1.7
+
 0.1.7 [revision 19cba9bb4cd88a3b25467d304f942137378795be]
 ---------------------------------------------------------
 
