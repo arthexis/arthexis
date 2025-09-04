@@ -1,7 +1,7 @@
 # Arthexis Constellation
 
 ## Purpose
-Arthexis Constellation is a narrative-driven Django-based suite that centralizes tools for managing charging infrastructure and orchestrating energy related products and services.
+Arthexis Constellation is a narrative-driven Django-based suite that centralizes tools for managing charging infrastructure and orchestrating energy-related products and services.
 
 ## Features
 - Compatible with OCPP 1.6+ chargers
