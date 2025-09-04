@@ -37,7 +37,7 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import IntegrityError
 from .backends import LocalhostAdminBackend
-from core.views import _step_check_pypi, _step_promote_build
+from core.views import _step_check_pypi, _step_promote_build, _step_publish
 
 
 class DefaultAdminTests(TestCase):
@@ -612,6 +612,26 @@ class ReleaseProcessTests(TestCase):
             self.release.version + "\n",
         )
         version_path.write_text(original, encoding="utf-8")
+
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    @mock.patch("core.views.release_utils.publish")
+    def test_publish_sets_pypi_url(self, publish, dump_fixture):
+        _step_publish(self.release, {}, Path("rel.log"))
+        self.release.refresh_from_db()
+        self.assertEqual(
+            self.release.pypi_url,
+            f"https://pypi.org/project/{self.package.name}/{self.release.version}/",
+        )
+        dump_fixture.assert_called_once()
+
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    @mock.patch("core.views.release_utils.publish", side_effect=Exception("boom"))
+    def test_publish_failure_keeps_url_blank(self, publish, dump_fixture):
+        with self.assertRaises(Exception):
+            _step_publish(self.release, {}, Path("rel.log"))
+        self.release.refresh_from_db()
+        self.assertEqual(self.release.pypi_url, "")
+        dump_fixture.assert_not_called()
 
     def test_release_progress_uses_lockfile(self):
         run = []
