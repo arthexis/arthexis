@@ -21,6 +21,7 @@ class ActiveAppFileHandler(TimedRotatingFileHandler):
         current = str(self._current_file())
         if self.baseFilename != current:
             self.baseFilename = current
+            Path(self.baseFilename).parent.mkdir(parents=True, exist_ok=True)
             if self.stream:
                 self.stream.close()
             self.stream = self._open()

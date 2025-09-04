@@ -29,10 +29,15 @@ class FixtureCheckTests(TestCase):
             )
         )
         self.hash_file = self.base_dir / "fixtures.md5"
-        self.original_hash = self.hash_file.read_text().strip()
+        self.original_hash = (
+            self.hash_file.read_text().strip() if self.hash_file.exists() else ""
+        )
 
     def tearDown(self):
-        self.hash_file.write_text(self.original_hash)
+        if self.original_hash:
+            self.hash_file.write_text(self.original_hash)
+        else:
+            self.hash_file.unlink(missing_ok=True)
         self.fixture_path.unlink(missing_ok=True)
         (self.tmp_dir / "fixtures").rmdir()
         self.tmp_dir.rmdir()
