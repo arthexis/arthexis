@@ -4,6 +4,11 @@ Changelog
 Unreleased
 ----------
 
+0.1.7 [revision a49aaabb30796da440dd0a2beeaec5be974ef9c9]
+---------------------------------------------------------
+
+- a49aaab Release v0.1.7
+
 0.1.7 [revision b1ce57eacc3cd79da6bf297bb35f075192a125b9]
 ---------------------------------------------------------
 
