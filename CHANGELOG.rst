@@ -6,9 +6,11 @@ Unreleased
 
 - remove automatic migration squashing from release process
 
+
 0.1.7 [revision 4dcd62ed8222e102edbc88c81300a774e39f095c]
 ---------------------------------------------------------
 
+- 4dcd62e Release v0.1.7
 - 4dcd62e Release v0.1.7
 - c47020c chore: update fixtures
 - 43cf2a9 restore fixture hash after env refresh
@@ -16,7 +18,6 @@ Unreleased
 - 0a9b746 Preserve unresolved sigils and log resolution errors
 - 851d2f0 fix: improve release restart and migration squashing
 - 6c06a41 feat: add fixture application check
-- 3684320 chore: update fixtures
 - 47ad15b feat: allow release retry
 - 0d45ad2 mysteric
 - eaec76b chore: restore log placeholders

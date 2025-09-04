@@ -318,14 +318,8 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                 except Exception:
                     continue
 
-    # Update the migrations hash file after a successful run and restore the
-    # fixtures hash from version control to keep the repository clean.
+    # Update the migrations hash file after a successful run.
     hash_file.write_text(new_hash)
-    subprocess.run(
-        ["git", "checkout", "--", "fixtures.md5"],
-        cwd=settings.BASE_DIR,
-        check=False,
-    )
 
 
 TASKS = {"database": run_database_tasks}
