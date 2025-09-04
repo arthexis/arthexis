@@ -45,11 +45,6 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-if [[ $EUID -ne 0 ]]; then
-    echo "This script must be run as root" >&2
-    exit 1
-fi
-
 ensure_psql() {
     if ! command -v psql >/dev/null 2>&1; then
         echo "psql (PostgreSQL client) is required." >&2
@@ -67,10 +62,28 @@ if [[ $REMOVE -eq 1 ]]; then
         echo "Configuration file not found: $CONFIG_FILE" >&2
         exit 1
     fi
+
+    # Require root only when managing a local server via the postgres OS user
+    if id -u postgres >/dev/null 2>&1 && [[ "$POSTGRES_HOST" == "localhost" || "$POSTGRES_HOST" == "127.0.0.1" ]]; then
+        if [[ $EUID -ne 0 ]]; then
+            echo "This script must be run as root to manage the local PostgreSQL server" >&2
+            exit 1
+        fi
+    fi
+
     read -rp "Drop database '$POSTGRES_DB'? [y/N]: " CONFIRM
     if [[ "${CONFIRM,,}" == "y" ]]; then
-        sudo -u postgres psql -c "DROP DATABASE IF EXISTS \"$POSTGRES_DB\";"
-        sudo -u postgres psql -c "DROP USER IF EXISTS \"$POSTGRES_USER\";"
+        if id -u postgres >/dev/null 2>&1 && [[ "$POSTGRES_HOST" == "localhost" || "$POSTGRES_HOST" == "127.0.0.1" ]]; then
+            sudo -u postgres psql -c "DROP DATABASE IF EXISTS \"$POSTGRES_DB\";"
+            sudo -u postgres psql -c "DROP USER IF EXISTS \"$POSTGRES_USER\";"
+        else
+            read -rp "Database admin user [postgres]: " DB_ADMIN
+            DB_ADMIN=${DB_ADMIN:-postgres}
+            read -rsp "Database admin password: " DB_ADMIN_PASS
+            echo
+            PGPASSWORD="$DB_ADMIN_PASS" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$DB_ADMIN" -c "DROP DATABASE IF EXISTS \"$POSTGRES_DB\";"
+            PGPASSWORD="$DB_ADMIN_PASS" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$DB_ADMIN" -c "DROP USER IF EXISTS \"$POSTGRES_USER\";"
+        fi
         rm -f "$CONFIG_FILE"
         echo "Configuration removed."
     else
@@ -92,7 +105,14 @@ DB_HOST=${DB_HOST:-localhost}
 read -rp "Database port [5432]: " DB_PORT
 DB_PORT=${DB_PORT:-5432}
 
-sudo -u postgres psql <<SQL
+# Require root only when using local postgres user
+if id -u postgres >/dev/null 2>&1 && [[ "$DB_HOST" == "localhost" || "$DB_HOST" == "127.0.0.1" ]] && [[ $EUID -ne 0 ]]; then
+    echo "This script must be run as root to manage the local PostgreSQL server" >&2
+    exit 1
+fi
+
+if id -u postgres >/dev/null 2>&1 && [[ "$DB_HOST" == "localhost" || "$DB_HOST" == "127.0.0.1" ]]; then
+    sudo -u postgres psql <<SQL
 DO
 \$\$
 BEGIN
@@ -110,6 +130,30 @@ BEGIN
 END
 \$\$;
 SQL
+else
+    read -rp "Database admin user [postgres]: " DB_ADMIN
+    DB_ADMIN=${DB_ADMIN:-postgres}
+    read -rsp "Database admin password: " DB_ADMIN_PASS
+    echo
+    PGPASSWORD="$DB_ADMIN_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_ADMIN" <<SQL
+DO
+\$\$
+BEGIN
+   IF NOT EXISTS (SELECT FROM pg_catalog.pg_user WHERE usename = '$DB_USER') THEN
+       CREATE USER "$DB_USER" WITH PASSWORD '$DB_PASS';
+   END IF;
+END
+\$\$;
+DO
+\$\$
+BEGIN
+   IF NOT EXISTS (SELECT FROM pg_catalog.pg_database WHERE datname = '$DB_NAME') THEN
+       CREATE DATABASE "$DB_NAME" OWNER "$DB_USER";
+   END IF;
+END
+\$\$;
+SQL
+fi
 
 cat > "$CONFIG_FILE" <<ENV
 POSTGRES_DB=$DB_NAME
@@ -122,3 +166,4 @@ ENV
 chmod 600 "$CONFIG_FILE"
 
 echo "PostgreSQL configuration saved to $CONFIG_FILE"
+
