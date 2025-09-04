@@ -4,65 +4,38 @@ Changelog
 Unreleased
 ----------
 
-0.1.7 [revision df6d92584deb46f17cd563fc73c72c75943fb7f7]
+- remove automatic migration squashing from release process
+
+0.1.7 [revision 4dcd62ed8222e102edbc88c81300a774e39f095c]
 ---------------------------------------------------------
 
-- df6d925 Release v0.1.7
+- 4dcd62e Release v0.1.7
 
-0.1.7 [revision c0720f78b7de417bb67a2c3ecea3ea27b11d5188]
----------------------------------------------------------
 
-- c0720f7 Release v0.1.7
 
-0.1.7 [revision 0b5dd2834c54497975c389e831d00201548c9277]
----------------------------------------------------------
 
-- 0b5dd28 Release v0.1.7
 
-0.1.7 [revision 55ec85d1e37531c7fc7dc40478cadf429107e99f]
----------------------------------------------------------
 
-- 55ec85d Release v0.1.7
 
-0.1.7 [revision 038760619757f47087a5f99d21275401b25c0435]
----------------------------------------------------------
 
-- 0387606 Release v0.1.7
 
-0.1.7 [revision b43aae6af68e2cf310d059767c595e30a2c0763f]
----------------------------------------------------------
 
-- b43aae6 Release v0.1.7
 
-0.1.7 [revision c47020cbe56f8dc35b3985e47b4af943f357c0ec]
----------------------------------------------------------
 
 - c47020c chore: update fixtures
-- 7b6bb07 Release v0.1.7
 
-0.1.7 [revision 50fb1bd7f55d1a204b3012cc86165b935e5dfb4b]
----------------------------------------------------------
 
 - 43cf2a9 restore fixture hash after env refresh
 - 07c27ea Ignore MD5 checksum files and handle missing fixture hash
 - 0a9b746 Preserve unresolved sigils and log resolution errors
 - 851d2f0 fix: improve release restart and migration squashing
 - 6c06a41 feat: add fixture application check
-- 61ba970 Release v0.1.7
 
-0.1.7 [revision 962e52759e114d537c2d15864a545118a0451d11]
----------------------------------------------------------
 
-- 962e527 Release v0.1.7
 
-0.1.7 [revision 368432060d698bb166f1de118dab6a898f5cfa08]
----------------------------------------------------------
 
 - 3684320 chore: update fixtures
-- 743befc Release v0.1.7
 
-0.1.7 [revision 3cb8bf8ab2694089fabf090d29fbf2e3f83462ae]
----------------------------------------------------------
 
 - 47ad15b feat: allow release retry
 - 538d315 ver
@@ -70,13 +43,7 @@ Unreleased
 - 0d45ad2 mysteric
 - eaec76b chore: restore log placeholders
 - 73dda0c Release v0.1.11
-- b7e6b69 Release v0.1.11
-- 82b094b Release v0.1.11
-- 5c4941c Release v0.1.11
-- ca765c2 Release v0.1.11
-- 02c6af1 Release v0.1.11
 - 847ebe5 chore: update fixtures
-- 703e22f Release v0.1.11
 - 4fc2d82 omni
 - c1e2ba3 microservices
 - 248ba81 Add Virtual and Particle node roles
@@ -85,17 +52,11 @@ Unreleased
 - bae58ca Add PyPI validation admin action
 - 033f958 Release v0.1.10
 - 63b1437 fix: persist release progress through reload
-- c463956 Release v0.1.10
-- c049ab9 Release v0.1.10
 - 3a5fc86 chore: update fixtures
-- 4c440ab Release v0.1.10
 - 4ae09ec readme
 - eb244d4 docs: update features section in README
 - f5c88ba Release v0.1.9
-- 90f8a2c Release v0.1.9
-- 9adc379 Release v0.1.9
 - e57f315 chore: update fixtures
-- 64d472b Release v0.1.9
 - 67e9179 Update references fixtures
 - 80f96da feat: auto-commit fixture changes during release
 - 9184bce Release v0.1.8
@@ -108,7 +69,6 @@ Unreleased
 - 2e82647 Add PowerLead tracking and shared Lead base
 - 08b35b5 fix: rebase before pushing release metadata
 - f9ab1d0 chore: update release metadata for v0.1.7
-- 06d9078 Release v0.1.7
 - f44c3f8 Delay release fixture until commit
 - d25ba8c Add app config overrides
 - 7dce0e2 Update VERSION and enforce sync with releases
@@ -141,7 +101,6 @@ Unreleased
 
 - fix: remove duplicate initial migration causing release loop
 
-- c9ef1c1 Release v0.1.4
 
 0.1.4 [revision 0dbfd4b21c7e365772a3afd0e2c9cb15020c018b]
 ---------------------------------------------------------
@@ -212,8 +171,6 @@ Unreleased
 - Adjust install defaults: Control uses --latest with auto-upgrade; Satellite and Constellation omit --latest
 - Require Redis for non-terminal installs and configure Celery broker
 
-0.1.1 [revision 76f70b6a72c78fcdf143a19ddcc88a0fbd209b3d]
----------------------------------------------------------
 
 - 4d9c2bd Revamp webshell terminal UI
 - a526f62 Prune site app fixtures and update README
