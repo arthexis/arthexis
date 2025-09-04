@@ -30,7 +30,7 @@ from .models import (
     PackageRelease,
 )
 from django.contrib.admin.sites import AdminSite
-from core.admin import PackageReleaseAdmin
+from core.admin import PackageReleaseAdmin, PackageAdmin
 from ocpp.models import Transaction, Charger
 
 from django.core.exceptions import ValidationError
@@ -718,4 +718,35 @@ class PackageReleaseCurrentTests(TestCase):
         self.release.version = "2.0.0"
         self.release.save()
         self.assertFalse(self.release.is_current)
+
+
+class PackageAdminPrepareNextReleaseTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.site = AdminSite()
+        self.admin = PackageAdmin(Package, self.site)
+        self.admin.message_user = lambda *args, **kwargs: None
+        self.package = Package.objects.get(name="arthexis")
+
+    def test_prepare_next_release_active_creates_release(self):
+        PackageRelease.all_objects.filter(package=self.package).delete()
+        request = self.factory.get("/admin/core/package/prepare-next-release/")
+        response = self.admin.prepare_next_release_active(request)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            PackageRelease.all_objects.filter(package=self.package).count(), 1
+        )
+
+
+class PackageReleaseChangelistTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User.objects.create_superuser("admin", "admin@example.com", "pw")
+        self.client.force_login(User.objects.get(username="admin"))
+
+    def test_prepare_next_release_button_present(self):
+        response = self.client.get(reverse("admin:core_packagerelease_changelist"))
+        self.assertContains(
+            response, reverse("admin:core_package_prepare_next_release"), html=False
+        )
 
