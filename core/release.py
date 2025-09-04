@@ -422,6 +422,7 @@ def promote(
                     "core",
                     "0001",
                     "--noinput",
+                    "--skip-checks",
                 ],
                 check=False,
             )
