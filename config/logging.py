@@ -13,9 +13,11 @@ class ActiveAppFileHandler(TimedRotatingFileHandler):
     """File handler that writes to a file named after the active app."""
 
     def _current_file(self) -> Path:
+        log_dir = Path(settings.LOG_DIR)
+        log_dir.mkdir(parents=True, exist_ok=True)
         if "test" in sys.argv:
-            return Path(settings.LOG_DIR) / "tests.log"
-        return Path(settings.LOG_DIR) / f"{get_active_app()}.log"
+            return log_dir / "tests.log"
+        return log_dir / f"{get_active_app()}.log"
 
     def emit(self, record: logging.LogRecord) -> None:
         current = str(self._current_file())
@@ -29,7 +31,9 @@ class ActiveAppFileHandler(TimedRotatingFileHandler):
     def rotation_filename(self, default_name: str) -> str:
         """Place rotated logs inside the old log directory."""
         default_path = Path(default_name)
-        return str(Path(settings.OLD_LOG_DIR) / default_path.name)
+        old_log_dir = Path(settings.OLD_LOG_DIR)
+        old_log_dir.mkdir(parents=True, exist_ok=True)
+        return str(old_log_dir / default_path.name)
 
     def getFilesToDelete(self):
         """Return files to delete in the old log directory respecting backupCount."""
