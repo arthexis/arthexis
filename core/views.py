@@ -6,7 +6,7 @@ import requests
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, login
 from django.http import Http404, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, render, redirect
 from django.views.decorators.csrf import csrf_exempt
 from pathlib import Path
 import subprocess
@@ -364,6 +364,28 @@ def release_progress(request, pk: int, action: str):
         raise Http404("Unknown action")
     session_key = f"release_publish_{pk}"
     lock_path = Path("locks") / f"release_publish_{pk}.json"
+    restart_path = Path("locks") / f"release_publish_{pk}.restarts"
+
+    if request.GET.get("restart"):
+        count = 0
+        if restart_path.exists():
+            try:
+                count = int(restart_path.read_text(encoding="utf-8"))
+            except Exception:
+                count = 0
+        restart_path.parent.mkdir(parents=True, exist_ok=True)
+        restart_path.write_text(str(count + 1), encoding="utf-8")
+        _clean_repo()
+        release.revision = ""
+        release.pypi_url = ""
+        release.save(update_fields=["revision", "pypi_url"])
+        request.session.pop(session_key, None)
+        if lock_path.exists():
+            lock_path.unlink()
+        log_dir = Path("logs")
+        for f in log_dir.glob(f"{release.package.name}-{release.version}*.log"):
+            f.unlink()
+        return redirect(request.path)
     ctx = request.session.get(session_key)
     if ctx is None and lock_path.exists():
         try:
@@ -372,6 +394,14 @@ def release_progress(request, pk: int, action: str):
             ctx = {"step": 0}
     if ctx is None:
         ctx = {"step": 0}
+        if restart_path.exists():
+            restart_path.unlink()
+    restart_count = 0
+    if restart_path.exists():
+        try:
+            restart_count = int(restart_path.read_text(encoding="utf-8"))
+        except Exception:
+            restart_count = 0
     step_count = ctx.get("step", 0)
     step_param = request.GET.get("step")
 
@@ -426,6 +456,7 @@ def release_progress(request, pk: int, action: str):
         "log_path": str(log_path),
         "cert_log": ctx.get("cert_log"),
         "fixtures": ctx.get("fixtures"),
+        "restart_count": restart_count,
     }
     request.session[session_key] = ctx
     if done or ctx.get("error"):
