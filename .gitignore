@@ -232,6 +232,7 @@ __marimo__/
  
 # Hash files used by upgrade scripts to track dependency changes
 *.md5
+!fixtures.md5
 REVISION
 
 # Auto-upgrade control file

@@ -16,6 +16,7 @@ class CoreConfig(AppConfig):
         )
         from .system import patch_admin_system_view
         from .environment import patch_admin_environment_view
+        from . import checks  # noqa: F401
 
         def create_default_arthexis(**kwargs):
             User = get_user_model()

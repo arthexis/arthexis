@@ -79,6 +79,13 @@ def _fixture_files() -> list[str]:
     return sorted(fixtures)
 
 
+def _fixture_hash(files: list[str]) -> str:
+    md5 = hashlib.md5()
+    for name in files:
+        md5.update(Path(settings.BASE_DIR, name).read_bytes())
+    return md5.hexdigest()
+
+
 def _migration_hash(app_labels: list[str]) -> str:
     """Return an md5 hash of all migration files for the given apps."""
     md5 = hashlib.md5()
@@ -200,6 +207,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     raise exc
 
     fixtures = _fixture_files()
+    fixture_hash = _fixture_hash(fixtures)
     if fixtures:
         # Process user fixtures first so foreign key references can be updated
         fixtures.sort(key=lambda n: 0 if n.endswith("users.json") else 1)
@@ -309,7 +317,8 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                 except Exception:
                     continue
 
-    # Update migrations hash file after successful run
+    # Update fixtures and migrations hash files after successful run
+    (Path(settings.BASE_DIR) / "fixtures.md5").write_text(fixture_hash)
     hash_file.write_text(new_hash)
 
 
