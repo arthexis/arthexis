@@ -4,6 +4,148 @@ Changelog
 Unreleased
 ----------
 
+0.1.7 [revision dd169decc41663f9657e7a6c075791793fe176ee]
+---------------------------------------------------------
+
+- dd169de Release v0.1.7
+
+0.1.7 [revision 17cb2bb5318e7b78f7416e000c09d7d6b6db2d84]
+---------------------------------------------------------
+
+- 17cb2bb Release v0.1.7
+
+0.1.7 [revision b02601182bd05eb91d3fd27f9b7cc4653e684358]
+---------------------------------------------------------
+
+- b026011 Release v0.1.7
+
+0.1.7 [revision f9cf91eeaca078508637a89c35abd54db84f60fc]
+---------------------------------------------------------
+
+- f9cf91e Release v0.1.7
+
+0.1.7 [revision cde2bffbf34a4099db8de250b7385fff2783198b]
+---------------------------------------------------------
+
+- cde2bff Release v0.1.7
+
+0.1.7 [revision a49aaabb30796da440dd0a2beeaec5be974ef9c9]
+---------------------------------------------------------
+
+- a49aaab Release v0.1.7
+
+0.1.7 [revision b1ce57eacc3cd79da6bf297bb35f075192a125b9]
+---------------------------------------------------------
+
+- b1ce57e Release v0.1.7
+
+0.1.7 [revision 7c7192ce84ad5d708ff24e541af1fbb280f52038]
+---------------------------------------------------------
+
+- 7c7192c Release v0.1.7
+
+0.1.7 [revision bf7076fb47d9f5a11cc540ea1457e6cf081891a2]
+---------------------------------------------------------
+
+- bf7076f Release v0.1.7
+
+0.1.7 [revision aea27ca31273da34e1db899e80ef2c51a551cbb9]
+---------------------------------------------------------
+
+- aea27ca Release v0.1.7
+
+0.1.7 [revision 688735d4f632fbe4561dc6c95d4392d23304cf88]
+---------------------------------------------------------
+
+- 688735d Release v0.1.7
+
+0.1.7 [revision d3e1256509a6f36b528edd3c6c78862d91c5de4b]
+---------------------------------------------------------
+
+- d3e1256 Release v0.1.7
+
+0.1.7 [revision cff6984cad52f6ab3945e5171c5d641bfd6859b9]
+---------------------------------------------------------
+
+- cff6984 Release v0.1.7
+
+0.1.7 [revision 5dc618dc0a5e5b01e5034df85dcb16c50fd0310b]
+---------------------------------------------------------
+
+- 5dc618d Release v0.1.7
+
+0.1.7 [revision 4cd8d6cae5166b83c610de29a76571fcd89d032b]
+---------------------------------------------------------
+
+- 4cd8d6c Release v0.1.7
+
+0.1.7 [revision 28fb90d2ffdf75583c105155f46fda7c51c6b9e8]
+---------------------------------------------------------
+
+- 28fb90d Release v0.1.7
+
+0.1.7 [revision bf7a5bd09606d33d126b3dda6548a56005f8caff]
+---------------------------------------------------------
+
+- bf7a5bd Release v0.1.7
+
+0.1.7 [revision 26b4d61e7f3cf1e42e745c49bb7c17c3a1b06a22]
+---------------------------------------------------------
+
+- 26b4d61 chore: update fixtures
+- d536680 Release v0.1.7
+
+0.1.7 [revision 3588f471f6d6430b6dff457bafa69713b90e9add]
+---------------------------------------------------------
+
+- 3588f47 ver
+- 0be2575 refactor: simplify release promotion
+- fb29e42 Release v0.1.7
+
+0.1.7 [revision a7b962b71a8665aa7b52022d78dbbcfaf2a6e232]
+---------------------------------------------------------
+
+- a7b962b chore: update fixtures
+- 832e0ab Release v0.1.7
+
+0.1.7 [revision 19cba9bb4cd88a3b25467d304f942137378795be]
+---------------------------------------------------------
+
+- ba9bb8b fix: avoid merge commit prompts
+- 7c74033 ver
+- dfb3eb2 feat: rebase release branch before merge
+- 754a697 fix: merge release branch without fast-forward
+- 6912be3 Write fixture hash during env refresh
+- 890e08e Restore log placeholders
+- d794092 fix: avoid checking out missing fixtures hash
+- 3529c66 chore: dedupe changelog
+- f185c66 Release v0.1.7
+- 4b7626b Release v0.1.7
+- ae2e08f Release v0.1.7
+- 93a21e6 chore: update fixtures
+- dfa6c0e Release v0.1.7
+- 2101034 Skip fixture checks during migration squash
+- ecf09eb Release v0.1.7
+- 62768b3 Release v0.1.7
+- 8823979 Release v0.1.7
+- 21047e9 Release v0.1.7
+- f036325 Release v0.1.7
+- 5dff0a5 Release v0.1.7
+- e9a5f2d Release v0.1.7
+- a226002 Release v0.1.7
+- bae3f59 Release v0.1.7
+- 03e841c Release v0.1.7
+- 8f48c5e Release v0.1.7
+- 6d42d15 Release v0.1.7
+- 047e861 Release v0.1.7
+- 8d68872 Release v0.1.7
+- 2c062fd Release v0.1.7
+- 3273665 Release v0.1.7
+- 4bf6cbd Release v0.1.7
+- b13418c Release v0.1.7
+- 981e59d Release v0.1.7
+- 18e1d4d Release v0.1.7
+
 - remove automatic migration squashing from release process
 
 
