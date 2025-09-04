@@ -7,7 +7,7 @@ Arthexis Constellation es una suite narrativa basada en Django que centraliza he
 - Compatible con cargadores OCPP 1.6+
 - Integración API con Odoo 1.6+
 - Funciona en Windows y Linux (Ubuntu 16+)
-- Una base de código. Seis* Roles dedicados.
+- Una base de código. Seis o más roles dedicados.
 
 ## Soporte
 Contáctenos en tecnologia arroba gelectriic punto com o visite nuestro sitio web https://www.gelectriic.com/ para servicios profesionales y soporte comercial.
