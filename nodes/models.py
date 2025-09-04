@@ -587,6 +587,8 @@ class Operation(Entity):
 
     name = models.SlugField(unique=True)
     template = SigilLongCheckField(blank=True)
+    command = SigilLongAutoField(blank=True)
+    is_django = models.BooleanField(default=False)
     next_operations = models.ManyToManyField(
         "self",
         through="Interrupt",
@@ -624,30 +626,13 @@ class Interrupt(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
-
-
-class Effect(Entity):
-    """Shell or Django command executed by an operation."""
-
-    operation = models.ForeignKey(
-        Operation, on_delete=models.CASCADE, related_name="effects"
-    )
-    command = SigilLongAutoField()
-    order = models.PositiveIntegerField(default=0)
-    is_django = models.BooleanField(default=False)
-
-    class Meta:
-        ordering = ["order"]
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.operation}: {self.command[:20]}"
-
+ 
 
 class Logbook(Entity):
-    """Record of executed effects."""
+    """Record of executed operations."""
 
-    effect = models.ForeignKey(
-        Effect, on_delete=models.CASCADE, related_name="logs"
+    operation = models.ForeignKey(
+        Operation, on_delete=models.CASCADE, related_name="logs"
     )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -670,7 +655,7 @@ class Logbook(Entity):
         verbose_name_plural = "Logbook"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.effect} @ {self.created:%Y-%m-%d %H:%M:%S}"
+        return f"{self.operation} @ {self.created:%Y-%m-%d %H:%M:%S}"
 
 
 UserModel = get_user_model()

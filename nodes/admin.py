@@ -30,7 +30,6 @@ from .models import (
     NodeTask,
     NetMessage,
     Operation,
-    Effect,
     Interrupt,
     Logbook,
     User,
@@ -370,15 +369,10 @@ class NodeTaskAdmin(admin.ModelAdmin):
     execute.short_description = "Run task on nodes"
 
 
-class EffectInline(admin.TabularInline):
-    model = Effect
-    extra = 1
-
-
 @admin.register(Operation)
 class OperationAdmin(admin.ModelAdmin):
     list_display = ("name",)
-    inlines = [EffectInline]
+    formfield_overrides = {models.TextField: {"widget": CodeEditorWidget}}
     change_form_template = "admin/nodes/operation/change_form.html"
 
     def get_urls(self):
@@ -397,10 +391,7 @@ class OperationAdmin(admin.ModelAdmin):
         if not operation:
             self.message_user(request, "Unknown operation", messages.ERROR)
             return redirect("..")
-
-        context = RUN_CONTEXTS.setdefault(
-            operation.pk, {"index": 0, "inputs": {}}
-        )
+        context = RUN_CONTEXTS.setdefault(operation.pk, {"inputs": {}})
         template_text = operation.resolve_sigils("template")
 
         # Interrupt handling
@@ -430,31 +421,31 @@ class OperationAdmin(admin.ModelAdmin):
         # Check running processes
         proc = context.get("process")
         thread = context.get("thread")
-        if proc:
-            if proc.poll() is not None:
-                out, err = proc.communicate()
-                log = context.pop("log")
-                log.output = out
-                log.error = err
-                log.save()
-                context["process"] = None
-                context["index"] += 1
-        elif thread:
-            if not thread.is_alive():
-                out = context.pop("out")
-                err = context.pop("err")
-                log = context.pop("log")
-                log.output = out.getvalue()
-                log.error = err.getvalue()
-                log.save()
-                context["thread"] = None
-                context["index"] += 1
+        if proc and proc.poll() is not None:
+            out, err = proc.communicate()
+            log = context.pop("log")
+            log.output = out
+            log.error = err
+            log.save()
+            RUN_CONTEXTS.pop(operation.pk, None)
+            self.message_user(request, "Operation executed", messages.SUCCESS)
+            return redirect("..")
+        if thread and not thread.is_alive():
+            out = context.pop("out")
+            err = context.pop("err")
+            log = context.pop("log")
+            log.output = out.getvalue()
+            log.error = err.getvalue()
+            log.save()
+            RUN_CONTEXTS.pop(operation.pk, None)
+            self.message_user(request, "Operation executed", messages.SUCCESS)
+            return redirect("..")
 
         interrupts = [
             (i, i.resolve_sigils("preview"))
             for i in operation.outgoing_interrupts.all().order_by("-priority")
         ]
-        logs = Logbook.objects.filter(effect__operation=operation).order_by("created")
+        logs = Logbook.objects.filter(operation=operation).order_by("created")
 
         # Waiting for user-provided sigils
         waiting = context.get("waiting_inputs")
@@ -463,12 +454,11 @@ class OperationAdmin(admin.ModelAdmin):
                 for token in waiting:
                     name = token[1:-1].replace(".", "__")
                     context["inputs"][token] = request.POST.get(name, "")
-                effect = context.pop("pending_effect")
                 command = context.pop("pending_command")
                 for token, value in context["inputs"].items():
                     command = command.replace(token, value)
                 context["waiting_inputs"] = None
-                self._start_effect(context, effect, command, request.user)
+                self._start_operation(context, operation, command, request.user)
                 return redirect(request.path)
             form_fields = [(t, t[1:-1].replace(".", "__")) for t in waiting]
             tpl_context = {
@@ -487,8 +477,9 @@ class OperationAdmin(admin.ModelAdmin):
         if context.get("waiting_continue"):
             if request.method == "POST":
                 context["waiting_continue"] = False
-                context["index"] += 1
-                return redirect(request.path)
+                RUN_CONTEXTS.pop(operation.pk, None)
+                self.message_user(request, "Operation executed", messages.SUCCESS)
+                return redirect("..")
             tpl_context = {
                 **self.admin_site.each_context(request),
                 "operation": operation,
@@ -515,27 +506,18 @@ class OperationAdmin(admin.ModelAdmin):
                 request, "admin/nodes/operation/run.html", tpl_context
             )
 
-        effects = list(operation.effects.all().order_by("order"))
-        index = context.get("index", 0)
-        if index >= len(effects):
-            RUN_CONTEXTS.pop(operation.pk, None)
-            self.message_user(request, "Operation executed", messages.SUCCESS)
-            return redirect("..")
-
-        effect = effects[index]
         if request.method == "POST":
-            command = effect.resolve_sigils("command")
+            command = operation.resolve_sigils("command")
             for token, value in context["inputs"].items():
                 command = command.replace(token, value)
             unresolved = SIGIL_RE.findall(command)
             if unresolved:
                 context["waiting_inputs"] = unresolved
-                context["pending_effect"] = effect
                 context["pending_command"] = command
                 return redirect(request.path)
             if command.strip() == "...":
                 log = Logbook.objects.create(
-                    effect=effect,
+                    operation=operation,
                     user=request.user,
                     input_text=command,
                     output="Waiting for user continuation",
@@ -543,7 +525,7 @@ class OperationAdmin(admin.ModelAdmin):
                 context["log"] = log
                 context["waiting_continue"] = True
                 return redirect(request.path)
-            self._start_effect(context, effect, command, request.user)
+            self._start_operation(context, operation, command, request.user)
             return redirect(request.path)
 
         tpl_context = {
@@ -555,9 +537,9 @@ class OperationAdmin(admin.ModelAdmin):
         }
         return TemplateResponse(request, "admin/nodes/operation/run.html", tpl_context)
 
-    def _start_effect(self, ctx, effect, command, user):
-        log = Logbook.objects.create(effect=effect, user=user, input_text=command)
-        if effect.is_django:
+    def _start_operation(self, ctx, operation, command, user):
+        log = Logbook.objects.create(operation=operation, user=user, input_text=command)
+        if operation.is_django:
             out = io.StringIO()
             err = io.StringIO()
 
