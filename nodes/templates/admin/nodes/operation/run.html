@@ -27,18 +27,18 @@
     <input type="submit" value="{% trans 'Continue' %}">
   </form>
 {% elif running %}
-  <p>{% trans "Effect running..." %}</p>
+  <p>{% trans "Command running..." %}</p>
 {% else %}
   <form method="post">
     {% csrf_token %}
-    <input type="submit" value="{% trans 'Run next effect' %}">
+    <input type="submit" value="{% trans 'Run command' %}">
   </form>
 {% endif %}
 
 <div class="logs">
   {% for log in logs %}
     <div class="log-entry">
-      <strong>{{ log.effect.command }}</strong>
+      <strong>{{ log.input_text }}</strong>
       {% if log.output %}<pre>{{ log.output }}</pre>{% endif %}
       {% if log.error %}<pre class="error">{{ log.error }}</pre>{% endif %}
     </div>

@@ -47,6 +47,8 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("template", core.fields.SigilLongCheckField(blank=True)),
+                ("command", core.fields.SigilLongAutoField(blank=True)),
+                ("is_django", models.BooleanField(default=False)),
             ],
             options={"ordering": ["name"]},
             bases=(core.entity.Entity,),
@@ -89,7 +91,7 @@ class Migration(migrations.Migration):
             bases=(core.entity.Entity,),
         ),
         migrations.CreateModel(
-            name="Effect",
+            name="Logbook",
             fields=[
                 (
                     "id",
@@ -106,37 +108,8 @@ class Migration(migrations.Migration):
                     "operation",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
-                        related_name="effects",
-                        to="nodes.operation",
-                    ),
-                ),
-                ("command", core.fields.SigilLongAutoField()),
-                ("order", models.PositiveIntegerField(default=0)),
-                ("is_django", models.BooleanField(default=False)),
-            ],
-            options={"ordering": ["order"]},
-            bases=(core.entity.Entity,),
-        ),
-        migrations.CreateModel(
-            name="Logbook",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("is_seed_data", models.BooleanField(default=False, editable=False)),
-                ("is_deleted", models.BooleanField(default=False, editable=False)),
-                (
-                    "effect",
-                    models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
                         related_name="logs",
-                        to="nodes.effect",
+                        to="nodes.operation",
                     ),
                 ),
                 (

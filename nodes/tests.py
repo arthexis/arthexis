@@ -37,7 +37,7 @@ from .tasks import capture_node_screenshot, sample_clipboard
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from core.models import PackageRelease
-from .models import Operation, Effect
+from .models import Operation
 from .admin import RUN_CONTEXTS
 
 
@@ -1080,15 +1080,13 @@ class OperationWorkflowTests(TestCase):
         RUN_CONTEXTS.clear()
 
     def test_unresolved_sigils_prompt(self):
-        op = Operation.objects.create(name="op1")
-        Effect.objects.create(operation=op, command="[ENV.MISSING]")
+        op = Operation.objects.create(name="op1", command="[ENV.MISSING]")
         url = reverse("admin:nodes_operation_run", args=[op.pk])
         resp = self.client.post(url, follow=True)
         self.assertContains(resp, 'name="ENV__MISSING"')
 
     def test_continue_effect(self):
-        op = Operation.objects.create(name="op2")
-        Effect.objects.create(operation=op, command="...")
+        op = Operation.objects.create(name="op2", command="...")
         url = reverse("admin:nodes_operation_run", args=[op.pk])
         resp = self.client.post(url, follow=True)
         self.assertContains(resp, 'value="Continue"')
