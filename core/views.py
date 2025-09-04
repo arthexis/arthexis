@@ -139,7 +139,9 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
         release.save(update_fields=["revision"])
         subprocess.run(["git", "checkout", current], check=True)
         subprocess.run(["git", "pull", "--rebase"], check=True)
-        subprocess.run(["git", "merge", "--ff-only", branch], check=True)
+        # Allow merging even when the release branch and main have diverged
+        # by creating a merge commit instead of requiring a fast-forward.
+        subprocess.run(["git", "merge", "--no-ff", branch], check=True)
         subprocess.run(["git", "branch", "-d", branch], check=True)
         diff = subprocess.run(
             [
