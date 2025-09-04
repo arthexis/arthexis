@@ -361,40 +361,28 @@ def promote(
     version: str,
     creds: Optional[Credentials] = None,
 ) -> tuple[str, str, str]:
-    """Create a release branch and build the package without tests.
+    """Build the package and commit the release on the current branch.
 
-    Returns a tuple of the release commit hash, the new branch name and the
-    original branch name.
+    Returns a tuple of the release commit hash, the current branch name and the
+    original branch name (identical since no branching occurs).
     """
     current = _current_branch()
-    tmp_branch = f"release/{version}"
     if not _git_clean():
         raise ReleaseError("Git repository is not clean")
-    try:
-        try:
-            _run(["git", "checkout", "-b", tmp_branch])
-        except subprocess.CalledProcessError:
-            _run(["git", "checkout", tmp_branch])
-        build(
-            package=package,
-            version=version,
-            creds=creds,
-            tests=False,
-            dist=True,
-            git=False,
-            tag=False,
-            stash=False,
-        )
-        _run(["git", "add", "."])  # add all changes
-        _run(["git", "commit", "-m", f"Release v{version}"])
-        commit_hash = _current_commit()
-        release_name = f"{package.name}-{version}-{commit_hash[:7]}"
-        branch = f"release-{release_name}"
-        _run(["git", "branch", "-m", branch])
-    except Exception:
-        _run(["git", "checkout", current])
-        raise
-    return commit_hash, branch, current
+    build(
+        package=package,
+        version=version,
+        creds=creds,
+        tests=False,
+        dist=True,
+        git=False,
+        tag=False,
+        stash=False,
+    )
+    _run(["git", "add", "."])  # add all changes
+    _run(["git", "commit", "-m", f"Release v{version}"])
+    commit_hash = _current_commit()
+    return commit_hash, current, current
 
 
 def publish(
