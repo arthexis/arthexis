@@ -4,6 +4,50 @@ Changelog
 Unreleased
 ----------
 
+0.1.7 [revision a7b962b71a8665aa7b52022d78dbbcfaf2a6e232]
+---------------------------------------------------------
+
+- a7b962b chore: update fixtures
+- 832e0ab Release v0.1.7
+
+0.1.7 [revision 19cba9bb4cd88a3b25467d304f942137378795be]
+---------------------------------------------------------
+
+- ba9bb8b fix: avoid merge commit prompts
+- 7c74033 ver
+- dfb3eb2 feat: rebase release branch before merge
+- 754a697 fix: merge release branch without fast-forward
+- 6912be3 Write fixture hash during env refresh
+- 890e08e Restore log placeholders
+- d794092 fix: avoid checking out missing fixtures hash
+- 3529c66 chore: dedupe changelog
+- f185c66 Release v0.1.7
+- 4b7626b Release v0.1.7
+- ae2e08f Release v0.1.7
+- 93a21e6 chore: update fixtures
+- dfa6c0e Release v0.1.7
+- 2101034 Skip fixture checks during migration squash
+- ecf09eb Release v0.1.7
+- 62768b3 Release v0.1.7
+- 8823979 Release v0.1.7
+- 21047e9 Release v0.1.7
+- f036325 Release v0.1.7
+- 5dff0a5 Release v0.1.7
+- e9a5f2d Release v0.1.7
+- a226002 Release v0.1.7
+- bae3f59 Release v0.1.7
+- 03e841c Release v0.1.7
+- 8f48c5e Release v0.1.7
+- 6d42d15 Release v0.1.7
+- 047e861 Release v0.1.7
+- 8d68872 Release v0.1.7
+- 2c062fd Release v0.1.7
+- 3273665 Release v0.1.7
+- 4bf6cbd Release v0.1.7
+- b13418c Release v0.1.7
+- 981e59d Release v0.1.7
+- 18e1d4d Release v0.1.7
+
 - remove automatic migration squashing from release process
 
 
