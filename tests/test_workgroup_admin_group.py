@@ -31,3 +31,4 @@ class WorkgroupAdminGroupTests(TestCase):
         self.assertContains(response, "6. Workgroup")
         self.assertContains(response, "Email Inboxes")
         self.assertContains(response, "Email Outboxes")
+        self.assertContains(response, "Chat Profiles")

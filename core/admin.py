@@ -45,6 +45,7 @@ from .models import (
     ReleaseManager,
     SecurityGroup,
     InviteLead,
+    ChatProfile,
 )
 from .user_data import UserDatumAdminMixin
 
@@ -521,6 +522,20 @@ class EmailInboxAdmin(admin.ModelAdmin):
             "action": "search_inbox",
         }
         return TemplateResponse(request, "admin/core/emailinbox/search.html", context)
+
+
+class WorkgroupChatProfile(ChatProfile):
+    class Meta:
+        proxy = True
+        app_label = "post_office"
+        verbose_name = ChatProfile._meta.verbose_name
+        verbose_name_plural = ChatProfile._meta.verbose_name_plural
+
+
+@admin.register(WorkgroupChatProfile)
+class ChatProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "created_at", "last_used_at", "is_active")
+    readonly_fields = ("user_key_hash",)
 
 
 class EnergyCreditInline(admin.TabularInline):
