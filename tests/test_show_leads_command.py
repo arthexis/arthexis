@@ -16,7 +16,7 @@ from core.models import InviteLead
 from awg.models import PowerLead
 
 
-def test_show_invites_lists_recent_leads():
+def test_show_leads_lists_recent_leads():
     InviteLead.objects.all().delete()
     PowerLead.objects.all().delete()
 
@@ -28,14 +28,14 @@ def test_show_invites_lists_recent_leads():
     new_invite = InviteLead.objects.create(email="new@example.com")
 
     out = StringIO()
-    call_command("show_invites", 2, stdout=out)
+    call_command("show_leads", 2, stdout=out)
     output = out.getvalue()
     assert "new@example.com" in output
     assert "PowerLead" in output
     assert "old@example.com" not in output
 
 
-def test_show_invites_filters_invite():
+def test_show_leads_filters_invites():
     InviteLead.objects.all().delete()
     PowerLead.objects.all().delete()
 
@@ -43,13 +43,13 @@ def test_show_invites_filters_invite():
     PowerLead.objects.create(values={"x": 1})
 
     out = StringIO()
-    call_command("show_invites", "--invite", stdout=out)
+    call_command("show_leads", "--invites", stdout=out)
     output = out.getvalue()
     assert "only@example.com" in output
     assert "PowerLead" not in output
 
 
-def test_show_invites_filters_power():
+def test_show_leads_filters_power():
     InviteLead.objects.all().delete()
     PowerLead.objects.all().delete()
 
@@ -57,7 +57,7 @@ def test_show_invites_filters_power():
     PowerLead.objects.create(values={"x": 1})
 
     out = StringIO()
-    call_command("show_invites", "--power", stdout=out)
+    call_command("show_leads", "--power", stdout=out)
     output = out.getvalue()
     assert "PowerLead" in output
     assert "only@example.com" not in output
