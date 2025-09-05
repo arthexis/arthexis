@@ -3,7 +3,11 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.contrib.admin.sites import site
 
-from core.admin import EmailInbox as PostOfficeEmailInbox
+from core.admin import (
+    EmailInbox as PostOfficeEmailInbox,
+    WorkgroupReleaseManager,
+    WorkgroupSecurityGroup,
+)
 from nodes.admin import EmailOutbox as PostOfficeEmailOutbox
 
 
@@ -19,11 +23,19 @@ class WorkgroupAdminGroupTests(TestCase):
         registry = site._registry
         self.assertIn(PostOfficeEmailInbox, registry)
         self.assertIn(PostOfficeEmailOutbox, registry)
+        self.assertIn(WorkgroupReleaseManager, registry)
+        self.assertIn(WorkgroupSecurityGroup, registry)
         self.assertEqual(
             registry[PostOfficeEmailInbox].model._meta.app_label, "post_office"
         )
         self.assertEqual(
             registry[PostOfficeEmailOutbox].model._meta.app_label, "post_office"
+        )
+        self.assertEqual(
+            registry[WorkgroupReleaseManager].model._meta.app_label, "post_office"
+        )
+        self.assertEqual(
+            registry[WorkgroupSecurityGroup].model._meta.app_label, "post_office"
         )
 
     def test_admin_index_shows_post_office_group(self):
@@ -32,3 +44,5 @@ class WorkgroupAdminGroupTests(TestCase):
         self.assertContains(response, "Email Inboxes")
         self.assertContains(response, "Email Outboxes")
         self.assertContains(response, "Chat Profiles")
+        self.assertContains(response, "Release Managers")
+        self.assertContains(response, "Security Groups")

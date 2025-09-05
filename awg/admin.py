@@ -118,7 +118,15 @@ class CalculatorTemplateAdmin(admin.ModelAdmin):
     calculator_link.short_description = "Calculator"
 
 
-@admin.register(PowerLead)
+class BusinessPowerLead(PowerLead):
+    class Meta:
+        proxy = True
+        app_label = "core"
+        verbose_name = PowerLead._meta.verbose_name
+        verbose_name_plural = PowerLead._meta.verbose_name_plural
+
+
+@admin.register(BusinessPowerLead)
 class PowerLeadAdmin(admin.ModelAdmin):
     list_display = ("created_on", "user", "ip_address")
     search_fields = ("user__username", "ip_address")

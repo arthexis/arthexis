@@ -53,6 +53,30 @@ from .user_data import UserDatumAdminMixin
 admin.site.unregister(Group)
 
 
+class WorkgroupReleaseManager(ReleaseManager):
+    class Meta:
+        proxy = True
+        app_label = "post_office"
+        verbose_name = ReleaseManager._meta.verbose_name
+        verbose_name_plural = ReleaseManager._meta.verbose_name_plural
+
+
+class WorkgroupSecurityGroup(SecurityGroup):
+    class Meta:
+        proxy = True
+        app_label = "post_office"
+        verbose_name = SecurityGroup._meta.verbose_name
+        verbose_name_plural = SecurityGroup._meta.verbose_name_plural
+
+
+class ExperienceReference(Reference):
+    class Meta:
+        proxy = True
+        app_label = "pages"
+        verbose_name = Reference._meta.verbose_name
+        verbose_name_plural = Reference._meta.verbose_name_plural
+
+
 class SaveBeforeChangeAction(DjangoObjectActions):
     def response_change(self, request, obj):
         action = request.POST.get("_action")
@@ -66,7 +90,7 @@ class SaveBeforeChangeAction(DjangoObjectActions):
         return super().response_change(request, obj)
 
 
-@admin.register(Reference)
+@admin.register(ExperienceReference)
 class ReferenceAdmin(admin.ModelAdmin):
     list_display = (
         "alt_text",
@@ -142,7 +166,7 @@ class ReferenceAdmin(admin.ModelAdmin):
     qr_code.short_description = "QR Code"
 
 
-@admin.register(ReleaseManager)
+@admin.register(WorkgroupReleaseManager)
 class ReleaseManagerAdmin(admin.ModelAdmin):
     list_display = ("user", "pypi_username", "pypi_url")
 
@@ -226,7 +250,7 @@ class SecurityGroupAdminForm(forms.ModelForm):
     )
 
     class Meta:
-        model = SecurityGroup
+        model = WorkgroupSecurityGroup
         fields = "__all__"
 
     def __init__(self, *args, **kwargs):
@@ -244,7 +268,7 @@ class SecurityGroupAdminForm(forms.ModelForm):
         return instance
 
 
-@admin.register(SecurityGroup)
+@admin.register(WorkgroupSecurityGroup)
 class SecurityGroupAdmin(DjangoGroupAdmin):
     form = SecurityGroupAdminForm
     fieldsets = ((None, {"fields": ("name", "parent", "users", "permissions")}),)
@@ -785,6 +809,7 @@ class RFIDForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["reference"].required = False
         rel = RFID._meta.get_field("reference").remote_field
+        rel.model = ExperienceReference
         widget = self.fields["reference"].widget
         self.fields["reference"].widget = RelatedFieldWidgetWrapper(
             widget,
