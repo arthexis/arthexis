@@ -19,7 +19,7 @@ class Command(BaseCommand):
         )
         group = parser.add_mutually_exclusive_group()
         group.add_argument(
-            "--invite",
+            "--invites",
             action="store_true",
             help="Show only InviteLead records",
         )
@@ -31,10 +31,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         limit = options["n"]
-        show_invite = options["invite"]
+        show_invites = options["invites"]
         show_power = options["power"]
 
-        if show_invite:
+        if show_invites:
             leads = list(InviteLead.objects.order_by("-created_on")[:limit])
         elif show_power:
             leads = list(PowerLead.objects.order_by("-created_on")[:limit])

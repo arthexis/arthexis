@@ -184,6 +184,24 @@ class PackageAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
             reverse("admin:core_packagerelease_change", args=[release.pk])
         )
 
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "prepare-next-release/",
+                self.admin_site.admin_view(self.prepare_next_release_active),
+                name="core_package_prepare_next_release",
+            )
+        ]
+        return custom + urls
+
+    def prepare_next_release_active(self, request):
+        package = Package.objects.filter(is_active=True).first()
+        if not package:
+            self.message_user(request, "No active package", messages.ERROR)
+            return redirect("admin:core_package_changelist")
+        return self._prepare(request, package)
+
     @admin.action(description="Prepare next Release")
     def prepare_next_release(self, request, queryset):
         if queryset.count() != 1:
@@ -856,6 +874,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
     list_display_links = ("version",)
     actions = ["publish_release", "validate_releases"]
     change_actions = ["publish_release_action"]
+    changelist_actions = ["refresh_from_pypi"]
     readonly_fields = ("pypi_url", "is_current", "revision")
     fields = (
         "package",
@@ -875,6 +894,46 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
         return obj.revision_short
 
     revision_short.short_description = "revision"
+
+    def refresh_from_pypi(self, request, queryset):
+        package = Package.objects.filter(is_active=True).first()
+        if not package:
+            self.message_user(request, "No active package", messages.ERROR)
+            return
+        try:
+            resp = requests.get(
+                f"https://pypi.org/pypi/{package.name}/json", timeout=10
+            )
+            resp.raise_for_status()
+        except Exception as exc:  # pragma: no cover - network failure
+            self.message_user(request, str(exc), messages.ERROR)
+            return
+        releases = resp.json().get("releases", {})
+        created = 0
+        for version in releases:
+            exists = PackageRelease.all_objects.filter(
+                package=package, version=version
+            ).exists()
+            if not exists:
+                PackageRelease.objects.create(
+                    package=package,
+                    release_manager=package.release_manager,
+                    version=version,
+                    pypi_url=f"https://pypi.org/project/{package.name}/{version}/",
+                )
+                created += 1
+        if created:
+            PackageRelease.dump_fixture()
+            self.message_user(
+                request,
+                f"Created {created} release{'s' if created != 1 else ''} from PyPI",
+                messages.SUCCESS,
+            )
+        else:
+            self.message_user(request, "No new releases found", messages.INFO)
+
+    refresh_from_pypi.label = "Refresh from PyPI"
+    refresh_from_pypi.short_description = "Refresh from PyPI"
 
     def _publish_release(self, request, release):
         try:
