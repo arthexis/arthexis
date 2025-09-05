@@ -153,8 +153,9 @@
 {% block extrahead %}
   {{ block.super }}
   <script>
-    (function () {
+    window.addEventListener('DOMContentLoaded', () => {
       const label = document.getElementById('last-netmessage');
+      if (!label) return;
       let last = '';
       async function fetchMessage() {
         try {
@@ -173,6 +174,6 @@
       }
       fetchMessage();
       setInterval(fetchMessage, 6000);
-    })();
+    });
   </script>
 {% endblock %}
