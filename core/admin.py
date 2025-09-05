@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
 from django.urls import path, reverse
 from django.shortcuts import redirect, render
-from django.http import JsonResponse, HttpResponseBase
+from django.http import JsonResponse, HttpResponseBase, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
@@ -554,6 +554,32 @@ class WorkgroupChatProfile(ChatProfile):
 class ChatProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "created_at", "last_used_at", "is_active")
     readonly_fields = ("user_key_hash",)
+
+    change_form_template = "admin/workgroupchatprofile_change_form.html"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "<path:object_id>/generate-key/",
+                self.admin_site.admin_view(self.generate_key),
+                name="post_office_workgroupchatprofile_generate_key",
+            ),
+        ]
+        return custom + urls
+
+    def generate_key(self, request, object_id, *args, **kwargs):
+        profile = self.get_object(request, object_id)
+        if profile is None:
+            return HttpResponseRedirect("../")
+        profile, key = ChatProfile.issue_key(profile.user)
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "original": profile,
+            "user_key": key,
+        }
+        return TemplateResponse(request, "admin/chatprofile_key.html", context)
 
 
 class EnergyCreditInline(admin.TabularInline):
