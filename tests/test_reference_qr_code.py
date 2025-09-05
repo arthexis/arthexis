@@ -44,7 +44,7 @@ class ReferenceQRTests(TestCase):
             method="text",
             value="some value",
         )
-        url = reverse("admin:core_reference_change", args=[ref.pk])
+        url = reverse("admin:pages_experiencereference_change", args=[ref.pk])
         response = self.client.get(url)
         self.assertContains(response, ref.image.url)
         self.assertContains(response, "<img", html=False)
