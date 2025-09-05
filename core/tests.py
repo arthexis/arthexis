@@ -681,6 +681,21 @@ class PackageReleaseAdminActionTests(TestCase):
         self.assertEqual(PackageRelease.objects.count(), 1)
         dump.assert_not_called()
 
+    @mock.patch("core.admin.PackageRelease.dump_fixture")
+    @mock.patch("core.admin.requests.get")
+    def test_refresh_from_pypi_creates_releases(self, mock_get, dump):
+        mock_get.return_value.raise_for_status.return_value = None
+        mock_get.return_value.json.return_value = {
+            "releases": {"1.0.0": [], "1.1.0": []}
+        }
+        self.admin.refresh_from_pypi(
+            self.request, PackageRelease.objects.none()
+        )
+        self.assertTrue(
+            PackageRelease.objects.filter(version="1.1.0").exists()
+        )
+        dump.assert_called_once()
+
 
 class PackageActiveTests(TestCase):
     def test_only_one_active_package(self):
@@ -749,4 +764,11 @@ class PackageReleaseChangelistTests(TestCase):
         self.assertContains(
             response, reverse("admin:core_package_prepare_next_release"), html=False
         )
+
+    def test_refresh_from_pypi_button_present(self):
+        response = self.client.get(reverse("admin:core_packagerelease_changelist"))
+        refresh_url = reverse(
+            "admin:core_packagerelease_actions", args=["refresh_from_pypi"]
+        )
+        self.assertContains(response, refresh_url, html=False)
 
