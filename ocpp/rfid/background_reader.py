@@ -4,7 +4,10 @@ import logging
 import os
 import queue
 import threading
+from pathlib import Path
 from typing import Optional
+
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +21,12 @@ _tag_queue: "queue.Queue[dict]" = queue.Queue()
 _thread: Optional[threading.Thread] = None
 _stop_event = threading.Event()
 _reader = None
+
+
+def is_configured() -> bool:
+    """Return ``True`` if an RFID reader is configured for this node."""
+    lock = Path(settings.BASE_DIR) / "locks" / "rfid.lck"
+    return lock.exists()
 
 
 def _irq_callback(channel):  # pragma: no cover - hardware dependent
@@ -90,6 +99,9 @@ def _worker():  # pragma: no cover - background thread
 def start():
     """Start the background RFID reader."""
     global _thread
+    if not is_configured():
+        logger.debug("RFID not configured; background reader not started")
+        return
     if GPIO is None:
         return
     if _thread and _thread.is_alive():
@@ -119,6 +131,9 @@ def get_next_tag(timeout: float = 0) -> Optional[dict]:
 
     Falls back to direct polling if no IRQ events are queued.
     """
+    if not is_configured():
+        logger.debug("RFID not configured; skipping read")
+        return None
     try:
         return _tag_queue.get(timeout=timeout)
     except queue.Empty:
