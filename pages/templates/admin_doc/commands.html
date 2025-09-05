@@ -1,0 +1,39 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'django-admindocs-docroot' %}">{% translate 'Documentation' %}</a>
+  &rsaquo; {% translate 'Commands' %}
+</div>
+{% endblock %}
+{% block title %}{% translate 'Commands' %}{% endblock %}
+
+{% block content %}
+<h1>{% translate 'Commands' %}</h1>
+<div id="content-main">
+  {% for command in commands %}
+    <div class="module">
+      <h2 id="{{ command.name }}">{{ command.name }}</h2>
+      {% if command.help %}<p>{{ command.help }}</p>{% endif %}
+      {% if command.args %}
+        <h3>{% translate 'Arguments' %}</h3>
+        <ul>
+          {% for arg in command.args %}
+            <li><code>{{ arg.name }}</code>{% if arg.help %} - {{ arg.help }}{% endif %}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if command.options %}
+        <h3>{% translate 'Options' %}</h3>
+        <ul>
+          {% for opt in command.options %}
+            <li><code>{{ opt.opts }}</code>{% if opt.help %} - {{ opt.help }}{% endif %}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}
