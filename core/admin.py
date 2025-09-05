@@ -848,6 +848,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
     list_display_links = ("version",)
     actions = ["publish_release", "validate_releases"]
     change_actions = ["publish_release_action"]
+    changelist_actions = ["refresh_from_pypi"]
     readonly_fields = ("pypi_url", "is_current", "revision")
     fields = (
         "package",
@@ -867,6 +868,46 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
         return obj.revision_short
 
     revision_short.short_description = "revision"
+
+    def refresh_from_pypi(self, request, queryset):
+        package = Package.objects.filter(is_active=True).first()
+        if not package:
+            self.message_user(request, "No active package", messages.ERROR)
+            return
+        try:
+            resp = requests.get(
+                f"https://pypi.org/pypi/{package.name}/json", timeout=10
+            )
+            resp.raise_for_status()
+        except Exception as exc:  # pragma: no cover - network failure
+            self.message_user(request, str(exc), messages.ERROR)
+            return
+        releases = resp.json().get("releases", {})
+        created = 0
+        for version in releases:
+            exists = PackageRelease.all_objects.filter(
+                package=package, version=version
+            ).exists()
+            if not exists:
+                PackageRelease.objects.create(
+                    package=package,
+                    release_manager=package.release_manager,
+                    version=version,
+                    pypi_url=f"https://pypi.org/project/{package.name}/{version}/",
+                )
+                created += 1
+        if created:
+            PackageRelease.dump_fixture()
+            self.message_user(
+                request,
+                f"Created {created} release{'s' if created != 1 else ''} from PyPI",
+                messages.SUCCESS,
+            )
+        else:
+            self.message_user(request, "No new releases found", messages.INFO)
+
+    refresh_from_pypi.label = "Refresh from PyPI"
+    refresh_from_pypi.short_description = "Refresh from PyPI"
 
     def _publish_release(self, request, release):
         try:
