@@ -17,6 +17,7 @@ from django.contrib.contenttypes.models import ContentType
 import hashlib
 import os
 import subprocess
+import secrets
 from io import BytesIO
 from django.core.files.base import ContentFile
 import qrcode
@@ -1334,3 +1335,54 @@ def _rfid_unique_energy_account(sender, instance, action, reverse, model, pk_set
             ).exclude(energy_accounts=instance)
             if conflict.exists():
                 raise ValidationError("RFID tags may only be assigned to one energy account.")
+
+
+def hash_key(key: str) -> str:
+    """Return a SHA-256 hash for ``key``."""
+
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+class ChatProfile(models.Model):
+    """Stores a hashed user key used by the assistant for authentication.
+
+    The plain-text ``user_key`` is generated server-side and shown only once.
+    Users must supply this key in the ``Authorization: Bearer <user_key>``
+    header when requesting protected endpoints. Only the hash is stored.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="chat_profile"
+    )
+    user_key_hash = models.CharField(max_length=64, unique=True)
+    scopes = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "workgroup_chatprofile"
+        verbose_name = "Chat Profile"
+        verbose_name_plural = "Chat Profiles"
+
+    @classmethod
+    def issue_key(cls, user) -> tuple["ChatProfile", str]:
+        """Create or update a profile and return it with a new plain key."""
+
+        key = secrets.token_hex(32)
+        key_hash = hash_key(key)
+        profile, _ = cls.objects.update_or_create(
+            user=user,
+            defaults={"user_key_hash": key_hash, "last_used_at": None, "is_active": True},
+        )
+        return profile, key
+
+    def touch(self) -> None:
+        """Record that the key was used."""
+
+        self.last_used_at = timezone.now()
+        self.save(update_fields=["last_used_at"])
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"ChatProfile for {self.user}"
