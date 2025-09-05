@@ -18,6 +18,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.i18n import set_language
 from django.utils.translation import gettext_lazy as _
 from core import views as core_views
+from core.admindocs import CommandsView
 
 admin.site.site_header = _("Constellation")
 admin.site.site_title = _("Constellation")
@@ -61,6 +62,11 @@ def autodiscovered_urlpatterns():
 
 
 urlpatterns = [
+    path(
+        "admin/doc/commands/",
+        CommandsView.as_view(),
+        name="django-admindocs-commands",
+    ),
     path("admin/doc/", include("django.contrib.admindocs.urls")),
     path(
         "admin/core/releases/<int:pk>/<str:action>/",
