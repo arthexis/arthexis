@@ -340,7 +340,10 @@ class EmailOutbox(Entity):
     def send_mail(self, subject, message, recipient_list, from_email=None, **kwargs):
         connection = self.get_connection()
         from_email = from_email or self.from_email or settings.DEFAULT_FROM_EMAIL
-        return send_mail(
+        logger.info(
+            "EmailOutbox %s sending email to %s", self.pk, recipient_list
+        )
+        result = send_mail(
             subject,
             message,
             from_email,
@@ -348,6 +351,8 @@ class EmailOutbox(Entity):
             connection=connection,
             **kwargs,
         )
+        logger.info("EmailOutbox send_mail result: %s", result)
+        return result
 
 
 class NetMessage(Entity):
