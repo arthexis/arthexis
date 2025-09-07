@@ -1,0 +1,16 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>RFID Energy Report</h1>
+<table class="adminlist">
+  <thead>
+    <tr><th>RFID</th><th>Sessions</th><th>Total kWh</th></tr>
+  </thead>
+  <tbody>
+  {% for rfid, info in report %}
+    <tr><td>{{ rfid }}</td><td>{{ info.count }}</td><td>{{ info.kw|floatformat:2 }}</td></tr>
+  {% empty %}
+    <tr><td colspan="3">No data available.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

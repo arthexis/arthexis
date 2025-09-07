@@ -23,6 +23,7 @@ import json
 import uuid
 import requests
 from django_object_actions import DjangoObjectActions
+from ocpp.models import Transaction
 from .user_data import UserDatumAdminMixin
 from .models import (
     User,
@@ -858,6 +859,11 @@ class RFIDAdmin(ImportExportModelAdmin):
         urls = super().get_urls()
         custom = [
             path(
+                "report/",
+                self.admin_site.admin_view(self.report_view),
+                name="core_rfid_report",
+            ),
+            path(
                 "scan/",
                 self.admin_site.admin_view(csrf_exempt(self.scan_view)),
                 name="core_rfid_scan",
@@ -869,6 +875,17 @@ class RFIDAdmin(ImportExportModelAdmin):
             ),
         ]
         return custom + urls
+
+    def report_view(self, request):
+        from collections import defaultdict
+
+        data = defaultdict(lambda: {"kw": 0.0, "count": 0})
+        for tx in Transaction.objects.exclude(rfid=""):
+            data[tx.rfid]["kw"] += tx.kw
+            data[tx.rfid]["count"] += 1
+        context = self.admin_site.each_context(request)
+        context["report"] = sorted(data.items())
+        return TemplateResponse(request, "admin/core/rfid/report.html", context)
 
     def scan_view(self, request):
         context = self.admin_site.each_context(request)
