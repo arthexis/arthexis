@@ -62,6 +62,16 @@
             "detail": "Run manage.py subcommands"
         },
         {
+            "label": "Dev: collectstatic",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/python ${workspaceFolder}/manage.py collectstatic --noinput",
+            "windows": {
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\manage.py collectstatic --noinput"
+            },
+            "problemMatcher": [],
+            "detail": "Collect static files"
+        },
+        {
             "label": "Update requirements",
             "type": "shell",
             "command": "${workspaceFolder}/install.sh && ${workspaceFolder}/.venv/bin/python ${workspaceFolder}/freeze_requirements.py",

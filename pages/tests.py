@@ -118,6 +118,18 @@ class InvitationTests(TestCase):
         self.assertContains(
             resp, "If the email exists, an invitation has been sent."
         )
+        lead = InviteLead.objects.get()
+        self.assertIsNone(lead.sent_on)
+        self.assertIn("fail", lead.error)
+
+    def test_request_invite_records_send_time(self):
+        resp = self.client.post(
+            reverse("pages:request-invite"), {"email": "invite@example.com"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        lead = InviteLead.objects.get()
+        self.assertIsNotNone(lead.sent_on)
+        self.assertEqual(lead.error, "")
 
     def test_request_invite_creates_lead_with_comment(self):
         resp = self.client.post(
@@ -128,6 +140,8 @@ class InvitationTests(TestCase):
         lead = InviteLead.objects.get()
         self.assertEqual(lead.email, "new@example.com")
         self.assertEqual(lead.comment, "Hello")
+        self.assertIsNone(lead.sent_on)
+        self.assertEqual(lead.error, "")
 
 
 class NavbarBrandTests(TestCase):

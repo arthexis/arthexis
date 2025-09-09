@@ -11,7 +11,7 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from nodes.models import Node
 from django.urls import reverse
-from django.utils import translation
+from django.utils import translation, timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.core.mail import send_mail
@@ -126,7 +126,7 @@ def request_invite(request):
     if request.method == "POST" and form.is_valid():
         email = form.cleaned_data["email"]
         comment = form.cleaned_data.get("comment", "")
-        InviteLead.objects.create(
+        lead = InviteLead.objects.create(
             email=email,
             comment=comment,
             user=request.user if request.user.is_authenticated else None,
@@ -155,12 +155,19 @@ def request_invite(request):
                 if node:
                     result = node.send_mail(subject, body, [email])
                 else:
-                    result = send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [email])
+                    result = send_mail(
+                        subject, body, settings.DEFAULT_FROM_EMAIL, [email]
+                    )
+                lead.sent_on = timezone.now()
+                lead.error = ""
                 logger.info(
                     "Invitation email sent to %s (user %s): %s", email, user.pk, result
                 )
-            except Exception:
+            except Exception as exc:
+                lead.error = str(exc)
                 logger.exception("Failed to send invitation email to %s", email)
+        if lead.sent_on or lead.error:
+            lead.save(update_fields=["sent_on", "error"])
         sent = True
     return render(request, "pages/request_invite.html", {"form": form, "sent": sent})
 

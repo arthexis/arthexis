@@ -83,6 +83,8 @@ class Lead(models.Model):
 class InviteLead(Lead):
     email = models.EmailField()
     comment = models.TextField(blank=True)
+    sent_on = models.DateTimeField(null=True, blank=True)
+    error = models.TextField(blank=True)
 
     class Meta:
         verbose_name = "Invite Lead"

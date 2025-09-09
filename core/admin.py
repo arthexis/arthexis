@@ -279,7 +279,7 @@ class SecurityGroupAdmin(DjangoGroupAdmin):
 
 @admin.register(InviteLead)
 class InviteLeadAdmin(admin.ModelAdmin):
-    list_display = ("email", "created_on")
+    list_display = ("email", "created_on", "sent_on")
     search_fields = ("email", "comment")
     readonly_fields = (
         "created_on",
@@ -288,6 +288,8 @@ class InviteLeadAdmin(admin.ModelAdmin):
         "referer",
         "user_agent",
         "ip_address",
+        "sent_on",
+        "error",
     )
 
 
