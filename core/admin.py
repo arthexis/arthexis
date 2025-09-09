@@ -905,6 +905,34 @@ class EnergyReportAdmin(admin.ModelAdmin):
     list_display = ("created_on", "start_date", "end_date")
     readonly_fields = ("created_on", "data")
 
+    change_list_template = "admin/core/energyreport/change_list.html"
+
+    class EnergyReportForm(forms.Form):
+        start = forms.DateField(label="Start date")
+        end = forms.DateField(label="End date")
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "generate/",
+                self.admin_site.admin_view(self.generate_view),
+                name="core_energyreport_generate",
+            ),
+        ]
+        return custom + urls
+
+    def generate_view(self, request):
+        form = self.EnergyReportForm(request.POST or None)
+        report = None
+        if request.method == "POST" and form.is_valid():
+            start = form.cleaned_data["start"]
+            end = form.cleaned_data["end"]
+            report = EnergyReport.generate(start, end)
+        context = self.admin_site.each_context(request)
+        context.update({"form": form, "report": report})
+        return TemplateResponse(request, "admin/core/energyreport/generate.html", context)
+
 
 @admin.register(PackageRelease)
 class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):

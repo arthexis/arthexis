@@ -1,0 +1,24 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>Energy Report</h1>
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Generate</button>
+</form>
+{% if report %}
+  <h2>Report from {{ report.start_date }} to {{ report.end_date }}</h2>
+  <table class="adminlist">
+    <thead>
+      <tr><th>RFID/Account</th><th>Sessions</th><th>Total kWh</th></tr>
+    </thead>
+    <tbody>
+      {% for row in report.data.rows %}
+        <tr><td>{{ row.subject }}</td><td>{{ row.count }}</td><td>{{ row.kw|floatformat:2 }}</td></tr>
+      {% empty %}
+        <tr><td colspan="3">No data available.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}
