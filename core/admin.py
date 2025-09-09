@@ -23,12 +23,14 @@ import json
 import uuid
 import requests
 from django_object_actions import DjangoObjectActions
+from ocpp.models import Transaction
 from .user_data import UserDatumAdminMixin
 from .models import (
     User,
     EnergyAccount,
     ElectricVehicle,
     EnergyCredit,
+    EnergyReport,
     Address,
     Product,
     Subscription,
@@ -860,6 +862,11 @@ class RFIDAdmin(ImportExportModelAdmin):
         urls = super().get_urls()
         custom = [
             path(
+                "report/",
+                self.admin_site.admin_view(self.report_view),
+                name="core_rfid_report",
+            ),
+            path(
                 "scan/",
                 self.admin_site.admin_view(csrf_exempt(self.scan_view)),
                 name="core_rfid_scan",
@@ -871,6 +878,11 @@ class RFIDAdmin(ImportExportModelAdmin):
             ),
         ]
         return custom + urls
+
+    def report_view(self, request):
+        context = self.admin_site.each_context(request)
+        context["report"] = EnergyReport.build_rows()
+        return TemplateResponse(request, "admin/core/rfid/report.html", context)
 
     def scan_view(self, request):
         context = self.admin_site.each_context(request)
@@ -886,6 +898,12 @@ class RFIDAdmin(ImportExportModelAdmin):
         result = scan_sources(request)
         status = 500 if result.get("error") else 200
         return JsonResponse(result, status=status)
+
+
+@admin.register(EnergyReport)
+class EnergyReportAdmin(admin.ModelAdmin):
+    list_display = ("created_on", "start_date", "end_date")
+    readonly_fields = ("created_on", "data")
 
 
 @admin.register(PackageRelease)

@@ -10,14 +10,30 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name="invitelead",
-            name="sent_on",
-            field=models.DateTimeField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name="invitelead",
-            name="error",
-            field=models.TextField(blank=True),
+        migrations.CreateModel(
+            name="EnergyReport",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                ("start_date", models.DateField()),
+                ("end_date", models.DateField()),
+                ("created_on", models.DateTimeField(auto_now_add=True)),
+                ("data", models.JSONField(default=dict)),
+            ],
+            options={
+                "ordering": ["-created_on"],
+                "db_table": "core_energy_report",
+                "verbose_name": "Energy Report",
+                "verbose_name_plural": "Energy Reports",
+            },
         ),
     ]

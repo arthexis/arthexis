@@ -17,7 +17,7 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.core.mail import send_mail
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
-from core.models import InviteLead
+from core.models import InviteLead, EnergyReport
 
 import markdown
 from pages.utils import landing
@@ -209,6 +209,22 @@ def invitation_login(request, uidb64, token):
         login(request, user, backend="core.backends.LocalhostAdminBackend")
         return redirect(reverse("admin:index") if user.is_staff else "/")
     return render(request, "pages/invitation_login.html", {"form": form})
+
+
+class EnergyReportForm(forms.Form):
+    start = forms.DateField(label=_("Start date"))
+    end = forms.DateField(label=_("End date"))
+
+
+def energy_report(request):
+    form = EnergyReportForm(request.POST or None)
+    report = None
+    if request.method == "POST" and form.is_valid():
+        start = form.cleaned_data["start"]
+        end = form.cleaned_data["end"]
+        report = EnergyReport.generate(start, end)
+    context = {"form": form, "report": report}
+    return render(request, "pages/energy_report.html", context)
 
 
 def csrf_failure(request, reason=""):
