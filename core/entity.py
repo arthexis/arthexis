@@ -27,11 +27,7 @@ class EntityManager(models.Manager):
 
 class EntityUserManager(DjangoUserManager):
     def get_queryset(self):
-        return (
-            EntityQuerySet(self.model, using=self._db)
-            .filter(is_deleted=False)
-            .exclude(username="admin")
-        )
+        return EntityQuerySet(self.model, using=self._db).filter(is_deleted=False)
 
 
 class Entity(models.Model):

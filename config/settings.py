@@ -135,6 +135,7 @@ LOCAL_APPS = [
     "awg",
     "pages",
     "app",
+    "user_manuals",
 ]
 
 INSTALLED_APPS = [

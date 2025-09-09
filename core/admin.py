@@ -936,6 +936,7 @@ class EnergyReportAdmin(admin.ModelAdmin):
 
 @admin.register(PackageRelease)
 class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
+    change_list_template = "admin/core/packagerelease/change_list.html"
     list_display = (
         "version",
         "package_link",
