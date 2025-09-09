@@ -30,6 +30,7 @@ from .models import (
     EnergyAccount,
     ElectricVehicle,
     EnergyCredit,
+    EnergyReport,
     Address,
     Product,
     Subscription,
@@ -877,14 +878,8 @@ class RFIDAdmin(ImportExportModelAdmin):
         return custom + urls
 
     def report_view(self, request):
-        from collections import defaultdict
-
-        data = defaultdict(lambda: {"kw": 0.0, "count": 0})
-        for tx in Transaction.objects.exclude(rfid=""):
-            data[tx.rfid]["kw"] += tx.kw
-            data[tx.rfid]["count"] += 1
         context = self.admin_site.each_context(request)
-        context["report"] = sorted(data.items())
+        context["report"] = EnergyReport.build_rows()
         return TemplateResponse(request, "admin/core/rfid/report.html", context)
 
     def scan_view(self, request):
@@ -901,6 +896,12 @@ class RFIDAdmin(ImportExportModelAdmin):
         result = scan_sources(request)
         status = 500 if result.get("error") else 200
         return JsonResponse(result, status=status)
+
+
+@admin.register(EnergyReport)
+class EnergyReportAdmin(admin.ModelAdmin):
+    list_display = ("created_on", "start_date", "end_date")
+    readonly_fields = ("created_on", "data")
 
 
 @admin.register(PackageRelease)

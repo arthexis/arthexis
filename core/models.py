@@ -950,6 +950,66 @@ class EnergyCredit(Entity):
         db_table = "core_credit"
 
 
+class EnergyReport(Entity):
+    """Snapshot of energy usage over a period."""
+
+    start_date = models.DateField()
+    end_date = models.DateField()
+    created_on = models.DateTimeField(auto_now_add=True)
+    data = models.JSONField(default=dict)
+
+    class Meta:
+        verbose_name = "Energy Report"
+        verbose_name_plural = "Energy Reports"
+        db_table = "core_energy_report"
+        ordering = ["-created_on"]
+
+    @classmethod
+    def generate(cls, start_date, end_date):
+        rows = cls.build_rows(start_date, end_date)
+        return cls.objects.create(
+            start_date=start_date, end_date=end_date, data={"rows": rows}
+        )
+
+    @staticmethod
+    def build_rows(start_date=None, end_date=None):
+        from collections import defaultdict
+        from ocpp.models import Transaction
+
+        qs = Transaction.objects.exclude(rfid="")
+        if start_date:
+            from datetime import datetime, time, timedelta, timezone as pytimezone
+
+            start_dt = datetime.combine(start_date, time.min, tzinfo=pytimezone.utc)
+            qs = qs.filter(start_time__gte=start_dt)
+        if end_date:
+            from datetime import datetime, time, timedelta, timezone as pytimezone
+
+            end_dt = datetime.combine(
+                end_date + timedelta(days=1), time.min, tzinfo=pytimezone.utc
+            )
+            qs = qs.filter(start_time__lt=end_dt)
+        data = defaultdict(lambda: {"kw": 0.0, "count": 0})
+        for tx in qs:
+            data[tx.rfid]["kw"] += tx.kw
+            data[tx.rfid]["count"] += 1
+        rows = []
+        for rfid_uid, stats in sorted(data.items()):
+            tag = RFID.objects.filter(rfid=rfid_uid).first()
+            if tag:
+                account = tag.energy_accounts.first()
+                if account:
+                    subject = account.name
+                else:
+                    subject = str(tag.label_id)
+            else:
+                subject = rfid_uid
+            rows.append(
+                {"subject": subject, "kw": stats["kw"], "count": stats["count"]}
+            )
+        return rows
+
+
 class Brand(Entity):
     """Vehicle manufacturer or brand."""
 

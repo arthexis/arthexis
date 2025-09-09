@@ -3,11 +3,11 @@
 <h1>RFID Energy Report</h1>
 <table class="adminlist">
   <thead>
-    <tr><th>RFID</th><th>Sessions</th><th>Total kWh</th></tr>
+    <tr><th>RFID/Account</th><th>Sessions</th><th>Total kWh</th></tr>
   </thead>
   <tbody>
-  {% for rfid, info in report %}
-    <tr><td>{{ rfid }}</td><td>{{ info.count }}</td><td>{{ info.kw|floatformat:2 }}</td></tr>
+  {% for row in report %}
+    <tr><td>{{ row.subject }}</td><td>{{ row.count }}</td><td>{{ row.kw|floatformat:2 }}</td></tr>
   {% empty %}
     <tr><td colspan="3">No data available.</td></tr>
   {% endfor %}

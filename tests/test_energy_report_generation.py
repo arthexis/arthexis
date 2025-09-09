@@ -9,44 +9,31 @@ import django
 
 django.setup()
 
-from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import RFID, EnergyAccount
+from core.models import RFID, EnergyReport, EnergyAccount
 from ocpp.models import Charger, Transaction
 
 
-class RFIDEnergyReportTests(TestCase):
+class EnergyReportGenerationTests(TestCase):
     def setUp(self):
-        User = get_user_model()
-        self.user = User.objects.create_superuser(
-            username="report", email="report@example.com", password="pass"
-        )
         self.client = Client()
-        self.client.force_login(self.user)
         self.charger = Charger.objects.create(charger_id="C1")
-        self.rfid1 = RFID.objects.create(rfid="AABBCCDD")
-        self.rfid2 = RFID.objects.create(rfid="EEFF0011")
-        self.account = EnergyAccount.objects.create(name="ACC")
+        self.rfid1 = RFID.objects.create(rfid="A1B2C3")
+        self.rfid2 = RFID.objects.create(rfid="D4E5F6")
+        self.account = EnergyAccount.objects.create(name="ACCOUNT")
         self.account.rfids.add(self.rfid1)
         start = timezone.now()
         Transaction.objects.create(
             charger=self.charger,
             rfid=self.rfid1.rfid,
+            account=self.account,
             start_time=start,
             stop_time=start + timedelta(hours=1),
             meter_start=0,
             meter_stop=1000,
-        )
-        Transaction.objects.create(
-            charger=self.charger,
-            rfid=self.rfid1.rfid,
-            start_time=start,
-            stop_time=start + timedelta(hours=1),
-            meter_start=1000,
-            meter_stop=2500,
         )
         Transaction.objects.create(
             charger=self.charger,
@@ -57,13 +44,18 @@ class RFIDEnergyReportTests(TestCase):
             meter_stop=500,
         )
 
-    def test_report_view(self):
-        url = reverse("admin:core_rfid_report")
-        resp = self.client.get(url)
+    def test_generate_report(self):
+        day = timezone.now().date()
+        url = reverse("pages:energy-report")
+        resp = self.client.post(url, {"start": day, "end": day})
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, self.account.name)
-        self.assertContains(resp, "2.50")
         self.assertContains(resp, str(self.rfid2.label_id))
-        self.assertContains(resp, "0.50")
         self.assertNotContains(resp, self.rfid1.rfid)
         self.assertNotContains(resp, self.rfid2.rfid)
+        report = EnergyReport.objects.get()
+        self.assertEqual(report.start_date, day)
+        self.assertEqual(report.end_date, day)
+        subjects = {row["subject"] for row in report.data["rows"]}
+        self.assertIn(self.account.name, subjects)
+        self.assertIn(str(self.rfid2.label_id), subjects)
