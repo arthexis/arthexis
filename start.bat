@@ -25,4 +25,5 @@ exit /b 1
 
 :run
 if not defined RELOAD set NORELOAD=--noreload
+%VENV%\Scripts\python.exe manage.py collectstatic --noinput
 %VENV%\Scripts\python.exe manage.py runserver 0.0.0.0:%PORT% %NORELOAD%

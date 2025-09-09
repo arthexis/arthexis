@@ -105,6 +105,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Collect static files
+python manage.py collectstatic --noinput
+
 # Start required Celery components if requested
 if [ "$CELERY" = true ]; then
   celery -A config worker -l info &
