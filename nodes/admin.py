@@ -205,6 +205,43 @@ class EmailOutbox(NodeEmailOutbox):
 @admin.register(EmailOutbox)
 class EmailOutboxAdmin(admin.ModelAdmin):
     list_display = ("node", "host", "port", "username", "use_tls", "use_ssl")
+    change_form_template = "admin/nodes/emailoutbox/change_form.html"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "<path:object_id>/test/",
+                self.admin_site.admin_view(self.test_outbox),
+                name="post_office_emailoutbox_test",
+            )
+        ]
+        return custom + urls
+
+    def test_outbox(self, request, object_id):
+        outbox = self.get_object(request, object_id)
+        if not outbox:
+            self.message_user(request, "Unknown outbox", messages.ERROR)
+            return redirect("..")
+        recipient = request.user.email or outbox.username
+        try:
+            outbox.send_mail(
+                "Test email",
+                "This is a test email.",
+                [recipient],
+            )
+            self.message_user(request, "Test email sent", messages.SUCCESS)
+        except Exception as exc:  # pragma: no cover - admin feedback
+            self.message_user(request, str(exc), messages.ERROR)
+        return redirect("..")
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        if object_id:
+            extra_context["test_url"] = reverse(
+                "admin:post_office_emailoutbox_test", args=[object_id]
+            )
+        return super().changeform_view(request, object_id, form_url, extra_context)
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
