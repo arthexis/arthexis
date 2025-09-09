@@ -31,6 +31,11 @@ def _gather_info() -> dict:
     info["mode"] = mode
     info["port"] = 8000 if mode == "public" else 8888
 
+    screen_file = lock_dir / "screen_mode.lck"
+    info["screen_mode"] = (
+        screen_file.read_text().strip() if screen_file.exists() else ""
+    )
+
     # Use settings.NODE_ROLE as the single source of truth for the node role.
     info["role"] = getattr(settings, "NODE_ROLE", "Terminal")
 
