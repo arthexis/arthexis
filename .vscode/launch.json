@@ -15,7 +15,8 @@
                 "--noreload"
             ],
             "django": true,
-            "noDebug": true
+            "noDebug": true,
+            "preLaunchTask": "Dev: collectstatic"
         },
         {
             "name": "Debug Server",
@@ -29,7 +30,8 @@
             "args": [
                 "runserver"
             ],
-            "subProcess": true
+            "subProcess": true,
+            "preLaunchTask": "Dev: collectstatic"
         }
     ]
 }
