@@ -144,6 +144,20 @@ slugify() {
     echo "$input" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
 }
 
+prompt_password() {
+    local label="$1"
+    while true; do
+        read -rsp "Enter WiFi password for '$label': " pass1; echo
+        read -rsp "Confirm password: " pass2; echo
+        if [[ "$pass1" == "$pass2" && -n "$pass1" ]]; then
+            printf '%s' "$pass1"
+            return 0
+        else
+            echo "Passwords do not match or are empty." >&2
+        fi
+    done
+}
+
 # Reinstall wlan1 connections with uniform naming, only for 5GHz networks
 if nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
     declare -A SEEN_SLUGS=()
@@ -167,9 +181,12 @@ if nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
             psk="$(nmcli -s -g 802-11-wireless-security.psk connection show "$con" 2>/dev/null || true)"
             key_mgmt="$(nmcli -g 802-11-wireless-security.key-mgmt connection show "$con" 2>/dev/null || true)"
             nmcli connection delete "$con"
+            if [[ -z "$psk" && -n "$key_mgmt" && "$key_mgmt" != "none" ]]; then
+                psk="$(prompt_password "$ssid")"
+            fi
             if [[ -n "$psk" ]]; then
                 nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" \
-                    wifi.band a wifi-sec.key-mgmt "$key_mgmt" wifi-sec.psk "$psk" autoconnect yes \
+                    wifi.band a wifi-sec.key-mgmt "${key_mgmt:-wpa-psk}" wifi-sec.psk "$psk" autoconnect yes \
                     ipv4.method auto ipv4.route-metric 100 ipv6.method ignore
             else
                 nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" \
@@ -199,19 +216,8 @@ done
 # Obtain or prompt for WiFi password
 if [[ -n "$EXISTING_PASS" && $FORCE_PASSWORD != true ]]; then
     WIFI_PASS="$EXISTING_PASS"
-elif [[ $FORCE_PASSWORD == true ]]; then
-    while true; do
-        read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
-        read -rsp "Confirm password: " WIFI_PASS2; echo
-        if [[ "$WIFI_PASS1" == "$WIFI_PASS2" && -n "$WIFI_PASS1" ]]; then
-            WIFI_PASS="$WIFI_PASS1"
-            break
-        else
-            echo "Passwords do not match or are empty." >&2
-        fi
-    done
 else
-    WIFI_PASS="arthexis"
+    WIFI_PASS="$(prompt_password "$AP_NAME")"
 fi
 
 # Configure wlan0 access point
