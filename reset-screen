@@ -51,5 +51,9 @@ case "$MODE" in
     ;;
 fi
 
+LOCK_DIR="$(cd "$(dirname "$0")" && pwd)/locks"
+sudo mkdir -p "$LOCK_DIR"
+echo "$MODE" | sudo tee "$LOCK_DIR/screen_mode.lck" >/dev/null
+
 echo "Done. Rebooting..."
 sudo reboot
