@@ -1,0 +1,23 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>RFID Energy Report</h1>
+<form method="post" style="margin-bottom:1em;">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <input type="submit" value="Generate" />
+</form>
+{% if report is not None %}
+<table class="adminlist">
+  <thead>
+    <tr><th>RFID/Account</th><th>Sessions</th><th>Total kWh</th></tr>
+  </thead>
+  <tbody>
+  {% for row in report %}
+    <tr><td>{{ row.subject }}</td><td>{{ row.count }}</td><td>{{ row.kw|floatformat:2 }}</td></tr>
+  {% empty %}
+    <tr><td colspan="3">No data available.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

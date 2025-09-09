@@ -23,12 +23,14 @@ import json
 import uuid
 import requests
 from django_object_actions import DjangoObjectActions
+from ocpp.models import Transaction
 from .user_data import UserDatumAdminMixin
 from .models import (
     User,
     EnergyAccount,
     ElectricVehicle,
     EnergyCredit,
+    EnergyReport,
     Address,
     Product,
     Subscription,
@@ -822,8 +824,7 @@ class RFIDForm(forms.ModelForm):
 
 
 @admin.register(RFID)
-class RFIDAdmin(ImportExportModelAdmin):
-    change_list_template = "admin/core/rfid/change_list.html"
+class RFIDAdmin(DjangoObjectActions, ImportExportModelAdmin):
     resource_class = RFIDResource
     list_display = (
         "label_id",
@@ -840,8 +841,8 @@ class RFIDAdmin(ImportExportModelAdmin):
     search_fields = ("label_id", "rfid")
     autocomplete_fields = ["energy_accounts"]
     raw_id_fields = ["reference"]
-    actions = ["scan_rfids"]
     readonly_fields = ("added_on", "last_seen_on")
+    changelist_actions = ["generate_report", "scan_rfids"]
     form = RFIDForm
 
     def energy_accounts_display(self, obj):
@@ -849,14 +850,26 @@ class RFIDAdmin(ImportExportModelAdmin):
 
     energy_accounts_display.short_description = "Energy Accounts"
 
-    def scan_rfids(self, request, queryset):
+    def scan_rfids(self, request, queryset=None):
         return redirect("admin:core_rfid_scan")
 
-    scan_rfids.short_description = "Scan new RFIDs"
+    scan_rfids.label = "Scan RFIDs"
+    scan_rfids.short_description = "Scan RFIDs"
+
+    def generate_report(self, request, queryset=None):
+        return redirect("admin:core_rfid_report")
+
+    generate_report.label = "Generate Report"
+    generate_report.short_description = "Generate Report"
 
     def get_urls(self):
         urls = super().get_urls()
         custom = [
+            path(
+                "report/",
+                self.admin_site.admin_view(self.report_view),
+                name="core_rfid_report",
+            ),
             path(
                 "scan/",
                 self.admin_site.admin_view(csrf_exempt(self.scan_view)),
@@ -869,6 +882,22 @@ class RFIDAdmin(ImportExportModelAdmin):
             ),
         ]
         return custom + urls
+
+    class _ReportForm(forms.Form):
+        start = forms.DateField()
+        end = forms.DateField()
+
+    def report_view(self, request):
+        form = self._ReportForm(request.POST or None)
+        report = None
+        if request.method == "POST" and form.is_valid():
+            start = form.cleaned_data["start"]
+            end = form.cleaned_data["end"]
+            report = EnergyReport.generate(start, end)
+        context = self.admin_site.each_context(request)
+        context["form"] = form
+        context["report"] = report.data["rows"] if report else None
+        return TemplateResponse(request, "admin/core/rfid/report.html", context)
 
     def scan_view(self, request):
         context = self.admin_site.each_context(request)
@@ -884,6 +913,20 @@ class RFIDAdmin(ImportExportModelAdmin):
         result = scan_sources(request)
         status = 500 if result.get("error") else 200
         return JsonResponse(result, status=status)
+
+
+class ProtocolEnergyReport(EnergyReport):
+    class Meta:
+        proxy = True
+        app_label = "ocpp"
+        verbose_name = EnergyReport._meta.verbose_name
+        verbose_name_plural = EnergyReport._meta.verbose_name_plural
+
+
+@admin.register(ProtocolEnergyReport)
+class EnergyReportAdmin(admin.ModelAdmin):
+    list_display = ("created_on", "start_date", "end_date")
+    readonly_fields = ("created_on", "data")
 
 
 @admin.register(PackageRelease)
