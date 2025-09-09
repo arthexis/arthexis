@@ -181,6 +181,9 @@ dmypy.json
 
 # local media generated during tests
 media/
+# Collected static files
+/static/
+/staticfiles/
 # Security keys generated for nodes
 security/
 # Pyre type checker
