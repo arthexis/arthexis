@@ -13,6 +13,8 @@ import json
 import tempfile
 import hashlib
 import time
+import shutil
+from datetime import datetime
 
 import django
 import importlib.util
@@ -43,8 +45,13 @@ from utils import revision as revision_utils
 
 
 def _unlink_sqlite_db(path: Path) -> None:
-    """Close database connections and remove SQLite files with retry."""
+    """Close database connections, back up, and remove SQLite files with retry."""
     connections.close_all()
+    if path.exists():
+        backup_dir = Path(settings.BASE_DIR) / "backups"
+        backup_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        shutil.copy2(path, backup_dir / f"{path.name}.{timestamp}.bak")
     # Windows may keep SQLite files locked briefly after closing. Retry a few times.
     for suffix in ("", "-journal", "-wal", "-shm"):
         db_file = Path(str(path) + suffix)

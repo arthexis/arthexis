@@ -22,7 +22,14 @@ if not exist %VENV%\Scripts\python.exe (
 )
 
 if %CLEAN%==1 (
-    del /f /q "%~dp0db.sqlite3" 2>nul
+    set "DB_FILE=%~dp0db.sqlite3"
+    if exist "%DB_FILE%" (
+        set "BACKUP_DIR=%~dp0backups"
+        if not exist "%BACKUP_DIR%" mkdir "%BACKUP_DIR%"
+        for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMddHHmmss"') do set "STAMP=%%i"
+        copy "%DB_FILE%" "%BACKUP_DIR%\db.sqlite3.%STAMP%.bak" >nul
+    )
+    del /f /q "%DB_FILE%" 2>nul
 )
 if exist requirements.txt (
     for /f "skip=1 tokens=1" %%h in ('certutil -hashfile requirements.txt MD5') do (

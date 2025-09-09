@@ -5,6 +5,7 @@ __pycache__/
 
 # Backup files
 *.bkp
+backups/
 
 # C extensions
 *.so
