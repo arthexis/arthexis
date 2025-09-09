@@ -48,8 +48,14 @@ def _unlink_sqlite_db(path: Path) -> None:
     """Close database connections, back up, and remove SQLite files with retry."""
     connections.close_all()
     if path.exists():
-        backup_dir = Path(settings.BASE_DIR) / "backups"
+        try:
+            base_dir = Path(settings.BASE_DIR)  # type: ignore[name-defined]
+        except Exception:
+            base_dir = path.parent
+        backup_dir = base_dir / "backups"
         backup_dir.mkdir(exist_ok=True)
+        from datetime import datetime
+        import shutil
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         shutil.copy2(path, backup_dir / f"{path.name}.{timestamp}.bak")
     # Windows may keep SQLite files locked briefly after closing. Retry a few times.

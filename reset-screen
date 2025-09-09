@@ -1,0 +1,55 @@
+#!/bin/bash
+# reset-screen
+# Force Raspberry Pi display output
+# Usage: reset-screen [hdmi|tft]
+
+MODE="${1:-hdmi}"
+CONFIG=/boot/config.txt
+
+case "$MODE" in
+  hdmi)
+    echo "Resetting display to HDMI..."
+    # Remove TFT framebuffer overlays (common for 3.5")
+    sudo sed -i '/dtoverlay=ili9341/d' "$CONFIG"
+    sudo sed -i '/dtoverlay=waveshare35a/d' "$CONFIG"
+    sudo sed -i '/dtoverlay=waveshare35b/d' "$CONFIG"
+    sudo sed -i '/dtoverlay=waveshare35c/d' "$CONFIG"
+    sudo sed -i '/dtoverlay=waveshare35d/d' "$CONFIG"
+
+    # Force HDMI mode
+    sudo sed -i '/hdmi_force_hotplug/d' "$CONFIG"
+    sudo sed -i '/hdmi_group/d' "$CONFIG"
+    sudo sed -i '/hdmi_mode/d' "$CONFIG"
+
+    echo "hdmi_force_hotplug=1" | sudo tee -a "$CONFIG"
+    echo "hdmi_group=2" | sudo tee -a "$CONFIG"
+    echo "hdmi_mode=82" | sudo tee -a "$CONFIG"
+    # mode 82 = 1080p 60Hz
+    ;;
+
+  tft)
+    echo "Resetting display to TFT..."
+    # Remove HDMI settings
+    sudo sed -i '/hdmi_force_hotplug/d' "$CONFIG"
+    sudo sed -i '/hdmi_group/d' "$CONFIG"
+    sudo sed -i '/hdmi_mode/d' "$CONFIG"
+
+    # Remove existing TFT overlays to avoid duplicates
+    sudo sed -i '/dtoverlay=ili9341/d' "$CONFIG"
+    sudo sed -i '/dtoverlay=waveshare35a/d' "$CONFIG"
+    sudo sed -i '/dtoverlay=waveshare35b/d' "$CONFIG"
+    sudo sed -i '/dtoverlay=waveshare35c/d' "$CONFIG"
+    sudo sed -i '/dtoverlay=waveshare35d/d' "$CONFIG"
+
+    # Enable a common 3.5" Waveshare overlay
+    echo "dtoverlay=waveshare35a" | sudo tee -a "$CONFIG"
+    ;;
+
+  *)
+    echo "Usage: $0 [hdmi|tft]"
+    exit 1
+    ;;
+fi
+
+echo "Done. Rebooting..."
+sudo reboot
