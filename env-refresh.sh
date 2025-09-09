@@ -35,7 +35,13 @@ fi
 
 
 if [ "$CLEAN" -eq 1 ]; then
-  rm -f "$SCRIPT_DIR/db.sqlite3"
+  DB_FILE="$SCRIPT_DIR/db.sqlite3"
+  if [ -f "$DB_FILE" ]; then
+    BACKUP_DIR="$SCRIPT_DIR/backups"
+    mkdir -p "$BACKUP_DIR"
+    cp "$DB_FILE" "$BACKUP_DIR/db.sqlite3.$(date +%Y%m%d%H%M%S).bak"
+  fi
+  rm -f "$DB_FILE"
 fi
 
 if [ -f requirements.txt ]; then

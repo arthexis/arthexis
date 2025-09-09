@@ -188,6 +188,9 @@ cd "$BASE_DIR"
 DB_FILE="$BASE_DIR/db.sqlite3"
 if [ -f "$DB_FILE" ]; then
     if [ "$CLEAN" = true ]; then
+        BACKUP_DIR="$BASE_DIR/backups"
+        mkdir -p "$BACKUP_DIR"
+        cp "$DB_FILE" "$BACKUP_DIR/db.sqlite3.$(date +%Y%m%d%H%M%S).bak"
         rm "$DB_FILE"
     else
         echo "Database file $DB_FILE exists. Use --clean to remove it before installing." >&2
