@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Network setup script
-# Configures eth0 with a shared static IP and creates a Wi-Fi access point on
-# wlan0 using NetworkManager (nmcli).
+# Configures eth0 with a shared static IP, connects wlan1 as the internet uplink,
+# and creates a Wi-Fi access point on wlan0 using NetworkManager (nmcli).
 
 set -euo pipefail
 
@@ -178,10 +178,12 @@ if nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
             nmcli connection delete "$con"
             if [[ -n "$psk" ]]; then
                 nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" \
-                    wifi.band a wifi-sec.key-mgmt "$key_mgmt" wifi-sec.psk "$psk" autoconnect yes
+                    wifi.band a wifi-sec.key-mgmt "$key_mgmt" wifi-sec.psk "$psk" autoconnect yes \
+                    ipv4.method auto ipv4.route-metric 100 ipv6.method ignore
             else
                 nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" \
-                    wifi.band a autoconnect yes
+                    wifi.band a autoconnect yes ipv4.method auto ipv4.route-metric 100 \
+                    ipv6.method ignore
             fi
         fi
     done < <(nmcli -t -f NAME connection show)
@@ -203,26 +205,32 @@ for dev in eth0 wlan0; do
     done
 done
 
-# Add persistent Hyperline connection on wlan0
-nmcli connection add type wifi ifname wlan0 con-name hyperline \
+# Add persistent Hyperline connection on wlan1
+nmcli connection delete hyperline 2>/dev/null || true
+nmcli connection add type wifi ifname wlan1 con-name hyperline \
     ssid "Hyperline" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "arthexis" \
-    autoconnect yes ipv4.method auto ipv6.method ignore
+    autoconnect yes ipv4.method auto ipv6.method ignore ipv4.route-metric 100
 
 # Configure eth0 shared connection
 nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect yes \
     ipv4.method shared ipv4.addresses 192.168.129.10/16 ipv4.never-default yes \
-    ipv6.method ignore ipv6.never-default yes
+    ipv4.route-metric 10000 ipv6.method ignore ipv6.never-default yes
 
-# Attempt to connect to Hyperline network
-HYPERLINE_CONNECTED=false
+# Attempt to connect to Hyperline network or any existing wlan1 networks
+WLAN1_CONNECTED=false
 if nmcli connection up hyperline; then
-    HYPERLINE_CONNECTED=true
+    WLAN1_CONNECTED=true
 else
-    echo "Failed to activate Hyperline connection; falling back to access point." >&2
-    nmcli connection delete hyperline || true
+    echo "Failed to activate Hyperline connection; trying existing wlan1 connections." >&2
+    while read -r con; do
+        if nmcli connection up "$con"; then
+            WLAN1_CONNECTED=true
+            break
+        fi
+    done < <(nmcli -t -f NAME connection show | grep '^gate-')
 fi
 
-if [[ "$HYPERLINE_CONNECTED" != true ]]; then
+if [[ "$WLAN1_CONNECTED" != true ]]; then
     # Obtain or prompt for WiFi password
     if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
         while true; do
@@ -255,8 +263,16 @@ if [[ "$HYPERLINE_CONNECTED" != true ]]; then
             iptables -A INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT
     fi
 else
-    # Bring up shared ethernet and already-connected Hyperline WiFi
+    # Bring up shared ethernet and already-connected wlan1 network
     nmcli connection up eth0-shared
+fi
+
+# Ensure eth0 is not used for default routing and favor wlan1 as gateway
+ip route del default dev eth0 2>/dev/null || true
+ip route del default dev wlan0 2>/dev/null || true
+WLAN1_GW=$(nmcli -g IP4.GATEWAY device show wlan1 2>/dev/null | head -n1)
+if [[ -n "$WLAN1_GW" ]]; then
+    ip route replace default via "$WLAN1_GW" dev wlan1 2>/dev/null || true
 fi
 
 # Show final status
