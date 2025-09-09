@@ -104,25 +104,16 @@ ensure_pkg nginx nginx
 ensure_pkg sshd openssh-server
 ensure_service ssh
 
-# Ensure VNC server is installed and running
-if systemctl list-unit-files | grep -q 'vncserver-x11-serviced.service'; then
-    ensure_service vncserver-x11-serviced
-else
-    ensure_pkg x11vnc x11vnc
-    ensure_service x11vnc
-fi
-
-# Ensure SSH and VNC ports are open if a firewall is active
+# Ensure SSH port is open if a firewall is active
 if command -v ufw >/dev/null 2>&1; then
     STATUS=$(ufw status 2>/dev/null || true)
     if ! echo "$STATUS" | grep -iq "inactive"; then
         ufw allow 22/tcp || true
-        ufw allow 5900/tcp || true
     fi
 fi
 
 if [[ $SKIP_FIREWALL == false ]]; then
-    PORTS=(22 5900 21114)
+    PORTS=(22 21114)
     MODE="internal"
     if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
         MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
