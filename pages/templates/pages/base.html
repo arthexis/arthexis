@@ -137,14 +137,11 @@
               <form action="{% url 'set_language' %}" method="post" class="d-inline ms-2">
                 {% csrf_token %}
                 <input name="next" type="hidden" value="{{ request.get_full_path }}">
-                <input name="language" type="hidden" value="{% if LANGUAGE_CODE|slice:":2" == 'en' %}es{% else %}en{% endif %}">
-                <button class="btn btn-sm btn-outline-light" type="submit" aria-label="{% if LANGUAGE_CODE|slice:":2" == 'en' %}{% trans 'Spanish' %}{% else %}{% trans 'English' %}{% endif %}">
-                  <svg aria-hidden="true" width="1.5rem" height="1.5rem">
-                    <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="currentColor" font-size="0.8rem" font-weight="bold">
-                      {% if LANGUAGE_CODE|slice:":2" == 'en' %}ES{% else %}EN{% endif %}
-                    </text>
-                  </svg>
-                </button>
+                <select name="language" class="form-select form-select-sm d-inline w-auto" onchange="this.form.submit()">
+                  {% for lang_code, lang_name in LANGUAGES %}
+                    <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>{{ lang_name }}</option>
+                  {% endfor %}
+                </select>
               </form>
               <button id="share-button" class="btn btn-sm btn-outline-light ms-2" type="button" aria-label="{% trans 'Share' %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
