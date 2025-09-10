@@ -11,6 +11,7 @@ from core.models import ReleaseManager
 class ReleaseManagerAdminActionTests(TestCase):
     def setUp(self):
         User = get_user_model()
+        User.all_objects.filter(username="admin").delete()
         self.user = User.objects.create_superuser(
             username="admin", email="a@example.com", password="pwd"
         )

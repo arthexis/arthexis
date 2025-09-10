@@ -82,6 +82,21 @@ class ExperienceReference(Reference):
 
 
 class SaveBeforeChangeAction(DjangoObjectActions):
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        extra_context.update(
+            {
+                "objectactions": [
+                    self._get_tool_dict(action)
+                    for action in self.get_change_actions(
+                        request, object_id, form_url
+                    )
+                ],
+                "tools_view_name": self.tools_view_name,
+            }
+        )
+        return super().changeform_view(request, object_id, form_url, extra_context)
+
     def response_change(self, request, obj):
         action = request.POST.get("_action")
         if action:
