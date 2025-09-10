@@ -49,6 +49,7 @@ from .models import (
     SecurityGroup,
     InviteLead,
     ChatProfile,
+    Todo,
 )
 from .user_data import UserDatumAdminMixin
 
@@ -1219,3 +1220,8 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
     @admin.display(description="Is current")
     def is_current(self, obj):
         return self._boolean_icon(obj.is_current)
+
+
+@admin.register(Todo)
+class TodoAdmin(admin.ModelAdmin):
+    list_display = ("description",)
