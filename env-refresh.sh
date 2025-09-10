@@ -41,6 +41,10 @@ fi
 
 if [ "$CLEAN" -eq 1 ]; then
   DB_FILE="$SCRIPT_DIR/db.sqlite3"
+  if [ "$(basename "$DB_FILE")" != "db.sqlite3" ]; then
+    echo "Unexpected database file: $DB_FILE" >&2
+    exit 1
+  fi
   case "$DB_FILE" in
     "$SCRIPT_DIR"/*) ;;
     *)
@@ -52,8 +56,8 @@ if [ "$CLEAN" -eq 1 ]; then
     BACKUP_DIR="$SCRIPT_DIR/backups"
     mkdir -p "$BACKUP_DIR"
     cp "$DB_FILE" "$BACKUP_DIR/db.sqlite3.$(date +%Y%m%d%H%M%S).bak"
+    rm "$DB_FILE"
   fi
-  rm -f "$DB_FILE"
 fi
 
 REQ_FILE="$SCRIPT_DIR/requirements.txt"

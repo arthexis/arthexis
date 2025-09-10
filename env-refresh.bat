@@ -29,7 +29,14 @@ if not exist "%VENV%\Scripts\python.exe" (
 
 if %CLEAN%==1 (
     set "DB_FILE=%SCRIPT_DIR%db.sqlite3"
-    for %%I in ("%DB_FILE%") do set "CHECK=%%~dpI"
+    for %%I in ("%DB_FILE%") do (
+        set "CHECK=%%~dpI"
+        if /I not "%%~nxI"=="db.sqlite3" (
+            echo Unexpected database file: %DB_FILE%
+            popd >nul
+            exit /b 1
+        )
+    )
     if /I not "%CHECK%"=="%SCRIPT_DIR%" (
         echo Database path outside repository: %DB_FILE%
         popd >nul
@@ -40,8 +47,8 @@ if %CLEAN%==1 (
         if not exist "%BACKUP_DIR%" mkdir "%BACKUP_DIR%"
         for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMddHHmmss"') do set "STAMP=%%i"
         copy "%DB_FILE%" "%BACKUP_DIR%\db.sqlite3.%STAMP%.bak" >nul
+        del "%DB_FILE%" >nul 2>&1
     )
-    del /f /q "%DB_FILE%" 2>nul
 )
 if exist "%SCRIPT_DIR%\requirements.txt" (
     for /f "skip=1 tokens=1" %%h in ('certutil -hashfile "%SCRIPT_DIR%\requirements.txt" MD5') do (

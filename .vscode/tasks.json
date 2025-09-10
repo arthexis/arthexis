@@ -4,9 +4,12 @@
         {
             "label": "Dev: refresh",
             "type": "shell",
-            "command": "${workspaceFolder}/env-refresh.sh --latest",
+            "command": "./env-refresh.sh --latest",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
             "windows": {
-                "command": "${workspaceFolder}\\env-refresh.bat --latest"
+                "command": ".\\env-refresh.bat --latest"
             },
             "problemMatcher": [],
             "detail": "Refresh virtual environment and database"
@@ -14,9 +17,12 @@
         {
             "label": "Dev: refresh clean",
             "type": "shell",
-            "command": "${workspaceFolder}/env-refresh.sh --latest --clean",
+            "command": "./env-refresh.sh --latest --clean",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
             "windows": {
-                "command": "${workspaceFolder}\\env-refresh.bat --latest --clean"
+                "command": ".\\env-refresh.bat --latest --clean"
             },
             "problemMatcher": [],
             "detail": "Delete database file and refresh virtual environment and database"
