@@ -2,6 +2,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
@@ -15,6 +17,8 @@ from awg.admin import CableSizeAdmin
 from awg.models import CableSize
 
 
+@pytest.mark.role("Terminal")
+@pytest.mark.role("Control")
 class CableSizeAdminListDisplayTests(SimpleTestCase):
     def test_list_display_shows_area_and_amps(self):
         admin = CableSizeAdmin(CableSize, AdminSite())

@@ -1,0 +1,24 @@
+Terminal:
+  - awg/**
+  - nodes/**
+  - ocpp/**
+  - core/**
+  - pages/**
+Control:
+  - awg/**
+  - nodes/**
+  - ocpp/**
+Gateway:
+  - nodes/**
+  - ocpp/**
+  - core/**
+Constellation:
+  - awg/**
+  - nodes/**
+  - ocpp/**
+  - core/**
+  - pages/**
+Virtual:
+  - core/**
+Particle:
+  - nodes/**
