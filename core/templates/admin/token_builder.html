@@ -4,6 +4,15 @@
 {% block content %}
 <div id="content-main">
   <h1>{{ title }}</h1>
+  <form method="post" style="margin-bottom:1em;">
+    {% csrf_token %}
+    <label for="token_input">{% trans "Token" %}</label>
+    <input type="text" name="token" id="token_input" value="{{ token }}" />
+    <button type="submit">{% trans "Validate" %}</button>
+  </form>
+  {% if token %}
+  <p>{% trans "Result" %}: {{ resolved }}</p>
+  {% endif %}
   <table>
     <thead>
       <tr><th>{% trans "Prefix" %}</th><th>{% trans "Model" %}</th><th>{% trans "Fields" %}</th></tr>

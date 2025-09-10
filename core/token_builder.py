@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import os
 import re
+from io import StringIO
 
 from django.apps import apps
+from django.conf import settings
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
+from django.core.management import call_command
 from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.translation import gettext_lazy as _
@@ -48,6 +52,56 @@ def generate_model_sigils(**kwargs) -> None:
         existing.add(prefix.upper())
 
 
+TOKEN_PATTERN = re.compile(
+    r"\[([A-Za-z0-9_-]+)(?:=([A-Za-z0-9_-]+))?\.([A-Za-z0-9_-]+)(?:=([^\]]+))?\]",
+    re.IGNORECASE,
+)
+
+
+def _resolve_token(token: str) -> str:
+    """Return resolved value for ``token`` or empty string."""
+    SigilRoot = apps.get_model("core", "SigilRoot")
+    match = TOKEN_PATTERN.fullmatch(token)
+    if not match:
+        return ""
+    root_name, instance_id, key, param = match.groups()
+    root_name = root_name.replace("-", "_").upper()
+    key = key.replace("-", "_").upper()
+    try:
+        root = SigilRoot.objects.get(prefix__iexact=root_name)
+        if root.context_type == SigilRoot.Context.CONFIG:
+            if root.prefix.upper() == "ENV":
+                return os.environ.get(key.upper(), "")
+            if root.prefix.upper() == "SYS":
+                return str(getattr(settings, key.upper(), ""))
+            if root.prefix.upper() == "CMD":
+                out = StringIO()
+                args: list[str] = []
+                if param:
+                    args.append(param)
+                call_command(key.lower(), *args, stdout=out)
+                return out.getvalue().strip()
+        elif root.context_type == SigilRoot.Context.ENTITY:
+            model = root.content_type.model_class() if root.content_type else None
+            instance = None
+            if model:
+                if instance_id:
+                    instance = model.objects.filter(pk=instance_id).first()
+                else:
+                    instance = model.objects.order_by("?").first()
+            if instance:
+                field = next(
+                    (f for f in model._meta.fields if f.name.lower() == key.lower()),
+                    None,
+                )
+                if field:
+                    val = getattr(instance, field.attname)
+                    return "" if val is None else str(val)
+        return ""
+    except Exception:
+        return ""
+
+
 def _token_builder_view(request):
     SigilRoot = apps.get_model("core", "SigilRoot")
     roots = []
@@ -64,8 +118,23 @@ def _token_builder_view(request):
             }
         )
 
+    token = ""
+    resolved = ""
+    if request.method == "POST":
+        token = request.POST.get("token", "").strip()
+        if token and not token.startswith("["):
+            token = f"[{token}]"
+        resolved = _resolve_token(token) if token else ""
+
     context = admin.site.each_context(request)
-    context.update({"title": _("Token Builder"), "sigil_roots": roots})
+    context.update(
+        {
+            "title": _("Token Builder"),
+            "sigil_roots": roots,
+            "token": token,
+            "resolved": resolved,
+        }
+    )
     return TemplateResponse(request, "admin/token_builder.html", context)
 
 
