@@ -668,3 +668,15 @@ msgstr "Francés"
 #: config/settings.py:309
 msgid "Russian"
 msgstr "Ruso"
+
+#: ocpp/views.py:26 ocpp/templates/ocpp/charger_page.html:18
+msgid "Charging"
+msgstr "Cargando"
+
+#: ocpp/views.py:28
+msgid "Available"
+msgstr "Disponible"
+
+#: ocpp/views.py:29
+msgid "Offline"
+msgstr "Sin conexión"
