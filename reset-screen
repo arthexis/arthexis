@@ -1,7 +1,7 @@
 #!/bin/bash
 # reset-screen
 # Force Raspberry Pi display output
-# Usage: reset-screen [hdmi|tft]
+# Usage: reset-screen [hdmi|tft|rpi]
 
 MODE="${1:-hdmi}"
 CONFIG=/boot/config.txt
@@ -25,6 +25,11 @@ case "$MODE" in
     echo "hdmi_group=2" | sudo tee -a "$CONFIG"
     echo "hdmi_mode=82" | sudo tee -a "$CONFIG"
     # mode 82 = 1080p 60Hz
+
+    # Ensure Raspberry Pi display stack
+    sudo sed -i '/dtoverlay=vc4-kms-v3d/d' "$CONFIG"
+    echo "dtoverlay=vc4-kms-v3d" | sudo tee -a "$CONFIG"
+    sudo sed -i '/ignore_lcd/d' "$CONFIG"
     ;;
 
   tft)
@@ -45,8 +50,28 @@ case "$MODE" in
     echo "dtoverlay=waveshare35a" | sudo tee -a "$CONFIG"
     ;;
 
+  rpi)
+    echo "Resetting display to Raspberry Pi screen..."
+    # Remove HDMI and TFT settings
+    sudo sed -i '/hdmi_force_hotplug/d' "$CONFIG"
+    sudo sed -i '/hdmi_group/d' "$CONFIG"
+    sudo sed -i '/hdmi_mode/d' "$CONFIG"
+
+    sudo sed -i '/dtoverlay=ili9341/d' "$CONFIG"
+    sudo sed -i '/dtoverlay=waveshare35a/d' "$CONFIG"
+    sudo sed -i '/dtoverlay=waveshare35b/d' "$CONFIG"
+    sudo sed -i '/dtoverlay=waveshare35c/d' "$CONFIG"
+    sudo sed -i '/dtoverlay=waveshare35d/d' "$CONFIG"
+
+    # Ensure Raspberry Pi screen is enabled
+    sudo sed -i '/ignore_lcd/d' "$CONFIG"
+    echo "ignore_lcd=0" | sudo tee -a "$CONFIG"
+    sudo sed -i '/dtoverlay=vc4-kms-v3d/d' "$CONFIG"
+    echo "dtoverlay=vc4-kms-v3d" | sudo tee -a "$CONFIG"
+    ;;
+
   *)
-    echo "Usage: $0 [hdmi|tft]"
+    echo "Usage: $0 [hdmi|tft|rpi]"
     exit 1
     ;;
 esac
