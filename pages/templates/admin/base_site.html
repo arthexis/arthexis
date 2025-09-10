@@ -219,6 +219,20 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
     color: gold;
 }
 
+.model-status {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+}
+.model-status.ok {
+    background: #28a745;
+}
+.model-status.missing {
+    background: #dc3545;
+}
+
 /* Ensure related object buttons match theme */
 .related-widget-wrapper-link {
     display: inline-flex;
