@@ -2,6 +2,19 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Dev: install",
+            "type": "shell",
+            "command": "./install.sh",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "windows": {
+                "command": ".\\install.bat"
+            },
+            "problemMatcher": [],
+            "detail": "Set up virtual environment and install dependencies"
+        },
+        {
             "label": "Dev: refresh",
             "type": "shell",
             "command": "./env-refresh.sh --latest",
