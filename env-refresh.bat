@@ -1,5 +1,7 @@
 @echo off
-set VENV=.venv
+set "SCRIPT_DIR=%~dp0"
+pushd "%SCRIPT_DIR%" >nul
+set VENV=%SCRIPT_DIR%\.venv
 set LATEST=0
 set CLEAN=0
 :parse
@@ -16,7 +18,7 @@ if "%1"=="--clean" (
 )
 goto after_parse
 :after_parse
-if not exist %VENV%\Scripts\python.exe (
+if not exist "%VENV%\Scripts\python.exe" (
     echo Virtual environment not found. Run install.sh first.
     exit /b 1
 )
@@ -31,19 +33,20 @@ if %CLEAN%==1 (
     )
     del /f /q "%DB_FILE%" 2>nul
 )
-if exist requirements.txt (
-    for /f "skip=1 tokens=1" %%h in ('certutil -hashfile requirements.txt MD5') do (
+if exist "%SCRIPT_DIR%\requirements.txt" (
+    for /f "skip=1 tokens=1" %%h in ('certutil -hashfile "%SCRIPT_DIR%\requirements.txt" MD5') do (
         if not defined REQ_HASH set REQ_HASH=%%h
     )
-    if exist requirements.md5 (
-        set /p STORED_HASH=<requirements.md5
+    if exist "%SCRIPT_DIR%\requirements.md5" (
+        set /p STORED_HASH=<"%SCRIPT_DIR%\requirements.md5"
     )
     if /I not "%REQ_HASH%"=="%STORED_HASH%" (
-        %VENV%\Scripts\python.exe -m pip install -r requirements.txt
-        echo %REQ_HASH%>requirements.md5
+        "%VENV%\Scripts\python.exe" -m pip install -r "%SCRIPT_DIR%\requirements.txt"
+        echo %REQ_HASH%>"%SCRIPT_DIR%\requirements.md5"
     )
 )
 set "ARGS="
 if %LATEST%==1 set "ARGS=%ARGS% --latest"
 if %CLEAN%==1 set "ARGS=%ARGS% --clean"
-%VENV%\Scripts\python.exe env-refresh.py %ARGS% database
+"%VENV%\Scripts\python.exe" "%SCRIPT_DIR%\env-refresh.py" %ARGS% database
+popd >nul
