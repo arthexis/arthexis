@@ -16,5 +16,9 @@ class Migration(migrations.Migration):
                 ("content_html", models.TextField()),
                 ("content_pdf", models.TextField(help_text="Base64 encoded PDF")),
             ],
+            options={
+                "verbose_name": "User Manual",
+                "verbose_name_plural": "User Manuals",
+            },
         ),
     ]
