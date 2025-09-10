@@ -2,6 +2,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -51,3 +53,20 @@ def safe_setup():
 
 django.setup = safe_setup
 safe_setup()
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "role(name): mark test as associated with a node role"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    role = os.environ.get("NODE_ROLE")
+    if not role:
+        return
+    skip = pytest.mark.skip(reason=f"not run for {role} role")
+    for item in items:
+        roles = {m.args[0] for m in item.iter_markers("role")}
+        if roles and role not in roles:
+            item.add_marker(skip)

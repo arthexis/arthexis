@@ -505,6 +505,38 @@ class EmailInboxAdmin(admin.ModelAdmin):
     form = EmailInboxAdminForm
     list_display = ("user", "username", "host", "protocol")
     actions = ["test_connection", "search_inbox"]
+    change_form_template = "admin/core/emailinbox/change_form.html"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "<path:object_id>/test/",
+                self.admin_site.admin_view(self.test_inbox),
+                name="post_office_emailinbox_test",
+            )
+        ]
+        return custom + urls
+
+    def test_inbox(self, request, object_id):
+        inbox = self.get_object(request, object_id)
+        if not inbox:
+            self.message_user(request, "Unknown inbox", messages.ERROR)
+            return redirect("..")
+        try:
+            inbox.test_connection()
+            self.message_user(request, "Inbox connection successful", messages.SUCCESS)
+        except Exception as exc:  # pragma: no cover - admin feedback
+            self.message_user(request, str(exc), messages.ERROR)
+        return redirect("..")
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        if object_id:
+            extra_context["test_url"] = reverse(
+                "admin:post_office_emailinbox_test", args=[object_id]
+            )
+        return super().changeform_view(request, object_id, form_url, extra_context)
     fieldsets = (
         (
             None,
@@ -936,6 +968,7 @@ class EnergyReportAdmin(admin.ModelAdmin):
 
 @admin.register(PackageRelease)
 class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
+    change_list_template = "admin/core/packagerelease/change_list.html"
     list_display = (
         "version",
         "package_link",

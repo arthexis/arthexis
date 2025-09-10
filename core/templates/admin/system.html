@@ -13,6 +13,10 @@
     <dd>{{ info.mode }} ({{ info.port }})</dd>
     <dt>{% trans "Node role" %}</dt>
     <dd>{{ info.role }}</dd>
+    {% if info.screen_mode %}
+    <dt>{% trans "Display mode" %}</dt>
+    <dd>{{ info.screen_mode }}</dd>
+    {% endif %}
     <dt>{% trans "Features" %}</dt>
     <dd>
       <ul>
