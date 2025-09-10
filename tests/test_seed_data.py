@@ -28,6 +28,25 @@ class SeedDataEntityTests(TestCase):
         self.assertTrue(NodeRole.all_objects.get(pk=role.pk).is_seed_data)
 
 
+class EntityInheritanceTests(TestCase):
+    def test_local_models_inherit_entity(self):
+        from django.apps import apps
+        from core.entity import Entity
+
+        allowed = {
+            "core.UserDatum",
+            "core.SecurityGroup",
+            "pages.SiteProxy",
+        }
+        for app_label in getattr(settings, "LOCAL_APPS", []):
+            config = apps.get_app_config(app_label)
+            for model in config.get_models():
+                label = model._meta.label
+                if label in allowed:
+                    continue
+                self.assertTrue(issubclass(model, Entity), label)
+
+
 class SeedDataAdminTests(TestCase):
     def setUp(self):
         call_command("flush", verbosity=0, interactive=False)
@@ -74,6 +93,15 @@ class SeedDataAdminTests(TestCase):
         response = self.client.get(url)
         self.assertNotContains(response, 'name="_seed_datum"')
         self.assertNotContains(response, 'name="_user_datum"')
+
+    def test_entity_admins_auto_patched(self):
+        from django.contrib import admin
+        from core.entity import Entity
+        from core.user_data import UserDatumAdminMixin
+
+        for model, model_admin in admin.site._registry.items():
+            if issubclass(model, Entity):
+                self.assertIsInstance(model_admin, UserDatumAdminMixin)
 
     def test_seed_datum_persists_after_save(self):
         OdooProfile.all_objects.filter(pk=self.profile.pk).update(is_seed_data=True)
