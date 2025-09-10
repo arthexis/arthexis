@@ -304,6 +304,8 @@ LANGUAGE_CODE = "en-us"
 LANGUAGES = [
     ("en", _("English")),
     ("es", _("Spanish")),
+    ("fr", _("French")),
+    ("ru", _("Russian")),
 ]
 
 LOCALE_PATHS = [BASE_DIR / "locale"]
