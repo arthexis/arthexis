@@ -49,7 +49,7 @@ case "$MODE" in
     echo "Usage: $0 [hdmi|tft]"
     exit 1
     ;;
-fi
+esac
 
 LOCK_DIR="$(cd "$(dirname "$0")" && pwd)/locks"
 sudo mkdir -p "$LOCK_DIR"
