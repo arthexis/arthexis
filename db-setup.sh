@@ -16,21 +16,20 @@ flock -n 200 || { echo "Another instance of $(basename "$0") is running." >&2; e
 
 usage() {
     cat <<USAGE
-Usage: $0 [--remove]
+Usage: $0 [--clean]
 
 Configure or remove PostgreSQL database settings for this project.
 Without arguments the script will configure the database.
-  --remove   Remove the database configuration and drop the database/user.
-  -h, --help Show this help message and exit.
+  --clean, --remove  Remove the database configuration and drop the database/user.
+  -h, --help         Show this help message and exit.
 USAGE
 }
 
 REMOVE=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --remove)
+        --clean|--remove)
             REMOVE=1
-            shift
             ;;
         -h|--help)
             usage
