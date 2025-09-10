@@ -287,6 +287,7 @@ class Migration(migrations.Migration):
                         max_length=20,
                     ),
                 ),
+                ("birthday", models.DateField(blank=True, null=True)),
                 ("has_charger", models.BooleanField(default=False)),
                 (
                     "groups",
