@@ -8,6 +8,8 @@ from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import UserManager as DjangoUserManager
 
+from .sigil_context import get_context
+
 logger = logging.getLogger(__name__)
 
 
@@ -70,17 +72,24 @@ class Entity(models.Model):
             return ""
         text = str(value)
 
-        pattern = re.compile(r"\[([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)\]")
+        pattern = re.compile(
+            r"\[([A-Za-z0-9_-]+)(?:=([A-Za-z0-9_-]+))?\.([A-Za-z0-9_-]+)(?:=([^\]]+))?\]",
+            re.IGNORECASE,
+        )
         SigilRoot = apps.get_model("core", "SigilRoot")
 
         def repl(match):
-            root_name, key = match.group(1), match.group(2)
+            root_name = match.group(1).replace("-", "_").upper()
+            instance_id = match.group(2)
+            key = match.group(3).replace("-", "_").upper()
+            param = match.group(4)
             try:
                 root = SigilRoot.objects.get(prefix__iexact=root_name)
                 if root.context_type == SigilRoot.Context.CONFIG:
                     if root.prefix.upper() == "ENV":
-                        if key in os.environ:
-                            return os.environ[key]
+                        env_val = os.environ.get(key.upper())
+                        if env_val is not None:
+                            return env_val
                         logger.warning(
                             "Missing environment variable for sigil [%s.%s]",
                             root_name,
@@ -88,14 +97,69 @@ class Entity(models.Model):
                         )
                         return match.group(0)
                     if root.prefix.upper() == "SYS":
-                        if hasattr(settings, key):
-                            return str(getattr(settings, key))
+                        if hasattr(settings, key.upper()):
+                            return str(getattr(settings, key.upper()))
                         logger.warning(
                             "Missing settings attribute for sigil [%s.%s]",
                             root_name,
                             key,
                         )
                         return match.group(0)
+                    if root.prefix.upper() == "CMD":
+                        from django.core.management import call_command
+                        from io import StringIO
+
+                        out = StringIO()
+                        try:
+                            args = []
+                            if param:
+                                args.append(param)
+                            call_command(key.lower(), *args, stdout=out)
+                            return out.getvalue().strip()
+                        except Exception:
+                            logger.exception(
+                                "Error running command for sigil [%s.%s]",
+                                root_name,
+                                key,
+                            )
+                            return match.group(0)
+                elif root.context_type == SigilRoot.Context.ENTITY:
+                    model = (
+                        root.content_type.model_class() if root.content_type else None
+                    )
+                    instance = None
+                    if model:
+                        if instance_id:
+                            instance = model.objects.filter(pk=instance_id).first()
+                        elif isinstance(self, model):
+                            instance = self
+                        else:
+                            ctx = get_context()
+                            inst_pk = ctx.get(model)
+                            if inst_pk is not None:
+                                instance = model.objects.filter(pk=inst_pk).first()
+                            if instance is None:
+                                instance = model.objects.order_by("?").first()
+                    if instance:
+                        field = next(
+                            (
+                                f
+                                for f in model._meta.fields
+                                if f.name.lower() == key.lower()
+                            ),
+                            None,
+                        )
+                        if field:
+                            val = getattr(instance, field.attname)
+                            return "" if val is None else str(val)
+                        logger.warning(
+                            "Missing field for sigil [%s.%s]", root_name, key
+                        )
+                        return match.group(0)
+                    logger.warning(
+                        "Unresolvable sigil [%s.%s]: no instance", root_name, key
+                    )
+                    return match.group(0)
                 logger.warning(
                     "Unresolvable sigil [%s.%s]: unsupported context", root_name, key
                 )
