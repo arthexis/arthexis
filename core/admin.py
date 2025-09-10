@@ -171,8 +171,49 @@ class ReferenceAdmin(admin.ModelAdmin):
 
 
 @admin.register(WorkgroupReleaseManager)
-class ReleaseManagerAdmin(admin.ModelAdmin):
+class ReleaseManagerAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
     list_display = ("user", "pypi_username", "pypi_url")
+    actions = ["test_credentials"]
+    change_actions = ["test_credentials_action"]
+
+    @admin.action(description="Test credentials")
+    def test_credentials(self, request, queryset):
+        for manager in queryset:
+            self._test_credentials(request, manager)
+
+    def test_credentials_action(self, request, obj):
+        self._test_credentials(request, obj)
+
+    test_credentials_action.label = "Test credentials"
+    test_credentials_action.short_description = "Test credentials"
+
+    def _test_credentials(self, request, manager):
+        creds = manager.to_credentials()
+        if not creds:
+            self.message_user(request, f"{manager} has no credentials", messages.ERROR)
+            return
+        url = manager.pypi_url or "https://upload.pypi.org/legacy/"
+        auth = (
+            ("__token__", creds.token)
+            if creds.token
+            else (creds.username, creds.password)
+        )
+        try:
+            resp = requests.get(url, auth=auth, timeout=10)
+            if resp.ok:
+                self.message_user(
+                    request, f"{manager} credentials valid", messages.SUCCESS
+                )
+            else:
+                self.message_user(
+                    request,
+                    f"{manager} credentials invalid ({resp.status_code})",
+                    messages.ERROR,
+                )
+        except Exception as exc:  # pragma: no cover - admin feedback
+            self.message_user(
+                request, f"{manager} credentials check failed: {exc}", messages.ERROR
+            )
 
 
 @admin.register(Package)
