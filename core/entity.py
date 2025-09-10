@@ -130,7 +130,20 @@ class Entity(models.Model):
                     instance = None
                     if model:
                         if instance_id:
-                            instance = model.objects.filter(pk=instance_id).first()
+                            try:
+                                instance = model.objects.filter(pk=instance_id).first()
+                            except (ValueError, TypeError):
+                                instance = None
+                            if instance is None:
+                                for field in model._meta.fields:
+                                    if field.unique and isinstance(
+                                        field, models.CharField
+                                    ):
+                                        instance = model.objects.filter(
+                                            **{f"{field.name}__iexact": instance_id}
+                                        ).first()
+                                        if instance:
+                                            break
                         elif isinstance(self, model):
                             instance = self
                         else:

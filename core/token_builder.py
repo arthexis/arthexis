@@ -12,6 +12,7 @@ from django.core.management import call_command
 from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.translation import gettext_lazy as _
+from django.db import models
 
 
 def _generate_prefix(name: str, existing: set[str]) -> str:
@@ -86,7 +87,18 @@ def _resolve_token(token: str) -> str:
             instance = None
             if model:
                 if instance_id:
-                    instance = model.objects.filter(pk=instance_id).first()
+                    try:
+                        instance = model.objects.filter(pk=instance_id).first()
+                    except (ValueError, TypeError):
+                        instance = None
+                    if instance is None:
+                        for field in model._meta.fields:
+                            if field.unique and isinstance(field, models.CharField):
+                                instance = model.objects.filter(
+                                    **{f"{field.name}__iexact": instance_id}
+                                ).first()
+                                if instance:
+                                    break
                 else:
                     instance = model.objects.order_by("?").first()
             if instance:
