@@ -30,7 +30,7 @@
   {% endif %}
   <div class="row mb-4">
     <div class="col-md-4">
-      <p>Serial Number: {{ charger.charger_id }}</p>
+      <p>{% trans "Serial Number" %}: {{ charger.charger_id }}</p>
       <div class="mb-3 d-flex align-items-center">
         <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
         <strong id="charger-state">{{ state }}</strong>

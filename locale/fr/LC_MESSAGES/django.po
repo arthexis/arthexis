@@ -30,3 +30,19 @@ msgstr "Français"
 msgid "Russian"
 msgstr "Russe"
 
+#: ocpp/views.py:26 ocpp/templates/ocpp/charger_page.html:18
+msgid "Charging"
+msgstr "En charge"
+
+#: ocpp/views.py:28
+msgid "Available"
+msgstr "Disponible"
+
+#: ocpp/views.py:29
+msgid "Offline"
+msgstr "Hors ligne"
+
+#: ocpp/templates/ocpp/charger_status.html:36
+msgid "Serial Number"
+msgstr "Numéro de série"
+
