@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  detect-roles:
+    runs-on: ubuntu-latest
+    outputs:
+      roles: ${{ steps.detect.outputs.roles }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Detect roles
+        id: detect
+        run: |
+          python scripts/detect_impacted_roles.py > roles.json
+          echo "roles=$(cat roles.json)" >> "$GITHUB_OUTPUT"
+      - name: Summarize roles
+        run: echo "Impacted roles: $(cat roles.json)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Comment roles
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        env:
+          ROLES: ${{ steps.detect.outputs.roles }}
+        with:
+          script: |
+            const roles = JSON.parse(process.env.ROLES);
+            const body = `Impacted node roles: ${roles.join(', ')}`;
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body
+            });
+
+  tests:
+    needs: detect-roles
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        role: ${{ fromJson(needs.detect-roles.outputs.roles) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+      - name: Run tests
+        env:
+          NODE_ROLE: ${{ matrix.role }}
+        run: pytest -q
