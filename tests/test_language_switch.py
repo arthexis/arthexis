@@ -33,6 +33,15 @@ class LanguageSwitchTests(TestCase):
             self.client.cookies.get(settings.LANGUAGE_COOKIE_NAME).value, "es"
         )
 
+    def test_redirect_renders_localized_readme(self):
+        """Follow redirect and ensure README updates immediately."""
+        # Visit the home page to ensure site is set up
+        self.client.get(reverse("pages:index"))
+        resp = self.client.post(
+            reverse("set_language"), {"language": "fr", "next": "/"}, follow=True
+        )
+        self.assertContains(resp, "Constellation Arthexis")
+
     def test_french_readme_rendered(self):
         """Switch to French and ensure the localized README is shown."""
         # Visit the home page to ensure site is set up

@@ -142,7 +142,7 @@
               <form action="{% url 'set_language' %}" method="post" class="d-inline me-2">
                 {% csrf_token %}
                 <input name="next" type="hidden" value="{{ request.get_full_path }}">
-                <select name="language" class="form-select form-select-sm d-inline w-auto language-select" onchange="this.form.submit()">
+                <select name="language" class="form-select form-select-sm d-inline w-auto language-select">
                   {% for lang_code, lang_name in LANGUAGES %}
                     <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>{{ lang_code|slice:":2"|upper }}</option>
                   {% endfor %}
@@ -298,27 +298,39 @@
         }
       });
     });
-    </script>
-    <script>
-      document.querySelectorAll('.user-info-trigger').forEach(btn => {
-        const tooltip = btn.querySelector('.user-info-tooltip');
-        if (!tooltip) {
-          return;
-        }
-        btn.addEventListener('mouseenter', () => {
-          tooltip.style.display = 'block';
+      </script>
+      <script>
+        document.querySelectorAll('.user-info-trigger').forEach(btn => {
+          const tooltip = btn.querySelector('.user-info-tooltip');
+          if (!tooltip) {
+            return;
+          }
+          btn.addEventListener('mouseenter', () => {
+            tooltip.style.display = 'block';
+          });
+          btn.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+          });
         });
-        btn.addEventListener('mouseleave', () => {
-          tooltip.style.display = 'none';
+      </script>
+      <script>
+        document.querySelectorAll('.language-select').forEach(select => {
+          select.addEventListener('change', () => {
+            const form = select.form;
+            const data = new FormData(form);
+            fetch(form.action, { method: 'POST', body: data }).then(() => {
+              const next = form.querySelector('input[name="next"]').value || '/';
+              window.location.href = next;
+            });
+          });
         });
-      });
-    </script>
-    <script>
-      (function() {
-        const btn = document.getElementById('share-button');
-        const modalEl = document.getElementById('shareModal');
-        if (!btn || !modalEl) {
-          return;
+      </script>
+      <script>
+        (function() {
+          const btn = document.getElementById('share-button');
+          const modalEl = document.getElementById('shareModal');
+          if (!btn || !modalEl) {
+            return;
         }
         const modal = new bootstrap.Modal(modalEl);
         btn.addEventListener('click', () => {
