@@ -17,3 +17,14 @@ def test_clean_creates_backup(tmp_path):
 
     backups = list((clone_dir / "backups").glob("db.sqlite3.*.bak"))
     assert backups
+    version = (clone_dir / "VERSION").read_text().strip()
+    rev = (
+        subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=clone_dir,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+    assert f"db.sqlite3.{version}.{rev}." in backups[0].name

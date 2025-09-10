@@ -46,7 +46,10 @@ if %CLEAN%==1 (
         set "BACKUP_DIR=%SCRIPT_DIR%backups"
         if not exist "%BACKUP_DIR%" mkdir "%BACKUP_DIR%"
         for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMddHHmmss"') do set "STAMP=%%i"
-        copy "%DB_FILE%" "%BACKUP_DIR%\db.sqlite3.%STAMP%.bak" >nul
+        set "VERSION=unknown"
+        if exist "%SCRIPT_DIR%VERSION" set /p VERSION=<"%SCRIPT_DIR%VERSION"
+        for /f %%i in ('git rev-parse HEAD 2^>nul') do set "REVISION=%%i"
+        copy "%DB_FILE%" "%BACKUP_DIR%\db.sqlite3.%VERSION%.%REVISION%.%STAMP%.bak" >nul
         del "%DB_FILE%" >nul 2>&1
     )
 )
