@@ -2,6 +2,7 @@ from utils.sites import get_site
 from django.urls import Resolver404, resolve
 from django.conf import settings
 from pathlib import Path
+from types import SimpleNamespace
 from nodes.models import Node
 from .models import Module
 
@@ -54,6 +55,15 @@ def nav_links(request):
                 ):
                     current_module = module
 
+    datasette_lock = Path(settings.BASE_DIR) / "locks" / "datasette.lck"
+    if datasette_lock.exists():
+        datasette_module = SimpleNamespace(
+            menu_label="Data",
+            path="/data/",
+            enabled_landings=[SimpleNamespace(path="/data/", label="Datasette")],
+        )
+        valid_modules.append(datasette_module)
+
     valid_modules.sort(key=lambda m: m.menu_label.lower())
 
     if current_module and current_module.favicon:
@@ -69,4 +79,7 @@ def nav_links(request):
         if not favicon_url:
             favicon_url = _DEFAULT_FAVICON
 
-    return {"nav_modules": valid_modules, "favicon_url": favicon_url}
+    return {
+        "nav_modules": valid_modules,
+        "favicon_url": favicon_url,
+    }

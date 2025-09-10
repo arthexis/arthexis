@@ -45,6 +45,12 @@ def test_install_script_sets_up_datasette_service():
     assert "datasette serve" in content
 
 
+def test_install_script_restricts_datasette_access():
+    script_path = Path(__file__).resolve().parent.parent / "install.sh"
+    content = script_path.read_text()
+    assert "auth_request /datasette-auth/" in content
+
+
 def test_install_script_runs_env_refresh():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()

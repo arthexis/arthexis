@@ -10,6 +10,27 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.CreateModel(
+            name="Todo",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                ("description", models.CharField(max_length=255)),
+            ],
+            options={
+                "verbose_name": "TODO",
+                "verbose_name_plural": "TODOs",
+            },
+        ),
         migrations.AddField(
             model_name="invitelead",
             name="error",

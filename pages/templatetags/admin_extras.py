@@ -10,6 +10,7 @@ from django.db import connection
 from django.urls import NoReverseMatch, reverse
 
 from core.user_data import UserDatum
+from core.models import Todo
 
 register = template.Library()
 
@@ -116,26 +117,26 @@ def model_db_status(context, app_label: str, model_name: str) -> bool:
 
 @register.simple_tag(takes_context=True)
 def future_action_items(context):
-    """Return deduplicated dashboard links for the current user.
+    """Return dashboard links and TODOs for the current user.
 
-    The list includes recent admin history entries, favorites and models with
-    user data.  Each model appears at most once and is displayed using its
-    plural name.
+    Returns a dict with ``models`` and ``todos`` lists. The ``models`` list
+    includes recent admin history entries, favorites and models with user
+    data. The ``todos`` list contains Release Manager tasks from fixtures.
     """
 
     request = context.get("request")
     user = getattr(request, "user", None)
     if not user or not user.is_authenticated:
-        return []
+        return {"models": [], "todos": []}
 
-    items = []
+    model_items = []
     seen = set()
 
     # Recently visited changelists (history)
     for entry in user.admin_history.all()[:10]:
         if entry.content_type_id in seen or not entry.url:
             continue
-        items.append({"url": entry.url, "label": entry.admin_label})
+        model_items.append({"url": entry.url, "label": entry.admin_label})
         seen.add(entry.content_type_id)
 
     # Favorites
@@ -150,7 +151,7 @@ def future_action_items(context):
         )
         url = admin_changelist_url(ct)
         if url:
-            items.append({"url": url, "label": label})
+            model_items.append({"url": url, "label": label})
             seen.add(ct.id)
 
     # Models with user data
@@ -162,7 +163,15 @@ def future_action_items(context):
         label = model._meta.verbose_name_plural if model else ct.name
         url = admin_changelist_url(ct)
         if url:
-            items.append({"url": url, "label": label})
+            model_items.append({"url": url, "label": label})
             seen.add(ct.id)
 
-    return items
+    todos = [
+        {
+            "url": reverse("admin:core_todo_change", args=[todo.pk]),
+            "label": todo.description,
+        }
+        for todo in Todo.objects.filter(is_deleted=False)
+    ]
+
+    return {"models": model_items, "todos": todos}

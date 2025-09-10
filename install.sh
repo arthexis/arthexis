@@ -197,7 +197,11 @@ if [ -f "$DB_FILE" ]; then
     if [ "$CLEAN" = true ]; then
         BACKUP_DIR="$BASE_DIR/backups"
         mkdir -p "$BACKUP_DIR"
-        cp "$DB_FILE" "$BACKUP_DIR/db.sqlite3.$(date +%Y%m%d%H%M%S).bak"
+        VERSION="unknown"
+        [ -f "$BASE_DIR/VERSION" ] && VERSION="$(cat "$BASE_DIR/VERSION")"
+        REVISION="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+        STAMP="$(date +%Y%m%d%H%M%S)"
+        cp "$DB_FILE" "$BACKUP_DIR/db.sqlite3.${VERSION}.${REVISION}.${STAMP}.bak"
         rm "$DB_FILE"
     else
         echo "Database file $DB_FILE exists. Use --clean to remove it before installing." >&2
@@ -286,6 +290,8 @@ server {
     }
     #DATASETTE_START
     location /data/ {
+        auth_request /datasette-auth/;
+        error_page 401 =302 /login/?next=$request_uri;
         proxy_pass http://127.0.0.1:DATA_PORT_PLACEHOLDER/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -315,6 +321,8 @@ server {
     }
     #DATASETTE_START
     location /data/ {
+        auth_request /datasette-auth/;
+        error_page 401 =302 /login/?next=$request_uri;
         proxy_pass http://127.0.0.1:DATA_PORT_PLACEHOLDER/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;

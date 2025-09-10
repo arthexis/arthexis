@@ -206,7 +206,7 @@ class UserDataViewTests(TestCase):
         self.assertContains(response, reverse("admin:user_data"))
         self.assertContains(response, reverse("admin:system"))
         self.assertContains(response, reverse("admin:environment"))
-        self.assertContains(response, reverse("admin:token_builder"))
+        self.assertContains(response, reverse("admin:sigil_builder"))
 
     def test_system_page_loads(self):
         response = self.client.get(reverse("admin:system"))
@@ -219,15 +219,15 @@ class UserDataViewTests(TestCase):
         self.assertContains(response, "PATH")
         self.assertContains(response, "DEBUG")
 
-    def test_token_builder_page_loads(self):
-        response = self.client.get(reverse("admin:token_builder"))
-        self.assertContains(response, "Token Builder")
+    def test_sigil_builder_page_loads(self):
+        response = self.client.get(reverse("admin:sigil_builder"))
+        self.assertContains(response, "Sigil Builder")
 
-    def test_token_builder_resolves_token_without_brackets(self):
+    def test_sigil_builder_resolves_sigil_without_brackets(self):
         os.environ["FOO"] = "BAR"
         try:
             response = self.client.post(
-                reverse("admin:token_builder"), {"token": "ENV.FOO"}
+                reverse("admin:sigil_builder"), {"sigil": "ENV.FOO"}
             )
         finally:
             del os.environ["FOO"]

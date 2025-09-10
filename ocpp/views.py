@@ -28,10 +28,10 @@ def _charger_state(charger: Charger, tx_obj: Transaction | None):
     cid = charger.charger_id
     connected = cid in store.connections
     if connected and tx_obj:
-        return "Charging", "green"
+        return _("Charging"), "green"
     if connected:
-        return "Available", "blue"
-    return "Offline", "grey"
+        return _("Available"), "blue"
+    return _("Offline"), "grey"
 
 
 @api_login_required

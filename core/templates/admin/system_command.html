@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
+  <a href="{% url 'admin:system' %}">{% trans 'System' %}</a> ›
+  {{ command_name }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{{ title }}</h1>
+  {% if form %}
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="form-row">
+      <label>{{ field.label }}:</label> {{ field }}
+    </div>
+    {% endfor %}
+    <button class="button" type="submit">{% trans 'Run' %}</button>
+  </form>
+  {% elif output %}
+  <pre>{{ output }}</pre>
+  {% endif %}
+</div>
+{% endblock %}

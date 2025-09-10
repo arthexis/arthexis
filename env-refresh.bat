@@ -27,26 +27,29 @@ if not exist "%VENV%\Scripts\python.exe" (
     exit /b 1
 )
 
+set "DB_FILE=%SCRIPT_DIR%db.sqlite3"
+
 if %CLEAN%==1 (
-    set "DB_FILE=%SCRIPT_DIR%db.sqlite3"
     for %%I in ("%DB_FILE%") do (
-        set "CHECK=%%~dpI"
         if /I not "%%~nxI"=="db.sqlite3" (
-            echo Unexpected database file: %DB_FILE%
+            echo Unexpected database file: %%~fI
             popd >nul
             exit /b 1
         )
-    )
-    if /I not "%CHECK%"=="%SCRIPT_DIR%" (
-        echo Database path outside repository: %DB_FILE%
-        popd >nul
-        exit /b 1
+        if /I not "%%~dpI"=="%SCRIPT_DIR%" (
+            echo Database path outside repository: %%~fI
+            popd >nul
+            exit /b 1
+        )
     )
     if exist "%DB_FILE%" (
         set "BACKUP_DIR=%SCRIPT_DIR%backups"
         if not exist "%BACKUP_DIR%" mkdir "%BACKUP_DIR%"
         for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMddHHmmss"') do set "STAMP=%%i"
-        copy "%DB_FILE%" "%BACKUP_DIR%\db.sqlite3.%STAMP%.bak" >nul
+        set "VERSION=unknown"
+        if exist "%SCRIPT_DIR%VERSION" set /p VERSION=<"%SCRIPT_DIR%VERSION"
+        for /f %%i in ('git rev-parse HEAD 2^>nul') do set "REVISION=%%i"
+        copy "%DB_FILE%" "%BACKUP_DIR%\db.sqlite3.%VERSION%.%REVISION%.%STAMP%.bak" >nul
         del "%DB_FILE%" >nul 2>&1
     )
 )

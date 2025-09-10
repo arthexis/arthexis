@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -15,6 +15,17 @@
 </head>
 <body>
 {% load i18n %}
+<div style="position:absolute; top:1rem; right:1rem;">
+  <form action="{% url 'set_language' %}" method="post">
+    {% csrf_token %}
+    <input name="next" type="hidden" value="{{ request.get_full_path }}">
+    <select name="language" onchange="this.form.submit()">
+      {% for lang_code, lang_name in LANGUAGES %}
+        <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>{{ lang_code|slice:":2"|upper }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
 {% if tx %}
   <h1>{% trans "Charging" %}</h1>
   <div class="progress"><div class="progress-bar" style="width: {{ tx.kw|floatformat:0 }}%;"></div></div>

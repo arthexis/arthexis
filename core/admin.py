@@ -49,6 +49,7 @@ from .models import (
     SecurityGroup,
     InviteLead,
     ChatProfile,
+    Todo,
 )
 from .user_data import UserDatumAdminMixin
 
@@ -81,6 +82,21 @@ class ExperienceReference(Reference):
 
 
 class SaveBeforeChangeAction(DjangoObjectActions):
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        extra_context.update(
+            {
+                "objectactions": [
+                    self._get_tool_dict(action)
+                    for action in self.get_change_actions(
+                        request, object_id, form_url
+                    )
+                ],
+                "tools_view_name": self.tools_view_name,
+            }
+        )
+        return super().changeform_view(request, object_id, form_url, extra_context)
+
     def response_change(self, request, obj):
         action = request.POST.get("_action")
         if action:
@@ -170,8 +186,49 @@ class ReferenceAdmin(admin.ModelAdmin):
 
 
 @admin.register(WorkgroupReleaseManager)
-class ReleaseManagerAdmin(admin.ModelAdmin):
+class ReleaseManagerAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
     list_display = ("user", "pypi_username", "pypi_url")
+    actions = ["test_credentials"]
+    change_actions = ["test_credentials_action"]
+
+    @admin.action(description="Test credentials")
+    def test_credentials(self, request, queryset):
+        for manager in queryset:
+            self._test_credentials(request, manager)
+
+    def test_credentials_action(self, request, obj):
+        self._test_credentials(request, obj)
+
+    test_credentials_action.label = "Test credentials"
+    test_credentials_action.short_description = "Test credentials"
+
+    def _test_credentials(self, request, manager):
+        creds = manager.to_credentials()
+        if not creds:
+            self.message_user(request, f"{manager} has no credentials", messages.ERROR)
+            return
+        url = manager.pypi_url or "https://upload.pypi.org/legacy/"
+        auth = (
+            ("__token__", creds.token)
+            if creds.token
+            else (creds.username, creds.password)
+        )
+        try:
+            resp = requests.get(url, auth=auth, timeout=10)
+            if resp.ok:
+                self.message_user(
+                    request, f"{manager} credentials valid", messages.SUCCESS
+                )
+            else:
+                self.message_user(
+                    request,
+                    f"{manager} credentials invalid ({resp.status_code})",
+                    messages.ERROR,
+                )
+        except Exception as exc:  # pragma: no cover - admin feedback
+            self.message_user(
+                request, f"{manager} credentials check failed: {exc}", messages.ERROR
+            )
 
 
 @admin.register(Package)
@@ -276,7 +333,7 @@ class SecurityGroupAdmin(DjangoGroupAdmin):
 
 @admin.register(InviteLead)
 class InviteLeadAdmin(admin.ModelAdmin):
-    list_display = ("email", "created_on", "sent_on")
+    list_display = ("email", "created_on", "sent_on", "short_error")
     search_fields = ("email", "comment")
     readonly_fields = (
         "created_on",
@@ -288,6 +345,11 @@ class InviteLeadAdmin(admin.ModelAdmin):
         "sent_on",
         "error",
     )
+
+    def short_error(self, obj):
+        return (obj.error[:40] + "…") if len(obj.error) > 40 else obj.error
+
+    short_error.short_description = "error"
 
 
 class EnergyAccountRFIDForm(forms.ModelForm):
@@ -888,7 +950,7 @@ class RFIDAdmin(ImportExportModelAdmin):
     def scan_rfids(self, request, queryset):
         return redirect("admin:core_rfid_scan")
 
-    scan_rfids.short_description = "Scan new RFIDs"
+    scan_rfids.short_description = "Scan RFIDs"
 
     def get_urls(self):
         urls = super().get_urls()
@@ -1158,3 +1220,8 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
     @admin.display(description="Is current")
     def is_current(self, obj):
         return self._boolean_icon(obj.is_current)
+
+
+@admin.register(Todo)
+class TodoAdmin(admin.ModelAdmin):
+    list_display = ("description",)

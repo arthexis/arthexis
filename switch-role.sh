@@ -18,9 +18,10 @@ UPDATE=false
 CLEAN=false
 LATEST=false
 ENABLE_DATASETTE=false
+CHECK=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette] [--satellite|--terminal|--control|--constellation|--virtual|--particle]" >&2
+    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette] [--check] [--satellite|--terminal|--control|--constellation|--virtual|--particle]" >&2
     exit 1
 }
 
@@ -67,6 +68,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --datasette)
             ENABLE_DATASETTE=true
+            shift
+            ;;
+        --check)
+            CHECK=true
             shift
             ;;
         --satellite)
@@ -122,6 +127,16 @@ while [[ $# -gt 0 ]]; do
 
 done
 
+if [ "$CHECK" = true ]; then
+    LOCK_DIR="$SCRIPT_DIR/locks"
+    if [ -f "$LOCK_DIR/role.lck" ]; then
+        cat "$LOCK_DIR/role.lck"
+    else
+        echo "unknown"
+    fi
+    exit 0
+fi
+
 if [ -z "$NODE_ROLE" ]; then
     usage
 fi
@@ -142,7 +157,11 @@ DB_FILE="$BASE_DIR/db.sqlite3"
 if [ "$CLEAN" = true ] && [ -f "$DB_FILE" ]; then
     BACKUP_DIR="$BASE_DIR/backups"
     mkdir -p "$BACKUP_DIR"
-    cp "$DB_FILE" "$BACKUP_DIR/db.sqlite3.$(date +%Y%m%d%H%M%S).bak"
+    VERSION="unknown"
+    [ -f "$BASE_DIR/VERSION" ] && VERSION="$(cat "$BASE_DIR/VERSION")"
+    REVISION="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+    STAMP="$(date +%Y%m%d%H%M%S)"
+    cp "$DB_FILE" "$BACKUP_DIR/db.sqlite3.${VERSION}.${REVISION}.${STAMP}.bak"
     rm "$DB_FILE"
 fi
 

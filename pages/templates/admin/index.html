@@ -90,7 +90,7 @@
     <a class="button" href="{% url 'admin:user_data' %}">{% translate 'User Data' %}</a>
     <a class="button" href="{% url 'admin:system' %}">{% translate 'System' %}</a>
     <a class="button" href="{% url 'admin:environment' %}">{% translate 'Environment' %}</a>
-    <a class="button" href="{% url 'admin:token_builder' %}">{% translate 'Token Builder' %}</a>
+    <a class="button" href="{% url 'admin:sigil_builder' %}">{% translate 'Sigil Builder' %}</a>
   </div>
 </div>
 {% endblock %}
@@ -107,15 +107,23 @@
     <div class="module" id="future-actions-module">
         <h2>{% translate 'Future actions' %}</h2>
         {% future_action_items as future_items %}
-            {% if future_items %}
+        {% if future_items.models %}
             <ul class="actionlist">
-                {% for item in future_items %}
-                <li class="changelink"><a href="{{ item.url }}">{{ item.label }}</a></li>
+                {% for item in future_items.models %}
+                <li class="changelink"><a href="{{ item.url }}">Create another {{ item.label }}</a></li>
                 {% endfor %}
             </ul>
-            {% else %}
+        {% endif %}
+        {% if future_items.todos %}
+            <h3>{% translate 'Release manager tasks' %}</h3>
+            <ul class="actionlist">
+                {% for todo in future_items.todos %}
+                <li class="changelink"><a href="{{ todo.url }}">{{ todo.label }}</a></li>
+                {% endfor %}
+            </ul>
+        {% elif not future_items.models %}
             <p>{% translate 'None available' %}</p>
-            {% endif %}
+        {% endif %}
     </div>
     <div class="module" id="recent-actions-module">
         <h2>{% translate 'Recent actions' %}</h2>

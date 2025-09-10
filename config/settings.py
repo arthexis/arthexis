@@ -137,7 +137,7 @@ LOCAL_APPS = [
     "awg",
     "pages",
     "app",
-    "user_manuals",
+    "man",
 ]
 
 INSTALLED_APPS = [
@@ -304,6 +304,8 @@ LANGUAGE_CODE = "en-us"
 LANGUAGES = [
     ("en", _("English")),
     ("es", _("Spanish")),
+    ("fr", _("French")),
+    ("ru", _("Russian")),
 ]
 
 LOCALE_PATHS = [BASE_DIR / "locale"]
@@ -378,5 +380,9 @@ CELERY_BEAT_SCHEDULE = {
     "heartbeat": {
         "task": "app.tasks.heartbeat",
         "schedule": crontab(minute="*/5"),
-    }
+    },
+    "birthday_greetings": {
+        "task": "app.tasks.birthday_greetings",
+        "schedule": crontab(hour=9, minute=0),
+    },
 }

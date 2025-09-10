@@ -110,6 +110,15 @@ class SeedDataAdminTests(TestCase):
             if issubclass(model, Entity):
                 self.assertIsInstance(model_admin, UserDatumAdminMixin)
 
+    def test_entity_admins_auto_patched(self):
+        from django.contrib import admin
+        from core.entity import Entity
+        from core.user_data import UserDatumAdminMixin
+
+        for model, model_admin in admin.site._registry.items():
+            if issubclass(model, Entity):
+                self.assertIsInstance(model_admin, UserDatumAdminMixin)
+
     def test_seed_datum_persists_after_save(self):
         OdooProfile.all_objects.filter(pk=self.profile.pk).update(is_seed_data=True)
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
