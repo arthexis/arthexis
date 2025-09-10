@@ -1493,6 +1493,7 @@ class Todo(Entity):
     """Tasks requested for the Release Manager."""
 
     description = models.CharField(max_length=255)
+    url = models.URLField(blank=True, default="")
 
     class Meta:
         verbose_name = "TODO"

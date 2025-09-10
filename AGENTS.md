@@ -7,7 +7,7 @@
 - Put any non-essential migrations into the 0002 or 0003 migrations instead of 0001.
 - Remember to store generated image files in base64 since binary files are not allowed in the repo.
 - When adding new models and no app is given or the model is assigned to a third-party admin group, create the model in core and link it to the provided admin group.
-- Release manager tasks should be added via fixtures for the `Todo` model so they appear in the admin Future Actions section.
+- Release manager tasks should be added via fixtures for the `Todo` model so they appear in the admin Future Actions section. Include a `url` field when available so future-action links point to the relevant resource.
 - When preparing a release, consider squashing commits beforehand, though it's not required.
 - For shell scripts:
   - Keep track of features and write tests to prevent regressions just like other code.

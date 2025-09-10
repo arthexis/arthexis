@@ -26,6 +26,7 @@ class Migration(migrations.Migration):
                 ("is_seed_data", models.BooleanField(default=False, editable=False)),
                 ("is_deleted", models.BooleanField(default=False, editable=False)),
                 ("description", models.CharField(max_length=255)),
+                ("url", models.URLField(blank=True, default="")),
             ],
             options={
                 "verbose_name": "TODO",
