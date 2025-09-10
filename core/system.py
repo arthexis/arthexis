@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+import io
 import socket
 import subprocess
 import shutil
+import argparse
 
+from django import forms
 from django.conf import settings
 from django.contrib import admin
+from django.core.management import get_commands, load_command_class
+from django.http import Http404
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -95,9 +100,90 @@ def _system_view(request):
         subprocess.Popen(args)
         return redirect(reverse("admin:index"))
 
+    commands = sorted(get_commands().keys())
+
     context = admin.site.each_context(request)
-    context.update({"title": _("System"), "info": info})
+    context.update({"title": _("System"), "info": info, "commands": commands})
     return TemplateResponse(request, "admin/system.html", context)
+
+
+def _build_form(parser: argparse.ArgumentParser) -> type[forms.Form]:
+    fields: dict[str, forms.Field] = {}
+    for action in parser._actions:
+        if action.help == argparse.SUPPRESS or action.dest == "help":
+            continue
+        label = action.option_strings[0] if action.option_strings else action.dest
+        required = (
+            action.required
+            if action.option_strings
+            else action.nargs not in ["?", "*", argparse.OPTIONAL]
+        )
+        fields[action.dest] = forms.CharField(label=label, required=required)
+    return type("CommandForm", (forms.Form,), fields)
+
+
+def _system_command_view(request, command):
+    commands = get_commands()
+    if command not in commands:
+        raise Http404
+    app_name = commands[command]
+    cmd_instance = load_command_class(app_name, command)
+    parser = cmd_instance.create_parser("manage.py", command)
+    form_class = _build_form(parser)
+    form = form_class(request.POST or None)
+    output = ""
+
+    has_required = any(
+        (a.option_strings and a.required)
+        or (not a.option_strings and a.nargs not in ["?", "*", argparse.OPTIONAL])
+        for a in parser._actions
+        if a.help != argparse.SUPPRESS and a.dest != "help"
+    )
+
+    if not has_required and request.method == "GET":
+        out = io.StringIO()
+        cmd_instance.stdout = out
+        cmd_instance.stderr = out
+        try:
+            cmd_instance.run_from_argv(["manage.py", command])
+        except Exception as exc:
+            out.write(str(exc))
+        output = out.getvalue()
+        form = None
+    elif request.method == "POST" and form.is_valid():
+        argv = ["manage.py", command]
+        for action in parser._actions:
+            if action.help == argparse.SUPPRESS or action.dest == "help":
+                continue
+            val = form.cleaned_data.get(action.dest)
+            if val in (None, ""):
+                continue
+            if action.option_strings:
+                argv.append(action.option_strings[0])
+                if action.nargs != 0:
+                    argv.append(val)
+            else:
+                argv.append(val)
+        out = io.StringIO()
+        cmd_instance.stdout = out
+        cmd_instance.stderr = out
+        try:
+            cmd_instance.run_from_argv(argv)
+        except Exception as exc:
+            out.write(str(exc))
+        output = out.getvalue()
+        form = None
+
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "title": command,
+            "command_name": command,
+            "form": form,
+            "output": output,
+        }
+    )
+    return TemplateResponse(request, "admin/system_command.html", context)
 
 
 def patch_admin_system_view() -> None:
@@ -108,6 +194,11 @@ def patch_admin_system_view() -> None:
         urls = original_get_urls()
         custom = [
             path("system/", admin.site.admin_view(_system_view), name="system"),
+            path(
+                "system/command/<str:command>/",
+                admin.site.admin_view(_system_command_view),
+                name="system_command",
+            ),
         ]
         return custom + urls
 
