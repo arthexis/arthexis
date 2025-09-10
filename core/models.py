@@ -1464,3 +1464,16 @@ class ChatProfile(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"ChatProfile for {self.user}"
+
+
+class Todo(Entity):
+    """Tasks requested for the Release Manager."""
+
+    description = models.CharField(max_length=255)
+
+    class Meta:
+        verbose_name = "TODO"
+        verbose_name_plural = "TODOs"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.description
