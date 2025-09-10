@@ -929,7 +929,7 @@ class RFIDAdmin(ImportExportModelAdmin):
     def scan_rfids(self, request, queryset):
         return redirect("admin:core_rfid_scan")
 
-    scan_rfids.short_description = "Scan new RFIDs"
+    scan_rfids.short_description = "Scan RFIDs"
 
     def get_urls(self):
         urls = super().get_urls()
