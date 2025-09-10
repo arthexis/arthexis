@@ -1,10 +1,9 @@
 from utils.sites import get_site
-from django.urls import Resolver404, resolve, reverse
+from django.urls import Resolver404, resolve
 from django.conf import settings
 from pathlib import Path
 from types import SimpleNamespace
 from nodes.models import Node
-from user_manuals.models import UserManual
 from .models import Module
 
 _favicon_path = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data" / "favicon.txt"
@@ -80,9 +79,7 @@ def nav_links(request):
         if not favicon_url:
             favicon_url = _DEFAULT_FAVICON
 
-    manual_url = reverse("user_manuals:list") if UserManual.objects.exists() else None
     return {
         "nav_modules": valid_modules,
         "favicon_url": favicon_url,
-        "manual_url": manual_url,
     }
