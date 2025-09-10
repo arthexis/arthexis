@@ -17,4 +17,4 @@ def manual_pdf(request, slug):
 
 def manual_list(request):
     manuals = UserManual.objects.all()
-    return render(request, "user_manuals/list.html", {"manuals": manuals})
+    return render(request, "man/list.html", {"manuals": manuals})

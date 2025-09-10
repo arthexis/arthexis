@@ -3,11 +3,16 @@ set -euo pipefail
 
 usage() {
   echo "Usage: $0 <archive-path>" >&2
-  exit 1
 }
 
 if [[ $# -ne 1 ]]; then
   usage
+  exit 1
+fi
+
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+  usage
+  exit 0
 fi
 
 archive="$(realpath -m "$1")"
