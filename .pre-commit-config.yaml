@@ -1,6 +1,11 @@
 repos:
-  - repo: https://github.com/psf/black
-    rev: 24.10.0
+  - repo: local
     hooks:
       - id: black
+        name: black
+        entry: black
+        language: python
         language_version: python3
+        types: [python]
+        additional_dependencies: [black==24.10.0]
+

@@ -7,7 +7,7 @@
   <form method="post" style="margin-bottom:1em;">
     {% csrf_token %}
     <label for="token_input">{% trans "Token" %}</label>
-    <input type="text" name="token" id="token_input" value="{{ token }}" />
+    <input type="text" name="token" id="token_input" value="{{ token }}" size="60" />
     <button type="submit">{% trans "Validate" %}</button>
   </form>
   {% if token %}
