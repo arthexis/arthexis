@@ -1,5 +1,8 @@
 from django.contrib.contenttypes.models import ContentType
+from django.urls import resolve
+
 from .models import AdminHistory
+from .sigil_context import set_context, clear_context
 
 
 class AdminHistoryMiddleware:
@@ -32,3 +35,42 @@ class AdminHistoryMiddleware:
                     defaults={"content_type": content_type},
                 )
         return response
+
+
+class SigilContextMiddleware:
+    """Capture model instance identifiers from resolved views."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        context = {}
+        try:
+            match = resolve(request.path_info)
+        except Exception:  # pragma: no cover - resolution errors
+            match = None
+        if match and hasattr(match, "func"):
+            view = match.func
+            model = None
+            if hasattr(view, "view_class"):
+                view_class = view.view_class
+                model = getattr(view_class, "model", None)
+                if model is None:
+                    queryset = getattr(view_class, "queryset", None)
+                    if queryset is not None:
+                        model = queryset.model
+            if model is not None:
+                pk = match.kwargs.get("pk") or match.kwargs.get("id")
+                if pk is not None:
+                    context[model] = pk
+                for field in model._meta.fields:
+                    if field.is_relation:
+                        for key in (field.name, field.attname):
+                            if key in match.kwargs:
+                                context[field.related_model] = match.kwargs[key]
+                                break
+        set_context(context)
+        try:
+            return self.get_response(request)
+        finally:
+            clear_context()

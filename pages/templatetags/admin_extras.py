@@ -6,6 +6,7 @@ from django import template
 from django.apps import apps
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
+from django.db import connection
 from django.urls import NoReverseMatch, reverse
 
 from core.user_data import UserDatum
@@ -84,6 +85,25 @@ def admin_changelist_url(ct: ContentType) -> str:
         return reverse(f"admin:{ct.app_label}_{ct.model}_changelist")
     except NoReverseMatch:
         return ""
+
+
+@register.simple_tag(takes_context=True)
+def model_db_status(context, app_label: str, model_name: str) -> bool:
+    """Return ``True`` if the model's database table exists.
+
+    The table list is cached on the template context to avoid repeated
+    introspection queries within a single request.
+    """
+    cache_key = "_model_status_tables"
+    tables = context.get(cache_key)
+    if tables is None:
+        tables = set(connection.introspection.table_names())
+        context[cache_key] = tables
+    try:
+        model = apps.get_model(app_label, model_name)
+    except LookupError:
+        return False
+    return model._meta.db_table in tables
 
 
 @register.simple_tag(takes_context=True)

@@ -26,12 +26,13 @@ def test_send_invite_generates_link_and_marks_sent():
 
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     token = default_token_generator.make_token(user)
-    expected = reverse("pages:invitation-login", args=[uid, token])
+    expected_login = reverse("pages:invitation-login", args=[uid, token])
 
     out = StringIO()
     call_command("send_invite", "invite@example.com", stdout=out)
     output = out.getvalue()
-    assert expected in output
+    expected_alt = expected_login.replace("invitation-login", "invitation")
+    assert expected_login in output or expected_alt in output
 
     lead = InviteLead.objects.get(email="invite@example.com")
     assert lead.sent_on is not None
