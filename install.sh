@@ -286,6 +286,8 @@ server {
     }
     #DATASETTE_START
     location /data/ {
+        auth_request /datasette-auth/;
+        error_page 401 =302 /login/?next=$request_uri;
         proxy_pass http://127.0.0.1:DATA_PORT_PLACEHOLDER/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -315,6 +317,8 @@ server {
     }
     #DATASETTE_START
     location /data/ {
+        auth_request /datasette-auth/;
+        error_page 401 =302 /login/?next=$request_uri;
         proxy_pass http://127.0.0.1:DATA_PORT_PLACEHOLDER/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;

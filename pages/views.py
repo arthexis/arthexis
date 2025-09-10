@@ -95,6 +95,13 @@ def sitemap(request):
     return HttpResponse("\n".join(lines), content_type="application/xml")
 
 
+@csrf_exempt
+def datasette_auth(request):
+    if request.user.is_authenticated:
+        return HttpResponse("OK")
+    return HttpResponse(status=401)
+
+
 class CustomLoginView(LoginView):
     """Login view that redirects staff to the admin."""
 
