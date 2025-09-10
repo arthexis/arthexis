@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("user_manuals", "0002_rpi_control_manual"),
+        ("man", "0002_rpi_control_manual"),
     ]
 
     operations = [

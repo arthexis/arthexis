@@ -190,7 +190,7 @@ IDAgUgovUm9vdCA0IDAgUgovU2l6ZSA4Cj4+CnN0YXJ0eHJlZgo1NDc4CiUlRU9GCg=="""
 
 
 def create_manual(apps, schema_editor):
-    UserManual = apps.get_model("user_manuals", "UserManual")
+    UserManual = apps.get_model("man", "UserManual")
     UserManual.objects.create(
         slug="rpi-control",
         title="RPi 4B Control Mode",
@@ -201,12 +201,12 @@ def create_manual(apps, schema_editor):
 
 
 def delete_manual(apps, schema_editor):
-    UserManual = apps.get_model("user_manuals", "UserManual")
+    UserManual = apps.get_model("man", "UserManual")
     UserManual.objects.filter(slug="rpi-control").delete()
 
 
 class Migration(migrations.Migration):
 
-    dependencies = [("user_manuals", "0001_initial")]
+    dependencies = [("man", "0001_initial")]
 
     operations = [migrations.RunPython(create_manual, delete_manual)]

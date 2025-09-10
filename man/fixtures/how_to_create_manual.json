@@ -1,6 +1,6 @@
 [
   {
-    "model": "user_manuals.usermanual",
+    "model": "man.usermanual",
     "fields": {
       "slug": "create-manual",
       "title": "Creating a User Manual",
