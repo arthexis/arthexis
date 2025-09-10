@@ -29,6 +29,10 @@ def _generate_prefix(name: str, existing: set[str]) -> str:
 def generate_model_sigils(**kwargs) -> None:
     """Create SigilRoot entries for all models using unique prefixes."""
     SigilRoot = apps.get_model("core", "SigilRoot")
+    for prefix in ["ENV", "SYS", "CMD"]:
+        SigilRoot.objects.get_or_create(
+            prefix=prefix, context_type=SigilRoot.Context.CONFIG
+        )
 
     existing = {p.upper() for p in SigilRoot.objects.values_list("prefix", flat=True)}
     for model in apps.get_models():

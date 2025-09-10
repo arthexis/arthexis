@@ -77,7 +77,7 @@ class Entity(models.Model):
         text = str(value)
 
         pattern = re.compile(
-            r"\[([A-Za-z0-9_]+)(?:=([A-Za-z0-9_-]+))?\.([A-Za-z0-9_]+)\]",
+            r"\[([A-Za-z0-9_]+)(?:=([A-Za-z0-9_-]+))?\.([A-Za-z0-9_]+)(?:=([^\]]+))?\]",
             re.IGNORECASE,
         )
         SigilRoot = apps.get_model("core", "SigilRoot")
@@ -86,6 +86,7 @@ class Entity(models.Model):
             root_name = match.group(1).upper()
             instance_id = match.group(2)
             key = match.group(3).upper()
+            param = match.group(4)
             try:
                 root = SigilRoot.objects.get(prefix__iexact=root_name)
                 if root.context_type == SigilRoot.Context.CONFIG:
@@ -108,6 +109,24 @@ class Entity(models.Model):
                             key,
                         )
                         return match.group(0)
+                    if root.prefix.upper() == "CMD":
+                        from django.core.management import call_command
+                        from io import StringIO
+
+                        out = StringIO()
+                        try:
+                            args = []
+                            if param:
+                                args.append(param)
+                            call_command(key.lower(), *args, stdout=out)
+                            return out.getvalue().strip()
+                        except Exception:
+                            logger.exception(
+                                "Error running command for sigil [%s.%s]",
+                                root_name,
+                                key,
+                            )
+                            return match.group(0)
                 elif root.context_type == SigilRoot.Context.ENTITY:
                     model = (
                         root.content_type.model_class() if root.content_type else None

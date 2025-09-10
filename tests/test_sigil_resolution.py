@@ -6,15 +6,13 @@ from django.template import Context, Template
 from django.test import TestCase
 from django.contrib.contenttypes.models import ContentType
 
-from core.models import SigilRoot, OdooProfile, EmailInbox
+from core.models import SigilRoot, OdooProfile, EmailInbox, InviteLead
 from core.sigil_context import set_context, clear_context
 
 
 class SigilResolutionTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        SigilRoot.objects.create(prefix="ENV", context_type=SigilRoot.Context.CONFIG)
-        SigilRoot.objects.create(prefix="SYS", context_type=SigilRoot.Context.CONFIG)
         cls.user = get_user_model().objects.create(username="sigiluser")
 
     def test_env_variable_sigil(self):
@@ -42,6 +40,22 @@ class SigilResolutionTests(TestCase):
         rendered = tmpl.render(Context({"profile": profile}))
         expected = f"lang={settings.LANGUAGE_CODE}"
         self.assertEqual(rendered, expected)
+
+    def test_command_sigil(self):
+        email = "invite@example.com"
+        User = get_user_model()
+        User.objects.create_user(username="cmduser", email=email)
+        InviteLead.objects.create(email=email)
+        profile = OdooProfile.objects.create(
+            user=self.user,
+            host=f"[CMD.SEND_INVITE={email}]",
+            database="db",
+            username="odoo",
+            password="secret",
+        )
+        tmpl = Template("{{ profile.host }}")
+        rendered = tmpl.render(Context({"profile": profile}))
+        self.assertIn("Invitation sent", rendered)
 
     def test_unresolved_env_sigil_left_intact(self):
         profile = OdooProfile.objects.create(
