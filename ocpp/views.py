@@ -12,6 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from utils.api import api_login_required
 
 from pages.utils import landing
+from core.liveupdate import live_update
 
 from . import store
 from .models import Transaction, Charger
@@ -124,6 +125,7 @@ def charger_detail(request, cid):
 
 @login_required
 @landing("Dashboard")
+@live_update()
 def dashboard(request):
     """Landing page listing all known chargers and their status."""
     chargers = []
@@ -142,6 +144,7 @@ def dashboard(request):
 
 @login_required
 @landing("CP Simulator")
+@live_update()
 def cp_simulator(request):
     """Public landing page to control the OCPP charge point simulator."""
     default_host = "127.0.0.1"
