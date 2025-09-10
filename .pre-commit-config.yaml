@@ -4,8 +4,5 @@ repos:
       - id: black
         name: black
         entry: black
-        language: python
-        language_version: python3
+        language: system
         types: [python]
-        additional_dependencies: [black==24.10.0]
-

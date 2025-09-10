@@ -2,6 +2,10 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -z "$SCRIPT_DIR" ] || [ "$SCRIPT_DIR" = "/" ]; then
+  echo "Refusing to run from root directory." >&2
+  exit 1
+fi
 cd "$SCRIPT_DIR"
 LOG_DIR="$SCRIPT_DIR/logs"
 mkdir -p "$LOG_DIR"
@@ -37,6 +41,13 @@ fi
 
 if [ "$CLEAN" -eq 1 ]; then
   DB_FILE="$SCRIPT_DIR/db.sqlite3"
+  case "$DB_FILE" in
+    "$SCRIPT_DIR"/*) ;;
+    *)
+      echo "Database path outside repository: $DB_FILE" >&2
+      exit 1
+      ;;
+  esac
   if [ -f "$DB_FILE" ]; then
     BACKUP_DIR="$SCRIPT_DIR/backups"
     mkdir -p "$BACKUP_DIR"

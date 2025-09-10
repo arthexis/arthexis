@@ -47,16 +47,18 @@ from utils import revision as revision_utils
 def _unlink_sqlite_db(path: Path) -> None:
     """Close database connections, back up, and remove SQLite files with retry."""
     connections.close_all()
+    try:
+        base_dir = Path(settings.BASE_DIR).resolve()
+    except Exception:
+        base_dir = path.parent.resolve()
+    path = path.resolve()
+    try:
+        path.relative_to(base_dir)
+    except ValueError:
+        raise RuntimeError(f"Refusing to delete database outside {base_dir}: {path}")
     if path.exists():
-        try:
-            base_dir = Path(settings.BASE_DIR)  # type: ignore[name-defined]
-        except Exception:
-            base_dir = path.parent
         backup_dir = base_dir / "backups"
         backup_dir.mkdir(exist_ok=True)
-        from datetime import datetime
-        import shutil
-
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         shutil.copy2(path, backup_dir / f"{path.name}.{timestamp}.bak")
     # Windows may keep SQLite files locked briefly after closing. Retry a few times.

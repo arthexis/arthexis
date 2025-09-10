@@ -1,5 +1,9 @@
 @echo off
 set "SCRIPT_DIR=%~dp0"
+if /I "%SCRIPT_DIR%"=="%SYSTEMDRIVE%\\" (
+    echo Refusing to run from drive root.
+    exit /b 1
+)
 pushd "%SCRIPT_DIR%" >nul
 set VENV=%SCRIPT_DIR%\.venv
 set LATEST=0
@@ -24,9 +28,15 @@ if not exist "%VENV%\Scripts\python.exe" (
 )
 
 if %CLEAN%==1 (
-    set "DB_FILE=%~dp0db.sqlite3"
+    set "DB_FILE=%SCRIPT_DIR%db.sqlite3"
+    for %%I in ("%DB_FILE%") do set "CHECK=%%~dpI"
+    if /I not "%CHECK%"=="%SCRIPT_DIR%" (
+        echo Database path outside repository: %DB_FILE%
+        popd >nul
+        exit /b 1
+    )
     if exist "%DB_FILE%" (
-        set "BACKUP_DIR=%~dp0backups"
+        set "BACKUP_DIR=%SCRIPT_DIR%backups"
         if not exist "%BACKUP_DIR%" mkdir "%BACKUP_DIR%"
         for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMddHHmmss"') do set "STAMP=%%i"
         copy "%DB_FILE%" "%BACKUP_DIR%\db.sqlite3.%STAMP%.bak" >nul
