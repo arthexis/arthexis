@@ -1,9 +1,21 @@
 {% extends "pages/base.html" %}
 {% block content %}
 <h1>Energy Report</h1>
-<form method="post">
+<form method="post" id="report-form">
   {% csrf_token %}
-  {{ form.as_p }}
+  <div>
+    {{ form.period.label_tag }} {{ form.period }}
+  </div>
+  <div id="range-fields">
+    {{ form.start.label_tag }} {{ form.start }}
+    {{ form.end.label_tag }} {{ form.end }}
+  </div>
+  <div id="week-field">
+    {{ form.week.label_tag }} {{ form.week }}
+  </div>
+  <div id="month-field">
+    {{ form.month.label_tag }} {{ form.month }}
+  </div>
   <button type="submit">Generate</button>
 </form>
 {% if report %}
@@ -21,4 +33,18 @@
     </tbody>
   </table>
 {% endif %}
+<script>
+  const periodRadios = document.querySelectorAll('input[name="period"]');
+  const rangeFields = document.getElementById('range-fields');
+  const weekField = document.getElementById('week-field');
+  const monthField = document.getElementById('month-field');
+  function toggleFields() {
+    const value = document.querySelector('input[name="period"]:checked').value;
+    rangeFields.style.display = value === 'range' ? 'block' : 'none';
+    weekField.style.display = value === 'week' ? 'block' : 'none';
+    monthField.style.display = value === 'month' ? 'block' : 'none';
+  }
+  periodRadios.forEach(r => r.addEventListener('change', toggleFields));
+  toggleFields();
+</script>
 {% endblock %}

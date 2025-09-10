@@ -1,5 +1,7 @@
 import logging
 from pathlib import Path
+import datetime
+import calendar
 
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
@@ -212,17 +214,67 @@ def invitation_login(request, uidb64, token):
 
 
 class EnergyReportForm(forms.Form):
-    start = forms.DateField(label=_("Start date"))
-    end = forms.DateField(label=_("End date"))
+    PERIOD_CHOICES = [
+        ("range", _("Date range")),
+        ("week", _("Week")),
+        ("month", _("Month")),
+    ]
+    period = forms.ChoiceField(
+        choices=PERIOD_CHOICES, widget=forms.RadioSelect, initial="range"
+    )
+    start = forms.DateField(
+        label=_("Start date"),
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    end = forms.DateField(
+        label=_("End date"),
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    week = forms.CharField(
+        label=_("Week"),
+        required=False,
+        widget=forms.TextInput(attrs={"type": "week"}),
+    )
+    month = forms.DateField(
+        label=_("Month"),
+        required=False,
+        widget=forms.DateInput(attrs={"type": "month"}),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        period = cleaned.get("period")
+        if period == "range":
+            if not cleaned.get("start") or not cleaned.get("end"):
+                raise forms.ValidationError(_("Please provide start and end dates."))
+        elif period == "week":
+            week_str = cleaned.get("week")
+            if not week_str:
+                raise forms.ValidationError(_("Please select a week."))
+            year, week_num = week_str.split("-W")
+            start = datetime.date.fromisocalendar(int(year), int(week_num), 1)
+            cleaned["start"] = start
+            cleaned["end"] = start + datetime.timedelta(days=6)
+        elif period == "month":
+            month_dt = cleaned.get("month")
+            if not month_dt:
+                raise forms.ValidationError(_("Please select a month."))
+            start = month_dt.replace(day=1)
+            last_day = calendar.monthrange(month_dt.year, month_dt.month)[1]
+            cleaned["start"] = start
+            cleaned["end"] = month_dt.replace(day=last_day)
+        return cleaned
 
 
 def energy_report(request):
     form = EnergyReportForm(request.POST or None)
     report = None
     if request.method == "POST" and form.is_valid():
-        start = form.cleaned_data["start"]
-        end = form.cleaned_data["end"]
-        report = EnergyReport.generate(start, end)
+        report = EnergyReport.generate(
+            form.cleaned_data["start"], form.cleaned_data["end"]
+        )
     context = {"form": form, "report": report}
     return render(request, "pages/energy_report.html", context)
 

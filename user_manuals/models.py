@@ -12,4 +12,3 @@ class UserManual(models.Model):
     class Meta:
         verbose_name = "User Manual"
         verbose_name_plural = "User Manuals"
-

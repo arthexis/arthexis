@@ -22,6 +22,8 @@ from django.utils.html import format_html
 import json
 import uuid
 import requests
+import datetime
+import calendar
 from django_object_actions import DjangoObjectActions
 from ocpp.models import Transaction
 from .user_data import UserDatumAdminMixin
@@ -940,8 +942,58 @@ class EnergyReportAdmin(admin.ModelAdmin):
     change_list_template = "admin/core/energyreport/change_list.html"
 
     class EnergyReportForm(forms.Form):
-        start = forms.DateField(label="Start date")
-        end = forms.DateField(label="End date")
+        PERIOD_CHOICES = [
+            ("range", "Date range"),
+            ("week", "Week"),
+            ("month", "Month"),
+        ]
+        period = forms.ChoiceField(
+            choices=PERIOD_CHOICES, widget=forms.RadioSelect, initial="range"
+        )
+        start = forms.DateField(
+            label="Start date",
+            required=False,
+            widget=forms.DateInput(attrs={"type": "date"}),
+        )
+        end = forms.DateField(
+            label="End date",
+            required=False,
+            widget=forms.DateInput(attrs={"type": "date"}),
+        )
+        week = forms.CharField(
+            label="Week",
+            required=False,
+            widget=forms.TextInput(attrs={"type": "week"}),
+        )
+        month = forms.DateField(
+            label="Month",
+            required=False,
+            widget=forms.DateInput(attrs={"type": "month"}),
+        )
+
+        def clean(self):
+            cleaned = super().clean()
+            period = cleaned.get("period")
+            if period == "range":
+                if not cleaned.get("start") or not cleaned.get("end"):
+                    raise forms.ValidationError("Please provide start and end dates.")
+            elif period == "week":
+                week_str = cleaned.get("week")
+                if not week_str:
+                    raise forms.ValidationError("Please select a week.")
+                year, week_num = week_str.split("-W")
+                start = datetime.date.fromisocalendar(int(year), int(week_num), 1)
+                cleaned["start"] = start
+                cleaned["end"] = start + datetime.timedelta(days=6)
+            elif period == "month":
+                month_dt = cleaned.get("month")
+                if not month_dt:
+                    raise forms.ValidationError("Please select a month.")
+                start = month_dt.replace(day=1)
+                last_day = calendar.monthrange(month_dt.year, month_dt.month)[1]
+                cleaned["start"] = start
+                cleaned["end"] = month_dt.replace(day=last_day)
+            return cleaned
 
     def get_urls(self):
         urls = super().get_urls()
@@ -958,9 +1010,9 @@ class EnergyReportAdmin(admin.ModelAdmin):
         form = self.EnergyReportForm(request.POST or None)
         report = None
         if request.method == "POST" and form.is_valid():
-            start = form.cleaned_data["start"]
-            end = form.cleaned_data["end"]
-            report = EnergyReport.generate(start, end)
+            report = EnergyReport.generate(
+                form.cleaned_data["start"], form.cleaned_data["end"]
+            )
         context = self.admin_site.each_context(request)
         context.update({"form": form, "report": report})
         return TemplateResponse(request, "admin/core/energyreport/generate.html", context)
