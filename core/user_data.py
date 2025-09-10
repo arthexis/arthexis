@@ -143,17 +143,21 @@ class UserDatumAdminMixin(admin.ModelAdmin):
     def render_change_form(
         self, request, context, add=False, change=False, form_url="", obj=None
     ):
-        context["show_user_datum"] = True
+        context["show_user_datum"] = issubclass(self.model, Entity)
+        context["show_seed_datum"] = issubclass(self.model, Entity)
         context["show_save_as_copy"] = issubclass(self.model, Entity) or hasattr(
-            self.model, "clone"
+            self.model,
+            "clone",
         )
         if obj is not None:
             ct = ContentType.objects.get_for_model(obj)
             context["is_user_datum"] = UserDatum.objects.filter(
                 user=request.user, content_type=ct, object_id=obj.pk
             ).exists()
+            context["is_seed_datum"] = getattr(obj, "is_seed_data", False)
         else:
             context["is_user_datum"] = False
+            context["is_seed_datum"] = False
         return super().render_change_form(request, context, add, change, form_url, obj)
 
     def save_model(self, request, obj, form, change):
@@ -173,6 +177,10 @@ class UserDatumAdminMixin(admin.ModelAdmin):
                 raise ValidationError("save_as_copy")
         else:
             super().save_model(request, obj, form, change)
+            if isinstance(obj, Entity):
+                type(obj).all_objects.filter(pk=obj.pk).update(
+                    is_seed_data=obj.is_seed_data
+                )
         if copied:
             return
         ct = ContentType.objects.get_for_model(obj)

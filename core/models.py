@@ -67,7 +67,7 @@ class SigilRoot(Entity):
         verbose_name_plural = "Sigil Roots"
 
 
-class Lead(models.Model):
+class Lead(Entity):
     """Common request lead information."""
 
     user = models.ForeignKey(
@@ -1416,7 +1416,7 @@ def hash_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
 
-class ChatProfile(models.Model):
+class ChatProfile(Entity):
     """Stores a hashed user key used by the assistant for authentication.
 
     The plain-text ``user_key`` is generated server-side and shown only once.

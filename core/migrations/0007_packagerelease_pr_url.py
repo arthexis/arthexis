@@ -89,6 +89,8 @@ class Migration(migrations.Migration):
                     models.GenericIPAddressField(blank=True, null=True),
                 ),
                 ("created_on", models.DateTimeField(auto_now_add=True)),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
             ],
             options={
                 "verbose_name": "Invite Lead",

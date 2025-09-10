@@ -20,7 +20,7 @@ env_refresh = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(env_refresh)
 run_database_tasks = env_refresh.run_database_tasks
 
-from core.models import Address, OdooProfile
+from core.models import Address, OdooProfile, SecurityGroup
 from core.user_data import UserDatum
 
 
@@ -61,6 +61,14 @@ class UserDatumAdminTests(TransactionTestCase):
         response = self.client.get(url)
         form_id = f"{self.profile._meta.model_name}_form"
         self.assertContains(response, f'name="_user_datum" form="{form_id}"')
+
+    def test_checkbox_not_displayed_for_non_entity(self):
+        group = SecurityGroup.objects.create(name="Temp")
+        url = reverse(
+            "admin:post_office_workgroupsecuritygroup_change", args=[group.pk]
+        )
+        response = self.client.get(url)
+        self.assertNotContains(response, 'name="_user_datum"')
 
     def test_userdatum_created_when_checked(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])

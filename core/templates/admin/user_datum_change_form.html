@@ -3,6 +3,14 @@
 
 {% block object-tools %}
 <ul class="object-tools">
+    {% if show_seed_datum %}
+    <li>
+        <label style="color: var(--body-quiet-color);">
+            {% trans "Seed Datum" %}
+            <input type="checkbox" name="_seed_datum" form="{{ opts.model_name }}_form"{% if original and original.is_seed_data %} checked{% endif %} disabled>
+        </label>
+    </li>
+    {% endif %}
     {% if show_user_datum %}
     <li>
         <label style="color: var(--body-quiet-color);">
