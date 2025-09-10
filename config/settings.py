@@ -57,7 +57,9 @@ ACRONYMS: list[str] = []
 with contextlib.suppress(FileNotFoundError):
     ACRONYMS = [
         line.strip()
-        for line in (BASE_DIR / "config" / "data" / "ACRONYMS.txt").read_text().splitlines()
+        for line in (BASE_DIR / "config" / "data" / "ACRONYMS.txt")
+        .read_text()
+        .splitlines()
         if line.strip()
     ]
 
@@ -174,6 +176,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "core.middleware.AdminHistoryMiddleware",
+    "core.middleware.SigilContextMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -376,4 +379,3 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute="*/5"),
     }
 }
-
