@@ -332,7 +332,7 @@ class SecurityGroupAdmin(DjangoGroupAdmin):
 
 @admin.register(InviteLead)
 class InviteLeadAdmin(admin.ModelAdmin):
-    list_display = ("email", "created_on", "sent_on")
+    list_display = ("email", "created_on", "sent_on", "short_error")
     search_fields = ("email", "comment")
     readonly_fields = (
         "created_on",
@@ -344,6 +344,11 @@ class InviteLeadAdmin(admin.ModelAdmin):
         "sent_on",
         "error",
     )
+
+    def short_error(self, obj):
+        return (obj.error[:40] + "…") if len(obj.error) > 40 else obj.error
+
+    short_error.short_description = "error"
 
 
 class EnergyAccountRFIDForm(forms.ModelForm):

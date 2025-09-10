@@ -162,20 +162,39 @@ def request_invite(request):
                 "link": link
             }
             try:
+                node_error = None
                 node = Node.get_local()
                 if node:
-                    result = node.send_mail(subject, body, [email])
+                    try:
+                        result = node.send_mail(subject, body, [email])
+                    except Exception as exc:
+                        node_error = exc
+                        logger.exception(
+                            "Node send_mail failed, falling back to default backend"
+                        )
+                        result = send_mail(
+                            subject, body, settings.DEFAULT_FROM_EMAIL, [email]
+                        )
                 else:
                     result = send_mail(
                         subject, body, settings.DEFAULT_FROM_EMAIL, [email]
                     )
                 lead.sent_on = timezone.now()
-                lead.error = ""
+                if node_error:
+                    lead.error = (
+                        f"Node email send failed: {node_error}. "
+                        "Invite was sent using default mail backend; ensure the "
+                        "node's email service is running or check its configuration."
+                    )
+                else:
+                    lead.error = ""
                 logger.info(
                     "Invitation email sent to %s (user %s): %s", email, user.pk, result
                 )
             except Exception as exc:
-                lead.error = str(exc)
+                lead.error = (
+                    f"{exc}. Ensure the email service is reachable and settings are correct."
+                )
                 logger.exception("Failed to send invitation email to %s", email)
         if lead.sent_on or lead.error:
             lead.save(update_fields=["sent_on", "error"])
