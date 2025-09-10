@@ -14,6 +14,7 @@ django.setup()
 from django.test import TestCase
 from django.conf import settings
 from nodes.models import Node, NodeRole
+from core.models import OdooProfile, SecurityGroup
 from django.contrib.sites.models import Site
 from django.urls import reverse
 from django.contrib.auth import get_user_model
@@ -25,6 +26,70 @@ class SeedDataEntityTests(TestCase):
     def test_preserve_seed_data_on_create(self):
         role = NodeRole.objects.create(name="Tester", is_seed_data=True)
         self.assertTrue(NodeRole.all_objects.get(pk=role.pk).is_seed_data)
+
+
+class SeedDataAdminTests(TestCase):
+    def setUp(self):
+        call_command("flush", verbosity=0, interactive=False)
+        User = get_user_model()
+        self.user = User.objects.create_superuser("sdadmin", password="pw")
+        self.client.login(username="sdadmin", password="pw")
+        self.profile = OdooProfile.objects.create(
+            user=self.user,
+            host="http://test",
+            database="db",
+            username="odoo",
+            password="secret",
+        )
+
+    def tearDown(self):
+        call_command("flush", verbosity=0, interactive=False)
+        User = get_user_model()
+        User.all_objects.filter(username="admin").delete()
+
+    def test_checkbox_displayed_on_change_form(self):
+        url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
+        response = self.client.get(url)
+        self.assertContains(response, 'name="_seed_datum"')
+        self.assertContains(response, "Seed Datum")
+        self.assertContains(response, 'name="_user_datum"')
+        self.assertContains(response, "User Datum")
+
+    def test_checkbox_has_form_attribute(self):
+        url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
+        response = self.client.get(url)
+        form_id = f"{self.profile._meta.model_name}_form"
+        self.assertContains(response, f'name="_seed_datum" form="{form_id}"')
+
+    def test_checkbox_not_displayed_for_non_entity(self):
+        group = SecurityGroup.objects.create(name="Temp")
+        url = reverse(
+            "admin:post_office_workgroupsecuritygroup_change", args=[group.pk]
+        )
+        response = self.client.get(url)
+        self.assertNotContains(response, 'name="_seed_datum"')
+        self.assertNotContains(response, 'name="_user_datum"')
+
+    def test_seed_datum_persists_after_save(self):
+        OdooProfile.all_objects.filter(pk=self.profile.pk).update(is_seed_data=True)
+        url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
+        data = {
+            "user": self.user.pk,
+            "host": "http://test",
+            "database": "db",
+            "username": "odoo",
+            "password": "",
+            "_save": "Save",
+        }
+        self.client.post(url, data)
+        profile = OdooProfile.all_objects.get(pk=self.profile.pk)
+        self.assertTrue(profile.is_seed_data)
+        response = self.client.get(url)
+        form_id = f"{self.profile._meta.model_name}_form"
+        self.assertContains(
+            response,
+            f'name="_seed_datum" form="{form_id}" checked disabled',
+        )
 
 
 class EnvRefreshFixtureTests(TestCase):

@@ -30,6 +30,8 @@ class Migration(migrations.Migration):
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("last_used_at", models.DateTimeField(blank=True, null=True)),
                 ("is_active", models.BooleanField(default=True)),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
                 (
                     "user",
                     models.OneToOneField(

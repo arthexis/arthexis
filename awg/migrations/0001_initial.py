@@ -144,6 +144,8 @@ class Migration(migrations.Migration):
                 ("user_agent", models.TextField(blank=True)),
                 ("ip_address", models.GenericIPAddressField(blank=True, null=True)),
                 ("created_on", models.DateTimeField(auto_now_add=True)),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
                 ("values", models.JSONField()),
                 (
                     "user",
