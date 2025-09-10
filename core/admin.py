@@ -26,7 +26,6 @@ import datetime
 import calendar
 from django_object_actions import DjangoObjectActions
 from ocpp.models import Transaction
-from .user_data import UserDatumAdminMixin
 from .models import (
     User,
     EnergyAccount,

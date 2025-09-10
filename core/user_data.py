@@ -201,24 +201,49 @@ class UserDatumAdminMixin(admin.ModelAdmin):
 
 
 def patch_admin_user_datum() -> None:
-    """Mixin all registered admin classes."""
-    for model, model_admin in list(admin.site._registry.items()):
-        if model is UserDatum:
-            continue
-        if isinstance(model_admin, UserDatumAdminMixin):
-            continue
-        admin.site.unregister(model)
+    """Mixin all registered entity admin classes and future registrations."""
+
+    if getattr(admin.site, "_user_datum_patched", False):
+        return
+
+    def _patched(admin_class):
         template = (
-            getattr(model_admin, "change_form_template", None)
+            getattr(admin_class, "change_form_template", None)
             or "admin/user_datum_change_form.html"
         )
-        attrs = {"change_form_template": template}
-        Patched = type(
-            f"Patched{model_admin.__class__.__name__}",
-            (UserDatumAdminMixin, model_admin.__class__),
-            attrs,
+        return type(
+            f"Patched{admin_class.__name__}",
+            (UserDatumAdminMixin, admin_class),
+            {"change_form_template": template},
         )
-        admin.site.register(model, Patched)
+
+    for model, model_admin in list(admin.site._registry.items()):
+        if (
+            model is UserDatum
+            or isinstance(model_admin, UserDatumAdminMixin)
+            or not issubclass(model, Entity)
+        ):
+            continue
+        admin.site.unregister(model)
+        admin.site.register(model, _patched(model_admin.__class__))
+
+    original_register = admin.site.register
+
+    def register(model_or_iterable, admin_class=None, **options):
+        models = model_or_iterable
+        if not isinstance(models, (list, tuple, set)):
+            models = [models]
+        admin_class = admin_class or admin.ModelAdmin
+        patched_class = admin_class
+        for model in models:
+            if model is UserDatum:
+                continue
+            if issubclass(model, Entity) and not issubclass(patched_class, UserDatumAdminMixin):
+                patched_class = _patched(patched_class)
+        return original_register(model_or_iterable, patched_class, **options)
+
+    admin.site.register = register
+    admin.site._user_datum_patched = True
 
 
 def _seed_data_view(request):
