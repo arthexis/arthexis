@@ -16,8 +16,8 @@ class CoreConfig(AppConfig):
         )
         from .system import patch_admin_system_view
         from .environment import patch_admin_environment_view
-        from .token_builder import (
-            patch_admin_token_builder_view,
+        from .sigil_builder import (
+            patch_admin_sigil_builder_view,
             generate_model_sigils,
         )
         from . import checks  # noqa: F401
@@ -38,7 +38,7 @@ class CoreConfig(AppConfig):
         patch_admin_user_data_views()
         patch_admin_system_view()
         patch_admin_environment_view()
-        patch_admin_token_builder_view()
+        patch_admin_sigil_builder_view()
 
         from pathlib import Path
         from django.conf import settings

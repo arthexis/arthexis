@@ -8,7 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 
 from core.models import SigilRoot, OdooProfile, EmailInbox, InviteLead
 from nodes.models import NodeRole
-from core.token_builder import _resolve_token
+from core.sigil_builder import _resolve_sigil
 from core.sigil_context import set_context, clear_context
 
 
@@ -231,4 +231,4 @@ class SigilResolutionTests(TestCase):
             name="Other", description="[NR=Terminal.DESCRIPTION]"
         )
         self.assertEqual(other.resolve_sigils("description"), term.description)
-        self.assertEqual(_resolve_token("[NR=Terminal.DESCRIPTION]"), term.description)
+        self.assertEqual(_resolve_sigil("[NR=Terminal.DESCRIPTION]"), term.description)

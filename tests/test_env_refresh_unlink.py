@@ -51,6 +51,11 @@ def test_unlink_sqlite_db_retries(monkeypatch, tmp_path):
     monkeypatch.setitem(
         unlink_func.__globals__, "shutil", SimpleNamespace(copy2=lambda *a, **k: None)
     )
+    monkeypatch.setitem(
+        unlink_func.__globals__,
+        "revision_utils",
+        SimpleNamespace(get_revision=lambda: "rev"),
+    )
 
     unlink_func(path)
 

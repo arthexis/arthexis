@@ -6,11 +6,11 @@
   <h1>{{ title }}</h1>
   <form method="post" style="margin-bottom:1em;">
     {% csrf_token %}
-    <label for="token_input">{% trans "Token" %}</label>
-    <input type="text" name="token" id="token_input" value="{{ token }}" size="60" />
+    <label for="sigil_input">{% trans "Sigil" %}</label>
+    <input type="text" name="sigil" id="sigil_input" value="{{ sigil }}" size="60" />
     <button type="submit">{% trans "Validate" %}</button>
   </form>
-  {% if token %}
+  {% if sigil %}
   <p>{% trans "Result" %}: {{ resolved }}</p>
   {% endif %}
   <table>
@@ -26,6 +26,22 @@
       </tr>
     {% empty %}
       <tr><td colspan="3">{% trans "No Sigil Roots." %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <h2 style="margin-top:1em;">{% trans "Auto-resolvable Fields" %}</h2>
+  <table>
+    <thead>
+      <tr><th>{% trans "Model" %}</th><th>{% trans "Field" %}</th></tr>
+    </thead>
+    <tbody>
+    {% for item in auto_fields %}
+      <tr>
+        <td>{{ item.model }}</td>
+        <td>{{ item.field }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="2">{% trans "No auto-resolvable fields." %}</td></tr>
     {% endfor %}
     </tbody>
   </table>
