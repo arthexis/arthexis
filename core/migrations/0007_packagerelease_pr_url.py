@@ -43,6 +43,15 @@ class Migration(migrations.Migration):
                         choices=[("config", "Configuration"), ("entity", "Entity")],
                     ),
                 ),
+                (
+                    "content_type",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="contenttypes.contenttype",
+                    ),
+                ),
             ],
             options={
                 "verbose_name": "Sigil Root",

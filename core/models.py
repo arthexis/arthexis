@@ -55,6 +55,9 @@ class SigilRoot(Entity):
 
     prefix = models.CharField(max_length=50, unique=True)
     context_type = models.CharField(max_length=20, choices=Context.choices)
+    content_type = models.ForeignKey(
+        ContentType, null=True, blank=True, on_delete=models.CASCADE
+    )
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.prefix

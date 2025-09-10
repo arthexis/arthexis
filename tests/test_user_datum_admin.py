@@ -205,6 +205,7 @@ class UserDataViewTests(TestCase):
         self.assertContains(response, reverse("admin:user_data"))
         self.assertContains(response, reverse("admin:system"))
         self.assertContains(response, reverse("admin:environment"))
+        self.assertContains(response, reverse("admin:token_builder"))
 
     def test_system_page_loads(self):
         response = self.client.get(reverse("admin:system"))
@@ -216,6 +217,10 @@ class UserDataViewTests(TestCase):
         self.assertContains(response, "Django Settings")
         self.assertContains(response, "PATH")
         self.assertContains(response, "DEBUG")
+
+    def test_token_builder_page_loads(self):
+        response = self.client.get(reverse("admin:token_builder"))
+        self.assertContains(response, "Token Builder")
 
     def test_user_data_page_has_import_export_links(self):
         response = self.client.get(reverse("admin:user_data"))

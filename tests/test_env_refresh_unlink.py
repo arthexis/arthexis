@@ -38,9 +38,7 @@ def test_unlink_sqlite_db_retries(monkeypatch, tmp_path):
         unlink_func.__globals__, "settings", SimpleNamespace(BASE_DIR=tmp_path)
     )
     monkeypatch.setitem(
-        unlink_func.__globals__,
-        "datetime",
-        SimpleNamespace(now=lambda: SimpleNamespace(strftime=lambda fmt: "0")),
+        unlink_func.__globals__, "datetime", SimpleNamespace(now=lambda: SimpleNamespace(strftime=lambda fmt: "20240101"))
     )
     monkeypatch.setitem(
         unlink_func.__globals__, "shutil", SimpleNamespace(copy2=lambda *a, **k: None)
