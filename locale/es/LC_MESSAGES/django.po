@@ -660,3 +660,11 @@ msgstr "Entradas"
 #: core/templates/core/release_progress.html:30 pages/templates/core/release_progress.html:30
 msgid "Models"
 msgstr "Modelos"
+
+#: config/settings.py:308
+msgid "French"
+msgstr "Francés"
+
+#: config/settings.py:309
+msgid "Russian"
+msgstr "Ruso"
