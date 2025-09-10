@@ -8,4 +8,8 @@
 - Remember to store generated image files in base64 since binary files are not allowed in the repo.
 - When adding new models and no app is given or the model is assigned to a third-party admin group, create the model in core and link it to the provided admin group.
 - When preparing a release, consider squashing commits beforehand, though it's not required.
+- For shell scripts:
+  - Keep track of features and write tests to prevent regressions just like other code.
+  - Follow consistent naming conventions, using the `.sh` extension with kebab-case names.
+  - Keep the interface and meaning of flags consistent across scripts.
 
