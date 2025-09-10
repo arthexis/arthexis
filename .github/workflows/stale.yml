@@ -1,0 +1,20 @@
+name: Close stale PRs
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          days-before-stale: 3
+          days-before-close: 0
+          close-branch: true
+          stale-pr-label: stale
+          stale-pr-message: >
+            This PR has been open for more than 72 hours with no activity and will be closed automatically.
+          close-pr-message: >
+            Closing PR and deleting branch due to inactivity.
