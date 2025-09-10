@@ -47,7 +47,9 @@ class EnergyReportGenerationTests(TestCase):
     def test_generate_report(self):
         day = timezone.now().date()
         url = reverse("pages:energy-report")
-        resp = self.client.post(url, {"start": day, "end": day})
+        resp = self.client.post(
+            url, {"period": "range", "start": day, "end": day}
+        )
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, self.account.name)
         self.assertContains(resp, str(self.rfid2.label_id))
