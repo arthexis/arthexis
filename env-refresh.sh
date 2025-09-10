@@ -2,12 +2,13 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 LOG_DIR="$SCRIPT_DIR/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 
-VENV_DIR=".venv"
+VENV_DIR="$SCRIPT_DIR/.venv"
 PYTHON="$VENV_DIR/bin/python"
 
 LATEST=0
@@ -44,9 +45,9 @@ if [ "$CLEAN" -eq 1 ]; then
   rm -f "$DB_FILE"
 fi
 
-if [ -f requirements.txt ]; then
-  REQ_FILE="requirements.txt"
-  MD5_FILE="requirements.md5"
+REQ_FILE="$SCRIPT_DIR/requirements.txt"
+if [ -f "$REQ_FILE" ]; then
+  MD5_FILE="$SCRIPT_DIR/requirements.md5"
   NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
   STORED_HASH=""
   [ -f "$MD5_FILE" ] && STORED_HASH=$(cat "$MD5_FILE")
