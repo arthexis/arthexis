@@ -77,15 +77,15 @@ class Entity(models.Model):
         text = str(value)
 
         pattern = re.compile(
-            r"\[([A-Za-z0-9_]+)(?:=([A-Za-z0-9_-]+))?\.([A-Za-z0-9_]+)(?:=([^\]]+))?\]",
+            r"\[([A-Za-z0-9_-]+)(?:=([A-Za-z0-9_-]+))?\.([A-Za-z0-9_-]+)(?:=([^\]]+))?\]",
             re.IGNORECASE,
         )
         SigilRoot = apps.get_model("core", "SigilRoot")
 
         def repl(match):
-            root_name = match.group(1).upper()
+            root_name = match.group(1).replace("-", "_").upper()
             instance_id = match.group(2)
-            key = match.group(3).upper()
+            key = match.group(3).replace("-", "_").upper()
             param = match.group(4)
             try:
                 root = SigilRoot.objects.get(prefix__iexact=root_name)

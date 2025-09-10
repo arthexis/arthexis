@@ -19,7 +19,7 @@ class SigilResolutionTests(TestCase):
         os.environ["SIGIL_PATH"] = "demo"
         profile = OdooProfile.objects.create(
             user=self.user,
-            host="path=[ENV.SIGIL_PATH]",
+            host="path=[ENV.SIGIL-PATH]",
             database="db",
             username="odoo",
             password="secret",
@@ -31,7 +31,7 @@ class SigilResolutionTests(TestCase):
     def test_settings_sigil(self):
         profile = OdooProfile.objects.create(
             user=self.user,
-            host="lang=[SYS.LANGUAGE_CODE]",
+            host="lang=[SYS.LANGUAGE-CODE]",
             database="db",
             username="odoo",
             password="secret",
@@ -48,7 +48,7 @@ class SigilResolutionTests(TestCase):
         InviteLead.objects.create(email=email)
         profile = OdooProfile.objects.create(
             user=self.user,
-            host=f"[CMD.SEND_INVITE={email}]",
+            host=f"[CMD.SEND-INVITE={email}]",
             database="db",
             username="odoo",
             password="secret",
@@ -104,6 +104,25 @@ class SigilResolutionTests(TestCase):
         tmpl = Template("{{ profile.host }}")
         rendered = tmpl.render(Context({"profile": profile}))
         self.assertEqual(rendered, "user=odoo")
+
+    def test_entity_sigil_hyphen_field(self):
+        ct = ContentType.objects.get_for_model(OdooProfile)
+        root = SigilRoot.objects.filter(prefix="OP").first()
+        if not root:
+            root = SigilRoot.objects.create(
+                prefix="OP", context_type=SigilRoot.Context.ENTITY, content_type=ct
+            )
+        profile = OdooProfile.objects.create(
+            user=self.user,
+            host=f"uid=[{root.prefix}.ODOO-UID]",
+            database="db",
+            username="odoo",
+            password="secret",
+            odoo_uid=42,
+        )
+        tmpl = Template("{{ profile.host }}")
+        rendered = tmpl.render(Context({"profile": profile}))
+        self.assertEqual(rendered, "uid=42")
 
     def test_entity_sigil_with_id(self):
         ct = ContentType.objects.get_for_model(OdooProfile)
