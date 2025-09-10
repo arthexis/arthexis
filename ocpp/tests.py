@@ -1283,3 +1283,20 @@ class EfficiencyCalculatorViewTests(TestCase):
         url = reverse("ev-efficiency")
         resp = self.client.post(url, {"distance": "100", "energy": "20"})
         self.assertContains(resp, "5.00")
+
+
+class LiveUpdateViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username="lu", password="pw")
+        self.client.force_login(self.user)
+
+    def test_dashboard_includes_interval(self):
+        resp = self.client.get(reverse("ocpp-dashboard"))
+        self.assertEqual(resp.context["request"].live_update_interval, 5)
+        self.assertContains(resp, "setInterval(() => location.reload()")
+
+    def test_cp_simulator_includes_interval(self):
+        resp = self.client.get(reverse("cp-simulator"))
+        self.assertEqual(resp.context["request"].live_update_interval, 5)
+        self.assertContains(resp, "setInterval(() => location.reload()")
