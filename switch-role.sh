@@ -18,9 +18,10 @@ UPDATE=false
 CLEAN=false
 LATEST=false
 ENABLE_DATASETTE=false
+CHECK=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette] [--satellite|--terminal|--control|--constellation|--virtual|--particle]" >&2
+    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette] [--check] [--satellite|--terminal|--control|--constellation|--virtual|--particle]" >&2
     exit 1
 }
 
@@ -67,6 +68,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --datasette)
             ENABLE_DATASETTE=true
+            shift
+            ;;
+        --check)
+            CHECK=true
             shift
             ;;
         --satellite)
@@ -121,6 +126,16 @@ while [[ $# -gt 0 ]]; do
     esac
 
 done
+
+if [ "$CHECK" = true ]; then
+    LOCK_DIR="$SCRIPT_DIR/locks"
+    if [ -f "$LOCK_DIR/role.lck" ]; then
+        cat "$LOCK_DIR/role.lck"
+    else
+        echo "unknown"
+    fi
+    exit 0
+fi
 
 if [ -z "$NODE_ROLE" ]; then
     usage
