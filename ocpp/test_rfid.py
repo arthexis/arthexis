@@ -19,7 +19,7 @@ from core.models import RFID
 from ocpp.rfid.reader import read_rfid, enable_deep_read
 
 
-class ScanNextViewTests(SimpleTestCase):
+class ScanNextViewTests(TestCase):
     @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")
     @patch(
@@ -125,7 +125,18 @@ class CardTypeDetectionTests(TestCase):
         return MockReader()
 
     @patch("ocpp.rfid.reader.notify_async")
-    def test_detects_ntag215(self, _mock_notify):
+    @patch("core.models.RFID.objects.get_or_create")
+    def test_detects_ntag215(self, mock_get, _mock_notify):
+        tag = MagicMock(
+            pk=1,
+            label_id=1,
+            allowed=True,
+            color="B",
+            released=False,
+            reference=None,
+            kind=RFID.NTAG215,
+        )
+        mock_get.return_value = (tag, True)
         result = read_rfid(mfrc=self._mock_ntag_reader(), cleanup=False)
         self.assertEqual(result["kind"], RFID.NTAG215)
 

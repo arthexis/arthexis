@@ -75,26 +75,6 @@ case "$MODE" in
     echo "dtoverlay=vc4-kms-v3d" | tee -a "$CONFIG"
     ;;
 
-  rpi)
-    echo "Resetting display to Raspberry Pi screen..."
-    # Remove HDMI and TFT settings
-    sudo sed -i '/hdmi_force_hotplug/d' "$CONFIG"
-    sudo sed -i '/hdmi_group/d' "$CONFIG"
-    sudo sed -i '/hdmi_mode/d' "$CONFIG"
-
-    sudo sed -i '/dtoverlay=ili9341/d' "$CONFIG"
-    sudo sed -i '/dtoverlay=waveshare35a/d' "$CONFIG"
-    sudo sed -i '/dtoverlay=waveshare35b/d' "$CONFIG"
-    sudo sed -i '/dtoverlay=waveshare35c/d' "$CONFIG"
-    sudo sed -i '/dtoverlay=waveshare35d/d' "$CONFIG"
-
-    # Ensure Raspberry Pi screen is enabled
-    sudo sed -i '/ignore_lcd/d' "$CONFIG"
-    echo "ignore_lcd=0" | sudo tee -a "$CONFIG"
-    sudo sed -i '/dtoverlay=vc4-kms-v3d/d' "$CONFIG"
-    echo "dtoverlay=vc4-kms-v3d" | sudo tee -a "$CONFIG"
-    ;;
-
   *)
     echo "Usage: $0 [hdmi|tft|rpi]"
     exit 1
