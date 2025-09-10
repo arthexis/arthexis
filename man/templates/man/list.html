@@ -7,7 +7,7 @@
 <h1>{% trans "User Manuals" %}</h1>
 <ul>
   {% for manual in manuals %}
-    <li><a href="{% url 'user_manuals:manual-html' manual.slug %}">{{ manual.title }}</a> - {{ manual.description }}</li>
+    <li><a href="{% url 'man:manual-html' manual.slug %}">{{ manual.title }}</a> - {{ manual.description }}</li>
   {% endfor %}
 </ul>
 {% endblock %}
