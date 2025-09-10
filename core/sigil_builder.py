@@ -9,10 +9,12 @@ from django.conf import settings
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
+from django.db import models
 from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.translation import gettext_lazy as _
-from django.db import models
+
+from .fields import SigilAutoFieldMixin
 
 
 def _generate_prefix(name: str, existing: set[str]) -> str:
@@ -53,16 +55,16 @@ def generate_model_sigils(**kwargs) -> None:
         existing.add(prefix.upper())
 
 
-TOKEN_PATTERN = re.compile(
+SIGIL_PATTERN = re.compile(
     r"\[([A-Za-z0-9_-]+)(?:=([A-Za-z0-9_-]+))?\.([A-Za-z0-9_-]+)(?:=([^\]]+))?\]",
     re.IGNORECASE,
 )
 
 
-def _resolve_token(token: str) -> str:
-    """Return resolved value for ``token`` or empty string."""
+def _resolve_sigil(sigil: str) -> str:
+    """Return resolved value for ``sigil`` or empty string."""
     SigilRoot = apps.get_model("core", "SigilRoot")
-    match = TOKEN_PATTERN.fullmatch(token)
+    match = SIGIL_PATTERN.fullmatch(sigil)
     if not match:
         return ""
     root_name, instance_id, key, param = match.groups()
@@ -114,7 +116,7 @@ def _resolve_token(token: str) -> str:
         return ""
 
 
-def _token_builder_view(request):
+def _sigil_builder_view(request):
     SigilRoot = apps.get_model("core", "SigilRoot")
     roots = []
     for root in SigilRoot.objects.filter(
@@ -130,27 +132,36 @@ def _token_builder_view(request):
             }
         )
 
-    token = ""
+    auto_fields = []
+    for model in apps.get_models():
+        for field in model._meta.fields:
+            if isinstance(field, SigilAutoFieldMixin):
+                auto_fields.append(
+                    {"model": model._meta.object_name, "field": field.name.upper()}
+                )
+
+    sigil = ""
     resolved = ""
     if request.method == "POST":
-        token = request.POST.get("token", "").strip()
-        if token and not token.startswith("["):
-            token = f"[{token}]"
-        resolved = _resolve_token(token) if token else ""
+        sigil = request.POST.get("sigil", "").strip()
+        if sigil and not sigil.startswith("["):
+            sigil = f"[{sigil}]"
+        resolved = _resolve_sigil(sigil) if sigil else ""
 
     context = admin.site.each_context(request)
     context.update(
         {
-            "title": _("Token Builder"),
+            "title": _("Sigil Builder"),
             "sigil_roots": roots,
-            "token": token,
+            "auto_fields": auto_fields,
+            "sigil": sigil,
             "resolved": resolved,
         }
     )
-    return TemplateResponse(request, "admin/token_builder.html", context)
+    return TemplateResponse(request, "admin/sigil_builder.html", context)
 
 
-def patch_admin_token_builder_view() -> None:
+def patch_admin_sigil_builder_view() -> None:
     """Add custom admin view for listing SigilRoots."""
     original_get_urls = admin.site.get_urls
 
@@ -158,9 +169,9 @@ def patch_admin_token_builder_view() -> None:
         urls = original_get_urls()
         custom = [
             path(
-                "token-builder/",
-                admin.site.admin_view(_token_builder_view),
-                name="token_builder",
+                "sigil-builder/",
+                admin.site.admin_view(_sigil_builder_view),
+                name="sigil_builder",
             ),
         ]
         return custom + urls
