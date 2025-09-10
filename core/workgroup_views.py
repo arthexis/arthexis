@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from functools import wraps
 
+from django.apps import apps
 from django.contrib.auth import get_user_model
+from django.forms.models import model_to_dict
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
@@ -54,3 +56,35 @@ def assistant_test(request):
 
     user_id = request.chat_profile.user_id
     return JsonResponse({"message": f"Hello from user {user_id}"})
+
+
+@require_GET
+@authenticate
+def chat(request):
+    """Return serialized data from any model.
+
+    Clients must provide ``model`` as ``app_label.ModelName`` and may include a
+    ``pk`` to fetch a specific record. When ``pk`` is omitted, the view returns
+    up to 100 records.
+    """
+
+    model_label = request.GET.get("model")
+    if not model_label:
+        return JsonResponse({"error": "model parameter required"}, status=400)
+    try:
+        model = apps.get_model(model_label)
+    except LookupError:
+        return JsonResponse({"error": "unknown model"}, status=400)
+
+    qs = model.objects.all()
+    pk = request.GET.get("pk")
+    if pk is not None:
+        try:
+            obj = qs.get(pk=pk)
+        except model.DoesNotExist:
+            return JsonResponse({"error": "object not found"}, status=404)
+        data = model_to_dict(obj)
+    else:
+        data = [model_to_dict(o) for o in qs[:100]]
+
+    return JsonResponse({"data": data})
