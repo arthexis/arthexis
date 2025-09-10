@@ -1,4 +1,5 @@
 """Background RFID reader using IRQ pin events."""
+
 import atexit
 import logging
 import os

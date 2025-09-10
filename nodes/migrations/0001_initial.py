@@ -10,160 +10,231 @@ class Migration(migrations.Migration):
 
     initial = True
 
-    dependencies = [
-    ]
+    dependencies = []
 
     operations = [
         migrations.CreateModel(
-            name='NodeRole',
+            name="NodeRole",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('name', models.CharField(max_length=50, unique=True)),
-                ('description', models.CharField(blank=True, max_length=200)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                ("name", models.CharField(max_length=50, unique=True)),
+                ("description", models.CharField(blank=True, max_length=200)),
             ],
             options={
-                'ordering': ['name'],
-                'verbose_name': 'Node Role',
-                'verbose_name_plural': 'Node Roles',
+                "ordering": ["name"],
+                "verbose_name": "Node Role",
+                "verbose_name_plural": "Node Roles",
             },
         ),
         migrations.CreateModel(
-            name='Node',
+            name="Node",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('hostname', models.CharField(max_length=100)),
-                ('address', models.GenericIPAddressField()),
-                ('mac_address', models.CharField(blank=True, max_length=17, null=True, unique=True)),
-                ('port', models.PositiveIntegerField(default=8000)),
-                ('badge_color', models.CharField(default='#28a745', max_length=7)),
-                ('last_seen', models.DateTimeField(auto_now=True)),
                 (
-                    'enable_public_api',
-                    models.BooleanField(default=False, verbose_name='enable public API'),
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
                 ),
-                ('public_endpoint', models.SlugField(blank=True, unique=True)),
-                ('clipboard_polling', models.BooleanField(default=False)),
-                ('screenshot_polling', models.BooleanField(default=False)),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                ("hostname", models.CharField(max_length=100)),
+                ("address", models.GenericIPAddressField()),
                 (
-                    'uuid',
+                    "mac_address",
+                    models.CharField(blank=True, max_length=17, null=True, unique=True),
+                ),
+                ("port", models.PositiveIntegerField(default=8000)),
+                ("badge_color", models.CharField(default="#28a745", max_length=7)),
+                ("last_seen", models.DateTimeField(auto_now=True)),
+                (
+                    "enable_public_api",
+                    models.BooleanField(
+                        default=False, verbose_name="enable public API"
+                    ),
+                ),
+                ("public_endpoint", models.SlugField(blank=True, unique=True)),
+                ("clipboard_polling", models.BooleanField(default=False)),
+                ("screenshot_polling", models.BooleanField(default=False)),
+                (
+                    "uuid",
                     models.UUIDField(
                         default=uuid.uuid4,
                         editable=False,
                         unique=True,
-                        verbose_name='UUID',
+                        verbose_name="UUID",
                     ),
                 ),
-                ('public_key', models.TextField(blank=True)),
-                ('base_path', models.CharField(blank=True, max_length=255)),
-                ('installed_version', models.CharField(blank=True, max_length=20)),
-                ('installed_revision', models.CharField(blank=True, max_length=40)),
-                ('has_lcd_screen', models.BooleanField(default=False)),
-                ('role', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='nodes.noderole')),
-            ],
-            options={
-                'abstract': False,
-            },
-        ),
-        migrations.CreateModel(
-            name='NodeTask',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('recipe', models.TextField()),
+                ("public_key", models.TextField(blank=True)),
+                ("base_path", models.CharField(blank=True, max_length=255)),
+                ("installed_version", models.CharField(blank=True, max_length=20)),
+                ("installed_revision", models.CharField(blank=True, max_length=40)),
+                ("has_lcd_screen", models.BooleanField(default=False)),
                 (
-                    'role',
+                    "role",
                     models.ForeignKey(
                         blank=True,
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
-                        to='nodes.noderole',
+                        to="nodes.noderole",
                     ),
                 ),
-                ('created', models.DateTimeField(auto_now_add=True)),
             ],
             options={
-                'ordering': ['-created'],
-                'verbose_name': 'Node Task',
-                'verbose_name_plural': 'Node Tasks',
+                "abstract": False,
             },
         ),
         migrations.CreateModel(
-            name='NetMessage',
+            name="NodeTask",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
                 (
-                    'uuid',
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                ("recipe", models.TextField()),
+                (
+                    "role",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to="nodes.noderole",
+                    ),
+                ),
+                ("created", models.DateTimeField(auto_now_add=True)),
+            ],
+            options={
+                "ordering": ["-created"],
+                "verbose_name": "Node Task",
+                "verbose_name_plural": "Node Tasks",
+            },
+        ),
+        migrations.CreateModel(
+            name="NetMessage",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                (
+                    "uuid",
                     models.UUIDField(
                         default=uuid.uuid4,
                         editable=False,
                         unique=True,
-                        verbose_name='UUID',
+                        verbose_name="UUID",
                     ),
                 ),
-                ('subject', models.CharField(blank=True, max_length=64)),
-                ('body', models.CharField(blank=True, max_length=256)),
+                ("subject", models.CharField(blank=True, max_length=64)),
+                ("body", models.CharField(blank=True, max_length=256)),
                 (
-                    'reach',
+                    "reach",
                     models.ForeignKey(
                         blank=True,
                         null=True,
                         default=nodes.models.get_terminal_role,
                         on_delete=django.db.models.deletion.SET_NULL,
-                        to='nodes.noderole',
+                        to="nodes.noderole",
                     ),
                 ),
-                ('created', models.DateTimeField(auto_now_add=True)),
-                ('complete', models.BooleanField(default=False, editable=False)),
+                ("created", models.DateTimeField(auto_now_add=True)),
+                ("complete", models.BooleanField(default=False, editable=False)),
                 (
-                    'propagated_to',
+                    "propagated_to",
                     models.ManyToManyField(
                         blank=True,
-                        related_name='received_net_messages',
-                        to='nodes.node',
+                        related_name="received_net_messages",
+                        to="nodes.node",
                     ),
                 ),
             ],
             options={
-                'ordering': ['-created'],
-                'verbose_name': 'Net Message',
-                'verbose_name_plural': 'Net Messages',
+                "ordering": ["-created"],
+                "verbose_name": "Net Message",
+                "verbose_name_plural": "Net Messages",
             },
         ),
         migrations.CreateModel(
-            name='ContentSample',
+            name="ContentSample",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('name', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
-                ('kind', models.CharField(choices=[('TEXT', 'Text'), ('IMAGE', 'Image')], max_length=10)),
-                ('content', models.TextField(blank=True)),
-                ('path', models.CharField(blank=True, max_length=255)),
-                ('method', models.CharField(blank=True, default='', max_length=10)),
-                ('hash', models.CharField(blank=True, max_length=64, null=True, unique=True)),
                 (
-                    'transaction_uuid',
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                (
+                    "name",
+                    models.UUIDField(default=uuid.uuid4, editable=False, unique=True),
+                ),
+                (
+                    "kind",
+                    models.CharField(
+                        choices=[("TEXT", "Text"), ("IMAGE", "Image")], max_length=10
+                    ),
+                ),
+                ("content", models.TextField(blank=True)),
+                ("path", models.CharField(blank=True, max_length=255)),
+                ("method", models.CharField(blank=True, default="", max_length=10)),
+                (
+                    "hash",
+                    models.CharField(blank=True, max_length=64, null=True, unique=True),
+                ),
+                (
+                    "transaction_uuid",
                     models.UUIDField(
                         default=uuid.uuid4,
                         editable=True,
                         db_index=True,
-                        verbose_name='transaction UUID',
+                        verbose_name="transaction UUID",
                     ),
                 ),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('node', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='nodes.node')),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "node",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to="nodes.node",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Content Sample',
-                'verbose_name_plural': 'Content Samples',
-                'ordering': ['-created_at'],
+                "verbose_name": "Content Sample",
+                "verbose_name_plural": "Content Samples",
+                "ordering": ["-created_at"],
             },
         ),
     ]

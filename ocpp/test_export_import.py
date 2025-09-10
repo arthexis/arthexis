@@ -126,4 +126,6 @@ class TransactionAdminExportImportTests(TestCase):
         response = self.client.post(url, {"file": json_file})
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Charger.objects.filter(charger_id="C9").exists())
-        self.assertEqual(Transaction.objects.filter(charger__charger_id="C9").count(), 1)
+        self.assertEqual(
+            Transaction.objects.filter(charger__charger_id="C9").count(), 1
+        )

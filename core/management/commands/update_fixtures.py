@@ -27,9 +27,7 @@ class Command(BaseCommand):
                 continue
             if not isinstance(data, list):
                 continue
-            use_natural = all(
-                isinstance(obj, dict) and "pk" not in obj for obj in data
-            )
+            use_natural = all(isinstance(obj, dict) and "pk" not in obj for obj in data)
             instances = []
             for obj in data:
                 if not isinstance(obj, dict):

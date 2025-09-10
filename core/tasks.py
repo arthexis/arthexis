@@ -37,12 +37,23 @@ def check_github_updates() -> None:
         startup = None
 
     if mode == "latest":
-        local = subprocess.check_output(["git", "rev-parse", branch], cwd=base_dir).decode().strip()
-        remote = subprocess.check_output([
-            "git",
-            "rev-parse",
-            f"origin/{branch}",
-        ], cwd=base_dir).decode().strip()
+        local = (
+            subprocess.check_output(["git", "rev-parse", branch], cwd=base_dir)
+            .decode()
+            .strip()
+        )
+        remote = (
+            subprocess.check_output(
+                [
+                    "git",
+                    "rev-parse",
+                    f"origin/{branch}",
+                ],
+                cwd=base_dir,
+            )
+            .decode()
+            .strip()
+        )
         if local == remote:
             if startup:
                 startup()
@@ -55,11 +66,18 @@ def check_github_updates() -> None:
         version_file = base_dir / "VERSION"
         if version_file.exists():
             local = version_file.read_text().strip()
-        remote = subprocess.check_output([
-            "git",
-            "show",
-            f"origin/{branch}:VERSION",
-        ], cwd=base_dir).decode().strip()
+        remote = (
+            subprocess.check_output(
+                [
+                    "git",
+                    "show",
+                    f"origin/{branch}:VERSION",
+                ],
+                cwd=base_dir,
+            )
+            .decode()
+            .strip()
+        )
         if local == remote:
             if startup:
                 startup()
@@ -76,13 +94,15 @@ def check_github_updates() -> None:
     service_file = base_dir / "locks/service.lck"
     if service_file.exists():
         service = service_file.read_text().strip()
-        subprocess.run([
-            "sudo",
-            "systemctl",
-            "kill",
-            "--signal=TERM",
-            service,
-        ])
+        subprocess.run(
+            [
+                "sudo",
+                "systemctl",
+                "kill",
+                "--signal=TERM",
+                service,
+            ]
+        )
     else:
         subprocess.run(["pkill", "-f", "manage.py runserver"])
 
@@ -97,4 +117,3 @@ def poll_email_collectors() -> None:
 
     for collector in EmailCollector.objects.all():
         collector.collect()
-

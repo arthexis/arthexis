@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock, call
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 import django
+
 django.setup()
 
 from django.test import SimpleTestCase, TestCase
@@ -85,9 +86,7 @@ class ReaderNotificationTests(TestCase):
         self.assertEqual(result["kind"], RFID.CLASSIC)
         self.assertEqual(result["reference"], "https://example.com")
         self.assertEqual(mock_notify.call_count, 1)
-        mock_notify.assert_has_calls(
-            [call("RFID 1 OK", f"{result['rfid']} B")]
-        )
+        mock_notify.assert_has_calls([call("RFID 1 OK", f"{result['rfid']} B")])
 
     @patch("ocpp.rfid.reader.notify_async")
     @patch("core.models.RFID.objects.get_or_create")
@@ -105,9 +104,7 @@ class ReaderNotificationTests(TestCase):
         result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
         self.assertEqual(result["kind"], RFID.CLASSIC)
         self.assertEqual(mock_notify.call_count, 1)
-        mock_notify.assert_has_calls(
-            [call("RFID 2 BAD", f"{result['rfid']} B")]
-        )
+        mock_notify.assert_has_calls([call("RFID 2 BAD", f"{result['rfid']} B")])
 
 
 class CardTypeDetectionTests(TestCase):
@@ -201,9 +198,8 @@ class RFIDLandingTests(TestCase):
         app = Application.objects.create(name="Ocpp")
         module = Module.objects.create(node_role=role, application=app, path="/ocpp/")
         module.create_landings()
-        self.assertTrue(
-            module.landings.filter(path="/ocpp/rfid/").exists()
-        )
+        self.assertTrue(module.landings.filter(path="/ocpp/rfid/").exists())
+
 
 class ScannerTemplateTests(TestCase):
     def setUp(self):
@@ -284,7 +280,10 @@ class ReaderPollingTests(SimpleTestCase):
 class DeepReadViewTests(TestCase):
     @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")
-    @patch("ocpp.rfid.views.enable_deep_read_mode", return_value={"status": "deep", "timeout": 60})
+    @patch(
+        "ocpp.rfid.views.enable_deep_read_mode",
+        return_value={"status": "deep", "timeout": 60},
+    )
     def test_enable_deep_read(self, mock_enable, mock_site, mock_node):
         User = get_user_model()
         staff = User.objects.create_user("staff4", password="pwd", is_staff=True)
@@ -341,5 +340,3 @@ class DeepReadAuthTests(TestCase):
         self.assertGreaterEqual(len(reader.auth_calls), 2)
         self.assertEqual(reader.auth_calls[0], reader.PICC_AUTHENT1A)
         self.assertEqual(reader.auth_calls[1], reader.PICC_AUTHENT1B)
-
-

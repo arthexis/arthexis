@@ -40,6 +40,7 @@ class UserDatum(models.Model):
 
 # ---- Fixture utilities ---------------------------------------------------
 
+
 def _data_dir() -> Path:
     path = Path(settings.BASE_DIR) / "data"
     path.mkdir(exist_ok=True)
@@ -95,6 +96,7 @@ def delete_user_fixture(instance, user) -> None:
 
 # ---- Signals -------------------------------------------------------------
 
+
 @receiver(post_save)
 def _entity_saved(sender, instance, **kwargs):
     if isinstance(instance, UserDatum):
@@ -133,6 +135,7 @@ def _userdatum_deleted(sender, instance, **kwargs):
 
 
 # ---- Admin integration ---------------------------------------------------
+
 
 class UserDatumAdminMixin(admin.ModelAdmin):
     """Mixin adding a *User Datum* checkbox to change forms."""
@@ -252,9 +255,7 @@ def _user_data_view(request):
         )
         section = sections.setdefault(model._meta, [])
         fixture = _fixture_path(request.user, obj)
-        section.append(
-            {"url": url, "label": str(obj), "fixture": fixture.name}
-        )
+        section.append({"url": url, "label": str(obj), "fixture": fixture.name})
     section_list = [{"opts": opts, "items": items} for opts, items in sections.items()]
     context = admin.site.each_context(request)
     context.update(
@@ -315,8 +316,12 @@ def patch_admin_user_data_views() -> None:
     def get_urls():
         urls = original_get_urls()
         custom = [
-            path("seed-data/", admin.site.admin_view(_seed_data_view), name="seed_data"),
-            path("user-data/", admin.site.admin_view(_user_data_view), name="user_data"),
+            path(
+                "seed-data/", admin.site.admin_view(_seed_data_view), name="seed_data"
+            ),
+            path(
+                "user-data/", admin.site.admin_view(_user_data_view), name="user_data"
+            ),
             path(
                 "user-data/export/",
                 admin.site.admin_view(_user_data_export),

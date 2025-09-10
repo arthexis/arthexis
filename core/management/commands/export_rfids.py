@@ -46,7 +46,9 @@ class Command(BaseCommand):
         if path:
             with open(path, "w", newline="", encoding="utf-8") as fh:
                 writer = csv.writer(fh)
-                writer.writerow(["rfid", "energy_accounts", "allowed", "color", "released"])
+                writer.writerow(
+                    ["rfid", "energy_accounts", "allowed", "color", "released"]
+                )
                 writer.writerows(rows)
         else:
             writer = csv.writer(self.stdout)

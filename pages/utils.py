@@ -10,4 +10,3 @@ def landing(label=None):
         return view
 
     return decorator
-

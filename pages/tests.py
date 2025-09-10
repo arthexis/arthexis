@@ -115,9 +115,7 @@ class InvitationTests(TestCase):
                 reverse("pages:request-invite"), {"email": "invite@example.com"}
             )
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(
-            resp, "If the email exists, an invitation has been sent."
-        )
+        self.assertContains(resp, "If the email exists, an invitation has been sent.")
         lead = InviteLead.objects.get()
         self.assertIsNone(lead.sent_on)
         self.assertIn("fail", lead.error)
@@ -153,16 +151,12 @@ class NavbarBrandTests(TestCase):
 
     def test_site_name_displayed_when_known(self):
         resp = self.client.get(reverse("pages:index"))
-        self.assertContains(
-            resp, '<a class="navbar-brand" href="/">Terminal</a>'
-        )
+        self.assertContains(resp, '<a class="navbar-brand" href="/">Terminal</a>')
 
     def test_default_brand_when_unknown(self):
         Site.objects.filter(id=1).update(domain="example.com")
         resp = self.client.get(reverse("pages:index"))
-        self.assertContains(
-            resp, '<a class="navbar-brand" href="/">Arthexis</a>'
-        )
+        self.assertContains(resp, '<a class="navbar-brand" href="/">Arthexis</a>')
 
     @override_settings(ALLOWED_HOSTS=["127.0.0.1", "testserver"])
     def test_brand_uses_role_name_when_site_name_blank(self):
@@ -280,6 +274,7 @@ class AdminModelStatusTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, 'class="model-status ok"')
         self.assertContains(resp, 'class="model-status missing"', count=1)
+
 
 class SiteAdminRegisterCurrentTests(TestCase):
     def setUp(self):
@@ -511,7 +506,9 @@ class LandingCreationTests(TestCase):
         self.role = role
 
     def test_landings_created_on_module_creation(self):
-        module = Module.objects.create(node_role=self.role, application=self.app, path="/")
+        module = Module.objects.create(
+            node_role=self.role, application=self.app, path="/"
+        )
         self.assertTrue(module.landings.filter(path="/").exists())
 
 
@@ -533,20 +530,14 @@ class AllowedHostSubnetTests(TestCase):
 
     @override_settings(ALLOWED_HOSTS=["10.42.0.0/16", "192.168.0.0/16"])
     def test_private_network_hosts_allowed(self):
-        resp = self.client.get(
-            reverse("pages:index"), HTTP_HOST="10.42.1.5"
-        )
+        resp = self.client.get(reverse("pages:index"), HTTP_HOST="10.42.1.5")
         self.assertEqual(resp.status_code, 200)
-        resp = self.client.get(
-            reverse("pages:index"), HTTP_HOST="192.168.2.3"
-        )
+        resp = self.client.get(reverse("pages:index"), HTTP_HOST="192.168.2.3")
         self.assertEqual(resp.status_code, 200)
 
     @override_settings(ALLOWED_HOSTS=["10.42.0.0/16"])
     def test_host_outside_subnets_disallowed(self):
-        resp = self.client.get(
-            reverse("pages:index"), HTTP_HOST="11.0.0.1"
-        )
+        resp = self.client.get(reverse("pages:index"), HTTP_HOST="11.0.0.1")
         self.assertEqual(resp.status_code, 400)
 
 
@@ -579,7 +570,11 @@ class FaviconTests(TestCase):
             role, _ = NodeRole.objects.get_or_create(name="Terminal")
             Node.objects.update_or_create(
                 mac_address=Node.get_current_mac(),
-                defaults={"hostname": "localhost", "address": "127.0.0.1", "role": role},
+                defaults={
+                    "hostname": "localhost",
+                    "address": "127.0.0.1",
+                    "role": role,
+                },
             )
             site, _ = Site.objects.update_or_create(
                 id=1, defaults={"domain": "testserver", "name": ""}
@@ -603,7 +598,11 @@ class FaviconTests(TestCase):
             role, _ = NodeRole.objects.get_or_create(name="Terminal")
             Node.objects.update_or_create(
                 mac_address=Node.get_current_mac(),
-                defaults={"hostname": "localhost", "address": "127.0.0.1", "role": role},
+                defaults={
+                    "hostname": "localhost",
+                    "address": "127.0.0.1",
+                    "role": role,
+                },
             )
             site, _ = Site.objects.update_or_create(
                 id=1, defaults={"domain": "testserver", "name": ""}
@@ -623,7 +622,11 @@ class FaviconTests(TestCase):
             role, _ = NodeRole.objects.get_or_create(name="Terminal")
             Node.objects.update_or_create(
                 mac_address=Node.get_current_mac(),
-                defaults={"hostname": "localhost", "address": "127.0.0.1", "role": role},
+                defaults={
+                    "hostname": "localhost",
+                    "address": "127.0.0.1",
+                    "role": role,
+                },
             )
             Site.objects.update_or_create(
                 id=1, defaults={"domain": "testserver", "name": ""}
@@ -646,12 +649,16 @@ class FavoriteTests(TestCase):
             username="favadmin", password="pwd", email="fav@example.com"
         )
         self.client.force_login(self.user)
-        Site.objects.update_or_create(id=1, defaults={"name": "test", "domain": "testserver"})
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "test", "domain": "testserver"}
+        )
 
     def test_add_favorite(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
         next_url = reverse("admin:pages_application_changelist")
-        url = reverse("admin:favorite_toggle", args=[ct.id]) + f"?next={quote(next_url)}"
+        url = (
+            reverse("admin:favorite_toggle", args=[ct.id]) + f"?next={quote(next_url)}"
+        )
         resp = self.client.post(url, {"custom_label": "Apps", "user_data": "on"})
         self.assertRedirects(resp, next_url)
         fav = Favorite.objects.get(user=self.user, content_type=ct)
@@ -661,7 +668,9 @@ class FavoriteTests(TestCase):
     def test_cancel_link_uses_next(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
         next_url = reverse("admin:pages_application_changelist")
-        url = reverse("admin:favorite_toggle", args=[ct.id]) + f"?next={quote(next_url)}"
+        url = (
+            reverse("admin:favorite_toggle", args=[ct.id]) + f"?next={quote(next_url)}"
+        )
         resp = self.client.get(url)
         self.assertContains(resp, f'href="{next_url}"')
 
@@ -685,7 +694,9 @@ class FavoriteTests(TestCase):
 
     def test_dashboard_includes_favorites_and_user_data(self):
         fav_ct = ContentType.objects.get_by_natural_key("pages", "application")
-        Favorite.objects.create(user=self.user, content_type=fav_ct, custom_label="Apps")
+        Favorite.objects.create(
+            user=self.user, content_type=fav_ct, custom_label="Apps"
+        )
         role = NodeRole.objects.create(name="DataRole")
         ud_ct = ContentType.objects.get_for_model(NodeRole)
         UserDatum.objects.create(user=self.user, content_type=ud_ct, object_id=role.pk)

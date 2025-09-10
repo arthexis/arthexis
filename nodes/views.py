@@ -172,9 +172,7 @@ def public_node_endpoint(request, endpoint):
     - ``POST`` broadcasts the request body as a :class:`NetMessage`.
     """
 
-    node = get_object_or_404(
-        Node, public_endpoint=endpoint, enable_public_api=True
-    )
+    node = get_object_or_404(Node, public_endpoint=endpoint, enable_public_api=True)
 
     if request.method == "GET":
         data = {

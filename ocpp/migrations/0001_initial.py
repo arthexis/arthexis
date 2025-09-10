@@ -7,130 +7,204 @@ class Migration(migrations.Migration):
 
     initial = True
 
-    dependencies = [
-    ]
+    dependencies = []
 
     operations = [
         migrations.CreateModel(
-            name='Charger',
+            name="Charger",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('charger_id', models.CharField(
-                    max_length=100,
-                    unique=True,
-                    verbose_name='Serial Number',
-                    help_text='Unique identifier reported by the charger.',
-                )),
-                ('connector_id', models.CharField(
-                    blank=True,
-                    max_length=10,
-                    null=True,
-                    verbose_name='Connector ID',
-                    help_text='Optional connector identifier for multi-connector chargers.',
-                )),
-                ('require_rfid', models.BooleanField(
-                    default=False,
-                    verbose_name='Require RFID Authorization',
-                    help_text='Require a valid RFID before starting a charging session.',
-                )),
-                ('last_heartbeat', models.DateTimeField(blank=True, null=True)),
-                ('last_meter_values', models.JSONField(blank=True, default=dict)),
-                ('temperature', models.DecimalField(blank=True, decimal_places=1, max_digits=5, null=True)),
-                ('temperature_unit', models.CharField(blank=True, max_length=16)),
-                ('last_path', models.CharField(blank=True, max_length=255)),
-            ],
-            options={
-                'verbose_name': 'Charge Point',
-                'verbose_name_plural': 'Charge Points',
-            },
-        ),
-        migrations.CreateModel(
-            name='Location',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('name', models.CharField(max_length=200)),
-                ('latitude', models.DecimalField(blank=True, decimal_places=6, max_digits=9, null=True)),
-                ('longitude', models.DecimalField(blank=True, decimal_places=6, max_digits=9, null=True)),
-            ],
-            options={
-                'verbose_name': 'Charge Location',
-                'verbose_name_plural': 'Charge Locations',
-            },
-        ),
-        migrations.CreateModel(
-            name='MeterReading',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('connector_id', models.IntegerField(blank=True, null=True)),
-                ('timestamp', models.DateTimeField()),
-                ('measurand', models.CharField(blank=True, max_length=100)),
-                ('value', models.DecimalField(decimal_places=3, max_digits=12)),
-                ('unit', models.CharField(blank=True, max_length=16)),
-            ],
-            options={
-                'verbose_name': 'Meter Reading',
-                'verbose_name_plural': 'Meter Readings',
-            },
-        ),
-        migrations.CreateModel(
-            name='Simulator',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
-                ('name', models.CharField(max_length=100, unique=True)),
-                ('cp_path', models.CharField(max_length=100, verbose_name='CP Path')),
-                ('host', models.CharField(default='127.0.0.1', max_length=100)),
-                ('ws_port', models.IntegerField(default=8000, verbose_name='WS Port')),
                 (
-                    'rfid',
-                    models.CharField(default='FFFFFFFF', max_length=255, verbose_name='RFID'),
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
                 ),
-                ('vin', models.CharField(blank=True, max_length=17)),
-                ('duration', models.IntegerField(default=600)),
-                ('interval', models.FloatField(default=5.0)),
-                ('pre_charge_delay', models.FloatField(default=10.0, verbose_name='Delay')),
-                ('kw_max', models.FloatField(default=60.0)),
-                ('repeat', models.BooleanField(default=False)),
-                ('username', models.CharField(blank=True, max_length=100)),
-                ('password', models.CharField(blank=True, max_length=100)),
-            ],
-            options={
-                'verbose_name': 'CP Simulator',
-                'verbose_name_plural': 'CP Simulators',
-            },
-        ),
-        migrations.CreateModel(
-            name='Transaction',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('is_seed_data', models.BooleanField(default=False, editable=False)),
-                ('is_deleted', models.BooleanField(default=False, editable=False)),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
                 (
-                    'rfid',
-                    models.CharField(blank=True, max_length=20, verbose_name='RFID'),
+                    "charger_id",
+                    models.CharField(
+                        max_length=100,
+                        unique=True,
+                        verbose_name="Serial Number",
+                        help_text="Unique identifier reported by the charger.",
+                    ),
                 ),
-                ('vin', models.CharField(blank=True, max_length=17)),
-                ('meter_start', models.IntegerField(blank=True, null=True)),
-                ('meter_stop', models.IntegerField(blank=True, null=True)),
-                ('start_time', models.DateTimeField()),
-                ('stop_time', models.DateTimeField(blank=True, null=True)),
+                (
+                    "connector_id",
+                    models.CharField(
+                        blank=True,
+                        max_length=10,
+                        null=True,
+                        verbose_name="Connector ID",
+                        help_text="Optional connector identifier for multi-connector chargers.",
+                    ),
+                ),
+                (
+                    "require_rfid",
+                    models.BooleanField(
+                        default=False,
+                        verbose_name="Require RFID Authorization",
+                        help_text="Require a valid RFID before starting a charging session.",
+                    ),
+                ),
+                ("last_heartbeat", models.DateTimeField(blank=True, null=True)),
+                ("last_meter_values", models.JSONField(blank=True, default=dict)),
+                (
+                    "temperature",
+                    models.DecimalField(
+                        blank=True, decimal_places=1, max_digits=5, null=True
+                    ),
+                ),
+                ("temperature_unit", models.CharField(blank=True, max_length=16)),
+                ("last_path", models.CharField(blank=True, max_length=255)),
             ],
             options={
-                'verbose_name': 'Transaction',
-                'verbose_name_plural': 'CP Transactions',
+                "verbose_name": "Charge Point",
+                "verbose_name_plural": "Charge Points",
             },
         ),
         migrations.CreateModel(
-            name='RFID',
+            name="Location",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                ("name", models.CharField(max_length=200)),
+                (
+                    "latitude",
+                    models.DecimalField(
+                        blank=True, decimal_places=6, max_digits=9, null=True
+                    ),
+                ),
+                (
+                    "longitude",
+                    models.DecimalField(
+                        blank=True, decimal_places=6, max_digits=9, null=True
+                    ),
+                ),
+            ],
+            options={
+                "verbose_name": "Charge Location",
+                "verbose_name_plural": "Charge Locations",
+            },
+        ),
+        migrations.CreateModel(
+            name="MeterReading",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                ("connector_id", models.IntegerField(blank=True, null=True)),
+                ("timestamp", models.DateTimeField()),
+                ("measurand", models.CharField(blank=True, max_length=100)),
+                ("value", models.DecimalField(decimal_places=3, max_digits=12)),
+                ("unit", models.CharField(blank=True, max_length=16)),
+            ],
+            options={
+                "verbose_name": "Meter Reading",
+                "verbose_name_plural": "Meter Readings",
+            },
+        ),
+        migrations.CreateModel(
+            name="Simulator",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                ("name", models.CharField(max_length=100, unique=True)),
+                ("cp_path", models.CharField(max_length=100, verbose_name="CP Path")),
+                ("host", models.CharField(default="127.0.0.1", max_length=100)),
+                ("ws_port", models.IntegerField(default=8000, verbose_name="WS Port")),
+                (
+                    "rfid",
+                    models.CharField(
+                        default="FFFFFFFF", max_length=255, verbose_name="RFID"
+                    ),
+                ),
+                ("vin", models.CharField(blank=True, max_length=17)),
+                ("duration", models.IntegerField(default=600)),
+                ("interval", models.FloatField(default=5.0)),
+                (
+                    "pre_charge_delay",
+                    models.FloatField(default=10.0, verbose_name="Delay"),
+                ),
+                ("kw_max", models.FloatField(default=60.0)),
+                ("repeat", models.BooleanField(default=False)),
+                ("username", models.CharField(blank=True, max_length=100)),
+                ("password", models.CharField(blank=True, max_length=100)),
+            ],
+            options={
+                "verbose_name": "CP Simulator",
+                "verbose_name_plural": "CP Simulators",
+            },
+        ),
+        migrations.CreateModel(
+            name="Transaction",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                (
+                    "rfid",
+                    models.CharField(blank=True, max_length=20, verbose_name="RFID"),
+                ),
+                ("vin", models.CharField(blank=True, max_length=17)),
+                ("meter_start", models.IntegerField(blank=True, null=True)),
+                ("meter_stop", models.IntegerField(blank=True, null=True)),
+                ("start_time", models.DateTimeField()),
+                ("stop_time", models.DateTimeField(blank=True, null=True)),
+            ],
+            options={
+                "verbose_name": "Transaction",
+                "verbose_name_plural": "CP Transactions",
+            },
+        ),
+        migrations.CreateModel(
+            name="RFID",
             fields=[],
-            options={'proxy': True, 'indexes': [], 'constraints': [], 'verbose_name': 'RFID', 'verbose_name_plural': 'RFIDs'},
-            bases=('core.rfid',),
+            options={
+                "proxy": True,
+                "indexes": [],
+                "constraints": [],
+                "verbose_name": "RFID",
+                "verbose_name_plural": "RFIDs",
+            },
+            bases=("core.rfid",),
         ),
     ]

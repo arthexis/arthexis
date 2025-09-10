@@ -435,9 +435,14 @@ class EmailInbox(Entity):
         def _get_body(msg):
             if msg.is_multipart():
                 for part in msg.walk():
-                    if part.get_content_type() == "text/plain" and not part.get_filename():
+                    if (
+                        part.get_content_type() == "text/plain"
+                        and not part.get_filename()
+                    ):
                         charset = part.get_content_charset() or "utf-8"
-                        return part.get_payload(decode=True).decode(charset, errors="ignore")
+                        return part.get_payload(decode=True).decode(
+                            charset, errors="ignore"
+                        )
                 return ""
             charset = msg.get_content_charset() or "utf-8"
             return msg.get_payload(decode=True).decode(charset, errors="ignore")
@@ -561,9 +566,7 @@ class EmailCollector(Entity):
             fp = EmailArtifact.fingerprint_for(
                 msg.get("subject", ""), msg.get("from", ""), msg.get("body", "")
             )
-            if EmailArtifact.objects.filter(
-                collector=self, fingerprint=fp
-            ).exists():
+            if EmailArtifact.objects.filter(collector=self, fingerprint=fp).exists():
                 break
             EmailArtifact.objects.create(
                 collector=self,
@@ -712,7 +715,9 @@ class Reference(Entity):
         if self.pk:
             original = type(self).all_objects.get(pk=self.pk)
             if original.transaction_uuid != self.transaction_uuid:
-                raise ValidationError({"transaction_uuid": "Cannot modify transaction UUID"})
+                raise ValidationError(
+                    {"transaction_uuid": "Cannot modify transaction UUID"}
+                )
         if not self.image and self.value:
             qr = qrcode.QRCode(box_size=10, border=4)
             qr.add_data(self.value)
@@ -726,6 +731,7 @@ class Reference(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.alt_text
+
 
 class RFID(Entity):
     """RFID tag that may be assigned to one account."""
@@ -1086,9 +1092,7 @@ class ElectricVehicle(Entity):
         related_name="vehicles",
     )
     vin = models.CharField(max_length=17, unique=True, verbose_name="VIN")
-    license_plate = models.CharField(
-        _("License Plate"), max_length=20, blank=True
-    )
+    license_plate = models.CharField(_("License Plate"), max_length=20, blank=True)
 
     def save(self, *args, **kwargs):
         if self.model and not self.brand:
@@ -1162,7 +1166,9 @@ class ReleaseManager(Entity):
     """Store credentials for publishing packages."""
 
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="release_manager"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="release_manager",
     )
     pypi_username = SigilShortAutoField("PyPI username", max_length=100, blank=True)
     pypi_token = SigilShortAutoField("PyPI token", max_length=200, blank=True)
@@ -1193,21 +1199,15 @@ class ReleaseManager(Entity):
         if self.pypi_token:
             return Credentials(token=self.pypi_token)
         if self.pypi_username and self.pypi_password:
-            return Credentials(
-                username=self.pypi_username, password=self.pypi_password
-            )
+            return Credentials(username=self.pypi_username, password=self.pypi_password)
         return None
 
 
 class Package(Entity):
     """Package details shared across releases."""
 
-    name = models.CharField(
-        max_length=100, default=DEFAULT_PACKAGE.name, unique=True
-    )
-    description = models.CharField(
-        max_length=255, default=DEFAULT_PACKAGE.description
-    )
+    name = models.CharField(max_length=100, default=DEFAULT_PACKAGE.name, unique=True)
+    description = models.CharField(max_length=255, default=DEFAULT_PACKAGE.description)
     author = models.CharField(max_length=100, default=DEFAULT_PACKAGE.author)
     email = models.EmailField(default=DEFAULT_PACKAGE.email)
     python_requires = models.CharField(
@@ -1255,6 +1255,7 @@ class Package(Entity):
             repository_url=self.repository_url,
             homepage_url=self.homepage_url,
         )
+
 
 class PackageRelease(Entity):
     """Store metadata for a specific package version."""
@@ -1386,20 +1387,27 @@ class PackageRelease(Entity):
     def revision_short(self) -> str:
         return self.revision[-6:] if self.revision else ""
 
+
 # Ensure each RFID can only be linked to one energy account
 @receiver(m2m_changed, sender=EnergyAccount.rfids.through)
-def _rfid_unique_energy_account(sender, instance, action, reverse, model, pk_set, **kwargs):
+def _rfid_unique_energy_account(
+    sender, instance, action, reverse, model, pk_set, **kwargs
+):
     """Prevent associating an RFID with more than one energy account."""
     if action == "pre_add":
         if reverse:  # adding energy accounts to an RFID
             if instance.energy_accounts.exclude(pk__in=pk_set).exists():
-                raise ValidationError("RFID tags may only be assigned to one energy account.")
+                raise ValidationError(
+                    "RFID tags may only be assigned to one energy account."
+                )
         else:  # adding RFIDs to an energy account
             conflict = model.objects.filter(
                 pk__in=pk_set, energy_accounts__isnull=False
             ).exclude(energy_accounts=instance)
             if conflict.exists():
-                raise ValidationError("RFID tags may only be assigned to one energy account.")
+                raise ValidationError(
+                    "RFID tags may only be assigned to one energy account."
+                )
 
 
 def hash_key(key: str) -> str:
@@ -1439,7 +1447,11 @@ class ChatProfile(models.Model):
         key_hash = hash_key(key)
         profile, _ = cls.objects.update_or_create(
             user=user,
-            defaults={"user_key_hash": key_hash, "last_used_at": None, "is_active": True},
+            defaults={
+                "user_key_hash": key_hash,
+                "last_used_at": None,
+                "is_active": True,
+            },
         )
         return profile, key
 

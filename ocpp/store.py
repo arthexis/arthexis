@@ -86,10 +86,12 @@ def add_session_message(cid: str, message: str) -> None:
     sess = history.get(cid)
     if not sess:
         return
-    sess["messages"].append({
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "message": message,
-    })
+    sess["messages"].append(
+        {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "message": message,
+        }
+    )
 
 
 def end_session_log(cid: str) -> None:

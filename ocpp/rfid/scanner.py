@@ -1,6 +1,8 @@
 from .background_reader import get_next_tag, is_configured, start, stop
 from .irq_wiring_check import check_irq_pin
 from .reader import enable_deep_read
+
+
 def scan_sources(request=None):
     """Read the next RFID tag from the local scanner."""
     if not is_configured():

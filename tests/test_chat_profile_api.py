@@ -28,4 +28,3 @@ class ChatProfileAPITests(TestCase):
 
         bad = self.client.get(test_url, HTTP_AUTHORIZATION="Bearer bad")
         self.assertEqual(bad.status_code, 401)
-

@@ -157,7 +157,15 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="EmailOutbox",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
                 ("is_seed_data", models.BooleanField(default=False, editable=False)),
                 ("is_deleted", models.BooleanField(default=False, editable=False)),
                 (
@@ -245,4 +253,3 @@ class Migration(migrations.Migration):
             ],
         ),
     ]
-

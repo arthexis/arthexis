@@ -22,9 +22,7 @@ def _gather_info() -> dict:
     info["installed"] = (base_dir / ".venv").exists()
 
     service_file = lock_dir / "service.lck"
-    info["service"] = (
-        service_file.read_text().strip() if service_file.exists() else ""
-    )
+    info["service"] = service_file.read_text().strip() if service_file.exists() else ""
 
     mode_file = lock_dir / "nginx_mode.lck"
     mode = mode_file.read_text().strip() if mode_file.exists() else "internal"

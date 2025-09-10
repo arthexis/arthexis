@@ -45,9 +45,7 @@ class NodeTests(TestCase):
     def setUp(self):
         self.client = Client()
         User = get_user_model()
-        self.user = User.objects.create_user(
-            username="nodeuser", password="pwd"
-        )
+        self.user = User.objects.create_user(username="nodeuser", password="pwd")
         self.client.force_login(self.user)
         NodeRole.objects.get_or_create(name="Terminal")
 
@@ -55,16 +53,18 @@ class NodeTests(TestCase):
         with TemporaryDirectory() as tmp:
             base = Path(tmp)
             with override_settings(BASE_DIR=base):
-                with patch(
-                    "nodes.models.Node.get_current_mac",
-                    return_value="00:ff:ee:dd:cc:bb",
-                ), patch(
-                    "nodes.models.socket.gethostname", return_value="testhost"
-                ), patch(
-                    "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
-                ), patch(
-                    "nodes.models.revision.get_revision", return_value="rev"
-                ), patch.object(Node, "ensure_keys"):
+                with (
+                    patch(
+                        "nodes.models.Node.get_current_mac",
+                        return_value="00:ff:ee:dd:cc:bb",
+                    ),
+                    patch("nodes.models.socket.gethostname", return_value="testhost"),
+                    patch(
+                        "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
+                    ),
+                    patch("nodes.models.revision.get_revision", return_value="rev"),
+                    patch.object(Node, "ensure_keys"),
+                ):
                     Node.register_current()
         self.assertEqual(PackageRelease.objects.count(), 0)
 
@@ -156,6 +156,7 @@ class NodeRegisterCurrentTests(TestCase):
         self.user = User.objects.create_user(username="nodeuser", password="pwd")
         self.client.force_login(self.user)
         NodeRole.objects.get_or_create(name="Terminal")
+
     def test_register_current_sets_and_retains_lcd(self):
         with TemporaryDirectory() as tmp:
             base = Path(tmp)
@@ -163,13 +164,18 @@ class NodeRegisterCurrentTests(TestCase):
             locks.mkdir()
             (locks / "lcd_screen.lck").touch()
             with override_settings(BASE_DIR=base):
-                with patch("nodes.models.Node.get_current_mac", return_value="00:ff:ee:dd:cc:bb"), patch(
-                    "nodes.models.socket.gethostname", return_value="testhost"
-                ), patch(
-                    "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
-                ), patch(
-                    "nodes.models.revision.get_revision", return_value="rev"
-                ), patch.object(Node, "ensure_keys"):
+                with (
+                    patch(
+                        "nodes.models.Node.get_current_mac",
+                        return_value="00:ff:ee:dd:cc:bb",
+                    ),
+                    patch("nodes.models.socket.gethostname", return_value="testhost"),
+                    patch(
+                        "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
+                    ),
+                    patch("nodes.models.revision.get_revision", return_value="rev"),
+                    patch.object(Node, "ensure_keys"),
+                ):
                     node, created = Node.register_current()
             self.assertTrue(created)
             self.assertTrue(node.has_lcd_screen)
@@ -178,13 +184,18 @@ class NodeRegisterCurrentTests(TestCase):
             node.save(update_fields=["has_lcd_screen"])
 
             with override_settings(BASE_DIR=base):
-                with patch("nodes.models.Node.get_current_mac", return_value="00:ff:ee:dd:cc:bb"), patch(
-                    "nodes.models.socket.gethostname", return_value="testhost"
-                ), patch(
-                    "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
-                ), patch(
-                    "nodes.models.revision.get_revision", return_value="rev"
-                ), patch.object(Node, "ensure_keys"):
+                with (
+                    patch(
+                        "nodes.models.Node.get_current_mac",
+                        return_value="00:ff:ee:dd:cc:bb",
+                    ),
+                    patch("nodes.models.socket.gethostname", return_value="testhost"),
+                    patch(
+                        "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
+                    ),
+                    patch("nodes.models.revision.get_revision", return_value="rev"),
+                    patch.object(Node, "ensure_keys"),
+                ):
                     node2, created2 = Node.register_current()
             self.assertFalse(created2)
             node.refresh_from_db()
@@ -270,9 +281,7 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertEqual(get_resp.json()["hostname"], "public")
 
         pre_count = NetMessage.objects.count()
-        post_resp = self.client.post(
-            url, data="hello", content_type="text/plain"
-        )
+        post_resp = self.client.post(url, data="hello", content_type="text/plain")
         self.assertEqual(post_resp.status_code, 200)
         self.assertEqual(NetMessage.objects.count(), pre_count + 1)
         msg = NetMessage.objects.order_by("-created").first()
@@ -307,10 +316,14 @@ class NodeRegisterCurrentTests(TestCase):
 
     def test_net_message_with_valid_signature(self):
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        public_key = key.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        ).decode()
+        public_key = (
+            key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
         sender = Node.objects.create(
             hostname="sender",
             address="10.0.0.1",
@@ -327,9 +340,7 @@ class NodeRegisterCurrentTests(TestCase):
             "sender": str(sender.uuid),
         }
         payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
-        signature = key.sign(
-            payload_json.encode(), padding.PKCS1v15(), hashes.SHA256()
-        )
+        signature = key.sign(payload_json.encode(), padding.PKCS1v15(), hashes.SHA256())
         resp = self.client.post(
             reverse("net-message"),
             data=payload_json,
@@ -371,6 +382,7 @@ class NodeRegisterCurrentTests(TestCase):
         node.save()
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
 
+
 class NodeAdminTests(TestCase):
 
     def setUp(self):
@@ -395,7 +407,7 @@ class NodeAdminTests(TestCase):
         self.assertTemplateUsed(response, "admin/nodes/node/register_remote.html")
         self.assertEqual(Node.objects.count(), 1)
         node = Node.objects.first()
-        ver = Path('VERSION').read_text().strip()
+        ver = Path("VERSION").read_text().strip()
         rev = "abcdef123456"
         self.assertEqual(node.base_path, str(settings.BASE_DIR))
         self.assertEqual(node.installed_version, ver)
@@ -408,9 +420,7 @@ class NodeAdminTests(TestCase):
         self.assertTrue(priv.exists())
         self.assertTrue(pub.exists())
         self.assertTrue(node.public_key)
-        self.assertTrue(
-            Site.objects.filter(domain=hostname, name="host").exists()
-        )
+        self.assertTrue(Site.objects.filter(domain=hostname, name="host").exists())
 
     def test_register_current_updates_existing_node(self):
         hostname = socket.gethostname()
@@ -446,9 +456,7 @@ class NodeAdminTests(TestCase):
         self.assertIn(node.public_key.strip(), resp.content.decode())
 
     @patch("nodes.admin.capture_screenshot")
-    def test_capture_site_screenshot_from_admin(
-        self, mock_capture_screenshot
-    ):
+    def test_capture_site_screenshot_from_admin(self, mock_capture_screenshot):
         screenshot_dir = settings.LOG_DIR / "screenshots"
         screenshot_dir.mkdir(parents=True, exist_ok=True)
         file_path = screenshot_dir / "test.png"
@@ -472,9 +480,7 @@ class NodeAdminTests(TestCase):
         self.assertEqual(screenshot.path, "screenshots/test.png")
         self.assertEqual(screenshot.method, "ADMIN")
         mock_capture_screenshot.assert_called_once_with("http://testserver/")
-        self.assertContains(
-            response, "Screenshot saved to screenshots/test.png"
-        )
+        self.assertContains(response, "Screenshot saved to screenshots/test.png")
 
     def test_view_screenshot_in_change_admin(self):
         screenshot_dir = settings.LOG_DIR / "screenshots"
@@ -578,7 +584,9 @@ class NetMessageReachTests(TestCase):
         for name in ["Terminal", "Control", "Satellite", "Constellation"]:
             self.roles[name], _ = NodeRole.objects.get_or_create(name=name)
         self.nodes = {}
-        for idx, name in enumerate(["Terminal", "Control", "Satellite", "Constellation"], start=1):
+        for idx, name in enumerate(
+            ["Terminal", "Control", "Satellite", "Constellation"], start=1
+        ):
             self.nodes[name] = Node.objects.create(
                 hostname=name.lower(),
                 address=f"10.0.0.{idx}",
@@ -589,7 +597,9 @@ class NetMessageReachTests(TestCase):
 
     @patch("requests.post")
     def test_terminal_reach_limits_nodes(self, mock_post):
-        msg = NetMessage.objects.create(subject="s", body="b", reach=self.roles["Terminal"])
+        msg = NetMessage.objects.create(
+            subject="s", body="b", reach=self.roles["Terminal"]
+        )
         with patch.object(Node, "get_local", return_value=None):
             msg.propagate()
         roles = set(msg.propagated_to.values_list("role__name", flat=True))
@@ -598,7 +608,9 @@ class NetMessageReachTests(TestCase):
 
     @patch("requests.post")
     def test_control_reach_includes_control_and_terminal(self, mock_post):
-        msg = NetMessage.objects.create(subject="s", body="b", reach=self.roles["Control"])
+        msg = NetMessage.objects.create(
+            subject="s", body="b", reach=self.roles["Control"]
+        )
         with patch.object(Node, "get_local", return_value=None):
             msg.propagate()
         roles = set(msg.propagated_to.values_list("role__name", flat=True))
@@ -607,7 +619,9 @@ class NetMessageReachTests(TestCase):
 
     @patch("requests.post")
     def test_satellite_reach_includes_lower_roles(self, mock_post):
-        msg = NetMessage.objects.create(subject="s", body="b", reach=self.roles["Satellite"])
+        msg = NetMessage.objects.create(
+            subject="s", body="b", reach=self.roles["Satellite"]
+        )
         with patch.object(Node, "get_local", return_value=None):
             msg.propagate()
         roles = set(msg.propagated_to.values_list("role__name", flat=True))
@@ -616,7 +630,9 @@ class NetMessageReachTests(TestCase):
 
     @patch("requests.post")
     def test_constellation_reach_prioritizes_constellation(self, mock_post):
-        msg = NetMessage.objects.create(subject="s", body="b", reach=self.roles["Constellation"])
+        msg = NetMessage.objects.create(
+            subject="s", body="b", reach=self.roles["Constellation"]
+        )
         with patch.object(Node, "get_local", return_value=None):
             msg.propagate()
         roles = set(msg.propagated_to.values_list("role__name", flat=True))
@@ -650,7 +666,9 @@ class NetMessagePropagationTests(TestCase):
 
     @patch("requests.post")
     @patch("core.notifications.notify")
-    def test_propagate_forwards_to_three_and_notifies_local(self, mock_notify, mock_post):
+    def test_propagate_forwards_to_three_and_notifies_local(
+        self, mock_notify, mock_post
+    ):
         msg = NetMessage.objects.create(subject="s", body="b", reach=self.role)
         with patch.object(Node, "get_local", return_value=self.local):
             msg.propagate(seen=[str(self.remotes[0].uuid)])
@@ -664,6 +682,7 @@ class NetMessagePropagationTests(TestCase):
         self.assertNotIn(sender_addr, targets)
         self.assertEqual(msg.propagated_to.count(), 4)
         self.assertTrue(msg.complete)
+
 
 class NodeActionTests(TestCase):
     def setUp(self):
@@ -750,13 +769,14 @@ class StartupNotificationTests(TestCase):
                     "nodes.apps.revision.get_revision", return_value="abcdef123456"
                 ):
                     with patch("nodes.models.NetMessage.broadcast") as mock_broadcast:
-                        with patch("nodes.apps.socket.gethostname", return_value="host"):
+                        with patch(
+                            "nodes.apps.socket.gethostname", return_value="host"
+                        ):
                             with patch(
-                                "nodes.apps.socket.gethostbyname", return_value="1.2.3.4"
+                                "nodes.apps.socket.gethostbyname",
+                                return_value="1.2.3.4",
                             ):
-                                with patch.dict(
-                                    os.environ, {"PORT": "9000"}
-                                ):
+                                with patch.dict(os.environ, {"PORT": "9000"}):
                                     _startup_notification()
                                     time.sleep(0.1)
 
@@ -787,10 +807,13 @@ class StartupHandlerTests(TestCase):
 
         with patch("nodes.apps._startup_notification") as mock_start:
             with patch("nodes.apps.connections") as mock_connections:
-                mock_connections.__getitem__.return_value.ensure_connection.return_value = None
+                mock_connections.__getitem__.return_value.ensure_connection.return_value = (
+                    None
+                )
                 _trigger_startup_notification()
 
         mock_start.assert_called_once()
+
 
 class NotificationManagerTests(TestCase):
     def test_send_writes_trimmed_lines(self):
@@ -932,9 +955,10 @@ class EmailOutboxTests(TestCase):
         EmailOutbox.objects.create(
             node=node, host="smtp.example.com", port=25, username="u", password="p"
         )
-        with patch("nodes.models.get_connection") as gc, patch(
-            "nodes.models.send_mail"
-        ) as sm:
+        with (
+            patch("nodes.models.get_connection") as gc,
+            patch("nodes.models.send_mail") as sm,
+        ):
             conn = MagicMock()
             gc.return_value = conn
             node.send_mail("sub", "msg", ["to@example.com"])
@@ -1090,5 +1114,3 @@ class OperationWorkflowTests(TestCase):
         url = reverse("admin:nodes_operation_run", args=[op.pk])
         resp = self.client.post(url, follow=True)
         self.assertContains(resp, 'value="Continue"')
-
-

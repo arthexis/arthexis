@@ -92,9 +92,10 @@ if settings.DEBUG:
         urlpatterns = [
             path(
                 "__debug__/",
-                include(("debug_toolbar.urls", "debug_toolbar"), namespace="debug_toolbar"),
+                include(
+                    ("debug_toolbar.urls", "debug_toolbar"), namespace="debug_toolbar"
+                ),
             )
         ] + urlpatterns
 
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-

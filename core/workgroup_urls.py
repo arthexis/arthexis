@@ -10,4 +10,3 @@ urlpatterns = [
     path("chat-profiles/<int:user_id>/", views.issue_key, name="chatprofile-issue"),
     path("assistant/test/", views.assistant_test, name="assistant-test"),
 ]
-

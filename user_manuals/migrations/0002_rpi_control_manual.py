@@ -188,6 +188,7 @@ Zjg5OGYxOTdkMTQwMjRiOTA1Y2U4YmRkYWRhNDQyYz5dCiUgUmVwb3J0TGFiIGdlbmVyYXRlZCBQ
 REYgZG9jdW1lbnQgLS0gZGlnZXN0IChodHRwOi8vd3d3LnJlcG9ydGxhYi5jb20pCgovSW5mbyA1
 IDAgUgovUm9vdCA0IDAgUgovU2l6ZSA4Cj4+CnN0YXJ0eHJlZgo1NDc4CiUlRU9GCg=="""
 
+
 def create_manual(apps, schema_editor):
     UserManual = apps.get_model("user_manuals", "UserManual")
     UserManual.objects.create(
@@ -196,6 +197,7 @@ def create_manual(apps, schema_editor):
         content_html=HTML,
         content_pdf=PDF,
     )
+
 
 def delete_manual(apps, schema_editor):
     UserManual = apps.get_model("user_manuals", "UserManual")

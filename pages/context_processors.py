@@ -5,9 +5,7 @@ from pathlib import Path
 from nodes.models import Node
 from .models import Module
 
-_favicon_path = (
-    Path(settings.BASE_DIR) / "pages" / "fixtures" / "data" / "favicon.txt"
-)
+_favicon_path = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data" / "favicon.txt"
 try:
     _DEFAULT_FAVICON = f"data:image/png;base64,{_favicon_path.read_text().strip()}"
 except OSError:
@@ -51,7 +49,9 @@ def nav_links(request):
             module.enabled_landings = landings
             valid_modules.append(module)
             if request.path.startswith(module.path):
-                if current_module is None or len(module.path) > len(current_module.path):
+                if current_module is None or len(module.path) > len(
+                    current_module.path
+                ):
                     current_module = module
 
     valid_modules.sort(key=lambda m: m.menu_label.lower())

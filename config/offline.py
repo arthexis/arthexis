@@ -2,6 +2,7 @@ import os
 import functools
 import asyncio
 
+
 class OfflineError(RuntimeError):
     """Raised when a network operation is attempted in offline mode."""
 
@@ -21,6 +22,7 @@ def requires_network(func):
     """
 
     if asyncio.iscoroutinefunction(func):
+
         @functools.wraps(func)
         async def async_wrapper(*args, **kwargs):
             if _is_offline():

@@ -32,11 +32,11 @@ def export_transactions(
 
     for charger in Charger.objects.filter(charger_id__in=export_chargers):
         data["chargers"].append(
-                {
-                    "charger_id": charger.charger_id,
-                    "connector_id": charger.connector_id,
-                    "require_rfid": charger.require_rfid,
-                }
+            {
+                "charger_id": charger.charger_id,
+                "connector_id": charger.connector_id,
+                "require_rfid": charger.require_rfid,
+            }
         )
 
     for tx in qs:

@@ -79,4 +79,3 @@ class LocalhostAdminBackend(ModelBackend):
             return User.all_objects.get(pk=user_id)
         except User.DoesNotExist:
             return None
-

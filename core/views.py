@@ -107,13 +107,9 @@ def _step_check_pypi(release, ctx, log_path: Path) -> None:
     _append_log(log_path, f"Checking if version {release.version} exists on PyPI")
     if release_utils.network_available():
         try:
-            resp = requests.get(
-                f"https://pypi.org/pypi/{release.package.name}/json"
-            )
+            resp = requests.get(f"https://pypi.org/pypi/{release.package.name}/json")
             if resp.ok and release.version in resp.json().get("releases", {}):
-                raise Exception(
-                    f"Version {release.version} already on PyPI"
-                )
+                raise Exception(f"Version {release.version} already on PyPI")
         except Exception as exc:
             # network errors should be logged but not crash
             if "already on PyPI" in str(exc):
@@ -125,6 +121,7 @@ def _step_check_pypi(release, ctx, log_path: Path) -> None:
 
 def _step_promote_build(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
+
     _append_log(log_path, "Generating build files")
     try:
         try:
@@ -184,7 +181,9 @@ def _step_publish(release, ctx, log_path: Path) -> None:
         version=release.version,
         creds=release.to_credentials(),
     )
-    release.pypi_url = f"https://pypi.org/project/{release.package.name}/{release.version}/"
+    release.pypi_url = (
+        f"https://pypi.org/project/{release.package.name}/{release.version}/"
+    )
     release.save(update_fields=["pypi_url"])
     PackageRelease.dump_fixture()
     _append_log(log_path, "Upload complete")
@@ -329,9 +328,7 @@ def rfid_batch(request):
                 continue
             allowed = row.get("allowed", True)
             energy_accounts = row.get("energy_accounts") or []
-            color = (
-                (row.get("color") or RFID.BLACK).strip().upper() or RFID.BLACK
-            )
+            color = (row.get("color") or RFID.BLACK).strip().upper() or RFID.BLACK
             released = row.get("released", False)
             if isinstance(released, str):
                 released = released.lower() == "true"
@@ -345,7 +342,9 @@ def rfid_batch(request):
                 },
             )
             if energy_accounts:
-                tag.energy_accounts.set(EnergyAccount.objects.filter(id__in=energy_accounts))
+                tag.energy_accounts.set(
+                    EnergyAccount.objects.filter(id__in=energy_accounts)
+                )
             else:
                 tag.energy_accounts.clear()
             count += 1

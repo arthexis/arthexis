@@ -5,6 +5,7 @@ updates the LCD. If writing to the lock file fails, a Windows
 notification or log entry is used as a fallback. Each line is truncated
 to 64 characters; scrolling is handled by the LCD service.
 """
+
 from __future__ import annotations
 
 import logging

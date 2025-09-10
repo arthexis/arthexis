@@ -42,4 +42,3 @@ class SaveAsCopyTests(TestCase):
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Address.objects.count(), 2)
-

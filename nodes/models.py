@@ -63,9 +63,7 @@ class Node(Entity):
 
     hostname = models.CharField(max_length=100)
     address = models.GenericIPAddressField()
-    mac_address = models.CharField(
-        max_length=17, unique=True, null=True, blank=True
-    )
+    mac_address = models.CharField(max_length=17, unique=True, null=True, blank=True)
     port = models.PositiveIntegerField(default=8000)
     badge_color = models.CharField(max_length=7, default="#28a745")
     role = models.ForeignKey(NodeRole, on_delete=models.SET_NULL, null=True, blank=True)
@@ -169,9 +167,7 @@ class Node(Entity):
         priv_path = security_dir / f"{self.public_endpoint}"
         pub_path = security_dir / f"{self.public_endpoint}.pub"
         if not priv_path.exists() or not pub_path.exists():
-            private_key = rsa.generate_private_key(
-                public_exponent=65537, key_size=2048
-            )
+            private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
             private_bytes = private_key.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.TraditionalOpenSSL,
@@ -254,8 +250,14 @@ class Node(Entity):
         else:
             PeriodicTask.objects.filter(name=task_name).delete()
 
-
-    def send_mail(self, subject: str, message: str, recipient_list: list[str], from_email: str | None = None, **kwargs):
+    def send_mail(
+        self,
+        subject: str,
+        message: str,
+        recipient_list: list[str],
+        from_email: str | None = None,
+        **kwargs,
+    ):
         """Send an email using this node's configured outbox if available."""
         outbox = getattr(self, "email_outbox", None)
         logger.info(
@@ -265,7 +267,9 @@ class Node(Entity):
             "outbox" if outbox else "default",
         )
         if outbox:
-            result = outbox.send_mail(subject, message, recipient_list, from_email, **kwargs)
+            result = outbox.send_mail(
+                subject, message, recipient_list, from_email, **kwargs
+            )
             logger.info("Outbox send_mail result: %s", result)
             return result
         from_email = from_email or settings.DEFAULT_FROM_EMAIL
@@ -282,17 +286,11 @@ class EmailOutbox(Entity):
     )
     host = SigilShortAutoField(
         max_length=100,
-        help_text=(
-            "Gmail: smtp.gmail.com. "
-            "GoDaddy: smtpout.secureserver.net"
-        ),
+        help_text=("Gmail: smtp.gmail.com. " "GoDaddy: smtpout.secureserver.net"),
     )
     port = models.PositiveIntegerField(
         default=587,
-        help_text=(
-            "Gmail: 587 (TLS). "
-            "GoDaddy: 587 (TLS) or 465 (SSL)"
-        ),
+        help_text=("Gmail: 587 (TLS). " "GoDaddy: 587 (TLS) or 465 (SSL)"),
     )
     username = SigilShortAutoField(
         max_length=100,
@@ -340,9 +338,7 @@ class EmailOutbox(Entity):
     def send_mail(self, subject, message, recipient_list, from_email=None, **kwargs):
         connection = self.get_connection()
         from_email = from_email or self.from_email or settings.DEFAULT_FROM_EMAIL
-        logger.info(
-            "EmailOutbox %s sending email to %s", self.pk, recipient_list
-        )
+        logger.info("EmailOutbox %s sending email to %s", self.pk, recipient_list)
         result = send_mail(
             subject,
             message,
@@ -457,8 +453,21 @@ class NetMessage(Entity):
             "Terminal": ["Terminal", "Particle"],
             "Control": ["Control", "Terminal", "Particle"],
             "Satellite": ["Satellite", "Control", "Terminal", "Particle"],
-            "Constellation": ["Constellation", "Satellite", "Control", "Terminal", "Particle"],
-            "Virtual": ["Virtual", "Constellation", "Satellite", "Control", "Terminal", "Particle"],
+            "Constellation": [
+                "Constellation",
+                "Satellite",
+                "Control",
+                "Terminal",
+                "Particle",
+            ],
+            "Virtual": [
+                "Virtual",
+                "Constellation",
+                "Satellite",
+                "Control",
+                "Terminal",
+                "Particle",
+            ],
         }
         role_order = role_map.get(reach_name, ["Terminal"])
         selected: list[Node] = []
@@ -532,9 +541,7 @@ class ContentSample(Entity):
         db_index=True,
         verbose_name="transaction UUID",
     )
-    node = models.ForeignKey(
-        Node, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    node = models.ForeignKey(Node, on_delete=models.SET_NULL, null=True, blank=True)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
     )
@@ -581,9 +588,7 @@ class NodeTask(Entity):
             raise NotImplementedError("Remote node execution is not implemented")
         import subprocess
 
-        result = subprocess.run(
-            self.recipe, shell=True, capture_output=True, text=True
-        )
+        result = subprocess.run(self.recipe, shell=True, capture_output=True, text=True)
         return result.stdout + result.stderr
 
 
@@ -631,7 +636,7 @@ class Interrupt(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
- 
+
 
 class Logbook(Entity):
     """Record of executed operations."""
@@ -672,7 +677,3 @@ class User(UserModel):
         app_label = "nodes"
         verbose_name = UserModel._meta.verbose_name
         verbose_name_plural = UserModel._meta.verbose_name_plural
-
-
-
-

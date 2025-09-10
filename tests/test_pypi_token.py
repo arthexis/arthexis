@@ -9,11 +9,15 @@ from core import release
 
 class PyPITokenTests(TestCase):
     def test_publish_uses_token_when_password_missing(self):
-        creds = release.Credentials(token="pypi-token", username="ignored", password=None)
+        creds = release.Credentials(
+            token="pypi-token", username="ignored", password=None
+        )
         with (
             mock.patch("core.release.network_available", return_value=False),
             mock.patch.object(release.Path, "exists", return_value=True),
-            mock.patch.object(release.Path, "glob", return_value=[Path("dist/fake.whl")]),
+            mock.patch.object(
+                release.Path, "glob", return_value=[Path("dist/fake.whl")]
+            ),
             mock.patch("core.release.subprocess.run") as run,
         ):
             run.return_value.returncode = 0
@@ -36,7 +40,9 @@ class PyPITokenTests(TestCase):
             mock.patch.dict(os.environ, env, clear=False),
             mock.patch("core.release.network_available", return_value=False),
             mock.patch.object(release.Path, "exists", return_value=True),
-            mock.patch.object(release.Path, "glob", return_value=[Path("dist/fake.whl")]),
+            mock.patch.object(
+                release.Path, "glob", return_value=[Path("dist/fake.whl")]
+            ),
             mock.patch("core.release.subprocess.run") as run,
             mock.patch("core.release._manager_credentials", return_value=profile),
         ):

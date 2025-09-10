@@ -14,7 +14,9 @@ from django.test import TestCase
 
 class ReadmeLanguageTests(TestCase):
     def setUp(self):
-        Site.objects.update_or_create(domain="testserver", defaults={"name": "testserver"})
+        Site.objects.update_or_create(
+            domain="testserver", defaults={"name": "testserver"}
+        )
 
     def test_spanish_readme_selected(self):
         response = self.client.get("/", HTTP_ACCEPT_LANGUAGE="es")

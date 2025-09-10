@@ -21,5 +21,5 @@ class CSRFFailureViewTests(TestCase):
         self.assertEqual(response.status_code, 403)
         content = response.content.decode()
         self.assertIn("You will be redirected", content)
-        self.assertIn("window.location.href = \"/\"", content)
+        self.assertIn('window.location.href = "/"', content)
         self.assertIn("CSRF", cm.output[0])

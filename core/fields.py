@@ -67,4 +67,3 @@ class SigilShortAutoField(SigilAutoFieldMixin, models.CharField):
 
 class SigilLongAutoField(SigilAutoFieldMixin, models.TextField):
     pass
-

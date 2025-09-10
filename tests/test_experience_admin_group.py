@@ -17,9 +17,7 @@ class ExperienceAdminGroupTests(TestCase):
     def test_reference_registered(self):
         registry = site._registry
         self.assertIn(ExperienceReference, registry)
-        self.assertEqual(
-            registry[ExperienceReference].model._meta.app_label, "pages"
-        )
+        self.assertEqual(registry[ExperienceReference].model._meta.app_label, "pages")
 
     def test_admin_index_shows_reference(self):
         response = self.client.get(reverse("admin:index"))

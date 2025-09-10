@@ -165,7 +165,9 @@ class ChargePointSimulator:
                                     "connectorId": 1,
                                     "meterValue": [
                                         {
-                                            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                            "timestamp": time.strftime(
+                                                "%Y-%m-%dT%H:%M:%SZ"
+                                            ),
                                             "sampledValue": [
                                                 {
                                                     "value": "0",
@@ -228,7 +230,9 @@ class ChargePointSimulator:
                                 "transactionId": tx_id,
                                 "meterValue": [
                                     {
-                                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                        "timestamp": time.strftime(
+                                            "%Y-%m-%dT%H:%M:%SZ"
+                                        ),
                                         "sampledValue": [
                                             {
                                                 "value": f"{meter_kw:.3f}",

@@ -53,5 +53,3 @@ def reader(request):
         )
         context["deep_read_url"] = reverse("rfid-scan-deep")
     return render(request, "rfid/reader.html", context)
-
-

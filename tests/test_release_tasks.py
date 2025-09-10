@@ -28,7 +28,10 @@ def test_no_upgrade_triggers_startup(monkeypatch, tmp_path):
 
     called = {}
     import nodes.apps as nodes_apps
-    monkeypatch.setattr(nodes_apps, "_startup_notification", lambda: called.setdefault("x", True))
+
+    monkeypatch.setattr(
+        nodes_apps, "_startup_notification", lambda: called.setdefault("x", True)
+    )
 
     tasks.check_github_updates()
 
@@ -52,7 +55,12 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
 
     notify_calls = []
     import core.notifications as notifications
-    monkeypatch.setattr(notifications, "notify", lambda subject, body="": notify_calls.append((subject, body)))
+
+    monkeypatch.setattr(
+        notifications,
+        "notify",
+        lambda subject, body="": notify_calls.append((subject, body)),
+    )
 
     tasks.check_github_updates()
 

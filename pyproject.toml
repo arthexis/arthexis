@@ -24,3 +24,7 @@ Homepage = "https://arthexis.com"
 
 [tool.setuptools]
 packages = [ "core", "config", "nodes", "ocpp", "pages",]
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]

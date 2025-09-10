@@ -42,9 +42,7 @@ def safe_setup():
         # million iterations which is unnecessarily slow for unit tests and
         # would make the migration phase (which creates a default superuser)
         # take several seconds.
-        settings.PASSWORD_HASHERS = [
-            "django.contrib.auth.hashers.MD5PasswordHasher"
-        ]
+        settings.PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
         settings.AUTH_PASSWORD_VALIDATORS = []
 
         # Apply migrations to create the database schema

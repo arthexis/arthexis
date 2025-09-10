@@ -49,7 +49,9 @@ class EnvRefreshFixtureTests(TestCase):
             )
         )
         rel_path = str(fixture_path.relative_to(base_dir))
-        spec = importlib.util.spec_from_file_location("env_refresh", base_dir / "env-refresh.py")
+        spec = importlib.util.spec_from_file_location(
+            "env_refresh", base_dir / "env-refresh.py"
+        )
         env_refresh = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(env_refresh)
         env_refresh._fixture_files = lambda: [rel_path]
@@ -70,7 +72,9 @@ class EnvRefreshFixtureTests(TestCase):
 class EnvRefreshNodeTests(TestCase):
     def setUp(self):
         base_dir = Path(settings.BASE_DIR)
-        spec = importlib.util.spec_from_file_location("env_refresh", base_dir / "env-refresh.py")
+        spec = importlib.util.spec_from_file_location(
+            "env_refresh", base_dir / "env-refresh.py"
+        )
         self.env_refresh = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.env_refresh)
         self.env_refresh.call_command = lambda *args, **kwargs: None
@@ -100,7 +104,9 @@ class EnvRefreshNodeTests(TestCase):
             node = Node.get_local()
             self.assertIsNotNone(node)
             self.assertTrue(
-                Site.objects.filter(domain=node.public_endpoint, name="Control").exists()
+                Site.objects.filter(
+                    domain=node.public_endpoint, name="Control"
+                ).exists()
             )
         finally:
             control_lock.unlink(missing_ok=True)

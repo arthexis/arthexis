@@ -34,15 +34,17 @@ class AcronymCapitalizationTests(TestCase):
             config = apps.get_app_config(app_label)
             for model in config.get_models():
                 for acronym in getattr(settings, "ACRONYMS", []):
-                    pattern = re.compile(rf"{re.escape(acronym)}s?", flags=re.IGNORECASE)
+                    pattern = re.compile(
+                        rf"{re.escape(acronym)}s?", flags=re.IGNORECASE
+                    )
                     for match in pattern.finditer(model.__name__):
                         # Skip matches that are part of a larger lowercase word
                         if (
-                            (match.start() > 0 and model.__name__[match.start() - 1].islower())
-                            or (
-                                match.end() < len(model.__name__)
-                                and model.__name__[match.end()].islower()
-                            )
+                            match.start() > 0
+                            and model.__name__[match.start() - 1].islower()
+                        ) or (
+                            match.end() < len(model.__name__)
+                            and model.__name__[match.end()].islower()
                         ):
                             continue
                         expected = acronym + (
@@ -57,13 +59,23 @@ class AcronymCapitalizationTests(TestCase):
                 if doc and not doc.startswith(f"{model.__name__}("):
                     self._check_text(doc, f"{model.__name__} docstring")
                 for attr in ("verbose_name", "verbose_name_plural"):
-                    self._check_text(str(getattr(model._meta, attr)), f"{model.__name__} {attr}")
+                    self._check_text(
+                        str(getattr(model._meta, attr)), f"{model.__name__} {attr}"
+                    )
                 for field in model._meta.get_fields():
                     if hasattr(field, "verbose_name"):
-                        self._check_text(str(field.verbose_name), f"{model.__name__}.{field.name} verbose_name")
+                        self._check_text(
+                            str(field.verbose_name),
+                            f"{model.__name__}.{field.name} verbose_name",
+                        )
                     help_text = getattr(field, "help_text", "")
                     if help_text:
-                        self._check_text(str(help_text), f"{model.__name__}.{field.name} help_text")
+                        self._check_text(
+                            str(help_text), f"{model.__name__}.{field.name} help_text"
+                        )
                     description = getattr(field, "description", "")
                     if description:
-                        self._check_text(str(description), f"{model.__name__}.{field.name} description")
+                        self._check_text(
+                            str(description),
+                            f"{model.__name__}.{field.name} description",
+                        )

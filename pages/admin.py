@@ -65,9 +65,7 @@ class SiteAdmin(DjangoSiteAdmin):
                 self.message_user(request, f"{site.domain}: {exc}", messages.ERROR)
                 continue
             if screenshot:
-                link = reverse(
-                    "admin:nodes_contentsample_change", args=[screenshot.pk]
-                )
+                link = reverse("admin:nodes_contentsample_change", args=[screenshot.pk])
                 self.message_user(
                     request,
                     format_html(
@@ -191,7 +189,9 @@ def favorite_toggle(request, ct_id):
 
 
 def favorite_list(request):
-    favorites = Favorite.objects.filter(user=request.user).select_related("content_type")
+    favorites = Favorite.objects.filter(user=request.user).select_related(
+        "content_type"
+    )
     if request.method == "POST":
         selected = request.POST.getlist("user_data")
         for fav in favorites:
@@ -215,8 +215,14 @@ def favorite_clear(request):
 def get_admin_urls(urls):
     def get_urls():
         my_urls = [
-            path("favorites/<int:ct_id>/", admin.site.admin_view(favorite_toggle), name="favorite_toggle"),
-            path("favorites/", admin.site.admin_view(favorite_list), name="favorite_list"),
+            path(
+                "favorites/<int:ct_id>/",
+                admin.site.admin_view(favorite_toggle),
+                name="favorite_toggle",
+            ),
+            path(
+                "favorites/", admin.site.admin_view(favorite_list), name="favorite_list"
+            ),
             path(
                 "favorites/delete/<int:pk>/",
                 admin.site.admin_view(favorite_delete),

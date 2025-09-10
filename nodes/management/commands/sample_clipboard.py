@@ -18,7 +18,9 @@ class Command(BaseCommand):
         if not content:
             self.stdout.write("Clipboard is empty")
             return
-        if ContentSample.objects.filter(content=content, kind=ContentSample.TEXT).exists():
+        if ContentSample.objects.filter(
+            content=content, kind=ContentSample.TEXT
+        ).exists():
             self.stdout.write("Duplicate sample not created")
             return
         node = Node.get_local()
