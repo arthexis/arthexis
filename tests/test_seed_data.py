@@ -93,6 +93,22 @@ class SeedDataAdminTests(TestCase):
         response = self.client.get(url)
         self.assertNotContains(response, 'name="_seed_datum"')
         self.assertNotContains(response, 'name="_user_datum"')
+        from django.contrib import admin
+        from core.admin import WorkgroupSecurityGroup
+        from core.user_data import UserDatumAdminMixin
+
+        self.assertNotIsInstance(
+            admin.site._registry[WorkgroupSecurityGroup], UserDatumAdminMixin
+        )
+
+    def test_entity_admins_auto_patched(self):
+        from django.contrib import admin
+        from core.entity import Entity
+        from core.user_data import UserDatumAdminMixin
+
+        for model, model_admin in admin.site._registry.items():
+            if issubclass(model, Entity):
+                self.assertIsInstance(model_admin, UserDatumAdminMixin)
 
     def test_entity_admins_auto_patched(self):
         from django.contrib import admin

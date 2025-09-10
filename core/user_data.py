@@ -201,7 +201,7 @@ class UserDatumAdminMixin(admin.ModelAdmin):
 
 
 def patch_admin_user_datum() -> None:
-    """Mixin all registered admin classes and future registrations."""
+    """Mixin all registered entity admin classes and future registrations."""
 
     if getattr(admin.site, "_user_datum_patched", False):
         return
@@ -218,7 +218,11 @@ def patch_admin_user_datum() -> None:
         )
 
     for model, model_admin in list(admin.site._registry.items()):
-        if model is UserDatum or isinstance(model_admin, UserDatumAdminMixin):
+        if (
+            model is UserDatum
+            or isinstance(model_admin, UserDatumAdminMixin)
+            or not issubclass(model, Entity)
+        ):
             continue
         admin.site.unregister(model)
         admin.site.register(model, _patched(model_admin.__class__))
