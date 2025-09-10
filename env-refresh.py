@@ -62,7 +62,13 @@ def _unlink_sqlite_db(path: Path) -> None:
         backup_dir = base_dir / "backups"
         backup_dir.mkdir(exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        shutil.copy2(path, backup_dir / f"{path.name}.{timestamp}.bak")
+        version_file = base_dir / "VERSION"
+        version = version_file.read_text().strip() if version_file.exists() else "unknown"
+        revision = revision_utils.get_revision() or "unknown"
+        shutil.copy2(
+            path,
+            backup_dir / f"{path.name}.{version}.{revision}.{timestamp}.bak",
+        )
     for _ in range(5):
         try:
             path.unlink(missing_ok=True)
