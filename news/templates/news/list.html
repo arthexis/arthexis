@@ -1,0 +1,49 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-9">
+    {% for article in object_list %}
+      <article id="{{ article.slug }}" class="mb-4">
+        <h2>{{ article.name }}</h2>
+        <p class="text-muted">{{ article.published }}</p>
+        <div>{{ article.content }}</div>
+      </article>
+    {% empty %}
+      <p>{% trans "No news articles available." %}</p>
+    {% endfor %}
+    {% if is_paginated %}
+      <nav aria-label="Pagination">
+        <ul class="pagination">
+          {% if page_obj.has_previous %}
+          <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.month %}&month={{ request.GET.month }}&year={{ request.GET.year }}{% endif %}">&laquo;</a>
+          </li>
+          {% endif %}
+          <li class="page-item active"><span class="page-link">{{ page_obj.number }}</span></li>
+          {% if page_obj.has_next %}
+          <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.month %}&month={{ request.GET.month }}&year={{ request.GET.year }}{% endif %}">&raquo;</a>
+          </li>
+          {% endif %}
+        </ul>
+      </nav>
+    {% endif %}
+  </div>
+  <div class="col-md-3">
+    <h4>{% trans "Months" %}</h4>
+    <ul class="list-unstyled">
+      {% for month in months %}
+      <li><a href="?year={{ month|date:'Y' }}&month={{ month|date:'m' }}">{{ month|date:"F Y" }}</a></li>
+      {% endfor %}
+    </ul>
+    <h4 class="mt-4">{% trans "All News" %}</h4>
+    <ul class="list-unstyled">
+      {% for item in all_articles %}
+      <li><a href="#{{ item.slug }}">{{ item.name }}</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endblock %}

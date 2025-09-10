@@ -1,0 +1,32 @@
+[
+  {
+    "model": "core.newsarticle",
+    "pk": 1,
+    "fields": {
+      "name": "0.1.7 Latest release",
+      "slug": "0-1-7-latest-release",
+      "content": "Highlights of version 0.1.7 with user friendly details.",
+      "published": "2025-03-05"
+    }
+  },
+  {
+    "model": "core.newsarticle",
+    "pk": 2,
+    "fields": {
+      "name": "0.1.4 Mid release",
+      "slug": "0-1-4-mid-release",
+      "content": "Overview of improvements in version 0.1.4 for all users.",
+      "published": "2024-07-10"
+    }
+  },
+  {
+    "model": "core.newsarticle",
+    "pk": 3,
+    "fields": {
+      "name": "0.1.1 First release",
+      "slug": "0-1-1-first-release",
+      "content": "Introduction to the initial 0.1.1 release and its features.",
+      "published": "2024-01-15"
+    }
+  }
+]

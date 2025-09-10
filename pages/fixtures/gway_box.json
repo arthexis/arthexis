@@ -15,6 +15,10 @@
     "fields": {"name": "awg", "description": "Cable sizing tools using AWG standards."}
   },
   {
+    "model": "pages.application",
+    "fields": {"name": "news", "description": "System news and updates."}
+  },
+  {
     "model": "pages.module",
     "fields": {
       "node_role": ["Gateway"],
@@ -46,6 +50,23 @@
       "application": ["awg"],
       "path": "/awg/",
       "is_default": false
+    }
+  },
+  {
+    "model": "pages.module",
+    "fields": {
+      "node_role": ["Gateway"],
+      "application": ["news"],
+      "path": "/news/",
+      "is_default": false
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "module": ["Gateway", "/news/"],
+      "path": "/news/",
+      "label": "News"
     }
   }
 ]
