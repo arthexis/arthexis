@@ -7,6 +7,8 @@ from django.test import TestCase
 from django.contrib.contenttypes.models import ContentType
 
 from core.models import SigilRoot, OdooProfile, EmailInbox, InviteLead
+from nodes.models import NodeRole
+from core.token_builder import _resolve_token
 from core.sigil_context import set_context, clear_context
 
 
@@ -216,3 +218,17 @@ class SigilResolutionTests(TestCase):
         rendered = tmpl.render(Context({"inbox": inbox}))
         names = set(OdooProfile.objects.values_list("username", flat=True))
         self.assertIn(rendered, {f"user={n}" for n in names})
+
+    def test_node_role_name_sigil(self):
+        ct = ContentType.objects.get_for_model(NodeRole)
+        root = SigilRoot.objects.filter(prefix="NR").first()
+        if not root:
+            root = SigilRoot.objects.create(
+                prefix="NR", context_type=SigilRoot.Context.ENTITY, content_type=ct
+            )
+        term = NodeRole.objects.create(name="Terminal", description="term role")
+        other = NodeRole.objects.create(
+            name="Other", description="[NR=Terminal.DESCRIPTION]"
+        )
+        self.assertEqual(other.resolve_sigils("description"), term.description)
+        self.assertEqual(_resolve_token("[NR=Terminal.DESCRIPTION]"), term.description)
