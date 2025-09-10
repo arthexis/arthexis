@@ -21,7 +21,7 @@ if %STASHED%==1 (
 )
 
 if not exist .venv\Scripts\python.exe (
-    echo Virtual environment not found. Run install.sh first.
+    echo Virtual environment not found. Run install.sh or install.bat first.
     exit /b 1
 )
 

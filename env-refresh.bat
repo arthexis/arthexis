@@ -23,7 +23,7 @@ if "%1"=="--clean" (
 goto after_parse
 :after_parse
 if not exist "%VENV%\Scripts\python.exe" (
-    echo Virtual environment not found. Run install.sh first.
+    echo Virtual environment not found. Run install.sh or install.bat first.
     exit /b 1
 )
 
