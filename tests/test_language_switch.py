@@ -32,3 +32,21 @@ class LanguageSwitchTests(TestCase):
         self.assertEqual(
             self.client.cookies.get(settings.LANGUAGE_COOKIE_NAME).value, "es"
         )
+
+    def test_french_readme_rendered(self):
+        """Switch to French and ensure the localized README is shown."""
+        # Visit the home page to ensure site is set up
+        self.client.get(reverse("pages:index"))
+        # Change language to French
+        self.client.post(reverse("set_language"), {"language": "fr", "next": "/"})
+        resp = self.client.get(reverse("pages:index"))
+        self.assertContains(resp, "Constellation Arthexis")
+
+    def test_russian_readme_rendered(self):
+        """Switch to Russian and ensure the localized README is shown."""
+        # Visit the home page to ensure site is set up
+        self.client.get(reverse("pages:index"))
+        # Change language to Russian
+        self.client.post(reverse("set_language"), {"language": "ru", "next": "/"})
+        resp = self.client.get(reverse("pages:index"))
+        self.assertContains(resp, "Созвездие Arthexis")
