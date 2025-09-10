@@ -47,6 +47,11 @@ class SeedDataAdminTests(TestCase):
         User = get_user_model()
         User.all_objects.filter(username="admin").delete()
 
+    def test_admin_index_seed_data_button(self):
+        response = self.client.get(reverse("admin:index"))
+        self.assertContains(response, "Seed Data")
+        self.assertNotContains(response, "Seed Datum")
+
     def test_checkbox_displayed_on_change_form(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
         response = self.client.get(url)
