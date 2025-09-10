@@ -67,6 +67,10 @@ fi
 
 REQ_FILE="$SCRIPT_DIR/requirements.txt"
 if [ -f "$REQ_FILE" ]; then
+  # ensure pip is available in the virtual environment
+  if ! "$PYTHON" -m pip --version >/dev/null 2>&1; then
+    "$PYTHON" -m ensurepip --upgrade
+  fi
   MD5_FILE="$SCRIPT_DIR/requirements.md5"
   NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
   STORED_HASH=""
