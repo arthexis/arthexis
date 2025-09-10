@@ -32,6 +32,19 @@ def test_install_script_includes_particle_flag():
     assert "--particle" in content
 
 
+def test_install_script_includes_datasette_flag():
+    script_path = Path(__file__).resolve().parent.parent / "install.sh"
+    content = script_path.read_text()
+    assert "--datasette" in content
+
+
+def test_install_script_sets_up_datasette_service():
+    script_path = Path(__file__).resolve().parent.parent / "install.sh"
+    content = script_path.read_text()
+    assert "datasette-$SERVICE" in content
+    assert "datasette serve" in content
+
+
 def test_install_script_runs_env_refresh():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()
