@@ -27,20 +27,20 @@ if not exist "%VENV%\Scripts\python.exe" (
     exit /b 1
 )
 
+set "DB_FILE=%SCRIPT_DIR%db.sqlite3"
+
 if %CLEAN%==1 (
-    set "DB_FILE=%SCRIPT_DIR%db.sqlite3"
     for %%I in ("%DB_FILE%") do (
-        set "CHECK=%%~dpI"
         if /I not "%%~nxI"=="db.sqlite3" (
-            echo Unexpected database file: %DB_FILE%
+            echo Unexpected database file: %%~fI
             popd >nul
             exit /b 1
         )
-    )
-    if /I not "%CHECK%"=="%SCRIPT_DIR%" (
-        echo Database path outside repository: %DB_FILE%
-        popd >nul
-        exit /b 1
+        if /I not "%%~dpI"=="%SCRIPT_DIR%" (
+            echo Database path outside repository: %%~fI
+            popd >nul
+            exit /b 1
+        )
     )
     if exist "%DB_FILE%" (
         set "BACKUP_DIR=%SCRIPT_DIR%backups"
