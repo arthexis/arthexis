@@ -256,6 +256,31 @@ class AdminSidebarTests(TestCase):
         self.assertContains(resp, 'id="admin-collapsible-apps"')
 
 
+class AdminModelStatusTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="status_admin", password="pwd", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "test", "domain": "testserver"}
+        )
+        from nodes.models import Node
+
+        Node.objects.create(hostname="testserver", address="127.0.0.1")
+
+    @patch("pages.templatetags.admin_extras.connection.introspection.table_names")
+    def test_status_dots_render(self, mock_tables):
+        from django.db import connection
+
+        tables = type(connection.introspection).table_names(connection.introspection)
+        mock_tables.return_value = [t for t in tables if t != "pages_module"]
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, 'class="model-status ok"')
+        self.assertContains(resp, 'class="model-status missing"', count=1)
+
 class SiteAdminRegisterCurrentTests(TestCase):
     def setUp(self):
         self.client = Client()
