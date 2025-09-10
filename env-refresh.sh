@@ -39,6 +39,19 @@ if [ ! -f "$PYTHON" ]; then
 fi
 
 
+# Ensure pip is available; attempt to install if missing
+if ! "$PYTHON" -m pip --version >/dev/null 2>&1; then
+  echo "pip not found in virtual environment. Attempting to install with ensurepip..." >&2
+  if "$PYTHON" -m ensurepip --upgrade >/dev/null 2>&1 && \
+     "$PYTHON" -m pip --version >/dev/null 2>&1; then
+    :
+  else
+    echo "Failed to install pip automatically. On Debian/Ubuntu/WSL, ensure python3-venv is installed and rerun ./install.sh." >&2
+    exit 1
+  fi
+fi
+
+
 if [ "$CLEAN" -eq 1 ]; then
   DB_FILE="$SCRIPT_DIR/db.sqlite3"
   if [ "$(basename "$DB_FILE")" != "db.sqlite3" ]; then
