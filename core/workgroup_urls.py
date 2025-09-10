@@ -9,4 +9,5 @@ app_name = "workgroup"
 urlpatterns = [
     path("chat-profiles/<int:user_id>/", views.issue_key, name="chatprofile-issue"),
     path("assistant/test/", views.assistant_test, name="assistant-test"),
+    path("chat/", views.chat, name="chat"),
 ]
