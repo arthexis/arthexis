@@ -15,4 +15,5 @@ urlpatterns = [
         views.invitation_login,
         name="invitation-login",
     ),
+    path("datasette-auth/", views.datasette_auth, name="datasette-auth"),
 ]
