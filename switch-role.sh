@@ -17,9 +17,10 @@ REQUIRES_REDIS=false
 UPDATE=false
 CLEAN=false
 LATEST=false
+ENABLE_DATASETTE=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--satellite|--terminal|--control|--constellation|--virtual|--particle]" >&2
+    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette] [--satellite|--terminal|--control|--constellation|--virtual|--particle]" >&2
     exit 1
 }
 
@@ -62,6 +63,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --latest)
             LATEST=true
+            shift
+            ;;
+        --datasette)
+            ENABLE_DATASETTE=true
             shift
             ;;
         --satellite)
@@ -153,6 +158,9 @@ if [ -n "$SERVICE" ] && systemctl list-unit-files | grep -Fq "${SERVICE}.service
         if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
             sudo systemctl stop "lcd-$SERVICE" || true
         fi
+        if [ -f "$LOCK_DIR/datasette.lck" ]; then
+            sudo systemctl stop "datasette-$SERVICE" || true
+        fi
     fi
 fi
 
@@ -167,6 +175,22 @@ if [ "$ENABLE_LCD_SCREEN" = true ]; then
 fi
 if [ "$ENABLE_CONTROL" = true ]; then
     touch "$LOCK_DIR/control.lck"
+fi
+if [ "$ENABLE_DATASETTE" = true ]; then
+    touch "$LOCK_DIR/datasette.lck"
+else
+    if [ -n "$SERVICE" ]; then
+        DATASETTE_SERVICE="datasette-$SERVICE"
+        if systemctl list-unit-files | grep -Fq "${DATASETTE_SERVICE}.service"; then
+            sudo systemctl stop "$DATASETTE_SERVICE" || true
+            sudo systemctl disable "$DATASETTE_SERVICE" || true
+            DATASETTE_SERVICE_FILE="/etc/systemd/system/${DATASETTE_SERVICE}.service"
+            if [ -f "$DATASETTE_SERVICE_FILE" ]; then
+                sudo rm "$DATASETTE_SERVICE_FILE"
+            fi
+            sudo systemctl daemon-reload
+        fi
+    fi
 fi
 
 echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
@@ -191,6 +215,9 @@ if [ "$SERVICE_ACTIVE" = true ]; then
     fi
     if [ "$ENABLE_LCD_SCREEN" = true ]; then
         sudo systemctl start "lcd-$SERVICE" || true
+    fi
+    if [ "$ENABLE_DATASETTE" = true ]; then
+        sudo systemctl start "datasette-$SERVICE" || true
     fi
 fi
 
