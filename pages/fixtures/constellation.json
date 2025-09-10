@@ -28,6 +28,13 @@
     }
   },
   {
+    "model": "pages.application",
+    "fields": {
+      "name": "news",
+      "description": "System news and updates."
+    }
+  },
+  {
     "model": "pages.module",
     "fields": {
       "node_role": ["Constellation"],
@@ -59,6 +66,23 @@
       "application": ["awg"],
       "path": "/awg/",
       "is_default": false
+    }
+  },
+  {
+    "model": "pages.module",
+    "fields": {
+      "node_role": ["Constellation"],
+      "application": ["news"],
+      "path": "/news/",
+      "is_default": false
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "module": ["Constellation", "/news/"],
+      "path": "/news/",
+      "label": "News"
     }
   }
 ]

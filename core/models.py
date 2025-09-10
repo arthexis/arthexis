@@ -13,6 +13,7 @@ from django.apps import apps
 from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
 from datetime import timedelta
+from django.utils.text import slugify
 from django.contrib.contenttypes.models import ContentType
 import hashlib
 import os
@@ -1464,6 +1465,28 @@ class ChatProfile(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"ChatProfile for {self.user}"
+
+
+class NewsArticle(Entity):
+    """Public-facing news items for system updates."""
+
+    name = models.CharField(max_length=200)
+    slug = models.SlugField(unique=True)
+    content = models.TextField()
+    published = models.DateField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-published"]
+        verbose_name = "News Article"
+        verbose_name_plural = "News Articles"
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
 
 
 class Todo(Entity):

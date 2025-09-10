@@ -136,6 +136,7 @@ LOCAL_APPS = [
     "ocpp",
     "awg",
     "pages",
+    "news",
     "app",
     "man",
 ]
