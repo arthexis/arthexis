@@ -77,20 +77,12 @@
         z-index: 1000;
       }
       .language-select {
-        padding: 0.25rem 0.5rem;
-        height: calc(1.5em + 0.5rem + 2px);
         background-color: transparent;
-        color: var(--bs-light);
-        border: 1px solid var(--bs-light);
-      }
-      .language-select:focus {
-        color: var(--bs-light);
-        background-color: transparent;
-        border-color: var(--bs-light);
-        box-shadow: none;
+        color: inherit;
       }
       .language-select option {
-        color: var(--bs-dark);
+        background-color: var(--bs-body-bg);
+        color: var(--bs-body-color);
       }
     </style>
   </head>
@@ -135,7 +127,21 @@
               {% endif %}
             </ul>
             <div class="toolbar ms-lg-3 d-flex align-items-center" role="toolbar">
-              <a class="btn btn-sm btn-outline-light me-2 position-relative user-info-trigger" href="{% if request.user.is_authenticated %}{% url 'admin:index' %}{% else %}{% url 'pages:login' %}{% endif %}" aria-label="{% if request.user.is_authenticated %}{% trans "Admin" %}{% else %}{% trans "Login" %}{% endif %}">
+              <button id="theme-toggle" class="btn btn-sm btn-outline-light me-2" onclick="toggleTheme()" aria-label="{% trans "Dark Mode" %}">
+                <svg aria-hidden="true" width="1.5rem" height="1.5rem">
+                  <use href="#icon-moon"></use>
+                </svg>
+              </button>
+              <form action="{% url 'set_language' %}" method="post" class="d-inline me-2">
+                {% csrf_token %}
+                <input name="next" type="hidden" value="{{ request.get_full_path }}">
+                <select name="language" class="form-select form-select-sm d-inline w-auto language-select" onchange="this.form.submit()">
+                  {% for lang_code, lang_name in LANGUAGES %}
+                    <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>{{ lang_code|slice:":2"|upper }}</option>
+                  {% endfor %}
+                </select>
+              </form>
+              <a class="btn btn-sm btn-outline-light position-relative user-info-trigger" href="{% if request.user.is_authenticated %}{% url 'admin:index' %}{% else %}{% url 'pages:login' %}{% endif %}" aria-label="{% if request.user.is_authenticated %}{% trans "Admin" %}{% else %}{% trans "Login" %}{% endif %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-person"></use>
                 </svg>
@@ -145,20 +151,6 @@
                 </div>
                 {% endif %}
               </a>
-              <button id="theme-toggle" class="btn btn-sm btn-outline-light" onclick="toggleTheme()" aria-label="{% trans "Dark Mode" %}">
-                <svg aria-hidden="true" width="1.5rem" height="1.5rem">
-                  <use href="#icon-moon"></use>
-                </svg>
-              </button>
-              <form action="{% url 'set_language' %}" method="post" class="d-inline ms-2">
-                {% csrf_token %}
-                <input name="next" type="hidden" value="{{ request.get_full_path }}">
-                <select name="language" class="form-select form-select-sm d-inline w-auto language-select bg-transparent text-light border-light" onchange="this.form.submit()">
-                  {% for lang_code, lang_name in LANGUAGES %}
-                    <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>{{ lang_code|slice:":2"|upper }}</option>
-                  {% endfor %}
-                </select>
-              </form>
               <button id="share-button" class="btn btn-sm btn-outline-light ms-2" type="button" aria-label="{% trans 'Share' %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-share"></use>

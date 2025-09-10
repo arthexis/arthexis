@@ -270,6 +270,19 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
     background-color: var(--object-tools-hover-bg);
 }
 
+/* Language dropdown styling */
+.language-select {
+    background: none;
+    border: none;
+    color: var(--header-link-color);
+    cursor: pointer;
+}
+
+.language-select option {
+    background-color: var(--body-bg);
+    color: var(--body-fg);
+}
+
 /* Align delete button with other submit-row buttons */
 .submit-row a.deletelink {
     margin-left: 0;
@@ -331,7 +344,7 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
   <form action="{% url 'set_language' %}" method="post" style="display: inline;">
     {% csrf_token %}
     <input name="next" type="hidden" value="{{ request.get_full_path }}">
-    <select name="language" onchange="this.form.submit()" style="background: none; border: none; color: var(--header-link-color); cursor: pointer;">
+    <select name="language" class="language-select" onchange="this.form.submit()">
       {% for lang_code, lang_name in LANGUAGES %}
         <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>{{ lang_name }}</option>
       {% endfor %}
