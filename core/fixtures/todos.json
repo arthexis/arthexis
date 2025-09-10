@@ -4,7 +4,8 @@
     "pk": 1,
     "fields": {
       "description": "Review release checklist",
-      "is_seed_data": true
+      "is_seed_data": true,
+      "url": "https://example.com/release-checklist"
     }
   },
   {
@@ -12,7 +13,8 @@
     "pk": 2,
     "fields": {
       "description": "Confirm version numbering",
-      "is_seed_data": true
+      "is_seed_data": true,
+      "url": "https://example.com/version-numbering"
     }
   }
 ]

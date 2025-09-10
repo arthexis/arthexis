@@ -10,7 +10,7 @@ from pages.models import Application, Module, SiteBadge, Favorite
 from core.user_data import UserDatum
 from pages.admin import ApplicationAdmin
 from django.apps import apps as django_apps
-from core.models import AdminHistory, InviteLead
+from core.models import AdminHistory, InviteLead, Todo
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
 import tempfile
@@ -147,9 +147,13 @@ class InvitationTests(TestCase):
         node = Node.objects.create(
             hostname="local", address="127.0.0.1", mac_address="00:11:22:33:44:55"
         )
-        with patch("pages.views.Node.get_local", return_value=node), patch.object(
-            node, "send_mail", side_effect=Exception("node fail")
-        ) as node_send, patch("pages.views.send_mail", return_value=1) as fallback:
+        with (
+            patch("pages.views.Node.get_local", return_value=node),
+            patch.object(
+                node, "send_mail", side_effect=Exception("node fail")
+            ) as node_send,
+            patch("pages.views.send_mail", return_value=1) as fallback,
+        ):
             resp = self.client.post(
                 reverse("pages:request-invite"), {"email": "invite@example.com"}
             )
@@ -738,6 +742,17 @@ class FavoriteTests(TestCase):
         url = reverse("admin:nodes_noderole_changelist")
         self.assertGreaterEqual(resp.content.decode().count(url), 1)
         self.assertContains(resp, NodeRole._meta.verbose_name_plural)
+
+    def test_dashboard_uses_browse_label(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        Favorite.objects.create(user=self.user, content_type=ct)
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, "Browse Applications")
+
+    def test_dashboard_uses_todo_url_if_set(self):
+        Todo.objects.create(description="Check docs", url="/docs/")
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, 'href="/docs/"')
 
 
 class DatasetteTests(TestCase):
