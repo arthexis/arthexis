@@ -2,6 +2,7 @@ from pathlib import Path
 from io import BytesIO
 from zipfile import ZipFile
 
+import os
 from django.test import TestCase, TransactionTestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -221,6 +222,16 @@ class UserDataViewTests(TestCase):
     def test_token_builder_page_loads(self):
         response = self.client.get(reverse("admin:token_builder"))
         self.assertContains(response, "Token Builder")
+
+    def test_token_builder_resolves_token_without_brackets(self):
+        os.environ["FOO"] = "BAR"
+        try:
+            response = self.client.post(
+                reverse("admin:token_builder"), {"token": "ENV.FOO"}
+            )
+        finally:
+            del os.environ["FOO"]
+        self.assertContains(response, "BAR")
 
     def test_user_data_page_has_import_export_links(self):
         response = self.client.get(reverse("admin:user_data"))
