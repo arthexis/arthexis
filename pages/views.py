@@ -19,6 +19,7 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.core.mail import send_mail
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.utils.cache import patch_vary_headers
 from core.models import InviteLead, EnergyReport
 
 import markdown
@@ -72,7 +73,9 @@ def index(request):
         toc_html = toc_html.strip()
     title = "README" if readme_file.name.startswith("README") else readme_file.stem
     context = {"content": html, "title": title, "toc": toc_html}
-    return render(request, "pages/readme.html", context)
+    response = render(request, "pages/readme.html", context)
+    patch_vary_headers(response, ["Accept-Language", "Cookie"])
+    return response
 
 
 def sitemap(request):
