@@ -3,6 +3,17 @@
 # Force Raspberry Pi display output
 # Usage: reset-screen [hdmi|tft|rpi]
 
+usage() {
+  echo "Usage: $0 [hdmi|tft|rpi]"
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
 MODE="${1:-hdmi}"
 CONFIG=/boot/config.txt
 
@@ -96,7 +107,7 @@ case "$MODE" in
     ;;
 
   *)
-    echo "Usage: $0 [hdmi|tft|rpi]"
+    usage >&2
     exit 1
     ;;
 esac

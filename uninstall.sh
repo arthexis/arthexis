@@ -10,19 +10,23 @@ exec > >(tee "$LOG_FILE") 2>&1
 SERVICE=""
 
 usage() {
-    echo "Usage: $0 [--service NAME]" >&2
-    exit 1
+    echo "Usage: $0 [--service NAME]"
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --service)
-            [ -z "$2" ] && usage
+            [ -z "$2" ] && { usage >&2; exit 1; }
             SERVICE="$2"
             shift 2
             ;;
-        *)
+        -h|--help)
             usage
+            exit 0
+            ;;
+        *)
+            usage >&2
+            exit 1
             ;;
     esac
 done

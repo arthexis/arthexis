@@ -2,12 +2,24 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 <archive-path>" >&2
-  exit 1
+  echo "Usage: $0 <archive-path>"
 }
 
+if [[ $# -eq 0 ]]; then
+  usage >&2
+  exit 1
+fi
+
+case "$1" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
 if [[ $# -ne 1 ]]; then
-  usage
+  usage >&2
+  exit 1
 fi
 
 archive="$1"

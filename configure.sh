@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -e
 
+usage() {
+  echo "Usage: $0 [FILE [--set KEY VALUE|--unset KEY]]"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$BASE_DIR/logs"
 mkdir -p "$LOG_DIR"
@@ -22,6 +31,11 @@ fi
 FILE="$1"
 shift
 
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
 if [ $# -eq 0 ]; then
   nano "$FILE"
   exit 0
@@ -29,7 +43,7 @@ fi
 
 case "$1" in
   --set)
-    [ $# -eq 3 ] || { echo "Usage: $0 FILE --set KEY VALUE" >&2; exit 1; }
+    [ $# -eq 3 ] || { usage >&2; exit 1; }
     KEY="$2"
     VAL="$3"
     if grep -q "^${KEY}=" "$FILE"; then
@@ -39,12 +53,16 @@ case "$1" in
     fi
     ;;
   --unset)
-    [ $# -eq 2 ] || { echo "Usage: $0 FILE --unset KEY" >&2; exit 1; }
+    [ $# -eq 2 ] || { usage >&2; exit 1; }
     KEY="$2"
     sed -i "/^${KEY}=.*/d" "$FILE"
     ;;
+  -h|--help)
+    usage
+    exit 0
+    ;;
   *)
-    echo "Usage: $0 [FILE] [--set KEY VALUE|--unset KEY]" >&2
+    usage >&2
     exit 1
     ;;
-fi
+esac

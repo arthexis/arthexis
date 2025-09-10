@@ -2,8 +2,19 @@
 # Release helper that bumps version, captures migration state, and tags the release.
 set -euo pipefail
 
+usage() {
+  echo "Usage: $0 <version>"
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
 if [ $# -ne 1 ]; then
-  echo "Usage: release.sh <version>" >&2
+  usage >&2
   exit 1
 fi
 

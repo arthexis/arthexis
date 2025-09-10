@@ -21,8 +21,7 @@ ENABLE_DATASETTE=false
 CHECK=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette] [--check] [--satellite|--terminal|--control|--constellation|--virtual|--particle]" >&2
-    exit 1
+    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette] [--check] [--satellite|--terminal|--control|--constellation|--virtual|--particle]"
 }
 
 require_nginx() {
@@ -50,7 +49,7 @@ EOF_REDIS
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --service)
-            [ -z "$2" ] && usage
+            [ -z "$2" ] && { usage >&2; exit 1; }
             SERVICE="$2"
             shift 2
             ;;
@@ -73,6 +72,10 @@ while [[ $# -gt 0 ]]; do
         --check)
             CHECK=true
             shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
             ;;
         --satellite)
             require_nginx "satellite"
@@ -121,7 +124,8 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         *)
-            usage
+            usage >&2
+            exit 1
             ;;
     esac
 
@@ -138,7 +142,8 @@ if [ "$CHECK" = true ]; then
 fi
 
 if [ -z "$NODE_ROLE" ]; then
-    usage
+    usage >&2
+    exit 1
 fi
 
 BASE_DIR="$SCRIPT_DIR"

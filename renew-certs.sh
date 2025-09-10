@@ -1,6 +1,28 @@
 #!/usr/bin/env bash
 set -e
 
+usage() {
+  echo "Usage: $0 [--check]"
+}
+
+CHECK_MODE=false
+case "${1:-}" in
+  --check)
+    CHECK_MODE=true
+    shift
+    ;;
+  -h|--help)
+    usage
+    exit 0
+    ;;
+  "")
+    ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$SCRIPT_DIR/logs"
 mkdir -p "$LOG_DIR"
@@ -11,11 +33,6 @@ exec > >(tee "$LOG_FILE") 2>&1
 DOMAIN="arthexis.com"
 LIVE_DIR="/etc/letsencrypt/live"
 CERT_DIR="$LIVE_DIR/$DOMAIN"
-
-CHECK_MODE=false
-if [[ "$1" == "--check" ]]; then
-    CHECK_MODE=true
-fi
 
 if [ "$CHECK_MODE" = true ]; then
     echo "nginx certificate configuration:"

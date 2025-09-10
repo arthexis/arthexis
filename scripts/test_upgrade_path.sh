@@ -2,6 +2,22 @@
 # Test migrating from the previous release tag to the current code.
 set -euo pipefail
 
+usage() {
+  echo "Usage: $0 [-h|--help]"
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
+if [ $# -ne 0 ]; then
+  usage >&2
+  exit 1
+fi
+
 PREV_TAG=$(git describe --tags --abbrev=0 HEAD^)
 WORKTREE_DIR=$(mktemp -d)
 

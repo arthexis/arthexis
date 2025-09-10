@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -e
 
+usage() {
+  echo "Usage: $0 [--port PORT] [--reload] [--public|--internal] [--celery|--no-celery]"
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$BASE_DIR/logs"
 mkdir -p "$LOG_DIR"
@@ -98,8 +109,12 @@ while [[ $# -gt 0 ]]; do
       PORT=8888
       shift
       ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
     *)
-      echo "Usage: $0 [--port PORT] [--reload] [--public|--internal] [--celery|--no-celery]" >&2
+      usage >&2
       exit 1
       ;;
   esac

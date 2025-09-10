@@ -23,8 +23,7 @@ REQUIRES_REDIS=false
 ENABLE_DATASETTE=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--terminal] [--control] [--constellation] [--virtual] [--particle] [--celery] [--lcd-screen|--no-lcd-screen] [--datasette] [--clean]" >&2
-    exit 1
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--terminal] [--control] [--constellation] [--virtual] [--particle] [--celery] [--lcd-screen|--no-lcd-screen] [--datasette] [--clean]"
 }
 
 require_nginx() {
@@ -58,7 +57,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --service)
-            [ -z "$2" ] && usage
+            [ -z "$2" ] && { usage >&2; exit 1; }
             SERVICE="$2"
             shift 2
             ;;
@@ -71,7 +70,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --port)
-            [ -z "$2" ] && usage
+            [ -z "$2" ] && { usage >&2; exit 1; }
             PORT="$2"
             shift 2
             ;;
@@ -108,6 +107,10 @@ while [[ $# -gt 0 ]]; do
         --clean)
             CLEAN=true
             shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
             ;;
         --satellite)
             require_nginx "satellite"
@@ -175,7 +178,8 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         *)
-            usage
+            usage >&2
+            exit 1
             ;;
     esac
 done

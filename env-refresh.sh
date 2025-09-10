@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -e
 
+usage() {
+  echo "Usage: $0 [--latest] [--clean]"
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -z "$SCRIPT_DIR" ] || [ "$SCRIPT_DIR" = "/" ]; then
   echo "Refusing to run from root directory." >&2
@@ -27,8 +38,13 @@ while [[ $# -gt 0 ]]; do
       CLEAN=1
       shift
       ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
     *)
-      break
+      usage >&2
+      exit 1
       ;;
   esac
 done

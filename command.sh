@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -e
 
+usage() {
+  echo "Usage: $0 <command> [args...]"
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$BASE_DIR/logs"
 mkdir -p "$LOG_DIR"
@@ -16,7 +27,7 @@ fi
 source .venv/bin/activate
 
 if [ $# -eq 0 ]; then
-  echo "Usage: $0 <command> [args...]" >&2
+  usage >&2
   exit 1
 fi
 
