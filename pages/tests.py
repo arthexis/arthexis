@@ -17,7 +17,8 @@ import tempfile
 import shutil
 from django.conf import settings
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock
+from types import SimpleNamespace
 from django.core import mail
 from django.core.management import call_command
 import re
@@ -119,6 +120,7 @@ class InvitationTests(TestCase):
         lead = InviteLead.objects.get()
         self.assertIsNone(lead.sent_on)
         self.assertIn("fail", lead.error)
+        self.assertIn("email service", lead.error)
 
     def test_request_invite_records_send_time(self):
         resp = self.client.post(
@@ -140,6 +142,24 @@ class InvitationTests(TestCase):
         self.assertEqual(lead.comment, "Hello")
         self.assertIsNone(lead.sent_on)
         self.assertEqual(lead.error, "")
+
+    def test_request_invite_falls_back_to_send_mail(self):
+        node = Node.objects.create(
+            hostname="local", address="127.0.0.1", mac_address="00:11:22:33:44:55"
+        )
+        with patch("pages.views.Node.get_local", return_value=node), patch.object(
+            node, "send_mail", side_effect=Exception("node fail")
+        ) as node_send, patch("pages.views.send_mail", return_value=1) as fallback:
+            resp = self.client.post(
+                reverse("pages:request-invite"), {"email": "invite@example.com"}
+            )
+        self.assertEqual(resp.status_code, 200)
+        lead = InviteLead.objects.get()
+        self.assertIsNotNone(lead.sent_on)
+        self.assertIn("node fail", lead.error)
+        self.assertIn("default mail backend", lead.error)
+        self.assertTrue(node_send.called)
+        self.assertTrue(fallback.called)
 
 
 class NavbarBrandTests(TestCase):
