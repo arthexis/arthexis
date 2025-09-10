@@ -118,12 +118,16 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name="releasemanager",
             name="pypi_username",
-            field=core.fields.SigilShortAutoField("PyPI username", blank=True, max_length=100),
+            field=core.fields.SigilShortAutoField(
+                "PyPI username", blank=True, max_length=100
+            ),
         ),
         migrations.AlterField(
             model_name="releasemanager",
             name="pypi_token",
-            field=core.fields.SigilShortAutoField("PyPI token", blank=True, max_length=200),
+            field=core.fields.SigilShortAutoField(
+                "PyPI token", blank=True, max_length=200
+            ),
         ),
         migrations.AlterField(
             model_name="releasemanager",
@@ -137,17 +141,23 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name="releasemanager",
             name="pypi_password",
-            field=core.fields.SigilShortAutoField("PyPI password", blank=True, max_length=200),
+            field=core.fields.SigilShortAutoField(
+                "PyPI password", blank=True, max_length=200
+            ),
         ),
         migrations.AlterField(
             model_name="releasemanager",
             name="pypi_url",
-            field=core.fields.SigilShortAutoField("PyPI URL", blank=True, max_length=200),
+            field=core.fields.SigilShortAutoField(
+                "PyPI URL", blank=True, max_length=200
+            ),
         ),
         migrations.AlterField(
             model_name="emailinbox",
             name="username",
-            field=core.fields.SigilShortAutoField(help_text="Login name for the mailbox", max_length=255),
+            field=core.fields.SigilShortAutoField(
+                help_text="Login name for the mailbox", max_length=255
+            ),
         ),
         migrations.AlterField(
             model_name="emailinbox",

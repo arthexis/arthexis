@@ -2,6 +2,7 @@ import os
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
+
 django.setup()
 
 from django.test import Client, TestCase, RequestFactory
@@ -279,7 +280,9 @@ class EnergyAccountTests(TestCase):
 
     def test_service_account_ignores_balance(self):
         user = User.objects.create_user(username="service", password="x")
-        acc = EnergyAccount.objects.create(user=user, service_account=True, name="SERVICE")
+        acc = EnergyAccount.objects.create(
+            user=user, service_account=True, name="SERVICE"
+        )
         self.assertTrue(acc.can_authorize())
 
     def test_account_without_user(self):
@@ -524,9 +527,7 @@ class ReleaseProcessTests(TestCase):
     @mock.patch("core.views.subprocess.run")
     @mock.patch("core.views.PackageRelease.dump_fixture")
     @mock.patch("core.views.release_utils.promote", side_effect=Exception("boom"))
-    def test_promote_cleans_repo_on_failure(
-        self, promote, dump_fixture, run
-    ):
+    def test_promote_cleans_repo_on_failure(self, promote, dump_fixture, run):
         with self.assertRaises(Exception):
             _step_promote_build(self.release, {}, Path("rel.log"))
         dump_fixture.assert_not_called()
@@ -688,12 +689,8 @@ class PackageReleaseAdminActionTests(TestCase):
         mock_get.return_value.json.return_value = {
             "releases": {"1.0.0": [], "1.1.0": []}
         }
-        self.admin.refresh_from_pypi(
-            self.request, PackageRelease.objects.none()
-        )
-        self.assertTrue(
-            PackageRelease.objects.filter(version="1.1.0").exists()
-        )
+        self.admin.refresh_from_pypi(self.request, PackageRelease.objects.none())
+        self.assertTrue(PackageRelease.objects.filter(version="1.1.0").exists())
         dump.assert_called_once()
 
 
@@ -771,4 +768,3 @@ class PackageReleaseChangelistTests(TestCase):
             "admin:core_packagerelease_actions", args=["refresh_from_pypi"]
         )
         self.assertContains(response, refresh_url, html=False)
-

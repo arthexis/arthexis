@@ -850,7 +850,9 @@ def _simulator_status_json(cp: Optional[int] = None) -> str:
 
     if cp is not None:
         return json.dumps(_export_state(_simulators[cp]), indent=2)
-    return json.dumps({str(idx): _export_state(st) for idx, st in _simulators.items()}, indent=2)
+    return json.dumps(
+        {str(idx): _export_state(st) for idx, st in _simulators.items()}, indent=2
+    )
 
 
 def get_simulator_state(cp: Optional[int] = None, refresh_file: bool = False):
@@ -908,4 +910,3 @@ __all__ = [
     "view_cp_simulator",
     "view_simulator",
 ]
-

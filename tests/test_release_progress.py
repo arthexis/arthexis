@@ -41,9 +41,7 @@ class ReleaseProgressViewTests(TestCase):
         shutil.rmtree(self.log_dir, ignore_errors=True)
 
     def test_stale_log_removed_on_start(self):
-        log_path = self.log_dir / (
-            f"{self.package.name}-{self.release.version}.log"
-        )
+        log_path = self.log_dir / (f"{self.package.name}-{self.release.version}.log")
         log_path.write_text("old data")
 
         url = reverse("release-progress", args=[self.release.pk, "publish"])
@@ -72,9 +70,7 @@ class ReleaseProgressViewTests(TestCase):
             response = self.client.get(f"{url}?step=0")
 
         self.assertContains(response, "core/fixtures/releases.json")
-        run.assert_any_call(
-            ["git", "add", "core/fixtures/releases.json"], check=True
-        )
+        run.assert_any_call(["git", "add", "core/fixtures/releases.json"], check=True)
         run.assert_any_call(
             ["git", "commit", "-m", "chore: update fixtures"], check=True
         )

@@ -39,9 +39,7 @@ class LocationAdminForm(forms.ModelForm):
         }
 
     class Media:
-        css = {
-            "all": ("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",)
-        }
+        css = {"all": ("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",)}
         js = (
             "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
             "ocpp/charger_map.js",
@@ -137,7 +135,7 @@ class ChargerAdmin(admin.ModelAdmin):
         return format_html('<a href="{}" target="_blank">view</a>', url)
 
     log_link.short_description = "Log"
-    
+
     def status_link(self, obj):
         from django.utils.html import format_html
         from django.urls import reverse
@@ -217,9 +215,7 @@ class SimulatorAdmin(admin.ModelAdmin):
             started, status, log_file = sim.start()
             if started:
                 store.simulators[obj.pk] = sim
-            self.message_user(
-                request, f"{obj.name}: {status}. Log: {log_file}"
-            )
+            self.message_user(request, f"{obj.name}: {status}. Log: {log_file}")
 
     start_simulator.short_description = "Start selected simulators"
 
@@ -301,17 +297,15 @@ class TransactionAdmin(admin.ModelAdmin):
                     json.dumps(data, indent=2, ensure_ascii=False),
                     content_type="application/json",
                 )
-                response[
-                    "Content-Disposition"
-                ] = "attachment; filename=transactions.json"
+                response["Content-Disposition"] = (
+                    "attachment; filename=transactions.json"
+                )
                 return response
         else:
             form = TransactionExportForm()
         context = self.admin_site.each_context(request)
         context["form"] = form
-        return TemplateResponse(
-            request, "admin/ocpp/transaction/export.html", context
-        )
+        return TemplateResponse(request, "admin/ocpp/transaction/export.html", context)
 
     def import_view(self, request):
         if request.method == "POST":
@@ -325,9 +319,7 @@ class TransactionAdmin(admin.ModelAdmin):
             form = TransactionImportForm()
         context = self.admin_site.each_context(request)
         context["form"] = form
-        return TemplateResponse(
-            request, "admin/ocpp/transaction/import.html", context
-        )
+        return TemplateResponse(request, "admin/ocpp/transaction/import.html", context)
 
 
 class MeterReadingDateFilter(admin.SimpleListFilter):
@@ -389,4 +381,3 @@ class ElectricVehicleAdmin(admin.ModelAdmin):
 
 
 admin.site.register(RFID, RFIDAdmin)
-

@@ -34,6 +34,7 @@ def read_rfid(
     try:
         if mfrc is None:
             from mfrc522 import MFRC522  # type: ignore
+
             mfrc = MFRC522()
     except Exception as exc:  # pragma: no cover - hardware dependent
         return {"error": str(exc)}
@@ -101,7 +102,7 @@ def read_rfid(
                 time.sleep(poll_interval)
         return {"rfid": None, "label_id": None}
     except Exception as exc:  # pragma: no cover - hardware dependent
-        if 'rfid' in locals():
+        if "rfid" in locals():
             notify_async(f"RFID {rfid}", "Read failed")
         return {"error": str(exc)}
     finally:  # pragma: no cover - cleanup hardware

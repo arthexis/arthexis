@@ -6,6 +6,7 @@ characters the text scrolls horizontally. A third line in the lock file
 can define the scroll speed in milliseconds per character (default 1000
 ms).
 """
+
 from __future__ import annotations
 
 import logging

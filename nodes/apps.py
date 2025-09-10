@@ -56,7 +56,9 @@ def _startup_notification() -> None:
 def _trigger_startup_notification(**_: object) -> None:
     """Send the startup notification once a request has started."""
 
-    request_started.disconnect(_trigger_startup_notification, dispatch_uid="nodes-startup")
+    request_started.disconnect(
+        _trigger_startup_notification, dispatch_uid="nodes-startup"
+    )
     try:
         connections["default"].ensure_connection()
     except OperationalError:

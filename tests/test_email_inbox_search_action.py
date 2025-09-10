@@ -80,7 +80,11 @@ class EmailInboxSearchTests(TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["subject"], "Hello there")
 
-    @patch.object(EmailInbox, "search_messages", return_value=[{"subject": "S", "from": "F", "body": "B"}])
+    @patch.object(
+        EmailInbox,
+        "search_messages",
+        return_value=[{"subject": "S", "from": "F", "body": "B"}],
+    )
     def test_admin_action(self, mock_search):
         admin = User.objects.create(username="admin", is_staff=True, is_superuser=True)
         inbox = EmailInbox.objects.create(
@@ -97,9 +101,7 @@ class EmailInboxSearchTests(TestCase):
         factory = RequestFactory()
         request = factory.post("/", {"apply": "yes", "subject": "S"})
         request.user = admin
-        response = ma.search_inbox(
-            request, AdminEmailInbox.objects.filter(id=inbox.id)
-        )
+        response = ma.search_inbox(request, AdminEmailInbox.objects.filter(id=inbox.id))
         self.assertEqual(response.status_code, 200)
         content = response.render().content.decode()
         self.assertIn("S", content)

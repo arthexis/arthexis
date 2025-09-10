@@ -22,9 +22,7 @@ def sample_clipboard() -> None:
     if not content:
         logger.info("Clipboard is empty")
         return
-    if ContentSample.objects.filter(
-        content=content, kind=ContentSample.TEXT
-    ).exists():
+    if ContentSample.objects.filter(content=content, kind=ContentSample.TEXT).exists():
         logger.info("Duplicate clipboard content; sample not created")
         return
     node = Node.get_local()
@@ -46,5 +44,3 @@ def capture_node_screenshot(
     node = Node.get_local()
     save_screenshot(path, node=node, method=method)
     return str(path)
-
-

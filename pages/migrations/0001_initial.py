@@ -85,7 +85,10 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("is_default", models.BooleanField(default=False)),
-                ("favicon", models.ImageField(blank=True, upload_to="modules/favicons/")),
+                (
+                    "favicon",
+                    models.ImageField(blank=True, upload_to="modules/favicons/"),
+                ),
                 (
                     "application",
                     models.ForeignKey(

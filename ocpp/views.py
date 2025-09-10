@@ -34,7 +34,6 @@ def _charger_state(charger: Charger, tx_obj: Transaction | None):
     return "Offline", "grey"
 
 
-
 @api_login_required
 def charger_list(request):
     """Return a JSON list of known chargers and state."""
@@ -67,7 +66,11 @@ def charger_list(request):
                 "name": charger.name,
                 "require_rfid": charger.require_rfid,
                 "transaction": tx_data,
-                "lastHeartbeat": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None,
+                "lastHeartbeat": (
+                    charger.last_heartbeat.isoformat()
+                    if charger.last_heartbeat
+                    else None
+                ),
                 "lastMeterValues": charger.last_meter_values,
                 "connected": cid in store.connections,
             }
@@ -110,7 +113,9 @@ def charger_detail(request, cid):
             "name": charger.name,
             "require_rfid": charger.require_rfid,
             "transaction": tx_data,
-            "lastHeartbeat": charger.last_heartbeat.isoformat() if charger.last_heartbeat else None,
+            "lastHeartbeat": (
+                charger.last_heartbeat.isoformat() if charger.last_heartbeat else None
+            ),
             "lastMeterValues": charger.last_meter_values,
             "log": log,
         }
@@ -153,11 +158,10 @@ def cp_simulator(request):
             sim_params = dict(
                 host=request.POST.get("host") or default_host,
                 ws_port=int(request.POST.get("ws_port") or default_ws_port),
-                cp_path=request.POST.get("cp_path")
-                or default_cp_paths[cp_idx - 1],
-                  rfid=request.POST.get("rfid") or default_rfid,
-                  vin=request.POST.get("vin") or default_vins[cp_idx - 1],
-                  duration=int(request.POST.get("duration") or 600),
+                cp_path=request.POST.get("cp_path") or default_cp_paths[cp_idx - 1],
+                rfid=request.POST.get("rfid") or default_rfid,
+                vin=request.POST.get("vin") or default_vins[cp_idx - 1],
+                duration=int(request.POST.get("duration") or 600),
                 interval=float(request.POST.get("interval") or 5),
                 kw_min=float(request.POST.get("kw_min") or 30),
                 kw_max=float(request.POST.get("kw_max") or 60),
@@ -228,7 +232,9 @@ def charger_status(request, cid):
             tx_obj = get_object_or_404(Transaction, pk=session_id, charger=charger)
             past_session = True
     state, color = _charger_state(charger, live_tx)
-    transactions_qs = Transaction.objects.filter(charger=charger).order_by("-start_time")
+    transactions_qs = Transaction.objects.filter(charger=charger).order_by(
+        "-start_time"
+    )
     paginator = Paginator(transactions_qs, 10)
     page_obj = paginator.get_page(request.GET.get("page"))
     transactions = page_obj.object_list
@@ -273,13 +279,13 @@ def charger_session_search(request, cid):
     if date_str:
         try:
             date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-            start = datetime.combine(date_obj, datetime.min.time(), tzinfo=dt_timezone.utc)
-            end = start + timedelta(days=1)
-            transactions = (
-                Transaction.objects.filter(
-                    charger=charger, start_time__gte=start, start_time__lt=end
-                ).order_by("-start_time")
+            start = datetime.combine(
+                date_obj, datetime.min.time(), tzinfo=dt_timezone.utc
             )
+            end = start + timedelta(days=1)
+            transactions = Transaction.objects.filter(
+                charger=charger, start_time__gte=start, start_time__lt=end
+            ).order_by("-start_time")
         except ValueError:
             transactions = []
     return render(
@@ -309,7 +315,9 @@ def charger_log_page(request, cid):
 @landing("EV Efficiency")
 def efficiency_calculator(request):
     """Simple EV efficiency calculator."""
-    form = {k: v for k, v in (request.POST or request.GET).items() if v not in (None, "")}
+    form = {
+        k: v for k, v in (request.POST or request.GET).items() if v not in (None, "")
+    }
     context: dict[str, object] = {"form": form}
     if request.method == "POST":
         try:
@@ -328,6 +336,7 @@ def efficiency_calculator(request):
             }
     return render(request, "ocpp/efficiency_calculator.html", context)
 
+
 @csrf_exempt
 @api_login_required
 def dispatch_action(request, cid):
@@ -343,15 +352,19 @@ def dispatch_action(request, cid):
         tx_obj = store.transactions.get(cid)
         if not tx_obj:
             return JsonResponse({"detail": "no transaction"}, status=404)
-        msg = json.dumps([
-            2,
-            str(datetime.utcnow().timestamp()),
-            "RemoteStopTransaction",
-            {"transactionId": tx_obj.pk},
-        ])
+        msg = json.dumps(
+            [
+                2,
+                str(datetime.utcnow().timestamp()),
+                "RemoteStopTransaction",
+                {"transactionId": tx_obj.pk},
+            ]
+        )
         asyncio.get_event_loop().create_task(ws.send(msg))
     elif action == "reset":
-        msg = json.dumps([2, str(datetime.utcnow().timestamp()), "Reset", {"type": "Soft"}])
+        msg = json.dumps(
+            [2, str(datetime.utcnow().timestamp()), "Reset", {"type": "Soft"}]
+        )
         asyncio.get_event_loop().create_task(ws.send(msg))
     else:
         return JsonResponse({"detail": "unknown action"}, status=400)

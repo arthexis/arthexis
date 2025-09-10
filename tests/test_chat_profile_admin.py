@@ -14,7 +14,9 @@ class ChatProfileAdminTests(TestCase):
             username="admin", email="a@example.com", password="pwd"
         )
         self.user = User.objects.create_user(username="bob", password="pwd")
-        self.profile = ChatProfile.objects.create(user=self.user, user_key_hash="0" * 64)
+        self.profile = ChatProfile.objects.create(
+            user=self.user, user_key_hash="0" * 64
+        )
         self.client.force_login(self.admin)
 
     def test_change_form_has_generate_key_link(self):
@@ -23,7 +25,7 @@ class ChatProfileAdminTests(TestCase):
             args=[self.profile.pk],
         )
         response = self.client.get(url)
-        self.assertContains(response, '../generate-key/')
+        self.assertContains(response, "../generate-key/")
 
     def test_generate_key_button(self):
         url = reverse(

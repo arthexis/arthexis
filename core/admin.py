@@ -208,9 +208,7 @@ class PackageAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
                 "is_deleted": False,
             },
         )
-        return redirect(
-            reverse("admin:core_packagerelease_change", args=[release.pk])
-        )
+        return redirect(reverse("admin:core_packagerelease_change", args=[release.pk]))
 
     def get_urls(self):
         urls = super().get_urls()
@@ -233,9 +231,7 @@ class PackageAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
     @admin.action(description="Prepare next Release")
     def prepare_next_release(self, request, queryset):
         if queryset.count() != 1:
-            self.message_user(
-                request, "Select exactly one package", messages.ERROR
-            )
+            self.message_user(request, "Select exactly one package", messages.ERROR)
             return
         return self._prepare(request, queryset.first())
 
@@ -305,7 +301,9 @@ class EnergyAccountRFIDForm(forms.ModelForm):
     def clean_rfid(self):
         rfid = self.cleaned_data["rfid"]
         if rfid.energy_accounts.exclude(pk=self.instance.energyaccount_id).exists():
-            raise forms.ValidationError("RFID is already assigned to another energy account")
+            raise forms.ValidationError(
+                "RFID is already assigned to another energy account"
+            )
         return rfid
 
 
@@ -411,7 +409,7 @@ class FediverseProfileAdminForm(forms.ModelForm):
         if self.instance.pk:
             self.fields["access_token"].initial = ""
             self.initial["access_token"] = ""
-        
+
     def clean_access_token(self):
         token = self.cleaned_data.get("access_token")
         if not token and self.instance.pk:
@@ -539,6 +537,7 @@ class EmailInboxAdmin(admin.ModelAdmin):
                 "admin:post_office_emailinbox_test", args=[object_id]
             )
         return super().changeform_view(request, object_id, form_url, extra_context)
+
     fieldsets = (
         (
             None,
@@ -1015,7 +1014,9 @@ class EnergyReportAdmin(admin.ModelAdmin):
             )
         context = self.admin_site.each_context(request)
         context.update({"form": form, "report": report})
-        return TemplateResponse(request, "admin/core/energyreport/generate.html", context)
+        return TemplateResponse(
+            request, "admin/core/energyreport/generate.html", context
+        )
 
 
 @admin.register(PackageRelease)
@@ -1127,9 +1128,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
                     messages.WARNING,
                 )
                 continue
-            url = (
-                f"https://pypi.org/pypi/{release.package.name}/{release.version}/json"
-            )
+            url = f"https://pypi.org/pypi/{release.package.name}/{release.version}/json"
             try:
                 resp = requests.get(url, timeout=10)
             except Exception as exc:  # pragma: no cover - network failure
@@ -1160,5 +1159,3 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
     @admin.display(description="Is current")
     def is_current(self, obj):
         return self._boolean_icon(obj.is_current)
-
-

@@ -16,7 +16,9 @@ def test_charlcd1602_falls_back_to_smbus2(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
 
-    fake_bus = types.SimpleNamespace(write_byte=lambda *a, **k: None, close=lambda: None)
+    fake_bus = types.SimpleNamespace(
+        write_byte=lambda *a, **k: None, close=lambda: None
+    )
     fake_smbus2 = types.SimpleNamespace(SMBus=lambda channel: fake_bus)
     monkeypatch.setitem(sys.modules, "smbus2", fake_smbus2)
 
@@ -32,7 +34,9 @@ def test_init_lcd_defaults_when_scan_unavailable(monkeypatch):
     """``init_lcd`` falls back to the default address when scanning fails."""
 
     # Provide a fake smbus implementation so the module can be imported.
-    fake_bus = types.SimpleNamespace(write_byte=lambda *a, **k: None, close=lambda: None)
+    fake_bus = types.SimpleNamespace(
+        write_byte=lambda *a, **k: None, close=lambda: None
+    )
     fake_smbus = types.SimpleNamespace(SMBus=lambda channel: fake_bus)
     monkeypatch.setitem(sys.modules, "smbus", fake_smbus)
 

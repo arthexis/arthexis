@@ -17,8 +17,12 @@ class Location(Entity):
     """Physical location shared by chargers."""
 
     name = models.CharField(max_length=200)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
@@ -51,11 +55,19 @@ class Charger(Entity):
     )
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_meter_values = models.JSONField(default=dict, blank=True)
-    temperature = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
+    temperature = models.DecimalField(
+        max_digits=5, decimal_places=1, null=True, blank=True
+    )
     temperature_unit = models.CharField(max_length=16, blank=True)
-    reference = models.OneToOneField(Reference, null=True, blank=True, on_delete=models.SET_NULL)
+    reference = models.OneToOneField(
+        Reference, null=True, blank=True, on_delete=models.SET_NULL
+    )
     location = models.ForeignKey(
-        Location, null=True, blank=True, on_delete=models.SET_NULL, related_name="chargers"
+        Location,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="chargers",
     )
     last_path = models.CharField(max_length=255, blank=True)
 
@@ -297,4 +309,3 @@ class ElectricVehicle(CoreElectricVehicle):
         app_label = "ocpp"
         verbose_name = _("Electric Vehicle")
         verbose_name_plural = _("Electric Vehicles")
-

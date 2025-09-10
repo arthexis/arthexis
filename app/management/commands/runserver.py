@@ -9,6 +9,7 @@ from daphne.management.commands.runserver import (
     get_default_application,
 )
 
+
 class Command(RunserverCommand):
     """Extended runserver command that also prints WebSocket URLs and admin link."""
 
@@ -22,10 +23,12 @@ class Command(RunserverCommand):
 
     def on_bind(self, server_port):
         super().on_bind(server_port)
-        host = self.addr or (self.default_addr_ipv6 if self.use_ipv6 else self.default_addr)
-        scheme = 'wss' if self.ssl_options else 'ws'
+        host = self.addr or (
+            self.default_addr_ipv6 if self.use_ipv6 else self.default_addr
+        )
+        scheme = "wss" if self.ssl_options else "ws"
         # Display available websocket URLs.
-        websocket_paths = ['/ws/echo/', '/<path>/<cid>/']
+        websocket_paths = ["/ws/echo/", "/<path>/<cid>/"]
         for path in websocket_paths:
             self.stdout.write(
                 f"WebSocket available at {scheme}://{host}:{server_port}{path}"
@@ -37,6 +40,3 @@ class Command(RunserverCommand):
 
         if os.environ.get("DJANGO_DEV_RELOAD") and os.environ.get("RUN_MAIN") == "true":
             webbrowser.open(f"{http_scheme}://{host}:{server_port}/")
-
-
-

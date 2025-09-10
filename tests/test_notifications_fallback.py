@@ -32,7 +32,9 @@ def test_send_returns_true_on_gui_failure(monkeypatch, tmp_path):
     nm = notifications.NotificationManager(lock_file=lock)
 
     monkeypatch.setattr(
-        nm, "_write_lock_file", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+        nm,
+        "_write_lock_file",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
     )
 
     assert nm.send("subject", "body") is True
@@ -47,4 +49,3 @@ def test_send_uses_gui_when_lock_file_missing(monkeypatch, tmp_path):
 
     assert nm.send("subject", "body") is True
     assert calls == [("subject", "body")]
-

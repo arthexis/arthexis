@@ -23,4 +23,3 @@ app.autodiscover_tasks()
 def debug_task(self):  # pragma: no cover - debug helper
     """A simple debug task."""
     print(f"Request: {self.request!r}")
-

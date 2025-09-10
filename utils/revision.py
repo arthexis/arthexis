@@ -2,6 +2,7 @@ import subprocess
 from functools import lru_cache
 from pathlib import Path
 
+
 @lru_cache()
 def get_revision() -> str:
     """Return the current Git commit hash.

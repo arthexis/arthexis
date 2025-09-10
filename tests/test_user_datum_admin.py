@@ -41,8 +41,7 @@ class UserDatumAdminTests(TransactionTestCase):
             password="secret",
         )
         self.fixture_path = (
-            self.data_dir
-            / f"{self.user.pk}_core_odooprofile_{self.profile.pk}.json"
+            self.data_dir / f"{self.user.pk}_core_odooprofile_{self.profile.pk}.json"
         )
 
     def tearDown(self):
@@ -54,16 +53,14 @@ class UserDatumAdminTests(TransactionTestCase):
     def test_checkbox_displayed_on_change_form(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
         response = self.client.get(url)
-        self.assertContains(response, "name=\"_user_datum\"")
+        self.assertContains(response, 'name="_user_datum"')
         self.assertContains(response, "User Datum")
 
     def test_checkbox_has_form_attribute(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
         response = self.client.get(url)
         form_id = f"{self.profile._meta.model_name}_form"
-        self.assertContains(
-            response, f'name="_user_datum" form="{form_id}"'
-        )
+        self.assertContains(response, f'name="_user_datum" form="{form_id}"')
 
     def test_userdatum_created_when_checked(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
@@ -88,7 +85,6 @@ class UserDatumAdminTests(TransactionTestCase):
             any(str(self.fixture_path) in msg for msg in messages),
         )
 
-
     def test_userdatum_persists_after_save(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
         data = {
@@ -103,10 +99,8 @@ class UserDatumAdminTests(TransactionTestCase):
         self.client.post(url, data)
         response = self.client.get(url)
         form_id = f"{self.profile._meta.model_name}_form"
-        self.assertContains(
-            response, f'name="_user_datum" form="{form_id}" checked'
-        )
-        
+        self.assertContains(response, f'name="_user_datum" form="{form_id}" checked')
+
     def test_fixture_created_and_loaded_on_env_refresh(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
         data = {
@@ -167,7 +161,6 @@ class UserDatumAdminTests(TransactionTestCase):
         )
 
 
-
 class UserDataViewTests(TestCase):
     def setUp(self):
         call_command("flush", verbosity=0, interactive=False)
@@ -189,8 +182,7 @@ class UserDataViewTests(TestCase):
             user=self.user, content_type=ct, object_id=self.profile.pk
         )
         self.fixture_path = (
-            self.data_dir
-            / f"{self.user.pk}_core_odooprofile_{self.profile.pk}.json"
+            self.data_dir / f"{self.user.pk}_core_odooprofile_{self.profile.pk}.json"
         )
 
     def test_user_data_view_lists_items(self):

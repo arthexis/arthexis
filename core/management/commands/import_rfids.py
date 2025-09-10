@@ -33,9 +33,7 @@ class Command(BaseCommand):
                     rfid = row.get("rfid", "").strip()
                     energy_accounts = row.get("energy_accounts", "").strip()
                     allowed = row.get("allowed", "True").strip().lower() != "false"
-                    color = (
-                        row.get("color", RFID.BLACK).strip().upper() or RFID.BLACK
-                    )
+                    color = row.get("color", RFID.BLACK).strip().upper() or RFID.BLACK
                     released = row.get("released", "False").strip().lower() == "true"
                     if not rfid:
                         continue
@@ -55,7 +53,9 @@ class Command(BaseCommand):
                     )
                     if energy_accounts:
                         ids = [int(a) for a in energy_accounts.split(",") if a]
-                        tag.energy_accounts.set(EnergyAccount.objects.filter(id__in=ids))
+                        tag.energy_accounts.set(
+                            EnergyAccount.objects.filter(id__in=ids)
+                        )
                     else:
                         tag.energy_accounts.clear()
                     count += 1

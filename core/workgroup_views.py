@@ -54,4 +54,3 @@ def assistant_test(request):
 
     user_id = request.chat_profile.user_id
     return JsonResponse({"message": f"Hello from user {user_id}"})
-

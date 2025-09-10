@@ -42,8 +42,7 @@ def find_conduit(awg: Union[str, int], cables: int, *, conduit: str = "emt"):
     awg = AWG(awg)
     field = _fill_field(awg)
     qs = (
-        ConduitFill.objects
-        .filter(conduit__iexact=conduit)
+        ConduitFill.objects.filter(conduit__iexact=conduit)
         .exclude(**{field: None})
         .filter(**{f"{field}__gte": cables})
     )
@@ -113,9 +112,7 @@ def find_awg(
         "AC phases 1, 2 or 3 to calculate for. DC not supported."
     )
     if temperature is not None:
-        assert temperature in (60, 75, 90), _(
-            "Temperature must be 60, 75 or 90"
-        )
+        assert temperature in (60, 75, 90), _("Temperature must be 60, 75 or 90")
 
     def _calc(*, force_awg=None, limit_awg=None):
         qs = CableSize.objects.filter(material=material, line_num__lte=max_lines)
@@ -159,7 +156,9 @@ def find_awg(
                 a75 = (info or base)["a75"] if info else base["a75"] * n
                 a90 = (info or base)["a90"] if info else base["a90"] * n
                 if temperature is None:
-                    allowed = ((a75 >= amps and amps > 100) or (a60 >= amps and amps <= 100))
+                    allowed = (a75 >= amps and amps > 100) or (
+                        a60 >= amps and amps <= 100
+                    )
                 else:
                     tmap = {60: a60, 75: a75, 90: a90}
                     allowed = tmap.get(temperature, 0) >= amps
@@ -174,7 +173,9 @@ def find_awg(
                     "amps": amps,
                     "volts": volts,
                     "temperature": (
-                        temperature if temperature is not None else (60 if amps <= 100 else 75)
+                        temperature
+                        if temperature is not None
+                        else (60 if amps <= 100 else 75)
                     ),
                     "lines": n,
                     "vdrop": vdrop,
@@ -187,7 +188,9 @@ def find_awg(
                     if allowed and perc <= 0.03:
                         if conduit:
                             c = "emt" if conduit is True else conduit
-                            fill = find_conduit(AWG(awg_size), n * (phases + ground), conduit=c)
+                            fill = find_conduit(
+                                AWG(awg_size), n * (phases + ground), conduit=c
+                            )
                             result["conduit"] = c
                             result["pipe_inch"] = fill["size_inch"]
                         return result
@@ -198,7 +201,9 @@ def find_awg(
                     if allowed and perc <= 0.03:
                         if conduit:
                             c = "emt" if conduit is True else conduit
-                            fill = find_conduit(AWG(awg_size), n * (phases + ground), conduit=c)
+                            fill = find_conduit(
+                                AWG(awg_size), n * (phases + ground), conduit=c
+                            )
                             result["conduit"] = c
                             result["pipe_inch"] = fill["size_inch"]
                         return result
@@ -208,16 +213,14 @@ def find_awg(
 
         if best and (force_awg is not None or limit_awg is not None):
             if force_awg is not None:
-                best["warning"] = _(
-                    "Voltage drop may exceed 3% with chosen parameters"
-                )
+                best["warning"] = _("Voltage drop may exceed 3% with chosen parameters")
             else:
-                best["warning"] = _(
-                    "Voltage drop exceeds 3% with given max_awg"
-                )
+                best["warning"] = _("Voltage drop exceeds 3% with given max_awg")
             if conduit:
                 c = "emt" if conduit is True else conduit
-                fill = find_conduit(AWG(best["awg"]), best["lines"] * (phases + ground), conduit=c)
+                fill = find_conduit(
+                    AWG(best["awg"]), best["lines"] * (phases + ground), conduit=c
+                )
                 best["conduit"] = c
                 best["pipe_inch"] = fill["size_inch"]
             return best
@@ -289,7 +292,7 @@ def calculator(request):
                 context["no_cable"] = True
             else:
                 context["result"] = result
-    context["templates"] = (
-        CalculatorTemplate.objects.filter(show_in_pages=True).order_by("name")
-    )
+    context["templates"] = CalculatorTemplate.objects.filter(
+        show_in_pages=True
+    ).order_by("name")
     return render(request, "awg/calculator.html", context)

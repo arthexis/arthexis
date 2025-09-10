@@ -10,7 +10,9 @@ from django.db.migrations.recorder import MigrationRecorder
 
 
 class Command(BaseCommand):
-    help = "Remove all migration files for local apps and create fresh initial migrations."
+    help = (
+        "Remove all migration files for local apps and create fresh initial migrations."
+    )
 
     def handle(self, *args, **options):
         base_dir = Path(settings.BASE_DIR)
@@ -38,7 +40,9 @@ class Command(BaseCommand):
             if recorder.has_table():
                 recorder.migration_qs.filter(app=app_config.label).delete()
 
-            self.stdout.write(self.style.WARNING(f"Cleared migrations for {app_config.label}"))
+            self.stdout.write(
+                self.style.WARNING(f"Cleared migrations for {app_config.label}")
+            )
 
         call_command("makemigrations", interactive=False)
         self.stdout.write(self.style.SUCCESS("Created new initial migrations."))

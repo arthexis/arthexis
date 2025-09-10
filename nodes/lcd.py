@@ -32,7 +32,9 @@ class _BusWrapper:
 
     channel: int
 
-    def write_byte(self, addr: int, data: int) -> None:  # pragma: no cover - thin wrapper
+    def write_byte(
+        self, addr: int, data: int
+    ) -> None:  # pragma: no cover - thin wrapper
         if smbus is None:
             raise LCDUnavailableError("smbus not available")
         bus = smbus.SMBus(self.channel)
@@ -138,7 +140,9 @@ class CharLCD1602:
         """Re-run the initialisation sequence to recover the display."""
         self.init_lcd(addr=self.LCD_ADDR, bl=self.BLEN)
 
-    def set_backlight(self, on: bool = True) -> None:  # pragma: no cover - hardware dependent
+    def set_backlight(
+        self, on: bool = True
+    ) -> None:  # pragma: no cover - hardware dependent
         self.BLEN = 1 if on else 0
         self._write_word(self.LCD_ADDR, 0x00)
 

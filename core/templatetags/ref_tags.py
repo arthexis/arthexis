@@ -71,9 +71,7 @@ def render_footer(context):
             release_name = f"{release_name}-{rev_short}"
         release = PackageRelease.objects.filter(version=version).first()
         if release:
-            release_url = reverse(
-                "admin:core_packagerelease_change", args=[release.pk]
-            )
+            release_url = reverse("admin:core_packagerelease_change", args=[release.pk])
 
     base_dir = Path(settings.BASE_DIR)
     log_file = base_dir / "logs" / "auto-upgrade.log"
@@ -100,4 +98,3 @@ def render_footer(context):
         "request": context.get("request"),
         "fresh_since": fresh_since,
     }
-

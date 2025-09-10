@@ -68,5 +68,3 @@ class CaptureScreenshotAction(NodeAction):
         path = capture_screenshot(url)
         save_screenshot(path, node=node, method="NODE_ACTION")
         return path
-
-

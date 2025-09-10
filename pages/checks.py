@@ -38,4 +38,3 @@ def landing_views_have_no_args(app_configs, **kwargs):
         if isinstance(p, URLResolver):
             _collect_checks(p, errors, p.pattern._route)
     return errors
-

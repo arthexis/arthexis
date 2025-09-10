@@ -17,9 +17,7 @@ class BusinessAdminGroupTests(TestCase):
     def test_powerlead_registered(self):
         registry = site._registry
         self.assertIn(BusinessPowerLead, registry)
-        self.assertEqual(
-            registry[BusinessPowerLead].model._meta.app_label, "core"
-        )
+        self.assertEqual(registry[BusinessPowerLead].model._meta.app_label, "core")
 
     def test_admin_index_shows_powerlead(self):
         response = self.client.get(reverse("admin:index"))

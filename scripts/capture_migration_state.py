@@ -21,9 +21,7 @@ def main() -> None:
     (out_dir / "migration-plan.txt").write_text(plan)
 
     # Capture inspectdb output
-    inspect = subprocess.check_output(
-        ["python", "manage.py", "inspectdb"], text=True
-    )
+    inspect = subprocess.check_output(["python", "manage.py", "inspectdb"], text=True)
     (out_dir / "inspectdb.py").write_text(inspect)
 
     # Optional: dump full schema using pg_dump if available

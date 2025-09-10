@@ -64,7 +64,6 @@ class NodeAdmin(admin.ModelAdmin):
     form = NodeAdminForm
     actions = ["run_task", "take_screenshots"]
 
-
     def get_urls(self):
         urls = super().get_urls()
         custom = [
@@ -304,13 +303,17 @@ class ContentSampleAdmin(admin.ModelAdmin):
         if not content:
             self.message_user(request, "Clipboard is empty.", level=messages.INFO)
             return redirect("..")
-        if ContentSample.objects.filter(content=content, kind=ContentSample.TEXT).exists():
+        if ContentSample.objects.filter(
+            content=content, kind=ContentSample.TEXT
+        ).exists():
             self.message_user(
                 request, "Duplicate sample not created.", level=messages.INFO
             )
             return redirect("..")
         user = request.user if request.user.is_authenticated else None
-        ContentSample.objects.create(content=content, user=user, kind=ContentSample.TEXT)
+        ContentSample.objects.create(
+            content=content, user=user, kind=ContentSample.TEXT
+        )
         self.message_user(
             request, "Text sample added from clipboard.", level=messages.SUCCESS
         )
@@ -328,9 +331,7 @@ class ContentSampleAdmin(admin.ModelAdmin):
         if sample:
             self.message_user(request, f"Screenshot saved to {path}", messages.SUCCESS)
         else:
-            self.message_user(
-                request, "Duplicate screenshot; not saved", messages.INFO
-            )
+            self.message_user(request, "Duplicate screenshot; not saved", messages.INFO)
         return redirect("..")
 
     @admin.display(description="Screenshot")
@@ -382,9 +383,7 @@ class NodeTaskAdmin(admin.ModelAdmin):
 
     def execute(self, request, queryset):
         if queryset.count() != 1:
-            self.message_user(
-                request, "Please select exactly one task", messages.ERROR
-            )
+            self.message_user(request, "Please select exactly one task", messages.ERROR)
             return
         task_obj = queryset.first()
         if "apply" in request.POST:
@@ -591,7 +590,11 @@ class OperationAdmin(admin.ModelAdmin):
             ctx.update({"thread": thread, "out": out, "err": err, "log": log})
         else:
             proc = subprocess.Popen(
-                command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                command,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
             )
             ctx.update({"process": proc, "log": log})
 

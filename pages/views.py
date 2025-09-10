@@ -47,7 +47,9 @@ def index(request):
         .first()
     )
     app_slug = app.path.strip("/") if app else ""
-    readme_base = Path(settings.BASE_DIR) / app_slug if app_slug else Path(settings.BASE_DIR)
+    readme_base = (
+        Path(settings.BASE_DIR) / app_slug if app_slug else Path(settings.BASE_DIR)
+    )
     lang = translation.get_language() or ""
     readme_file = readme_base / "README.md"
     if lang:
@@ -93,7 +95,6 @@ def sitemap(request):
     return HttpResponse("\n".join(lines), content_type="application/xml")
 
 
-
 class CustomLoginView(LoginView):
     """Login view that redirects staff to the admin."""
 
@@ -119,6 +120,7 @@ login_view = CustomLoginView.as_view()
 class InvitationRequestForm(forms.Form):
     email = forms.EmailField()
     comment = forms.CharField(required=False, widget=forms.Textarea, label=_("Comment"))
+
 
 @csrf_exempt
 @ensure_csrf_cookie
@@ -149,9 +151,9 @@ def request_invite(request):
                 reverse("pages:invitation-login", args=[uid, token])
             )
             subject = _("Your invitation link")
-            body = _(
-                "Use the following link to access your account: %(link)s"
-            ) % {"link": link}
+            body = _("Use the following link to access your account: %(link)s") % {
+                "link": link
+            }
             try:
                 node = Node.get_local()
                 if node:
@@ -283,4 +285,3 @@ def csrf_failure(request, reason=""):
     """Custom CSRF failure view with a friendly message."""
     logger.warning("CSRF failure on %s: %s", request.path, reason)
     return render(request, "pages/csrf_failure.html", status=403)
-

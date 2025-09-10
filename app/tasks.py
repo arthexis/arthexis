@@ -11,4 +11,3 @@ logger = logging.getLogger(__name__)
 def heartbeat() -> None:
     """Log a simple heartbeat message."""
     logger.info("Heartbeat task executed")
-

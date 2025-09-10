@@ -79,7 +79,9 @@ def _run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
 
 
 def _git_clean() -> bool:
-    proc = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+    proc = subprocess.run(
+        ["git", "status", "--porcelain"], capture_output=True, text=True
+    )
     return not proc.stdout.strip()
 
 
@@ -87,7 +89,6 @@ def _git_has_staged_changes() -> bool:
     """Return True if there are staged changes ready to commit."""
     proc = subprocess.run(["git", "diff", "--cached", "--quiet"])
     return proc.returncode != 0
-
 
 
 def _manager_credentials() -> Optional[Credentials]:
@@ -162,11 +163,10 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
         if toml is not None and hasattr(toml, "dumps"):
             return toml.dumps(data)
         import json
+
         return json.dumps(data)
 
     Path("pyproject.toml").write_text(_dump_toml(content), encoding="utf-8")
-
-
 
 
 @requires_network
@@ -254,19 +254,19 @@ def build(
             except Exception:
                 requests = None  # type: ignore
             if requests is not None:
-                resp = requests.get(
-                    f"https://pypi.org/pypi/{package.name}/json"
-                )
+                resp = requests.get(f"https://pypi.org/pypi/{package.name}/json")
                 if resp.ok:
                     releases = resp.json().get("releases", {})
                     if version in releases:
-                        raise ReleaseError(
-                            f"Version {version} already on PyPI"
-                        )
-        creds = creds or _manager_credentials() or Credentials(
-            token=os.environ.get("PYPI_API_TOKEN"),
-            username=os.environ.get("PYPI_USERNAME"),
-            password=os.environ.get("PYPI_PASSWORD"),
+                        raise ReleaseError(f"Version {version} already on PyPI")
+        creds = (
+            creds
+            or _manager_credentials()
+            or Credentials(
+                token=os.environ.get("PYPI_API_TOKEN"),
+                username=os.environ.get("PYPI_USERNAME"),
+                password=os.environ.get("PYPI_PASSWORD"),
+            )
         )
         files = sorted(str(p) for p in Path("dist").glob("*"))
         if not files:
@@ -307,7 +307,10 @@ def promote(
 
 
 def publish(
-    *, package: Package = DEFAULT_PACKAGE, version: str, creds: Optional[Credentials] = None
+    *,
+    package: Package = DEFAULT_PACKAGE,
+    version: str,
+    creds: Optional[Credentials] = None,
 ) -> None:
     """Upload the existing distribution to PyPI."""
     if network_available():
@@ -321,10 +324,14 @@ def publish(
                 raise ReleaseError(f"Version {version} already on PyPI")
     if not Path("dist").exists():
         raise ReleaseError("dist directory not found")
-    creds = creds or _manager_credentials() or Credentials(
-        token=os.environ.get("PYPI_API_TOKEN"),
-        username=os.environ.get("PYPI_USERNAME"),
-        password=os.environ.get("PYPI_PASSWORD"),
+    creds = (
+        creds
+        or _manager_credentials()
+        or Credentials(
+            token=os.environ.get("PYPI_API_TOKEN"),
+            username=os.environ.get("PYPI_USERNAME"),
+            password=os.environ.get("PYPI_PASSWORD"),
+        )
     )
     files = sorted(str(p) for p in Path("dist").glob("*"))
     if not files:

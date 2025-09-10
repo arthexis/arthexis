@@ -56,6 +56,7 @@ def _unlink_sqlite_db(path: Path) -> None:
         backup_dir.mkdir(exist_ok=True)
         from datetime import datetime
         import shutil
+
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         shutil.copy2(path, backup_dir / f"{path.name}.{timestamp}.bak")
     # Windows may keep SQLite files locked briefly after closing. Retry a few times.
@@ -87,8 +88,7 @@ def _fixture_files() -> list[str]:
     """Return all JSON fixtures in the project."""
     base_dir = Path(settings.BASE_DIR)
     fixtures = [
-        str(path.relative_to(base_dir))
-        for path in base_dir.glob("**/fixtures/*.json")
+        str(path.relative_to(base_dir)) for path in base_dir.glob("**/fixtures/*.json")
     ]
     return sorted(fixtures)
 
@@ -182,7 +182,9 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
             if recorder and loader:
                 for label in local_apps:
                     try:
-                        qs = recorder.migration_qs.filter(app=label).order_by("-applied")
+                        qs = recorder.migration_qs.filter(app=label).order_by(
+                            "-applied"
+                        )
                         if qs.exists():
                             last = qs.first().name
                             node = loader.graph.node_map.get((label, last))
@@ -217,7 +219,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     with psycopg.connect(**params, autocommit=True) as conn:
                         with conn.cursor() as cur:
                             cur.execute(
-                                sql.SQL("CREATE DATABASE {}" ).format(
+                                sql.SQL("CREATE DATABASE {}").format(
                                     sql.Identifier(default_db["NAME"])
                                 )
                             )
@@ -250,7 +252,11 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                         username = obj.get("fields", {}).get("username")
                         existing = None
                         if username:
-                            existing = get_user_model().objects.filter(username=username).first()
+                            existing = (
+                                get_user_model()
+                                .objects.filter(username=username)
+                                .first()
+                            )
                         if existing:
                             user_pk_map[obj.get("pk")] = existing.pk
                             for field, value in obj.get("fields", {}).items():
@@ -262,7 +268,10 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                         fields["user"] = user_pk_map.get(fields["user"], fields["user"])
                     if model is PackageRelease:
                         version = obj.get("fields", {}).get("version")
-                        if version and PackageRelease.objects.filter(version=version).exists():
+                        if (
+                            version
+                            and PackageRelease.objects.filter(version=version).exists()
+                        ):
                             continue
                     if any(f.name == "is_seed_data" for f in model._meta.fields):
                         obj.setdefault("fields", {})["is_seed_data"] = True
@@ -321,7 +330,10 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     for obj in data:
                         fields = obj.get("fields", {})
                         uid = fields.get("user")
-                        if isinstance(uid, int) and not User.all_objects.filter(pk=uid).exists():
+                        if (
+                            isinstance(uid, int)
+                            and not User.all_objects.filter(pk=uid).exists()
+                        ):
                             fields["user"] = 1
                     dest.write_text(json.dumps(data))
                     patched.append(str(dest))
@@ -344,7 +356,9 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
 TASKS = {"database": run_database_tasks}
 
 
-def main(selected: list[str] | None = None, *, latest: bool = False, clean: bool = False) -> None:
+def main(
+    selected: list[str] | None = None, *, latest: bool = False, clean: bool = False
+) -> None:
     """Run the selected maintenance tasks."""
     to_run = selected or list(TASKS)
     for name in to_run:
@@ -353,9 +367,7 @@ def main(selected: list[str] | None = None, *, latest: bool = False, clean: bool
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Development maintenance tasks")
-    parser.add_argument(
-        "tasks", nargs="*", choices=TASKS.keys(), help="Tasks to run"
-    )
+    parser.add_argument("tasks", nargs="*", choices=TASKS.keys(), help="Tasks to run")
     parser.add_argument(
         "--latest", action="store_true", help="Force rebuild if migrations changed"
     )
@@ -364,4 +376,3 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     main(args.tasks, latest=args.latest, clean=args.clean)
-

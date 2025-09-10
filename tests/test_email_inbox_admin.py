@@ -4,7 +4,11 @@ from django.contrib.admin.sites import AdminSite
 from unittest.mock import patch
 
 from core.models import EmailInbox
-from core.admin import EmailInboxAdminForm, EmailInboxAdmin, EmailInbox as AdminEmailInbox
+from core.admin import (
+    EmailInboxAdminForm,
+    EmailInboxAdmin,
+    EmailInbox as AdminEmailInbox,
+)
 
 
 class EmailInboxAdminFormTests(TestCase):

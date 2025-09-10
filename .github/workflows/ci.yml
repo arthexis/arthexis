@@ -37,7 +37,6 @@ jobs:
               issue_number: context.issue.number,
               body
             });
-
   tests:
     needs: detect-roles
     runs-on: ubuntu-latest
@@ -57,3 +56,17 @@ jobs:
         env:
           NODE_ROLE: ${{ matrix.role }}
         run: pytest -q
+
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pre-commit
+      - name: Run pre-commit
+        run: pre-commit run --all-files

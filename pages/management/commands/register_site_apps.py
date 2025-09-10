@@ -16,9 +16,7 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **options):
-        site, _ = Site.objects.get_or_create(
-            domain="127.0.0.1", defaults={"name": ""}
-        )
+        site, _ = Site.objects.get_or_create(domain="127.0.0.1", defaults={"name": ""})
         role, _ = NodeRole.objects.get_or_create(name="Terminal")
 
         hostname = socket.gethostname()

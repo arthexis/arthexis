@@ -9,8 +9,10 @@ class IRQPinSetupManualTest(TestCase):
     """Manual test to ensure IRQ pin setup uses the expected GPIO pin."""
 
     def test_irq_pin_setup(self):
-        with patch("ocpp.rfid.background_reader.GPIO") as mock_gpio, \
-             patch.dict("sys.modules", {"mfrc522": MagicMock(MFRC522=MagicMock())}):
+        with (
+            patch("ocpp.rfid.background_reader.GPIO") as mock_gpio,
+            patch.dict("sys.modules", {"mfrc522": MagicMock(MFRC522=MagicMock())}),
+        ):
             _setup_hardware()
             mock_gpio.setmode.assert_called_once_with(mock_gpio.BCM)
             mock_gpio.setup.assert_called_once_with(

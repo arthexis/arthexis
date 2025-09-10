@@ -27,6 +27,7 @@ def main() -> None:
             Command as DaphneRunserver,
         )
         from django.core.management.commands import runserver as core_runserver
+
         try:
             from django.contrib.staticfiles.management.commands import (
                 runserver as static_runserver,
@@ -63,6 +64,7 @@ def main() -> None:
         ) from exc
 
     execute_from_command_line(sys.argv)
+
 
 if __name__ == "__main__":  # pragma: no cover - script entry
     main()

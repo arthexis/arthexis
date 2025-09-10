@@ -1,6 +1,7 @@
 import subprocess
 from pathlib import Path
 
+
 def test_clean_creates_backup(tmp_path):
     base_dir = Path(__file__).resolve().parent.parent
     clone_dir = tmp_path / "clone"
@@ -8,6 +9,7 @@ def test_clean_creates_backup(tmp_path):
 
     db_file = clone_dir / "db.sqlite3"
     import sqlite3
+
     sqlite3.connect(db_file).close()
     (clone_dir / "migrations.md5").write_text("0" * 32)
 

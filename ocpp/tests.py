@@ -1,4 +1,3 @@
-
 from channels.testing import WebsocketCommunicator
 from channels.db import database_sync_to_async
 from django.test import Client, TransactionTestCase, TestCase
@@ -27,7 +26,6 @@ from .simulator import SimulatorConfig, ChargePointSimulator
 import re
 from datetime import timedelta
 from .tasks import purge_meter_readings
-
 
 
 class ChargerFixtureTests(TestCase):
@@ -69,12 +67,14 @@ class CSMSConsumerTests(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        await communicator.send_json_to([
-            2,
-            "1",
-            "StartTransaction",
-            {"meterStart": 10},
-        ])
+        await communicator.send_json_to(
+            [
+                2,
+                "1",
+                "StartTransaction",
+                {"meterStart": 10},
+            ]
+        )
         response = await communicator.receive_json_from()
         tx_id = response[2]["transactionId"]
 
@@ -84,12 +84,14 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertEqual(tx.meter_start, 10)
         self.assertIsNone(tx.stop_time)
 
-        await communicator.send_json_to([
-            2,
-            "2",
-            "StopTransaction",
-            {"transactionId": tx_id, "meterStop": 20},
-        ])
+        await communicator.send_json_to(
+            [
+                2,
+                "2",
+                "StopTransaction",
+                {"transactionId": tx_id, "meterStop": 20},
+            ]
+        )
         await communicator.receive_json_from()
 
         await database_sync_to_async(tx.refresh_from_db)()
@@ -258,21 +260,25 @@ class CSMSConsumerTests(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        await communicator.send_json_to([
-            2,
-            "1",
-            "StartTransaction",
-            {"meterStart": 1},
-        ])
+        await communicator.send_json_to(
+            [
+                2,
+                "1",
+                "StartTransaction",
+                {"meterStart": 1},
+            ]
+        )
         response = await communicator.receive_json_from()
         tx_id = response[2]["transactionId"]
 
-        await communicator.send_json_to([
-            2,
-            "2",
-            "StopTransaction",
-            {"transactionId": tx_id, "meterStop": 2},
-        ])
+        await communicator.send_json_to(
+            [
+                2,
+                "2",
+                "StopTransaction",
+                {"transactionId": tx_id, "meterStop": 2},
+            ]
+        )
         await communicator.receive_json_from()
         await communicator.disconnect()
 
@@ -313,12 +319,14 @@ class CSMSConsumerTests(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        await communicator.send_json_to([
-            2,
-            "1",
-            "StartTransaction",
-            {"meterStart": 5},
-        ])
+        await communicator.send_json_to(
+            [
+                2,
+                "1",
+                "StartTransaction",
+                {"meterStart": 5},
+            ]
+        )
         await communicator.receive_json_from()
 
         await communicator.disconnect()
@@ -399,9 +407,7 @@ class ChargerLandingTests(TestCase):
             unit="W",
         )
         resp = self.client.get(reverse("charger-status", args=["ONGOING"]))
-        self.assertContains(
-            resp, 'Total Energy: <span id="total-kw">1.50</span> kW'
-        )
+        self.assertContains(resp, 'Total Energy: <span id="total-kw">1.50</span> kW')
         store.transactions.pop(charger.charger_id, None)
 
     def test_temperature_displayed(self):
@@ -527,7 +533,9 @@ class ChargerAdminTests(TestCase):
         )
         store.add_log("PURGE1", "entry", log_type="charger")
         url = reverse("admin:ocpp_charger_changelist")
-        self.client.post(url, {"action": "purge_data", "_selected_action": [charger.pk]})
+        self.client.post(
+            url, {"action": "purge_data", "_selected_action": [charger.pk]}
+        )
         self.assertFalse(Transaction.objects.filter(charger=charger).exists())
         self.assertFalse(MeterReading.objects.filter(charger=charger).exists())
         self.assertNotIn("PURGE1", store.logs["charger"])
@@ -543,7 +551,9 @@ class ChargerAdminTests(TestCase):
             self.client.post(delete_url, {"post": "yes"})
         self.assertTrue(Charger.objects.filter(pk=charger.pk).exists())
         url = reverse("admin:ocpp_charger_changelist")
-        self.client.post(url, {"action": "purge_data", "_selected_action": [charger.pk]})
+        self.client.post(
+            url, {"action": "purge_data", "_selected_action": [charger.pk]}
+        )
         self.client.post(delete_url, {"post": "yes"})
         self.assertFalse(Charger.objects.filter(pk=charger.pk).exists())
 
@@ -589,8 +599,9 @@ class SimulatorAdminTests(TestCase):
         self.assertContains(resp, log_url)
 
     def test_admin_shows_ws_url(self):
-        sim = Simulator.objects.create(name="SIM2", cp_path="SIMY", host="h",
-                                      ws_port=1111)
+        sim = Simulator.objects.create(
+            name="SIM2", cp_path="SIMY", host="h", ws_port=1111
+        )
         url = reverse("admin:ocpp_simulator_changelist")
         resp = self.client.get(url)
         self.assertContains(resp, "ws://h:1111/SIMY/")
@@ -617,7 +628,9 @@ class SimulatorAdminTests(TestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        exists = await database_sync_to_async(Charger.objects.filter(charger_id="NEWCHG").exists)()
+        exists = await database_sync_to_async(
+            Charger.objects.filter(charger_id="NEWCHG").exists
+        )()
         self.assertTrue(exists)
 
         charger = await database_sync_to_async(Charger.objects.get)(charger_id="NEWCHG")
@@ -636,21 +649,27 @@ class SimulatorAdminTests(TestCase):
         self.assertEqual(charger.last_path, "/foo/NEST/")
 
     async def test_rfid_required_rejects_invalid(self):
-        await database_sync_to_async(Charger.objects.create)(charger_id="RFID", require_rfid=True)
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id="RFID", require_rfid=True
+        )
         communicator = WebsocketCommunicator(application, "/RFID/")
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        await communicator.send_json_to([
-            2,
-            "1",
-            "StartTransaction",
-            {"meterStart": 0},
-        ])
+        await communicator.send_json_to(
+            [
+                2,
+                "1",
+                "StartTransaction",
+                {"meterStart": 0},
+            ]
+        )
         response = await communicator.receive_json_from()
         self.assertEqual(response[2]["idTagInfo"]["status"], "Invalid")
 
-        exists = await database_sync_to_async(Transaction.objects.filter(charger__charger_id="RFID").exists)()
+        exists = await database_sync_to_async(
+            Transaction.objects.filter(charger__charger_id="RFID").exists
+        )()
         self.assertFalse(exists)
 
         await communicator.disconnect()
@@ -668,22 +687,28 @@ class SimulatorAdminTests(TestCase):
         )
         tag = await database_sync_to_async(RFID.objects.create)(rfid="CARDX")
         await database_sync_to_async(acc.rfids.add)(tag)
-        await database_sync_to_async(Charger.objects.create)(charger_id="RFIDOK", require_rfid=True)
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id="RFIDOK", require_rfid=True
+        )
         communicator = WebsocketCommunicator(application, "/RFIDOK/")
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        await communicator.send_json_to([
-            2,
-            "1",
-            "StartTransaction",
-            {"meterStart": 5, "idTag": "CARDX"},
-        ])
+        await communicator.send_json_to(
+            [
+                2,
+                "1",
+                "StartTransaction",
+                {"meterStart": 5, "idTag": "CARDX"},
+            ]
+        )
         response = await communicator.receive_json_from()
         self.assertEqual(response[2]["idTagInfo"]["status"], "Accepted")
         tx_id = response[2]["transactionId"]
 
-        tx = await database_sync_to_async(Transaction.objects.get)(pk=tx_id, charger__charger_id="RFIDOK")
+        tx = await database_sync_to_async(Transaction.objects.get)(
+            pk=tx_id, charger__charger_id="RFIDOK"
+        )
         self.assertEqual(tx.account_id, user.energy_account.id)
 
     async def test_status_fields_updated(self):
@@ -709,7 +734,10 @@ class SimulatorAdminTests(TestCase):
         await communicator.receive_json_from()
 
         await database_sync_to_async(charger.refresh_from_db)()
-        self.assertEqual(charger.last_meter_values.get("meterValue")[0]["sampledValue"][0]["value"], "42")
+        self.assertEqual(
+            charger.last_meter_values.get("meterValue")[0]["sampledValue"][0]["value"],
+            "42",
+        )
 
         await communicator.disconnect()
 
@@ -750,10 +778,14 @@ class MeterReadingTests(TransactionTestCase):
         await communicator.send_json_to([2, "1", "MeterValues", payload])
         await communicator.receive_json_from()
 
-        reading = await database_sync_to_async(MeterReading.objects.get)(charger__charger_id="MR1")
+        reading = await database_sync_to_async(MeterReading.objects.get)(
+            charger__charger_id="MR1"
+        )
         self.assertEqual(reading.transaction_id, 100)
         self.assertEqual(str(reading.value), "2.749")
-        tx = await database_sync_to_async(Transaction.objects.get)(pk=100, charger__charger_id="MR1")
+        tx = await database_sync_to_async(Transaction.objects.get)(
+            pk=100, charger__charger_id="MR1"
+        )
         self.assertEqual(tx.meter_start, 2749)
 
         await communicator.disconnect()
@@ -819,7 +851,9 @@ class ChargePointSimulatorTests(TransactionTestCase):
                     )
                     break
 
-        server = await websockets.serve(handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"])
+        server = await websockets.serve(
+            handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"]
+        )
         port = server.sockets[0].getsockname()[1]
 
         try:
@@ -867,9 +901,7 @@ class ChargePointSimulatorTests(TransactionTestCase):
                     )
                 elif action == "Authorize":
                     await ws.send(
-                        json.dumps(
-                            [3, data[1], {"idTagInfo": {"status": "Accepted"}}]
-                        )
+                        json.dumps([3, data[1], {"idTagInfo": {"status": "Accepted"}}])
                     )
                 elif action == "StartTransaction":
                     await ws.send(
@@ -886,15 +918,15 @@ class ChargePointSimulatorTests(TransactionTestCase):
                     )
                 elif action == "StopTransaction":
                     await ws.send(
-                        json.dumps(
-                            [3, data[1], {"idTagInfo": {"status": "Accepted"}}]
-                        )
+                        json.dumps([3, data[1], {"idTagInfo": {"status": "Accepted"}}])
                     )
                     break
                 else:
                     await ws.send(json.dumps([3, data[1], {}]))
 
-        server = await websockets.serve(handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"])
+        server = await websockets.serve(
+            handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"]
+        )
         port = server.sockets[0].getsockname()[1]
 
         cfg = SimulatorConfig(
@@ -927,9 +959,7 @@ class ChargePointSimulatorTests(TransactionTestCase):
                 data = json.loads(msg)
                 action = data[2]
                 if action == "BootNotification":
-                    await ws.send(
-                        json.dumps([3, data[1], {"status": "Accepted"}])
-                    )
+                    await ws.send(json.dumps([3, data[1], {"status": "Accepted"}]))
                 elif action == "Authorize":
                     await ws.send(
                         json.dumps([3, data[1], {"idTagInfo": {"status": "Accepted"}}])
@@ -937,7 +967,9 @@ class ChargePointSimulatorTests(TransactionTestCase):
                     await ws.close()
                     break
 
-        server = await websockets.serve(handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"])
+        server = await websockets.serve(
+            handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"]
+        )
         port = server.sockets[0].getsockname()[1]
 
         cfg = SimulatorConfig(
@@ -973,7 +1005,12 @@ class ChargePointSimulatorTests(TransactionTestCase):
                 action = data[2]
                 if action == "BootNotification":
                     await ws.send(json.dumps([3, data[1], {"status": "Accepted"}]))
-                elif action in {"Authorize", "StatusNotification", "Heartbeat", "MeterValues"}:
+                elif action in {
+                    "Authorize",
+                    "StatusNotification",
+                    "Heartbeat",
+                    "MeterValues",
+                }:
                     await ws.send(json.dumps([3, data[1], {}]))
                 elif action == "StartTransaction":
                     await ws.send(
@@ -981,15 +1018,22 @@ class ChargePointSimulatorTests(TransactionTestCase):
                             [
                                 3,
                                 data[1],
-                                {"transactionId": 1, "idTagInfo": {"status": "Accepted"}},
+                                {
+                                    "transactionId": 1,
+                                    "idTagInfo": {"status": "Accepted"},
+                                },
                             ]
                         )
                     )
                 elif action == "StopTransaction":
-                    await ws.send(json.dumps([3, data[1], {"idTagInfo": {"status": "Accepted"}}]))
+                    await ws.send(
+                        json.dumps([3, data[1], {"idTagInfo": {"status": "Accepted"}}])
+                    )
                     break
 
-        server = await websockets.serve(handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"])
+        server = await websockets.serve(
+            handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"]
+        )
         port = server.sockets[0].getsockname()[1]
 
         try:
@@ -1020,13 +1064,16 @@ class ChargePointSimulatorTests(TransactionTestCase):
             async for _ in ws:
                 pass
 
-        server = await websockets.serve(handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"])
+        server = await websockets.serve(
+            handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"]
+        )
         port = server.sockets[0].getsockname()[1]
 
         cfg = SimulatorConfig(host="127.0.0.1", ws_port=port, cp_path="SIMTO/")
         sim = ChargePointSimulator(cfg)
         store.simulators[99] = sim
         try:
+
             async def fake_wait_for(coro, timeout):
                 coro.close()
                 raise asyncio.TimeoutError
@@ -1066,7 +1113,9 @@ class PurgeMeterReadingsTaskTests(TestCase):
 
         self.assertEqual(MeterReading.objects.count(), 1)
         self.assertTrue(
-            MeterReading.objects.filter(timestamp__gte=recent - timedelta(minutes=1)).exists()
+            MeterReading.objects.filter(
+                timestamp__gte=recent - timedelta(minutes=1)
+            ).exists()
         )
         self.assertTrue(Transaction.objects.filter(pk=tx.pk).exists())
 
@@ -1119,6 +1168,7 @@ class ChargerStatusViewTests(TestCase):
         User = get_user_model()
         self.user = User.objects.create_user(username="status", password="pwd")
         self.client.force_login(self.user)
+
     def test_chart_data_populated_from_existing_readings(self):
         charger = Charger.objects.create(charger_id="VIEW1")
         tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
@@ -1199,7 +1249,9 @@ class ChargerSessionPaginationTests(TestCase):
             )
 
     def test_only_ten_transactions_shown(self):
-        resp = self.client.get(reverse("charger-status", args=[self.charger.charger_id]))
+        resp = self.client.get(
+            reverse("charger-status", args=[self.charger.charger_id])
+        )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(resp.context["transactions"]), 10)
         self.assertTrue(resp.context["page_obj"].has_next())

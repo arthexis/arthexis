@@ -11,6 +11,7 @@ def test_celery_disables_debug(monkeypatch, role):
     monkeypatch.setenv("CELERY_TRACE_APP", "1")
     # Reload module to apply environment changes
     import config.celery as celery_module
+
     importlib.reload(celery_module)
     assert "CELERY_TRACE_APP" not in os.environ
     # Cleanup to avoid affecting other tests

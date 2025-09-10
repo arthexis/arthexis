@@ -6,6 +6,7 @@ from .models import CableSize, ConduitFill, CalculatorTemplate, PowerLead
 
 class AWGCalculatorTests(TestCase):
     fixtures = ["calculator_templates.json"]
+
     def setUp(self):
         CableSize.objects.create(
             awg_size="8",
@@ -211,7 +212,7 @@ class CalculatorTemplateTests(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["form"]["meters"], "10")
-        self.assertIn("value=\"10\"", resp.content.decode())
+        self.assertIn('value="10"', resp.content.decode())
 
     def test_get_absolute_url_omits_none_values(self):
         tmpl = CalculatorTemplate.objects.create(name="blank")

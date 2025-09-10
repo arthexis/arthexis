@@ -12,7 +12,9 @@ def test_wrapper_strips_debugpy(monkeypatch):
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join(["/a", "/debugpy", "/b"]))
 
     called = {}
-    monkeypatch.setattr(runpy, "run_path", lambda path, run_name: called.setdefault("path", path))
+    monkeypatch.setattr(
+        runpy, "run_path", lambda path, run_name: called.setdefault("path", path)
+    )
 
     vscode_manage.main(["runserver"])
 

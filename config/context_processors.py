@@ -13,7 +13,7 @@ def site_and_node(request: HttpRequest):
     ``badge_node`` is a ``Node`` instance or ``None`` if no match.
     ``badge_site_color`` and ``badge_node_color`` provide the configured colors.
     """
-    host = request.get_host().split(':')[0]
+    host = request.get_host().split(":")[0]
     site = Site.objects.filter(domain__iexact=host).first()
 
     node = None

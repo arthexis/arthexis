@@ -23,7 +23,9 @@ class SinkConsumer(AsyncWebsocketConsumer):
     async def connect(self) -> None:
         await self.accept()
 
-    async def receive(self, text_data: str | None = None, bytes_data: bytes | None = None) -> None:
+    async def receive(
+        self, text_data: str | None = None, bytes_data: bytes | None = None
+    ) -> None:
         if text_data is None:
             return
         try:
@@ -148,7 +150,9 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 await database_sync_to_async(tx_obj.save)(update_fields=["meter_start"])
         if connector is not None and not self.charger.connector_id:
             self.charger.connector_id = str(connector)
-            await database_sync_to_async(self.charger.save)(update_fields=["connector_id"])
+            await database_sync_to_async(self.charger.save)(
+                update_fields=["connector_id"]
+            )
         if temperature is not None:
             self.charger.temperature = temperature
             self.charger.temperature_unit = temp_unit
@@ -186,9 +190,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     "status": "Accepted",
                 }
             elif action == "Heartbeat":
-                reply_payload = {
-                    "currentTime": datetime.utcnow().isoformat() + "Z"
-                }
+                reply_payload = {"currentTime": datetime.utcnow().isoformat() + "Z"}
                 now = timezone.now()
                 self.charger.last_heartbeat = now
                 await database_sync_to_async(
@@ -199,7 +201,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 if self.charger.require_rfid:
                     status = (
                         "Accepted"
-                        if account and await database_sync_to_async(account.can_authorize)()
+                        if account
+                        and await database_sync_to_async(account.can_authorize)()
                         else "Invalid"
                     )
                 else:
@@ -251,7 +254,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         pk=tx_id,
                         charger=self.charger,
                         start_time=timezone.now(),
-                        meter_start=payload.get("meterStart") or payload.get("meterStop"),
+                        meter_start=payload.get("meterStart")
+                        or payload.get("meterStop"),
                         vin=(payload.get("vin") or ""),
                     )
                 if tx_obj:
