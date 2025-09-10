@@ -240,6 +240,7 @@ class User(Entity, AbstractUser):
         blank=True,
         help_text="Optional contact phone number",
     )
+    birthday = models.DateField(null=True, blank=True)
     address = models.ForeignKey(
         Address,
         null=True,
