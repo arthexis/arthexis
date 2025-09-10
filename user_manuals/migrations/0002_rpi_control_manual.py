@@ -194,6 +194,7 @@ def create_manual(apps, schema_editor):
     UserManual.objects.create(
         slug="rpi-control",
         title="RPi 4B Control Mode",
+        description="Wiring and control instructions for an RPi 4B.",
         content_html=HTML,
         content_pdf=PDF,
     )

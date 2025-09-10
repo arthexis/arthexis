@@ -96,6 +96,13 @@
           </button>
           <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+              {% if manual_url %}
+                <li class="nav-item">
+                  <a class="nav-link" href="{{ manual_url }}">
+                    <span class="badge rounded-pill text-bg-secondary">MAN</span>
+                  </a>
+                </li>
+              {% endif %}
               {% if nav_modules %}
                 {% for module in nav_modules %}
                   {% with landings=module.enabled_landings %}
