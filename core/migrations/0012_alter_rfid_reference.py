@@ -23,4 +23,9 @@ class Migration(migrations.Migration):
                 to="core.reference",
             ),
         ),
+        migrations.AddField(
+            model_name="newsarticle",
+            name="version",
+            field=models.CharField(blank=True, max_length=50),
+        ),
     ]

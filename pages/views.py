@@ -151,7 +151,7 @@ class NewsArticleListView(ListView):
         context["months"] = months
         all_articles = list(NewsArticle.objects.all())
         all_articles.sort(
-            key=lambda a: Version(a.name.split()[0]),
+            key=lambda a: Version(a.version or a.name.split()[0]),
             reverse=True,
         )
         context["all_articles"] = all_articles
