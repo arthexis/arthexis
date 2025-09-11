@@ -726,8 +726,9 @@ class EnergyCreditInline(admin.TabularInline):
 
 
 @admin.register(EnergyAccount)
-class EnergyAccountAdmin(admin.ModelAdmin):
+class EnergyAccountAdmin(UserDatumAdminMixin, admin.ModelAdmin):
     change_list_template = "admin/core/energyaccount/change_list.html"
+    change_form_template = "admin/user_datum_change_form.html"
     list_display = (
         "name",
         "user",

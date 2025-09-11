@@ -21,7 +21,7 @@ env_refresh = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(env_refresh)
 run_database_tasks = env_refresh.run_database_tasks
 
-from core.models import Address, OdooProfile, SecurityGroup
+from core.models import Address, EnergyAccount, OdooProfile, SecurityGroup
 from core.user_data import UserDatum
 
 
@@ -168,6 +168,13 @@ class UserDatumAdminTests(TransactionTestCase):
                 user=self.user, content_type=ct, object_id=new_addr.pk
             ).exists()
         )
+
+    def test_energyaccount_checkbox_displayed_on_change_form(self):
+        account = EnergyAccount.objects.create(name="MAIN")
+        url = reverse("admin:core_energyaccount_change", args=[account.pk])
+        response = self.client.get(url)
+        self.assertContains(response, 'name="_user_datum"')
+        self.assertContains(response, "User Datum")
 
 
 class UserDataViewTests(TestCase):
