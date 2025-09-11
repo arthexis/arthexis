@@ -3,9 +3,9 @@
     "model": "core.newsarticle",
     "pk": 1,
     "fields": {
-      "name": "0.1.7 Latest release",
-      "slug": "0-1-7-latest-release",
-      "content": "Highlights of version 0.1.7 with user friendly details.",
+      "name": "0.1.7 release notes",
+      "slug": "0-1-7-release-notes",
+      "content": "Version 0.1.7 streamlines the release workflow with a migration snapshot script, fixture checks, and automatic fixture commits. It introduces Virtual and Particle node roles along with PyPI validation tools and stability fixes.",
       "published": "2025-03-05"
     }
   },
@@ -13,9 +13,9 @@
     "model": "core.newsarticle",
     "pk": 2,
     "fields": {
-      "name": "0.1.4 Mid release",
-      "slug": "0-1-4-mid-release",
-      "content": "Overview of improvements in version 0.1.4 for all users.",
+      "name": "0.1.4 release notes",
+      "slug": "0-1-4-release-notes",
+      "content": "Version 0.1.4 adds a request approval system and admin favorites, moves releases to fixtures, and improves database refresh with a clean flag and deduplicated future actions.",
       "published": "2024-07-10"
     }
   },
@@ -23,9 +23,9 @@
     "model": "core.newsarticle",
     "pk": 3,
     "fields": {
-      "name": "0.1.1 First release",
-      "slug": "0-1-1-first-release",
-      "content": "Introduction to the initial 0.1.1 release and its features.",
+      "name": "0.1.1 release notes",
+      "slug": "0-1-1-release-notes",
+      "content": "The 0.1.1 release debuts the arts gallery and invitation templates, adds a public charger landing page with QR links, and introduces certificate renewal scripts and hardware integration enhancements.",
       "published": "2024-01-15"
     }
   }
