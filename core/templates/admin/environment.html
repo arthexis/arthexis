@@ -5,7 +5,8 @@
 <div id="content-main">
   <h1>{{ title }}</h1>
   <h2>{% trans "Environment Variables" %}</h2>
-  <table>
+  <input type="text" id="env-vars-filter" placeholder="{% trans 'Filter' %}" />
+  <table id="env-vars-table">
     <thead>
       <tr><th>{% trans "Name" %}</th><th>{% trans "Value" %}</th></tr>
     </thead>
@@ -18,7 +19,8 @@
     </tbody>
   </table>
   <h2>{% trans "Django Settings" %}</h2>
-  <table>
+  <input type="text" id="settings-filter" placeholder="{% trans 'Filter' %}" />
+  <table id="settings-table">
     <thead>
       <tr><th>{% trans "Name" %}</th><th>{% trans "Value" %}</th></tr>
     </thead>
@@ -31,4 +33,21 @@
     </tbody>
   </table>
 </div>
+<script>
+  function setupFilter(inputId, tableId) {
+    const input = document.getElementById(inputId);
+    const table = document.getElementById(tableId);
+    if (!input || !table) return;
+    input.addEventListener('input', function () {
+      const term = this.value.toLowerCase();
+      for (const row of table.tBodies[0].rows) {
+        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
+      }
+    });
+  }
+  document.addEventListener('DOMContentLoaded', function () {
+    setupFilter('env-vars-filter', 'env-vars-table');
+    setupFilter('settings-filter', 'settings-table');
+  });
+</script>
 {% endblock %}
