@@ -32,7 +32,8 @@
     </div>
   {% endif %}
   {% if sections %}
-    <table>
+    <input type="text" id="data-filter" placeholder="{% trans 'Filter' %}" />
+    <table id="data-table">
       <thead>
         <tr>
           <th>{% trans "App" %}</th>
@@ -58,4 +59,20 @@
     <p>{% trans 'None available' %}</p>
   {% endif %}
 </div>
+<script>
+  function setupFilter(inputId, tableId) {
+    const input = document.getElementById(inputId);
+    const table = document.getElementById(tableId);
+    if (!input || !table) return;
+    input.addEventListener('input', function () {
+      const term = this.value.toLowerCase();
+      for (const row of table.tBodies[0].rows) {
+        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
+      }
+    });
+  }
+  document.addEventListener('DOMContentLoaded', function () {
+    setupFilter('data-filter', 'data-table');
+  });
+</script>
 {% endblock %}
