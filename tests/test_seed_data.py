@@ -74,10 +74,15 @@ class SeedDataAdminTests(TestCase):
     def test_checkbox_displayed_on_change_form(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
         response = self.client.get(url)
-        self.assertContains(response, 'name="_seed_datum"')
-        self.assertContains(response, "Seed Datum")
-        self.assertContains(response, 'name="_user_datum"')
-        self.assertContains(response, "User Datum")
+        content = response.content.decode()
+        self.assertIn('name="_seed_datum"', content)
+        self.assertIn("Seed Datum", content)
+        self.assertIn('name="_user_datum"', content)
+        self.assertIn("User Datum", content)
+        self.assertLess(
+            content.index('name="_user_datum"'),
+            content.index('name="_seed_datum"'),
+        )
 
     def test_checkbox_has_form_attribute(self):
         url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])

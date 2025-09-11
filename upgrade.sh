@@ -106,6 +106,9 @@ fi
 echo "Refreshing environment..."
 ./env-refresh.sh $ENV_ARGS
 
+# Reload personal user data fixtures
+"$BASE_DIR/.venv/bin/python" manage.py load_user_fixtures || true
+
 # Migrate existing systemd unit to dedicated Celery services if needed
 LOCK_DIR="$BASE_DIR/locks"
 if [ -f "$LOCK_DIR/service.lck" ]; then

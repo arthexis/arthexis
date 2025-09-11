@@ -134,6 +134,30 @@ class UserDatumAdminTests(TransactionTestCase):
             ).exists()
         )
 
+    def test_load_user_fixtures_command(self):
+        url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
+        data = {
+            "user": self.user.pk,
+            "host": "http://test",
+            "database": "db",
+            "username": "odoo",
+            "password": "",
+            "_user_datum": "on",
+            "_save": "Save",
+        }
+        self.client.post(url, data)
+        self.assertTrue(self.fixture_path.exists())
+
+        call_command("flush", verbosity=0, interactive=False)
+        call_command("load_user_fixtures")
+
+        ct = ContentType.objects.get_for_model(OdooProfile)
+        self.assertTrue(
+            UserDatum.objects.filter(
+                user_id=self.user.pk, content_type=ct, object_id=self.profile.pk
+            ).exists()
+        )
+
     def test_copy_unmarks_user_datum(self):
         address = Address.objects.create(
             street="Main",

@@ -4,12 +4,14 @@ from pathlib import Path
 from io import BytesIO
 from zipfile import ZipFile
 import json
+import tempfile
 
 from django.conf import settings
 from django.contrib import admin
 from django.contrib import messages
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import IntegrityError, models
@@ -92,6 +94,52 @@ def dump_user_fixture(instance, user) -> None:
 
 def delete_user_fixture(instance, user) -> None:
     _fixture_path(user, instance).unlink(missing_ok=True)
+
+
+def load_user_fixtures() -> None:
+    """Load all user datum fixtures from the data directory."""
+    data_dir = _data_dir()
+    personal = sorted(data_dir.glob("*.json"))
+    if not personal:
+        return
+    User = get_user_model()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        patched: list[str] = []
+        for p in personal:
+            dest = Path(tmpdir, p.name)
+            try:
+                data = json.load(p.open())
+            except Exception:
+                dest.write_text(p.read_text())
+                patched.append(str(dest))
+                continue
+            try:
+                user_id = int(p.stem.split("_", 1)[0])
+                User.objects.get_or_create(
+                    pk=user_id, defaults={"username": f"user{user_id}"}
+                )
+            except Exception:
+                pass
+            for obj in data:
+                fields = obj.get("fields", {})
+                uid = fields.get("user")
+                if (
+                    isinstance(uid, int)
+                    and not User.all_objects.filter(pk=uid).exists()
+                ):
+                    fields["user"] = 1
+            dest.write_text(json.dumps(data))
+            patched.append(str(dest))
+        call_command("loaddata", *patched, ignorenonexistent=True)
+    for p in personal:
+        try:
+            user_id, app_label, model, obj_id = p.stem.split("_", 3)
+            ct = ContentType.objects.get_by_natural_key(app_label, model)
+            UserDatum.objects.get_or_create(
+                user_id=int(user_id), content_type=ct, object_id=int(obj_id)
+            )
+        except Exception:
+            continue
 
 
 # ---- Signals -------------------------------------------------------------
@@ -317,9 +365,9 @@ def _user_data_export(request):
             zf.write(path, arcname=path.name)
     buffer.seek(0)
     response = HttpResponse(buffer.getvalue(), content_type="application/zip")
-    response["Content-Disposition"] = (
-        f"attachment; filename=user_data_{request.user.pk}.zip"
-    )
+    response[
+        "Content-Disposition"
+    ] = f"attachment; filename=user_data_{request.user.pk}.zip"
     return response
 
 

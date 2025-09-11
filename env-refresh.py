@@ -36,10 +36,9 @@ from django.db.models.signals import post_save
 from pages.models import Module, Landing, _create_landings
 from nodes.models import Node
 from django.contrib.sites.models import Site
-from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth import get_user_model
 
-from core.user_data import UserDatum
+from core.user_data import load_user_fixtures
 from core.models import PackageRelease
 from utils import revision as revision_utils
 
@@ -63,7 +62,9 @@ def _unlink_sqlite_db(path: Path) -> None:
         backup_dir.mkdir(exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         version_file = base_dir / "VERSION"
-        version = version_file.read_text().strip() if version_file.exists() else "unknown"
+        version = (
+            version_file.read_text().strip() if version_file.exists() else "unknown"
+        )
         revision = revision_utils.get_revision() or "unknown"
         shutil.copy2(
             path,
@@ -312,48 +313,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
         )
 
     # Load personal user data fixtures last
-    data_dir = Path(settings.BASE_DIR) / "data"
-    if data_dir.is_dir():
-        personal = sorted(data_dir.glob("*.json"))
-        if personal:
-            User = get_user_model()
-            with tempfile.TemporaryDirectory() as tmpdir:
-                patched: list[str] = []
-                for p in personal:
-                    dest = Path(tmpdir, p.name)
-                    try:
-                        data = json.load(p.open())
-                    except Exception:
-                        dest.write_text(p.read_text())
-                        patched.append(str(dest))
-                        continue
-                    try:
-                        user_id = int(p.stem.split("_", 1)[0])
-                        User.objects.get_or_create(
-                            pk=user_id, defaults={"username": f"user{user_id}"}
-                        )
-                    except Exception:
-                        pass
-                    for obj in data:
-                        fields = obj.get("fields", {})
-                        uid = fields.get("user")
-                        if (
-                            isinstance(uid, int)
-                            and not User.all_objects.filter(pk=uid).exists()
-                        ):
-                            fields["user"] = 1
-                    dest.write_text(json.dumps(data))
-                    patched.append(str(dest))
-                call_command("loaddata", *patched, ignorenonexistent=True)
-            for p in personal:
-                try:
-                    user_id, app_label, model, obj_id = p.stem.split("_", 3)
-                    ct = ContentType.objects.get_by_natural_key(app_label, model)
-                    UserDatum.objects.get_or_create(
-                        user_id=int(user_id), content_type=ct, object_id=int(obj_id)
-                    )
-                except Exception:
-                    continue
+    load_user_fixtures()
 
     # Update the fixtures and migrations hash files after a successful run.
     _write_fixture_hash(fixture_hash)
