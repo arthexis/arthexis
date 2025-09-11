@@ -2,6 +2,7 @@
 - Note: do not modify README files unless directed. Use Django's admindocs for app documentation.
 - Application documentation lives in Django's admindocs. Do not create or modify per-app README files.
 - Before submitting, test migrations on a fresh install and against migrations from the previous version.
+- Run `pre-commit run --all-files` to ensure migration checks pass. Use `scripts/test-upgrade-path.sh` to verify upgrades from the previous release and `env-refresh.sh --clean` for a fresh install.
 - Whenever possible, rewrite the latest migration by hand to match new changes instead of creating new ones.
   Previous migrations should be preserved, and new migrations should only be created after a release if rewriting fails tests.
 - Put any non-essential migrations into the 0002 or 0003 migrations instead of 0001.
