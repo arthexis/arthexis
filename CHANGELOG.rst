@@ -1,6 +1,9 @@
 Changelog
 =========
 
+.. This file is generated from commit messages using scripts/generate-changelog.sh.
+.. Do not edit manually.
+
 Unreleased
 ----------
 
