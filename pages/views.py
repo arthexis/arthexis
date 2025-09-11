@@ -13,12 +13,14 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from nodes.models import Node
 from django.urls import reverse
-from django.utils import translation, timezone
+from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.core.mail import send_mail
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.views.decorators.cache import never_cache
+from django.utils.cache import patch_vary_headers
 from core.models import InviteLead, EnergyReport
 
 import markdown
@@ -30,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 @landing("Home")
+@never_cache
 def index(request):
     site = get_site(request)
     if site:
@@ -50,17 +53,24 @@ def index(request):
     readme_base = (
         Path(settings.BASE_DIR) / app_slug if app_slug else Path(settings.BASE_DIR)
     )
-    lang = translation.get_language() or ""
-    readme_file = readme_base / "README.md"
+    lang = getattr(request, "LANGUAGE_CODE", "")
+    lang = lang.replace("_", "-").lower()
+    root_base = Path(settings.BASE_DIR)
+    candidates = []
     if lang:
-        localized = readme_base / f"README.{lang}.md"
-        if not localized.exists():
+        candidates.append(readme_base / f"README.{lang}.md")
+        short = lang.split("-")[0]
+        if short != lang:
+            candidates.append(readme_base / f"README.{short}.md")
+    candidates.append(readme_base / "README.md")
+    if readme_base != root_base:
+        if lang:
+            candidates.append(root_base / f"README.{lang}.md")
             short = lang.split("-")[0]
-            localized = readme_base / f"README.{short}.md"
-        if localized.exists():
-            readme_file = localized
-    if not readme_file.exists():
-        readme_file = Path(settings.BASE_DIR) / "README.md"
+            if short != lang:
+                candidates.append(root_base / f"README.{short}.md")
+        candidates.append(root_base / "README.md")
+    readme_file = next((p for p in candidates if p.exists()), root_base / "README.md")
     text = readme_file.read_text(encoding="utf-8")
     md = markdown.Markdown(extensions=["toc", "tables"])
     html = md.convert(text)
@@ -72,7 +82,9 @@ def index(request):
         toc_html = toc_html.strip()
     title = "README" if readme_file.name.startswith("README") else readme_file.stem
     context = {"content": html, "title": title, "toc": toc_html}
-    return render(request, "pages/readme.html", context)
+    response = render(request, "pages/readme.html", context)
+    patch_vary_headers(response, ["Accept-Language", "Cookie"])
+    return response
 
 
 def sitemap(request):
