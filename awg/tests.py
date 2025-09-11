@@ -112,6 +112,35 @@ class AWGCalculatorTests(TestCase):
         self.assertIn("order-first", content)
         self.assertIn("order-lg-last", content)
 
+    def test_odd_awg_displays_even_preference(self):
+        CableSize.objects.create(
+            awg_size="3",
+            material="cu",
+            dia_in=0,
+            dia_mm=0,
+            area_kcmil=0,
+            area_mm2=0,
+            k_ohm_km=0.1,
+            k_ohm_kft=0.1,
+            amps_60c=150,
+            amps_75c=150,
+            amps_90c=150,
+            line_num=1,
+        )
+        url = reverse("awg:calculator")
+        data = {
+            "meters": "10",
+            "amps": "80",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "ground": "1",
+        }
+        resp = self.client.post(url, data)
+        self.assertContains(resp, "2-3")
+
     def test_query_params_prefill_form(self):
         url = (
             reverse("awg:calculator")

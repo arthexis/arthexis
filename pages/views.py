@@ -25,6 +25,7 @@ from core.models import InviteLead, EnergyReport
 
 import markdown
 from pages.utils import landing
+from core.liveupdate import live_update
 from .models import Module
 
 
@@ -198,9 +199,7 @@ def request_invite(request):
                     "Invitation email sent to %s (user %s): %s", email, user.pk, result
                 )
             except Exception as exc:
-                lead.error = (
-                    f"{exc}. Ensure the email service is reachable and settings are correct."
-                )
+                lead.error = f"{exc}. Ensure the email service is reachable and settings are correct."
                 logger.exception("Failed to send invitation email to %s", email)
         if lead.sent_on or lead.error:
             lead.save(update_fields=["sent_on", "error"])
@@ -302,6 +301,7 @@ class EnergyReportForm(forms.Form):
         return cleaned
 
 
+@live_update()
 def energy_report(request):
     form = EnergyReportForm(request.POST or None)
     report = None

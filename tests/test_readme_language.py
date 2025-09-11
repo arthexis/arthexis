@@ -41,3 +41,9 @@ class ReadmeLanguageTests(TestCase):
         request.LANGUAGE_CODE = "ES"
         response = index(request)
         self.assertContains(response, "Constelación Arthexis")
+
+    def test_vary_headers_present(self):
+        response = self.client.get("/")
+        vary = response.headers.get("Vary", "")
+        self.assertIn("Accept-Language", vary)
+        self.assertIn("Cookie", vary)
