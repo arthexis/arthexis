@@ -1,0 +1,19 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'django-admindocs-docroot' %}">{% translate 'Documentation' %}</a>
+  &rsaquo; <a href="{% url 'django-admindocs-manuals' %}">{% translate 'Manuals' %}</a>
+  &rsaquo; {{ manual.title }}
+</div>
+{% endblock %}
+{% block title %}{{ manual.title }}{% endblock %}
+
+{% block content %}
+<h1>{{ manual.title }}</h1>
+<div id="content-main">
+  {{ manual.content_html|safe }}
+</div>
+{% endblock %}

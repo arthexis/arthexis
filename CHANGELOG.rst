@@ -1,9 +1,13 @@
 Changelog
 =========
 
+.. This file is generated from commit messages using scripts/generate-changelog.sh.
+.. Do not edit manually.
+
 Unreleased
 ----------
 
+- integrate user manuals into admin documentation
 - add migration snapshot script and release workflow
 - expand security model to include Public permissions and add permission matrix field
 
