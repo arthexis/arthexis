@@ -9,7 +9,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import LoginView
 from django import forms
 from utils.sites import get_site
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
 from nodes.models import Node
 from django.urls import reverse
@@ -106,6 +106,25 @@ def sitemap(request):
             lines.append(f"  <url><loc>{loc}</loc></url>")
     lines.append("</urlset>")
     return HttpResponse("\n".join(lines), content_type="application/xml")
+
+
+def release_checklist(request):
+    file_path = Path(settings.BASE_DIR) / "releases" / "release-checklist.md"
+    if not file_path.exists():
+        raise Http404("Release checklist not found")
+    text = file_path.read_text(encoding="utf-8")
+    md = markdown.Markdown(extensions=["toc", "tables"])
+    html = md.convert(text)
+    toc_html = md.toc
+    if toc_html.strip().startswith('<div class="toc">'):
+        toc_html = toc_html.strip()[len('<div class="toc">') :]
+        if toc_html.endswith("</div>"):
+            toc_html = toc_html[: -len("</div>")]
+        toc_html = toc_html.strip()
+    context = {"content": html, "title": "Release Checklist", "toc": toc_html}
+    response = render(request, "pages/readme.html", context)
+    patch_vary_headers(response, ["Accept-Language", "Cookie"])
+    return response
 
 
 @csrf_exempt
