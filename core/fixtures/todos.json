@@ -1,10 +1,1 @@
-[
-  {
-    "model": "core.todo",
-    "pk": 1,
-    "fields": {
-      "description": "Validate screen Model Permissions",
-      "url": "/admin/core/model/permissions/"
-    }
-  }
-]
+[]
