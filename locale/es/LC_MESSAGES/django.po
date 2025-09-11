@@ -546,7 +546,7 @@ msgstr "Registrar anfitrión actual"
 #: pages/templates/pages/login.html:4
 #: pages/templates/pages/login.html:9
 msgid "Login"
-msgstr ""
+msgstr "Iniciar sesión"
 
 #: pages/templates/pages/base.html:72
 #: pages/templates/pages/base.html:99
@@ -559,15 +559,19 @@ msgstr "Modo Claro"
 
 #: pages/templates/pages/login.html:14
 msgid "Username"
-msgstr ""
+msgstr "Nombre de usuario"
 
 #: pages/templates/pages/login.html:18
 msgid "Password"
-msgstr ""
+msgstr "Contraseña"
 
 #: pages/templates/pages/login.html:22
 msgid "Log in"
-msgstr ""
+msgstr "Iniciar sesión"
+
+#: pages/templates/pages/login.html:25
+msgid "Request email invitation"
+msgstr "Solicitar invitación por correo electrónico"
 
 #: awg/models.py:24
 msgid "Cable Size"
