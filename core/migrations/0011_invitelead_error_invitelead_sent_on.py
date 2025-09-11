@@ -80,4 +80,59 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "News Articles",
             },
         ),
+        migrations.AddField(
+            model_name="evmodel",
+            name="battery_capacity_kwh",
+            field=models.DecimalField(
+                blank=True,
+                null=True,
+                max_digits=6,
+                decimal_places=2,
+                verbose_name="Battery Capacity (kWh)",
+            ),
+        ),
+        migrations.AddField(
+            model_name="evmodel",
+            name="ac_110v_power_kw",
+            field=models.DecimalField(
+                blank=True,
+                null=True,
+                max_digits=5,
+                decimal_places=2,
+                verbose_name="110V AC (kW)",
+            ),
+        ),
+        migrations.AddField(
+            model_name="evmodel",
+            name="ac_220v_power_kw",
+            field=models.DecimalField(
+                blank=True,
+                null=True,
+                max_digits=5,
+                decimal_places=2,
+                verbose_name="220V AC (kW)",
+            ),
+        ),
+        migrations.AddField(
+            model_name="evmodel",
+            name="dc_60_power_kw",
+            field=models.DecimalField(
+                blank=True,
+                null=True,
+                max_digits=5,
+                decimal_places=2,
+                verbose_name="60kW DC (kW)",
+            ),
+        ),
+        migrations.AddField(
+            model_name="evmodel",
+            name="dc_100_power_kw",
+            field=models.DecimalField(
+                blank=True,
+                null=True,
+                max_digits=5,
+                decimal_places=2,
+                verbose_name="100kW DC (kW)",
+            ),
+        ),
     ]

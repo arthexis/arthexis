@@ -414,6 +414,7 @@ class EVBrandFixtureTests(TestCase):
         )
         self.assertTrue(EVModel.objects.filter(brand=porsche, name="Taycan").exists())
         self.assertTrue(EVModel.objects.filter(brand=audi, name="e-tron GT").exists())
+        self.assertTrue(EVModel.objects.filter(brand=porsche, name="Macan").exists())
 
     def test_brand_from_vin(self):
         call_command(
