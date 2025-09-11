@@ -477,4 +477,7 @@ def todo_done(request, pk: int):
         data = []
     data = [item for item in data if item.get("pk") != todo.pk]
     TODO_FIXTURE_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", str(TODO_FIXTURE_PATH)], check=False)
+    subprocess.run(["git", "commit", "-m", todo.description], check=False)
+    subprocess.run(["git", "push"], check=False)
     return redirect("admin:index")

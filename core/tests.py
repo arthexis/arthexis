@@ -799,13 +799,19 @@ class TodoDoneTests(TestCase):
             ),
             encoding="utf-8",
         )
-        with mock.patch("core.views.TODO_FIXTURE_PATH", tmp):
+        with (
+            mock.patch("core.views.TODO_FIXTURE_PATH", tmp),
+            mock.patch("core.views.subprocess.run") as mock_run,
+        ):
             resp = self.client.post(reverse("todo-done", args=[todo.pk]))
         self.assertRedirects(resp, reverse("admin:index"))
         todo.refresh_from_db()
         self.assertTrue(todo.is_deleted)
         data = json.loads(tmp.read_text(encoding="utf-8"))
         self.assertEqual(data, [])
+        mock_run.assert_any_call(["git", "add", str(tmp)], check=False)
+        mock_run.assert_any_call(["git", "commit", "-m", "Task"], check=False)
+        mock_run.assert_any_call(["git", "push"], check=False)
         tmp.unlink()
 
 
