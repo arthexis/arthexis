@@ -18,12 +18,10 @@
     <legend>{% trans 'Users' %}</legend>
     {% for code, name in perm_choices %}
     {% with 'user_'|add:code as field_name %}
-    {% with form[field_name] as field %}
     <div class="form-row">
-      {{ field.label_tag }}
-      {{ field }}
+      {{ form[field_name].label_tag }}
+      {{ form[field_name] }}
     </div>
-    {% endwith %}
     {% endwith %}
     {% endfor %}
   </fieldset>
@@ -31,12 +29,10 @@
     <legend>{% trans 'Security groups' %}</legend>
     {% for code, name in perm_choices %}
     {% with 'group_'|add:code as field_name %}
-    {% with form[field_name] as field %}
     <div class="form-row">
-      {{ field.label_tag }}
-      {{ field }}
+      {{ form[field_name].label_tag }}
+      {{ form[field_name] }}
     </div>
-    {% endwith %}
     {% endwith %}
     {% endfor %}
   </fieldset>
