@@ -18,7 +18,3 @@ Constellation:
   - ocpp/**
   - core/**
   - pages/**
-Virtual:
-  - core/**
-Particle:
-  - nodes/**

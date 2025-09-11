@@ -31,7 +31,6 @@ Unreleased
 - 847ebe5 chore: update fixtures
 - 4fc2d82 omni
 - c1e2ba3 microservices
-- 248ba81 Add Virtual and Particle node roles
 - d4524bf test: cover dist cleanup in build
 - f14bc47 regress version test
 - bae58ca Add PyPI validation admin action

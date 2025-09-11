@@ -15,7 +15,6 @@ def _setup_tmp(monkeypatch, tmp_path):
 
 
 @pytest.mark.role("Constellation")
-@pytest.mark.role("Virtual")
 def test_no_upgrade_triggers_startup(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.0")
@@ -39,7 +38,6 @@ def test_no_upgrade_triggers_startup(monkeypatch, tmp_path):
 
 
 @pytest.mark.role("Constellation")
-@pytest.mark.role("Virtual")
 def test_upgrade_shows_message(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.0")

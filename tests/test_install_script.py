@@ -20,16 +20,16 @@ def test_install_script_includes_constellation_flag():
     assert "--constellation" in content
 
 
-def test_install_script_includes_virtual_flag():
+def test_install_script_excludes_virtual_flag():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()
-    assert "--virtual" in content
+    assert "--virtual" not in content
 
 
-def test_install_script_includes_particle_flag():
+def test_install_script_excludes_particle_flag():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()
-    assert "--particle" in content
+    assert "--particle" not in content
 
 
 def test_install_script_includes_datasette_flag():
@@ -60,7 +60,7 @@ def test_install_script_runs_env_refresh():
 def test_install_script_requires_nginx_for_roles():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()
-    for role in ("satellite", "control", "constellation", "virtual"):
+    for role in ("satellite", "control", "constellation"):
         assert f'require_nginx "{role}"' in content
 
 
@@ -86,10 +86,5 @@ def test_install_script_role_defaults():
     assert "AUTO_UPGRADE=true" in control
     assert "LATEST=true" in control
 
-    virtual = block("virtual")
-    assert "AUTO_UPGRADE=true" in virtual
-    assert "LATEST=false" in virtual
-
-    particle = block("particle")
-    assert "AUTO_UPGRADE=false" in particle
-    assert "LATEST=true" in particle
+    assert "--virtual)" not in content
+    assert "--particle)" not in content

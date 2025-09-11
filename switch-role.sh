@@ -21,7 +21,7 @@ ENABLE_DATASETTE=false
 CHECK=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette] [--check] [--satellite|--terminal|--control|--constellation|--virtual|--particle]" >&2
+    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette] [--check] [--satellite|--terminal|--control|--constellation]" >&2
     exit 1
 }
 
@@ -104,20 +104,6 @@ while [[ $# -gt 0 ]]; do
             ENABLE_CELERY=true
             NGINX_MODE="public"
             REQUIRES_REDIS=true
-            shift
-            ;;
-        --virtual)
-            require_nginx "virtual"
-            NODE_ROLE="Virtual"
-            ENABLE_CELERY=true
-            NGINX_MODE="public"
-            REQUIRES_REDIS=true
-            shift
-            ;;
-        --particle)
-            NODE_ROLE="Particle"
-            ENABLE_CELERY=false
-            NGINX_MODE="internal"
             shift
             ;;
         *)
