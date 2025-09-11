@@ -1,24 +1,22 @@
 {% extends "admin/change_form.html" %}
 {% load i18n %}
 
-{% block object-tools %}
-<ul class="object-tools">
-    {% if show_seed_datum %}
-    <li>
-        <label style="color: var(--body-quiet-color);">
-            {% trans "Seed Datum" %}
-            <input type="checkbox" name="_seed_datum" form="{{ opts.model_name }}_form"{% if original and original.is_seed_data %} checked{% endif %} disabled>
-        </label>
-    </li>
-    {% endif %}
-    {% if show_user_datum %}
-    <li>
-        <label style="color: var(--body-quiet-color);">
-            {% trans "User Datum" %}
+{% block content_title %}
+<div style="display:flex; justify-content:space-between; align-items:center;">
+    <h1>{{ title }}</h1>
+    <div>
+        {% if show_user_datum %}
+        <label style="color: var(--body-quiet-color); margin-left: 1em;">
             <input type="checkbox" name="_user_datum" form="{{ opts.model_name }}_form"{% if is_user_datum %} checked{% endif %}>
+            {% trans "User Datum" %}
         </label>
-    </li>
-    {% endif %}
-    {% block object-tools-items %}{{ block.super }}{% endblock %}
-</ul>
+        {% endif %}
+        {% if show_seed_datum %}
+        <label style="color: var(--body-quiet-color); margin-left: 1em;">
+            <input type="checkbox" name="_seed_datum" form="{{ opts.model_name }}_form"{% if original and original.is_seed_data %} checked{% endif %} disabled>
+            {% trans "Seed Datum" %}
+        </label>
+        {% endif %}
+    </div>
+</div>
 {% endblock %}
