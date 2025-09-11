@@ -808,6 +808,17 @@ class TodoDoneTests(TestCase):
         tmp.unlink()
 
 
+class TodoUrlValidationTests(TestCase):
+    def test_relative_url_valid(self):
+        todo = Todo(description="Task", url="/path")
+        todo.full_clean()  # should not raise
+
+    def test_absolute_url_invalid(self):
+        todo = Todo(description="Task", url="https://example.com/path")
+        with self.assertRaises(ValidationError):
+            todo.full_clean()
+
+
 class ModelPermissionViewTests(TestCase):
     def setUp(self):
         self.client = Client()
