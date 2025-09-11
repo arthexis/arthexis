@@ -38,8 +38,10 @@ from ocpp.models import Transaction, Charger
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import IntegrityError
+from django.contrib.auth.models import Permission
 from .backends import LocalhostAdminBackend
 from core.views import _step_check_pypi, _step_promote_build, _step_publish
+from .model_permissions import PERM_CHOICES
 
 
 class DefaultAdminTests(TestCase):
@@ -804,3 +806,48 @@ class TodoDoneTests(TestCase):
         data = json.loads(tmp.read_text(encoding="utf-8"))
         self.assertEqual(data, [])
         tmp.unlink()
+
+
+class ModelPermissionViewTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User.objects.create_superuser("admin", "admin@example.com", "pw")
+        self.client.force_login(User.objects.get(username="admin"))
+        self.user = User.objects.create_user("u1", password="pw")
+        self.group = SecurityGroup.objects.create(name="G1")
+
+    def test_assign_permissions(self):
+        url = reverse("admin:model_permissions", args=["core", "address"])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        data = {
+            "user_view": [str(self.user.pk)],
+            "group_view": [str(self.group.pk)],
+            "user_add": [],
+            "user_change": [],
+            "user_delete": [],
+            "group_add": [],
+            "group_change": [],
+            "group_delete": [],
+        }
+        resp = self.client.post(url, data)
+        self.assertRedirects(resp, reverse("admin:app_list", args=["core"]))
+        perm = Permission.objects.get(codename="view_address")
+        self.assertIn(self.user, perm.user_set.all())
+        self.assertIn(self.group, perm.group_set.all())
+
+    def test_superuser_not_in_form_and_has_access(self):
+        url = reverse("admin:model_permissions", args=["core", "address"])
+        resp = self.client.get(url)
+        field = resp.context["form"].fields["user_view"]
+        self.assertFalse(field.queryset.filter(is_superuser=True).exists())
+
+        data = {}
+        for code, _ in PERM_CHOICES:
+            data[f"user_{code}"] = []
+            data[f"group_{code}"] = []
+        resp = self.client.post(url, data)
+        self.assertRedirects(resp, reverse("admin:app_list", args=["core"]))
+
+        resp = self.client.get(reverse("admin:core_address_changelist"))
+        self.assertEqual(resp.status_code, 200)
