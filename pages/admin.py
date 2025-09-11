@@ -3,7 +3,7 @@ from django.contrib.sites.admin import SiteAdmin as DjangoSiteAdmin
 from django.contrib.sites.models import Site
 from django import forms
 from django.db import models
-from app.widgets import CopyColorWidget
+from core.widgets import CopyColorWidget
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import path, reverse
 from django.utils.html import format_html

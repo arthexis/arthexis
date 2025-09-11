@@ -6,7 +6,7 @@ class CopyColorWidget(forms.TextInput):
     template_name = "widgets/copy_color.html"
 
     class Media:
-        js = ["app/copy_color.js"]
+        js = ["core/copy_color.js"]
 
 
 class CodeEditorWidget(forms.Textarea):
@@ -19,5 +19,5 @@ class CodeEditorWidget(forms.Textarea):
         super().__init__(attrs=default_attrs)
 
     class Media:
-        css = {"all": ["app/code_editor.css"]}
-        js = ["app/code_editor.js"]
+        css = {"all": ["core/code_editor.css"]}
+        js = ["core/code_editor.js"]

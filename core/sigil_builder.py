@@ -152,6 +152,10 @@ def _sigil_builder_view(request):
         upload = request.FILES.get("sigils_file")
         if upload:
             sigils_text = upload.read().decode("utf-8", errors="ignore")
+        else:
+            single = request.POST.get("sigil", "")
+            if single:
+                sigils_text = f"[{single}]" if not single.startswith("[") else single
         resolved_text = resolve_sigils_in_text(sigils_text) if sigils_text else ""
 
     context = admin.site.each_context(request)

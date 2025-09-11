@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.core import mail
 
-from app.tasks import birthday_greetings
+from core.tasks import birthday_greetings
 from nodes.models import NetMessage
 
 

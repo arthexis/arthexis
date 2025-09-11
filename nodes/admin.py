@@ -4,7 +4,7 @@ from django.shortcuts import redirect, render
 from django.utils.html import format_html
 from django import forms
 from django.contrib.admin.widgets import FilteredSelectMultiple
-from app.widgets import CopyColorWidget, CodeEditorWidget
+from core.widgets import CopyColorWidget, CodeEditorWidget
 from django.db import models
 from django.conf import settings
 from pathlib import Path
