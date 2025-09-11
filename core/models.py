@@ -1064,6 +1064,41 @@ class EVModel(Entity):
 
     brand = models.ForeignKey(Brand, on_delete=models.CASCADE, related_name="ev_models")
     name = models.CharField(max_length=100)
+    battery_capacity_kwh = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Battery Capacity (kWh)",
+    )
+    ac_110v_power_kw = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="110V AC (kW)",
+    )
+    ac_220v_power_kw = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="220V AC (kW)",
+    )
+    dc_60_power_kw = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="60kW DC (kW)",
+    )
+    dc_100_power_kw = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="100kW DC (kW)",
+    )
 
     class Meta:
         unique_together = ("brand", "name")
