@@ -11,3 +11,8 @@ repos:
         entry: python scripts/check_migrations.py
         language: system
         pass_filenames: false
+      - id: validation-todos
+        name: Ensure validation TODOs
+        entry: python scripts/ensure_validation_todos.py
+        language: system
+        pass_filenames: false
