@@ -879,8 +879,16 @@ class BrandAdmin(admin.ModelAdmin):
 
 @admin.register(EVModel)
 class EVModelAdmin(admin.ModelAdmin):
-    fields = ("brand", "name")
-    list_display = ("name", "brand")
+    fields = (
+        "brand",
+        "name",
+        "battery_capacity_kwh",
+        "ac_110v_power_kw",
+        "ac_220v_power_kw",
+        "dc_60_power_kw",
+        "dc_100_power_kw",
+    )
+    list_display = ("name", "brand", "battery_capacity_kwh")
     list_filter = ("brand",)
 
 
