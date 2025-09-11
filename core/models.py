@@ -27,6 +27,7 @@ from django.utils import timezone
 import uuid
 from pathlib import Path
 from django.core import serializers
+from urllib.parse import urlparse
 from utils import revision as revision_utils
 
 from .entity import Entity, EntityUserManager
@@ -1489,11 +1490,21 @@ class NewsArticle(Entity):
         return self.name
 
 
+def validate_relative_url(value: str) -> None:
+    if not value:
+        return
+    parsed = urlparse(value)
+    if parsed.scheme or parsed.netloc or not value.startswith("/"):
+        raise ValidationError("URL must be relative")
+
+
 class Todo(Entity):
     """Tasks requested for the Release Manager."""
 
     description = models.CharField(max_length=255)
-    url = models.URLField(blank=True, default="")
+    url = models.CharField(
+        max_length=200, blank=True, default="", validators=[validate_relative_url]
+    )
 
     class Meta:
         verbose_name = "TODO"

@@ -5,7 +5,7 @@
     "fields": {
       "description": "Review release checklist",
       "is_seed_data": true,
-      "url": "https://arthexis.com/release-checklist"
+      "url": "/release-checklist"
     }
   },
   {
@@ -14,7 +14,7 @@
     "fields": {
       "description": "Confirm version numbering",
       "is_seed_data": true,
-      "url": "https://arthexis.com/version-numbering"
+      "url": "/version-numbering"
     }
   }
 ]

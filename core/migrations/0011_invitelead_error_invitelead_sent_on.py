@@ -2,6 +2,7 @@
 
 from django.db import migrations, models
 import django.utils.timezone
+from core.models import validate_relative_url
 
 
 class Migration(migrations.Migration):
@@ -26,7 +27,15 @@ class Migration(migrations.Migration):
                 ("is_seed_data", models.BooleanField(default=False, editable=False)),
                 ("is_deleted", models.BooleanField(default=False, editable=False)),
                 ("description", models.CharField(max_length=255)),
-                ("url", models.URLField(blank=True, default="")),
+                (
+                    "url",
+                    models.CharField(
+                        blank=True,
+                        default="",
+                        max_length=200,
+                        validators=[validate_relative_url],
+                    ),
+                ),
             ],
             options={
                 "verbose_name": "TODO",
