@@ -116,6 +116,11 @@ def _resolve_sigil(sigil: str) -> str:
         return ""
 
 
+def resolve_sigils_in_text(text: str) -> str:
+    """Resolve all sigils within ``text`` and return the result."""
+    return SIGIL_PATTERN.sub(lambda m: _resolve_sigil(m.group(0)), text)
+
+
 def _sigil_builder_view(request):
     SigilRoot = apps.get_model("core", "SigilRoot")
     roots = []
@@ -140,13 +145,14 @@ def _sigil_builder_view(request):
                     {"model": model._meta.object_name, "field": field.name.upper()}
                 )
 
-    sigil = ""
-    resolved = ""
+    sigils_text = ""
+    resolved_text = ""
     if request.method == "POST":
-        sigil = request.POST.get("sigil", "").strip()
-        if sigil and not sigil.startswith("["):
-            sigil = f"[{sigil}]"
-        resolved = _resolve_sigil(sigil) if sigil else ""
+        sigils_text = request.POST.get("sigils_text", "")
+        upload = request.FILES.get("sigils_file")
+        if upload:
+            sigils_text = upload.read().decode("utf-8", errors="ignore")
+        resolved_text = resolve_sigils_in_text(sigils_text) if sigils_text else ""
 
     context = admin.site.each_context(request)
     context.update(
@@ -154,8 +160,8 @@ def _sigil_builder_view(request):
             "title": _("Sigil Builder"),
             "sigil_roots": roots,
             "auto_fields": auto_fields,
-            "sigil": sigil,
-            "resolved": resolved,
+            "sigils_text": sigils_text,
+            "resolved_text": resolved_text,
         }
     )
     return TemplateResponse(request, "admin/sigil_builder.html", context)

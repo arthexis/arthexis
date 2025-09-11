@@ -4,14 +4,16 @@
 {% block content %}
 <div id="content-main">
   <h1>{{ title }}</h1>
-  <form method="post" style="margin-bottom:1em;">
+  <form method="post" enctype="multipart/form-data" style="margin-bottom:1em;">
     {% csrf_token %}
-    <label for="sigil_input">{% trans "Sigil" %}</label>
-    <input type="text" name="sigil" id="sigil_input" value="{{ sigil }}" size="60" />
+    <label for="sigils_text">{% trans "Sigils" %}</label>
+    <textarea name="sigils_text" id="sigils_text" rows="10" cols="80" style="width:100%;">{{ sigils_text }}</textarea>
+    <input type="file" name="sigils_file" id="sigils_file" />
     <button type="submit">{% trans "Validate" %}</button>
   </form>
-  {% if sigil %}
-  <p>{% trans "Result" %}: {{ resolved }}</p>
+  {% if sigils_text %}
+  <label for="resolved_text">{% trans "Result" %}</label>
+  <textarea id="resolved_text" rows="10" cols="80" style="width:100%;" readonly>{{ resolved_text }}</textarea>
   {% endif %}
   <table>
     <thead>
