@@ -81,6 +81,28 @@ command -v nmcli >/dev/null 2>&1 || {
     exit 1
 }
 
+# Install and enable wlan1 device refresh service
+WLAN1_REFRESH_SCRIPT="$BASE_DIR/wlan1-device-refresh.sh"
+WLAN1_REFRESH_SERVICE="wlan1-device-refresh"
+WLAN1_REFRESH_SERVICE_FILE="/etc/systemd/system/${WLAN1_REFRESH_SERVICE}.service"
+if [ -f "$WLAN1_REFRESH_SCRIPT" ]; then
+    cat > "$WLAN1_REFRESH_SERVICE_FILE" <<EOF
+[Unit]
+Description=Refresh wlan1 MAC addresses in NetworkManager
+After=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=$WLAN1_REFRESH_SCRIPT
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable "$WLAN1_REFRESH_SERVICE" >/dev/null 2>&1 || true
+    "$WLAN1_REFRESH_SCRIPT" || true
+fi
+
 # Ensure required packages are installed
 APT_UPDATED=false
 ensure_pkg() {
