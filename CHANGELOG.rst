@@ -5,6 +5,7 @@ Unreleased
 ----------
 
 - add migration snapshot script and release workflow
+- fix missing admindocs commands route
 
 0.1.7 [revision 4dcd62ed8222e102edbc88c81300a774e39f095c]
 ---------------------------------------------------------
