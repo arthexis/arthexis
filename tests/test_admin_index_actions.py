@@ -39,7 +39,7 @@ class AdminIndexActionLinkTests(TestCase):
         pattern = re.compile(
             r'<td class="actions">\s*</td>\s*'
             r'<td>\s*<a[^>]*class="addlink"[^<]*</a>\s*</td>\s*'
-            r'<td>\s*<a[^>]*class="changelink"',
+            r'<td>\s*(?:<[^>]+>\s*)*<a[^>]*class="changelink"',
             re.DOTALL,
         )
         self.assertRegex(row_html, pattern)
