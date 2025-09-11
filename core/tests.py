@@ -27,6 +27,7 @@ from .models import (
     RFID,
     FediverseProfile,
     SecurityGroup,
+    PublicPermission,
     Package,
     PackageRelease,
     Todo,
@@ -841,6 +842,7 @@ class ModelPermissionViewTests(TestCase):
         data = {
             "user_view": [str(self.user.pk)],
             "group_view": [str(self.group.pk)],
+            "public_view": "on",
             "user_add": [],
             "user_change": [],
             "user_delete": [],
@@ -853,6 +855,9 @@ class ModelPermissionViewTests(TestCase):
         perm = Permission.objects.get(codename="view_address")
         self.assertIn(self.user, perm.user_set.all())
         self.assertIn(self.group, perm.group_set.all())
+        self.assertTrue(
+            PublicPermission.objects.filter(permission=perm, is_public=True).exists()
+        )
 
     def test_superuser_not_in_form_and_has_access(self):
         url = reverse("admin:model_permissions", args=["core", "address"])
@@ -864,6 +869,7 @@ class ModelPermissionViewTests(TestCase):
         for code, _ in PERM_CHOICES:
             data[f"user_{code}"] = []
             data[f"group_{code}"] = []
+            data[f"public_{code}"] = ""
         resp = self.client.post(url, data)
         self.assertRedirects(resp, reverse("admin:app_list", args=["core"]))
 
