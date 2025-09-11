@@ -16,6 +16,7 @@ from nodes.utils import capture_screenshot, save_screenshot
 
 from .models import SiteBadge, Application, SiteProxy, Module, Landing, Favorite
 from django.contrib.contenttypes.models import ContentType
+from core.user_data import EntityModelAdmin
 
 
 def get_local_app_choices():
@@ -136,7 +137,7 @@ class ApplicationModuleInline(admin.TabularInline):
 
 
 @admin.register(Application)
-class ApplicationAdmin(admin.ModelAdmin):
+class ApplicationAdmin(EntityModelAdmin):
     form = ApplicationForm
     list_display = ("name", "app_verbose_name", "installed")
     readonly_fields = ("installed",)
@@ -158,7 +159,7 @@ class LandingInline(admin.TabularInline):
 
 
 @admin.register(Module)
-class ModuleAdmin(admin.ModelAdmin):
+class ModuleAdmin(EntityModelAdmin):
     list_display = ("application", "node_role", "path", "menu", "is_default")
     list_filter = ("node_role", "application")
     fields = ("node_role", "application", "path", "menu", "is_default", "favicon")

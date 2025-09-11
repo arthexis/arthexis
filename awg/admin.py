@@ -2,10 +2,11 @@ from django.contrib import admin
 from django import forms
 
 from .models import CableSize, ConduitFill, CalculatorTemplate, PowerLead
+from core.user_data import EntityModelAdmin
 
 
 @admin.register(CableSize)
-class CableSizeAdmin(admin.ModelAdmin):
+class CableSizeAdmin(EntityModelAdmin):
     list_display = (
         "awg_size",
         "material",
@@ -17,7 +18,7 @@ class CableSizeAdmin(admin.ModelAdmin):
 
 
 @admin.register(ConduitFill)
-class ConduitFillAdmin(admin.ModelAdmin):
+class ConduitFillAdmin(EntityModelAdmin):
     list_display = ("trade_size", "conduit")
     search_fields = ("trade_size", "conduit")
 
@@ -69,7 +70,7 @@ class CalculatorTemplateForm(forms.ModelForm):
 
 
 @admin.register(CalculatorTemplate)
-class CalculatorTemplateAdmin(admin.ModelAdmin):
+class CalculatorTemplateAdmin(EntityModelAdmin):
     form = CalculatorTemplateForm
     list_display = (
         "name",
@@ -127,7 +128,7 @@ class BusinessPowerLead(PowerLead):
 
 
 @admin.register(BusinessPowerLead)
-class PowerLeadAdmin(admin.ModelAdmin):
+class PowerLeadAdmin(EntityModelAdmin):
     list_display = ("created_on", "user", "ip_address")
     search_fields = ("user__username", "ip_address")
     readonly_fields = (

@@ -160,6 +160,12 @@ class UserDatumAdminMixin(admin.ModelAdmin):
             context["is_seed_datum"] = False
         return super().render_change_form(request, context, add, change, form_url, obj)
 
+
+class EntityModelAdmin(UserDatumAdminMixin, admin.ModelAdmin):
+    """ModelAdmin base class for :class:`Entity` models."""
+
+    change_form_template = "admin/user_datum_change_form.html"
+
     def save_model(self, request, obj, form, change):
         copied = "_saveacopy" in request.POST
         if copied:
@@ -209,18 +215,18 @@ def patch_admin_user_datum() -> None:
     def _patched(admin_class):
         template = (
             getattr(admin_class, "change_form_template", None)
-            or "admin/user_datum_change_form.html"
+            or EntityModelAdmin.change_form_template
         )
         return type(
             f"Patched{admin_class.__name__}",
-            (UserDatumAdminMixin, admin_class),
+            (EntityModelAdmin, admin_class),
             {"change_form_template": template},
         )
 
     for model, model_admin in list(admin.site._registry.items()):
         if (
             model is UserDatum
-            or isinstance(model_admin, UserDatumAdminMixin)
+            or isinstance(model_admin, EntityModelAdmin)
             or not issubclass(model, Entity)
         ):
             continue
@@ -238,7 +244,9 @@ def patch_admin_user_datum() -> None:
         for model in models:
             if model is UserDatum:
                 continue
-            if issubclass(model, Entity) and not issubclass(patched_class, UserDatumAdminMixin):
+            if issubclass(model, Entity) and not issubclass(
+                patched_class, EntityModelAdmin
+            ):
                 patched_class = _patched(patched_class)
         return original_register(model_or_iterable, patched_class, **options)
 

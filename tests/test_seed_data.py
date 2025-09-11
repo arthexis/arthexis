@@ -95,29 +95,20 @@ class SeedDataAdminTests(TestCase):
         self.assertNotContains(response, 'name="_user_datum"')
         from django.contrib import admin
         from core.admin import WorkgroupSecurityGroup
-        from core.user_data import UserDatumAdminMixin
+        from core.user_data import EntityModelAdmin
 
         self.assertNotIsInstance(
-            admin.site._registry[WorkgroupSecurityGroup], UserDatumAdminMixin
+            admin.site._registry[WorkgroupSecurityGroup], EntityModelAdmin
         )
 
     def test_entity_admins_auto_patched(self):
         from django.contrib import admin
         from core.entity import Entity
-        from core.user_data import UserDatumAdminMixin
+        from core.user_data import EntityModelAdmin
 
         for model, model_admin in admin.site._registry.items():
             if issubclass(model, Entity):
-                self.assertIsInstance(model_admin, UserDatumAdminMixin)
-
-    def test_entity_admins_auto_patched(self):
-        from django.contrib import admin
-        from core.entity import Entity
-        from core.user_data import UserDatumAdminMixin
-
-        for model, model_admin in admin.site._registry.items():
-            if issubclass(model, Entity):
-                self.assertIsInstance(model_admin, UserDatumAdminMixin)
+                self.assertIsInstance(model_admin, EntityModelAdmin)
 
     def test_seed_datum_persists_after_save(self):
         OdooProfile.all_objects.filter(pk=self.profile.pk).update(is_seed_data=True)
