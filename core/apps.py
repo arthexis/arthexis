@@ -20,6 +20,7 @@ class CoreConfig(AppConfig):
             patch_admin_sigil_builder_view,
             generate_model_sigils,
         )
+        from .model_permissions import patch_admin_model_permissions_view
         from . import checks  # noqa: F401
 
         def create_default_arthexis(**kwargs):
@@ -39,6 +40,7 @@ class CoreConfig(AppConfig):
         patch_admin_system_view()
         patch_admin_environment_view()
         patch_admin_sigil_builder_view()
+        patch_admin_model_permissions_view()
 
         from pathlib import Path
         from django.conf import settings

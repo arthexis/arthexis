@@ -31,6 +31,7 @@
                   {% translate 'Missing' as status_label %}
                 {% endif %}
                 <span class="model-status {% if model_ok %}ok{% else %}missing{% endif %}" title="{{ status_label }}" aria-label="{{ status_label }}"></span>
+                <a href="{% url 'admin:model_permissions' app.app_label model.object_name|lower %}" class="model-lock" title="{% translate 'Edit permissions' %}"></a>
                 {% if model.admin_url %}
                   <a href="{{ model.admin_url }}"{% if model.admin_url in request.path|urlencode %} aria-current="page"{% endif %}>{{ fav.custom_label|default:model.name }}</a>
                 {% else %}
