@@ -10,17 +10,17 @@ class NewsViewTests(TestCase):
     def setUp(self):
         self.client = Client()
         NewsArticle.objects.create(
-            name="0.1.7 Latest release",
+            name="0.1.7 release notes",
             content="Details",
             published=date(2025, 3, 5),
         )
         NewsArticle.objects.create(
-            name="0.1.4 Mid release",
+            name="0.1.4 release notes",
             content="Details",
             published=date(2024, 7, 10),
         )
         NewsArticle.objects.create(
-            name="0.1.1 First release",
+            name="0.1.1 release notes",
             content="Details",
             published=date(2024, 1, 15),
         )
@@ -28,7 +28,7 @@ class NewsViewTests(TestCase):
     def test_latest_article_first(self):
         resp = self.client.get(reverse("news:list"))
         articles = list(resp.context["object_list"])
-        self.assertEqual(articles[0].name, "0.1.7 Latest release")
+        self.assertEqual(articles[0].name, "0.1.7 release notes")
 
     def test_sidebar_version_order(self):
         resp = self.client.get(reverse("news:list"))
@@ -36,8 +36,8 @@ class NewsViewTests(TestCase):
         self.assertEqual(
             titles,
             [
-                "0.1.7 Latest release",
-                "0.1.4 Mid release",
-                "0.1.1 First release",
+                "0.1.7 release notes",
+                "0.1.4 release notes",
+                "0.1.1 release notes",
             ],
         )
