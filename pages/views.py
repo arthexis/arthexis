@@ -13,12 +13,14 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from nodes.models import Node
 from django.urls import reverse
-from django.utils import translation, timezone
+from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.core.mail import send_mail
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.views.decorators.cache import never_cache
+from django.utils.cache import patch_vary_headers
 from core.models import InviteLead, EnergyReport
 
 import markdown
@@ -30,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 @landing("Home")
+@never_cache
 def index(request):
     site = get_site(request)
     if site:
@@ -50,7 +53,8 @@ def index(request):
     readme_base = (
         Path(settings.BASE_DIR) / app_slug if app_slug else Path(settings.BASE_DIR)
     )
-    lang = translation.get_language() or ""
+    lang = getattr(request, "LANGUAGE_CODE", "")
+    lang = lang.replace("_", "-").lower()
     readme_file = readme_base / "README.md"
     if lang:
         localized = readme_base / f"README.{lang}.md"
@@ -72,7 +76,9 @@ def index(request):
         toc_html = toc_html.strip()
     title = "README" if readme_file.name.startswith("README") else readme_file.stem
     context = {"content": html, "title": title, "toc": toc_html}
-    return render(request, "pages/readme.html", context)
+    response = render(request, "pages/readme.html", context)
+    patch_vary_headers(response, ["Accept-Language", "Cookie"])
+    return response
 
 
 def sitemap(request):
