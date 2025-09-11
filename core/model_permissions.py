@@ -10,6 +10,25 @@ from django.template.response import TemplateResponse
 
 from .models import SecurityGroup
 
+
+class _SecurityGroupRelation:
+    """Wrapper for Permission.group_set using SecurityGroup objects."""
+
+    def __init__(self, perm):
+        self.perm = perm
+
+    def all(self):
+        ids = self.perm.group_set_original.values_list("id", flat=True)
+        return SecurityGroup.objects.filter(id__in=ids)
+
+    def set(self, groups):
+        self.perm.group_set_original.set(groups)
+
+
+# Expose SecurityGroup instances via perm.group_set
+Permission.group_set_original = Permission.group_set
+Permission.group_set = property(lambda self: _SecurityGroupRelation(self))
+
 PERM_CHOICES = [
     ("view", _("View")),
     ("add", _("Add")),
@@ -37,9 +56,7 @@ class ModelPermissionForm(forms.Form):
 
 
 def model_permissions_view(request, app_label, model_name):
-    content_type = get_object_or_404(
-        ContentType, app_label=app_label, model=model_name
-    )
+    content_type = get_object_or_404(ContentType, app_label=app_label, model=model_name)
     Model = content_type.model_class()
     perms = {
         code: Permission.objects.get(
@@ -72,8 +89,7 @@ def model_permissions_view(request, app_label, model_name):
             "opts": Model._meta,
             "app_label": app_label,
             "model_name": model_name,
-            "title": _("Permissions for %(name)s")
-            % {"name": Model._meta.verbose_name},
+            "title": _("Permissions for %(name)s") % {"name": Model._meta.verbose_name},
             "perm_choices": PERM_CHOICES,
         }
     )

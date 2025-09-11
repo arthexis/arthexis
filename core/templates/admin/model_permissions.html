@@ -1,11 +1,11 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
+{% load i18n form_extras %}
 
 {% block breadcrumbs %}
 <div class="breadcrumbs">
   <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
   &rsaquo; <a href="{% url 'admin:app_list' app_label %}">{{ app_label|capfirst }}</a>
-  &rsaquo; <a href="{% url 'admin:%s_%s_changelist' opts.app_label opts.model_name %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; <a href="{% url 'admin:'|add:opts.app_label|add:'_'|add:opts.model_name|add:'_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
   &rsaquo; {% trans 'Permissions' %}
 </div>
 {% endblock %}
@@ -18,7 +18,7 @@
     <legend>{% trans 'Users' %}</legend>
     {% for code, name in perm_choices %}
     {% with 'user_'|add:code as field_name %}
-    {% with form[field_name] as field %}
+    {% with form|get_field:field_name as field %}
     <div class="form-row">
       {{ field.label_tag }}
       {{ field }}
@@ -31,7 +31,7 @@
     <legend>{% trans 'Security groups' %}</legend>
     {% for code, name in perm_choices %}
     {% with 'group_'|add:code as field_name %}
-    {% with form[field_name] as field %}
+    {% with form|get_field:field_name as field %}
     <div class="form-row">
       {{ field.label_tag }}
       {{ field }}

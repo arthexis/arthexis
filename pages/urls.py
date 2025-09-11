@@ -8,6 +8,7 @@ urlpatterns = [
     path("", views.index, name="index"),
     path("sitemap.xml", views.sitemap, name="pages-sitemap"),
     path("energy-report/", views.energy_report, name="energy-report"),
+    path("release-checklist", views.release_checklist, name="release-checklist"),
     path("login/", views.login_view, name="login"),
     path("request-invite/", views.request_invite, name="request-invite"),
     path(
