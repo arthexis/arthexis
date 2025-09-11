@@ -25,6 +25,7 @@ from .transactions_io import (
     import_transactions as import_transactions_data,
 )
 from core.admin import RFIDAdmin
+from core.user_data import EntityModelAdmin
 from .models import RFID
 
 
@@ -59,13 +60,13 @@ class TransactionImportForm(forms.Form):
 
 
 @admin.register(Location)
-class LocationAdmin(admin.ModelAdmin):
+class LocationAdmin(EntityModelAdmin):
     form = LocationAdminForm
     list_display = ("name", "latitude", "longitude")
 
 
 @admin.register(Charger)
-class ChargerAdmin(admin.ModelAdmin):
+class ChargerAdmin(EntityModelAdmin):
     fieldsets = (
         (
             "General",
@@ -176,7 +177,7 @@ class ChargerAdmin(admin.ModelAdmin):
 
 
 @admin.register(Simulator)
-class SimulatorAdmin(admin.ModelAdmin):
+class SimulatorAdmin(EntityModelAdmin):
     list_display = (
         "name",
         "cp_path",
@@ -250,7 +251,7 @@ class MeterReadingInline(admin.TabularInline):
 
 
 @admin.register(Transaction)
-class TransactionAdmin(admin.ModelAdmin):
+class TransactionAdmin(EntityModelAdmin):
     change_list_template = "admin/ocpp/transaction/change_list.html"
     list_display = (
         "charger",
@@ -354,7 +355,7 @@ class MeterReadingDateFilter(admin.SimpleListFilter):
 
 
 @admin.register(MeterReading)
-class MeterReadingAdmin(admin.ModelAdmin):
+class MeterReadingAdmin(EntityModelAdmin):
     list_display = (
         "charger",
         "timestamp",
@@ -368,7 +369,7 @@ class MeterReadingAdmin(admin.ModelAdmin):
 
 
 @admin.register(ElectricVehicle)
-class ElectricVehicleAdmin(admin.ModelAdmin):
+class ElectricVehicleAdmin(EntityModelAdmin):
     list_display = ("vin", "license_plate", "brand", "model", "account")
     search_fields = (
         "vin",

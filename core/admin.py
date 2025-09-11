@@ -52,7 +52,7 @@ from .models import (
     NewsArticle,
     Todo,
 )
-from .user_data import UserDatumAdminMixin
+from .user_data import EntityModelAdmin
 
 
 admin.site.unregister(Group)
@@ -117,7 +117,7 @@ class SaveBeforeChangeAction(DjangoObjectActions):
 
 
 @admin.register(ExperienceReference)
-class ReferenceAdmin(admin.ModelAdmin):
+class ReferenceAdmin(EntityModelAdmin):
     list_display = (
         "alt_text",
         "content_type",
@@ -193,7 +193,7 @@ class ReferenceAdmin(admin.ModelAdmin):
 
 
 @admin.register(WorkgroupReleaseManager)
-class ReleaseManagerAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
+class ReleaseManagerAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     list_display = ("user", "pypi_username", "pypi_url")
     actions = ["test_credentials"]
     change_actions = ["test_credentials_action"]
@@ -239,7 +239,7 @@ class ReleaseManagerAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
 
 
 @admin.register(Package)
-class PackageAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
+class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     list_display = (
         "name",
         "description",
@@ -339,14 +339,14 @@ class SecurityGroupAdmin(DjangoGroupAdmin):
 
 
 @admin.register(WorkgroupNewsArticle)
-class NewsArticleAdmin(admin.ModelAdmin):
+class NewsArticleAdmin(EntityModelAdmin):
     list_display = ("name", "published")
     search_fields = ("name", "content")
     ordering = ("-published",)
 
 
 @admin.register(InviteLead)
-class InviteLeadAdmin(admin.ModelAdmin):
+class InviteLeadAdmin(EntityModelAdmin):
     list_display = ("email", "created_on", "sent_on", "short_error")
     search_fields = ("email", "comment")
     readonly_fields = (
@@ -401,7 +401,7 @@ class UserAdmin(DjangoUserAdmin):
 
 
 @admin.register(Address)
-class AddressAdmin(UserDatumAdminMixin, admin.ModelAdmin):
+class AddressAdmin(EntityModelAdmin):
     change_form_template = "admin/user_datum_change_form.html"
     list_display = ("street", "number", "municipality", "state", "postal_code")
     search_fields = ("street", "municipality", "postal_code")
@@ -443,7 +443,7 @@ class OdooProfileAdminForm(forms.ModelForm):
 
 
 @admin.register(OdooProfile)
-class OdooProfileAdmin(UserDatumAdminMixin, admin.ModelAdmin):
+class OdooProfileAdmin(EntityModelAdmin):
     change_form_template = "admin/user_datum_change_form.html"
     form = OdooProfileAdminForm
     list_display = ("user", "host", "database", "verified_on")
@@ -493,7 +493,7 @@ class FediverseProfileAdminForm(forms.ModelForm):
 
 
 @admin.register(FediverseProfile)
-class FediverseProfileAdmin(admin.ModelAdmin):
+class FediverseProfileAdmin(EntityModelAdmin):
     form = FediverseProfileAdminForm
     list_display = ("user", "service", "host", "handle", "verified_on")
     readonly_fields = ("verified_on",)
@@ -576,7 +576,7 @@ class EmailSearchForm(forms.Form):
 
 
 @admin.register(EmailInbox)
-class EmailInboxAdmin(admin.ModelAdmin):
+class EmailInboxAdmin(EntityModelAdmin):
     form = EmailInboxAdminForm
     list_display = ("user", "username", "host", "protocol")
     actions = ["test_connection", "search_inbox"]
@@ -687,7 +687,7 @@ class WorkgroupChatProfile(ChatProfile):
 
 
 @admin.register(WorkgroupChatProfile)
-class ChatProfileAdmin(admin.ModelAdmin):
+class ChatProfileAdmin(EntityModelAdmin):
     list_display = ("user", "created_at", "last_used_at", "is_active")
     readonly_fields = ("user_key_hash",)
 
@@ -726,8 +726,9 @@ class EnergyCreditInline(admin.TabularInline):
 
 
 @admin.register(EnergyAccount)
-class EnergyAccountAdmin(admin.ModelAdmin):
+class EnergyAccountAdmin(EntityModelAdmin):
     change_list_template = "admin/core/energyaccount/change_list.html"
+    change_form_template = "admin/user_datum_change_form.html"
     list_display = (
         "name",
         "user",
@@ -844,13 +845,13 @@ class EnergyAccountAdmin(admin.ModelAdmin):
 
 
 @admin.register(ElectricVehicle)
-class ElectricVehicleAdmin(admin.ModelAdmin):
+class ElectricVehicleAdmin(EntityModelAdmin):
     list_display = ("vin", "license_plate", "brand", "model", "account")
     fields = ("account", "vin", "license_plate", "brand", "model")
 
 
 @admin.register(EnergyCredit)
-class EnergyCreditAdmin(admin.ModelAdmin):
+class EnergyCreditAdmin(EntityModelAdmin):
     list_display = ("account", "amount_kw", "created_by", "created_on")
     readonly_fields = ("created_by", "created_on")
 
@@ -866,7 +867,7 @@ class WMICodeInline(admin.TabularInline):
 
 
 @admin.register(Brand)
-class BrandAdmin(admin.ModelAdmin):
+class BrandAdmin(EntityModelAdmin):
     fields = ("name",)
     list_display = ("name", "wmi_codes_display")
     inlines = [WMICodeInline]
@@ -878,7 +879,7 @@ class BrandAdmin(admin.ModelAdmin):
 
 
 @admin.register(EVModel)
-class EVModelAdmin(admin.ModelAdmin):
+class EVModelAdmin(EntityModelAdmin):
     fields = ("brand", "name")
     list_display = ("name", "brand")
     list_filter = ("brand",)
@@ -934,7 +935,7 @@ class RFIDForm(forms.ModelForm):
 
 
 @admin.register(RFID)
-class RFIDAdmin(ImportExportModelAdmin):
+class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     change_list_template = "admin/core/rfid/change_list.html"
     resource_class = RFIDResource
     list_display = (
@@ -1009,7 +1010,7 @@ class RFIDAdmin(ImportExportModelAdmin):
 
 
 @admin.register(EnergyReport)
-class EnergyReportAdmin(admin.ModelAdmin):
+class EnergyReportAdmin(EntityModelAdmin):
     list_display = ("created_on", "start_date", "end_date")
     readonly_fields = ("created_on", "data")
 
@@ -1095,7 +1096,7 @@ class EnergyReportAdmin(admin.ModelAdmin):
 
 
 @admin.register(PackageRelease)
-class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
+class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     change_list_template = "admin/core/packagerelease/change_list.html"
     list_display = (
         "version",
@@ -1237,5 +1238,5 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, admin.ModelAdmin):
 
 
 @admin.register(Todo)
-class TodoAdmin(admin.ModelAdmin):
+class TodoAdmin(EntityModelAdmin):
     list_display = ("description", "url")

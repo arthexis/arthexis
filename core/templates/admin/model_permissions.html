@@ -20,9 +20,10 @@
     {% with 'user_'|add:code as field_name %}
     {% with form|get_field:field_name as field %}
     <div class="form-row">
-      {{ form[field_name].label_tag }}
-      {{ form[field_name] }}
+      {{ field.label_tag }}
+      {{ field }}
     </div>
+    {% endwith %}
     {% endwith %}
     {% endfor %}
   </fieldset>
@@ -32,9 +33,10 @@
     {% with 'group_'|add:code as field_name %}
     {% with form|get_field:field_name as field %}
     <div class="form-row">
-      {{ form[field_name].label_tag }}
-      {{ form[field_name] }}
+      {{ field.label_tag }}
+      {{ field }}
     </div>
+    {% endwith %}
     {% endwith %}
     {% endfor %}
   </fieldset>

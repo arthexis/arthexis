@@ -35,6 +35,7 @@ from .models import (
     User,
 )
 from core.admin import UserAdmin as CoreUserAdmin
+from core.user_data import EntityModelAdmin
 
 
 RUN_CONTEXTS: dict[int, dict] = {}
@@ -49,7 +50,7 @@ class NodeAdminForm(forms.ModelForm):
 
 
 @admin.register(Node)
-class NodeAdmin(admin.ModelAdmin):
+class NodeAdmin(EntityModelAdmin):
     list_display = (
         "hostname",
         "mac_address",
@@ -202,7 +203,7 @@ class EmailOutbox(NodeEmailOutbox):
 
 
 @admin.register(EmailOutbox)
-class EmailOutboxAdmin(admin.ModelAdmin):
+class EmailOutboxAdmin(EntityModelAdmin):
     list_display = ("node", "host", "port", "username", "use_tls", "use_ssl")
     change_form_template = "admin/nodes/emailoutbox/change_form.html"
 
@@ -265,7 +266,7 @@ class NodeRoleAdminForm(forms.ModelForm):
 
 
 @admin.register(NodeRole)
-class NodeRoleAdmin(admin.ModelAdmin):
+class NodeRoleAdmin(EntityModelAdmin):
     form = NodeRoleAdminForm
     list_display = ("name", "description")
 
@@ -274,7 +275,7 @@ class NodeRoleAdmin(admin.ModelAdmin):
 
 
 @admin.register(ContentSample)
-class ContentSampleAdmin(admin.ModelAdmin):
+class ContentSampleAdmin(EntityModelAdmin):
     list_display = ("name", "kind", "node", "user", "created_at")
     readonly_fields = ("created_at", "name", "user", "image_preview")
 
@@ -352,7 +353,7 @@ class ContentSampleAdmin(admin.ModelAdmin):
 
 
 @admin.register(NetMessage)
-class NetMessageAdmin(admin.ModelAdmin):
+class NetMessageAdmin(EntityModelAdmin):
     list_display = ("subject", "body", "reach", "created", "complete")
     search_fields = ("subject", "body")
     list_filter = ("complete", "reach")
@@ -376,7 +377,7 @@ class NodeTaskForm(forms.ModelForm):
 
 
 @admin.register(NodeTask)
-class NodeTaskAdmin(admin.ModelAdmin):
+class NodeTaskAdmin(EntityModelAdmin):
     form = NodeTaskForm
     list_display = ("recipe", "role", "created")
     actions = ["execute"]
@@ -406,7 +407,7 @@ class NodeTaskAdmin(admin.ModelAdmin):
 
 
 @admin.register(Operation)
-class OperationAdmin(admin.ModelAdmin):
+class OperationAdmin(EntityModelAdmin):
     list_display = ("name",)
     formfield_overrides = {models.TextField: {"widget": CodeEditorWidget}}
     change_form_template = "admin/nodes/operation/change_form.html"
