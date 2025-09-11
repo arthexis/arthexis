@@ -5,7 +5,8 @@
     "fields": {
       "description": "Review release checklist",
       "is_seed_data": true,
-      "url": "/release-checklist"
+      "url": "/release-checklist",
+      "assigned_to": 1
     }
   },
   {
@@ -14,7 +15,8 @@
     "fields": {
       "description": "Confirm version numbering",
       "is_seed_data": true,
-      "url": "/version-numbering"
+      "url": "/version-numbering",
+      "assigned_to": 1
     }
   }
 ]

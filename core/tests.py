@@ -792,6 +792,7 @@ class TodoDoneTests(TestCase):
                             "description": "Task",
                             "is_seed_data": True,
                             "url": "",
+                            "assigned_to": todo.assigned_to_id,
                         },
                     }
                 ]
@@ -809,6 +810,9 @@ class TodoDoneTests(TestCase):
 
 
 class TodoUrlValidationTests(TestCase):
+    def setUp(self):
+        User.objects.create_user("u", password="pw")
+
     def test_relative_url_valid(self):
         todo = Todo(description="Task", url="/path")
         todo.full_clean()  # should not raise

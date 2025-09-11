@@ -1498,12 +1498,35 @@ def validate_relative_url(value: str) -> None:
         raise ValidationError("URL must be relative")
 
 
+def todo_default_assignee() -> int:
+    """Return the default assignee for TODO items.
+
+    Prefers the user with username ``arthexis``; falls back to the first user
+    in the database. The function returns the user's primary key so it can be
+    used as the ``default`` for the ``assigned_to`` ForeignKey.
+    """
+
+    User = get_user_model()
+    user = User.objects.filter(username="arthexis").first()
+    if user:
+        return user.pk
+    user = User.objects.first()
+    if user:
+        return user.pk
+    return None
+
+
 class Todo(Entity):
     """Tasks requested for the Release Manager."""
 
     description = models.CharField(max_length=255)
     url = models.CharField(
         max_length=200, blank=True, default="", validators=[validate_relative_url]
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        default=todo_default_assignee,
     )
 
     class Meta:

@@ -750,16 +750,24 @@ class FavoriteTests(TestCase):
         self.assertContains(resp, "Browse Applications")
 
     def test_dashboard_uses_todo_url_if_set(self):
-        Todo.objects.create(description="Check docs", url="/docs/")
+        Todo.objects.create(
+            description="Check docs", url="/docs/", assigned_to=self.user
+        )
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, 'href="/docs/"')
 
     def test_dashboard_shows_done_button(self):
-        todo = Todo.objects.create(description="Do thing")
+        todo = Todo.objects.create(description="Do thing", assigned_to=self.user)
         resp = self.client.get(reverse("admin:index"))
         done_url = reverse("todo-done", args=[todo.pk])
         self.assertContains(resp, f'action="{done_url}"')
-        self.assertContains(resp, 'DONE')
+        self.assertContains(resp, "DONE")
+
+    def test_dashboard_excludes_other_users_todos(self):
+        other = get_user_model().objects.create_user("other")
+        Todo.objects.create(description="Hidden", assigned_to=other)
+        resp = self.client.get(reverse("admin:index"))
+        self.assertNotContains(resp, "Hidden")
 
 
 class DatasetteTests(TestCase):

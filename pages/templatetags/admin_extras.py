@@ -172,7 +172,7 @@ def future_action_items(context):
             "label": todo.description,
             "done_url": reverse("todo-done", args=[todo.pk]),
         }
-        for todo in Todo.objects.filter(is_deleted=False)
+        for todo in Todo.objects.filter(is_deleted=False, assigned_to=user)
     ]
 
     return {"models": model_items, "todos": todos}
