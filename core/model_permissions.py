@@ -48,7 +48,10 @@ def model_permissions_view(request, app_label, model_name):
         for code, _ in PERM_CHOICES
     }
     User = get_user_model()
-    form_kwargs = {"users": User.objects.all(), "groups": SecurityGroup.objects.all()}
+    form_kwargs = {
+        "users": User.objects.filter(is_superuser=False),
+        "groups": SecurityGroup.objects.all(),
+    }
     if request.method == "POST":
         form = ModelPermissionForm(request.POST, **form_kwargs)
         if form.is_valid():

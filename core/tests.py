@@ -41,6 +41,7 @@ from django.db import IntegrityError
 from django.contrib.auth.models import Permission
 from .backends import LocalhostAdminBackend
 from core.views import _step_check_pypi, _step_promote_build, _step_publish
+from .model_permissions import PERM_CHOICES
 
 
 class DefaultAdminTests(TestCase):
@@ -834,3 +835,19 @@ class ModelPermissionViewTests(TestCase):
         perm = Permission.objects.get(codename="view_address")
         self.assertIn(self.user, perm.user_set.all())
         self.assertIn(self.group, perm.group_set.all())
+
+    def test_superuser_not_in_form_and_has_access(self):
+        url = reverse("admin:model_permissions", args=["core", "address"])
+        resp = self.client.get(url)
+        field = resp.context["form"].fields["user_view"]
+        self.assertFalse(field.queryset.filter(is_superuser=True).exists())
+
+        data = {}
+        for code, _ in PERM_CHOICES:
+            data[f"user_{code}"] = []
+            data[f"group_{code}"] = []
+        resp = self.client.post(url, data)
+        self.assertRedirects(resp, reverse("admin:app_list", args=["core"]))
+
+        resp = self.client.get(reverse("admin:core_address_changelist"))
+        self.assertEqual(resp.status_code, 200)
