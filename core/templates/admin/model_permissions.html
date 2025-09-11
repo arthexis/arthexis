@@ -17,19 +17,23 @@
   <fieldset>
     <legend>{% trans 'Users' %}</legend>
     {% for code, name in perm_choices %}
+    {% with 'user_'|add:code as field_name %}
     <div class="form-row">
-      {{ form['user_'|add:code].label_tag }}
-      {{ form['user_'|add:code] }}
+      {{ form[field_name].label_tag }}
+      {{ form[field_name] }}
     </div>
+    {% endwith %}
     {% endfor %}
   </fieldset>
   <fieldset>
     <legend>{% trans 'Security groups' %}</legend>
     {% for code, name in perm_choices %}
+    {% with 'group_'|add:code as field_name %}
     <div class="form-row">
-      {{ form['group_'|add:code].label_tag }}
-      {{ form['group_'|add:code] }}
+      {{ form[field_name].label_tag }}
+      {{ form[field_name] }}
     </div>
+    {% endwith %}
     {% endfor %}
   </fieldset>
   <div class="submit-row"><input type="submit" value="{% trans 'Save' %}" class="default"></div>
