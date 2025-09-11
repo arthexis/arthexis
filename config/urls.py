@@ -21,6 +21,7 @@ from django.views.i18n import set_language
 from django.utils.translation import gettext_lazy as _
 from core import views as core_views
 from core.admindocs import CommandsView
+from man import views as man_views
 
 autodiscover()
 admin.site.site_header = _("Constellation")
@@ -66,7 +67,22 @@ def autodiscovered_urlpatterns():
 
 urlpatterns = [
     path(
-        "admindocs/commands/",
+        "admin/doc/manuals/",
+        man_views.manual_list,
+        name="django-admindocs-manuals",
+    ),
+    path(
+        "admin/doc/manuals/<slug:slug>/",
+        man_views.manual_html,
+        name="django-admindocs-manual-detail",
+    ),
+    path(
+        "admin/doc/manuals/<slug:slug>/pdf/",
+        man_views.manual_pdf,
+        name="django-admindocs-manual-pdf",
+    ),
+    path(
+        "admin/doc/commands/",
         CommandsView.as_view(),
         name="django-admindocs-commands",
     ),

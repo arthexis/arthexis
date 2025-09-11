@@ -45,14 +45,17 @@ class ManTests(TestCase):
         )
         self.client.force_login(user)
         response = self.client.get(reverse("django-admindocs-docroot"))
-        self.assertContains(response, reverse("man:list"))
+        self.assertContains(response, reverse("django-admindocs-manuals"))
 
-    def test_manual_pill_rendered(self):
-        response = self.client.get(reverse("man:list"))
-        pill = 'badge rounded-pill text-bg-secondary">MAN</span>'
-        self.assertContains(response, pill, count=1)
-        self.assertNotContains(
-            response, 'badge rounded-pill text-bg-secondary">USER_MANUALS</span>'
-        )
+    def test_manuals_page_in_admin_context(self):
+        response = self.client.get(reverse("django-admindocs-manuals"))
+        self.assertContains(response, reverse("django-admindocs-docroot"))
         self.assertContains(response, "Test Manual")
         self.assertContains(response, "Test description")
+
+    def test_manual_detail_in_admin_context(self):
+        response = self.client.get(
+            reverse("django-admindocs-manual-detail", args=["test-manual"])
+        )
+        self.assertContains(response, reverse("django-admindocs-manuals"))
+        self.assertContains(response, "hi")

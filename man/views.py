@@ -6,7 +6,7 @@ from .models import UserManual
 
 def manual_html(request, slug):
     manual = get_object_or_404(UserManual, slug=slug)
-    return HttpResponse(manual.content_html)
+    return render(request, "admin_doc/manual_detail.html", {"manual": manual})
 
 
 def manual_pdf(request, slug):
@@ -17,4 +17,4 @@ def manual_pdf(request, slug):
 
 def manual_list(request):
     manuals = UserManual.objects.all()
-    return render(request, "man/list.html", {"manuals": manuals})
+    return render(request, "admin_doc/manuals.html", {"manuals": manuals})

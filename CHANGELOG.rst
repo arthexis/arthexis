@@ -4,6 +4,7 @@ Changelog
 Unreleased
 ----------
 
+- integrate user manuals into admin documentation
 - add migration snapshot script and release workflow
 - fix missing admindocs commands route
 - add real-time table filtering to Environment, Seed Data, User Data, and Sigil Builder admin screens

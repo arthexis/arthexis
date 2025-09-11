@@ -3,40 +3,26 @@
     "model": "core.todo",
     "pk": 1,
     "fields": {
-      "description": "Validate screen Environment",
-      "url": "/admin/environment/",
       "is_seed_data": true,
-      "is_deleted": false
+      "is_deleted": false,
+      "description": "Validate screen Manuals",
+      "url": "/admin/doc/manuals/"
     }
   },
   {
     "model": "core.todo",
     "pk": 2,
     "fields": {
-      "description": "Validate screen Seed Data",
-      "url": "/admin/seed-data/",
-      "is_seed_data": true,
-      "is_deleted": false
+      "description": "Validate view manual_list",
+      "url": ""
     }
   },
   {
     "model": "core.todo",
     "pk": 3,
     "fields": {
-      "description": "Validate screen User Data",
-      "url": "/admin/user-data/",
-      "is_seed_data": true,
-      "is_deleted": false
-    }
-  },
-  {
-    "model": "core.todo",
-    "pk": 4,
-    "fields": {
-      "description": "Validate screen Sigil Builder",
-      "url": "/admin/sigil-builder/",
-      "is_seed_data": true,
-      "is_deleted": false
+      "description": "Validate view manual_html",
+      "url": ""
     }
   }
 ]
