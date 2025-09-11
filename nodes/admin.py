@@ -6,6 +6,7 @@ from django import forms
 from django.contrib.admin.widgets import FilteredSelectMultiple
 from core.widgets import CopyColorWidget, CodeEditorWidget
 from django.db import models
+from django.db.models import Count
 from django.conf import settings
 from pathlib import Path
 from django.http import HttpResponse
@@ -268,7 +269,15 @@ class NodeRoleAdminForm(forms.ModelForm):
 @admin.register(NodeRole)
 class NodeRoleAdmin(EntityModelAdmin):
     form = NodeRoleAdminForm
-    list_display = ("name", "description")
+    list_display = ("name", "description", "registered")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.annotate(_registered=Count("node", distinct=True))
+
+    @admin.display(description="Registered", ordering="_registered")
+    def registered(self, obj):
+        return getattr(obj, "_registered", obj.node_set.count())
 
     def save_model(self, request, obj, form, change):
         obj.node_set.set(form.cleaned_data.get("nodes", []))

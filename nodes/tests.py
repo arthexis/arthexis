@@ -1090,6 +1090,18 @@ class NodeRoleAdminTests(TestCase):
         self.assertIsNone(node1.role)
         self.assertEqual(node2.role, role)
 
+    def test_registered_count_displayed(self):
+        role = NodeRole.objects.create(name="ViewRole")
+        Node.objects.create(
+            hostname="n1",
+            address="127.0.0.1",
+            port=8000,
+            mac_address="00:11:22:33:44:77",
+            role=role,
+        )
+        resp = self.client.get(reverse("admin:nodes_noderole_changelist"))
+        self.assertContains(resp, '<td class="field-registered">1</td>', html=True)
+
 
 class OperationWorkflowTests(TestCase):
     def setUp(self):
