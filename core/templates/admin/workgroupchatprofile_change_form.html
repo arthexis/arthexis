@@ -1,13 +1,11 @@
-{% extends "admin/change_form.html" %}
+{% extends "admin/user_datum_change_form.html" %}
 {% load i18n %}
 
-{% block object-tools %}
-<ul class="object-tools">
+{% block object-tools-items %}
     {% if original %}
     <li><a href="../generate-key/" class="addlink">{% trans "Generate Key" %}</a></li>
     {% endif %}
-    {% block object-tools-items %}{{ block.super }}{% endblock %}
-</ul>
+    {{ block.super }}
 {% endblock %}
 
 {% block form_top %}
