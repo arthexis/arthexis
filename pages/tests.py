@@ -806,16 +806,19 @@ class NewsViewTests(TestCase):
             name="0.1.7 release notes",
             content="Details",
             published=date(2025, 3, 5),
+            version="0.1.7",
         )
         NewsArticle.objects.create(
             name="0.1.4 release notes",
             content="Details",
             published=date(2024, 7, 10),
+            version="0.1.4",
         )
         NewsArticle.objects.create(
             name="0.1.1 release notes",
             content="Details",
             published=date(2024, 1, 15),
+            version="0.1.1",
         )
 
     def test_latest_article_first(self):
@@ -834,3 +837,7 @@ class NewsViewTests(TestCase):
                 "0.1.1 release notes",
             ],
         )
+
+    def test_changelog_included(self):
+        resp = self.client.get(reverse("pages:news"))
+        self.assertContains(resp, "avoid merge commit prompts")

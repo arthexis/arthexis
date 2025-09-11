@@ -14,11 +14,13 @@ from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
 from datetime import timedelta
 from django.utils.text import slugify
+from django.utils.safestring import mark_safe
 from django.contrib.contenttypes.models import ContentType
 import hashlib
 import os
 import subprocess
 import secrets
+import re
 from io import BytesIO
 from django.core.files.base import ContentFile
 import qrcode
@@ -26,6 +28,7 @@ import xmlrpc.client
 from django.utils import timezone
 import uuid
 from pathlib import Path
+from docutils.core import publish_parts
 from django.core import serializers
 from urllib.parse import urlparse
 from utils import revision as revision_utils
@@ -1510,6 +1513,7 @@ class NewsArticle(Entity):
     slug = models.SlugField(unique=True)
     content = models.TextField()
     published = models.DateField(default=timezone.now)
+    version = models.CharField(max_length=50, blank=True)
 
     class Meta:
         ordering = ["-published"]
@@ -1523,6 +1527,24 @@ class NewsArticle(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
+
+    def changelog_html(self) -> str:
+        if not self.version:
+            return ""
+        changelog_path = Path(settings.BASE_DIR) / "CHANGELOG.rst"
+        try:
+            text = changelog_path.read_text(encoding="utf-8")
+        except OSError:
+            return ""
+        pattern = rf"(?ms)^{re.escape(self.version)}.*?\n-+\n(.*?)(?=\n(?:\d+\.\d+|Unreleased)\b.*?\n-+|\Z)"
+        match = re.search(pattern, text)
+        if not match:
+            return ""
+        section = match.group(1).strip()
+        if not section:
+            return ""
+        html = publish_parts(section, writer_name="html5")["html_body"]
+        return mark_safe(html)
 
 
 def validate_relative_url(value: str) -> None:
