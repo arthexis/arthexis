@@ -16,6 +16,7 @@ from django.contrib import admin
 from django.contrib.admin import autodiscover
 from django.urls import include, path
 from django.views.decorators.csrf import csrf_exempt
+from django.views.generic import RedirectView
 from django.views.i18n import set_language
 from django.utils.translation import gettext_lazy as _
 from core import views as core_views
@@ -85,7 +86,15 @@ urlpatterns = [
         CommandsView.as_view(),
         name="django-admindocs-commands",
     ),
-    path("admin/doc/", include("django.contrib.admindocs.urls")),
+    path(
+        "admin/doc/commands/",
+        RedirectView.as_view(pattern_name="django-admindocs-commands"),
+    ),
+    path("admindocs/", include("django.contrib.admindocs.urls")),
+    path(
+        "admin/doc/",
+        RedirectView.as_view(pattern_name="django-admindocs-docroot"),
+    ),
     path(
         "admin/core/releases/<int:pk>/<str:action>/",
         core_views.release_progress,
