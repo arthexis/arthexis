@@ -16,14 +16,16 @@ LOCK_DIR="$BASE_DIR/locks"
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--no-firewall]
-  --password     Prompt for a new WiFi password even if one is already configured.
-  --no-firewall  Skip firewall port validation.
+Usage: $0 [--password] [--no-firewall] [--interactive|-i]
+  --password      Prompt for a new WiFi password even if one is already configured.
+  --no-firewall   Skip firewall port validation.
+  --interactive, -i  Collect user decisions for each step before executing.
 USAGE
 }
 
 FORCE_PASSWORD=false
 SKIP_FIREWALL=false
+INTERACTIVE=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --password)
@@ -31,6 +33,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-firewall)
             SKIP_FIREWALL=true
+            ;;
+        -i|--interactive)
+            INTERACTIVE=true
             ;;
         -h|--help)
             usage
@@ -60,8 +65,33 @@ ensure_service() {
     fi
 }
 
-ensure_service dbus
-ensure_service NetworkManager
+# Prompt helper for interactive mode
+ask_step() {
+    local var="$1"
+    local desc="$2"
+    local mandatory="${3:-0}"
+    if [[ $INTERACTIVE == true ]]; then
+        if [[ $mandatory -eq 1 ]]; then
+            read -rp "Run step '$desc'? [Y/n] (mandatory) " _ans
+            eval "$var=true"
+        else
+            read -rp "Run step '$desc'? [Y/n] " _ans
+            if [[ -z "$_ans" || "$_ans" =~ ^[Yy] ]]; then
+                eval "$var=true"
+            else
+                eval "$var=false"
+            fi
+        fi
+    else
+        eval "$var=true"
+    fi
+}
+
+# Slugify helper used for connection names
+slugify() {
+    local input="$1"
+    echo "$input" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
+}
 
 # Check initial internet connectivity (non-fatal)
 check_connectivity() {
@@ -81,12 +111,52 @@ command -v nmcli >/dev/null 2>&1 || {
     exit 1
 }
 
-# Install and enable wlan1 device refresh service
-WLAN1_REFRESH_SCRIPT="$BASE_DIR/wlan1-device-refresh.sh"
-WLAN1_REFRESH_SERVICE="wlan1-device-refresh"
-WLAN1_REFRESH_SERVICE_FILE="/etc/systemd/system/${WLAN1_REFRESH_SERVICE}.service"
-if [ -f "$WLAN1_REFRESH_SCRIPT" ]; then
-    cat > "$WLAN1_REFRESH_SERVICE_FILE" <<EOF
+# Determine access point name and password before running steps
+HOSTNAME_SLUG="$(slugify "$(hostname)")"
+AP_NAME="gelectriic-$HOSTNAME_SLUG"
+EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null \
+    || nmcli -s -g 802-11-wireless-security.psk connection show gelectriic-ap 2>/dev/null || true)"
+if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
+    while true; do
+        read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
+        read -rsp "Confirm password: " WIFI_PASS2; echo
+        if [[ "$WIFI_PASS1" == "$WIFI_PASS2" && -n "$WIFI_PASS1" ]]; then
+            WIFI_PASS="$WIFI_PASS1"
+            break
+        else
+            echo "Passwords do not match or are empty." >&2
+        fi
+    done
+else
+    WIFI_PASS="$EXISTING_PASS"
+fi
+
+# Collect user decisions for each step in advance
+ask_step RUN_SERVICES "Ensure required services"
+ask_step RUN_WLAN1_REFRESH "Install wlan1 device refresh service"
+ask_step RUN_PACKAGES "Ensure required packages and SSH service"
+if [[ $SKIP_FIREWALL == false ]]; then
+    ask_step RUN_FIREWALL "Validate firewall ports"
+else
+    RUN_FIREWALL=false
+fi
+ask_step RUN_REINSTALL_WLAN1 "Reinstall wlan1 connections"
+ask_step RUN_CONFIGURE_NET "Configure network connections"
+ask_step RUN_AP "Configure wlan0 access point" 1
+ask_step RUN_ROUTING "Finalize routing and connectivity checks"
+
+# Execute steps based on user choices
+if [[ $RUN_SERVICES == true ]]; then
+    ensure_service dbus
+    ensure_service NetworkManager
+fi
+
+if [[ $RUN_WLAN1_REFRESH == true ]]; then
+    WLAN1_REFRESH_SCRIPT="$BASE_DIR/wlan1-device-refresh.sh"
+    WLAN1_REFRESH_SERVICE="wlan1-device-refresh"
+    WLAN1_REFRESH_SERVICE_FILE="/etc/systemd/system/${WLAN1_REFRESH_SERVICE}.service"
+    if [ -f "$WLAN1_REFRESH_SCRIPT" ]; then
+        cat > "$WLAN1_REFRESH_SERVICE_FILE" <<EOF
 [Unit]
 Description=Refresh wlan1 MAC addresses in NetworkManager
 After=NetworkManager.service
@@ -98,43 +168,44 @@ ExecStart=$WLAN1_REFRESH_SCRIPT
 [Install]
 WantedBy=multi-user.target
 EOF
-    systemctl daemon-reload
-    systemctl enable "$WLAN1_REFRESH_SERVICE" >/dev/null 2>&1 || true
-    "$WLAN1_REFRESH_SCRIPT" || true
+        systemctl daemon-reload
+        systemctl enable "$WLAN1_REFRESH_SERVICE" >/dev/null 2>&1 || true
+        "$WLAN1_REFRESH_SCRIPT" || true
+    fi
 fi
 
-# Ensure required packages are installed
-APT_UPDATED=false
-ensure_pkg() {
-    local cmd="$1"
-    local pkg="$2"
-    if ! command -v "$cmd" >/dev/null 2>&1; then
-        if [ "$APT_UPDATED" = false ]; then
-            if ! apt-get update; then
-                echo "Warning: apt-get update failed; continuing without package installation" >&2
-                return
+if [[ $RUN_PACKAGES == true ]]; then
+    APT_UPDATED=false
+    ensure_pkg() {
+        local cmd="$1"
+        local pkg="$2"
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            if [ "$APT_UPDATED" = false ]; then
+                if ! apt-get update; then
+                    echo "Warning: apt-get update failed; continuing without package installation" >&2
+                    return
+                fi
+                APT_UPDATED=true
             fi
-            APT_UPDATED=true
+            if ! apt-get install -y "$pkg"; then
+                echo "Warning: failed to install $pkg" >&2
+            fi
         fi
-        if ! apt-get install -y "$pkg"; then
-            echo "Warning: failed to install $pkg" >&2
+    }
+
+    ensure_pkg nginx nginx
+    ensure_pkg sshd openssh-server
+    ensure_service ssh
+
+    if command -v ufw >/dev/null 2>&1; then
+        STATUS=$(ufw status 2>/dev/null || true)
+        if ! echo "$STATUS" | grep -iq "inactive"; then
+            ufw allow 22/tcp || true
         fi
-    fi
-}
-
-ensure_pkg nginx nginx
-ensure_pkg sshd openssh-server
-ensure_service ssh
-
-# Ensure SSH port is open if a firewall is active
-if command -v ufw >/dev/null 2>&1; then
-    STATUS=$(ufw status 2>/dev/null || true)
-    if ! echo "$STATUS" | grep -iq "inactive"; then
-        ufw allow 22/tcp || true
     fi
 fi
 
-if [[ $SKIP_FIREWALL == false ]]; then
+if [[ $RUN_FIREWALL == true ]]; then
     PORTS=(22 21114)
     MODE="internal"
     if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
@@ -161,140 +232,99 @@ if [[ $SKIP_FIREWALL == false ]]; then
     fi
 fi
 
-slugify() {
-    local input="$1"
-    echo "$input" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
-}
-
-# Reinstall wlan1 connections with uniform naming, only for 5GHz networks
-if nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
-    declare -A SEEN_SLUGS=()
-    nmcli device disconnect wlan1 || true
-    while IFS= read -r con; do
-        iface="$(nmcli -g connection.interface-name connection show "$con" 2>/dev/null || true)"
-        if [[ "$iface" == "wlan1" ]]; then
-            band="$(nmcli -g 802-11-wireless.band connection show "$con" 2>/dev/null || true)"
-            if [[ "$band" != "a" ]]; then
-                continue
-            fi
-            ssid="$(nmcli -g 802-11-wireless.ssid connection show "$con" 2>/dev/null || true)"
-            [[ -z "$ssid" ]] && continue
-            slug="$(slugify "$ssid")"
-            new_name="gate-$slug"
-            if [[ -n "${SEEN_SLUGS[$slug]:-}" ]]; then
+if [[ $RUN_REINSTALL_WLAN1 == true ]]; then
+    if nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
+        declare -A SEEN_SLUGS=()
+        nmcli device disconnect wlan1 || true
+        while IFS= read -r con; do
+            iface="$(nmcli -g connection.interface-name connection show "$con" 2>/dev/null || true)"
+            if [[ "$iface" == "wlan1" ]]; then
+                band="$(nmcli -g 802-11-wireless.band connection show "$con" 2>/dev/null || true)"
+                if [[ "$band" != "a" ]]; then
+                    continue
+                fi
+                ssid="$(nmcli -g 802-11-wireless.ssid connection show "$con" 2>/dev/null || true)"
+                [[ -z "$ssid" ]] && continue
+                slug="$(slugify "$ssid")"
+                new_name="gate-$slug"
+                if [[ -n "${SEEN_SLUGS[$slug]:-}" ]]; then
+                    nmcli connection delete "$con"
+                    continue
+                fi
+                SEEN_SLUGS[$slug]=1
+                psk="$(nmcli -s -g 802-11-wireless-security.psk connection show "$con" 2>/dev/null || true)"
+                key_mgmt="$(nmcli -g 802-11-wireless-security.key-mgmt connection show "$con" 2>/dev/null || true)"
                 nmcli connection delete "$con"
-                continue
+                if [[ -n "$psk" ]]; then
+                    nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" \
+                        wifi.band a wifi-sec.key-mgmt "$key_mgmt" wifi-sec.psk "$psk" autoconnect yes \
+                        ipv4.method auto ipv4.route-metric 100 ipv6.method ignore
+                else
+                    nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" \
+                        wifi.band a autoconnect yes ipv4.method auto ipv4.route-metric 100 \
+                        ipv6.method ignore
+                fi
             fi
-            SEEN_SLUGS[$slug]=1
-            psk="$(nmcli -s -g 802-11-wireless-security.psk connection show "$con" 2>/dev/null || true)"
-            key_mgmt="$(nmcli -g 802-11-wireless-security.key-mgmt connection show "$con" 2>/dev/null || true)"
-            nmcli connection delete "$con"
-            if [[ -n "$psk" ]]; then
-                nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" \
-                    wifi.band a wifi-sec.key-mgmt "$key_mgmt" wifi-sec.psk "$psk" autoconnect yes \
-                    ipv4.method auto ipv4.route-metric 100 ipv6.method ignore
-            else
-                nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" \
-                    wifi.band a autoconnect yes ipv4.method auto ipv4.route-metric 100 \
-                    ipv6.method ignore
-            fi
-        fi
-    done < <(nmcli -t -f NAME connection show)
-    nmcli device connect wlan1 || true
-fi
-
-# Preserve existing password if connection already exists
-HOSTNAME_SLUG="$(slugify "$(hostname)")"
-AP_NAME="gelectriic-$HOSTNAME_SLUG"
-EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null \
-    || nmcli -s -g 802-11-wireless-security.psk connection show gelectriic-ap 2>/dev/null || true)"
-
-# Remove existing connections on eth0 and wlan0
-nmcli connection delete gelectriic-ap 2>/dev/null || true
-nmcli connection delete "$AP_NAME" 2>/dev/null || true
-for dev in eth0 wlan0; do
-    nmcli -t -f NAME,DEVICE connection show | awk -F: -v D="$dev" '$2==D {print $1}' | while read -r con; do
-        nmcli connection delete "$con"
-    done
-done
-
-# Add persistent Hyperline connection on wlan1
-nmcli connection delete hyperline 2>/dev/null || true
-nmcli connection add type wifi ifname wlan1 con-name hyperline \
-    ssid "Hyperline" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "arthexis" \
-    autoconnect yes ipv4.method auto ipv6.method ignore ipv4.route-metric 100
-
-# Configure eth0 shared connection
-nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect yes \
-    ipv4.method shared ipv4.addresses 192.168.129.10/16 ipv4.never-default yes \
-    ipv4.route-metric 10000 ipv6.method ignore ipv6.never-default yes
-
-# Attempt to connect to Hyperline network or any existing wlan1 networks
-WLAN1_CONNECTED=false
-if nmcli connection up hyperline; then
-    WLAN1_CONNECTED=true
-else
-    echo "Failed to activate Hyperline connection; trying existing wlan1 connections." >&2
-    while read -r con; do
-        if nmcli connection up "$con"; then
-            WLAN1_CONNECTED=true
-            break
-        fi
-    done < <(nmcli -t -f NAME connection show | grep '^gate-')
-fi
-
-if [[ "$WLAN1_CONNECTED" != true ]]; then
-    # Obtain or prompt for WiFi password
-    if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
-        while true; do
-            read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
-            read -rsp "Confirm password: " WIFI_PASS2; echo
-            if [[ "$WIFI_PASS1" == "$WIFI_PASS2" && -n "$WIFI_PASS1" ]]; then
-                WIFI_PASS="$WIFI_PASS1"
-                break
-            else
-                echo "Passwords do not match or are empty." >&2
-            fi
-        done
-    else
-        WIFI_PASS="$EXISTING_PASS"
+        done < <(nmcli -t -f NAME connection show)
+        nmcli device connect wlan1 || true
     fi
+fi
 
-    # Configure wlan0 access point
+if [[ $RUN_CONFIGURE_NET == true ]]; then
+    nmcli connection delete gelectriic-ap 2>/dev/null || true
+    nmcli connection delete "$AP_NAME" 2>/dev/null || true
+    for dev in eth0 wlan0; do
+        nmcli -t -f NAME,DEVICE connection show | awk -F: -v D="$dev" '$2==D {print $1}' | while read -r con; do
+            nmcli connection delete "$con"
+        done
+    done
+
+    nmcli connection delete hyperline 2>/dev/null || true
+    nmcli connection add type wifi ifname wlan1 con-name hyperline \
+        ssid "Hyperline" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "arthexis" \
+        autoconnect yes ipv4.method auto ipv6.method ignore ipv4.route-metric 100
+
+    nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect yes \
+        ipv4.method shared ipv4.addresses 192.168.129.10/16 ipv4.never-default yes \
+        ipv4.route-metric 10000 ipv6.method ignore ipv6.never-default yes
+
+    if ! nmcli connection up hyperline; then
+        echo "Failed to activate Hyperline connection; trying existing wlan1 connections." >&2
+        while read -r con; do
+            nmcli connection up "$con" && break
+        done < <(nmcli -t -f NAME connection show | grep '^gate-')
+    fi
+fi
+
+if [[ $RUN_AP == true ]]; then
     nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" autoconnect yes \
         ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
         ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
         wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
 
-    # Bring up connections
     nmcli connection up eth0-shared
     nmcli connection up "$AP_NAME"
 
-    # Allow wlan0 clients to reach local services on 10.42.0.1
     if command -v iptables >/dev/null 2>&1; then
         iptables -C INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT 2>/dev/null || \
             iptables -A INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT
     fi
-else
-    # Bring up shared ethernet and already-connected wlan1 network
-    nmcli connection up eth0-shared
 fi
 
-# Ensure eth0 is not used for default routing and favor wlan1 as gateway
-ip route del default dev eth0 2>/dev/null || true
-ip route del default dev wlan0 2>/dev/null || true
-WLAN1_GW=$(nmcli -g IP4.GATEWAY device show wlan1 2>/dev/null | head -n1)
-if [[ -n "$WLAN1_GW" ]]; then
-    ip route replace default via "$WLAN1_GW" dev wlan1 2>/dev/null || true
-fi
+if [[ $RUN_ROUTING == true ]]; then
+    ip route del default dev eth0 2>/dev/null || true
+    ip route del default dev wlan0 2>/dev/null || true
+    WLAN1_GW=$(nmcli -g IP4.GATEWAY device show wlan1 2>/dev/null | head -n1)
+    if [[ -n "$WLAN1_GW" ]]; then
+        ip route replace default via "$WLAN1_GW" dev wlan1 2>/dev/null || true
+    fi
 
-# Show final status
-nmcli device status
+    nmcli device status
 
-# Final internet connectivity check
-if check_connectivity; then
-    echo "Internet connectivity confirmed."
-else
-    echo "No internet connectivity after configuration." >&2
-    exit 1
+    if check_connectivity; then
+        echo "Internet connectivity confirmed."
+    else
+        echo "No internet connectivity after configuration." >&2
+        exit 1
+    fi
 fi
