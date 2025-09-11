@@ -118,7 +118,13 @@
             <h3>{% translate 'Release manager tasks' %}</h3>
             <ul class="actionlist">
                 {% for todo in future_items.todos %}
-                <li class="changelink"><a href="{{ todo.url }}">{{ todo.label }}</a></li>
+                <li class="changelink">
+                    <a href="{{ todo.url }}">{{ todo.label }}</a>
+                    <form method="post" action="{{ todo.done_url }}" style="display:inline; float:right;">
+                        {% csrf_token %}
+                        <button class="button" title="Done">DONE</button>
+                    </form>
+                </li>
                 {% endfor %}
             </ul>
         {% elif not future_items.models %}

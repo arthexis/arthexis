@@ -75,6 +75,11 @@ urlpatterns = [
         core_views.release_progress,
         name="release-progress",
     ),
+    path(
+        "admin/core/todos/<int:pk>/done/",
+        core_views.todo_done,
+        name="todo-done",
+    ),
     path("admin/", admin.site.urls),
     path("i18n/setlang/", csrf_exempt(set_language), name="set_language"),
     path("api/", include("core.workgroup_urls")),
