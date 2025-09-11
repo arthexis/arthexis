@@ -4,7 +4,7 @@ import os
 import pytest
 
 
-@pytest.mark.parametrize("role", ["Constellation", "Satellite", "Virtual"])
+@pytest.mark.parametrize("role", ["Constellation", "Satellite"])
 def test_celery_disables_debug(monkeypatch, role):
     """Celery should not run in debug mode for production node roles."""
     monkeypatch.setenv("NODE_ROLE", role)

@@ -5,7 +5,7 @@
     "fields": {
       "name": "0.1.7 release notes",
       "slug": "0-1-7-release-notes",
-      "content": "Version 0.1.7 streamlines the release workflow with a migration snapshot script, fixture checks, and automatic fixture commits. It introduces Virtual and Particle node roles along with PyPI validation tools and stability fixes.",
+      "content": "Version 0.1.7 streamlines the release workflow with a migration snapshot script, fixture checks, automatic fixture commits, and PyPI validation tools alongside stability fixes.",
       "published": "2025-03-05"
     }
   },

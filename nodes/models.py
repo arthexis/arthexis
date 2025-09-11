@@ -449,24 +449,14 @@ class NetMessage(Entity):
 
         reach_name = self.reach.name if self.reach else "Terminal"
         role_map = {
-            "Particle": ["Particle"],
-            "Terminal": ["Terminal", "Particle"],
-            "Control": ["Control", "Terminal", "Particle"],
-            "Satellite": ["Satellite", "Control", "Terminal", "Particle"],
+            "Terminal": ["Terminal"],
+            "Control": ["Control", "Terminal"],
+            "Satellite": ["Satellite", "Control", "Terminal"],
             "Constellation": [
                 "Constellation",
                 "Satellite",
                 "Control",
                 "Terminal",
-                "Particle",
-            ],
-            "Virtual": [
-                "Virtual",
-                "Constellation",
-                "Satellite",
-                "Control",
-                "Terminal",
-                "Particle",
             ],
         }
         role_order = role_map.get(reach_name, ["Terminal"])
