@@ -137,7 +137,6 @@ LOCAL_APPS = [
     "awg",
     "pages",
     "news",
-    "app",
     "man",
 ]
 
@@ -379,11 +378,11 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
 CELERY_BEAT_SCHEDULE = {
     "heartbeat": {
-        "task": "app.tasks.heartbeat",
+        "task": "core.tasks.heartbeat",
         "schedule": crontab(minute="*/5"),
     },
     "birthday_greetings": {
-        "task": "app.tasks.birthday_greetings",
+        "task": "core.tasks.birthday_greetings",
         "schedule": crontab(hour=9, minute=0),
     },
 }

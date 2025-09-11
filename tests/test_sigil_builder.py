@@ -9,7 +9,9 @@ from core.sigil_builder import resolve_sigils_in_text
 
 class SigilBuilderTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_superuser(
+        User = get_user_model()
+        User.all_objects.filter(username="admin").delete()
+        self.user = User.objects.create_superuser(
             username="admin", email="admin@example.com", password="admin"
         )
         self.client.force_login(self.user)

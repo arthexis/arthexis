@@ -16,7 +16,7 @@ def main() -> int:
             return 1
 
     # Ensure no new migrations are needed
-    apps = ["nodes", "core", "ocpp", "awg", "pages", "news", "app", "man"]
+    apps = ["nodes", "core", "ocpp", "awg", "pages", "news", "man"]
     try:
         subprocess.run(
             ["python", "manage.py", "makemigrations", "--check", "--dry-run", *apps],
