@@ -8,14 +8,18 @@ from django.contrib.auth import authenticate, login
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from pathlib import Path
 import subprocess
 
 from utils.api import api_login_required
 
-from .models import Product, Subscription, EnergyAccount, PackageRelease
+from .models import Product, Subscription, EnergyAccount, PackageRelease, Todo
 from .models import RFID
 from . import release as release_utils
+
+
+TODO_FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "todos.json"
 
 
 def _append_log(path: Path, message: str) -> None:
@@ -460,3 +464,17 @@ def release_progress(request, pk: int, action: str):
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_path.write_text(json.dumps(ctx), encoding="utf-8")
     return render(request, "core/release_progress.html", context)
+
+
+@staff_member_required
+@require_POST
+def todo_done(request, pk: int):
+    todo = get_object_or_404(Todo, pk=pk, is_deleted=False)
+    todo.delete()
+    try:
+        data = json.loads(TODO_FIXTURE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        data = []
+    data = [item for item in data if item.get("pk") != todo.pk]
+    TODO_FIXTURE_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return redirect("admin:index")

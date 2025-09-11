@@ -754,6 +754,13 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, 'href="/docs/"')
 
+    def test_dashboard_shows_done_button(self):
+        todo = Todo.objects.create(description="Do thing")
+        resp = self.client.get(reverse("admin:index"))
+        done_url = reverse("todo-done", args=[todo.pk])
+        self.assertContains(resp, f'action="{done_url}"')
+        self.assertContains(resp, 'DONE')
+
 
 class DatasetteTests(TestCase):
     def setUp(self):
