@@ -27,6 +27,16 @@ class ChatProfileAdminTests(TestCase):
         response = self.client.get(url)
         self.assertContains(response, "../generate-key/")
 
+    def test_change_form_shows_gpt_instructions(self):
+        url = reverse(
+            "admin:post_office_workgroupchatprofile_change",
+            args=[self.profile.pk],
+        )
+        response = self.client.get(url)
+        self.assertContains(response, "/api/chat/")
+        self.assertContains(response, "Authorization")
+        self.assertContains(response, "GPT")
+
     def test_generate_key_button(self):
         url = reverse(
             "admin:post_office_workgroupchatprofile_generate_key",

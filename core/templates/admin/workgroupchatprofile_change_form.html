@@ -9,3 +9,11 @@
     {% block object-tools-items %}{{ block.super }}{% endblock %}
 </ul>
 {% endblock %}
+
+{% block form_top %}
+<p class="help">
+    After generating a key, configure your GPT to call <code>/api/chat/</code>
+    and include the key in the <code>Authorization</code> header as
+    <code>Bearer &lt;key&gt;</code>.
+</p>
+{% endblock %}

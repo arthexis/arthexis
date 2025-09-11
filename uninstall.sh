@@ -99,6 +99,16 @@ else
     pkill -f "manage.py runserver" || true
 fi
 
+# Remove wlan1 device refresh service if present
+if systemctl list-unit-files | grep -Fq 'wlan1-device-refresh.service'; then
+    sudo systemctl stop wlan1-device-refresh || true
+    sudo systemctl disable wlan1-device-refresh || true
+    if [ -f /etc/systemd/system/wlan1-device-refresh.service ]; then
+        sudo rm /etc/systemd/system/wlan1-device-refresh.service
+        sudo systemctl daemon-reload
+    fi
+fi
+
 # Ensure any Celery workers or beats are also stopped
 pkill -f "celery -A config" || true
 

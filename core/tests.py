@@ -29,6 +29,7 @@ from .models import (
     SecurityGroup,
     Package,
     PackageRelease,
+    Todo,
 )
 from django.contrib.admin.sites import AdminSite
 from core.admin import PackageReleaseAdmin, PackageAdmin
@@ -768,3 +769,38 @@ class PackageReleaseChangelistTests(TestCase):
             "admin:core_packagerelease_actions", args=["refresh_from_pypi"]
         )
         self.assertContains(response, refresh_url, html=False)
+
+
+class TodoDoneTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User.objects.create_superuser("admin", "admin@example.com", "pw")
+        self.client.force_login(User.objects.get(username="admin"))
+
+    def test_mark_done_deletes_and_updates_fixture(self):
+        todo = Todo.objects.create(description="Task", is_seed_data=True)
+        tmp = Path("core/fixtures/tmp_todos.json")
+        tmp.write_text(
+            json.dumps(
+                [
+                    {
+                        "model": "core.todo",
+                        "pk": todo.pk,
+                        "fields": {
+                            "description": "Task",
+                            "is_seed_data": True,
+                            "url": "",
+                        },
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        with mock.patch("core.views.TODO_FIXTURE_PATH", tmp):
+            resp = self.client.post(reverse("todo-done", args=[todo.pk]))
+        self.assertRedirects(resp, reverse("admin:index"))
+        todo.refresh_from_db()
+        self.assertTrue(todo.is_deleted)
+        data = json.loads(tmp.read_text(encoding="utf-8"))
+        self.assertEqual(data, [])
+        tmp.unlink()

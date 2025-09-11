@@ -754,6 +754,13 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, 'href="/docs/"')
 
+    def test_dashboard_shows_done_button(self):
+        todo = Todo.objects.create(description="Do thing")
+        resp = self.client.get(reverse("admin:index"))
+        done_url = reverse("todo-done", args=[todo.pk])
+        self.assertContains(resp, f'action="{done_url}"')
+        self.assertContains(resp, 'DONE')
+
 
 class DatasetteTests(TestCase):
     def setUp(self):
@@ -779,3 +786,13 @@ class DatasetteTests(TestCase):
             self.assertContains(resp, 'href="/data/"')
         finally:
             lock_file.unlink(missing_ok=True)
+
+
+class EnergyReportLiveUpdateTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+
+    def test_energy_report_includes_interval(self):
+        resp = self.client.get(reverse("pages:energy-report"))
+        self.assertEqual(resp.context["request"].live_update_interval, 5)
+        self.assertContains(resp, "setInterval(() => location.reload()")

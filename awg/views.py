@@ -36,6 +36,15 @@ def _fill_field(size: Union[str, int]) -> str:
     return "awg_" + ("0" * (-n) if n < 0 else str(n))
 
 
+def _display_awg(size: Union[str, int]) -> str:
+    """Return an AWG display string preferring even numbers when possible."""
+
+    n = int(AWG(size))
+    if n > 0 and n % 2:
+        return f"{n - 1}-{n}"
+    return str(AWG(n))
+
+
 def find_conduit(awg: Union[str, int], cables: int, *, conduit: str = "emt"):
     """Return the conduit trade size capable of holding *cables* wires."""
 
@@ -167,8 +176,10 @@ def find_awg(
 
                 vdrop = base_vdrop * base["k"] / n
                 perc = vdrop / volts
+                awg_str = str(AWG(awg_size))
                 result = {
-                    "awg": str(AWG(awg_size)),
+                    "awg": awg_str,
+                    "awg_display": _display_awg(awg_size),
                     "meters": meters,
                     "amps": amps,
                     "volts": volts,
@@ -225,7 +236,7 @@ def find_awg(
                 best["pipe_inch"] = fill["size_inch"]
             return best
 
-        return {"awg": "n/a"}
+        return {"awg": "n/a", "awg_display": "n/a"}
 
     baseline = _calc()
     if max_awg is None:

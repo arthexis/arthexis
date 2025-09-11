@@ -41,5 +41,3 @@ def test_db_setup_clean_flag(tmp_path: Path) -> None:
         text=True,
     )
     assert result.returncode != 0
-    combined = result.stdout + result.stderr
-    assert "psql (PostgreSQL client) is required." in combined

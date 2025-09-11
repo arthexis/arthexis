@@ -100,7 +100,16 @@ def _system_view(request):
         subprocess.Popen(args)
         return redirect(reverse("admin:index"))
 
-    commands = sorted(get_commands().keys())
+    excluded = {
+        "shell",
+        "dbshell",
+        "createsuperuser",
+        "changepassword",
+        "startapp",
+        "startproject",
+        "runserver",
+    }
+    commands = sorted(cmd for cmd in get_commands().keys() if cmd not in excluded)
 
     context = admin.site.each_context(request)
     context.update({"title": _("System"), "info": info, "commands": commands})
