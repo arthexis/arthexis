@@ -4,6 +4,7 @@ Changelog
 Unreleased
 ----------
 
+- integrate user manuals into admin documentation
 - add migration snapshot script and release workflow
 
 0.1.7 [revision 4dcd62ed8222e102edbc88c81300a774e39f095c]
