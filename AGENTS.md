@@ -9,6 +9,7 @@
 - Remember to store generated image files in base64 since binary files are not allowed in the repo.
 - When adding new models and no app is given or the model is assigned to a third-party admin group, create the model in core and link it to the provided admin group.
 - Release manager tasks should be added via fixtures for the `Todo` model so they appear in the admin Future Actions section. Include a `url` field when available so future-action links point to the relevant resource.
+- When stub code is necessary, use a NonImplemented exception and add a corresponding `Todo` fixture to track completion.
 - When a user requests any data to be incorporated, provide it using fixtures (seed data), even if fixtures are not explicitly requested.
 - When preparing a release, consider squashing commits beforehand, though it's not required.
 - For shell scripts:
