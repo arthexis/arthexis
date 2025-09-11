@@ -5,6 +5,35 @@ import django.utils.timezone
 from core.models import validate_relative_url
 
 
+def add_invitelead_fields(apps, schema_editor):
+    InviteLead = apps.get_model("core", "InviteLead")
+    table = InviteLead._meta.db_table
+    with schema_editor.connection.cursor() as cursor:
+        existing = {
+            column.name
+            for column in schema_editor.connection.introspection.get_table_description(
+                cursor, table
+            )
+        }
+
+    fields = []
+    if "error" not in existing:
+        field = models.TextField(blank=True)
+        field.set_attributes_from_name("error")
+        fields.append((InviteLead, field))
+    if "sent_on" not in existing:
+        field = models.DateTimeField(blank=True, null=True)
+        field.set_attributes_from_name("sent_on")
+        fields.append((InviteLead, field))
+
+    for model, field in fields:
+        schema_editor.add_field(model, field)
+
+
+def noop(*args, **kwargs):
+    pass
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -42,15 +71,22 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "TODOs",
             },
         ),
-        migrations.AddField(
-            model_name="invitelead",
-            name="error",
-            field=models.TextField(blank=True),
-        ),
-        migrations.AddField(
-            model_name="invitelead",
-            name="sent_on",
-            field=models.DateTimeField(blank=True, null=True),
+        migrations.SeparateDatabaseAndState(
+            database_operations=[
+                migrations.RunPython(add_invitelead_fields, noop),
+            ],
+            state_operations=[
+                migrations.AddField(
+                    model_name="invitelead",
+                    name="error",
+                    field=models.TextField(blank=True),
+                ),
+                migrations.AddField(
+                    model_name="invitelead",
+                    name="sent_on",
+                    field=models.DateTimeField(blank=True, null=True),
+                ),
+            ],
         ),
         migrations.CreateModel(
             name="NewsArticle",
