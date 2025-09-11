@@ -176,6 +176,51 @@ class UserDatumAdminTests(TransactionTestCase):
         self.assertContains(response, 'name="_user_datum"')
         self.assertContains(response, "User Datum")
 
+    def test_fixture_updates_on_subsequent_saves(self):
+        """Fixture content reflects changes after additional saves."""
+        url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
+        data = {
+            "user": self.user.pk,
+            "host": "http://initial",
+            "database": "db",
+            "username": "odoo",
+            "password": "",
+            "_user_datum": "on",
+            "_save": "Save",
+        }
+        self.client.post(url, data)
+        self.assertIn("http://initial", self.fixture_path.read_text())
+
+        update = data | {"host": "http://updated"}
+        self.client.post(url, update)
+        self.assertIn("http://updated", self.fixture_path.read_text())
+
+    def test_unchecking_deletes_fixture(self):
+        """Removing the user datum flag deletes link and fixture."""
+        url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
+        data = {
+            "user": self.user.pk,
+            "host": "http://test",
+            "database": "db",
+            "username": "odoo",
+            "password": "",
+            "_user_datum": "on",
+            "_save": "Save",
+        }
+        self.client.post(url, data)
+        self.assertTrue(self.fixture_path.exists())
+
+        unchecked = data.copy()
+        unchecked.pop("_user_datum")
+        self.client.post(url, unchecked)
+        self.assertFalse(self.fixture_path.exists())
+        ct = ContentType.objects.get_for_model(OdooProfile)
+        self.assertFalse(
+            UserDatum.objects.filter(
+                user=self.user, content_type=ct, object_id=self.profile.pk
+            ).exists()
+        )
+
 
 class UserDataViewTests(TestCase):
     def setUp(self):
