@@ -53,16 +53,22 @@ class ModelPermissionForm(forms.Form):
                 queryset=groups,
                 required=False,
             )
+            self.fields[f"public_{code}"] = forms.BooleanField(
+                label=_("Public with %(perm)s permission") % {"perm": label},
+                required=False,
+            )
 
 
 def model_permissions_view(request, app_label, model_name):
+    from .models import PublicPermission
+
     content_type = get_object_or_404(ContentType, app_label=app_label, model=model_name)
     Model = content_type.model_class()
     perms = {
         code: Permission.objects.get(
             content_type=content_type, codename=f"{code}_{model_name}"
         )
-        for code, _ in PERM_CHOICES
+        for code, _label in PERM_CHOICES
     }
     User = get_user_model()
     form_kwargs = {
@@ -75,12 +81,20 @@ def model_permissions_view(request, app_label, model_name):
             for code, perm in perms.items():
                 perm.user_set.set(form.cleaned_data[f"user_{code}"])
                 perm.group_set.set(form.cleaned_data[f"group_{code}"])
+                public, _created = PublicPermission.objects.get_or_create(
+                    permission=perm
+                )
+                public.is_public = form.cleaned_data[f"public_{code}"]
+                public.save()
             return redirect(reverse("admin:app_list", args=[app_label]))
     else:
         initial = {}
         for code, perm in perms.items():
             initial[f"user_{code}"] = perm.user_set.all()
             initial[f"group_{code}"] = perm.group_set.all()
+            initial[f"public_{code}"] = PublicPermission.objects.filter(
+                permission=perm, is_public=True
+            ).exists()
         form = ModelPermissionForm(initial=initial, **form_kwargs)
     context = admin.site.each_context(request)
     context.update(

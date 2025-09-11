@@ -14,32 +14,32 @@
 <h1>{{ title }}</h1>
 <form method="post" novalidate>
   {% csrf_token %}
-  <fieldset>
-    <legend>{% trans 'Users' %}</legend>
+  <table class="permission-matrix">
+    <thead>
+      <tr>
+        <th>{% trans 'Permission' %}</th>
+        <th>{% trans 'Users' %}</th>
+        <th>{% trans 'Security groups' %}</th>
+        <th>{% trans 'Public' %}</th>
+      </tr>
+    </thead>
+    <tbody>
     {% for code, name in perm_choices %}
-    {% with 'user_'|add:code as field_name %}
-    {% with form|get_field:field_name as field %}
-    <div class="form-row">
-      {{ field.label_tag }}
-      {{ field }}
-    </div>
-    {% endwith %}
-    {% endwith %}
+    <tr>
+      <th>{{ name }}</th>
+      {% with 'user_'|add:code as field_name %}{% with form|get_field:field_name as field %}
+      <td>{{ field }}</td>
+      {% endwith %}{% endwith %}
+      {% with 'group_'|add:code as field_name %}{% with form|get_field:field_name as field %}
+      <td>{{ field }}</td>
+      {% endwith %}{% endwith %}
+      {% with 'public_'|add:code as field_name %}{% with form|get_field:field_name as field %}
+      <td>{{ field }}</td>
+      {% endwith %}{% endwith %}
+    </tr>
     {% endfor %}
-  </fieldset>
-  <fieldset>
-    <legend>{% trans 'Security groups' %}</legend>
-    {% for code, name in perm_choices %}
-    {% with 'group_'|add:code as field_name %}
-    {% with form|get_field:field_name as field %}
-    <div class="form-row">
-      {{ field.label_tag }}
-      {{ field }}
-    </div>
-    {% endwith %}
-    {% endwith %}
-    {% endfor %}
-  </fieldset>
+    </tbody>
+  </table>
   <div class="submit-row"><input type="submit" value="{% trans 'Save' %}" class="default"></div>
 </form>
 {% endblock %}

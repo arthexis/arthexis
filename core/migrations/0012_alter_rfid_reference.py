@@ -11,6 +11,33 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.CreateModel(
+            name="PublicPermission",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_public", models.BooleanField(default=False)),
+                (
+                    "permission",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="public_permission",
+                        to="auth.permission",
+                    ),
+                ),
+            ],
+            options={
+                "verbose_name": "Public Permission",
+                "verbose_name_plural": "Public Permissions",
+            },
+        ),
         migrations.AlterField(
             model_name="rfid",
             name="reference",

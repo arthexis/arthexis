@@ -1,6 +1,7 @@
 from django.contrib.auth.models import (
     AbstractUser,
     Group,
+    Permission,
     UserManager as DjangoUserManager,
 )
 from django.db import models
@@ -51,6 +52,17 @@ class SecurityGroup(Group):
     class Meta:
         verbose_name = "Security Group"
         verbose_name_plural = "Security Groups"
+
+
+class PublicPermission(models.Model):
+    permission = models.OneToOneField(
+        Permission, on_delete=models.CASCADE, related_name="public_permission"
+    )
+    is_public = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Public Permission"
+        verbose_name_plural = "Public Permissions"
 
 
 class SigilRoot(Entity):
