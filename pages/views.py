@@ -56,16 +56,22 @@ def index(request):
     )
     lang = getattr(request, "LANGUAGE_CODE", "")
     lang = lang.replace("_", "-").lower()
-    readme_file = readme_base / "README.md"
+    root_base = Path(settings.BASE_DIR)
+    candidates = []
     if lang:
-        localized = readme_base / f"README.{lang}.md"
-        if not localized.exists():
+        candidates.append(readme_base / f"README.{lang}.md")
+        short = lang.split("-")[0]
+        if short != lang:
+            candidates.append(readme_base / f"README.{short}.md")
+    candidates.append(readme_base / "README.md")
+    if readme_base != root_base:
+        if lang:
+            candidates.append(root_base / f"README.{lang}.md")
             short = lang.split("-")[0]
-            localized = readme_base / f"README.{short}.md"
-        if localized.exists():
-            readme_file = localized
-    if not readme_file.exists():
-        readme_file = Path(settings.BASE_DIR) / "README.md"
+            if short != lang:
+                candidates.append(root_base / f"README.{short}.md")
+        candidates.append(root_base / "README.md")
+    readme_file = next((p for p in candidates if p.exists()), root_base / "README.md")
     text = readme_file.read_text(encoding="utf-8")
     md = markdown.Markdown(extensions=["toc", "tables"])
     html = md.convert(text)

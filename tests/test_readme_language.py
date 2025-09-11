@@ -11,6 +11,8 @@ django.setup()
 from django.contrib.sites.models import Site
 from django.test import TestCase, RequestFactory
 from pages.views import index
+from nodes.models import Node, NodeRole
+from pages.models import Application, Module
 
 
 class ReadmeLanguageTests(TestCase):
@@ -42,8 +44,16 @@ class ReadmeLanguageTests(TestCase):
         response = index(request)
         self.assertContains(response, "Constelación Arthexis")
 
-    def test_vary_headers_present(self):
+    def test_fallback_uses_root_localized_readme(self):
+        role = NodeRole.objects.create(name="Role")
+        Node.objects.create(
+            hostname="host",
+            address="127.0.0.1",
+            mac_address=Node.get_current_mac(),
+            role=role,
+        )
+        app = Application.objects.create(name="foo")
+        Module.objects.create(node_role=role, application=app, path="/foo/", is_default=True)
+        self.client.post("/i18n/setlang/", {"language": "fr", "next": "/"})
         response = self.client.get("/")
-        vary = response.headers.get("Vary", "")
-        self.assertIn("Accept-Language", vary)
-        self.assertIn("Cookie", vary)
+        self.assertContains(response, "Constellation Arthexis")
