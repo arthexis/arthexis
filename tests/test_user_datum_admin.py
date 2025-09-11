@@ -212,6 +212,12 @@ class UserDataViewTests(TestCase):
         response = self.client.get(reverse("admin:system"))
         self.assertContains(response, "Hostname")
 
+    def test_shell_command_not_listed(self):
+        response = self.client.get(reverse("admin:system"))
+        self.assertNotContains(
+            response, reverse("admin:system_command", args=["shell"])
+        )
+
     def test_environment_page_loads(self):
         response = self.client.get(reverse("admin:environment"))
         self.assertContains(response, "Environment Variables")
