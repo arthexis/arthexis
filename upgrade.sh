@@ -75,6 +75,8 @@ git pull --rebase
 if [ "$STASHED" -eq 1 ]; then
   echo "Restoring local changes..."
   git stash pop || true
+  echo "Removing untracked files..."
+  git clean -fd || true
 fi
 
 # Exit after pulling if the node isn't installed
