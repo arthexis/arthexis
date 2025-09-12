@@ -16,10 +16,9 @@ def main() -> int:
             return 1
 
     # Ensure no new migrations are needed
-    apps = ["nodes", "core", "ocpp", "awg", "pages", "man"]
     try:
         subprocess.run(
-            ["python", "manage.py", "makemigrations", "--check", "--dry-run", *apps],
+            ["python", "manage.py", "makemigrations", "--check", "--dry-run"],
             cwd=REPO_ROOT,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
