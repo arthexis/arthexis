@@ -122,8 +122,7 @@ def load_user_fixtures() -> None:
             try:
                 data = json.load(p.open())
             except Exception:
-                dest.write_text(p.read_text())
-                patched.append(str(dest))
+                # Skip files that cannot be parsed as JSON
                 continue
             try:
                 user_id = int(p.stem.split("_", 1)[0])
@@ -142,7 +141,8 @@ def load_user_fixtures() -> None:
                     fields["user"] = 1
             dest.write_text(json.dumps(data))
             patched.append(str(dest))
-        call_command("loaddata", *patched, ignorenonexistent=True)
+        if patched:
+            call_command("loaddata", *patched, ignorenonexistent=True)
     for p in personal:
         ensure_userdatum(p)
 
