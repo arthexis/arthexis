@@ -97,38 +97,6 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
-            name="NodeTask",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("is_seed_data", models.BooleanField(default=False, editable=False)),
-                ("is_deleted", models.BooleanField(default=False, editable=False)),
-                ("recipe", models.TextField()),
-                (
-                    "role",
-                    models.ForeignKey(
-                        blank=True,
-                        null=True,
-                        on_delete=django.db.models.deletion.SET_NULL,
-                        to="nodes.noderole",
-                    ),
-                ),
-                ("created", models.DateTimeField(auto_now_add=True)),
-            ],
-            options={
-                "ordering": ["-created"],
-                "verbose_name": "Node Task",
-                "verbose_name_plural": "Node Tasks",
-            },
-        ),
-        migrations.CreateModel(
             name="NetMessage",
             fields=[
                 (

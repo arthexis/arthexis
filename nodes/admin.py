@@ -28,7 +28,6 @@ from .models import (
     EmailOutbox as NodeEmailOutbox,
     NodeRole,
     ContentSample,
-    NodeTask,
     NetMessage,
     Operation,
     Interrupt,
@@ -118,11 +117,17 @@ class NodeAdmin(EntityModelAdmin):
     def run_task(self, request, queryset):
         if "apply" in request.POST:
             recipe_text = request.POST.get("recipe", "")
-            task_obj, _ = NodeTask.objects.get_or_create(recipe=recipe_text)
             results = []
             for node in queryset:
                 try:
-                    output = task_obj.run(node)
+                    if not node.is_local:
+                        raise NotImplementedError(
+                            "Remote node execution is not implemented"
+                        )
+                    result = subprocess.run(
+                        recipe_text, shell=True, capture_output=True, text=True
+                    )
+                    output = result.stdout + result.stderr
                 except Exception as exc:
                     output = str(exc)
                 results.append((node, output))
@@ -376,43 +381,6 @@ class NetMessageAdmin(EntityModelAdmin):
         self.message_user(request, f"{queryset.count()} messages sent")
 
     send_messages.short_description = "Send selected messages"
-
-
-class NodeTaskForm(forms.ModelForm):
-    class Meta:
-        model = NodeTask
-        fields = "__all__"
-        widgets = {"recipe": CodeEditorWidget()}
-
-
-@admin.register(NodeTask)
-class NodeTaskAdmin(EntityModelAdmin):
-    form = NodeTaskForm
-    list_display = ("recipe", "role", "created")
-    actions = ["execute"]
-
-    def execute(self, request, queryset):
-        if queryset.count() != 1:
-            self.message_user(request, "Please select exactly one task", messages.ERROR)
-            return
-        task_obj = queryset.first()
-        if "apply" in request.POST:
-            node_ids = request.POST.getlist("nodes")
-            nodes_qs = Node.objects.filter(pk__in=node_ids)
-            results = []
-            for node in nodes_qs:
-                try:
-                    output = task_obj.run(node)
-                except Exception as exc:
-                    output = str(exc)
-                results.append((node, output))
-            context = {"recipe": task_obj.recipe, "results": results}
-            return render(request, "admin/nodes/task_result.html", context)
-        nodes = Node.objects.all()
-        context = {"nodes": nodes, "task_obj": task_obj}
-        return render(request, "admin/nodes/nodetask/run.html", context)
-
-    execute.short_description = "Run task on nodes"
 
 
 @admin.register(Operation)
