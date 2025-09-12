@@ -64,7 +64,7 @@
                     {% if model.view_only %}
                       <a href="{{ model.admin_url }}" class="viewlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'View' %}</a>
                     {% else %}
-                      <a href="{{ model.admin_url }}" class="changelink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'List' %}</a>
+                      <a href="{{ model.admin_url }}" class="changelink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'Browse' %}</a>
                     {% endif %}
                     <a href="{% url 'admin:model_permissions' app.app_label model.object_name|lower %}" class="authlink" aria-describedby="{{ app.app_label }}-{{ model_name }}" title="{% translate 'Edit permissions' %}"><span class="model-lock"></span>{% translate 'Auth' %}</a>
                   </span>
