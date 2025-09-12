@@ -83,7 +83,6 @@ check_nginx_and_redis() {
         echo "  sudo systemctl start redis-server"
         exit 1
     fi
-
     cat > "$BASE_DIR/redis.env" <<'EOF'
 CELERY_BROKER_URL=redis://localhost:6379/0
 CELERY_RESULT_BACKEND=redis://localhost:6379/0
