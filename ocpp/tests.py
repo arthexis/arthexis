@@ -1218,6 +1218,37 @@ class ChargerStatusViewTests(TestCase):
         self.assertAlmostEqual(chart["values"][1], 1.5)
         store.transactions.pop(charger.charger_id, None)
 
+    def test_chart_data_uses_meter_start_for_register_values(self):
+        charger = Charger.objects.create(charger_id="VIEWREG")
+        tx = Transaction.objects.create(
+            charger=charger, start_time=timezone.now(), meter_start=746060
+        )
+        t0 = timezone.now()
+        MeterReading.objects.create(
+            charger=charger,
+            transaction=tx,
+            timestamp=t0,
+            measurand="Energy.Active.Import.Register",
+            value=Decimal("746.060"),
+            unit="kWh",
+        )
+        MeterReading.objects.create(
+            charger=charger,
+            transaction=tx,
+            timestamp=t0 + timedelta(seconds=10),
+            measurand="Energy.Active.Import.Register",
+            value=Decimal("746.080"),
+            unit="kWh",
+        )
+        store.transactions[charger.charger_id] = tx
+        resp = self.client.get(reverse("charger-status", args=[charger.charger_id]))
+        chart = json.loads(resp.context["chart_data"])
+        self.assertEqual(len(chart["labels"]), 2)
+        self.assertAlmostEqual(chart["values"][0], 0.0)
+        self.assertAlmostEqual(chart["values"][1], 0.02)
+        self.assertAlmostEqual(resp.context["tx"].kw, 0.02)
+        store.transactions.pop(charger.charger_id, None)
+
     def test_sessions_are_linked(self):
         charger = Charger.objects.create(charger_id="LINK1")
         tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
