@@ -28,7 +28,6 @@ class Migration(migrations.Migration):
                     "charger_id",
                     models.CharField(
                         max_length=100,
-                        unique=True,
                         verbose_name="Serial Number",
                         help_text="Unique identifier reported by the charger.",
                     ),
@@ -65,6 +64,13 @@ class Migration(migrations.Migration):
             options={
                 "verbose_name": "Charge Point",
                 "verbose_name_plural": "Charge Points",
+                "constraints": [
+                    models.UniqueConstraint(
+                        fields=("charger_id", "connector_id"),
+                        name="charger_connector_unique",
+                        nulls_distinct=False,
+                    )
+                ],
             },
         ),
         migrations.CreateModel(

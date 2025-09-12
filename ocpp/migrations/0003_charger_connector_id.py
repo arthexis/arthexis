@@ -25,6 +25,23 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunPython(ensure_connector_id, migrations.RunPython.noop),
+        migrations.AlterField(
+            model_name="charger",
+            name="charger_id",
+            field=models.CharField(
+                max_length=100,
+                verbose_name="Serial Number",
+                help_text="Unique identifier reported by the charger.",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="charger",
+            constraint=models.UniqueConstraint(
+                fields=("charger_id", "connector_id"),
+                name="charger_connector_unique",
+                nulls_distinct=False,
+            ),
+        ),
         migrations.CreateModel(
             name="ElectricVehicle",
             fields=[],
