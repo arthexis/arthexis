@@ -86,6 +86,13 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.ERROR(f"Unexpected error during LCD init: {exc}")
             )
+            if isinstance(exc, FileNotFoundError) and "/dev/i2c-1" in str(exc):
+                self.stdout.write(
+                    self.style.WARNING(
+                        "Hint: enable the I2C interface or check that the LCD is wired correctly. "
+                        "On Raspberry Pi, run 'sudo raspi-config' then enable I2C under Interfacing Options"
+                    )
+                )
 
         # Random string display -----------------------------------------
         random_text = "".join(
