@@ -633,59 +633,6 @@ class EmailArtifact(Entity):
         verbose_name_plural = "Email Artifacts"
 
 
-class FediverseProfile(Entity):
-    """Configuration for connecting to fediverse services."""
-
-    MASTODON = "mastodon"
-    BLUESKY = "bluesky"
-    SERVICE_CHOICES = [
-        (MASTODON, "Mastodon"),
-        (BLUESKY, "Bluesky"),
-    ]
-
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        related_name="fediverse_profile",
-        on_delete=models.CASCADE,
-    )
-    service = models.CharField(max_length=20, choices=SERVICE_CHOICES)
-    host = models.CharField(max_length=255)
-    handle = models.CharField(max_length=255)
-    access_token = models.CharField(max_length=255, blank=True)
-    verified_on = models.DateTimeField(null=True, blank=True)
-
-    def test_connection(self):
-        """Attempt to verify credentials against the configured service."""
-        import requests
-
-        try:
-            headers = {}
-            if self.access_token:
-                headers["Authorization"] = f"Bearer {self.access_token}"
-            if self.service == self.MASTODON:
-                url = f"https://{self.host}/api/v1/accounts/verify_credentials"
-                resp = requests.get(url, headers=headers, timeout=10)
-            else:  # BLUESKY
-                url = f"https://{self.host}/xrpc/app.bsky.actor.getProfile"
-                params = {"actor": self.handle}
-                resp = requests.get(url, params=params, headers=headers, timeout=10)
-            resp.raise_for_status()
-            self.verified_on = timezone.now()
-            self.save(update_fields=["verified_on"])
-            return True
-        except Exception as exc:
-            self.verified_on = None
-            self.save(update_fields=["verified_on"])
-            raise ValidationError(str(exc))
-
-    def __str__(self):  # pragma: no cover - simple representation
-        return f"{self.user} @ {self.host}"
-
-    class Meta:
-        verbose_name = _("Fediverse Profile")
-        verbose_name_plural = _("Fediverse Profiles")
-
-
 class Reference(Entity):
     """Store a piece of reference content which can be text or an image."""
 
