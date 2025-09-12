@@ -11,9 +11,18 @@
 {% endblock %}
 {% block title %}{{ manual.title }}{% endblock %}
 
+{% block sidebar %}
+{% include "admin/nav_sidebar.html" %}
+{% endblock %}
+
 {% block content %}
 <h1>{{ manual.title }}</h1>
 <div id="content-main">
+  <div class="object-tools">
+    <ul>
+      <li><a href="{% url 'django-admindocs-manual-pdf' manual.slug %}">{% translate 'Download PDF' %}</a></li>
+    </ul>
+  </div>
   {{ manual.content_html|safe }}
 </div>
 {% endblock %}
