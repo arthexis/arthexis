@@ -40,6 +40,7 @@ from django.contrib.auth import get_user_model
 
 from core.user_data import load_user_fixtures
 from core.models import PackageRelease
+from core.sigil_builder import generate_model_sigils
 from utils import revision as revision_utils
 
 
@@ -235,6 +236,10 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                 except Exception:
                     raise exc
 
+    # Remove auto-generated SigilRoot entries so fixtures define prefixes
+    SigilRoot = apps.get_model("core", "SigilRoot")
+    SigilRoot.objects.all().delete()
+
     fixtures = _fixture_files()
     fixture_hash = _fixture_hash(fixtures)
     if fixtures:
@@ -314,6 +319,9 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
 
     # Load personal user data fixtures last
     load_user_fixtures()
+
+    # Recreate any missing SigilRoots after loading fixtures
+    generate_model_sigils()
 
     # Update the fixtures and migrations hash files after a successful run.
     _write_fixture_hash(fixture_hash)
