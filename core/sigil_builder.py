@@ -157,10 +157,16 @@ def _sigil_builder_view(request):
 
     auto_fields = []
     for model in apps.get_models():
+        model_name = model._meta.object_name
+        prefixes = grouped.get(model_name, {}).get("prefixes", [])
         for field in model._meta.fields:
             if isinstance(field, SigilAutoFieldMixin):
                 auto_fields.append(
-                    {"model": model._meta.object_name, "field": field.name.upper()}
+                    {
+                        "model": model_name,
+                        "roots": prefixes,
+                        "field": field.name.upper(),
+                    }
                 )
 
     sigils_text = ""

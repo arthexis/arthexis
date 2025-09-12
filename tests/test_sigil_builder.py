@@ -52,3 +52,18 @@ class SigilBuilderTests(TestCase):
         self.assertContains(response, "[EMAIL]")
         content = response.content.decode()
         self.assertEqual(content.count("Email Inbox"), 1)
+
+    def test_auto_fields_include_roots(self):
+        from django.contrib.contenttypes.models import ContentType
+        from core.models import EmailInbox, SigilRoot
+
+        ct = ContentType.objects.get_for_model(EmailInbox)
+        SigilRoot.objects.get_or_create(
+            prefix="INBOX",
+            context_type=SigilRoot.Context.ENTITY,
+            content_type=ct,
+        )
+        response = self.client.get("/admin/sigil-builder/")
+        content = response.content.decode()
+        self.assertIn("<th>Root</th>", content)
+        self.assertGreater(content.count("[INBOX]"), 1)
