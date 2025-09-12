@@ -314,6 +314,9 @@ if [[ $RUN_REINSTALL_WLAN1 == true ]]; then
                 fi
                 ssid="$(nmcli -g 802-11-wireless.ssid connection show "$con" 2>/dev/null || true)"
                 [[ -z "$ssid" ]] && continue
+                if [[ "$ssid" == "Hyperline" || "$ssid" == "Porsche Centre" ]]; then
+                    continue
+                fi
                 slug="$(slugify "$ssid")"
                 new_name="gate-$slug"
                 if [[ -n "${SEEN_SLUGS[$slug]:-}" ]]; then
@@ -367,14 +370,21 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
             ssid "Hyperline" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "arthexis" \
             autoconnect yes connection.autoconnect-priority 10 \
             ipv4.method auto ipv6.method ignore ipv4.route-metric 50
+        nmcli connection delete "Porsche Centre" 2>/dev/null || true
+        nmcli connection add type wifi ifname wlan1 con-name "Porsche Centre" \
+            ssid "Porsche Centre" wifi.band a wifi-sec.key-mgmt wpa-psk wifi-sec.psk "porschecentre" \
+            autoconnect yes connection.autoconnect-priority 5 \
+            ipv4.method auto ipv6.method ignore ipv4.route-metric 60
 
         if ! nmcli connection up hyperline; then
-            echo "Failed to activate Hyperline connection; trying existing wlan1 connections." >&2
-            while read -r con; do
-                if nmcli connection up "$con"; then
-                    break
-                fi
-            done < <(nmcli -t -f NAME connection show | grep '^gate-')
+            echo "Failed to activate Hyperline connection; trying Porsche Centre and existing wlan1 connections." >&2
+            if ! nmcli connection up "Porsche Centre"; then
+                while read -r con; do
+                    if nmcli connection up "$con"; then
+                        break
+                    fi
+                done < <(nmcli -t -f NAME connection show | grep '^gate-')
+            fi
         fi
     fi
 fi
