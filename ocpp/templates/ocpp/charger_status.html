@@ -2,7 +2,7 @@
 
 {% load i18n %}
 
-{% block title %}{{ charger.name|default:charger.charger_id }} - {% trans "Status" %}{% endblock %}
+{% block title %}{{ charger.display_name|default:charger.name|default:charger.charger_id }} - {% trans "Status" %}{% endblock %}
 
 {% block content %}
 <div id="status-content">
@@ -21,7 +21,10 @@
       animation: text-update-fade 1s ease-out;
     }
   </style>
-    <h1>{{ charger.name|default:charger.charger_id }}</h1>
+    <h1>{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
+    {% if charger.display_name %}
+    <p class="text-muted"><small>{% trans "Serial Number" %}: {{ charger.charger_id }}</small></p>
+    {% endif %}
     <p><a href="{% url 'charger-page' charger.charger_id %}">{% trans "Landing page" %}</a></p>
     {% if past_session %}
   <div class="alert alert-info" role="alert">
@@ -30,7 +33,6 @@
   {% endif %}
   <div class="row mb-4">
     <div class="col-md-4">
-      <p>{% trans "Serial Number" %}: {{ charger.charger_id }}</p>
       <div class="mb-3 d-flex align-items-center">
         <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
         <strong id="charger-state">{{ state }}</strong>

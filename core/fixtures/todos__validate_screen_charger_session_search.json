@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "pk": 14,
+    "fields": {
+      "description": "Validate screen Charger Session Search",
+      "url": "/ocpp/c/CP1/sessions/"
+    }
+  }
+]

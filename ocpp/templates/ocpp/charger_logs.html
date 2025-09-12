@@ -1,6 +1,7 @@
 {% extends "pages/base.html" %}
+{% load i18n %}
 
-{% block title %}Log for {{ charger.name|default:charger.charger_id }}{% endblock %}
+{% block title %}Log for {{ charger.display_name|default:charger.name|default:charger.charger_id }}{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -13,7 +14,10 @@
 {% endblock %}
 
 {% block content %}
-<h1>Log for {{ charger.name|default:charger.charger_id }}</h1>
+<h1>Log for {{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
+{% if charger.display_name %}
+<p class="text-muted"><small>{% trans "Serial Number" %}: {{ charger.charger_id }}</small></p>
+{% endif %}
 <div class="form-check mb-2">
   <input class="form-check-input" type="checkbox" id="auto-reload">
   <label class="form-check-label" for="auto-reload">Auto reload</label>

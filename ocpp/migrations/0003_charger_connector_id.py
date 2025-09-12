@@ -15,6 +15,10 @@ def ensure_connector_id(apps, schema_editor):
         field = models.CharField(max_length=10, null=True, blank=True)
         field.set_attributes_from_name("connector_id")
         schema_editor.add_field(Charger, field)
+    if "display_name" not in columns:
+        field = models.CharField(max_length=200, null=True, blank=True)
+        field.set_attributes_from_name("display_name")
+        schema_editor.add_field(Charger, field)
 
 
 class Migration(migrations.Migration):

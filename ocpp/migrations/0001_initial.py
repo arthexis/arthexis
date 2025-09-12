@@ -34,6 +34,15 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
+                    "display_name",
+                    models.CharField(
+                        blank=True,
+                        max_length=200,
+                        verbose_name="Display Name",
+                        help_text="Optional user-friendly name for this charger.",
+                    ),
+                ),
+                (
                     "connector_id",
                     models.CharField(
                         blank=True,
