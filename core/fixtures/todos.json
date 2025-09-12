@@ -52,4 +52,23 @@
       "is_seed_data": true
     }
   }
+,
+  {
+    "model": "core.todo",
+    "pk": 6,
+    "fields": {
+      "description": "Validate screen Manuals admin list navbar",
+      "url": "/admin/doc/manuals/",
+      "is_seed_data": true
+    }
+  },
+  {
+    "model": "core.todo",
+    "pk": 7,
+    "fields": {
+      "description": "Validate screen Manual detail navbar",
+      "url": "/admin/doc/manuals/create-manual/",
+      "is_seed_data": true
+    }
+  }
 ]
