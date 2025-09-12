@@ -3,7 +3,7 @@ import json
 import base64
 from datetime import datetime
 from django.utils import timezone
-from core.models import EnergyAccount
+from core.models import EnergyAccount, RFID as CoreRFID
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -216,7 +216,12 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 )(last_meter_values=payload)
                 reply_payload = {}
             elif action == "StartTransaction":
-                account = await self._get_account(payload.get("idTag"))
+                id_tag = payload.get("idTag")
+                account = await self._get_account(id_tag)
+                if id_tag:
+                    await database_sync_to_async(CoreRFID.objects.get_or_create)(
+                        rfid=id_tag.upper()
+                    )
                 if self.charger.require_rfid:
                     authorized = (
                         account is not None
@@ -228,7 +233,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     tx_obj = await database_sync_to_async(Transaction.objects.create)(
                         charger=self.charger,
                         account=account,
-                        rfid=(payload.get("idTag") or ""),
+                        rfid=(id_tag or ""),
                         vin=(payload.get("vin") or ""),
                         meter_start=payload.get("meterStart"),
                         start_time=timezone.now(),
