@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.test import TestCase
 
-from core.sigil_builder import resolve_sigils_in_text
+from core.sigil_builder import generate_model_sigils, resolve_sigils_in_text
 
 
 class SigilBuilderTests(TestCase):
@@ -52,3 +52,16 @@ class SigilBuilderTests(TestCase):
         self.assertContains(response, "[EMAIL]")
         content = response.content.decode()
         self.assertEqual(content.count("Email Inbox"), 1)
+
+
+class GenerateModelSigilsTests(TestCase):
+    def test_idempotent_generation(self):
+        from core.models import SigilRoot
+
+        SigilRoot.objects.create(prefix="ENV", context_type=SigilRoot.Context.ENTITY)
+        generate_model_sigils()
+        # Second call should not raise an error or create duplicates
+        generate_model_sigils()
+        sigils = SigilRoot.objects.filter(prefix="ENV")
+        self.assertEqual(sigils.count(), 1)
+        self.assertEqual(sigils.get().context_type, SigilRoot.Context.CONFIG)
