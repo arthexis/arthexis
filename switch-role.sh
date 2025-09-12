@@ -35,10 +35,14 @@ require_nginx() {
 require_redis() {
     if ! command -v redis-cli >/dev/null 2>&1; then
         echo "Redis is required for the $1 role but is not installed." >&2
+        echo "Install redis-server and re-run this script. For Debian/Ubuntu:" >&2
+        echo "  sudo apt-get update && sudo apt-get install redis-server" >&2
         exit 1
     fi
     if ! redis-cli ping >/dev/null 2>&1; then
         echo "Redis is required for the $1 role but does not appear to be running." >&2
+        echo "Start redis and re-run this script. For Debian/Ubuntu:" >&2
+        echo "  sudo systemctl start redis-server" >&2
         exit 1
     fi
     cat > "$SCRIPT_DIR/redis.env" <<'EOF_REDIS'
