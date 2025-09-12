@@ -159,8 +159,14 @@
           const kwElem = newContent.querySelector('#session-kw');
           const stateElem = newContent.querySelector('#charger-state');
           const isCharging = stateElem && stateElem.textContent.trim() === 'Charging';
+          let chartNeedsUpdate = false;
           if (kwElem && isCharging) {
-            addDataPoint(parseFloat(kwElem.textContent));
+            const kw = parseFloat(kwElem.textContent);
+            const lastKw = chartData.datasets[0].data[chartData.datasets[0].data.length - 1];
+            if (kw !== lastKw) {
+              addDataPoint(kw);
+              chartNeedsUpdate = true;
+            }
           }
           current.innerHTML = newContent.innerHTML;
           if (oldCanvas) {
@@ -169,7 +175,7 @@
               placeholder.replaceWith(oldCanvas);
             }
           }
-          if (kwElem && kwChart && isCharging) {
+          if (chartNeedsUpdate && kwChart) {
             kwChart.update();
           }
           changedIds.forEach(id => {
