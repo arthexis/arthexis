@@ -274,8 +274,8 @@ else:
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
-            "OPTIONS": {"timeout": 30},
-            "TEST": {"NAME": BASE_DIR / "test_db.sqlite3"},
+            "OPTIONS": {"timeout": 60},
+            "TEST": {"NAME": ":memory:"},
         }
     }
 
