@@ -124,6 +124,23 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_rfid_unbound_instance_created(self):
+        await database_sync_to_async(Charger.objects.create)(charger_id="NEWRFID")
+        communicator = WebsocketCommunicator(application, "/NEWRFID/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [2, "1", "StartTransaction", {"meterStart": 1, "idTag": "TAG456"}]
+        )
+        await communicator.receive_json_from()
+
+        tag = await database_sync_to_async(RFID.objects.get)(rfid="TAG456")
+        count = await database_sync_to_async(tag.energy_accounts.count)()
+        self.assertEqual(count, 0)
+
+        await communicator.disconnect()
+
     async def test_vin_recorded(self):
         await database_sync_to_async(Charger.objects.create)(charger_id="VINREC")
         communicator = WebsocketCommunicator(application, "/VINREC/")
