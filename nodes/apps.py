@@ -69,8 +69,6 @@ class NodesConfig(AppConfig):
     verbose_name = "4. Infrastructure"
 
     def ready(self):  # pragma: no cover - exercised on app start
-        threading.Thread(
-            target=_trigger_startup_notification,
-            name="startup-notify",
-            daemon=True,
-        ).start()
+        from django.db.models.signals import post_migrate
+
+        post_migrate.connect(_trigger_startup_notification, sender=self)
