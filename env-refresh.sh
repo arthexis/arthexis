@@ -34,8 +34,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ ! -f "$PYTHON" ]; then
-  echo "Virtual environment not found. Run ./install.sh first." >&2
-  exit 1
+  echo "Virtual environment not found. Run ./install.sh first. Skipping." >&2
+  exit 0
 fi
 
 

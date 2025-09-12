@@ -1,5 +1,9 @@
+from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.sites.models import Site
 from django.urls import resolve
+
+from nodes.models import Node, NodeRole
 
 from .models import AdminHistory
 from .sigil_context import set_context, clear_context
@@ -45,6 +49,17 @@ class SigilContextMiddleware:
 
     def __call__(self, request):
         context = {}
+        if request.user.is_authenticated:
+            context[get_user_model()] = request.user.pk
+        try:
+            site = Site.objects.get_current(request)
+            context[Site] = site.pk
+        except Exception:
+            pass
+        if hasattr(request, "node") and getattr(request, "node", None):
+            context[Node] = request.node.pk
+        if hasattr(request, "role") and getattr(request, "role", None):
+            context[NodeRole] = request.role.pk
         try:
             match = resolve(request.path_info)
         except Exception:  # pragma: no cover - resolution errors

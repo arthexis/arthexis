@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.test import TestCase
 
-from core.sigil_builder import resolve_sigils_in_text
+from core.sigil_builder import generate_model_sigils, resolve_sigils_in_text
 
 
 class SigilBuilderTests(TestCase):
@@ -52,3 +52,19 @@ class SigilBuilderTests(TestCase):
         self.assertContains(response, "[EMAIL]")
         content = response.content.decode()
         self.assertEqual(content.count("Email Inbox"), 1)
+
+    def test_auto_fields_include_roots(self):
+        from django.contrib.contenttypes.models import ContentType
+        from core.models import EmailInbox, SigilRoot
+
+        ct = ContentType.objects.get_for_model(EmailInbox)
+        SigilRoot.objects.get_or_create(
+            prefix="INBOX",
+            context_type=SigilRoot.Context.ENTITY,
+            content_type=ct,
+        )
+        response = self.client.get("/admin/sigil-builder/")
+        content = response.content.decode()
+        self.assertIn("<th>Root</th>", content)
+        self.assertGreater(content.count("[INBOX]"), 1)
+

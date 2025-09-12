@@ -43,7 +43,6 @@ from .models import (
     CustomSigil,
     Reference,
     OdooProfile,
-    FediverseProfile,
     EmailInbox as CoreEmailInbox,
     Package,
     PackageRelease,
@@ -58,6 +57,28 @@ from .user_data import EntityModelAdmin
 
 
 admin.site.unregister(Group)
+
+
+# Add object links for small datasets in changelist view
+original_changelist_view = admin.ModelAdmin.changelist_view
+
+
+def changelist_view_with_object_links(self, request, extra_context=None):
+    extra_context = extra_context or {}
+    count = self.model._default_manager.count()
+    if 1 <= count <= 4:
+        links = []
+        for obj in self.model._default_manager.all():
+            url = reverse(
+                f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change",
+                args=[obj.pk],
+            )
+            links.append({"url": url, "label": str(obj)})
+        extra_context["global_object_links"] = links
+    return original_changelist_view(self, request, extra_context=extra_context)
+
+
+admin.ModelAdmin.changelist_view = changelist_view_with_object_links
 
 
 class WorkgroupReleaseManager(ReleaseManager):
@@ -486,64 +507,6 @@ class OdooProfileAdmin(EntityModelAdmin):
                 self.message_user(
                     request, f"{profile.user}: {exc}", level=messages.ERROR
                 )
-
-
-class FediverseProfileAdminForm(forms.ModelForm):
-    """Admin form for :class:`core.models.FediverseProfile` with hidden token."""
-
-    access_token = forms.CharField(
-        widget=forms.PasswordInput(render_value=True),
-        required=False,
-        help_text="Leave blank to keep the current token.",
-    )
-
-    class Meta:
-        model = FediverseProfile
-        fields = "__all__"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance.pk:
-            self.fields["access_token"].initial = ""
-            self.initial["access_token"] = ""
-
-    def clean_access_token(self):
-        token = self.cleaned_data.get("access_token")
-        if not token and self.instance.pk:
-            return self.instance.access_token
-        return token
-
-
-@admin.register(FediverseProfile)
-class FediverseProfileAdmin(EntityModelAdmin):
-    form = FediverseProfileAdminForm
-    list_display = ("user", "service", "host", "handle", "verified_on")
-    readonly_fields = ("verified_on",)
-    actions = ["test_connection"]
-    fieldsets = (
-        (
-            None,
-            {
-                "fields": (
-                    "user",
-                    "service",
-                    "host",
-                    "handle",
-                    "access_token",
-                    "verified_on",
-                )
-            },
-        ),
-    )
-
-    @admin.action(description="Test selected profiles")
-    def test_connection(self, request, queryset):
-        for profile in queryset:
-            try:
-                profile.test_connection()
-                self.message_user(request, f"{profile} connection successful")
-            except Exception as exc:  # pragma: no cover - admin feedback
-                self.message_user(request, f"{profile}: {exc}", level=messages.ERROR)
 
 
 class EmailInbox(CoreEmailInbox):

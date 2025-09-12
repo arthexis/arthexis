@@ -29,43 +29,4 @@ class Migration(migrations.Migration):
             name="key_b_verified",
             field=models.BooleanField(default=False),
         ),
-        migrations.CreateModel(
-            name="FediverseProfile",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("is_seed_data", models.BooleanField(default=False, editable=False)),
-                ("is_deleted", models.BooleanField(default=False, editable=False)),
-                (
-                    "service",
-                    models.CharField(
-                        choices=[("mastodon", "Mastodon"), ("bluesky", "Bluesky")],
-                        max_length=20,
-                    ),
-                ),
-                ("host", models.CharField(max_length=255)),
-                ("handle", models.CharField(max_length=255)),
-                ("access_token", models.CharField(blank=True, max_length=255)),
-                ("verified_on", models.DateTimeField(blank=True, null=True)),
-                (
-                    "user",
-                    models.OneToOneField(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="fediverse_profile",
-                        to=settings.AUTH_USER_MODEL,
-                    ),
-                ),
-            ],
-            options={
-                "verbose_name": "Fediverse Profile",
-                "verbose_name_plural": "Fediverse Profiles",
-            },
-        ),
     ]
