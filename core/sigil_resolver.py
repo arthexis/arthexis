@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 from io import StringIO
 from typing import Optional
 
@@ -12,12 +11,7 @@ from django.db import models
 
 from .sigil_context import get_context
 
-logger = logging.getLogger(__name__)
-
-TOKEN_RE = re.compile(
-    r"^([A-Za-z0-9_-]+)(?:=([A-Za-z0-9_-]+))?(?:\.([A-Za-z0-9_-]+)(?:=(.*))?)?$",
-    re.IGNORECASE,
-)
+logger = logging.getLogger("core.entity")
 
 
 def _first_instance(model: type[models.Model]) -> Optional[models.Model]:
@@ -31,15 +25,56 @@ def _first_instance(model: type[models.Model]) -> Optional[models.Model]:
 
 
 def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
-    match = TOKEN_RE.fullmatch(token)
-    if not match:
+    i = 0
+    n = len(token)
+    root_name = ""
+    while i < n and token[i] not in ":=.":
+        root_name += token[i]
+        i += 1
+    if not root_name:
         return f"[{token}]"
-    root_name, instance_id, key, param = match.groups()
+    filter_field = None
+    if i < n and token[i] == ":":
+        i += 1
+        field = ""
+        while i < n and token[i] != "=":
+            field += token[i]
+            i += 1
+        if i == n:
+            return f"[{token}]"
+        filter_field = field.replace("-", "_")
+    instance_id = None
+    if i < n and token[i] == "=":
+        i += 1
+        start = i
+        depth = 0
+        while i < n:
+            ch = token[i]
+            if ch == "[":
+                depth += 1
+            elif ch == "]" and depth:
+                depth -= 1
+            elif ch == "." and depth == 0:
+                break
+            i += 1
+        instance_id = token[start:i]
+    key = None
+    if i < n and token[i] == ".":
+        i += 1
+        start = i
+        while i < n and token[i] != "=":
+            i += 1
+        key = token[start:i]
+    param = None
+    if i < n and token[i] == "=":
+        param = token[i + 1 :]
     root_name = root_name.replace("-", "_").upper()
     if key:
         key = key.replace("-", "_").upper()
     if param:
         param = resolve_sigils(param, current)
+    if instance_id:
+        instance_id = resolve_sigils(instance_id, current)
     SigilRoot = apps.get_model("core", "SigilRoot")
     try:
         root = SigilRoot.objects.get(prefix__iexact=root_name)
@@ -47,7 +82,13 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
             if not key:
                 return ""
             if root.prefix.upper() == "ENV":
-                return os.environ.get(key.upper(), "")
+                val = os.environ.get(key.upper())
+                if val is None:
+                    logger.warning(
+                        "Missing environment variable for sigil [ENV.%s]", key.upper()
+                    )
+                    return f"[{token}]"
+                return val
             if root.prefix.upper() == "SYS":
                 return str(getattr(settings, key.upper(), ""))
             if root.prefix.upper() == "CMD":
@@ -63,10 +104,23 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
             if model:
                 if instance_id:
                     try:
-                        instance = model.objects.filter(pk=instance_id).first()
-                    except (ValueError, TypeError):
+                        if filter_field:
+                            field_name = filter_field.lower()
+                            try:
+                                field_obj = model._meta.get_field(field_name)
+                            except Exception:
+                                field_obj = None
+                            lookup: dict[str, str] = {}
+                            if field_obj and isinstance(field_obj, models.CharField):
+                                lookup = {f"{field_name}__iexact": instance_id}
+                            else:
+                                lookup = {field_name: instance_id}
+                            instance = model.objects.filter(**lookup).first()
+                        else:
+                            instance = model.objects.filter(pk=instance_id).first()
+                    except Exception:
                         instance = None
-                    if instance is None:
+                    if instance is None and not filter_field:
                         for field in model._meta.fields:
                             if field.unique and isinstance(field, models.CharField):
                                 instance = model.objects.filter(

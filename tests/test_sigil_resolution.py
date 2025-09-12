@@ -200,6 +200,32 @@ class SigilResolutionTests(TestCase):
         rendered = tmpl.render(Context({"profile": profile}))
         self.assertEqual(rendered, "user=srcuser")
 
+    def test_entity_sigil_field_filter(self):
+        ct = ContentType.objects.get_for_model(OdooProfile)
+        root = SigilRoot.objects.filter(prefix="ODOO").first()
+        if not root:
+            root = SigilRoot.objects.create(
+                prefix="ODOO", context_type=SigilRoot.Context.ENTITY, content_type=ct
+            )
+        src_user = get_user_model().objects.create(username="fieldsrc")
+        src = OdooProfile.objects.create(
+            user=src_user,
+            host="h",
+            database="db_src",
+            username="odoo",
+            password="secret",
+        )
+        profile = OdooProfile.objects.create(
+            user=self.user,
+            host=f"db=[{root.prefix}:USER={src_user.pk}.DATABASE]",
+            database="db",
+            username="odoo",
+            password="secret",
+        )
+        tmpl = Template("{{ profile.host }}")
+        rendered = tmpl.render(Context({"profile": profile}))
+        self.assertEqual(rendered, "db=db_src")
+
     def test_entity_sigil_from_context(self):
         ct = ContentType.objects.get_for_model(OdooProfile)
         root = SigilRoot.objects.filter(prefix="ODOO").first()
