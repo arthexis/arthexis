@@ -358,7 +358,8 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
         nmcli connection delete hyperline 2>/dev/null || true
         nmcli connection add type wifi ifname wlan1 con-name hyperline \
             ssid "Hyperline" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "arthexis" \
-            autoconnect yes ipv4.method auto ipv6.method ignore ipv4.route-metric 100
+            autoconnect yes connection.autoconnect-priority 10 \
+            ipv4.method auto ipv6.method ignore ipv4.route-metric 50
 
         if ! nmcli connection up hyperline; then
             echo "Failed to activate Hyperline connection; trying existing wlan1 connections." >&2
