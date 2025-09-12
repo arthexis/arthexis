@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "model": "sites.site",
+    "pk": 3,
+    "fields": {
+      "domain": "10.42.0.1",
+      "name": "Router"
+    }
+  }
+]
