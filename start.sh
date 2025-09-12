@@ -9,6 +9,24 @@ exec > >(tee "$LOG_FILE") 2>&1
 cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 
+# Ensure virtual environment is available
+if [ ! -d .venv ]; then
+  echo "Virtual environment not found. Run ./install.sh first." >&2
+  exit 1
+fi
+source .venv/bin/activate
+
+# Load any .env files to configure environment variables
+for env_file in *.env; do
+  [ -f "$env_file" ] || continue
+  set -a
+  . "$env_file"
+  set +a
+done
+
+# Collect static files before starting services
+python manage.py collectstatic --noinput
+
 # If a systemd service was installed, restart it instead of launching a new process
 if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
@@ -38,21 +56,6 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
     exit 0
   fi
 fi
-
-# Ensure virtual environment is available
-if [ ! -d .venv ]; then
-  echo "Virtual environment not found. Run ./install.sh first." >&2
-  exit 1
-fi
-source .venv/bin/activate
-
-# Load any .env files to configure environment variables
-for env_file in *.env; do
-  [ -f "$env_file" ] || continue
-  set -a
-  . "$env_file"
-  set +a
-done
 
 # Determine default port based on nginx mode if present
 PORT=""
@@ -104,9 +107,6 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
-
-# Collect static files
-python manage.py collectstatic --noinput
 
 # Start required Celery components if requested
 if [ "$CELERY" = true ]; then
