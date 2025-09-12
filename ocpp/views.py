@@ -244,6 +244,7 @@ def charger_status(request, cid):
     chart_data = {"labels": [], "values": []}
     if tx_obj:
         total = 0.0
+        prev = tx_obj.meter_start / 1000.0 if tx_obj.meter_start is not None else None
         readings = tx_obj.meter_readings.filter(
             measurand__in=["", "Energy.Active.Import.Register"]
         ).order_by("timestamp")
@@ -252,10 +253,17 @@ def charger_status(request, cid):
                 val = float(reading.value)
             except (TypeError, ValueError):
                 continue
-            if reading.unit == "kW":
-                total += val
+            if reading.unit != "kW":
+                val /= 1000.0
+            if prev is not None:
+                delta = val - prev
+                if delta < 0:
+                    prev = val
+                    continue
+                total += delta
             else:
-                total += val / 1000.0
+                total += val
+            prev = val
             chart_data["labels"].append(reading.timestamp.isoformat())
             chart_data["values"].append(total)
     return render(
