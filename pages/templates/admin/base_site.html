@@ -171,6 +171,11 @@ body:not(.login) #site-name {
     align-items: center;
 }
 
+body:not(.login) #site-name > a {
+    margin-right: 10px;
+    margin-bottom: 10px;
+}
+
 body:not(.login) #site-badges {
     margin-left: 0.5em;
     display: flex;
@@ -205,6 +210,10 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
 #nav-sidebar .module.collapsed ul,
 #nav-sidebar .module.collapsed table {
     display: none;
+}
+.form-row {
+    margin-top: 0;
+    margin-bottom: 0;
 }
 .form-row > div:only-child input[type="text"]:not(.vDateField):not(.vTimeField),
 .form-row > div:only-child textarea {

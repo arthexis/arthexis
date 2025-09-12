@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.test import TestCase
 
-from core.sigil_builder import resolve_sigils_in_text
+from core.sigil_builder import generate_model_sigils, resolve_sigils_in_text
 
 
 class SigilBuilderTests(TestCase):
@@ -67,3 +67,4 @@ class SigilBuilderTests(TestCase):
         content = response.content.decode()
         self.assertIn("<th>Root</th>", content)
         self.assertGreater(content.count("[INBOX]"), 1)
+

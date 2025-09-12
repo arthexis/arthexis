@@ -334,10 +334,6 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Bluesky domain account (optional)
-BSKY_HANDLE = os.environ.get("BSKY_HANDLE")
-BSKY_APP_PASSWORD = os.environ.get("BSKY_APP_PASSWORD")
-
 # Logging configuration
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)

@@ -19,6 +19,16 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="usermanual",
+            name="languages",
+            field=models.CharField(
+                blank=True,
+                default="",
+                help_text="Comma-separated 2-letter language codes",
+                max_length=100,
+            ),
+        ),
+        migrations.AddField(
+            model_name="usermanual",
             name="is_seed_data",
             field=models.BooleanField(default=False, editable=False),
         ),
