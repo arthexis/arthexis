@@ -44,6 +44,7 @@ from .models import (
     Reference,
     OdooProfile,
     EmailInbox as CoreEmailInbox,
+    EmailCollector,
     Package,
     PackageRelease,
     ReleaseManager,
@@ -485,6 +486,11 @@ class OdooProfileAdminForm(forms.ModelForm):
         return pwd
 
 
+class EmailCollectorInline(admin.TabularInline):
+    model = EmailCollector
+    extra = 0
+
+
 @admin.register(OdooProfile)
 class OdooProfileAdmin(EntityModelAdmin):
     change_form_template = "admin/user_datum_change_form.html"
@@ -561,11 +567,13 @@ class EmailSearchForm(forms.Form):
 
 
 @admin.register(EmailInbox)
-class EmailInboxAdmin(EntityModelAdmin):
+class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     form = EmailInboxAdminForm
     list_display = ("user", "username", "host", "protocol")
-    actions = ["test_connection", "search_inbox"]
+    actions = ["test_connection", "search_inbox", "test_collectors"]
+    change_actions = ["test_collectors_action"]
     change_form_template = "admin/core/emailinbox/change_form.html"
+    inlines = [EmailCollectorInline]
 
     def get_urls(self):
         urls = super().get_urls()
@@ -627,6 +635,33 @@ class EmailInboxAdmin(EntityModelAdmin):
                 self.message_user(request, f"{inbox} connection successful")
             except Exception as exc:  # pragma: no cover - admin feedback
                 self.message_user(request, f"{inbox}: {exc}", level=messages.ERROR)
+
+    def _test_collectors(self, request, inbox):
+        for collector in inbox.collectors.all():
+            before = collector.artifacts.count()
+            try:
+                collector.collect(limit=1)
+                after = collector.artifacts.count()
+                if after > before:
+                    msg = f"{collector} collected {after - before} email(s)"
+                    self.message_user(request, msg)
+                else:
+                    self.message_user(
+                        request, f"{collector} found no emails", level=messages.WARNING
+                    )
+            except Exception as exc:  # pragma: no cover - admin feedback
+                self.message_user(request, f"{collector}: {exc}", level=messages.ERROR)
+
+    @admin.action(description="Test collectors")
+    def test_collectors(self, request, queryset):
+        for inbox in queryset:
+            self._test_collectors(request, inbox)
+
+    def test_collectors_action(self, request, obj):
+        self._test_collectors(request, obj)
+
+    test_collectors_action.label = "Test collectors"
+    test_collectors_action.short_description = "Test collectors"
 
     @admin.action(description="Search selected inbox")
     def search_inbox(self, request, queryset):

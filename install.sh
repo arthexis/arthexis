@@ -116,7 +116,7 @@ while [[ $# -gt 0 ]]; do
             SERVICE="arthexis"
             LATEST=false
             ENABLE_CELERY=true
-            NODE_ROLE="Gateway"
+            NODE_ROLE="Satellite"
             REQUIRES_REDIS=true
             shift
             ;;

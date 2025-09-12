@@ -80,7 +80,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --satellite)
             require_nginx "satellite"
-            NODE_ROLE="Gateway"
+            NODE_ROLE="Satellite"
             ENABLE_CELERY=true
             NGINX_MODE="internal"
             REQUIRES_REDIS=true

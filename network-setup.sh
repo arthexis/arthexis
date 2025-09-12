@@ -16,9 +16,10 @@ LOCK_DIR="$BASE_DIR/locks"
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--no-firewall] [--interactive|-i]
+Usage: $0 [--password] [--no-firewall] [--unsafe] [--interactive|-i]
   --password      Prompt for a new WiFi password even if one is already configured.
   --no-firewall   Skip firewall port validation.
+  --unsafe        Allow modification of the active internet connection.
   --interactive, -i  Collect user decisions for each step before executing.
 USAGE
 }
@@ -26,6 +27,7 @@ USAGE
 FORCE_PASSWORD=false
 SKIP_FIREWALL=false
 INTERACTIVE=false
+UNSAFE=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --password)
@@ -33,6 +35,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-firewall)
             SKIP_FIREWALL=true
+            ;;
+        --unsafe)
+            UNSAFE=true
             ;;
         -i|--interactive)
             INTERACTIVE=true
@@ -111,6 +116,19 @@ command -v nmcli >/dev/null 2>&1 || {
     exit 1
 }
 
+# Detect the active internet connection unless running in unsafe mode
+PROTECTED_DEV=""
+PROTECTED_CONN=""
+if [[ $UNSAFE == false && $INITIAL_CONNECTIVITY == true ]]; then
+    PROTECTED_DEV=$(ip route get 8.8.8.8 2>/dev/null | awk '/dev/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); break}}' || true)
+    if [[ -n "$PROTECTED_DEV" ]]; then
+        PROTECTED_CONN=$(nmcli -t -f NAME,DEVICE connection show --active | awk -F: -v dev="$PROTECTED_DEV" '$2==dev {print $1; exit}')
+        if [[ -n "$PROTECTED_CONN" ]]; then
+            echo "Preserving active connection '$PROTECTED_CONN' on '$PROTECTED_DEV'"
+        fi
+    fi
+fi
+
 # Determine access point name and password before running steps
 AP_NAME="gelectriic-ap"
 EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null || true)"
@@ -150,45 +168,49 @@ if [[ $RUN_SERVICES == true ]]; then
 fi
 
 if [[ $RUN_AP == true ]]; then
-    nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" '$2=="wlan0" && $1!=ap {print $1}' | while read -r con; do
-        nmcli connection delete "$con"
-    done
-
-    if nmcli -t -f NAME connection show | grep -Fxq "$AP_NAME"; then
-        nmcli connection modify "$AP_NAME" \
-            connection.interface-name wlan0 \
-            wifi.ssid "$AP_NAME" \
-            wifi.mode ap \
-            wifi.band bg \
-            wifi-sec.key-mgmt wpa-psk \
-            wifi-sec.psk "$WIFI_PASS" \
-            ipv4.method shared \
-            ipv4.addresses 10.42.0.1/16 \
-            ipv4.never-default yes \
-            ipv6.method ignore \
-            ipv6.never-default yes \
-            connection.autoconnect yes
+    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
+        echo "Skipping wlan0 access point configuration to preserve '$PROTECTED_CONN'."
     else
-        nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" autoconnect yes \
-            ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
-            ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
-            wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
-    fi
-    nmcli connection up eth0-shared || true
-    nmcli connection up "$AP_NAME"
-    if command -v iptables >/dev/null 2>&1; then
-        iptables -C INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT 2>/dev/null || \
-            iptables -A INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT
-    fi
-    if ! nmcli -t -f NAME connection show --active | grep -Fxq "$AP_NAME"; then
-        echo "Access point $AP_NAME failed to start." >&2
-        exit 1
+        nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" -v protect="$PROTECTED_CONN" '$2=="wlan0" && $1!=ap && $1!=protect {print $1}' | while read -r con; do
+            nmcli connection delete "$con"
+        done
+
+        if nmcli -t -f NAME connection show | grep -Fxq "$AP_NAME"; then
+            nmcli connection modify "$AP_NAME" \
+                connection.interface-name wlan0 \
+                wifi.ssid "$AP_NAME" \
+                wifi.mode ap \
+                wifi.band bg \
+                wifi-sec.key-mgmt wpa-psk \
+                wifi-sec.psk "$WIFI_PASS" \
+                ipv4.method shared \
+                ipv4.addresses 10.42.0.1/16 \
+                ipv4.never-default yes \
+                ipv6.method ignore \
+                ipv6.never-default yes \
+                connection.autoconnect yes
+        else
+            nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" autoconnect yes \
+                ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
+                ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
+                wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
+        fi
+        nmcli connection up eth0-shared || true
+        nmcli connection up "$AP_NAME"
+        if command -v iptables >/dev/null 2>&1; then
+            iptables -C INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT 2>/dev/null || \
+                iptables -A INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT
+        fi
+        if ! nmcli -t -f NAME connection show --active | grep -Fxq "$AP_NAME"; then
+            echo "Access point $AP_NAME failed to start." >&2
+            exit 1
+        fi
     fi
 fi
 
 if [[ $RUN_WLAN1_REFRESH == true ]]; then
-    WLAN1_REFRESH_SCRIPT="$BASE_DIR/wlan1-device-refresh.sh"
-    WLAN1_REFRESH_SERVICE="wlan1-device-refresh"
+    WLAN1_REFRESH_SCRIPT="$BASE_DIR/scripts/wlan1-refresh.sh"
+    WLAN1_REFRESH_SERVICE="wlan1-refresh"
     WLAN1_REFRESH_SERVICE_FILE="/etc/systemd/system/${WLAN1_REFRESH_SERVICE}.service"
     if [ -f "$WLAN1_REFRESH_SCRIPT" ]; then
         cat > "$WLAN1_REFRESH_SERVICE_FILE" <<EOF
@@ -268,10 +290,15 @@ if [[ $RUN_FIREWALL == true ]]; then
 fi
 
 if [[ $RUN_REINSTALL_WLAN1 == true ]]; then
-    if nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
+    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan1" ]]; then
+        echo "Skipping wlan1 connection reinstall to preserve '$PROTECTED_CONN'."
+    elif nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
         declare -A SEEN_SLUGS=()
         nmcli device disconnect wlan1 || true
         while IFS= read -r con; do
+            if [[ $UNSAFE == false && "$con" == "$PROTECTED_CONN" ]]; then
+                continue
+            fi
             iface="$(nmcli -g connection.interface-name connection show "$con" 2>/dev/null || true)"
             if [[ "$iface" == "wlan1" ]]; then
                 band="$(nmcli -g 802-11-wireless.band connection show "$con" 2>/dev/null || true)"
@@ -306,39 +333,64 @@ if [[ $RUN_REINSTALL_WLAN1 == true ]]; then
 fi
 
 if [[ $RUN_CONFIGURE_NET == true ]]; then
-    nmcli -t -f NAME,DEVICE connection show | awk -F: '$2=="eth0" {print $1}' | while read -r con; do
-        nmcli connection delete "$con"
-    done
-    nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" '$2=="wlan0" && $1!=ap {print $1}' | while read -r con; do
-        nmcli connection delete "$con"
-    done
+    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "eth0" ]]; then
+        echo "Skipping eth0 reconfiguration to preserve '$PROTECTED_CONN'."
+    else
+        nmcli -t -f NAME,DEVICE connection show | awk -F: -v protect="$PROTECTED_CONN" '$2=="eth0" && $1!=protect {print $1}' | while read -r con; do
+            nmcli connection delete "$con"
+        done
+        nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect yes \
+            ipv4.method shared ipv4.addresses 192.168.129.10/16 ipv4.never-default yes \
+            ipv4.route-metric 10000 ipv6.method ignore ipv6.never-default yes
+    fi
 
-    nmcli connection delete hyperline 2>/dev/null || true
-    nmcli connection add type wifi ifname wlan1 con-name hyperline \
-        ssid "Hyperline" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "arthexis" \
-        autoconnect yes ipv4.method auto ipv6.method ignore ipv4.route-metric 100
+    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
+        echo "Skipping wlan0 reconfiguration to preserve '$PROTECTED_CONN'."
+    else
+        nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" -v protect="$PROTECTED_CONN" '$2=="wlan0" && $1!=ap && $1!=protect {print $1}' | while read -r con; do
+            nmcli connection delete "$con"
+        done
+    fi
 
-    nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect yes \
-        ipv4.method shared ipv4.addresses 192.168.129.10/16 ipv4.never-default yes \
-        ipv4.route-metric 10000 ipv6.method ignore ipv6.never-default yes
+    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan1" ]]; then
+        echo "Skipping wlan1 configuration to preserve '$PROTECTED_CONN'."
+    else
+        nmcli connection delete hyperline 2>/dev/null || true
+        nmcli connection add type wifi ifname wlan1 con-name hyperline \
+            ssid "Hyperline" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "arthexis" \
+            autoconnect yes ipv4.method auto ipv6.method ignore ipv4.route-metric 100
 
-    if ! nmcli connection up hyperline; then
-        echo "Failed to activate Hyperline connection; trying existing wlan1 connections." >&2
-        while read -r con; do
-            if nmcli connection up "$con"; then
-                break
-            fi
-        done < <(nmcli -t -f NAME connection show | grep '^gate-')
+        if ! nmcli connection up hyperline; then
+            echo "Failed to activate Hyperline connection; trying existing wlan1 connections." >&2
+            while read -r con; do
+                if nmcli connection up "$con"; then
+                    break
+                fi
+            done < <(nmcli -t -f NAME connection show | grep '^gate-')
+        fi
     fi
 fi
 
 
 if [[ $RUN_ROUTING == true ]]; then
-    ip route del default dev eth0 2>/dev/null || true
-    ip route del default dev wlan0 2>/dev/null || true
-    WLAN1_GW=$(nmcli -g IP4.GATEWAY device show wlan1 2>/dev/null | head -n1)
-    if [[ -n "$WLAN1_GW" ]]; then
-        ip route replace default via "$WLAN1_GW" dev wlan1 2>/dev/null || true
+    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "eth0" ]]; then
+        :
+    else
+        ip route del default dev eth0 2>/dev/null || true
+    fi
+    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
+        :
+    else
+        ip route del default dev wlan0 2>/dev/null || true
+    fi
+
+    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan1" ]]; then
+        echo "Skipping default route change to preserve '$PROTECTED_CONN'."
+    else
+        WLAN1_GW=$(nmcli -g IP4.GATEWAY device show wlan1 2>/dev/null | head -n1)
+        if [[ -n "$WLAN1_GW" ]]; then
+            ip route replace default via "$WLAN1_GW" dev wlan1 2>/dev/null || true
+        fi
     fi
 
     nmcli device status
