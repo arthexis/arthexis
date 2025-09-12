@@ -24,5 +24,23 @@
       "url": "/admin/doc/manuals/create-manual/",
       "is_seed_data": true
     }
+  },
+  {
+    "model": "core.todo",
+    "pk": 3,
+    "fields": {
+      "description": "Validate screen Manuals admin list",
+      "url": "/admin/doc/manuals/",
+      "is_seed_data": true
+    }
+  },
+  {
+    "model": "core.todo",
+    "pk": 4,
+    "fields": {
+      "description": "Validate screen Manual detail",
+      "url": "/admin/doc/manuals/create-manual/",
+      "is_seed_data": true
+    }
   }
 ]
