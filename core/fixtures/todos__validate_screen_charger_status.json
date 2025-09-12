@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "pk": 12,
+    "fields": {
+      "description": "Validate screen Charger Status",
+      "url": "/ocpp/c/CP1/status/"
+    }
+  }
+]

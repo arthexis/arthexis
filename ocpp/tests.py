@@ -400,6 +400,22 @@ class ChargerLandingTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "PAGE2")
 
+    def test_display_name_preferred(self):
+        charger = Charger.objects.create(charger_id="DN1", display_name="Main Unit")
+        resp = self.client.get(reverse("charger-status", args=["DN1"]))
+        self.assertContains(resp, "<h1>Main Unit</h1>", html=True)
+        self.assertContains(
+            resp,
+            f"<small>Serial Number: {charger.charger_id}</small>",
+            html=True,
+        )
+
+    def test_dashboard_shows_display_name(self):
+        Charger.objects.create(charger_id="DB1", display_name="Friendly")
+        resp = self.client.get(reverse("ocpp-dashboard"))
+        self.assertContains(resp, "Friendly")
+        self.assertContains(resp, "DB1")
+
     def test_charger_page_shows_progress(self):
         charger = Charger.objects.create(charger_id="STATS")
         tx = Transaction.objects.create(

@@ -25,6 +25,18 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunPython(ensure_connector_id, migrations.RunPython.noop),
+        migrations.AddField(
+            model_name="charger",
+            name="display_name",
+            field=models.CharField(
+                verbose_name="Display Name",
+                max_length=200,
+                blank=True,
+                default="",
+                help_text="Optional user-friendly name for this charger.",
+            ),
+            preserve_default=False,
+        ),
         migrations.CreateModel(
             name="ElectricVehicle",
             fields=[],

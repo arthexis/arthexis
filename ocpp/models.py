@@ -41,6 +41,12 @@ class Charger(Entity):
         unique=True,
         help_text="Unique identifier reported by the charger.",
     )
+    display_name = models.CharField(
+        _("Display Name"),
+        max_length=200,
+        blank=True,
+        help_text="Optional user-friendly name for this charger.",
+    )
     connector_id = models.CharField(
         _("Connector ID"),
         max_length=10,
@@ -72,7 +78,7 @@ class Charger(Entity):
     last_path = models.CharField(max_length=255, blank=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.charger_id
+        return self.display_name or self.charger_id
 
     class Meta:
         verbose_name = _("Charge Point")
@@ -92,7 +98,8 @@ class Charger(Entity):
         ref_value = self._full_url()
         if not self.reference or self.reference.value != ref_value:
             ref, _ = Reference.objects.get_or_create(
-                value=ref_value, defaults={"alt_text": self.charger_id}
+                value=ref_value,
+                defaults={"alt_text": self.display_name or self.charger_id},
             )
             self.reference = ref
             super().save(update_fields=["reference"])

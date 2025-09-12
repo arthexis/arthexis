@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ charger.name|default:charger.charger_id }}</title>
+  <title>{{ charger.display_name|default:charger.name|default:charger.charger_id }}</title>
   <script>
     setInterval(function(){ location.reload(); }, 5000);
   </script>
@@ -32,7 +32,10 @@
   <p>{% trans "Energy" %}: {{ tx.kw|floatformat:2 }} kW</p>
   <p>{% trans "Started" %}: {{ tx.start_time }}</p>
 {% else %}
-  <h1>{{ charger.name|default:charger.charger_id }}</h1>
+  <h1>{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
+  {% if charger.display_name %}
+  <p><small>{% trans "Serial Number" %}: {{ charger.charger_id }}</small></p>
+  {% endif %}
   <p>{% trans "Plug in your vehicle and slide your RFID card over the reader to begin charging." %}</p>
 {% endif %}
 </body>
