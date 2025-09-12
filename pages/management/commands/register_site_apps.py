@@ -16,7 +16,10 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **options):
-        site, _ = Site.objects.get_or_create(domain="127.0.0.1", defaults={"name": ""})
+        Site.objects.filter(domain="zephyrus").delete()
+        site, _ = Site.objects.update_or_create(
+            domain="127.0.0.1", defaults={"name": "Local"}
+        )
         role, _ = NodeRole.objects.get_or_create(name="Terminal")
 
         hostname = socket.gethostname()
