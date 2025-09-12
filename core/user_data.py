@@ -385,9 +385,16 @@ def _user_data_import(request):
             for name in zf.namelist():
                 if not name.endswith(".json"):
                     continue
+                content = zf.read(name)
+                try:
+                    data = json.loads(content)
+                except Exception:
+                    continue
+                if not data:
+                    continue
                 target = data_dir / name
                 with target.open("wb") as f:
-                    f.write(zf.read(name))
+                    f.write(content)
                 paths.append(target)
         if paths:
             call_command("loaddata", *[str(p) for p in paths])
