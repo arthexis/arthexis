@@ -2,7 +2,9 @@ from pathlib import Path
 from io import BytesIO
 from zipfile import ZipFile
 
+import json
 import os
+import shutil
 from django.test import TestCase, TransactionTestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -157,6 +159,59 @@ class UserDatumAdminTests(TransactionTestCase):
                 user_id=self.user.pk, content_type=ct, object_id=self.profile.pk
             ).exists()
         )
+
+    def test_env_refresh_creates_userdatum_for_fixture(self):
+        url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
+        data = {
+            "user": self.user.pk,
+            "host": "http://test",
+            "database": "db",
+            "username": "odoo",
+            "password": "",
+            "_user_datum": "on",
+            "_save": "Save",
+        }
+        self.client.post(url, data)
+        self.assertTrue(self.fixture_path.exists())
+
+        base_dir = Path(settings.BASE_DIR)
+        tmp_dir = base_dir / "temp_ud_fixture"
+        fixture_dir = tmp_dir / "fixtures"
+        fixture_dir.mkdir(parents=True, exist_ok=True)
+        user_fixture = fixture_dir / "users.json"
+        call_command(
+            "dumpdata",
+            f"{self.user._meta.app_label}.{self.user._meta.model_name}",
+            pks=str(self.user.pk),
+            output=str(user_fixture),
+        )
+        profile_fixture = fixture_dir / self.fixture_path.name
+        profile_fixture.write_text(self.fixture_path.read_text())
+        self.fixture_path.unlink()
+
+        rel_user = str(user_fixture.relative_to(base_dir))
+        rel_profile = str(profile_fixture.relative_to(base_dir))
+
+        env_refresh._fixture_files = lambda: [rel_user, rel_profile]
+        from django.core.management import call_command as django_call
+
+        def fake_call_command(name, *args, **kwargs):
+            if name == "loaddata":
+                django_call(name, *args, **kwargs)
+
+        env_refresh.call_command = fake_call_command
+
+        call_command("flush", verbosity=0, interactive=False)
+        env_refresh.run_database_tasks()
+
+        ct = ContentType.objects.get_for_model(OdooProfile)
+        self.assertTrue(
+            UserDatum.objects.filter(
+                user_id=self.user.pk, content_type=ct, object_id=self.profile.pk
+            ).exists()
+        )
+
+        shutil.rmtree(tmp_dir)
 
     def test_copy_unmarks_user_datum(self):
         address = Address.objects.create(

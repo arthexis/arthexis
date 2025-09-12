@@ -79,6 +79,18 @@ def _seed_fixture_path(instance) -> Path | None:
     return _seed_fixture_cache.get(key)
 
 
+def ensure_userdatum(path: Path) -> None:
+    """Ensure a :class:`UserDatum` entry exists for the given fixture."""
+    try:
+        user_id, app_label, model, obj_id = path.stem.split("_", 3)
+        ct = ContentType.objects.get_by_natural_key(app_label, model)
+        UserDatum.objects.get_or_create(
+            user_id=int(user_id), content_type=ct, object_id=int(obj_id)
+        )
+    except Exception:
+        pass
+
+
 def dump_user_fixture(instance, user) -> None:
     path = _fixture_path(user, instance)
     app_label = instance._meta.app_label
@@ -132,14 +144,7 @@ def load_user_fixtures() -> None:
             patched.append(str(dest))
         call_command("loaddata", *patched, ignorenonexistent=True)
     for p in personal:
-        try:
-            user_id, app_label, model, obj_id = p.stem.split("_", 3)
-            ct = ContentType.objects.get_by_natural_key(app_label, model)
-            UserDatum.objects.get_or_create(
-                user_id=int(user_id), content_type=ct, object_id=int(obj_id)
-            )
-        except Exception:
-            continue
+        ensure_userdatum(p)
 
 
 # ---- Signals -------------------------------------------------------------
@@ -387,14 +392,7 @@ def _user_data_import(request):
         if paths:
             call_command("loaddata", *[str(p) for p in paths])
             for p in paths:
-                try:
-                    user_id, app_label, model, obj_id = p.stem.split("_", 3)
-                    ct = ContentType.objects.get_by_natural_key(app_label, model)
-                    UserDatum.objects.get_or_create(
-                        user_id=int(user_id), content_type=ct, object_id=int(obj_id)
-                    )
-                except Exception:
-                    continue
+                ensure_userdatum(p)
     return HttpResponseRedirect(reverse("admin:user_data"))
 
 
