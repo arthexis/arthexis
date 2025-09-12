@@ -8,6 +8,7 @@ from django.apps import apps
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
+from django.core import serializers
 from django.core.management import call_command
 from django.db import models
 from django.template.response import TemplateResponse
@@ -56,7 +57,7 @@ def generate_model_sigils(**kwargs) -> None:
 
 
 SIGIL_PATTERN = re.compile(
-    r"\[([A-Za-z0-9_-]+)(?:=([A-Za-z0-9_-]+))?\.([A-Za-z0-9_-]+)(?:=([^\]]+))?\]",
+    r"\[([A-Za-z0-9_-]+)(?:=([A-Za-z0-9_-]+))?(?:\.([A-Za-z0-9_-]+)(?:=([^\]]+))?)?\]",
     re.IGNORECASE,
 )
 
@@ -69,10 +70,13 @@ def _resolve_sigil(sigil: str) -> str:
         return ""
     root_name, instance_id, key, param = match.groups()
     root_name = root_name.replace("-", "_").upper()
-    key = key.replace("-", "_").upper()
+    if key:
+        key = key.replace("-", "_").upper()
     try:
         root = SigilRoot.objects.get(prefix__iexact=root_name)
         if root.context_type == SigilRoot.Context.CONFIG:
+            if not key:
+                return ""
             if root.prefix.upper() == "ENV":
                 return os.environ.get(key.upper(), "")
             if root.prefix.upper() == "SYS":
@@ -104,13 +108,20 @@ def _resolve_sigil(sigil: str) -> str:
                 else:
                     instance = model.objects.order_by("?").first()
             if instance:
-                field = next(
-                    (f for f in model._meta.fields if f.name.lower() == key.lower()),
-                    None,
-                )
-                if field:
-                    val = getattr(instance, field.attname)
-                    return "" if val is None else str(val)
+                if key:
+                    field = next(
+                        (
+                            f
+                            for f in model._meta.fields
+                            if f.name.lower() == key.lower()
+                        ),
+                        None,
+                    )
+                    if field:
+                        val = getattr(instance, field.attname)
+                        return "" if val is None else str(val)
+                else:
+                    return serializers.serialize("json", [instance])
         return ""
     except Exception:
         return ""

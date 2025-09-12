@@ -73,7 +73,7 @@ class Entity(models.Model):
         text = str(value)
 
         pattern = re.compile(
-            r"\[([A-Za-z0-9_-]+)(?:=([A-Za-z0-9_-]+))?\.([A-Za-z0-9_-]+)(?:=([^\]]+))?\]",
+            r"\[([A-Za-z0-9_-]+)(?:=([A-Za-z0-9_-]+))?(?:\.([A-Za-z0-9_-]+)(?:=([^\]]+))?)?\]",
             re.IGNORECASE,
         )
         SigilRoot = apps.get_model("core", "SigilRoot")
@@ -81,11 +81,15 @@ class Entity(models.Model):
         def repl(match):
             root_name = match.group(1).replace("-", "_").upper()
             instance_id = match.group(2)
-            key = match.group(3).replace("-", "_").upper()
+            key = match.group(3)
             param = match.group(4)
+            if key:
+                key = key.replace("-", "_").upper()
             try:
                 root = SigilRoot.objects.get(prefix__iexact=root_name)
                 if root.context_type == SigilRoot.Context.CONFIG:
+                    if not key:
+                        return match.group(0)
                     if root.prefix.upper() == "ENV":
                         env_val = os.environ.get(key.upper())
                         if env_val is not None:
@@ -154,21 +158,26 @@ class Entity(models.Model):
                             if instance is None:
                                 instance = model.objects.order_by("?").first()
                     if instance:
-                        field = next(
-                            (
-                                f
-                                for f in model._meta.fields
-                                if f.name.lower() == key.lower()
-                            ),
-                            None,
-                        )
-                        if field:
-                            val = getattr(instance, field.attname)
-                            return "" if val is None else str(val)
-                        logger.warning(
-                            "Missing field for sigil [%s.%s]", root_name, key
-                        )
-                        return match.group(0)
+                        if key:
+                            field = next(
+                                (
+                                    f
+                                    for f in model._meta.fields
+                                    if f.name.lower() == key.lower()
+                                ),
+                                None,
+                            )
+                            if field:
+                                val = getattr(instance, field.attname)
+                                return "" if val is None else str(val)
+                            logger.warning(
+                                "Missing field for sigil [%s.%s]", root_name, key
+                            )
+                            return match.group(0)
+                        else:
+                            from django.core import serializers
+
+                            return serializers.serialize("json", [instance])
                     logger.warning(
                         "Unresolvable sigil [%s.%s]: no instance", root_name, key
                     )
