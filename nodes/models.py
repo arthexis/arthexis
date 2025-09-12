@@ -557,31 +557,6 @@ class ContentSample(Entity):
         return str(self.name)
 
 
-class NodeTask(Entity):
-    """Script that can be executed on nodes."""
-
-    recipe = models.TextField()
-    role = models.ForeignKey(NodeRole, on_delete=models.SET_NULL, null=True, blank=True)
-    created = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created"]
-        verbose_name = "Node Task"
-        verbose_name_plural = "Node Tasks"
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.recipe
-
-    def run(self, node: Node):
-        """Execute this script on ``node`` and return its output."""
-        if not node.is_local:
-            raise NotImplementedError("Remote node execution is not implemented")
-        import subprocess
-
-        result = subprocess.run(self.recipe, shell=True, capture_output=True, text=True)
-        return result.stdout + result.stderr
-
-
 class Operation(Entity):
     """Action that can change node or constellation state."""
 
