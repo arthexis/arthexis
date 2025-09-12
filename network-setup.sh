@@ -395,10 +395,15 @@ if [[ $RUN_ROUTING == true ]]; then
 
     nmcli device status
 
-    if check_connectivity; then
-        echo "Internet connectivity confirmed."
-    else
-        echo "No internet connectivity after configuration." >&2
-        exit 1
-    fi
+    ATTEMPTS=0
+    while ! check_connectivity; do
+        ATTEMPTS=$((ATTEMPTS+1))
+        if [[ $ATTEMPTS -ge 5 ]]; then
+            echo "No internet connectivity after configuration." >&2
+            exit 1
+        fi
+        echo "No internet connectivity yet; retrying in 5 seconds..." >&2
+        sleep 5
+    done
+    echo "Internet connectivity confirmed."
 fi
