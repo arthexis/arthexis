@@ -10,12 +10,21 @@
 {% endblock %}
 {% block title %}{% translate 'Manuals' %}{% endblock %}
 
+{% block sidebar %}
+{% include "admin/nav_sidebar.html" %}
+{% endblock %}
+
 {% block content %}
 <h1>{% translate 'Manuals' %}</h1>
 <div id="content-main">
   <ul>
   {% for manual in manuals %}
-    <li><a href="{% url 'django-admindocs-manual-detail' manual.slug %}">{{ manual.title }}</a> - {{ manual.description }}</li>
+    <li>
+      <a href="{% url 'django-admindocs-manual-detail' manual.slug %}">{{ manual.title }}</a>
+      - {{ manual.description }}
+      - {% translate 'Languages' %}: {{ manual.languages }}
+      - <a href="{% url 'django-admindocs-manual-pdf' manual.slug %}">{% translate 'Download PDF' %}</a>
+    </li>
   {% endfor %}
   </ul>
 </div>
