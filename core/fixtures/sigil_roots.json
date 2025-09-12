@@ -230,6 +230,168 @@
       "context_type": "entity",
       "content_type": ["django_celery_beat", "periodictask"]
     }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 27,
+    "fields": {
+      "prefix": "LAND",
+      "context_type": "entity",
+      "content_type": ["pages", "landing"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 28,
+    "fields": {
+      "prefix": "HIST",
+      "context_type": "entity",
+      "content_type": ["core", "adminhistory"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 29,
+    "fields": {
+      "prefix": "BADGE",
+      "context_type": "entity",
+      "content_type": ["pages", "sitebadge"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 30,
+    "fields": {
+      "prefix": "CP",
+      "context_type": "entity",
+      "content_type": ["ocpp", "charger"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 31,
+    "fields": {
+      "prefix": "PKG",
+      "context_type": "entity",
+      "content_type": ["core", "package"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 32,
+    "fields": {
+      "prefix": "RELEASE",
+      "context_type": "entity",
+      "content_type": ["core", "packagerelease"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 33,
+    "fields": {
+      "prefix": "SROOT",
+      "context_type": "entity",
+      "content_type": ["core", "sigilroot"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 34,
+    "fields": {
+      "prefix": "PPERM",
+      "context_type": "entity",
+      "content_type": ["core", "publicpermission"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 35,
+    "fields": {
+      "prefix": "MAN",
+      "context_type": "entity",
+      "content_type": ["man", "usermanual"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 36,
+    "fields": {
+      "prefix": "PERM",
+      "context_type": "entity",
+      "content_type": ["auth", "permission"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 37,
+    "fields": {
+      "prefix": "FAV",
+      "context_type": "entity",
+      "content_type": ["pages", "favorite"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 38,
+    "fields": {
+      "prefix": "AWG",
+      "context_type": "entity",
+      "content_type": ["awg", "cablesize"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 39,
+    "fields": {
+      "prefix": "CFILL",
+      "context_type": "entity",
+      "content_type": ["awg", "conduitfill"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 40,
+    "fields": {
+      "prefix": "TXN",
+      "context_type": "entity",
+      "content_type": ["ocpp", "transaction"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 41,
+    "fields": {
+      "prefix": "TODO",
+      "context_type": "entity",
+      "content_type": ["core", "todo"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 42,
+    "fields": {
+      "prefix": "PROD",
+      "context_type": "entity",
+      "content_type": ["core", "product"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 43,
+    "fields": {
+      "prefix": "EVB",
+      "context_type": "entity",
+      "content_type": ["core", "brand"]
+    }
+  },
+  {
+    "model": "core.sigilroot",
+    "pk": 44,
+    "fields": {
+      "prefix": "INVITE",
+      "context_type": "entity",
+      "content_type": ["core", "invitelead"]
+    }
   }
 ]
 
