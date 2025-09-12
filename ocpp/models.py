@@ -190,25 +190,31 @@ class Transaction(Entity):
     def kw(self) -> float:
         """Return consumed energy in kW for this session."""
         total = 0.0
-        prev = self.meter_start / 1000.0 if self.meter_start is not None else None
-        readings = self.meter_readings.filter(
-            measurand__in=["", "Energy.Active.Import.Register"]
-        ).order_by("timestamp")
+        readings = list(
+            self.meter_readings.filter(
+                measurand__in=["", "Energy.Active.Import.Register"]
+            ).order_by("timestamp")
+        )
+        use_register = any(r.unit in ("Wh", "kWh") for r in readings)
+        start_val = None
         for reading in readings:
             try:
                 val = float(reading.value)
             except (TypeError, ValueError):  # pragma: no cover - unexpected
                 continue
-            if reading.unit != "kW":
-                val /= 1000.0
-            if prev is None:
-                # No meter start; treat reading as incremental energy
-                total += val
+            if use_register and reading.unit in ("Wh", "kWh"):
+                val_kwh = val / (1000.0 if reading.unit == "Wh" else 1.0)
+                if start_val is None:
+                    start_val = (
+                        (self.meter_start or 0) / 1000.0
+                        if self.meter_start is not None
+                        else val_kwh
+                    )
+                total = val_kwh - start_val
             else:
-                delta = val - prev
-                if delta > 0:
-                    total += delta
-            prev = val
+                inc = val if reading.unit == "kW" else val / 1000.0
+                total += inc
+
         if total == 0 and self.meter_start is not None and self.meter_stop is not None:
             total = (self.meter_stop - self.meter_start) / 1000.0
         if total < 0:

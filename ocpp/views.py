@@ -243,29 +243,33 @@ def charger_status(request, cid):
     transactions = page_obj.object_list
     chart_data = {"labels": [], "values": []}
     if tx_obj:
+        readings = list(
+            tx_obj.meter_readings.filter(
+                measurand__in=["", "Energy.Active.Import.Register"]
+            ).order_by("timestamp")
+        )
+        use_register = any(r.unit in ("Wh", "kWh") for r in readings)
         total = 0.0
-        prev = tx_obj.meter_start / 1000.0 if tx_obj.meter_start is not None else None
-        readings = tx_obj.meter_readings.filter(
-            measurand__in=["", "Energy.Active.Import.Register"]
-        ).order_by("timestamp")
+        start_val = None
         for reading in readings:
             try:
                 val = float(reading.value)
             except (TypeError, ValueError):
                 continue
-            if reading.unit != "kW":
-                val /= 1000.0
-            if prev is not None:
-                delta = val - prev
-                if delta < 0:
-                    prev = val
-                    continue
-                total += delta
+            if use_register and reading.unit in ("Wh", "kWh"):
+                val_kwh = val / (1000.0 if reading.unit == "Wh" else 1.0)
+                if start_val is None:
+                    start_val = (
+                        (tx_obj.meter_start or 0) / 1000.0
+                        if tx_obj.meter_start is not None
+                        else val_kwh
+                    )
+                total = val_kwh - start_val
             else:
-                total += val
-            prev = val
+                inc = val if reading.unit == "kW" else val / 1000.0
+                total += inc
             chart_data["labels"].append(reading.timestamp.isoformat())
-            chart_data["values"].append(total)
+            chart_data["values"].append(max(total, 0.0))
     return render(
         request,
         "ocpp/charger_status.html",
