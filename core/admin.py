@@ -59,6 +59,28 @@ from .user_data import EntityModelAdmin
 admin.site.unregister(Group)
 
 
+# Add object links for small datasets in changelist view
+original_changelist_view = admin.ModelAdmin.changelist_view
+
+
+def changelist_view_with_object_links(self, request, extra_context=None):
+    extra_context = extra_context or {}
+    count = self.model._default_manager.count()
+    if 1 <= count <= 4:
+        links = []
+        for obj in self.model._default_manager.all():
+            url = reverse(
+                f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change",
+                args=[obj.pk],
+            )
+            links.append({"url": url, "label": str(obj)})
+        extra_context["global_object_links"] = links
+    return original_changelist_view(self, request, extra_context=extra_context)
+
+
+admin.ModelAdmin.changelist_view = changelist_view_with_object_links
+
+
 class WorkgroupReleaseManager(ReleaseManager):
     class Meta:
         proxy = True
