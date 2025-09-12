@@ -13,21 +13,21 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 
 ## Quick Guide
 
-### Clone
+### 1. Clone
 - **[Linux](https://en.wikipedia.org/wiki/Linux)**: open a [terminal](https://en.wikipedia.org/wiki/Command-line_interface) and run  
   `git clone https://github.com/arthexis/arthexis.git`
 - **[Windows](https://en.wikipedia.org/wiki/Microsoft_Windows)**: open [PowerShell](https://learn.microsoft.com/powershell/) or [Git Bash](https://gitforwindows.org/) and run the same command.
 
-### Start and stop
+### 2. Start and stop
 - **[VS Code](https://code.visualstudio.com/)**: open the folder and run  
   `python [vscode_manage.py](vscode_manage.py) runserver`; press `Ctrl+C` to stop.
 - **[Shell](https://en.wikipedia.org/wiki/Shell_(computing))**: on Linux run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh); on Windows run [`start.bat`](start.bat) and stop with `Ctrl+C`.
 
-### Install and upgrade
+### 3. Install and upgrade
 - **Linux**: use [`./install.sh`](install.sh) with options like `--service NAME`, `--public` or `--internal`, `--port PORT`, `--upgrade`, `--auto-upgrade`, `--latest`, `--celery`, `--lcd-screen`, `--no-lcd-screen`, `--clean`, `--datasette`. Upgrade with [`./upgrade.sh`](upgrade.sh) using flags such as `--latest`, `--clean`, or `--no-restart`.
 - **Windows**: run [`install.bat`](install.bat) to install and [`upgrade.bat`](upgrade.bat) to upgrade.
 
-### Administration
+### 4. Administration
 Visit [`http://localhost:8888/admin/`](http://localhost:8888/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use port `8000` if you started with [`start.bat`](start.bat) or the `--public` option.
 
 ## Support

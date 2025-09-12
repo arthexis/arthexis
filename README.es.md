@@ -13,21 +13,21 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
 
 ## Quick Guide
 
-### Clonar
+### 1. Clonar
 - **[Linux](https://es.wikipedia.org/wiki/Linux)**: abre una [terminal](https://es.wikipedia.org/wiki/Interfaz_de_l%C3%ADnea_de_comandos) y ejecuta  
   `git clone https://github.com/arthexis/arthexis.git`
 - **[Windows](https://es.wikipedia.org/wiki/Microsoft_Windows)**: abre [PowerShell](https://learn.microsoft.com/es-es/powershell/) o [Git Bash](https://gitforwindows.org/) y ejecuta el mismo comando.
 
-### Iniciar y detener
+### 2. Iniciar y detener
 - **[VS Code](https://code.visualstudio.com/)**: abre la carpeta y ejecuta  
   `python [vscode_manage.py](vscode_manage.py) runserver`; presiona `Ctrl+C` para detener.
 - **[Shell](https://es.wikipedia.org/wiki/Shell_de_unidad_de_comandos)**: en Linux ejecuta [`./start.sh`](start.sh) y detén con [`./stop.sh`](stop.sh); en Windows ejecuta [`start.bat`](start.bat) y detén con `Ctrl+C`.
 
-### Instalar y actualizar
+### 3. Instalar y actualizar
 - **Linux**: usa [`./install.sh`](install.sh) con opciones como `--service NOMBRE`, `--public` o `--internal`, `--port PUERTO`, `--upgrade`, `--auto-upgrade`, `--latest`, `--celery`, `--lcd-screen`, `--no-lcd-screen`, `--clean`, `--datasette`. Actualiza con [`./upgrade.sh`](upgrade.sh) usando opciones como `--latest`, `--clean` o `--no-restart`.
 - **Windows**: ejecuta [`install.bat`](install.bat) para instalar y [`upgrade.bat`](upgrade.bat) para actualizar.
 
-### Administración
+### 4. Administración
 Visita [`http://localhost:8888/admin/`](http://localhost:8888/admin/) para el [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) y [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) para la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa el puerto `8000` si iniciaste con [`start.bat`](start.bat) o la opción `--public`.
 
 ## Soporte

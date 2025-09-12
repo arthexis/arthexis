@@ -13,21 +13,21 @@
 
 ## Quick Guide
 
-### Клонирование
+### 1. Клонирование
 - **[Linux](https://ru.wikipedia.org/wiki/Linux)**: откройте [терминал](https://ru.wikipedia.org/wiki/Командная_оболочка) и выполните  
   `git clone https://github.com/arthexis/arthexis.git`
 - **[Windows](https://ru.wikipedia.org/wiki/Microsoft_Windows)**: откройте [PowerShell](https://learn.microsoft.com/ru-ru/powershell/) или [Git Bash](https://gitforwindows.org/) и выполните ту же команду.
 
-### Запуск и остановка
+### 2. Запуск и остановка
 - **[VS Code](https://code.visualstudio.com/)**: откройте папку и выполните  
   `python [vscode_manage.py](vscode_manage.py) runserver`; для остановки нажмите `Ctrl+C`.
 - **[Shell](https://ru.wikipedia.org/wiki/Командная_оболочка)**: в Linux запустите [`./start.sh`](start.sh) и остановите [`./stop.sh`](stop.sh); в Windows запустите [`start.bat`](start.bat) и остановите `Ctrl+C`.
 
-### Установка и обновление
+### 3. Установка и обновление
 - **Linux**: используйте [`./install.sh`](install.sh) с опциями `--service ИМЯ`, `--public` или `--internal`, `--port ПОРТ`, `--upgrade`, `--auto-upgrade`, `--latest`, `--celery`, `--lcd-screen`, `--no-lcd-screen`, `--clean`, `--datasette`. Обновляйте через [`./upgrade.sh`](upgrade.sh), применяя `--latest`, `--clean` или `--no-restart`.
 - **Windows**: выполните [`install.bat`](install.bat) для установки и [`upgrade.bat`](upgrade.bat) для обновления.
 
-### Администрирование
+### 4. Администрирование
 Перейдите на [`http://localhost:8888/admin/`](http://localhost:8888/admin/) для [панели администратора Django](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) и [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) для [административной документации](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Используйте порт `8000`, если запуск был через [`start.bat`](start.bat) или с опцией `--public`.
 
 ## Поддержка

@@ -13,21 +13,21 @@ Constellation Arthexis est une [suite logicielle](https://fr.wikipedia.org/wiki/
 
 ## Quick Guide
 
-### Cloner
+### 1. Cloner
 - **[Linux](https://fr.wikipedia.org/wiki/Linux)** : ouvrez un [terminal](https://fr.wikipedia.org/wiki/Interface_en_ligne_de_commande) et exécutez  
   `git clone https://github.com/arthexis/arthexis.git`
 - **[Windows](https://fr.wikipedia.org/wiki/Microsoft_Windows)** : ouvrez [PowerShell](https://learn.microsoft.com/fr-fr/powershell/) ou [Git Bash](https://gitforwindows.org/) et exécutez la même commande.
 
-### Démarrer et arrêter
+### 2. Démarrer et arrêter
 - **[VS Code](https://code.visualstudio.com/)** : ouvrez le dossier puis exécutez  
   `python [vscode_manage.py](vscode_manage.py) runserver` ; appuyez sur `Ctrl+C` pour arrêter.
 - **[Shell](https://fr.wikipedia.org/wiki/Interface_en_ligne_de_commande)** : sous Linux exécutez [`./start.sh`](start.sh) et arrêtez avec [`./stop.sh`](stop.sh) ; sous Windows exécutez [`start.bat`](start.bat) et arrêtez avec `Ctrl+C`.
 
-### Installer et mettre à jour
+### 3. Installer et mettre à jour
 - **Linux** : utilisez [`./install.sh`](install.sh) avec des options comme `--service NOM`, `--public` ou `--internal`, `--port PORT`, `--upgrade`, `--auto-upgrade`, `--latest`, `--celery`, `--lcd-screen`, `--no-lcd-screen`, `--clean`, `--datasette`. Mettez à jour avec [`./upgrade.sh`](upgrade.sh) en utilisant des options telles que `--latest`, `--clean` ou `--no-restart`.
 - **Windows** : lancez [`install.bat`](install.bat) pour installer et [`upgrade.bat`](upgrade.bat) pour mettre à jour.
 
-### Administration
+### 4. Administration
 Visitez [`http://localhost:8888/admin/`](http://localhost:8888/admin/) pour l'[administration Django](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) et [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) pour la [documentation d’administration](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Utilisez le port `8000` si vous avez démarré avec [`start.bat`](start.bat) ou l’option `--public`.
 
 ## Support
