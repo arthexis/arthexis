@@ -8,10 +8,10 @@ Control:
   - awg/**
   - nodes/**
   - ocpp/**
-Gateway:
-  - nodes/**
-  - ocpp/**
-  - core/**
+  Satellite:
+    - nodes/**
+    - ocpp/**
+    - core/**
 Constellation:
   - awg/**
   - nodes/**
