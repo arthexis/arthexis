@@ -781,7 +781,7 @@ class StartupNotificationTests(TestCase):
         mock_broadcast.assert_called_once()
         _, kwargs = mock_broadcast.call_args
         self.assertEqual(kwargs["subject"], "1.2.3.4:9000")
-        self.assertTrue(kwargs["body"].startswith("v1.2.3 r"))
+        self.assertTrue(kwargs["body"].startswith("1.2.3 r"))
 
 
 class StartupHandlerTests(TestCase):

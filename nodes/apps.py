@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def _startup_notification() -> None:
-    """Queue a notification with host:port and version on a background thread."""
+    """Queue a Net Message with ``ip:port`` and version info."""
 
     host = socket.gethostname()
     try:
@@ -35,9 +35,9 @@ def _startup_notification() -> None:
     revision_value = revision.get_revision()
     rev_short = revision_value[-6:] if revision_value else ""
 
-    body = f"v{version}"
+    body = version
     if rev_short:
-        body += f" r{rev_short}"
+        body = f"{body} r{rev_short}" if body else f"r{rev_short}"
 
     def _worker() -> None:  # pragma: no cover - background thread
         # Allow the LCD a moment to become ready and retry a few times
