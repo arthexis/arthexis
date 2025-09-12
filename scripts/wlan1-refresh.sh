@@ -28,8 +28,8 @@ if [[ -z "$MAC" ]]; then
     exit 0
 fi
 
-nmcli -t --separator '|' -f NAME,DEVICE,TYPE connection show |
-awk -F'|' '$3=="wifi" && $2=="wlan1" {print $1}' |
+nmcli -t -f NAME,DEVICE,TYPE connection show |
+awk -F':' '$3=="wifi" && $2=="wlan1" {print $1}' |
 while IFS= read -r con; do
     echo "Updating connection $con to use MAC $MAC"
     nmcli connection modify "$con" 802-11-wireless.mac-address "$MAC"
