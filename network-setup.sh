@@ -401,13 +401,28 @@ if [[ $RUN_ROUTING == true ]]; then
         fi
     fi
 
-    nmcli device status
-
+    exit_code=0
     if check_connectivity; then
         echo "Internet connectivity confirmed."
     else
-        echo "No internet connectivity after configuration." >&2
-        exit 1
+        if ! nmcli -t -f NAME,DEVICE connection show --active | grep -Fxq "hyperline:wlan1" && \
+           nmcli -t -f DEVICE,STATE device status | grep -E '^wlan1:(connecting|connected)' >/dev/null; then
+            sleep 10
+            if check_connectivity; then
+                echo "Internet connectivity confirmed."
+            else
+                echo "No internet connectivity after configuration." >&2
+                exit_code=1
+            fi
+        else
+            echo "No internet connectivity after configuration." >&2
+            exit_code=1
+        fi
+    fi
+
+    nmcli device status
+    if [[ $exit_code -ne 0 ]]; then
+        exit $exit_code
     fi
 fi
 
