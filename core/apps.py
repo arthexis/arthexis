@@ -21,7 +21,6 @@ class CoreConfig(AppConfig):
             generate_model_sigils,
         )
         from .admin_history import patch_admin_history
-        from .model_permissions import patch_admin_model_permissions_view
         from . import checks  # noqa: F401
 
         def create_default_arthexis(**kwargs):
@@ -41,7 +40,6 @@ class CoreConfig(AppConfig):
         patch_admin_system_view()
         patch_admin_environment_view()
         patch_admin_sigil_builder_view()
-        patch_admin_model_permissions_view()
         patch_admin_history()
 
         from pathlib import Path
