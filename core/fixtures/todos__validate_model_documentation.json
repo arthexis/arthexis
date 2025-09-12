@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "pk": 10,
+    "fields": {
+      "description": "Validate screen Model documentation",
+      "url": "/admindocs/models/"
+    }
+  }
+]
