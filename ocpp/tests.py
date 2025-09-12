@@ -182,6 +182,52 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_new_charger_created_for_different_connector(self):
+        communicator = WebsocketCommunicator(application, "/DUPC/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        payload1 = {
+            "connectorId": 1,
+            "meterValue": [
+                {
+                    "timestamp": timezone.now().isoformat(),
+                    "sampledValue": [{"value": "1"}],
+                }
+            ],
+        }
+        await communicator.send_json_to([2, "1", "MeterValues", payload1])
+        await communicator.receive_json_from()
+        await communicator.disconnect()
+
+        communicator = WebsocketCommunicator(application, "/DUPC/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        payload2 = {
+            "connectorId": 2,
+            "meterValue": [
+                {
+                    "timestamp": timezone.now().isoformat(),
+                    "sampledValue": [{"value": "1"}],
+                }
+            ],
+        }
+        await communicator.send_json_to([2, "1", "MeterValues", payload2])
+        await communicator.receive_json_from()
+        await communicator.disconnect()
+
+        count = await database_sync_to_async(
+            Charger.objects.filter(charger_id="DUPC").count
+        )()
+        self.assertEqual(count, 2)
+        connectors = await database_sync_to_async(list)(
+            Charger.objects.filter(charger_id="DUPC").values_list(
+                "connector_id", flat=True
+            )
+        )
+        self.assertIn("1", connectors)
+        self.assertIn("2", connectors)
+
     async def test_transaction_created_from_meter_values(self):
         communicator = WebsocketCommunicator(application, "/NOSTART/")
         connected, _ = await communicator.connect()

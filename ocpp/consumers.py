@@ -59,10 +59,9 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         )
         store.connections[self.charger_id] = self
         store.logs["charger"].setdefault(self.charger_id, [])
-        self.charger, _ = await database_sync_to_async(
-            Charger.objects.update_or_create
-        )(
+        self.charger, _ = await database_sync_to_async(Charger.objects.get_or_create)(
             charger_id=self.charger_id,
+            connector_id=None,
             defaults={"last_path": self.scope.get("path", "")},
         )
         location_name = await sync_to_async(
@@ -82,9 +81,36 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             ).first
         )()
 
+    async def _assign_connector(self, connector: int | str | None) -> None:
+        """Ensure ``self.charger`` matches the provided connector id."""
+        if connector is None:
+            return
+        connector = str(connector)
+        if self.charger.connector_id == connector:
+            return
+        existing = await database_sync_to_async(
+            Charger.objects.filter(
+                charger_id=self.charger_id, connector_id=connector
+            ).first
+        )()
+        if existing:
+            self.charger = existing
+        elif self.charger.connector_id:
+            self.charger = await database_sync_to_async(Charger.objects.create)(
+                charger_id=self.charger_id,
+                connector_id=connector,
+                last_path=self.scope.get("path", ""),
+            )
+        else:
+            self.charger.connector_id = connector
+            await database_sync_to_async(self.charger.save)(
+                update_fields=["connector_id"]
+            )
+
     async def _store_meter_values(self, payload: dict, raw_message: str) -> None:
         """Parse a MeterValues payload into MeterReading rows."""
         connector = payload.get("connectorId")
+        await self._assign_connector(connector)
         tx_id = payload.get("transactionId")
         tx_obj = None
         if tx_id is not None:
@@ -149,11 +175,6 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             await database_sync_to_async(MeterReading.objects.bulk_create)(readings)
             if tx_obj and start_updated:
                 await database_sync_to_async(tx_obj.save)(update_fields=["meter_start"])
-        if connector is not None and not self.charger.connector_id:
-            self.charger.connector_id = str(connector)
-            await database_sync_to_async(self.charger.save)(
-                update_fields=["connector_id"]
-            )
         if temperature is not None:
             self.charger.temperature = temperature
             self.charger.temperature_unit = temp_unit
@@ -184,6 +205,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             msg_id, action = msg[1], msg[2]
             payload = msg[3] if len(msg) > 3 else {}
             reply_payload = {}
+            await self._assign_connector(payload.get("connectorId"))
             if action == "BootNotification":
                 reply_payload = {
                     "currentTime": datetime.utcnow().isoformat() + "Z",
@@ -195,7 +217,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 now = timezone.now()
                 self.charger.last_heartbeat = now
                 await database_sync_to_async(
-                    Charger.objects.filter(charger_id=self.charger_id).update
+                    Charger.objects.filter(pk=self.charger.pk).update
                 )(last_heartbeat=now)
             elif action == "Authorize":
                 account = await self._get_account(payload.get("idTag"))
@@ -213,7 +235,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 await self._store_meter_values(payload, text_data)
                 self.charger.last_meter_values = payload
                 await database_sync_to_async(
-                    Charger.objects.filter(charger_id=self.charger_id).update
+                    Charger.objects.filter(pk=self.charger.pk).update
                 )(last_meter_values=payload)
                 reply_payload = {}
             elif action == "StartTransaction":

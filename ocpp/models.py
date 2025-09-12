@@ -38,7 +38,6 @@ class Charger(Entity):
     charger_id = models.CharField(
         _("Serial Number"),
         max_length=100,
-        unique=True,
         help_text="Unique identifier reported by the charger.",
     )
     connector_id = models.CharField(
@@ -77,6 +76,13 @@ class Charger(Entity):
     class Meta:
         verbose_name = _("Charge Point")
         verbose_name_plural = _("Charge Points")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("charger_id", "connector_id"),
+                name="charger_connector_unique",
+                nulls_distinct=False,
+            )
+        ]
 
     def get_absolute_url(self):
         return reverse("charger-page", args=[self.charger_id])
