@@ -22,6 +22,7 @@ class ManTests(TestCase):
             slug="test-manual",
             title="Test Manual",
             description="Test description",
+            languages="en,fr",
             content_html="<p>hi</p>",
             content_pdf="UEZERg==",
         )
@@ -52,6 +53,15 @@ class ManTests(TestCase):
         self.assertContains(response, reverse("django-admindocs-docroot"))
         self.assertContains(response, "Test Manual")
         self.assertContains(response, "Test description")
+        self.assertContains(response, "Languages: en,fr")
+        self.assertContains(
+            response, reverse("django-admindocs-manual-pdf", args=["test-manual"])
+        )
+        self.assertContains(response, 'id="nav-sidebar"')
+        self.assertContains(response, 'id="nav-filter"')
+        self.assertNotContains(
+            response, "You don't have permission to view or edit anything."
+        )
 
     def test_manual_detail_in_admin_context(self):
         response = self.client.get(
@@ -59,3 +69,11 @@ class ManTests(TestCase):
         )
         self.assertContains(response, reverse("django-admindocs-manuals"))
         self.assertContains(response, "hi")
+        self.assertContains(
+            response, reverse("django-admindocs-manual-pdf", args=["test-manual"])
+        )
+        self.assertContains(response, 'id="nav-sidebar"')
+        self.assertContains(response, 'id="nav-filter"')
+        self.assertNotContains(
+            response, "You don't have permission to view or edit anything."
+        )
