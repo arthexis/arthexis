@@ -1,6 +1,7 @@
 from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.contrib.admin.sites import AdminSite
+from django.contrib import admin
 from unittest.mock import patch
 
 from core.models import EmailInbox, EmailCollector
@@ -107,6 +108,34 @@ class EmailInboxAdminActionTests(TestCase):
         content = response.render().content.decode()
         self.assertIn("Test Inbox", content)
 
+    def test_test_collectors_actions(self):
+        collector = EmailCollector.objects.create(inbox=self.inbox)
+        request = self.factory.post(
+            "/", {"action": "test_collectors", "_selected_action": [self.inbox.pk]}
+        )
+        request.user = self.user
+        request.session = self.client.session
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        request._messages = FallbackStorage(request)
+        with patch.object(EmailCollector, "collect") as mock_collect:
+            self.admin.test_collectors(
+                request, EmailInbox.objects.filter(pk=self.inbox.pk)
+            )
+            mock_collect.assert_called_once_with(limit=1)
+        messages = list(request._messages)
+        self.assertEqual(len(messages), 1)
+
+        request2 = self.factory.post("/", {"_action": "test_collectors_action"})
+        request2.user = self.user
+        request2.session = self.client.session
+        request2._messages = FallbackStorage(request2)
+        with patch.object(EmailCollector, "collect") as mock_collect2:
+            self.admin.test_collectors_action(request2, self.inbox)
+            mock_collect2.assert_called_once_with(limit=1)
+        messages2 = list(request2._messages)
+        self.assertEqual(len(messages2), 1)
+
 
 class EmailCollectorInlineTests(TestCase):
     def setUp(self):
@@ -155,3 +184,8 @@ class EmailCollectorInlineTests(TestCase):
         self.assertEqual(EmailCollector.objects.count(), 2)
         inbox = EmailInbox.objects.get()
         self.assertEqual(inbox.collectors.count(), 2)
+
+
+class EmailCollectorStandaloneAdminTests(TestCase):
+    def test_collector_not_registered_standalone(self):
+        self.assertNotIn(EmailCollector, admin.site._registry)

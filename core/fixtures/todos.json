@@ -51,5 +51,13 @@
       "url": "/",
       "is_seed_data": true
     }
+  },
+  {
+    "model": "core.todo",
+    "pk": 6,
+    "fields": {
+      "description": "Validate screen Email Inboxes admin",
+      "url": "/admin/post_office/emailinbox/"
+    }
   }
 ]
