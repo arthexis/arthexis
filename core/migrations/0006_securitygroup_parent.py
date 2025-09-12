@@ -176,6 +176,7 @@ class Migration(migrations.Migration):
                 "verbose_name": "Email Artifact",
                 "verbose_name_plural": "Email Artifacts",
                 "unique_together": {("collector", "fingerprint")},
+                "ordering": ["-id"],
             },
         ),
         migrations.CreateModel(

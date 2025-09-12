@@ -129,7 +129,7 @@
     "fields": {
       "prefix": "EMAIL",
       "context_type": "entity",
-      "content_type": ["core", "emailinbox"]
+      "content_type": ["core", "emailartifact"]
     }
   },
   {
