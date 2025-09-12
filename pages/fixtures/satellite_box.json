@@ -21,7 +21,7 @@
   {
     "model": "pages.module",
     "fields": {
-      "node_role": ["Gateway"],
+        "node_role": ["Satellite"],
       "application": ["ocpp"],
       "path": "/ocpp/",
       "is_default": true
@@ -30,7 +30,7 @@
   {
     "model": "pages.landing",
     "fields": {
-      "module": ["Gateway", "/ocpp/"],
+        "module": ["Satellite", "/ocpp/"],
       "path": "/ocpp/rfid/",
       "label": "RFID Scanner"
     }
@@ -38,7 +38,7 @@
   {
     "model": "pages.landing",
     "fields": {
-      "module": ["Gateway", "/ocpp/"],
+        "module": ["Satellite", "/ocpp/"],
       "path": "/ocpp/efficiency/",
       "label": "EV Efficiency"
     }
@@ -46,7 +46,7 @@
   {
     "model": "pages.module",
     "fields": {
-      "node_role": ["Gateway"],
+        "node_role": ["Satellite"],
       "application": ["awg"],
       "path": "/awg/",
       "is_default": false
@@ -55,7 +55,7 @@
   {
     "model": "pages.module",
     "fields": {
-      "node_role": ["Gateway"],
+        "node_role": ["Satellite"],
       "application": ["news"],
       "path": "/news/",
       "is_default": false
@@ -64,7 +64,7 @@
   {
     "model": "pages.landing",
     "fields": {
-      "module": ["Gateway", "/news/"],
+        "module": ["Satellite", "/news/"],
       "path": "/news/",
       "label": "News"
     }
