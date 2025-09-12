@@ -21,4 +21,5 @@
   - Keep track of features and write tests to prevent regressions just like other code.
   - Follow consistent naming conventions, using the `.sh` extension with kebab-case names.
   - Keep the interface and meaning of flags consistent across scripts.
+  - Ensure all shell scripts are executable. Verify new or modified scripts retain the `chmod +x` permission.
 
