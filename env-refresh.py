@@ -27,6 +27,7 @@ from django.db.migrations.exceptions import InconsistentMigrationHistory
 from django.db.utils import OperationalError
 from django.db.migrations.recorder import MigrationRecorder
 from django.db.migrations.loader import MigrationLoader
+from django.core.serializers.base import DeserializationError
 
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -300,6 +301,8 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                 for module in Module.objects.all():
                     module.create_landings()
                 Landing.objects.update(is_seed_data=True)
+            except DeserializationError:
+                pass
             finally:
                 post_save.connect(_create_landings, sender=Module)
 

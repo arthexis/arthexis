@@ -44,7 +44,9 @@ class ReleaseManagerAdminActionTests(TestCase):
         messages = [m.message for m in request._messages]
         self.assertTrue(any("credentials valid" in m for m in messages))
 
-    @pytest.mark.skip("Release manager bulk credentials action not exercised in environment")
+    @pytest.mark.skip(
+        "Release manager bulk credentials action not exercised in environment"
+    )
     @patch("core.admin.requests.get")
     def test_test_credentials_bulk_action(self, mock_get):
         mock_get.return_value = MagicMock(ok=False, status_code=401)

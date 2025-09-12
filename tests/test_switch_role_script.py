@@ -1,6 +1,7 @@
 from pathlib import Path
 import subprocess
 
+
 def test_switch_role_script_includes_datasette_flag():
     script_path = Path(__file__).resolve().parent.parent / "switch-role.sh"
     content = script_path.read_text()
@@ -29,7 +30,12 @@ def test_switch_role_script_check_flag_outputs_role():
     role_file = lock_dir / "role.lck"
     role_file.write_text("TestRole")
     try:
-        result = subprocess.run(["bash", str(script_path), "--check"], capture_output=True, text=True, cwd=repo_root)
+        result = subprocess.run(
+            ["bash", str(script_path), "--check"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
         assert result.stdout.strip() == "TestRole"
     finally:
         role_file.unlink(missing_ok=True)

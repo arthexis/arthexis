@@ -67,4 +67,3 @@ class SigilBuilderTests(TestCase):
         content = response.content.decode()
         self.assertIn("<th>Root</th>", content)
         self.assertGreater(content.count("[INBOX]"), 1)
-
