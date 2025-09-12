@@ -245,7 +245,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     fixture_hash = _fixture_hash(fixtures)
     if fixtures:
         # Process user fixtures first so foreign key references can be updated
-        fixtures.sort(key=lambda n: 0 if n.endswith("users.json") else 1)
+        fixtures.sort(key=lambda n: 0 if Path(n).name.startswith("users__") else 1)
         with tempfile.TemporaryDirectory() as tmpdir:
             patched: list[str] = []
             user_pk_map: dict[int, int] = {}

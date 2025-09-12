@@ -12,6 +12,7 @@ import json
 from unittest import mock
 from pathlib import Path
 import subprocess
+from glob import glob
 
 from django.utils import timezone
 from .models import (
@@ -400,8 +401,8 @@ class EVBrandFixtureTests(TestCase):
     def test_ev_brand_fixture_loads(self):
         call_command(
             "loaddata",
-            "core/fixtures/ev_brands.json",
-            "core/fixtures/ev_models.json",
+            *glob("core/fixtures/ev_brands__*.json"),
+            *glob("core/fixtures/ev_models__*.json"),
             verbosity=0,
         )
         porsche = Brand.objects.get(name="Porsche")
@@ -419,7 +420,7 @@ class EVBrandFixtureTests(TestCase):
     def test_brand_from_vin(self):
         call_command(
             "loaddata",
-            "core/fixtures/ev_brands.json",
+            *glob("core/fixtures/ev_brands__*.json"),
             verbosity=0,
         )
         self.assertEqual(Brand.from_vin("WP0ZZZ12345678901").name, "Porsche")
@@ -431,9 +432,9 @@ class RFIDFixtureTests(TestCase):
     def test_fixture_assigns_gelectriic_rfid(self):
         call_command(
             "loaddata",
-            "core/fixtures/users.json",
-            "core/fixtures/energy_accounts.json",
-            "core/fixtures/rfids.json",
+            "core/fixtures/users__arthexis.json",
+            "core/fixtures/energy_accounts__gelectriic.json",
+            "core/fixtures/rfids__ffffffff.json",
             verbosity=0,
         )
         account = EnergyAccount.objects.get(name="GELECTRIIC")
@@ -751,8 +752,9 @@ class TodoDoneTests(TestCase):
 
     def test_mark_done_deletes_and_updates_fixture(self):
         todo = Todo.objects.create(description="Task", is_seed_data=True)
-        tmp = Path("core/fixtures/tmp_todos.json")
-        tmp.write_text(
+        tmp_dir = Path("core/fixtures")
+        tmp_file = tmp_dir / f"todos__todo_{todo.pk}.json"
+        tmp_file.write_text(
             json.dumps(
                 [
                     {
@@ -769,16 +771,15 @@ class TodoDoneTests(TestCase):
             encoding="utf-8",
         )
         with (
-            mock.patch("core.views.TODO_FIXTURE_PATH", tmp),
+            mock.patch("core.views.TODO_FIXTURE_DIR", tmp_dir),
             mock.patch("core.views.subprocess.run") as mock_run,
         ):
             resp = self.client.post(reverse("todo-done", args=[todo.pk]))
         self.assertRedirects(resp, reverse("admin:index"))
         todo.refresh_from_db()
         self.assertTrue(todo.is_deleted)
-        data = json.loads(tmp.read_text(encoding="utf-8"))
-        self.assertEqual(data, [])
-        mock_run.assert_any_call(["git", "add", str(tmp)], check=False)
+        self.assertFalse(tmp_file.exists())
+        mock_run.assert_any_call(["git", "add", str(tmp_file)], check=False)
         mock_run.assert_any_call(["git", "commit", "-m", "Task"], check=False)
         mock_run.assert_any_call(["git", "push"], check=False)
         tmp.unlink()

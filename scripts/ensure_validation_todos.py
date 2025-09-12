@@ -83,12 +83,11 @@ def ensure_todo(entries: list, description: str) -> None:
 
 def main() -> int:
     base = Path(__file__).resolve().parents[1]
-    todos_path = base / "core/fixtures/todos.json"
-    if todos_path.exists():
-        entries = json.loads(todos_path.read_text())
-    else:
-        entries = []
-    original = json.dumps(entries, indent=2)
+    todos_dir = base / "core/fixtures"
+    entries = []
+    for p in sorted(todos_dir.glob("todos__*.json")):
+        entries.extend(json.loads(p.read_text()))
+    original_len = len(entries)
 
     files = get_staged_files()
     for path in files:
@@ -105,10 +104,11 @@ def main() -> int:
             if cmd:
                 ensure_todo(entries, f"Validate command {cmd}")
 
-    new_content = json.dumps(entries, indent=2) + "\n"
-    if new_content != original + "\n":
-        todos_path.write_text(new_content)
-        subprocess.run(["git", "add", str(todos_path)])
+    if len(entries) != original_len:
+        for item in entries[original_len:]:
+            path = todos_dir / f"todos__todo_{item['pk']}.json"
+            path.write_text(json.dumps([item], indent=2) + "\n")
+            subprocess.run(["git", "add", str(path)])
         print("Added validation TODOs.")
         return 1
     return 0

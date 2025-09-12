@@ -1,0 +1,13 @@
+[
+{
+  "model": "core.sigilroot",
+  "pk": 36,
+  "fields": {
+    "is_seed_data": false,
+    "is_deleted": false,
+    "prefix": "OP",
+    "context_type": "entity",
+    "content_type": 40
+  }
+}
+]

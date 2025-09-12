@@ -1293,10 +1293,15 @@ class PackageRelease(Entity):
 
     @classmethod
     def dump_fixture(cls) -> None:
-        path = Path("core/fixtures/releases.json")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        data = serializers.serialize("json", cls.objects.all())
-        path.write_text(data)
+        base = Path("core/fixtures")
+        base.mkdir(parents=True, exist_ok=True)
+        for old in base.glob("releases__*.json"):
+            old.unlink()
+        for release in cls.objects.all():
+            name = f"releases__packagerelease_{release.version.replace('.', '_')}.json"
+            path = base / name
+            data = serializers.serialize("json", [release])
+            path.write_text(data)
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.package.name} {self.version}"
@@ -1375,13 +1380,16 @@ class PackageRelease(Entity):
         self.save(update_fields=["revision"])
         PackageRelease.dump_fixture()
         if kwargs.get("git"):
+            from glob import glob
+
+            paths = sorted(glob("core/fixtures/releases__*.json"))
             diff = subprocess.run(
-                ["git", "status", "--porcelain", "core/fixtures/releases.json"],
+                ["git", "status", "--porcelain", *paths],
                 capture_output=True,
                 text=True,
             )
             if diff.stdout.strip():
-                release_utils._run(["git", "add", "core/fixtures/releases.json"])
+                release_utils._run(["git", "add", *paths])
                 release_utils._run(
                     [
                         "git",

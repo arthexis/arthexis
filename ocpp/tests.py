@@ -29,7 +29,12 @@ from .tasks import purge_meter_readings
 
 
 class ChargerFixtureTests(TestCase):
-    fixtures = ["initial_data.json"]
+    fixtures = [
+        p.name
+        for p in (Path(__file__).resolve().parent / "fixtures").glob(
+            "initial_data__*.json"
+        )
+    ]
 
     def test_cp2_requires_rfid(self):
         cp2 = Charger.objects.get(charger_id="CP2")

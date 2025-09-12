@@ -1,9 +1,0 @@
-[
-  {
-    "model": "sites.site",
-    "fields": {
-      "domain": "10.42.0.1",
-      "name": ""
-    }
-  }
-]

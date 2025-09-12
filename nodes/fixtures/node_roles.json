@@ -1,6 +1,0 @@
-[
-  {"model": "nodes.noderole", "pk": 1, "fields": {"name": "Terminal", "description": "Single-User Research & Development"}},
-  {"model": "nodes.noderole", "pk": 2, "fields": {"name": "Constellation", "description": "Multi-User Cloud & Orchestration"}},
-  {"model": "nodes.noderole", "pk": 3, "fields": {"name": "Control", "description": "Single-Device Testing & Special Task Appliances"}},
-  {"model": "nodes.noderole", "pk": 4, "fields": {"name": "Satellite", "description": "Multi-Device Edge, Network & Data Acquisition"}}
-]
