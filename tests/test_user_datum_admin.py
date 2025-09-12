@@ -5,6 +5,8 @@ from zipfile import ZipFile
 import json
 import os
 import shutil
+from unittest.mock import patch
+
 import pytest
 from django.test import TestCase, TransactionTestCase
 from django.contrib.auth import get_user_model
@@ -403,3 +405,16 @@ class UserDataViewTests(TestCase):
                 user=self.user, content_type=ct, object_id=profile_pk
             ).exists()
         )
+
+    def test_import_skips_empty_fixtures(self):
+        empty_zip = BytesIO()
+        with ZipFile(empty_zip, "w") as zf:
+            zf.writestr("3_core_emailinbox_1.json", "[]")
+        upload = SimpleUploadedFile(
+            "user_data.zip", empty_zip.getvalue(), content_type="application/zip"
+        )
+        with patch("core.user_data.call_command") as call:
+            self.client.post(
+                reverse("admin:user_data_import"), {"data_zip": upload}, follow=True
+            )
+        call.assert_not_called()
