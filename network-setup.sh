@@ -291,7 +291,9 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
     if ! nmcli connection up hyperline; then
         echo "Failed to activate Hyperline connection; trying existing wlan1 connections." >&2
         while read -r con; do
-            nmcli connection up "$con" && break
+            if nmcli connection up "$con"; then
+                break
+            fi
         done < <(nmcli -t -f NAME connection show | grep '^gate-')
     fi
 fi
@@ -302,7 +304,7 @@ if [[ $RUN_AP == true ]]; then
         ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
         wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
 
-    nmcli connection up eth0-shared
+    nmcli connection up eth0-shared || true
     nmcli connection up "$AP_NAME"
 
     if command -v iptables >/dev/null 2>&1; then
