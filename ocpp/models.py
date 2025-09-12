@@ -214,6 +214,7 @@ class Transaction(Entity):
             else:
                 inc = val if reading.unit == "kW" else val / 1000.0
                 total += inc
+
         if total == 0 and self.meter_start is not None and self.meter_stop is not None:
             total = (self.meter_stop - self.meter_start) / 1000.0
         if total < 0:

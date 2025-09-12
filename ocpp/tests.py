@@ -1161,19 +1161,21 @@ class PurgeMeterReadingsTaskTests(TestCase):
 class TransactionKwTests(TestCase):
     def test_kw_sums_meter_readings(self):
         charger = Charger.objects.create(charger_id="SUM1")
-        tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
-        MeterReading.objects.create(
-            charger=charger,
-            transaction=tx,
-            timestamp=timezone.now(),
-            value=Decimal("1.0"),
-            unit="kW",
+        tx = Transaction.objects.create(
+            charger=charger, start_time=timezone.now(), meter_start=0
         )
         MeterReading.objects.create(
             charger=charger,
             transaction=tx,
             timestamp=timezone.now(),
-            value=Decimal("500"),
+            value=Decimal("1000"),
+            unit="W",
+        )
+        MeterReading.objects.create(
+            charger=charger,
+            transaction=tx,
+            timestamp=timezone.now(),
+            value=Decimal("1500"),
             unit="W",
         )
         self.assertAlmostEqual(tx.kw, 1.5)
@@ -1193,7 +1195,9 @@ class ChargerStatusViewTests(TestCase):
 
     def test_chart_data_populated_from_existing_readings(self):
         charger = Charger.objects.create(charger_id="VIEW1")
-        tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
+        tx = Transaction.objects.create(
+            charger=charger, start_time=timezone.now(), meter_start=0
+        )
         t0 = timezone.now()
         MeterReading.objects.create(
             charger=charger,
@@ -1206,7 +1210,7 @@ class ChargerStatusViewTests(TestCase):
             charger=charger,
             transaction=tx,
             timestamp=t0 + timedelta(seconds=10),
-            value=Decimal("500"),
+            value=Decimal("1500"),
             unit="W",
         )
         store.transactions[charger.charger_id] = tx
@@ -1262,7 +1266,9 @@ class ChargerStatusViewTests(TestCase):
 
     def test_past_session_chart(self):
         charger = Charger.objects.create(charger_id="PAST1")
-        tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
+        tx = Transaction.objects.create(
+            charger=charger, start_time=timezone.now(), meter_start=0
+        )
         t0 = timezone.now()
         MeterReading.objects.create(
             charger=charger,
@@ -1275,7 +1281,7 @@ class ChargerStatusViewTests(TestCase):
             charger=charger,
             transaction=tx,
             timestamp=t0 + timedelta(seconds=10),
-            value=Decimal("1000"),
+            value=Decimal("1500"),
             unit="W",
         )
         resp = self.client.get(
