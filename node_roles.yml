@@ -4,17 +4,17 @@ Terminal:
   - ocpp/**
   - core/**
   - pages/**
-Control:
-  - awg/**
-  - nodes/**
-  - ocpp/**
-  Satellite:
-    - nodes/**
-    - ocpp/**
-    - core/**
 Constellation:
   - awg/**
   - nodes/**
   - ocpp/**
   - core/**
   - pages/**
+Control:
+  - awg/**
+  - nodes/**
+  - ocpp/**
+Satellite:
+  - nodes/**
+  - ocpp/**
+  - core/**
