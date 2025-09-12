@@ -4,7 +4,7 @@ set -euo pipefail
 
 PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
 if [[ -z "$PREV_TAG" ]]; then
-  echo "No previous release tag found; skipping upgrade path test." >&2
+  echo "No previous release tag found; skipping upgrade path test."
   exit 0
 fi
 

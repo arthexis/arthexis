@@ -21,21 +21,31 @@ def safe_setup():
     """Initialize Django and ensure the test database is migrated.
 
     Pytest does not use ``pytest-django`` for these tests, so simply calling
-    :func:`django.setup` leaves the SQLite database without any tables.  Many
-    tests exercise ORM behaviour and expect the schema to exist.  Run
-    ``migrate`` the first time Django is configured so the database file and
-    tables are created automatically.
+    :func:`django.setup` leaves the database without any tables. Many tests
+    exercise ORM behaviour and expect the schema to exist. Configure Django to
+    use the dedicated test database and run ``migrate`` the first time it is
+    configured so the database file and tables are created automatically.
     """
 
     if not apps.ready:
-        # Start from a clean SQLite database for every test run.
-        db_path = ROOT / "db.sqlite3"
-        if db_path.exists():
-            db_path.unlink()
-
-        # Perform the regular Django setup after cleaning up the database
-        _original_setup()
         from django.conf import settings
+
+        # Switch to the test database defined in settings to avoid touching
+        # development data.
+        test_name = settings.DATABASES["default"].get("TEST", {}).get("NAME")
+        if test_name:
+            settings.DATABASES["default"]["NAME"] = str(test_name)
+            db_path = Path(test_name)
+            if db_path.exists():
+                db_path.unlink()
+
+        # Perform the regular Django setup after configuring the test database
+        _original_setup()
+
+        from django.db import connections
+
+        if test_name:
+            connections.databases["default"]["NAME"] = str(test_name)
 
         # Speed up tests by using a lightweight password hasher and disabling
         # password validation checks. The default PBKDF2 hasher uses one
@@ -51,6 +61,16 @@ def safe_setup():
 
 django.setup = safe_setup
 safe_setup()
+
+
+@pytest.fixture(autouse=True)
+def ensure_test_database():
+    """Fail fast if tests attempt to use the development database."""
+    from django.conf import settings
+
+    name = str(settings.DATABASES["default"]["NAME"])
+    if "test" not in name:
+        raise RuntimeError("Tests must run against the test database")
 
 
 def pytest_configure(config):
