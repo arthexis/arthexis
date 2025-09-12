@@ -112,10 +112,8 @@ command -v nmcli >/dev/null 2>&1 || {
 }
 
 # Determine access point name and password before running steps
-HOSTNAME_SLUG="$(slugify "$(hostname)")"
-AP_NAME="gelectriic-$HOSTNAME_SLUG"
-EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null \
-    || nmcli -s -g 802-11-wireless-security.psk connection show gelectriic-ap 2>/dev/null || true)"
+AP_NAME="gelectriic-ap"
+EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null || true)"
 if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
     while true; do
         read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
@@ -133,7 +131,7 @@ fi
 
 # Collect user decisions for each step in advance
 ask_step RUN_SERVICES "Ensure required services"
-ask_step RUN_AP "Configure wlan0 access point" 1
+ask_step RUN_AP "Configure wlan0 access point"
 ask_step RUN_WLAN1_REFRESH "Install wlan1 device refresh service"
 ask_step RUN_PACKAGES "Ensure required packages and SSH service"
 if [[ $SKIP_FIREWALL == false ]]; then
@@ -152,12 +150,30 @@ if [[ $RUN_SERVICES == true ]]; then
 fi
 
 if [[ $RUN_AP == true ]]; then
-    nmcli connection delete gelectriic-ap 2>/dev/null || true
-    nmcli connection delete "$AP_NAME" 2>/dev/null || true
-    nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" autoconnect yes \
-        ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
-        ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
-        wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
+    nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" '$2=="wlan0" && $1!=ap {print $1}' | while read -r con; do
+        nmcli connection delete "$con"
+    done
+
+    if nmcli -t -f NAME connection show | grep -Fxq "$AP_NAME"; then
+        nmcli connection modify "$AP_NAME" \
+            connection.interface-name wlan0 \
+            wifi.ssid "$AP_NAME" \
+            wifi.mode ap \
+            wifi.band bg \
+            wifi-sec.key-mgmt wpa-psk \
+            wifi-sec.psk "$WIFI_PASS" \
+            ipv4.method shared \
+            ipv4.addresses 10.42.0.1/16 \
+            ipv4.never-default yes \
+            ipv6.method ignore \
+            ipv6.never-default yes \
+            connection.autoconnect yes
+    else
+        nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" autoconnect yes \
+            ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
+            ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
+            wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
+    fi
     nmcli connection up eth0-shared || true
     nmcli connection up "$AP_NAME"
     if command -v iptables >/dev/null 2>&1; then
@@ -290,14 +306,11 @@ if [[ $RUN_REINSTALL_WLAN1 == true ]]; then
 fi
 
 if [[ $RUN_CONFIGURE_NET == true ]]; then
-    nmcli connection delete gelectriic-ap 2>/dev/null || true
     nmcli -t -f NAME,DEVICE connection show | awk -F: '$2=="eth0" {print $1}' | while read -r con; do
         nmcli connection delete "$con"
     done
-    nmcli -t -f NAME,DEVICE connection show | awk -F: '$2=="wlan0" {print $1}' | while read -r con; do
-        if [[ "$con" != "$AP_NAME" ]]; then
-            nmcli connection delete "$con"
-        fi
+    nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" '$2=="wlan0" && $1!=ap {print $1}' | while read -r con; do
+        nmcli connection delete "$con"
     done
 
     nmcli connection delete hyperline 2>/dev/null || true
