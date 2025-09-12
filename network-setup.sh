@@ -209,8 +209,8 @@ if [[ $RUN_AP == true ]]; then
 fi
 
 if [[ $RUN_WLAN1_REFRESH == true ]]; then
-    WLAN1_REFRESH_SCRIPT="$BASE_DIR/wlan1-device-refresh.sh"
-    WLAN1_REFRESH_SERVICE="wlan1-device-refresh"
+    WLAN1_REFRESH_SCRIPT="$BASE_DIR/scripts/wlan1-refresh.sh"
+    WLAN1_REFRESH_SERVICE="wlan1-refresh"
     WLAN1_REFRESH_SERVICE_FILE="/etc/systemd/system/${WLAN1_REFRESH_SERVICE}.service"
     if [ -f "$WLAN1_REFRESH_SCRIPT" ]; then
         cat > "$WLAN1_REFRESH_SERVICE_FILE" <<EOF

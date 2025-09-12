@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOG_DIR="$SCRIPT_DIR/logs"
+if (( EUID != 0 )); then
+    echo "This script must be run as root." >&2
+    exit 1
+fi
+
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+LOG_DIR="$REPO_DIR/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -23,17 +28,11 @@ if [[ -z "$MAC" ]]; then
     exit 0
 fi
 
-while read -r con; do
+nmcli -t --separator '|' -f NAME,DEVICE,TYPE connection show |
+awk -F'|' '$3=="wifi" && $2=="wlan1" {print $1}' |
+while IFS= read -r con; do
     echo "Updating connection $con to use MAC $MAC"
-    nmcli connection modify "$con" 802-11-wireless.mac-address "$MAC" || true
-  done < <(
-    nmcli -t -f NAME,TYPE connection show |
-    awk -F: '$2=="wifi" {print $1}' |
-    while read -r c; do
-        if [[ "$(nmcli -g connection.interface-name connection show "$c" 2>/dev/null)" == "wlan1" ]]; then
-            echo "$c"
-        fi
-    done
-)
+    nmcli connection modify "$con" 802-11-wireless.mac-address "$MAC"
+done
 
-nmcli device reapply wlan1 >/dev/null 2>&1 || true
+nmcli device reapply wlan1 >/dev/null
