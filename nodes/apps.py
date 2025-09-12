@@ -7,7 +7,6 @@ from pathlib import Path
 
 from django.apps import AppConfig
 from django.conf import settings
-from django.core.signals import request_started
 from django.db import connections
 from django.db.utils import OperationalError
 from utils import revision
@@ -54,11 +53,8 @@ def _startup_notification() -> None:
 
 
 def _trigger_startup_notification(**_: object) -> None:
-    """Send the startup notification once a request has started."""
+    """Attempt to send the startup notification in the background."""
 
-    request_started.disconnect(
-        _trigger_startup_notification, dispatch_uid="nodes-startup"
-    )
     try:
         connections["default"].ensure_connection()
     except OperationalError:
@@ -73,6 +69,8 @@ class NodesConfig(AppConfig):
     verbose_name = "4. Infrastructure"
 
     def ready(self):  # pragma: no cover - exercised on app start
-        request_started.connect(
-            _trigger_startup_notification, dispatch_uid="nodes-startup"
-        )
+        threading.Thread(
+            target=_trigger_startup_notification,
+            name="startup-notify",
+            daemon=True,
+        ).start()
