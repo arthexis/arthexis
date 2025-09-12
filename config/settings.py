@@ -264,6 +264,9 @@ if _postgres_available():
             "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
             "PORT": os.environ.get("POSTGRES_PORT", "5432"),
             "OPTIONS": {"options": "-c timezone=UTC"},
+            "TEST": {
+                "NAME": f"{os.environ.get('POSTGRES_DB', 'postgres')}_test",
+            },
         }
     }
 else:
@@ -272,6 +275,7 @@ else:
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
             "OPTIONS": {"timeout": 30},
+            "TEST": {"NAME": BASE_DIR / "test_db.sqlite3"},
         }
     }
 

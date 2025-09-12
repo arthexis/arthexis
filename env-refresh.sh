@@ -14,6 +14,7 @@ exec > >(tee "$LOG_FILE") 2>&1
 
 VENV_DIR="$SCRIPT_DIR/.venv"
 PYTHON="$VENV_DIR/bin/python"
+USE_SYSTEM_PYTHON=0
 
 LATEST=0
 CLEAN=0
@@ -34,8 +35,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ ! -f "$PYTHON" ]; then
-  echo "Virtual environment not found. Run ./install.sh first. Skipping." >&2
-  exit 0
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON="$(command -v python3)"
+    USE_SYSTEM_PYTHON=1
+    echo "Virtual environment not found. Using system Python." >&2
+  else
+    echo "Python interpreter not found. Run ./install.sh first. Skipping." >&2
+    exit 0
+  fi
 fi
 
 
@@ -79,7 +86,7 @@ if [ "$CLEAN" -eq 1 ]; then
 fi
 
 REQ_FILE="$SCRIPT_DIR/requirements.txt"
-if [ -f "$REQ_FILE" ]; then
+if [ "$USE_SYSTEM_PYTHON" -eq 0 ] && [ -f "$REQ_FILE" ]; then
   # ensure pip is available in the virtual environment
   if ! "$PYTHON" -m pip --version >/dev/null 2>&1; then
     "$PYTHON" -m ensurepip --upgrade
