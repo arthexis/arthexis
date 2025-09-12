@@ -1,10 +1,13 @@
 {% extends "pages/base.html" %}
 {% load i18n %}
 
-{% block title %}{{ charger.name|default:charger.charger_id }} - {% trans "Search Sessions" %}{% endblock %}
+{% block title %}{{ charger.display_name|default:charger.name|default:charger.charger_id }} - {% trans "Search Sessions" %}{% endblock %}
 
 {% block content %}
-<h1>{{ charger.name|default:charger.charger_id }}</h1>
+<h1>{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
+{% if charger.display_name %}
+<p class="text-muted"><small>{% trans "Serial Number" %}: {{ charger.charger_id }}</small></p>
+{% endif %}
 <form method="get" class="mb-3">
   <label for="date">{% trans "Select date" %}</label>
   <input type="date" id="date" name="date" value="{{ date|default:'' }}">

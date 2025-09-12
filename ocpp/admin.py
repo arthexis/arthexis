@@ -73,6 +73,7 @@ class ChargerAdmin(EntityModelAdmin):
             {
                 "fields": (
                     "charger_id",
+                    "display_name",
                     "connector_id",
                     "require_rfid",
                     "last_heartbeat",
@@ -92,6 +93,7 @@ class ChargerAdmin(EntityModelAdmin):
     readonly_fields = ("last_heartbeat", "last_meter_values")
     list_display = (
         "charger_id",
+        "display_name",
         "connector_id",
         "location_name",
         "require_rfid",
@@ -102,7 +104,12 @@ class ChargerAdmin(EntityModelAdmin):
         "log_link",
         "status_link",
     )
-    search_fields = ("charger_id", "connector_id", "location__name")
+    search_fields = (
+        "charger_id",
+        "display_name",
+        "connector_id",
+        "location__name",
+    )
     actions = ["purge_data", "delete_selected"]
 
     def get_view_on_site_url(self, obj=None):

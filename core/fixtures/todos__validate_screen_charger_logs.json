@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "pk": 13,
+    "fields": {
+      "description": "Validate screen Charger Logs",
+      "url": "/ocpp/log/CP1/"
+    }
+  }
+]
