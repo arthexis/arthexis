@@ -54,7 +54,7 @@ class SecurityGroup(Group):
         verbose_name_plural = "Security Groups"
 
 
-class PublicPermission(models.Model):
+class PublicPermission(Entity):
     permission = models.OneToOneField(
         Permission, on_delete=models.CASCADE, related_name="public_permission"
     )

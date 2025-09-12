@@ -49,7 +49,6 @@ class EntityInheritanceTests(TestCase):
 
 class SeedDataAdminTests(TestCase):
     def setUp(self):
-        call_command("flush", verbosity=0, interactive=False)
         User = get_user_model()
         self.user = User.objects.create_superuser("sdadmin", password="pw")
         self.client.login(username="sdadmin", password="pw")
@@ -62,7 +61,6 @@ class SeedDataAdminTests(TestCase):
         )
 
     def tearDown(self):
-        call_command("flush", verbosity=0, interactive=False)
         User = get_user_model()
         User.all_objects.filter(username="admin").delete()
 
@@ -139,7 +137,7 @@ class SeedDataAdminTests(TestCase):
 
 class EnvRefreshFixtureTests(TestCase):
     def setUp(self):
-        call_command("flush", verbosity=0, interactive=False)
+        pass
 
     def test_env_refresh_marks_seed_data(self):
         base_dir = Path(settings.BASE_DIR)

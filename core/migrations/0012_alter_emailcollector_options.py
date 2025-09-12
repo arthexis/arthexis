@@ -23,6 +23,8 @@ class Migration(migrations.Migration):
                         verbose_name="ID",
                     ),
                 ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
                 ("is_public", models.BooleanField(default=False)),
                 (
                     "permission",

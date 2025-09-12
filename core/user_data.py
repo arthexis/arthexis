@@ -365,9 +365,9 @@ def _user_data_export(request):
             zf.write(path, arcname=path.name)
     buffer.seek(0)
     response = HttpResponse(buffer.getvalue(), content_type="application/zip")
-    response[
-        "Content-Disposition"
-    ] = f"attachment; filename=user_data_{request.user.pk}.zip"
+    response["Content-Disposition"] = (
+        f"attachment; filename=user_data_{request.user.pk}.zip"
+    )
     return response
 
 
