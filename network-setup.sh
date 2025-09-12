@@ -133,6 +133,7 @@ fi
 
 # Collect user decisions for each step in advance
 ask_step RUN_SERVICES "Ensure required services"
+ask_step RUN_AP "Configure wlan0 access point" 1
 ask_step RUN_WLAN1_REFRESH "Install wlan1 device refresh service"
 ask_step RUN_PACKAGES "Ensure required packages and SSH service"
 if [[ $SKIP_FIREWALL == false ]]; then
@@ -142,13 +143,31 @@ else
 fi
 ask_step RUN_REINSTALL_WLAN1 "Reinstall wlan1 connections"
 ask_step RUN_CONFIGURE_NET "Configure network connections"
-ask_step RUN_AP "Configure wlan0 access point" 1
 ask_step RUN_ROUTING "Finalize routing and connectivity checks"
 
 # Execute steps based on user choices
 if [[ $RUN_SERVICES == true ]]; then
     ensure_service dbus
     ensure_service NetworkManager
+fi
+
+if [[ $RUN_AP == true ]]; then
+    nmcli connection delete gelectriic-ap 2>/dev/null || true
+    nmcli connection delete "$AP_NAME" 2>/dev/null || true
+    nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" autoconnect yes \
+        ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
+        ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
+        wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
+    nmcli connection up eth0-shared || true
+    nmcli connection up "$AP_NAME"
+    if command -v iptables >/dev/null 2>&1; then
+        iptables -C INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT 2>/dev/null || \
+            iptables -A INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT
+    fi
+    if ! nmcli -t -f NAME connection show --active | grep -Fxq "$AP_NAME"; then
+        echo "Access point $AP_NAME failed to start." >&2
+        exit 1
+    fi
 fi
 
 if [[ $RUN_WLAN1_REFRESH == true ]]; then
@@ -272,11 +291,13 @@ fi
 
 if [[ $RUN_CONFIGURE_NET == true ]]; then
     nmcli connection delete gelectriic-ap 2>/dev/null || true
-    nmcli connection delete "$AP_NAME" 2>/dev/null || true
-    for dev in eth0 wlan0; do
-        nmcli -t -f NAME,DEVICE connection show | awk -F: -v D="$dev" '$2==D {print $1}' | while read -r con; do
+    nmcli -t -f NAME,DEVICE connection show | awk -F: '$2=="eth0" {print $1}' | while read -r con; do
+        nmcli connection delete "$con"
+    done
+    nmcli -t -f NAME,DEVICE connection show | awk -F: '$2=="wlan0" {print $1}' | while read -r con; do
+        if [[ "$con" != "$AP_NAME" ]]; then
             nmcli connection delete "$con"
-        done
+        fi
     done
 
     nmcli connection delete hyperline 2>/dev/null || true
@@ -298,20 +319,6 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
     fi
 fi
 
-if [[ $RUN_AP == true ]]; then
-    nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" autoconnect yes \
-        ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
-        ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
-        wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
-
-    nmcli connection up eth0-shared || true
-    nmcli connection up "$AP_NAME"
-
-    if command -v iptables >/dev/null 2>&1; then
-        iptables -C INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT 2>/dev/null || \
-            iptables -A INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT
-    fi
-fi
 
 if [[ $RUN_ROUTING == true ]]; then
     ip route del default dev eth0 2>/dev/null || true
