@@ -38,8 +38,12 @@ def generate_model_sigils(**kwargs) -> None:
     """Create SigilRoot entries for all models using unique prefixes."""
     SigilRoot = apps.get_model("core", "SigilRoot")
     for prefix in ["ENV", "SYS", "CMD"]:
-        SigilRoot.objects.get_or_create(
-            prefix=prefix, context_type=SigilRoot.Context.CONFIG
+        # Ensure built-in configuration roots exist without violating the
+        # unique ``prefix`` constraint, even if older databases already have
+        # entries with a different ``context_type``.
+        SigilRoot.objects.update_or_create(
+            prefix__iexact=prefix,
+            defaults={"prefix": prefix, "context_type": SigilRoot.Context.CONFIG},
         )
 
     existing = {p.upper() for p in SigilRoot.objects.values_list("prefix", flat=True)}
