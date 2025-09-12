@@ -83,6 +83,10 @@ check_nginx_and_redis() {
         echo "  sudo systemctl start redis-server"
         exit 1
     fi
+    cat > "$BASE_DIR/redis.env" <<'EOF'
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+EOF
 }
 
 while [[ $# -gt 0 ]]; do
@@ -160,7 +164,6 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --control)
-            check_nginx_and_redis "control"
             AUTO_UPGRADE=true
             NGINX_MODE="internal"
             SERVICE="arthexis"
@@ -221,7 +224,9 @@ fi
 LOCK_DIR="$BASE_DIR/locks"
 mkdir -p "$LOCK_DIR"
 
-if [ "$REQUIRES_REDIS" = true ]; then
+if [ "$ENABLE_CONTROL" = true ]; then
+    check_nginx_and_redis "$NODE_ROLE"
+elif [ "$REQUIRES_REDIS" = true ]; then
     require_redis "$NODE_ROLE"
 fi
 
