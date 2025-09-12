@@ -26,6 +26,8 @@ from .simulator import SimulatorConfig, ChargePointSimulator
 import re
 from datetime import timedelta
 from .tasks import purge_meter_readings
+from django.db import close_old_connections
+from django.db.utils import OperationalError
 
 
 class ChargerFixtureTests(TestCase):
@@ -67,6 +69,16 @@ class SinkConsumerTests(TransactionTestCase):
 
 
 class CSMSConsumerTests(TransactionTestCase):
+    async def _retry_db(self, func, attempts: int = 5, delay: float = 0.1):
+        """Run a database function, retrying if the database is locked."""
+        for _ in range(attempts):
+            try:
+                return await database_sync_to_async(func)()
+            except OperationalError:
+                await database_sync_to_async(close_old_connections)()
+                await asyncio.sleep(delay)
+        raise
+
     async def test_transaction_saved(self):
         communicator = WebsocketCommunicator(application, "/TEST/")
         connected, _ = await communicator.connect()
@@ -199,6 +211,8 @@ class CSMSConsumerTests(TransactionTestCase):
         await communicator.send_json_to([2, "1", "MeterValues", payload1])
         await communicator.receive_json_from()
         await communicator.disconnect()
+        await communicator.wait()
+        await database_sync_to_async(close_old_connections)()
 
         communicator = WebsocketCommunicator(application, "/DUPC/")
         connected, _ = await communicator.connect()
@@ -215,14 +229,18 @@ class CSMSConsumerTests(TransactionTestCase):
         await communicator.send_json_to([2, "1", "MeterValues", payload2])
         await communicator.receive_json_from()
         await communicator.disconnect()
+        await communicator.wait()
+        await database_sync_to_async(close_old_connections)()
 
-        count = await database_sync_to_async(
-            Charger.objects.filter(charger_id="DUPC").count
-        )()
+        count = await self._retry_db(
+            lambda: Charger.objects.filter(charger_id="DUPC").count()
+        )
         self.assertEqual(count, 2)
-        connectors = await database_sync_to_async(list)(
-            Charger.objects.filter(charger_id="DUPC").values_list(
-                "connector_id", flat=True
+        connectors = await self._retry_db(
+            lambda: list(
+                Charger.objects.filter(charger_id="DUPC").values_list(
+                    "connector_id", flat=True
+                )
             )
         )
         self.assertIn("1", connectors)
