@@ -433,3 +433,9 @@ if [[ -n "$PROTECTED_CONN_BACKUP" ]]; then
     fi
     nmcli connection delete "$PROTECTED_CONN_BACKUP" >/dev/null 2>&1 || true
 fi
+
+# Ensure NetworkManager leaves Wi-Fi interfaces in a state where new
+# connections can be discovered after the script completes.
+nmcli radio wifi on >/dev/null 2>&1 || true
+nmcli device set wlan1 managed yes >/dev/null 2>&1 || true
+nmcli device connect wlan1 >/dev/null 2>&1 || true
