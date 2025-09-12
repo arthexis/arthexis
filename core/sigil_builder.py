@@ -1,21 +1,19 @@
 from __future__ import annotations
 
-import os
 import re
-from io import StringIO
 
 from django.apps import apps
-from django.conf import settings
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
-from django.core import serializers
-from django.core.management import call_command
-from django.db import models
 from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.translation import gettext_lazy as _
 
 from .fields import SigilAutoFieldMixin
+from .sigil_resolver import (
+    resolve_sigils as resolve_sigils_in_text,
+    resolve_sigil as _resolve_sigil,
+)
 
 
 def _generate_prefix(name: str, existing: set[str]) -> str:
@@ -54,82 +52,6 @@ def generate_model_sigils(**kwargs) -> None:
             content_type=ct,
         )
         existing.add(prefix.upper())
-
-
-SIGIL_PATTERN = re.compile(
-    r"\[([A-Za-z0-9_-]+)(?:=([A-Za-z0-9_-]+))?(?:\.([A-Za-z0-9_-]+)(?:=([^\]]+))?)?\]",
-    re.IGNORECASE,
-)
-
-
-def _resolve_sigil(sigil: str) -> str:
-    """Return resolved value for ``sigil`` or empty string."""
-    SigilRoot = apps.get_model("core", "SigilRoot")
-    match = SIGIL_PATTERN.fullmatch(sigil)
-    if not match:
-        return ""
-    root_name, instance_id, key, param = match.groups()
-    root_name = root_name.replace("-", "_").upper()
-    if key:
-        key = key.replace("-", "_").upper()
-    try:
-        root = SigilRoot.objects.get(prefix__iexact=root_name)
-        if root.context_type == SigilRoot.Context.CONFIG:
-            if not key:
-                return ""
-            if root.prefix.upper() == "ENV":
-                return os.environ.get(key.upper(), "")
-            if root.prefix.upper() == "SYS":
-                return str(getattr(settings, key.upper(), ""))
-            if root.prefix.upper() == "CMD":
-                out = StringIO()
-                args: list[str] = []
-                if param:
-                    args.append(param)
-                call_command(key.lower(), *args, stdout=out)
-                return out.getvalue().strip()
-        elif root.context_type == SigilRoot.Context.ENTITY:
-            model = root.content_type.model_class() if root.content_type else None
-            instance = None
-            if model:
-                if instance_id:
-                    try:
-                        instance = model.objects.filter(pk=instance_id).first()
-                    except (ValueError, TypeError):
-                        instance = None
-                    if instance is None:
-                        for field in model._meta.fields:
-                            if field.unique and isinstance(field, models.CharField):
-                                instance = model.objects.filter(
-                                    **{f"{field.name}__iexact": instance_id}
-                                ).first()
-                                if instance:
-                                    break
-                else:
-                    instance = model.objects.order_by("?").first()
-            if instance:
-                if key:
-                    field = next(
-                        (
-                            f
-                            for f in model._meta.fields
-                            if f.name.lower() == key.lower()
-                        ),
-                        None,
-                    )
-                    if field:
-                        val = getattr(instance, field.attname)
-                        return "" if val is None else str(val)
-                else:
-                    return serializers.serialize("json", [instance])
-        return ""
-    except Exception:
-        return ""
-
-
-def resolve_sigils_in_text(text: str) -> str:
-    """Resolve all sigils within ``text`` and return the result."""
-    return SIGIL_PATTERN.sub(lambda m: _resolve_sigil(m.group(0)), text)
 
 
 def _sigil_builder_view(request):

@@ -631,6 +631,7 @@ class EmailArtifact(Entity):
         unique_together = ("collector", "fingerprint")
         verbose_name = "Email Artifact"
         verbose_name_plural = "Email Artifacts"
+        ordering = ["-id"]
 
 
 class Reference(Entity):
