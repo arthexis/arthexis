@@ -116,15 +116,22 @@ command -v nmcli >/dev/null 2>&1 || {
     exit 1
 }
 
-# Detect the active internet connection unless running in unsafe mode
+# Detect the active internet connection and back it up
 PROTECTED_DEV=""
 PROTECTED_CONN=""
-if [[ $UNSAFE == false && $INITIAL_CONNECTIVITY == true ]]; then
+PROTECTED_CONN_BACKUP=""
+if [[ $INITIAL_CONNECTIVITY == true ]]; then
     PROTECTED_DEV=$(ip route get 8.8.8.8 2>/dev/null | awk '/dev/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); break}}' || true)
     if [[ -n "$PROTECTED_DEV" ]]; then
         PROTECTED_CONN=$(nmcli -t -f NAME,DEVICE connection show --active | awk -F: -v dev="$PROTECTED_DEV" '$2==dev {print $1; exit}')
         if [[ -n "$PROTECTED_CONN" ]]; then
-            echo "Preserving active connection '$PROTECTED_CONN' on '$PROTECTED_DEV'"
+            if [[ $UNSAFE == false ]]; then
+                echo "Preserving active connection '$PROTECTED_CONN' on '$PROTECTED_DEV'"
+            else
+                echo "Detected active connection '$PROTECTED_CONN' on '$PROTECTED_DEV'"
+            fi
+            PROTECTED_CONN_BACKUP="${PROTECTED_CONN}-backup"
+            nmcli connection clone "$PROTECTED_CONN" "$PROTECTED_CONN_BACKUP" >/dev/null 2>&1 || PROTECTED_CONN_BACKUP=""
         fi
     fi
 fi
@@ -402,4 +409,12 @@ if [[ $RUN_ROUTING == true ]]; then
         echo "No internet connectivity after configuration." >&2
         exit 1
     fi
+fi
+
+# Restore any previously active connection that was removed
+if [[ -n "$PROTECTED_CONN_BACKUP" ]]; then
+    if ! nmcli -t -f NAME connection show | grep -Fxq "$PROTECTED_CONN"; then
+        nmcli connection clone "$PROTECTED_CONN_BACKUP" "$PROTECTED_CONN" >/dev/null 2>&1 || true
+    fi
+    nmcli connection delete "$PROTECTED_CONN_BACKUP" >/dev/null 2>&1 || true
 fi
