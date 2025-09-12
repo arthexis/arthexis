@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 
-from ocpp.models import Charger, Transaction, MeterReading
+from ocpp.models import Charger, Transaction, MeterValue
 from core.models import EnergyAccount
 
 
@@ -29,12 +29,11 @@ class TransactionExportImportTests(TestCase):
             charger=self.ch2,
             start_time=now,
         )
-        MeterReading.objects.create(
+        MeterValue.objects.create(
             charger=self.ch1,
             transaction=self.tx_old,
             timestamp=now - timedelta(days=5),
-            value=1,
-            unit="kW",
+            energy=1,
         )
 
     def test_export_filters_and_import_creates_chargers(self):
@@ -55,7 +54,7 @@ class TransactionExportImportTests(TestCase):
         self.assertEqual(len(data["transactions"]), 1)
         self.assertEqual(data["transactions"][0]["charger"], "C2")
 
-        MeterReading.objects.all().delete()
+        MeterValue.objects.all().delete()
         Transaction.objects.all().delete()
         Charger.objects.all().delete()
 
@@ -117,7 +116,7 @@ class TransactionAdminExportImportTests(TestCase):
                     "meter_stop": 0,
                     "start_time": timezone.now().isoformat(),
                     "stop_time": None,
-                    "meter_readings": [],
+                    "meter_values": [],
                 }
             ],
         }

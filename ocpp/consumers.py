@@ -13,7 +13,7 @@ from config.offline import requires_network
 from . import store
 from decimal import Decimal
 from django.utils.dateparse import parse_datetime
-from .models import Transaction, Charger, MeterReading
+from .models import Transaction, Charger, MeterValue
 
 
 class SinkConsumer(AsyncWebsocketConsumer):
@@ -108,15 +108,12 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             )
 
     async def _store_meter_values(self, payload: dict, raw_message: str) -> None:
-        """Parse a MeterValues payload into MeterReading rows."""
+        """Parse a MeterValues payload into MeterValue rows."""
         connector = payload.get("connectorId")
         await self._assign_connector(connector)
         tx_id = payload.get("transactionId")
         tx_obj = None
         if tx_id is not None:
-            # Look up an existing transaction, first in the in-memory store
-            # then in the database.  If none exists create one so that meter
-            # readings can be linked to it.
             tx_obj = store.transactions.get(self.charger_id)
             if not tx_obj or tx_obj.pk != int(tx_id):
                 tx_obj = await database_sync_to_async(
@@ -133,48 +130,72 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             tx_obj = store.transactions.get(self.charger_id)
 
         readings = []
-        start_updated = False
+        updated_fields: set[str] = set()
         temperature = None
         temp_unit = ""
         for mv in payload.get("meterValue", []):
             ts = parse_datetime(mv.get("timestamp"))
+            values: dict[str, Decimal] = {}
+            context = ""
             for sv in mv.get("sampledValue", []):
                 try:
                     val = Decimal(str(sv.get("value")))
                 except Exception:
                     continue
-                if (
-                    tx_obj
-                    and tx_obj.meter_start is None
-                    and sv.get("measurand", "") in ("", "Energy.Active.Import.Register")
-                ):
-                    try:
-                        unit = sv.get("unit")
-                        mult = 1000 if unit in ("kW", "kWh") else 1
-                        tx_obj.meter_start = int(val * mult)
-                        start_updated = True
-                    except Exception:
-                        pass
+                context = sv.get("context", context or "")
                 measurand = sv.get("measurand", "")
                 unit = sv.get("unit", "")
-                if measurand == "Temperature":
+                field = None
+                if measurand in ("", "Energy.Active.Import.Register"):
+                    field = "energy"
+                    if unit == "Wh":
+                        val = val / Decimal("1000")
+                elif measurand == "Voltage":
+                    field = "voltage"
+                elif measurand == "Current.Import":
+                    field = "current_import"
+                elif measurand == "Current.Offered":
+                    field = "current_offered"
+                elif measurand == "Temperature":
+                    field = "temperature"
                     temperature = val
                     temp_unit = unit
+                elif measurand == "SoC":
+                    field = "soc"
+                if field:
+                    if tx_obj and context in ("Transaction.Begin", "Transaction.End"):
+                        suffix = "start" if context == "Transaction.Begin" else "stop"
+                        if field == "energy":
+                            mult = 1000 if unit in ("kW", "kWh") else 1
+                            setattr(tx_obj, f"meter_{suffix}", int(val * mult))
+                            updated_fields.add(f"meter_{suffix}")
+                        else:
+                            setattr(tx_obj, f"{field}_{suffix}", val)
+                            updated_fields.add(f"{field}_{suffix}")
+                    else:
+                        values[field] = val
+            if values and context not in ("Transaction.Begin", "Transaction.End"):
                 readings.append(
-                    MeterReading(
+                    MeterValue(
                         charger=self.charger,
                         connector_id=connector,
                         transaction=tx_obj,
                         timestamp=ts,
-                        measurand=measurand,
-                        value=val,
-                        unit=unit,
+                        context=context,
+                        **values,
                     )
                 )
         if readings:
-            await database_sync_to_async(MeterReading.objects.bulk_create)(readings)
-            if tx_obj and start_updated:
-                await database_sync_to_async(tx_obj.save)(update_fields=["meter_start"])
+            await database_sync_to_async(MeterValue.objects.bulk_create)(readings)
+        if tx_obj and updated_fields:
+            await database_sync_to_async(tx_obj.save)(
+                update_fields=list(updated_fields)
+            )
+        if connector is not None and not self.charger.connector_id:
+            self.charger.connector_id = str(connector)
+            await database_sync_to_async(self.charger.save)(
+                update_fields=["connector_id"]
+            )
         if temperature is not None:
             self.charger.temperature = temperature
             self.charger.temperature_unit = temp_unit

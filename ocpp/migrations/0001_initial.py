@@ -107,7 +107,7 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
-            name="MeterReading",
+            name="MeterValue",
             fields=[
                 (
                     "id",
@@ -122,13 +122,47 @@ class Migration(migrations.Migration):
                 ("is_deleted", models.BooleanField(default=False, editable=False)),
                 ("connector_id", models.IntegerField(blank=True, null=True)),
                 ("timestamp", models.DateTimeField()),
-                ("measurand", models.CharField(blank=True, max_length=100)),
-                ("value", models.DecimalField(decimal_places=3, max_digits=12)),
-                ("unit", models.CharField(blank=True, max_length=16)),
+                ("context", models.CharField(blank=True, max_length=32)),
+                (
+                    "energy",
+                    models.DecimalField(
+                        decimal_places=3, max_digits=12, null=True, blank=True
+                    ),
+                ),
+                (
+                    "voltage",
+                    models.DecimalField(
+                        decimal_places=3, max_digits=12, null=True, blank=True
+                    ),
+                ),
+                (
+                    "current_import",
+                    models.DecimalField(
+                        decimal_places=3, max_digits=12, null=True, blank=True
+                    ),
+                ),
+                (
+                    "current_offered",
+                    models.DecimalField(
+                        decimal_places=3, max_digits=12, null=True, blank=True
+                    ),
+                ),
+                (
+                    "temperature",
+                    models.DecimalField(
+                        decimal_places=3, max_digits=12, null=True, blank=True
+                    ),
+                ),
+                (
+                    "soc",
+                    models.DecimalField(
+                        decimal_places=3, max_digits=12, null=True, blank=True
+                    ),
+                ),
             ],
             options={
-                "verbose_name": "Meter Reading",
-                "verbose_name_plural": "Meter Readings",
+                "verbose_name": "Meter Value",
+                "verbose_name_plural": "Meter Values",
             },
         ),
         migrations.CreateModel(
@@ -193,6 +227,66 @@ class Migration(migrations.Migration):
                 ("vin", models.CharField(blank=True, max_length=17)),
                 ("meter_start", models.IntegerField(blank=True, null=True)),
                 ("meter_stop", models.IntegerField(blank=True, null=True)),
+                (
+                    "voltage_start",
+                    models.DecimalField(
+                        blank=True, decimal_places=3, max_digits=12, null=True
+                    ),
+                ),
+                (
+                    "voltage_stop",
+                    models.DecimalField(
+                        blank=True, decimal_places=3, max_digits=12, null=True
+                    ),
+                ),
+                (
+                    "current_import_start",
+                    models.DecimalField(
+                        blank=True, decimal_places=3, max_digits=12, null=True
+                    ),
+                ),
+                (
+                    "current_import_stop",
+                    models.DecimalField(
+                        blank=True, decimal_places=3, max_digits=12, null=True
+                    ),
+                ),
+                (
+                    "current_offered_start",
+                    models.DecimalField(
+                        blank=True, decimal_places=3, max_digits=12, null=True
+                    ),
+                ),
+                (
+                    "current_offered_stop",
+                    models.DecimalField(
+                        blank=True, decimal_places=3, max_digits=12, null=True
+                    ),
+                ),
+                (
+                    "temperature_start",
+                    models.DecimalField(
+                        blank=True, decimal_places=3, max_digits=12, null=True
+                    ),
+                ),
+                (
+                    "temperature_stop",
+                    models.DecimalField(
+                        blank=True, decimal_places=3, max_digits=12, null=True
+                    ),
+                ),
+                (
+                    "soc_start",
+                    models.DecimalField(
+                        blank=True, decimal_places=3, max_digits=12, null=True
+                    ),
+                ),
+                (
+                    "soc_stop",
+                    models.DecimalField(
+                        blank=True, decimal_places=3, max_digits=12, null=True
+                    ),
+                ),
                 ("start_time", models.DateTimeField()),
                 ("stop_time", models.DateTimeField(blank=True, null=True)),
             ],

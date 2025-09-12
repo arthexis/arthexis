@@ -6,7 +6,7 @@ from typing import Iterable
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from .models import Charger, Transaction, MeterReading
+from .models import Charger, Transaction, MeterValue
 
 
 def export_transactions(
@@ -18,7 +18,7 @@ def export_transactions(
     qs = (
         Transaction.objects.all()
         .select_related("charger")
-        .prefetch_related("meter_readings")
+        .prefetch_related("meter_values")
     )
     if start:
         qs = qs.filter(start_time__gte=start)
@@ -48,17 +48,41 @@ def export_transactions(
                 "vin": tx.vin,
                 "meter_start": tx.meter_start,
                 "meter_stop": tx.meter_stop,
+                "voltage_start": tx.voltage_start,
+                "voltage_stop": tx.voltage_stop,
+                "current_import_start": tx.current_import_start,
+                "current_import_stop": tx.current_import_stop,
+                "current_offered_start": tx.current_offered_start,
+                "current_offered_stop": tx.current_offered_stop,
+                "temperature_start": tx.temperature_start,
+                "temperature_stop": tx.temperature_stop,
+                "soc_start": tx.soc_start,
+                "soc_stop": tx.soc_stop,
                 "start_time": tx.start_time.isoformat(),
                 "stop_time": tx.stop_time.isoformat() if tx.stop_time else None,
-                "meter_readings": [
+                "meter_values": [
                     {
-                        "connector_id": mr.connector_id,
-                        "timestamp": mr.timestamp.isoformat(),
-                        "measurand": mr.measurand,
-                        "value": str(mr.value),
-                        "unit": mr.unit,
+                        "connector_id": mv.connector_id,
+                        "timestamp": mv.timestamp.isoformat(),
+                        "context": mv.context,
+                        "energy": str(mv.energy) if mv.energy is not None else None,
+                        "voltage": str(mv.voltage) if mv.voltage is not None else None,
+                        "current_import": (
+                            str(mv.current_import)
+                            if mv.current_import is not None
+                            else None
+                        ),
+                        "current_offered": (
+                            str(mv.current_offered)
+                            if mv.current_offered is not None
+                            else None
+                        ),
+                        "temperature": (
+                            str(mv.temperature) if mv.temperature is not None else None
+                        ),
+                        "soc": str(mv.soc) if mv.soc is not None else None,
                     }
-                    for mr in tx.meter_readings.all()
+                    for mv in tx.meter_values.all()
                 ],
             }
         )
@@ -102,18 +126,32 @@ def import_transactions(data: dict) -> int:
             vin=tx.get("vin", ""),
             meter_start=tx.get("meter_start"),
             meter_stop=tx.get("meter_stop"),
+            voltage_start=tx.get("voltage_start"),
+            voltage_stop=tx.get("voltage_stop"),
+            current_import_start=tx.get("current_import_start"),
+            current_import_stop=tx.get("current_import_stop"),
+            current_offered_start=tx.get("current_offered_start"),
+            current_offered_stop=tx.get("current_offered_stop"),
+            temperature_start=tx.get("temperature_start"),
+            temperature_stop=tx.get("temperature_stop"),
+            soc_start=tx.get("soc_start"),
+            soc_stop=tx.get("soc_stop"),
             start_time=_parse_dt(tx.get("start_time")),
             stop_time=_parse_dt(tx.get("stop_time")),
         )
-        for mr in tx.get("meter_readings", []):
-            MeterReading.objects.create(
+        for mv in tx.get("meter_values", []):
+            MeterValue.objects.create(
                 charger=charger,
                 transaction=transaction,
-                connector_id=mr.get("connector_id"),
-                timestamp=_parse_dt(mr.get("timestamp")),
-                measurand=mr.get("measurand", ""),
-                value=mr.get("value"),
-                unit=mr.get("unit", ""),
+                connector_id=mv.get("connector_id"),
+                timestamp=_parse_dt(mv.get("timestamp")),
+                context=mv.get("context", ""),
+                energy=mv.get("energy"),
+                voltage=mv.get("voltage"),
+                current_import=mv.get("current_import"),
+                current_offered=mv.get("current_offered"),
+                temperature=mv.get("temperature"),
+                soc=mv.get("soc"),
             )
         imported += 1
     return imported

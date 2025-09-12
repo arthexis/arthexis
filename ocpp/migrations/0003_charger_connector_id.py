@@ -54,4 +54,16 @@ class Migration(migrations.Migration):
             },
             bases=("core.electricvehicle",),
         ),
+        migrations.CreateModel(
+            name="MeterReading",
+            fields=[],
+            options={
+                "verbose_name": "Meter Value",
+                "verbose_name_plural": "Meter Values",
+                "proxy": True,
+                "indexes": [],
+                "constraints": [],
+            },
+            bases=("ocpp.metervalue",),
+        ),
     ]

@@ -36,11 +36,11 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.AddField(
-            model_name="meterreading",
+            model_name="metervalue",
             name="charger",
             field=models.ForeignKey(
                 on_delete=django.db.models.deletion.CASCADE,
-                related_name="meter_readings",
+                related_name="meter_values",
                 to="ocpp.charger",
             ),
         ),
@@ -65,13 +65,13 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.AddField(
-            model_name="meterreading",
+            model_name="metervalue",
             name="transaction",
             field=models.ForeignKey(
                 blank=True,
                 null=True,
                 on_delete=django.db.models.deletion.CASCADE,
-                related_name="meter_readings",
+                related_name="meter_values",
                 to="ocpp.transaction",
             ),
         ),

@@ -244,30 +244,17 @@ def charger_status(request, cid):
     chart_data = {"labels": [], "values": []}
     if tx_obj:
         readings = list(
-            tx_obj.meter_readings.filter(
-                measurand__in=["", "Energy.Active.Import.Register"]
-            ).order_by("timestamp")
+            tx_obj.meter_values.filter(energy__isnull=False).order_by("timestamp")
         )
-        use_register = any(r.unit in ("Wh", "kWh") for r in readings)
-        total = 0.0
         start_val = None
         for reading in readings:
             try:
-                val = float(reading.value)
+                val = float(reading.energy)
             except (TypeError, ValueError):
                 continue
-            if use_register and reading.unit in ("Wh", "kWh"):
-                val_kwh = val / (1000.0 if reading.unit == "Wh" else 1.0)
-                if start_val is None:
-                    start_val = (
-                        (tx_obj.meter_start or 0) / 1000.0
-                        if tx_obj.meter_start is not None
-                        else val_kwh
-                    )
-                total = val_kwh - start_val
-            else:
-                inc = val if reading.unit == "kW" else val / 1000.0
-                total += inc
+            if start_val is None:
+                start_val = val
+            total = val - start_val
             chart_data["labels"].append(reading.timestamp.isoformat())
             chart_data["values"].append(max(total, 0.0))
     return render(

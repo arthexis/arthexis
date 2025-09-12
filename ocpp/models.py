@@ -144,7 +144,7 @@ class Charger(Entity):
         from . import store
 
         self.transactions.all().delete()
-        self.meter_readings.all().delete()
+        self.meter_values.all().delete()
         store.clear_log(self.charger_id, log_type="charger")
         store.transactions.pop(self.charger_id, None)
         store.history.pop(self.charger_id, None)
@@ -155,7 +155,7 @@ class Charger(Entity):
 
         if (
             self.transactions.exists()
-            or self.meter_readings.exists()
+            or self.meter_values.exists()
             or store.get_logs(self.charger_id, log_type="charger")
             or store.transactions.get(self.charger_id)
             or store.history.get(self.charger_id)
@@ -181,6 +181,36 @@ class Transaction(Entity):
     vin = models.CharField(max_length=17, blank=True)
     meter_start = models.IntegerField(null=True, blank=True)
     meter_stop = models.IntegerField(null=True, blank=True)
+    voltage_start = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
+    voltage_stop = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
+    current_import_start = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
+    current_import_stop = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
+    current_offered_start = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
+    current_offered_stop = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
+    temperature_start = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
+    temperature_stop = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
+    soc_start = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
+    soc_stop = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
     start_time = models.DateTimeField()
     stop_time = models.DateTimeField(null=True, blank=True)
 
@@ -194,64 +224,66 @@ class Transaction(Entity):
     @property
     def kw(self) -> float:
         """Return consumed energy in kW for this session."""
-        total = 0.0
-        readings = list(
-            self.meter_readings.filter(
-                measurand__in=["", "Energy.Active.Import.Register"]
-            ).order_by("timestamp")
-        )
-        use_register = any(r.unit in ("Wh", "kWh") for r in readings)
-        start_val = None
-        for reading in readings:
-            try:
-                val = float(reading.value)
-            except (TypeError, ValueError):  # pragma: no cover - unexpected
-                continue
-            if use_register and reading.unit in ("Wh", "kWh"):
-                val_kwh = val / (1000.0 if reading.unit == "Wh" else 1.0)
-                if start_val is None:
-                    start_val = (
-                        (self.meter_start or 0) / 1000.0
-                        if self.meter_start is not None
-                        else val_kwh
-                    )
-                total = val_kwh - start_val
-            else:
-                inc = val if reading.unit == "kW" else val / 1000.0
-                total += inc
-
-        if total == 0 and self.meter_start is not None and self.meter_stop is not None:
+        if self.meter_start is not None and self.meter_stop is not None:
             total = (self.meter_stop - self.meter_start) / 1000.0
-        if total < 0:
+            return max(total, 0.0)
+        readings = list(
+            self.meter_values.filter(energy__isnull=False).order_by("timestamp")
+        )
+        if not readings:
             return 0.0
-        return total
+        start_val = readings[0].energy or 0
+        end_val = readings[-1].energy or start_val
+        total = float(end_val - start_val)
+        return max(total, 0.0)
 
 
-class MeterReading(Entity):
+class MeterValue(Entity):
     """Parsed meter values reported by chargers."""
 
     charger = models.ForeignKey(
-        Charger, on_delete=models.CASCADE, related_name="meter_readings"
+        Charger, on_delete=models.CASCADE, related_name="meter_values"
     )
     connector_id = models.IntegerField(null=True, blank=True)
     transaction = models.ForeignKey(
         Transaction,
         on_delete=models.CASCADE,
-        related_name="meter_readings",
+        related_name="meter_values",
         null=True,
         blank=True,
     )
     timestamp = models.DateTimeField()
-    measurand = models.CharField(max_length=100, blank=True)
-    value = models.DecimalField(max_digits=12, decimal_places=3)
-    unit = models.CharField(max_length=16, blank=True)
+    context = models.CharField(max_length=32, blank=True)
+    energy = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True)
+    voltage = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
+    current_import = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
+    current_offered = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
+    temperature = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
+    soc = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.charger} {self.measurand} {self.value}{self.unit}".strip()
+        return f"{self.charger} {self.timestamp}"
 
     class Meta:
-        verbose_name = _("Meter Reading")
-        verbose_name_plural = _("Meter Readings")
+        verbose_name = _("Meter Value")
+        verbose_name_plural = _("Meter Values")
+
+
+class MeterReading(MeterValue):
+    """Proxy model for backwards compatibility."""
+
+    class Meta:
+        proxy = True
+        verbose_name = _("Meter Value")
+        verbose_name_plural = _("Meter Values")
 
 
 class Simulator(Entity):
