@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Network setup script
-# Configures eth0 with a shared static IP, connects wlan1 as the internet uplink,
-# and creates a Wi-Fi access point on wlan0 using NetworkManager (nmcli).
+# Configures eth0 with a shared static IP and sets up both the Hyperline
+# client and the gelectriic access point on wlan0 using NetworkManager (nmcli).
 
 set -euo pipefail
 
@@ -138,6 +138,7 @@ fi
 
 # Determine access point name and password before running steps
 AP_NAME="gelectriic-ap"
+HYPERLINE_NAME="hyperline"
 EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null || true)"
 if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
     while true; do
@@ -178,7 +179,7 @@ if [[ $RUN_AP == true ]]; then
     if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
         echo "Skipping wlan0 access point configuration to preserve '$PROTECTED_CONN'."
     else
-        nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" -v protect="$PROTECTED_CONN" '$2=="wlan0" && $1!=ap && $1!=protect {print $1}' | while read -r con; do
+        nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" -v hl="$HYPERLINE_NAME" -v protect="$PROTECTED_CONN" '$2=="wlan0" && $1!=ap && $1!=hl && $1!=protect {print $1}' | while read -r con; do
             nmcli connection delete "$con"
         done
 
@@ -195,9 +196,11 @@ if [[ $RUN_AP == true ]]; then
                 ipv4.never-default yes \
                 ipv6.method ignore \
                 ipv6.never-default yes \
-                connection.autoconnect yes
+                connection.autoconnect yes \
+                connection.autoconnect-priority 0
         else
-            nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" autoconnect yes \
+            nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" \
+                connection.interface-name wlan0 autoconnect yes connection.autoconnect-priority 0 \
                 ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
                 ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
                 wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
@@ -354,22 +357,19 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
     if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
         echo "Skipping wlan0 reconfiguration to preserve '$PROTECTED_CONN'."
     else
-        nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" -v protect="$PROTECTED_CONN" '$2=="wlan0" && $1!=ap && $1!=protect {print $1}' | while read -r con; do
+        nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" -v hl="$HYPERLINE_NAME" -v protect="$PROTECTED_CONN" '$2=="wlan0" && $1!=ap && $1!=hl && $1!=protect {print $1}' | while read -r con; do
             nmcli connection delete "$con"
         done
-    fi
 
-    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan1" ]]; then
-        echo "Skipping wlan1 configuration to preserve '$PROTECTED_CONN'."
-    else
-        nmcli connection delete hyperline 2>/dev/null || true
-        nmcli connection add type wifi ifname wlan1 con-name hyperline \
+        nmcli connection delete "$HYPERLINE_NAME" 2>/dev/null || true
+        nmcli connection add type wifi ifname wlan0 con-name "$HYPERLINE_NAME" \
+            connection.interface-name wlan0 \
             ssid "Hyperline" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "arthexis" \
-            autoconnect yes connection.autoconnect-priority 10 \
+            autoconnect yes connection.autoconnect-priority 20 \
             ipv4.method auto ipv6.method ignore ipv4.route-metric 50
 
-        if ! nmcli connection up hyperline; then
-            echo "Failed to activate Hyperline connection; trying existing wlan1 connections." >&2
+        if ! nmcli connection up "$HYPERLINE_NAME"; then
+            echo "Failed to activate Hyperline connection; trying existing wlan0 connections." >&2
             while read -r con; do
                 if nmcli connection up "$con"; then
                     break
@@ -392,12 +392,12 @@ if [[ $RUN_ROUTING == true ]]; then
         ip route del default dev wlan0 2>/dev/null || true
     fi
 
-    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan1" ]]; then
+    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
         echo "Skipping default route change to preserve '$PROTECTED_CONN'."
     else
-        WLAN1_GW=$(nmcli -g IP4.GATEWAY device show wlan1 2>/dev/null | head -n1)
-        if [[ -n "$WLAN1_GW" ]]; then
-            ip route replace default via "$WLAN1_GW" dev wlan1 2>/dev/null || true
+        WLAN0_GW=$(nmcli -g IP4.GATEWAY device show wlan0 2>/dev/null | head -n1)
+        if [[ -n "$WLAN0_GW" ]]; then
+            ip route replace default via "$WLAN0_GW" dev wlan0 2>/dev/null || true
         fi
     fi
 
@@ -405,8 +405,8 @@ if [[ $RUN_ROUTING == true ]]; then
     if check_connectivity; then
         echo "Internet connectivity confirmed."
     else
-        if ! nmcli -t -f NAME,DEVICE connection show --active | grep -Fxq "hyperline:wlan1" && \
-           nmcli -t -f DEVICE,STATE device status | grep -E '^wlan1:(connecting|connected)' >/dev/null; then
+        if ! nmcli -t -f NAME,DEVICE connection show --active | grep -Fxq "hyperline:wlan0" && \
+           nmcli -t -f DEVICE,STATE device status | grep -E '^wlan0:(connecting|connected)' >/dev/null; then
             sleep 10
             if check_connectivity; then
                 echo "Internet connectivity confirmed."
