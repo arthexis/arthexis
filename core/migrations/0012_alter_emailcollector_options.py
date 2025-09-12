@@ -5,6 +5,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
+    replaces = [("core", "0012_alter_rfid_reference")]
 
     dependencies = [
         ("core", "0011_invitelead_error_invitelead_sent_on"),
