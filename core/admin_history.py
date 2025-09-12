@@ -17,11 +17,13 @@ def patch_admin_history():
                 return ""
             return json.dumps({"added": fields})
         for name in form.changed_data:
-            fields.append({
-                "field": name,
-                "old": smart_str(form.initial.get(name)),
-                "new": smart_str(form.cleaned_data.get(name)),
-            })
+            fields.append(
+                {
+                    "field": name,
+                    "old": smart_str(form.initial.get(name)),
+                    "new": smart_str(form.cleaned_data.get(name)),
+                }
+            )
         if not fields:
             return ""
         return json.dumps({"changed": fields})
@@ -37,7 +39,8 @@ def patch_admin_history():
                 return "Added " + ", ".join(parts)
             if "changed" in data:
                 parts = [
-                    f"{d['field']}: '{d['old']}' -> '{d['new']}'" for d in data["changed"]
+                    f"{d['field']}: '{d['old']}' -> '{d['new']}'"
+                    for d in data["changed"]
                 ]
                 return "Changed " + ", ".join(parts)
         return self.change_message
