@@ -6,8 +6,11 @@
       "description": "Validate screen Admin header clock alignment",
       "url": "/admin/"
     }
-  }
-]
+  },
+  {
+    "model": "core.todo",
+    "pk": 2,
+    "fields": {
       "description": "Validate screen NodeRole admin list",
       "url": "/admin/nodes/noderole/",
       "is_seed_data": true
