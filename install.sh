@@ -55,6 +55,36 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/0
 EOF
 }
 
+check_nginx_and_redis() {
+    local role="$1"
+    local missing=()
+
+    if ! command -v nginx >/dev/null 2>&1; then
+        missing+=("nginx")
+    fi
+    if ! command -v redis-cli >/dev/null 2>&1; then
+        missing+=("redis-server")
+    fi
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        if [ ${#missing[@]} -eq 1 ]; then
+            echo "${missing[0]} is required for the $role role but is not installed."
+        else
+            echo "${missing[*]} are required for the $role role but are not installed."
+        fi
+        echo "Install ${missing[*]} and re-run this script. For Debian/Ubuntu:"
+        echo "  sudo apt-get update && sudo apt-get install ${missing[*]}"
+        exit 1
+    fi
+
+    if ! redis-cli ping >/dev/null 2>&1; then
+        echo "Redis is required for the $role role but does not appear to be running."
+        echo "Start redis and re-run this script. For Debian/Ubuntu:"
+        echo "  sudo systemctl start redis-server"
+        exit 1
+    fi
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --service)
@@ -130,7 +160,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --control)
-            require_nginx "control"
+            check_nginx_and_redis "control"
             AUTO_UPGRADE=true
             NGINX_MODE="internal"
             SERVICE="arthexis"
