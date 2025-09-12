@@ -498,27 +498,35 @@ class EmailCollectorAdmin(EntityModelAdmin):
 
 
 @admin.register(OdooProfile)
-class OdooProfileAdmin(EntityModelAdmin):
-    change_form_template = "admin/user_datum_change_form.html"
+class OdooProfileAdmin(SaveBeforeChangeAction, EntityModelAdmin):
+    change_form_template = "django_object_actions/change_form.html"
     form = OdooProfileAdminForm
     list_display = ("user", "host", "database", "verified_on")
     readonly_fields = ("verified_on", "odoo_uid", "name", "email")
     actions = ["verify_credentials"]
+    change_actions = ["verify_credentials_action"]
     fieldsets = (
         (None, {"fields": ("user", "host", "database", "username", "password")}),
         ("Odoo", {"fields": ("verified_on", "odoo_uid", "name", "email")}),
     )
 
-    @admin.action(description="Test selected credentials")
+    def _verify_credentials(self, request, profile):
+        try:
+            profile.verify()
+            self.message_user(request, f"{profile.user} verified")
+        except Exception as exc:  # pragma: no cover - admin feedback
+            self.message_user(request, f"{profile.user}: {exc}", level=messages.ERROR)
+
+    @admin.action(description="Test credentials")
     def verify_credentials(self, request, queryset):
         for profile in queryset:
-            try:
-                profile.verify()
-                self.message_user(request, f"{profile.user} verified")
-            except Exception as exc:  # pragma: no cover - admin feedback
-                self.message_user(
-                    request, f"{profile.user}: {exc}", level=messages.ERROR
-                )
+            self._verify_credentials(request, profile)
+
+    def verify_credentials_action(self, request, obj):
+        self._verify_credentials(request, obj)
+
+    verify_credentials_action.label = "Test credentials"
+    verify_credentials_action.short_description = "Test credentials"
 
 
 class EmailInbox(CoreEmailInbox):

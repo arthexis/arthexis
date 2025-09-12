@@ -71,4 +71,14 @@
       "is_seed_data": true
     }
   }
+  ,
+  {
+    "model": "core.todo",
+    "pk": 8,
+    "fields": {
+      "description": "Validate screen Odoo profile change form",
+      "url": "/admin/core/odooprofile/1/change/",
+      "is_seed_data": true
+    }
+  }
 ]
