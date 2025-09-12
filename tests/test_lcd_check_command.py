@@ -36,3 +36,31 @@ def test_lcd_check_sends_random_string(tmp_path):
     mock_lcd.assert_called_once()
     mock_lcd.return_value.init_lcd.assert_called_once()
     mock_notify.assert_called_once_with(subject="ABC123")
+
+
+def test_lcd_check_advises_when_i2c_missing(tmp_path, capsys):
+    locks = tmp_path / "locks"
+    locks.mkdir()
+    (locks / "lcd_screen.lck").write_text("hello\n", encoding="utf-8")
+    (locks / "service.lck").write_text("demo", encoding="utf-8")
+
+    with (
+        patch(
+            "core.management.commands.lcd_check.CharLCD1602",
+            side_effect=FileNotFoundError(2, "No such file or directory", "/dev/i2c-1"),
+        ),
+        patch("core.management.commands.lcd_check.notify"),
+        patch("builtins.input", return_value="n"),
+        patch("random.choices", return_value=list("ABC123")),
+        patch(
+            "subprocess.run",
+            return_value=SimpleNamespace(returncode=0, stdout="active\n"),
+        ),
+        patch.object(settings, "BASE_DIR", tmp_path),
+    ):
+        call_command("lcd_check")
+
+    out = capsys.readouterr().out
+    assert "Unexpected error during LCD init" in out
+    assert "enable the I2C interface" in out
+    assert "raspi-config" in out
