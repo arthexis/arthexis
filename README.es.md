@@ -11,6 +11,25 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
 - Funciona en [Windows 11](https://www.microsoft.com/es-es/windows/windows-11) y [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Probado para la [Raspberry Pi 4 Modelo B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 
+## Quick Guide
+
+### Clonar
+- **[Linux](https://es.wikipedia.org/wiki/Linux)**: abre una [terminal](https://es.wikipedia.org/wiki/Interfaz_de_l%C3%ADnea_de_comandos) y ejecuta  
+  `git clone https://github.com/arthexis/arthexis.git`
+- **[Windows](https://es.wikipedia.org/wiki/Microsoft_Windows)**: abre [PowerShell](https://learn.microsoft.com/es-es/powershell/) o [Git Bash](https://gitforwindows.org/) y ejecuta el mismo comando.
+
+### Iniciar y detener
+- **[VS Code](https://code.visualstudio.com/)**: abre la carpeta y ejecuta  
+  `python [vscode_manage.py](vscode_manage.py) runserver`; presiona `Ctrl+C` para detener.
+- **[Shell](https://es.wikipedia.org/wiki/Shell_de_unidad_de_comandos)**: en Linux ejecuta [`./start.sh`](start.sh) y detén con [`./stop.sh`](stop.sh); en Windows ejecuta [`start.bat`](start.bat) y detén con `Ctrl+C`.
+
+### Instalar y actualizar
+- **Linux**: usa [`./install.sh`](install.sh) con opciones como `--service NOMBRE`, `--public` o `--internal`, `--port PUERTO`, `--upgrade`, `--auto-upgrade`, `--latest`, `--celery`, `--lcd-screen`, `--no-lcd-screen`, `--clean`, `--datasette`. Actualiza con [`./upgrade.sh`](upgrade.sh) usando opciones como `--latest`, `--clean` o `--no-restart`.
+- **Windows**: ejecuta [`install.bat`](install.bat) para instalar y [`upgrade.bat`](upgrade.bat) para actualizar.
+
+### Administración
+Visita [`http://localhost:8888/admin/`](http://localhost:8888/admin/) para el [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) y [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) para la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa el puerto `8000` si iniciaste con [`start.bat`](start.bat) o la opción `--public`.
+
 ## Soporte
 
 Contáctenos en [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) o visite nuestro [sitio web](https://www.gelectriic.com/) para [servicios profesionales](https://es.wikipedia.org/wiki/Servicios_profesionales) y [soporte comercial](https://es.wikipedia.org/wiki/Soporte_t%C3%A9cnico).
