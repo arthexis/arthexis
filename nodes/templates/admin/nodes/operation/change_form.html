@@ -1,9 +1,0 @@
-{% extends "admin/user_datum_change_form.html" %}
-{% load i18n %}
-
-{% block object-tools-items %}
-    {% if run_url %}
-        <li><a href="{{ run_url }}">{% trans "Run operation" %}</a></li>
-    {% endif %}
-    {{ block.super }}
-{% endblock %}

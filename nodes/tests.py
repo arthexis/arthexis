@@ -37,8 +37,6 @@ from .tasks import capture_node_screenshot, sample_clipboard
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from core.models import PackageRelease
-from .models import Operation
-from .admin import RUN_CONTEXTS
 
 
 class NodeTests(TestCase):
@@ -1101,28 +1099,3 @@ class NodeRoleAdminTests(TestCase):
         )
         resp = self.client.get(reverse("admin:nodes_noderole_changelist"))
         self.assertContains(resp, '<td class="field-registered">1</td>', html=True)
-
-
-class OperationWorkflowTests(TestCase):
-    def setUp(self):
-        self.client = Client()
-        User = get_user_model()
-        self.user = User.objects.create_superuser(
-            username="admin", email="admin@example.com", password="pwd"
-        )
-        self.client.force_login(self.user)
-
-    def tearDown(self):
-        RUN_CONTEXTS.clear()
-
-    def test_unresolved_sigils_prompt(self):
-        op = Operation.objects.create(name="op1", command="[ENV.MISSING]")
-        url = reverse("admin:nodes_operation_run", args=[op.pk])
-        resp = self.client.post(url, follow=True)
-        self.assertContains(resp, 'name="ENV__MISSING"')
-
-    def test_continue_effect(self):
-        op = Operation.objects.create(name="op2", command="...")
-        url = reverse("admin:nodes_operation_run", args=[op.pk])
-        resp = self.client.post(url, follow=True)
-        self.assertContains(resp, 'value="Continue"')
