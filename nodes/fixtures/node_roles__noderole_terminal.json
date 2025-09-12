@@ -1,0 +1,12 @@
+[
+{
+  "model": "nodes.noderole",
+  "pk": 1,
+  "fields": {
+    "is_seed_data": false,
+    "is_deleted": false,
+    "name": "Updated",
+    "description": ""
+  }
+}
+]

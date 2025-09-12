@@ -53,7 +53,7 @@ class ReleaseProgressViewTests(TestCase):
     @mock.patch("core.views.release_utils._git_clean", return_value=False)
     @mock.patch("core.views.release_utils.network_available", return_value=False)
     def test_dirty_fixtures_committed(self, net, git_clean):
-        fixture_path = Path("core/fixtures/releases.json")
+        fixture_path = Path("core/fixtures/releases__packagerelease_0_1_3.json")
         original = fixture_path.read_text(encoding="utf-8")
         fixture_path.write_text("[]", encoding="utf-8")
         self.addCleanup(lambda: fixture_path.write_text(original, encoding="utf-8"))
@@ -61,7 +61,7 @@ class ReleaseProgressViewTests(TestCase):
         def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
             if cmd[:3] == ["git", "status", "--porcelain"]:
                 return subprocess.CompletedProcess(
-                    cmd, 0, stdout=" M core/fixtures/releases.json\n", stderr=""
+                    cmd, 0, stdout=f" M {fixture_path}\n", stderr=""
                 )
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
@@ -69,8 +69,8 @@ class ReleaseProgressViewTests(TestCase):
             url = reverse("release-progress", args=[self.release.pk, "publish"])
             response = self.client.get(f"{url}?step=0")
 
-        self.assertContains(response, "core/fixtures/releases.json")
-        run.assert_any_call(["git", "add", "core/fixtures/releases.json"], check=True)
+        self.assertContains(response, str(fixture_path))
+        run.assert_any_call(["git", "add", str(fixture_path)], check=True)
         run.assert_any_call(
             ["git", "commit", "-m", "chore: update fixtures"], check=True
         )

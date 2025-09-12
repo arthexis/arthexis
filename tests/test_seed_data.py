@@ -222,7 +222,9 @@ class EnvRefreshNodeTests(TestCase):
 
 class SeedDataViewTests(TestCase):
     def setUp(self):
-        call_command("loaddata", "nodes/fixtures/node_roles.json")
+        from glob import glob
+
+        call_command("loaddata", *glob("nodes/fixtures/node_roles__*.json"))
         NodeRole.objects.filter(pk=1).update(is_seed_data=True)
         User = get_user_model()
         self.user = User.objects.create_superuser("sdadmin", password="pw")
@@ -230,4 +232,4 @@ class SeedDataViewTests(TestCase):
 
     def test_seed_data_view_shows_fixture(self):
         response = self.client.get(reverse("admin:seed_data"))
-        self.assertContains(response, "node_roles.json")
+        self.assertContains(response, "node_roles__noderole_terminal.json")

@@ -16,6 +16,7 @@
 - After modifying a view or any part of the GUI, add a `Todo` fixture titled `Validate screen [Screen]` and set its `url` to the screen needing manual validation.
 - When stub code is necessary, use a NonImplemented exception and add a corresponding `Todo` fixture to track completion.
 - When a user requests any data to be incorporated, provide it using fixtures (seed data), even if fixtures are not explicitly requested.
+- Store each fixture object in its own file to avoid merge conflicts, giving each file a unique name related to the item it contains.
 - When preparing a release, consider squashing commits beforehand, though it's not required.
 - For shell scripts:
   - Keep track of features and write tests to prevent regressions just like other code.

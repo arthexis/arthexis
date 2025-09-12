@@ -18,7 +18,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         base = Path(settings.BASE_DIR)
         for path in sorted(base.glob("**/fixtures/*.json")):
-            if path.name == "users.json":
+            if path.name.startswith("users__"):
                 continue
             try:
                 with path.open() as fh:

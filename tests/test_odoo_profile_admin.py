@@ -66,7 +66,7 @@ class OdooProfileAdminActionTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_superuser(
-            username="admin", email="a@example.com", password="pwd"
+            username="odooadmin", email="a@example.com", password="pwd"
         )
         self.profile = OdooProfile.objects.create(
             user=self.user,

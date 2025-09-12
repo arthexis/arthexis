@@ -1,11 +1,17 @@
 from django.test import TestCase
 from django.urls import reverse
+from pathlib import Path
 
 from .models import CableSize, ConduitFill, CalculatorTemplate, PowerLead
 
 
 class AWGCalculatorTests(TestCase):
-    fixtures = ["calculator_templates.json"]
+    fixtures = [
+        p.name
+        for p in (Path(__file__).resolve().parent / "fixtures").glob(
+            "calculator_templates__*.json"
+        )
+    ]
 
     def setUp(self):
         CableSize.objects.create(

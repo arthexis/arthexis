@@ -19,7 +19,7 @@ from .models import RFID
 from . import release as release_utils
 
 
-TODO_FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "todos.json"
+TODO_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
 
 
 def _append_log(path: Path, message: str) -> None:
@@ -139,22 +139,16 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
             version=release.version,
             creds=release.to_credentials(),
         )
+        from glob import glob
+
+        paths = ["VERSION", *glob("core/fixtures/releases__*.json")]
         diff = subprocess.run(
-            [
-                "git",
-                "status",
-                "--porcelain",
-                "VERSION",
-                "core/fixtures/releases.json",
-            ],
+            ["git", "status", "--porcelain", *paths],
             capture_output=True,
             text=True,
         )
         if diff.stdout.strip():
-            subprocess.run(
-                ["git", "add", "VERSION", "core/fixtures/releases.json"],
-                check=True,
-            )
+            subprocess.run(["git", "add", *paths], check=True)
             subprocess.run(
                 [
                     "git",
@@ -471,13 +465,10 @@ def release_progress(request, pk: int, action: str):
 def todo_done(request, pk: int):
     todo = get_object_or_404(Todo, pk=pk, is_deleted=False)
     todo.delete()
-    try:
-        data = json.loads(TODO_FIXTURE_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        data = []
-    data = [item for item in data if item.get("pk") != todo.pk]
-    TODO_FIXTURE_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    subprocess.run(["git", "add", str(TODO_FIXTURE_PATH)], check=False)
+    path = TODO_FIXTURE_DIR / f"todos__todo_{pk}.json"
+    if path.exists():
+        path.unlink()
+        subprocess.run(["git", "add", str(path)], check=False)
     subprocess.run(["git", "commit", "-m", todo.description], check=False)
     subprocess.run(["git", "push"], check=False)
     return redirect("admin:index")
