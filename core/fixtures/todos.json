@@ -47,8 +47,9 @@
     "model": "core.todo",
     "pk": 5,
     "fields": {
-      "description": "Validate screen Email Inbox admin",
-      "url": "/admin/post_office/emailinbox/"
+      "description": "Validate screen Top navigation padding",
+      "url": "/",
+      "is_seed_data": true
     }
   }
 ]
