@@ -234,3 +234,29 @@ class SigilResolutionTests(TestCase):
         self.assertEqual(
             _resolve_sigil("[ROLE=Terminal.DESCRIPTION]"), term.description
         )
+
+    def test_node_role_serialized_sigil(self):
+        ct = ContentType.objects.get_for_model(NodeRole)
+        root = SigilRoot.objects.filter(prefix="ROLE").first()
+        if not root:
+            root = SigilRoot.objects.create(
+                prefix="ROLE", context_type=SigilRoot.Context.ENTITY, content_type=ct
+            )
+        term = NodeRole.objects.create(name="Terminal", description="term role")
+        other = NodeRole.objects.create(
+            name="Other", description=f"[{root.prefix}=Terminal]"
+        )
+        expected = [
+            {
+                "model": "nodes.noderole",
+                "pk": term.pk,
+                "fields": {
+                    "is_seed_data": False,
+                    "is_deleted": False,
+                    "name": "Terminal",
+                    "description": "term role",
+                },
+            }
+        ]
+        self.assertJSONEqual(other.resolve_sigils("description"), expected)
+        self.assertJSONEqual(_resolve_sigil(f"[{root.prefix}=Terminal]"), expected)
