@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.admin.sites import AdminSite
 from unittest.mock import patch
 
-from core.models import EmailInbox
+from core.models import EmailInbox, EmailCollector
 from core.admin import (
     EmailInboxAdminForm,
     EmailInboxAdmin,
@@ -106,3 +106,52 @@ class EmailInboxAdminActionTests(TestCase):
         response = self.admin.changeform_view(request, str(self.inbox.pk))
         content = response.render().content.decode()
         self.assertIn("Test Inbox", content)
+
+
+class EmailCollectorInlineTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="admin", email="a@example.com", password="pwd"
+        )
+        self.factory = RequestFactory()
+        self.admin = EmailInboxAdmin(AdminEmailInbox, AdminSite())
+
+    def test_can_add_multiple_collectors(self):
+        data = {
+            "user": self.user.pk,
+            "host": "imap.test",
+            "port": 993,
+            "username": "u",
+            "password": "p",
+            "protocol": EmailInbox.IMAP,
+            "use_ssl": "on",
+            "collectors-TOTAL_FORMS": "2",
+            "collectors-INITIAL_FORMS": "0",
+            "collectors-MIN_NUM_FORMS": "0",
+            "collectors-MAX_NUM_FORMS": "1000",
+            "collectors-0-id": "",
+            "collectors-0-subject": "s1",
+            "collectors-0-sender": "",
+            "collectors-0-body": "",
+            "collectors-0-fragment": "",
+            "collectors-1-id": "",
+            "collectors-1-subject": "s2",
+            "collectors-1-sender": "",
+            "collectors-1-body": "",
+            "collectors-1-fragment": "",
+            "_save": "Save",
+        }
+        request = self.factory.post("/", data)
+        request.user = self.user
+        request.session = self.client.session
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        request._messages = FallbackStorage(request)
+        request._dont_enforce_csrf_checks = True
+        with patch.object(EmailInboxAdmin, "log_addition"):
+            response = self.admin.add_view(request)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(EmailCollector.objects.count(), 2)
+        inbox = EmailInbox.objects.get()
+        self.assertEqual(inbox.collectors.count(), 2)

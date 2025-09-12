@@ -44,6 +44,7 @@ from .models import (
     Reference,
     OdooProfile,
     EmailInbox as CoreEmailInbox,
+    EmailCollector,
     Package,
     PackageRelease,
     ReleaseManager,
@@ -485,6 +486,17 @@ class OdooProfileAdminForm(forms.ModelForm):
         return pwd
 
 
+class EmailCollectorInline(admin.TabularInline):
+    model = EmailCollector
+    extra = 0
+
+
+@admin.register(EmailCollector)
+class EmailCollectorAdmin(EntityModelAdmin):
+    list_display = ("inbox", "subject", "sender")
+    search_fields = ("subject", "sender", "body")
+
+
 @admin.register(OdooProfile)
 class OdooProfileAdmin(EntityModelAdmin):
     change_form_template = "admin/user_datum_change_form.html"
@@ -566,6 +578,7 @@ class EmailInboxAdmin(EntityModelAdmin):
     list_display = ("user", "username", "host", "protocol")
     actions = ["test_connection", "search_inbox"]
     change_form_template = "admin/core/emailinbox/change_form.html"
+    inlines = [EmailCollectorInline]
 
     def get_urls(self):
         urls = super().get_urls()
