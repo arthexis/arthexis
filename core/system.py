@@ -19,7 +19,7 @@ from django.utils.translation import gettext_lazy as _
 
 
 def _gather_info() -> dict:
-    """Collect basic system information similar to status-check.sh."""
+    """Collect basic system information similar to status.sh."""
     base_dir = Path(settings.BASE_DIR)
     lock_dir = base_dir / "locks"
     info: dict[str, object] = {}
