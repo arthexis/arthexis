@@ -23,4 +23,16 @@ class Migration(migrations.Migration):
             },
             bases=("core.reference",),
         ),
+        migrations.CreateModel(
+            name="CustomSigil",
+            fields=[],
+            options={
+                "verbose_name": "Custom Sigil",
+                "verbose_name_plural": "Custom Sigils",
+                "proxy": True,
+                "indexes": [],
+                "constraints": [],
+            },
+            bases=("core.sigilroot",),
+        ),
     ]

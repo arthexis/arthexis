@@ -84,6 +84,14 @@ class SigilRoot(Entity):
         verbose_name_plural = "Sigil Roots"
 
 
+class CustomSigil(SigilRoot):
+    class Meta:
+        proxy = True
+        app_label = "pages"
+        verbose_name = _("Custom Sigil")
+        verbose_name_plural = _("Custom Sigils")
+
+
 class Lead(Entity):
     """Common request lead information."""
 

@@ -18,12 +18,14 @@
   <input type="text" id="sigil-filter" placeholder="{% trans 'Filter' %}" />
   <table id="sigil-table">
     <thead>
-      <tr><th>{% trans "Prefix" %}</th><th>{% trans "Model" %}</th><th>{% trans "Fields" %}</th></tr>
+      <tr><th>{% trans "Prefixes" %}</th><th>{% trans "Model" %}</th><th>{% trans "Fields" %}</th></tr>
     </thead>
     <tbody>
     {% for root in sigil_roots %}
       <tr>
-        <td>[{{ root.prefix }}]</td>
+        <td>
+          {% for prefix in root.prefixes %}[{{ prefix }}]{% if not forloop.last %}, {% endif %}{% endfor %}
+        </td>
         <td>{{ root.model }}</td>
         <td>{% for field in root.fields %}{{ field }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
       </tr>

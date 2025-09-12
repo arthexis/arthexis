@@ -31,3 +31,24 @@ class SigilBuilderTests(TestCase):
             {"sigils_file": upload},
         )
         self.assertContains(response, settings.LANGUAGE_CODE)
+
+    def test_builder_groups_multiple_roots(self):
+        from django.contrib.contenttypes.models import ContentType
+        from core.models import EmailInbox, SigilRoot
+
+        ct = ContentType.objects.get_for_model(EmailInbox)
+        SigilRoot.objects.get_or_create(
+            prefix="INBOX",
+            context_type=SigilRoot.Context.ENTITY,
+            content_type=ct,
+        )
+        SigilRoot.objects.get_or_create(
+            prefix="EMAIL",
+            context_type=SigilRoot.Context.ENTITY,
+            content_type=ct,
+        )
+        response = self.client.get("/admin/sigil-builder/")
+        self.assertContains(response, "[INBOX]")
+        self.assertContains(response, "[EMAIL]")
+        content = response.content.decode()
+        self.assertEqual(content.count("Email Inbox"), 1)

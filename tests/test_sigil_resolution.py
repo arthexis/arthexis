@@ -91,10 +91,10 @@ class SigilResolutionTests(TestCase):
 
     def test_entity_sigil(self):
         ct = ContentType.objects.get_for_model(OdooProfile)
-        root = SigilRoot.objects.filter(prefix="OP").first()
+        root = SigilRoot.objects.filter(prefix="ODOO").first()
         if not root:
             root = SigilRoot.objects.create(
-                prefix="OP", context_type=SigilRoot.Context.ENTITY, content_type=ct
+                prefix="ODOO", context_type=SigilRoot.Context.ENTITY, content_type=ct
             )
         profile = OdooProfile.objects.create(
             user=self.user,
@@ -109,10 +109,10 @@ class SigilResolutionTests(TestCase):
 
     def test_entity_sigil_hyphen_field(self):
         ct = ContentType.objects.get_for_model(OdooProfile)
-        root = SigilRoot.objects.filter(prefix="OP").first()
+        root = SigilRoot.objects.filter(prefix="ODOO").first()
         if not root:
             root = SigilRoot.objects.create(
-                prefix="OP", context_type=SigilRoot.Context.ENTITY, content_type=ct
+                prefix="ODOO", context_type=SigilRoot.Context.ENTITY, content_type=ct
             )
         profile = OdooProfile.objects.create(
             user=self.user,
@@ -128,10 +128,10 @@ class SigilResolutionTests(TestCase):
 
     def test_entity_sigil_with_id(self):
         ct = ContentType.objects.get_for_model(OdooProfile)
-        root = SigilRoot.objects.filter(prefix="OP").first()
+        root = SigilRoot.objects.filter(prefix="ODOO").first()
         if not root:
             root = SigilRoot.objects.create(
-                prefix="OP", context_type=SigilRoot.Context.ENTITY, content_type=ct
+                prefix="ODOO", context_type=SigilRoot.Context.ENTITY, content_type=ct
             )
         src_user = get_user_model().objects.create(username="srcuser")
         src = OdooProfile.objects.create(
@@ -154,10 +154,10 @@ class SigilResolutionTests(TestCase):
 
     def test_entity_sigil_from_context(self):
         ct = ContentType.objects.get_for_model(OdooProfile)
-        root = SigilRoot.objects.filter(prefix="OP").first()
+        root = SigilRoot.objects.filter(prefix="ODOO").first()
         if not root:
             root = SigilRoot.objects.create(
-                prefix="OP", context_type=SigilRoot.Context.ENTITY, content_type=ct
+                prefix="ODOO", context_type=SigilRoot.Context.ENTITY, content_type=ct
             )
         src_user = get_user_model().objects.create(username="ctxuser_src")
         src = OdooProfile.objects.create(
@@ -185,10 +185,10 @@ class SigilResolutionTests(TestCase):
 
     def test_entity_sigil_random_instance(self):
         ct = ContentType.objects.get_for_model(OdooProfile)
-        root = SigilRoot.objects.filter(prefix="OP").first()
+        root = SigilRoot.objects.filter(prefix="ODOO").first()
         if not root:
             root = SigilRoot.objects.create(
-                prefix="OP", context_type=SigilRoot.Context.ENTITY, content_type=ct
+                prefix="ODOO", context_type=SigilRoot.Context.ENTITY, content_type=ct
             )
         u1 = get_user_model().objects.create(username="randuser1")
         p1 = OdooProfile.objects.create(
@@ -221,14 +221,16 @@ class SigilResolutionTests(TestCase):
 
     def test_node_role_name_sigil(self):
         ct = ContentType.objects.get_for_model(NodeRole)
-        root = SigilRoot.objects.filter(prefix="NR").first()
+        root = SigilRoot.objects.filter(prefix="ROLE").first()
         if not root:
             root = SigilRoot.objects.create(
-                prefix="NR", context_type=SigilRoot.Context.ENTITY, content_type=ct
+                prefix="ROLE", context_type=SigilRoot.Context.ENTITY, content_type=ct
             )
         term = NodeRole.objects.create(name="Terminal", description="term role")
         other = NodeRole.objects.create(
-            name="Other", description="[NR=Terminal.DESCRIPTION]"
+            name="Other", description="[ROLE=Terminal.DESCRIPTION]"
         )
         self.assertEqual(other.resolve_sigils("description"), term.description)
-        self.assertEqual(_resolve_sigil("[NR=Terminal.DESCRIPTION]"), term.description)
+        self.assertEqual(
+            _resolve_sigil("[ROLE=Terminal.DESCRIPTION]"), term.description
+        )

@@ -123,19 +123,26 @@ def resolve_sigils_in_text(text: str) -> str:
 
 def _sigil_builder_view(request):
     SigilRoot = apps.get_model("core", "SigilRoot")
-    roots = []
+    grouped: dict[str, dict[str, object]] = {}
     for root in SigilRoot.objects.filter(
         context_type=SigilRoot.Context.ENTITY
     ).select_related("content_type"):
+        if not root.content_type:
+            continue
         model = root.content_type.model_class()
-        fields = [f.name.upper() for f in model._meta.fields]
-        roots.append(
+        model_name = model._meta.object_name
+        entry = grouped.setdefault(
+            model_name,
             {
-                "prefix": root.prefix.upper(),
-                "model": model._meta.object_name,
-                "fields": fields,
-            }
+                "model": model_name,
+                "fields": [f.name.upper() for f in model._meta.fields],
+                "prefixes": [],
+            },
         )
+        entry["prefixes"].append(root.prefix.upper())
+    roots = sorted(grouped.values(), key=lambda r: r["model"])
+    for entry in roots:
+        entry["prefixes"].sort()
 
     auto_fields = []
     for model in apps.get_models():
