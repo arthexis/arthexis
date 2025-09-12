@@ -13,7 +13,7 @@ from django.template.response import TemplateResponse
 from .models import (
     Charger,
     Simulator,
-    MeterReading,
+    MeterValue,
     Transaction,
     Location,
     ElectricVehicle,
@@ -242,10 +242,20 @@ class SimulatorAdmin(EntityModelAdmin):
     log_link.short_description = "Log"
 
 
-class MeterReadingInline(admin.TabularInline):
-    model = MeterReading
+class MeterValueInline(admin.TabularInline):
+    model = MeterValue
     extra = 0
-    fields = ("timestamp", "value", "unit", "measurand", "connector_id")
+    fields = (
+        "timestamp",
+        "context",
+        "energy",
+        "voltage",
+        "current_import",
+        "current_offered",
+        "temperature",
+        "soc",
+        "connector_id",
+    )
     readonly_fields = fields
     can_delete = False
 
@@ -266,7 +276,7 @@ class TransactionAdmin(EntityModelAdmin):
     readonly_fields = ("kw",)
     list_filter = ("charger", "account")
     date_hierarchy = "start_time"
-    inlines = [MeterReadingInline]
+    inlines = [MeterValueInline]
 
     def get_urls(self):
         urls = super().get_urls()
@@ -323,7 +333,7 @@ class TransactionAdmin(EntityModelAdmin):
         return TemplateResponse(request, "admin/ocpp/transaction/import.html", context)
 
 
-class MeterReadingDateFilter(admin.SimpleListFilter):
+class MeterValueDateFilter(admin.SimpleListFilter):
     title = "Timestamp"
     parameter_name = "timestamp_range"
 
@@ -354,18 +364,23 @@ class MeterReadingDateFilter(admin.SimpleListFilter):
         return queryset
 
 
-@admin.register(MeterReading)
-class MeterReadingAdmin(EntityModelAdmin):
+@admin.register(MeterValue)
+class MeterValueAdmin(EntityModelAdmin):
     list_display = (
         "charger",
         "timestamp",
-        "value",
-        "unit",
+        "context",
+        "energy",
+        "voltage",
+        "current_import",
+        "current_offered",
+        "temperature",
+        "soc",
         "connector_id",
         "transaction",
     )
     date_hierarchy = "timestamp"
-    list_filter = ("charger", MeterReadingDateFilter)
+    list_filter = ("charger", MeterValueDateFilter)
 
 
 @admin.register(ElectricVehicle)
