@@ -246,6 +246,26 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertIn("1", connectors)
         self.assertIn("2", connectors)
 
+    @patch("ocpp.consumers.requests.get")
+    async def test_console_url_recorded(self, mock_get):
+        mock_get.return_value.status_code = 200
+        communicator = WebsocketCommunicator(application, "/CONS1/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        charger = await database_sync_to_async(Charger.objects.get)(charger_id="CONS1")
+        self.assertTrue(charger.console_url)
+        await communicator.disconnect()
+
+    @patch("ocpp.consumers.requests.get")
+    async def test_console_url_not_recorded_when_unreachable(self, mock_get):
+        mock_get.side_effect = Exception("nope")
+        communicator = WebsocketCommunicator(application, "/CONS2/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        charger = await database_sync_to_async(Charger.objects.get)(charger_id="CONS2")
+        self.assertFalse(charger.console_url)
+        await communicator.disconnect()
+
     async def test_transaction_created_from_meter_values(self):
         communicator = WebsocketCommunicator(application, "/NOSTART/")
         connected, _ = await communicator.connect()
@@ -579,6 +599,22 @@ class ChargerAdminTests(TestCase):
         log_url = reverse("charger-log", args=["LOG1"]) + "?type=charger"
         self.assertContains(resp, log_url)
 
+    def test_admin_lists_console_link(self):
+        charger = Charger.objects.create(
+            charger_id="CON1", console_url="http://1.2.3.4"
+        )
+        url = reverse("admin:ocpp_charger_changelist")
+        resp = self.client.get(url)
+        console_url = reverse("charger-console", args=["CON1"])
+        self.assertContains(resp, console_url)
+
+    def test_admin_hides_console_link_without_url(self):
+        Charger.objects.create(charger_id="CON2")
+        url = reverse("admin:ocpp_charger_changelist")
+        resp = self.client.get(url)
+        console_url = reverse("charger-console", args=["CON2"])
+        self.assertNotContains(resp, console_url)
+
     def test_admin_change_links_landing_page(self):
         charger = Charger.objects.create(charger_id="CHANGE1")
         url = reverse("admin:ocpp_charger_change", args=[charger.pk])
@@ -642,6 +678,30 @@ class ChargerAdminTests(TestCase):
         )
         self.client.post(delete_url, {"post": "yes"})
         self.assertFalse(Charger.objects.filter(pk=charger.pk).exists())
+
+
+class ConsoleProxyTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="user", password="pw", email="user@example.com"
+        )
+        self.client.force_login(self.user)
+        self.charger = Charger.objects.create(
+            charger_id="PROXY", console_url="http://example.com"
+        )
+
+    @patch("ocpp.views.requests.request")
+    def test_proxy_forwards_response(self, mock_req):
+        mock_resp = mock_req.return_value
+        mock_resp.status_code = 200
+        mock_resp.headers = {"Content-Type": "text/plain"}
+        mock_resp.content = b"ok"
+        url = reverse("charger-console-proxy", args=["PROXY"])
+        resp = self.client.get(url)
+        self.assertEqual(resp.content, b"ok")
+        self.assertEqual(resp.status_code, 200)
 
 
 class TransactionAdminTests(TestCase):
