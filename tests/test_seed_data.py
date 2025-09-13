@@ -76,6 +76,8 @@ class SeedDataAdminTests(TestCase):
         self.assertIn("Seed Datum", content)
         self.assertIn('name="_user_datum"', content)
         self.assertIn("User Datum", content)
+        self.assertIn(f'[ <a href="{reverse("admin:user_data")}">View</a> ]', content)
+        self.assertIn(f'[ <a href="{reverse("admin:seed_data")}">View</a> ]', content)
         self.assertLess(
             content.index('name="_user_datum"'),
             content.index('name="_seed_datum"'),
