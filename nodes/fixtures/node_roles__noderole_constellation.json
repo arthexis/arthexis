@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "model": "nodes.noderole",
+    "pk": 2,
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Constellation",
+      "description": "Multi-User Cloud & Orchestration"
+    }
+  }
+]

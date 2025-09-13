@@ -233,3 +233,10 @@ class SeedDataViewTests(TestCase):
     def test_seed_data_view_shows_fixture(self):
         response = self.client.get(reverse("admin:seed_data"))
         self.assertContains(response, "node_roles__noderole_terminal.json")
+
+    def test_node_role_fixtures_present(self):
+        names = set(NodeRole.objects.values_list("name", flat=True))
+        self.assertEqual(
+            names,
+            {"Terminal", "Constellation", "Control", "Satellite"},
+        )
