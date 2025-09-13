@@ -121,7 +121,7 @@ class Migration(migrations.Migration):
             field=models.BooleanField(default=False, editable=False),
         ),
         migrations.AddField(
-            model_name="subscription",
+            model_name="livesubscription",
             name="is_user_data",
             field=models.BooleanField(default=False, editable=False),
         ),

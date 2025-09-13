@@ -36,7 +36,7 @@ from .models import (
     EnergyReport,
     Address,
     Product,
-    Subscription,
+    LiveSubscription,
     Brand,
     WMICode,
     EVModel,
@@ -957,7 +957,7 @@ class EVModelAdmin(EntityModelAdmin):
 
 
 admin.site.register(Product)
-admin.site.register(Subscription)
+admin.site.register(LiveSubscription)
 
 
 class RFIDResource(resources.ModelResource):

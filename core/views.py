@@ -14,7 +14,7 @@ import subprocess
 
 from utils.api import api_login_required
 
-from .models import Product, Subscription, EnergyAccount, PackageRelease, Todo
+from .models import Product, LiveSubscription, EnergyAccount, PackageRelease, Todo
 from .models import RFID
 from . import release as release_utils
 
@@ -230,8 +230,8 @@ def product_list(request):
 
 @csrf_exempt
 @api_login_required
-def add_subscription(request):
-    """Create a subscription for an energy account from POSTed JSON."""
+def add_live_subscription(request):
+    """Create a live subscription for an energy account from POSTed JSON."""
 
     if request.method != "POST":
         return JsonResponse({"detail": "POST required"}, status=400)
@@ -254,7 +254,7 @@ def add_subscription(request):
     except Product.DoesNotExist:
         return JsonResponse({"detail": "invalid product"}, status=404)
 
-    sub = Subscription.objects.create(
+    sub = LiveSubscription.objects.create(
         account_id=account_id,
         product=product,
         next_renewal=date.today() + timedelta(days=product.renewal_period),
@@ -263,15 +263,15 @@ def add_subscription(request):
 
 
 @api_login_required
-def subscription_list(request):
-    """Return subscriptions for the given account_id."""
+def live_subscription_list(request):
+    """Return live subscriptions for the given account_id."""
 
     account_id = request.GET.get("account_id")
     if not account_id:
         return JsonResponse({"detail": "account_id required"}, status=400)
 
     subs = list(
-        Subscription.objects.filter(account_id=account_id)
+        LiveSubscription.objects.filter(account_id=account_id)
         .select_related("product")
         .values(
             "id",
@@ -279,7 +279,7 @@ def subscription_list(request):
             "next_renewal",
         )
     )
-    return JsonResponse({"subscriptions": subs})
+    return JsonResponse({"live_subscriptions": subs})
 
 
 @csrf_exempt
