@@ -550,10 +550,11 @@ if [ "$ENABLE_DATASETTE" != true ]; then
 fi
 
 if [ "$AUTO_UPGRADE" = true ]; then
+    rm -f AUTO_UPGRADE
     if [ "$LATEST" = true ]; then
-        echo "latest" > AUTO_UPGRADE
+        echo "latest" > "$LOCK_DIR/auto_upgrade.lck"
     else
-        echo "version" > AUTO_UPGRADE
+        echo "version" > "$LOCK_DIR/auto_upgrade.lck"
     fi
     if [ "$UPGRADE" = true ]; then
         if [ "$LATEST" = true ]; then

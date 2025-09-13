@@ -44,7 +44,7 @@ def birthday_greetings() -> None:
 def check_github_updates() -> None:
     """Check the GitHub repo for updates and upgrade if needed."""
     base_dir = Path(__file__).resolve().parent.parent
-    mode_file = base_dir / "AUTO_UPGRADE"
+    mode_file = base_dir / "locks" / "auto_upgrade.lck"
     mode = "version"
     if mode_file.exists():
         mode = mode_file.read_text().strip()
