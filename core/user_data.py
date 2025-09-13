@@ -104,14 +104,14 @@ class EntityModelAdmin(UserDatumAdminMixin, admin.ModelAdmin):
             return
         if request.POST.get("_user_datum") == "on":
             if not obj.is_user_data:
+                type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=True)
                 obj.is_user_data = True
-                obj.save(update_fields=["is_user_data"])
             dump_user_fixture(obj, request.user)
             path = _fixture_path(request.user, obj)
             self.message_user(request, f"User datum saved to {path}")
         elif obj.is_user_data:
+            type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=False)
             obj.is_user_data = False
-            obj.save(update_fields=["is_user_data"])
             delete_user_fixture(obj, request.user)
 
 
