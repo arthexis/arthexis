@@ -3,6 +3,22 @@
 from django.db import migrations, models
 
 
+def link_modules_to_applications(apps, schema_editor):
+    Module = apps.get_model("pages", "Module")
+    Application = apps.get_model("pages", "Application")
+    for module in Module.objects.all():
+        # Ensure the module's application exists
+        if not Application.objects.filter(pk=module.application_id).exists():
+            # Try to infer application from the first segment of the path
+            slug = module.path.strip("/").split("/")[0]
+            app = Application.objects.filter(name=slug).first()
+            if app:
+                module.application = app
+                module.save(update_fields=["application"])
+            else:
+                module.delete()
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -35,4 +51,5 @@ class Migration(migrations.Migration):
             name="is_user_data",
             field=models.BooleanField(default=False, editable=False),
         ),
+        migrations.RunPython(link_modules_to_applications, migrations.RunPython.noop),
     ]
