@@ -1,15 +1,1 @@
-[
-  {
-    "model": "pages.landing",
-    "pk": 1,
-    "fields": {
-      "is_seed_data": true,
-      "is_deleted": false,
-      "module": ["Satellite", "/ocpp/"],
-      "path": "/ocpp/",
-      "label": "Dashboard",
-      "enabled": true,
-      "description": ""
-    }
-  }
-]
+[]
