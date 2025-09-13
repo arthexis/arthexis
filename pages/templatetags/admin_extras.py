@@ -9,8 +9,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import connection
 from django.urls import NoReverseMatch, reverse
 
-from core.user_data import UserDatum
 from core.models import Todo
+from core.entity import Entity
 
 register = template.Library()
 
@@ -155,12 +155,15 @@ def future_action_items(context):
             seen.add(ct.id)
 
     # Models with user data
-    ct_ids = UserDatum.objects.filter(user=user).values_list(
-        "content_type_id", flat=True
-    )
-    for ct in ContentType.objects.filter(id__in=ct_ids).exclude(id__in=seen):
-        model = ct.model_class()
-        label = model._meta.verbose_name_plural if model else ct.name
+    for model, model_admin in admin.site._registry.items():
+        if not issubclass(model, Entity):
+            continue
+        if not model.objects.filter(is_user_data=True).exists():
+            continue
+        ct = ContentType.objects.get_for_model(model)
+        if ct.id in seen:
+            continue
+        label = model._meta.verbose_name_plural
         url = admin_changelist_url(ct)
         if url:
             model_items.append({"url": url, "label": label})
