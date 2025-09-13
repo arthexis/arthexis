@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 17,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "CP",
+      "context_type": "entity",
+      "content_type": [
+        "ocpp",
+        "charger"
+      ]
+    }
+  }
+]

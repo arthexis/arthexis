@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 25,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "ECRED",
+      "context_type": "entity",
+      "content_type": [
+        "core",
+        "energycredit"
+      ]
+    }
+  }
+]

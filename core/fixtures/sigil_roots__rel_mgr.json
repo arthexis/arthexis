@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 54,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "REL-MGR",
+      "context_type": "entity",
+      "content_type": [
+        "core",
+        "releasemanager"
+      ]
+    }
+  }
+]

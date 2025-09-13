@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 50,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "PTASK",
+      "context_type": "entity",
+      "content_type": [
+        "django_celery_beat",
+        "periodictask"
+      ]
+    }
+  }
+]

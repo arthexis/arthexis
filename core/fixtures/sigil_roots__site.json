@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 64,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "SITE",
+      "context_type": "entity",
+      "content_type": [
+        "sites",
+        "site"
+      ]
+    }
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 62,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "ETMPL",
+      "context_type": "entity",
+      "content_type": [
+        "post_office",
+        "emailtemplate"
+      ]
+    }
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 52,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "CRON",
+      "context_type": "entity",
+      "content_type": [
+        "django_celery_beat",
+        "crontabschedule"
+      ]
+    }
+  }
+]

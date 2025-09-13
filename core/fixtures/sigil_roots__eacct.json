@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 26,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "EACCT",
+      "context_type": "entity",
+      "content_type": [
+        "core",
+        "energyaccount"
+      ]
+    }
+  }
+]

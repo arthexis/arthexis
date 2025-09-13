@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 61,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "WRM",
+      "context_type": "entity",
+      "content_type": [
+        "core",
+        "releasemanager"
+      ]
+    }
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 4,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "DEBUG",
+      "context_type": "entity",
+      "content_type": [
+        "debug_toolbar",
+        "historyentry"
+      ]
+    }
+  }
+]
