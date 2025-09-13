@@ -2,17 +2,20 @@ import asyncio
 import json
 from datetime import datetime, timedelta, timezone as dt_timezone
 
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, Http404
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.utils.translation import gettext_lazy as _
+from django.urls import reverse
 
 from utils.api import api_login_required
 
 from pages.utils import landing
 from core.liveupdate import live_update
+
+import requests
 
 from . import store
 from .models import Transaction, Charger
@@ -346,3 +349,57 @@ def dispatch_action(request, cid):
         return JsonResponse({"detail": "unknown action"}, status=400)
     store.add_log(cid, f"< {msg}", log_type="charger")
     return JsonResponse({"sent": msg})
+
+
+@login_required
+def charger_console(request, cid):
+    charger = get_object_or_404(Charger, charger_id=cid)
+    if not charger.console_url:
+        raise Http404
+    return render(request, "ocpp/charger_console.html", {"charger": charger})
+
+
+@login_required
+def charger_console_proxy(request, cid, path=""):
+    charger = get_object_or_404(Charger, charger_id=cid)
+    if not charger.console_url:
+        raise Http404
+    base = charger.console_url.rstrip("/")
+    target = f"{base}/{path}" if path else base
+    headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
+    try:
+        resp = requests.request(
+            request.method,
+            target,
+            params=request.GET,
+            data=request.body if request.method != "GET" else None,
+            headers=headers,
+            cookies=request.COOKIES,
+            allow_redirects=False,
+            timeout=5,
+        )
+    except Exception:
+        return HttpResponse("", status=502)
+
+    content_type = resp.headers.get("Content-Type", "")
+    if content_type.startswith("text/html"):
+        proxy_base = reverse("charger-console-proxy", args=[cid])
+        text = resp.text.replace('href="/', f'href="{proxy_base}/')
+        text = text.replace('src="/', f'src="{proxy_base}/')
+        proxy_resp = HttpResponse(text, status=resp.status_code)
+    else:
+        proxy_resp = HttpResponse(resp.content, status=resp.status_code)
+    proxy_resp["Content-Type"] = content_type
+    for key, value in resp.headers.items():
+        lk = key.lower()
+        if lk in (
+            "content-length",
+            "transfer-encoding",
+            "content-encoding",
+            "connection",
+        ):
+            continue
+        if key == "Content-Type":
+            continue
+        proxy_resp[key] = value
+    return proxy_resp

@@ -16,5 +16,16 @@ urlpatterns = [
     ),
     path("log/<str:cid>/", views.charger_log_page, name="charger-log"),
     path("c/<str:cid>/status/", views.charger_status, name="charger-status"),
+    path("console/<str:cid>/", views.charger_console, name="charger-console"),
+    path(
+        "console/<str:cid>/proxy/",
+        views.charger_console_proxy,
+        name="charger-console-proxy",
+    ),
+    path(
+        "console/<str:cid>/proxy/<path:path>",
+        views.charger_console_proxy,
+        name="charger-console-proxy",
+    ),
     path("rfid/", include("ocpp.rfid.urls")),
 ]
