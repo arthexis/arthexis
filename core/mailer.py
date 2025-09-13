@@ -23,18 +23,16 @@ def send(
     backend alias so that Post Office can use it when dispatching.
     """
     sender = (
-        from_email
-        or getattr(outbox, "from_email", None)
-        or settings.DEFAULT_FROM_EMAIL
+        from_email or getattr(outbox, "from_email", None) or settings.DEFAULT_FROM_EMAIL
     )
     backend = ""
     if outbox is not None:
         alias = f"outbox_{getattr(outbox, 'pk', 'tmp')}"
         if not hasattr(settings, "POST_OFFICE"):
             settings.POST_OFFICE = {}
-        settings.POST_OFFICE.setdefault("BACKENDS", {})[alias] = (
-            "django.core.mail.backends.smtp.EmailBackend"
-        )
+        settings.POST_OFFICE.setdefault("BACKENDS", {})[
+            alias
+        ] = "django.core.mail.backends.smtp.EmailBackend"
         if not hasattr(po_connections._connections, "connections"):
             po_connections._connections.connections = {}
         po_connections._connections.connections[alias] = outbox.get_connection()

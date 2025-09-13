@@ -68,12 +68,12 @@ def autodiscovered_urlpatterns():
 urlpatterns = [
     path(
         "admin/doc/manuals/",
-        man_views.manual_list,
+        man_views.admin_manual_list,
         name="django-admindocs-manuals",
     ),
     path(
         "admin/doc/manuals/<slug:slug>/",
-        man_views.manual_html,
+        man_views.admin_manual_detail,
         name="django-admindocs-manual-detail",
     ),
     path(

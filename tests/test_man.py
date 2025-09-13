@@ -77,3 +77,17 @@ class ManTests(TestCase):
         self.assertNotContains(
             response, "You don't have permission to view or edit anything."
         )
+
+    def test_public_manual_list(self):
+        response = self.client.get(reverse("man:list"))
+        self.assertContains(response, "Test Manual")
+        self.assertContains(response, "Test description")
+        self.assertContains(response, "Languages: en,fr")
+        self.assertContains(response, reverse("man:manual-pdf", args=["test-manual"]))
+        self.assertNotContains(response, 'id="nav-sidebar"')
+
+    def test_public_manual_detail(self):
+        response = self.client.get(reverse("man:manual-html", args=["test-manual"]))
+        self.assertContains(response, "hi")
+        self.assertContains(response, reverse("man:manual-pdf", args=["test-manual"]))
+        self.assertNotContains(response, 'id="nav-sidebar"')
