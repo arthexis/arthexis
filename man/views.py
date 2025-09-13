@@ -5,6 +5,9 @@ from django.contrib import admin
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.test import RequestFactory
+from django.utils.translation import gettext as _
+
+from pages.utils import landing
 
 from .models import UserManual
 
@@ -26,7 +29,7 @@ def _admin_context(request):
     return context
 
 
-def manual_html(request, slug):
+def admin_manual_detail(request, slug):
     manual = get_object_or_404(UserManual, slug=slug)
     context = _admin_context(request)
     context["manual"] = manual
@@ -39,8 +42,19 @@ def manual_pdf(request, slug):
     return HttpResponse(pdf_data, content_type="application/pdf")
 
 
-def manual_list(request):
+def admin_manual_list(request):
     manuals = UserManual.objects.all()
     context = _admin_context(request)
     context["manuals"] = manuals
     return render(request, "admin_doc/manuals.html", context)
+
+
+@landing(_("Manuals"))
+def manual_list(request):
+    manuals = UserManual.objects.all()
+    return render(request, "man/manual_list.html", {"manuals": manuals})
+
+
+def manual_detail(request, slug):
+    manual = get_object_or_404(UserManual, slug=slug)
+    return render(request, "man/manual_detail.html", {"manual": manual})
