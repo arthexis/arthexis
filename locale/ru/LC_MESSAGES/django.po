@@ -46,3 +46,24 @@ msgstr "Не в сети"
 msgid "Serial Number"
 msgstr "Серийный номер"
 
+#: pages/templates/pages/base.html:67
+#: pages/templates/pages/login.html:4
+#: pages/templates/pages/login.html:9
+msgid "Login"
+msgstr "Вход"
+
+#: pages/templates/pages/login.html:14
+msgid "Username"
+msgstr "Имя пользователя"
+
+#: pages/templates/pages/login.html:18
+msgid "Password"
+msgstr "Пароль"
+
+#: pages/templates/pages/login.html:22
+msgid "Log in"
+msgstr "Войти"
+
+#: pages/templates/pages/login.html:25
+msgid "Request email invitation"
+msgstr "Запросить приглашение по электронной почте"

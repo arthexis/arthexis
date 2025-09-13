@@ -46,3 +46,24 @@ msgstr "Hors ligne"
 msgid "Serial Number"
 msgstr "Numéro de série"
 
+#: pages/templates/pages/base.html:67
+#: pages/templates/pages/login.html:4
+#: pages/templates/pages/login.html:9
+msgid "Login"
+msgstr "Connexion"
+
+#: pages/templates/pages/login.html:14
+msgid "Username"
+msgstr "Nom d'utilisateur"
+
+#: pages/templates/pages/login.html:18
+msgid "Password"
+msgstr "Mot de passe"
+
+#: pages/templates/pages/login.html:22
+msgid "Log in"
+msgstr "Se connecter"
+
+#: pages/templates/pages/login.html:25
+msgid "Request email invitation"
+msgstr "Demander une invitation par e-mail"
