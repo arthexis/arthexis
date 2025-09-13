@@ -102,6 +102,20 @@ def _fixture_files() -> list[str]:
     return sorted(fixtures)
 
 
+def _fixture_sort_key(name: str) -> tuple[int, str]:
+    """Sort fixtures to satisfy foreign key dependencies."""
+    filename = Path(name).name
+    if filename.startswith("users__"):
+        priority = 0
+    elif "__module_" in filename:
+        priority = 1
+    elif "__landing_" in filename:
+        priority = 2
+    else:
+        priority = 3
+    return (priority, filename)
+
+
 def _fixture_hash(files: list[str]) -> str:
     md5 = hashlib.md5()
     for name in files:
@@ -243,8 +257,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     fixtures = _fixture_files()
     fixture_hash = _fixture_hash(fixtures)
     if fixtures:
-        # Process user fixtures first so foreign key references can be updated
-        fixtures.sort(key=lambda n: 0 if Path(n).name.startswith("users__") else 1)
+        fixtures.sort(key=_fixture_sort_key)
         with tempfile.TemporaryDirectory() as tmpdir:
             patched: list[str] = []
             user_pk_map: dict[int, int] = {}
