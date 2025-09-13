@@ -34,10 +34,30 @@ def safe_setup():
         # development data.
         test_name = settings.DATABASES["default"].get("TEST", {}).get("NAME")
         if test_name:
+            db_name = settings.DATABASES["default"]["NAME"]
             settings.DATABASES["default"]["NAME"] = str(test_name)
-            db_path = Path(test_name)
-            if db_path.exists():
-                db_path.unlink()
+            engine = settings.DATABASES["default"].get("ENGINE", "")
+            if engine.endswith("sqlite3"):
+                db_path = Path(test_name)
+                if db_path.exists():
+                    db_path.unlink()
+            else:
+                import psycopg
+
+                params = {
+                    "dbname": db_name,
+                    "user": settings.DATABASES["default"].get("USER", ""),
+                    "password": settings.DATABASES["default"].get("PASSWORD", ""),
+                    "host": settings.DATABASES["default"].get("HOST", ""),
+                    "port": settings.DATABASES["default"].get("PORT", ""),
+                }
+                with psycopg.connect(**params) as conn:
+                    conn.autocommit = True
+                    with conn.cursor() as cursor:
+                        cursor.execute(
+                            f'DROP DATABASE IF EXISTS "{test_name}" WITH (FORCE)'
+                        )
+                        cursor.execute(f'CREATE DATABASE "{test_name}"')
 
         # Perform the regular Django setup after configuring the test database
         _original_setup()
