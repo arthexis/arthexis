@@ -327,6 +327,7 @@ class SigilResolutionTests(TestCase):
                 "fields": {
                     "is_seed_data": False,
                     "is_deleted": False,
+                    "is_user_data": False,
                     "name": "Terminal",
                     "description": "term role",
                 },
