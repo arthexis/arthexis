@@ -1,4 +1,5 @@
 from django import forms
+import json
 
 
 class CopyColorWidget(forms.TextInput):
@@ -21,3 +22,30 @@ class CodeEditorWidget(forms.Textarea):
     class Media:
         css = {"all": ["core/code_editor.css"]}
         js = ["core/code_editor.js"]
+
+
+class OdooProductWidget(forms.Select):
+    """Widget for selecting an Odoo product."""
+
+    template_name = "widgets/odoo_product.html"
+
+    class Media:
+        js = ["core/odoo_product.js"]
+
+    def get_context(self, name, value, attrs):
+        attrs = attrs or {}
+        if isinstance(value, dict):
+            attrs["data-current-id"] = str(value.get("id", ""))
+            value = json.dumps(value)
+        elif not value:
+            value = ""
+        return super().get_context(name, value, attrs)
+
+    def value_from_datadict(self, data, files, name):
+        raw = data.get(name)
+        if not raw:
+            return {}
+        try:
+            return json.loads(raw)
+        except Exception:
+            return {}

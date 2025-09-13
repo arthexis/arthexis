@@ -17,6 +17,28 @@ from utils.api import api_login_required
 
 from .models import Product, Subscription, EnergyAccount, PackageRelease, Todo
 from .models import RFID
+
+
+@staff_member_required
+def odoo_products(request):
+    """Return available products from the user's Odoo instance."""
+
+    profile = getattr(request.user, "odoo_profile", None)
+    if not profile or not profile.is_verified:
+        raise Http404
+    try:
+        products = profile.execute(
+            "product.product",
+            "search_read",
+            [],
+            {"fields": ["name"], "limit": 50},
+        )
+    except Exception:
+        return JsonResponse({"detail": "Unable to fetch products"}, status=502)
+    items = [{"id": p.get("id"), "name": p.get("name", "")} for p in products]
+    return JsonResponse(items, safe=False)
+
+
 from . import release as release_utils
 
 

@@ -63,6 +63,14 @@ class Migration(migrations.Migration):
                     "renewal_period",
                     models.PositiveIntegerField(help_text="Renewal period in days"),
                 ),
+                (
+                    "odoo_product",
+                    models.JSONField(
+                        blank=True,
+                        null=True,
+                        help_text="Selected product from Odoo (id and name)",
+                    ),
+                ),
             ],
             options={
                 "abstract": False,
