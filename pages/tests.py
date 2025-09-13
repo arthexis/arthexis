@@ -10,7 +10,7 @@ from pages.models import Application, Module, SiteBadge, Favorite
 from core.user_data import UserDatum
 from pages.admin import ApplicationAdmin
 from django.apps import apps as django_apps
-from core.models import AdminHistory, InviteLead, Todo, NewsArticle
+from core.models import AdminHistory, InviteLead, Todo
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
 import tempfile
@@ -23,7 +23,6 @@ from django.core import mail
 from django.core.management import call_command
 import re
 from django.contrib.contenttypes.models import ContentType
-from datetime import date
 
 from nodes.models import Node, ContentSample, NodeRole
 
@@ -814,47 +813,3 @@ class EnergyReportLiveUpdateTests(TestCase):
         resp = self.client.get(reverse("pages:energy-report"))
         self.assertEqual(resp.context["request"].live_update_interval, 5)
         self.assertContains(resp, "setInterval(() => location.reload()")
-
-
-class NewsViewTests(TestCase):
-    def setUp(self):
-        self.client = Client()
-        NewsArticle.objects.create(
-            name="0.1.7 release notes",
-            content="Details",
-            published=date(2025, 3, 5),
-            version="0.1.7",
-        )
-        NewsArticle.objects.create(
-            name="0.1.4 release notes",
-            content="Details",
-            published=date(2024, 7, 10),
-            version="0.1.4",
-        )
-        NewsArticle.objects.create(
-            name="0.1.1 release notes",
-            content="Details",
-            published=date(2024, 1, 15),
-            version="0.1.1",
-        )
-
-    def test_latest_article_first(self):
-        resp = self.client.get(reverse("pages:news"))
-        articles = list(resp.context["object_list"])
-        self.assertEqual(articles[0].name, "0.1.7 release notes")
-
-    def test_sidebar_version_order(self):
-        resp = self.client.get(reverse("pages:news"))
-        titles = [a.name for a in resp.context["all_articles"]]
-        self.assertEqual(
-            titles,
-            [
-                "0.1.7 release notes",
-                "0.1.4 release notes",
-                "0.1.1 release notes",
-            ],
-        )
-
-    def test_changelog_included(self):
-        resp = self.client.get(reverse("pages:news"))
-        self.assertContains(resp, "avoid merge commit prompts")

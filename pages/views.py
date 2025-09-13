@@ -21,9 +21,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.cache import never_cache
 from django.utils.cache import patch_vary_headers
-from django.views.generic import ListView
-from packaging.version import Version
-from core.models import InviteLead, EnergyReport, NewsArticle
+from core.models import InviteLead, EnergyReport
 
 import markdown
 from pages.utils import landing
@@ -127,35 +125,6 @@ def release_checklist(request):
     response = render(request, "pages/readme.html", context)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])
     return response
-
-
-class NewsArticleListView(ListView):
-    model = NewsArticle
-    template_name = "pages/news_list.html"
-    paginate_by = 4
-
-    def get_queryset(self):
-        qs = super().get_queryset().order_by("-published")
-        year = self.request.GET.get("year")
-        month = self.request.GET.get("month")
-        if year and month:
-            try:
-                qs = qs.filter(published__year=int(year), published__month=int(month))
-            except ValueError:
-                pass
-        return qs
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        months = NewsArticle.objects.dates("published", "month", order="DESC")[:3]
-        context["months"] = months
-        all_articles = list(NewsArticle.objects.all())
-        all_articles.sort(
-            key=lambda a: Version(a.version or a.name.split()[0]),
-            reverse=True,
-        )
-        context["all_articles"] = all_articles
-        return context
 
 
 @csrf_exempt

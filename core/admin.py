@@ -51,7 +51,6 @@ from .models import (
     SecurityGroup,
     InviteLead,
     ChatProfile,
-    NewsArticle,
     Todo,
 )
 from .user_data import EntityModelAdmin
@@ -96,14 +95,6 @@ class WorkgroupSecurityGroup(SecurityGroup):
         app_label = "post_office"
         verbose_name = SecurityGroup._meta.verbose_name
         verbose_name_plural = SecurityGroup._meta.verbose_name_plural
-
-
-class WorkgroupNewsArticle(NewsArticle):
-    class Meta:
-        proxy = True
-        app_label = "post_office"
-        verbose_name = NewsArticle._meta.verbose_name
-        verbose_name_plural = NewsArticle._meta.verbose_name_plural
 
 
 class ExperienceReference(Reference):
@@ -380,13 +371,6 @@ class SecurityGroupAdmin(DjangoGroupAdmin):
     form = SecurityGroupAdminForm
     fieldsets = ((None, {"fields": ("name", "parent", "users", "permissions")}),)
     filter_horizontal = ("permissions",)
-
-
-@admin.register(WorkgroupNewsArticle)
-class NewsArticleAdmin(EntityModelAdmin):
-    list_display = ("name", "published")
-    search_fields = ("name", "content")
-    ordering = ("-published",)
 
 
 @admin.register(InviteLead)
