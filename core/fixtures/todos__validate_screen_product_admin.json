@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "pk": 16,
+    "fields": {
+      "description": "Validate screen Product admin",
+      "url": "/admin/core/product/"
+    }
+  }
+]

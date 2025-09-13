@@ -57,6 +57,7 @@ from .models import (
     Todo,
 )
 from .user_data import EntityModelAdmin
+from .widgets import OdooProductWidget
 
 
 admin.site.unregister(Group)
@@ -956,7 +957,19 @@ class EVModelAdmin(EntityModelAdmin):
     list_filter = ("brand",)
 
 
-admin.site.register(Product)
+class ProductAdminForm(forms.ModelForm):
+    odoo_product = forms.JSONField(required=False, widget=OdooProductWidget)
+
+    class Meta:
+        model = Product
+        fields = "__all__"
+
+
+@admin.register(Product)
+class ProductAdmin(EntityModelAdmin):
+    form = ProductAdminForm
+
+
 admin.site.register(Subscription)
 
 

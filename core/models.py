@@ -1114,6 +1114,11 @@ class Product(Entity):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     renewal_period = models.PositiveIntegerField(help_text="Renewal period in days")
+    odoo_product = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Selected product from Odoo (id and name)",
+    )
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
