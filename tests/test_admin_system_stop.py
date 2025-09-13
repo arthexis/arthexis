@@ -21,7 +21,10 @@ class AdminSystemStopTests(TestCase):
             username="admin", email="admin@example.com", password="password"
         )
         self.staff = User.objects.create_user(
-            username="staff", email="staff@example.com", password="password", is_staff=True
+            username="staff",
+            email="staff@example.com",
+            password="password",
+            is_staff=True,
         )
 
     def test_stop_button_hidden_for_non_superuser(self):
