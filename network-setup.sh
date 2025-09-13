@@ -103,6 +103,37 @@ check_connectivity() {
     ping -c1 -W2 8.8.8.8 >/dev/null 2>&1
 }
 
+# Ensure SSH password authentication is enabled
+require_ssh_password() {
+    if [[ ! -f /etc/ssh/sshd_config ]]; then
+        echo "SSH configuration not found; enable SSH with password login before running this script." >&2
+        exit 1
+    fi
+    if ! grep -Eq '^[[:space:]]*PasswordAuthentication[[:space:]]+yes' /etc/ssh/sshd_config; then
+        echo "SSH password authentication is disabled. Enable it in /etc/ssh/sshd_config before running this script." >&2
+        exit 1
+    fi
+}
+
+# Ensure VNC is enabled via raspi-config or an active VNC service
+# Assumes VNC service names 'vncserver-x11-serviced' or 'x11vnc' when raspi-config is unavailable
+require_vnc_enabled() {
+    if command -v raspi-config >/dev/null 2>&1; then
+        local vnc_state
+        vnc_state=$(raspi-config nonint get_vnc 2>/dev/null || true)
+        if [[ "$vnc_state" != "1" ]]; then
+            echo "VNC is disabled in raspi-config. Enable it before running this script." >&2
+            exit 1
+        fi
+    else
+        if ! systemctl is-enabled --quiet vncserver-x11-serviced 2>/dev/null && \
+           ! systemctl is-enabled --quiet x11vnc 2>/dev/null; then
+            echo "No enabled VNC service detected. Enable a VNC server before running this script." >&2
+            exit 1
+        fi
+    fi
+}
+
 INITIAL_CONNECTIVITY=true
 if check_connectivity; then
     echo "Internet connectivity detected."
@@ -115,6 +146,9 @@ command -v nmcli >/dev/null 2>&1 || {
     echo "nmcli (NetworkManager) is required." >&2
     exit 1
 }
+
+require_ssh_password
+require_vnc_enabled
 
 # Detect the active internet connection and back it up
 PROTECTED_DEV=""
@@ -176,7 +210,9 @@ if [[ $RUN_SERVICES == true ]]; then
 fi
 
 if [[ $RUN_AP == true ]]; then
-    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
+    if ! nmcli -t -f DEVICE device status | grep -Fxq "wlan0"; then
+        echo "Warning: device wlan0 not found; skipping access point configuration." >&2
+    elif [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
         echo "Skipping wlan0 access point configuration to preserve '$PROTECTED_CONN'."
     else
         nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" -v hl="$HYPERLINE_NAME" -v protect="$PROTECTED_CONN" '$2=="wlan0" && $1!=ap && $1!=hl && $1!=protect {print $1}' | while read -r con; do
@@ -219,11 +255,14 @@ if [[ $RUN_AP == true ]]; then
 fi
 
 if [[ $RUN_WLAN1_REFRESH == true ]]; then
-    WLAN1_REFRESH_SCRIPT="$BASE_DIR/scripts/wlan1-refresh.sh"
-    WLAN1_REFRESH_SERVICE="wlan1-refresh"
-    WLAN1_REFRESH_SERVICE_FILE="/etc/systemd/system/${WLAN1_REFRESH_SERVICE}.service"
-    if [ -f "$WLAN1_REFRESH_SCRIPT" ]; then
-        cat > "$WLAN1_REFRESH_SERVICE_FILE" <<EOF
+    if ! nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
+        echo "Warning: device wlan1 not found; skipping wlan1 refresh service." >&2
+    else
+        WLAN1_REFRESH_SCRIPT="$BASE_DIR/scripts/wlan1-refresh.sh"
+        WLAN1_REFRESH_SERVICE="wlan1-refresh"
+        WLAN1_REFRESH_SERVICE_FILE="/etc/systemd/system/${WLAN1_REFRESH_SERVICE}.service"
+        if [ -f "$WLAN1_REFRESH_SCRIPT" ]; then
+            cat > "$WLAN1_REFRESH_SERVICE_FILE" <<EOF
 [Unit]
 Description=Refresh wlan1 MAC addresses in NetworkManager
 After=NetworkManager.service
@@ -235,9 +274,10 @@ ExecStart=$WLAN1_REFRESH_SCRIPT
 [Install]
 WantedBy=multi-user.target
 EOF
-        systemctl daemon-reload
-        systemctl enable "$WLAN1_REFRESH_SERVICE" >/dev/null 2>&1 || true
-        "$WLAN1_REFRESH_SCRIPT" || true
+            systemctl daemon-reload
+            systemctl enable "$WLAN1_REFRESH_SERVICE" >/dev/null 2>&1 || true
+            "$WLAN1_REFRESH_SCRIPT" || true
+        fi
     fi
 fi
 
@@ -339,12 +379,16 @@ if [[ $RUN_REINSTALL_WLAN1 == true ]]; then
             fi
         done < <(nmcli -t -f NAME connection show)
         nmcli device connect wlan1 || true
+    else
+        echo "Warning: device wlan1 not found; skipping wlan1 connection reinstall." >&2
     fi
 fi
 
 if [[ $RUN_CONFIGURE_NET == true ]]; then
     if [[ $UNSAFE == false && "$PROTECTED_DEV" == "eth0" ]]; then
         echo "Skipping eth0 reconfiguration to preserve '$PROTECTED_CONN'."
+    elif ! nmcli -t -f DEVICE device status | grep -Fxq "eth0"; then
+        echo "Warning: device eth0 not found; skipping eth0 configuration." >&2
     else
         nmcli -t -f NAME,DEVICE connection show | awk -F: -v protect="$PROTECTED_CONN" '$2=="eth0" && $1!=protect {print $1}' | while read -r con; do
             nmcli connection delete "$con"
@@ -356,6 +400,8 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
 
     if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
         echo "Skipping wlan0 reconfiguration to preserve '$PROTECTED_CONN'."
+    elif ! nmcli -t -f DEVICE device status | grep -Fxq "wlan0"; then
+        echo "Warning: device wlan0 not found; skipping wlan0 configuration." >&2
     else
         nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" -v hl="$HYPERLINE_NAME" -v protect="$PROTECTED_CONN" '$2=="wlan0" && $1!=ap && $1!=hl && $1!=protect {print $1}' | while read -r con; do
             nmcli connection delete "$con"
