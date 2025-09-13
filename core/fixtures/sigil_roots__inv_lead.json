@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 47,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "INV-LEAD",
+      "context_type": "entity",
+      "content_type": [
+        "core",
+        "invitelead"
+      ]
+    }
+  }
+]

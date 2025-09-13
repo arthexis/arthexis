@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 60,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "WSG",
+      "context_type": "entity",
+      "content_type": [
+        "core",
+        "odooprofile"
+      ]
+    }
+  }
+]

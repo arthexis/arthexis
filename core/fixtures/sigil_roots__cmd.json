@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 3,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "CMD",
+      "context_type": "config",
+      "content_type": null
+    }
+  }
+]

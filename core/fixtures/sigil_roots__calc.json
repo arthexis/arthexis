@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 11,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "CALC",
+      "context_type": "entity",
+      "content_type": [
+        "awg",
+        "calculatortemplate"
+      ]
+    }
+  }
+]

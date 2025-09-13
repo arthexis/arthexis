@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 34,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "GROUP",
+      "context_type": "entity",
+      "content_type": [
+        "core",
+        "securitygroup"
+      ]
+    }
+  }
+]

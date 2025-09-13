@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 15,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "METER",
+      "context_type": "entity",
+      "content_type": [
+        "ocpp",
+        "metervalue"
+      ]
+    }
+  }
+]

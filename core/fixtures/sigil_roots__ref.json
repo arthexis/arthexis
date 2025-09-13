@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 27,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "REF",
+      "context_type": "entity",
+      "content_type": [
+        "core",
+        "reference"
+      ]
+    }
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.sigilroot",
+    "pk": 29,
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "ADDR",
+      "context_type": "entity",
+      "content_type": [
+        "core",
+        "address"
+      ]
+    }
+  }
+]
