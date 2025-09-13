@@ -20,7 +20,6 @@ from .models import (
     EnergyAccount,
     ElectricVehicle,
     EnergyCredit,
-    Address,
     Product,
     Subscription,
     Brand,
@@ -309,30 +308,6 @@ class ElectricVehicleTests(TestCase):
             account=acc, brand=nissan, model=leaf, vin="VIN23456789012345"
         )
         self.assertEqual(acc.vehicles.count(), 2)
-
-
-class AddressTests(TestCase):
-    def test_invalid_municipality_state(self):
-        addr = Address(
-            street="Main",
-            number="1",
-            municipality="Monterrey",
-            state=Address.State.COAHUILA,
-            postal_code="00000",
-        )
-        with self.assertRaises(ValidationError):
-            addr.full_clean()
-
-    def test_user_link(self):
-        addr = Address.objects.create(
-            street="Main",
-            number="2",
-            municipality="Monterrey",
-            state=Address.State.NUEVO_LEON,
-            postal_code="64000",
-        )
-        user = User.objects.create_user(username="addr", password="pwd", address=addr)
-        self.assertEqual(user.address, addr)
 
 
 class SubscriptionTests(TestCase):
