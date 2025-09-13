@@ -164,6 +164,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --control)
+            require_nginx "control"
             AUTO_UPGRADE=true
             NGINX_MODE="internal"
             SERVICE="arthexis"

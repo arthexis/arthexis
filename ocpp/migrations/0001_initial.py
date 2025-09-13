@@ -64,13 +64,6 @@ class Migration(migrations.Migration):
             options={
                 "verbose_name": "Charge Point",
                 "verbose_name_plural": "Charge Points",
-                "constraints": [
-                    models.UniqueConstraint(
-                        fields=("charger_id", "connector_id"),
-                        name="charger_connector_unique",
-                        nulls_distinct=False,
-                    )
-                ],
             },
         ),
         migrations.CreateModel(

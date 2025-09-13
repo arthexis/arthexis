@@ -7,7 +7,6 @@ import django.core.validators
 import django.db.models.deletion
 import django.utils.timezone
 import utils.revision
-import uuid
 from django.conf import settings
 from django.db import migrations, models
 
@@ -365,23 +364,6 @@ class Migration(migrations.Migration):
                     models.BooleanField(
                         default=False, verbose_name="Include in Footer"
                     ),
-                ),
-                (
-                    "footer_visibility",
-                    models.CharField(
-                        choices=[
-                            ("public", "Public"),
-                            ("private", "Private"),
-                            ("staff", "Staff"),
-                        ],
-                        default="public",
-                        max_length=7,
-                        verbose_name="Footer visibility",
-                    ),
-                ),
-                (
-                    "transaction_uuid",
-                    models.UUIDField(db_index=True, default=uuid.uuid4),
                 ),
                 ("created", models.DateTimeField(auto_now_add=True)),
                 (
