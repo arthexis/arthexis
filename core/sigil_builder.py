@@ -36,13 +36,24 @@ def generate_model_sigils(**kwargs) -> None:
     """Create SigilRoot entries for all models using unique prefixes."""
     SigilRoot = apps.get_model("core", "SigilRoot")
     for prefix in ["ENV", "SYS", "CMD"]:
-        # Ensure built-in configuration roots exist without violating the
-        # unique ``prefix`` constraint, even if older databases already have
-        # entries with a different ``context_type``.
-        SigilRoot.objects.update_or_create(
+        # ``update_or_create`` issues a ``SELECT ... FOR UPDATE`` which can
+        # trigger ``database is locked`` errors with SQLite during migrations.
+        # Manually perform a ``get_or_create`` followed by an update to avoid
+        # acquiring an unnecessary lock while still ensuring built-in
+        # configuration roots are present.
+        obj, _created = SigilRoot.objects.get_or_create(
             prefix__iexact=prefix,
             defaults={"prefix": prefix, "context_type": SigilRoot.Context.CONFIG},
         )
+        update_fields: list[str] = []
+        if obj.prefix != prefix:
+            obj.prefix = prefix
+            update_fields.append("prefix")
+        if obj.context_type != SigilRoot.Context.CONFIG:
+            obj.context_type = SigilRoot.Context.CONFIG
+            update_fields.append("context_type")
+        if update_fields:
+            obj.save(update_fields=update_fields)
 
     existing = {p.upper() for p in SigilRoot.objects.values_list("prefix", flat=True)}
     for model in apps.get_models():
