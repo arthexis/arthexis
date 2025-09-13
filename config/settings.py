@@ -245,7 +245,7 @@ def _postgres_available() -> bool:
         "password": os.environ.get("POSTGRES_PASSWORD", ""),
         "host": os.environ.get("POSTGRES_HOST", "localhost"),
         "port": os.environ.get("POSTGRES_PORT", "5432"),
-        "connect_timeout": 1,
+        "connect_timeout": 10,
     }
     try:
         with contextlib.closing(psycopg.connect(**params)):
