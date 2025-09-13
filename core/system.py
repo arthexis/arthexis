@@ -9,7 +9,7 @@ import argparse
 
 from django import forms
 from django.conf import settings
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.core.management import get_commands, load_command_class
 from django.http import Http404
 from django.shortcuts import redirect
@@ -95,10 +95,18 @@ def _system_view(request):
         action = request.POST.get("action")
         stop_script = Path(settings.BASE_DIR) / "stop.sh"
         args = [str(stop_script)]
-        if action == "stop" and info["service"]:
-            args.append("--all")
-        subprocess.Popen(args)
-        return redirect(reverse("admin:index"))
+        if action == "stop":
+            password = request.POST.get("password", "")
+            if not request.user.check_password(password):
+                messages.error(request, _("Incorrect password."))
+            else:
+                if info["service"]:
+                    args.append("--all")
+                subprocess.Popen(args)
+                return redirect(reverse("admin:index"))
+        elif action == "restart":
+            subprocess.Popen(args)
+            return redirect(reverse("admin:index"))
 
     excluded = {
         "shell",

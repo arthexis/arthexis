@@ -12,6 +12,8 @@
           <p>{% trans "This instance is managed by a service daemon. Restart will momentarily stop the service which will be brought back up automatically." %}</p>
           <button class="button" type="submit" name="action" value="restart">{% trans "Restart" %}</button>
         {% endif %}
+        <label for="id_password">{% trans "Confirm password" %}</label>
+        <input type="password" name="password" id="id_password">
         <button class="button" type="submit" name="action" value="stop">{% trans "Stop Server" %}</button>
       </form>
       <div class="command-list">
