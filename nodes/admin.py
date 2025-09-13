@@ -21,6 +21,7 @@ from .models import (
     Node,
     EmailOutbox as NodeEmailOutbox,
     NodeRole,
+    NodeFeature,
     ContentSample,
     NetMessage,
     User,
@@ -273,6 +274,13 @@ class NodeRoleAdmin(EntityModelAdmin):
 
     def save_model(self, request, obj, form, change):
         obj.node_set.set(form.cleaned_data.get("nodes", []))
+
+
+@admin.register(NodeFeature)
+class NodeFeatureAdmin(EntityModelAdmin):
+    filter_horizontal = ("roles",)
+    list_display = ("display", "slug", "is_enabled")
+    readonly_fields = ("is_enabled",)
 
 
 @admin.register(ContentSample)

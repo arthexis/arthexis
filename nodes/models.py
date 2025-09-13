@@ -50,6 +50,52 @@ class NodeRole(Entity):
         return self.name
 
 
+class NodeFeatureManager(models.Manager):
+    def get_by_natural_key(self, slug: str):
+        return self.get(slug=slug)
+
+
+class NodeFeature(Entity):
+    """Feature that may be enabled on nodes and roles."""
+
+    slug = models.SlugField(max_length=50, unique=True)
+    display = models.CharField(max_length=50)
+    roles = models.ManyToManyField(NodeRole, blank=True, related_name="features")
+
+    objects = NodeFeatureManager()
+
+    class Meta:
+        ordering = ["display"]
+        verbose_name = "Node Feature"
+        verbose_name_plural = "Node Features"
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        return (self.slug,)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.display
+
+    @property
+    def is_enabled(self) -> bool:
+        from django.conf import settings
+        from pathlib import Path
+
+        node = Node.get_local()
+        if self.slug == "lcd-screen":
+            return bool(node and node.has_lcd_screen)
+        lock_map = {
+            "rfid-scanner": "rfid.lck",
+            "celery-queue": "celery.lck",
+            "nginx-server": "nginx_mode.lck",
+        }
+        lock = lock_map.get(self.slug)
+        if lock:
+            return (Path(settings.BASE_DIR) / "locks" / lock).exists()
+        if node and node.role:
+            return self.roles.filter(pk=node.role.pk).exists()
+        return False
+
+
 def get_terminal_role():
     """Return the NodeRole representing a Terminal if it exists."""
     return NodeRole.objects.filter(name="Terminal").first()

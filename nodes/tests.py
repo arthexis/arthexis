@@ -33,6 +33,7 @@ from .models import (
     EmailOutbox,
     ContentSample,
     NodeRole,
+    NodeFeature,
     NetMessage,
 )
 from .backends import OutboxEmailBackend
@@ -1098,3 +1099,50 @@ class NodeRoleAdminTests(TestCase):
         )
         resp = self.client.get(reverse("admin:nodes_noderole_changelist"))
         self.assertContains(resp, '<td class="field-registered">1</td>', html=True)
+
+
+class NodeFeatureTests(TestCase):
+    def setUp(self):
+        self.role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            self.node = Node.objects.create(
+                hostname="local",
+                address="127.0.0.1",
+                port=8000,
+                mac_address="00:11:22:33:44:55",
+                role=self.role,
+            )
+
+    def test_lcd_screen_enabled(self):
+        feature = NodeFeature.objects.create(slug="lcd-screen", display="LCD")
+        feature.roles.add(self.role)
+        self.node.has_lcd_screen = True
+        self.node.save(update_fields=["has_lcd_screen"])
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            self.assertTrue(feature.is_enabled)
+        self.node.has_lcd_screen = False
+        self.node.save(update_fields=["has_lcd_screen"])
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            self.assertFalse(feature.is_enabled)
+
+    def test_rfid_scanner_lock(self):
+        feature = NodeFeature.objects.create(slug="rfid-scanner", display="RFID")
+        feature.roles.add(self.role)
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            locks = base / "locks"
+            locks.mkdir()
+            with override_settings(BASE_DIR=base):
+                with patch(
+                    "nodes.models.Node.get_current_mac",
+                    return_value="00:11:22:33:44:55",
+                ):
+                    self.assertFalse(feature.is_enabled)
+                    (locks / "rfid.lck").touch()
+                    self.assertTrue(feature.is_enabled)
