@@ -52,6 +52,11 @@ class Charger(Entity):
         default=False,
         help_text="Require a valid RFID before starting a charging session.",
     )
+    notify_on_charge = models.BooleanField(
+        _("Notify On Charge"),
+        default=False,
+        help_text="Send a net message when a charging session starts.",
+    )
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_meter_values = models.JSONField(default=dict, blank=True)
     temperature = models.DecimalField(

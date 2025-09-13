@@ -24,7 +24,7 @@ import asyncio
 from pathlib import Path
 from .simulator import SimulatorConfig, ChargePointSimulator
 import re
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone as dt_timezone
 from .tasks import purge_meter_readings
 from django.db import close_old_connections
 from django.db.utils import OperationalError
@@ -169,6 +169,36 @@ class CSMSConsumerTests(TransactionTestCase):
             pk=tx_id, charger__charger_id="VINREC"
         )
         self.assertEqual(tx.vin, "WP0ZZZ11111111111")
+
+        await communicator.disconnect()
+
+    @patch("ocpp.consumers.NetMessage.broadcast")
+    async def test_notify_on_charge(self, mock_broadcast):
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id="123456789012", notify_on_charge=True
+        )
+        communicator = WebsocketCommunicator(application, "/123456789012/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        fixed = datetime(2025, 1, 1, 5, 6, tzinfo=dt_timezone.utc)
+        with patch("ocpp.consumers.timezone") as mock_timezone:
+            mock_timezone.now.return_value = fixed
+            mock_timezone.localtime.return_value = fixed
+            await communicator.send_json_to(
+                [
+                    2,
+                    "1",
+                    "StartTransaction",
+                    {"meterStart": 1, "idTag": "RF1", "connectorId": 3},
+                ]
+            )
+            await communicator.receive_json_from()
+
+        mock_broadcast.assert_called_once_with(
+            subject="789012 3",
+            body="RF1 05:06",
+        )
 
         await communicator.disconnect()
 

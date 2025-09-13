@@ -16,6 +16,7 @@ from . import store
 from decimal import Decimal
 from django.utils.dateparse import parse_datetime
 from .models import Transaction, Charger, MeterValue
+from nodes.models import NetMessage
 
 
 class SinkConsumer(AsyncWebsocketConsumer):
@@ -299,11 +300,20 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         rfid=(id_tag or ""),
                         vin=(payload.get("vin") or ""),
                         meter_start=payload.get("meterStart"),
-                        start_time=timezone.now(),
+                        start_time=(now := timezone.now()),
                     )
                     store.transactions[self.charger_id] = tx_obj
                     store.start_session_log(self.charger_id, tx_obj.pk)
                     store.add_session_message(self.charger_id, text_data)
+                    if self.charger.notify_on_charge:
+                        subj = f"{self.charger.charger_id[-6:]} {self.charger.connector_id or ''}".strip()
+                        time_str = timezone.localtime(now).strftime("%H:%M")
+                        rfid_str = id_tag or ""
+                        body = f"{rfid_str} {time_str}".strip()
+                        await database_sync_to_async(NetMessage.broadcast)(
+                            subject=subj,
+                            body=body,
+                        )
                     reply_payload = {
                         "transactionId": tx_obj.pk,
                         "idTagInfo": {"status": "Accepted"},

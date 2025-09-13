@@ -21,6 +21,15 @@ class Migration(migrations.Migration):
             field=models.URLField(blank=True),
         ),
         migrations.AddField(
+            model_name="charger",
+            name="notify_on_charge",
+            field=models.BooleanField(
+                default=False,
+                verbose_name="Notify On Charge",
+                help_text="Send a net message when a charging session starts.",
+            ),
+        ),
+        migrations.AddField(
             model_name="location",
             name="is_user_data",
             field=models.BooleanField(default=False, editable=False),
