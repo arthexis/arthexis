@@ -89,7 +89,7 @@ class CSMSConsumerTests(TransactionTestCase):
                 2,
                 "1",
                 "StartTransaction",
-                {"meterStart": 10},
+                {"meterStart": 10, "connectorId": 3},
             ]
         )
         response = await communicator.receive_json_from()
@@ -99,6 +99,7 @@ class CSMSConsumerTests(TransactionTestCase):
             pk=tx_id, charger__charger_id="TEST"
         )
         self.assertEqual(tx.meter_start, 10)
+        self.assertEqual(tx.connector_id, 3)
         self.assertIsNone(tx.stop_time)
 
         await communicator.send_json_to(
@@ -1013,6 +1014,8 @@ class ChargePointSimulatorTests(TransactionTestCase):
                 kw_min=0.1,
                 kw_max=0.2,
                 pre_charge_delay=0.0,
+                serial_number="SN123",
+                connector_id=7,
             )
             sim = ChargePointSimulator(cfg)
             await sim._run_session()
@@ -1023,8 +1026,11 @@ class ChargePointSimulatorTests(TransactionTestCase):
         actions = [msg[2] for msg in received]
         self.assertIn("BootNotification", actions)
         self.assertIn("StartTransaction", actions)
+        boot_msg = next(msg for msg in received if msg[2] == "BootNotification")
+        self.assertEqual(boot_msg[3].get("serialNumber"), "SN123")
         start_msg = next(msg for msg in received if msg[2] == "StartTransaction")
         self.assertEqual(start_msg[3].get("vin"), "WP0ZZZ12345678901")
+        self.assertEqual(start_msg[3].get("connectorId"), 7)
 
     async def test_start_returns_status_and_log(self):
         async def handler(ws):

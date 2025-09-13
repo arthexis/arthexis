@@ -31,6 +31,8 @@ class SimulatorConfig:
     repeat: bool = False
     username: Optional[str] = None
     password: Optional[str] = None
+    serial_number: str = ""
+    connector_id: int = 1
 
 
 class ChargePointSimulator:
@@ -113,6 +115,7 @@ class ChargePointSimulator:
                     {
                         "chargePointModel": "Simulator",
                         "chargePointVendor": "SimVendor",
+                        "serialNumber": cfg.serial_number,
                     },
                 ]
             )
@@ -145,7 +148,7 @@ class ChargePointSimulator:
                                 "status",
                                 "StatusNotification",
                                 {
-                                    "connectorId": 1,
+                                    "connectorId": cfg.connector_id,
                                     "errorCode": "NoError",
                                     "status": "Available",
                                 },
@@ -162,7 +165,7 @@ class ChargePointSimulator:
                                 "meter",
                                 "MeterValues",
                                 {
-                                    "connectorId": 1,
+                                    "connectorId": cfg.connector_id,
                                     "meterValue": [
                                         {
                                             "timestamp": time.strftime(
@@ -192,7 +195,7 @@ class ChargePointSimulator:
                         "start",
                         "StartTransaction",
                         {
-                            "connectorId": 1,
+                            "connectorId": cfg.connector_id,
                             "idTag": cfg.rfid,
                             "meterStart": meter_start,
                             "vin": cfg.vin,
@@ -226,7 +229,7 @@ class ChargePointSimulator:
                             "meter",
                             "MeterValues",
                             {
-                                "connectorId": 1,
+                                "connectorId": cfg.connector_id,
                                 "transactionId": tx_id,
                                 "meterValue": [
                                     {
