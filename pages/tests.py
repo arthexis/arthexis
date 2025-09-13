@@ -748,6 +748,19 @@ class FavoriteTests(TestCase):
         self.assertGreaterEqual(resp.content.decode().count(url), 1)
         self.assertContains(resp, NodeRole._meta.verbose_name_plural)
 
+    def test_favorite_ct_id_recreates_missing_content_type(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        ct.delete()
+        from pages.templatetags.favorites import favorite_ct_id
+
+        new_id = favorite_ct_id("pages", "Application")
+        self.assertIsNotNone(new_id)
+        self.assertTrue(
+            ContentType.objects.filter(
+                pk=new_id, app_label="pages", model="application"
+            ).exists()
+        )
+
     def test_dashboard_uses_browse_label(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
         Favorite.objects.create(user=self.user, content_type=ct)
