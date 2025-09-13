@@ -21,7 +21,7 @@ from .models import (
     ElectricVehicle,
     EnergyCredit,
     Product,
-    Subscription,
+    LiveSubscription,
     Brand,
     EVModel,
     RFID,
@@ -310,7 +310,31 @@ class ElectricVehicleTests(TestCase):
         self.assertEqual(acc.vehicles.count(), 2)
 
 
-class SubscriptionTests(TestCase):
+class AddressTests(TestCase):
+    def test_invalid_municipality_state(self):
+        addr = Address(
+            street="Main",
+            number="1",
+            municipality="Monterrey",
+            state=Address.State.COAHUILA,
+            postal_code="00000",
+        )
+        with self.assertRaises(ValidationError):
+            addr.full_clean()
+
+    def test_user_link(self):
+        addr = Address.objects.create(
+            street="Main",
+            number="2",
+            municipality="Monterrey",
+            state=Address.State.NUEVO_LEON,
+            postal_code="64000",
+        )
+        user = User.objects.create_user(username="addr", password="pwd", address=addr)
+        self.assertEqual(user.address, addr)
+
+
+class LiveSubscriptionTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(username="bob", password="pwd")
@@ -318,22 +342,22 @@ class SubscriptionTests(TestCase):
         self.product = Product.objects.create(name="Gold", renewal_period=30)
         self.client.force_login(self.user)
 
-    def test_create_and_list_subscription(self):
+    def test_create_and_list_live_subscription(self):
         response = self.client.post(
-            reverse("add-subscription"),
+            reverse("add-live-subscription"),
             data={"account_id": self.account.id, "product_id": self.product.id},
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(Subscription.objects.count(), 1)
+        self.assertEqual(LiveSubscription.objects.count(), 1)
 
         list_resp = self.client.get(
-            reverse("subscription-list"), {"account_id": self.account.id}
+            reverse("live-subscription-list"), {"account_id": self.account.id}
         )
         self.assertEqual(list_resp.status_code, 200)
         data = list_resp.json()
-        self.assertEqual(len(data["subscriptions"]), 1)
-        self.assertEqual(data["subscriptions"][0]["product__name"], "Gold")
+        self.assertEqual(len(data["live_subscriptions"]), 1)
+        self.assertEqual(data["live_subscriptions"][0]["product__name"], "Gold")
 
     def test_product_list(self):
         response = self.client.get(reverse("product-list"))

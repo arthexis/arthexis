@@ -985,8 +985,8 @@ class Product(Entity):
         return self.name
 
 
-class Subscription(Entity):
-    """An energy account's subscription to a product."""
+class LiveSubscription(Entity):
+    """An energy account's live subscription to a product."""
 
     account = models.ForeignKey(EnergyAccount, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
@@ -1002,6 +1002,10 @@ class Subscription(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.account.user} -> {self.product}"
+
+    class Meta:
+        verbose_name = _("Live Subscription")
+        verbose_name_plural = _("Live Subscriptions")
 
 
 class AdminHistory(Entity):

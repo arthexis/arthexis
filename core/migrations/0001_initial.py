@@ -471,7 +471,7 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.CreateModel(
-            name="Subscription",
+            name="LiveSubscription",
             fields=[
                 (
                     "id",
@@ -501,7 +501,8 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "abstract": False,
+                "verbose_name": "Live Subscription",
+                "verbose_name_plural": "Live Subscriptions",
             },
         ),
         migrations.CreateModel(
