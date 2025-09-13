@@ -115,8 +115,8 @@ require_ssh_password() {
         exit 1
     fi
     if ! grep -Eq '^[[:space:]]*PasswordAuthentication[[:space:]]+yes' /etc/ssh/sshd_config; then
-        echo "SSH password authentication is disabled. Enable it in /etc/ssh/sshd_config before running this script." >&2
-        exit 1
+        sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+        systemctl restart ssh
     fi
 }
 
