@@ -107,12 +107,14 @@ def _fixture_sort_key(name: str) -> tuple[int, str]:
     filename = Path(name).name
     if filename.startswith("users__"):
         priority = 0
-    elif "__module_" in filename:
+    elif "__application_" in filename or "__noderole_" in filename:
         priority = 1
-    elif "__landing_" in filename:
+    elif "__module_" in filename:
         priority = 2
-    else:
+    elif "__landing_" in filename:
         priority = 3
+    else:
+        priority = 4
     return (priority, filename)
 
 
@@ -259,9 +261,10 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     if fixtures:
         fixtures.sort(key=_fixture_sort_key)
         with tempfile.TemporaryDirectory() as tmpdir:
-            patched: list[str] = []
+            patched: dict[int, list[str]] = {}
             user_pk_map: dict[int, int] = {}
             for name in fixtures:
+                priority, _ = _fixture_sort_key(name)
                 source = Path(settings.BASE_DIR, name)
                 with source.open() as f:
                     data = json.load(f)
@@ -306,10 +309,11 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                 with dest.open("w") as f:
                     json.dump(patched_data, f)
                 if patched_data:
-                    patched.append(str(dest))
+                    patched.setdefault(priority, []).append(str(dest))
             post_save.disconnect(_create_landings, sender=Module)
             try:
-                call_command("loaddata", *patched)
+                for priority in sorted(patched):
+                    call_command("loaddata", *patched[priority])
                 for module in Module.objects.all():
                     module.create_landings()
                 Landing.objects.update(is_seed_data=True)
