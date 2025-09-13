@@ -25,6 +25,8 @@ import requests
 import datetime
 import calendar
 from django_object_actions import DjangoObjectActions
+from post_office.admin import LogAdmin as PostOfficeLogAdmin
+from post_office.models import Log as PostOfficeLog
 from ocpp.models import Transaction
 from .models import (
     User,
@@ -58,6 +60,7 @@ from .user_data import EntityModelAdmin
 
 
 admin.site.unregister(Group)
+admin.site.unregister(PostOfficeLog)
 
 
 # Add object links for small datasets in changelist view
@@ -531,6 +534,14 @@ class EmailInbox(CoreEmailInbox):
         verbose_name_plural = CoreEmailInbox._meta.verbose_name_plural
 
 
+class EmailLog(PostOfficeLog):
+    class Meta:
+        proxy = True
+        app_label = "post_office"
+        verbose_name = "Email Log"
+        verbose_name_plural = "Email Logs"
+
+
 class EmailInboxAdminForm(forms.ModelForm):
     """Admin form for :class:`core.models.EmailInbox` with hidden password."""
 
@@ -572,6 +583,11 @@ class EmailSearchForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={"style": "width: 40em; height: 10em;"}),
     )
+
+
+@admin.register(EmailLog)
+class EmailLogAdmin(PostOfficeLogAdmin):
+    pass
 
 
 @admin.register(EmailInbox)
