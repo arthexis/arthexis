@@ -302,17 +302,30 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         from packaging.version import Version
 
         ver_file = Path("VERSION")
-        repo_version = ver_file.read_text().strip() if ver_file.exists() else "0.0.0"
-        versions = [Version(repo_version)]
-        versions += [
-            Version(r.version)
-            for r in PackageRelease.all_objects.filter(package=package)
-        ]
-        highest = max(versions)
-        next_version = f"{highest.major}.{highest.minor}.{highest.micro + 1}"
+        repo_version = (
+            Version(ver_file.read_text().strip())
+            if ver_file.exists()
+            else Version("0.0.0")
+        )
+
+        pypi_latest = Version("0.0.0")
+        try:
+            resp = requests.get(
+                f"https://pypi.org/pypi/{package.name}/json", timeout=10
+            )
+            if resp.ok:
+                releases = resp.json().get("releases", {})
+                if releases:
+                    pypi_latest = max(Version(v) for v in releases)
+        except Exception:
+            pass
+        pypi_plus_one = Version(
+            f"{pypi_latest.major}.{pypi_latest.minor}.{pypi_latest.micro + 1}"
+        )
+        next_version = max(repo_version, pypi_plus_one)
         release, _created = PackageRelease.all_objects.update_or_create(
             package=package,
-            version=next_version,
+            version=str(next_version),
             defaults={
                 "release_manager": package.release_manager,
                 "is_deleted": False,
