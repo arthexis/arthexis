@@ -16,6 +16,11 @@ class Migration(migrations.Migration):
             field=models.BooleanField(default=False, editable=False),
         ),
         migrations.AddField(
+            model_name="charger",
+            name="console_url",
+            field=models.URLField(blank=True),
+        ),
+        migrations.AddField(
             model_name="location",
             name="is_user_data",
             field=models.BooleanField(default=False, editable=False),

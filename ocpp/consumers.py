@@ -1,9 +1,11 @@
 import asyncio
 import json
 import base64
+import os
 from datetime import datetime
 from django.utils import timezone
 from core.models import EnergyAccount, RFID as CoreRFID
+import requests
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -59,16 +61,32 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         )
         store.connections[self.charger_id] = self
         store.logs["charger"].setdefault(self.charger_id, [])
-        self.charger, _ = await database_sync_to_async(Charger.objects.get_or_create)(
+        self.charger, created = await database_sync_to_async(
+            Charger.objects.get_or_create
+        )(
             charger_id=self.charger_id,
             connector_id=None,
             defaults={"last_path": self.scope.get("path", "")},
         )
+        if created:
+            await self._set_console_url(self.charger)
         location_name = await sync_to_async(
             lambda: self.charger.location.name if self.charger.location else ""
         )()
         store.register_log_name(
             self.charger_id, location_name or self.charger_id, log_type="charger"
+        )
+
+    async def _set_console_url(self, charger: Charger) -> None:
+        ip = self.scope.get("client", ("", ""))[0]
+        port = os.getenv("OCPP_EVCS_PORT", "8900")
+        url = f"http://{ip}:{port}"
+        try:
+            await asyncio.to_thread(requests.get, url, timeout=5)
+        except Exception:
+            return
+        await database_sync_to_async(Charger.objects.filter(pk=charger.pk).update)(
+            console_url=url
         )
 
     async def _get_account(self, id_tag: str) -> EnergyAccount | None:
@@ -101,6 +119,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 connector_id=connector,
                 last_path=self.scope.get("path", ""),
             )
+            await self._set_console_url(self.charger)
         else:
             self.charger.connector_id = connector
             await database_sync_to_async(self.charger.save)(
