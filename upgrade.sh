@@ -11,6 +11,7 @@ cd "$BASE_DIR"
 FORCE=0
 CLEAN=0
 NO_RESTART=0
+CANARY=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --latest)
@@ -25,12 +26,24 @@ while [[ $# -gt 0 ]]; do
       NO_RESTART=1
       shift
       ;;
+    --canary)
+      CANARY=1
+      shift
+      ;;
     *)
       echo "Unknown option: $1" >&2
       exit 1
       ;;
   esac
 done
+
+# Run in canary mode if requested
+if [[ $CANARY -eq 1 ]]; then
+  echo "Running canary upgrade test in Docker..."
+  docker build -t arthexis-canary -f Dockerfile.canary .
+  docker run --rm arthexis-canary
+  exit $?
+fi
 
 # Determine current and remote versions
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
