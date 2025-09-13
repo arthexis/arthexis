@@ -82,10 +82,16 @@ def _seed_fixture_path(instance) -> Path | None:
 def ensure_userdatum(path: Path) -> None:
     """Ensure a :class:`UserDatum` entry exists for the given fixture."""
     try:
-        user_id, app_label, model, obj_id = path.stem.split("_", 3)
+        parts = path.stem.split("_")
+        if len(parts) < 4:
+            return
+        user_id = int(parts[0])
+        obj_id = int(parts[-1])
+        model = parts[-2]
+        app_label = "_".join(parts[1:-2])
         ct = ContentType.objects.get_by_natural_key(app_label, model)
         UserDatum.objects.get_or_create(
-            user_id=int(user_id), content_type=ct, object_id=int(obj_id)
+            user_id=user_id, content_type=ct, object_id=obj_id
         )
     except Exception:
         pass
