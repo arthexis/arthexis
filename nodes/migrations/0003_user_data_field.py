@@ -10,6 +10,36 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.CreateModel(
+            name="NodeFeature",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                ("is_user_data", models.BooleanField(default=False, editable=False)),
+                ("slug", models.SlugField(max_length=50, unique=True)),
+                ("display", models.CharField(max_length=50)),
+                (
+                    "roles",
+                    models.ManyToManyField(
+                        blank=True, related_name="features", to="nodes.noderole"
+                    ),
+                ),
+            ],
+            options={
+                "ordering": ["display"],
+                "verbose_name": "Node Feature",
+                "verbose_name_plural": "Node Features",
+            },
+        ),
         migrations.AddField(
             model_name="contentsample",
             name="is_user_data",
