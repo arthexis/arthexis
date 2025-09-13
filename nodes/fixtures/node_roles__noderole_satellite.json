@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "model": "nodes.noderole",
+    "pk": 4,
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Satellite",
+      "description": "Multi-Device Edge, Network & Data Acquisition"
+    }
+  }
+]

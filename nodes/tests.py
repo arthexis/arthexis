@@ -23,6 +23,7 @@ from django.contrib import admin
 from django.contrib.sites.models import Site
 from django_celery_beat.models import PeriodicTask
 from django.conf import settings
+from django.core.mail import EmailMessage
 from .actions import NodeAction
 from selenium.common.exceptions import WebDriverException
 from .utils import capture_screenshot
@@ -34,6 +35,7 @@ from .models import (
     NodeRole,
     NetMessage,
 )
+from .backends import OutboxEmailBackend
 from .tasks import capture_node_screenshot, sample_clipboard
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes

@@ -274,11 +274,8 @@ class Node(Entity):
 
 
 class EmailOutbox(Entity):
-    """SMTP credentials for sending mail from a node."""
+    """SMTP credentials for sending mail."""
 
-    node = models.OneToOneField(
-        Node, on_delete=models.CASCADE, related_name="email_outbox"
-    )
     host = SigilShortAutoField(
         max_length=100,
         help_text=("Gmail: smtp.gmail.com. " "GoDaddy: smtpout.secureserver.net"),
@@ -316,12 +313,9 @@ class EmailOutbox(Entity):
         verbose_name = "Email Outbox"
         verbose_name_plural = "Email Outboxes"
 
-    class Meta:
-        verbose_name = "Email Outbox"
-        verbose_name_plural = "Email Outboxes"
-
     def get_connection(self):
         return get_connection(
+            "django.core.mail.backends.smtp.EmailBackend",
             host=self.host,
             port=self.port,
             username=self.username or None,
