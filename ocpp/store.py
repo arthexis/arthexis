@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime
 import json
 import re
+import asyncio
 
 connections = {}
 transactions = {}
@@ -21,6 +22,36 @@ LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 SESSION_DIR = LOG_DIR / "sessions"
 SESSION_DIR.mkdir(exist_ok=True)
+LOCK_DIR = Path(__file__).resolve().parent.parent / "locks"
+LOCK_DIR.mkdir(exist_ok=True)
+SESSION_LOCK = LOCK_DIR / "charging.lck"
+_lock_task: asyncio.Task | None = None
+
+
+async def _touch_lock() -> None:
+    try:
+        while True:
+            SESSION_LOCK.touch()
+            await asyncio.sleep(60)
+    except asyncio.CancelledError:
+        pass
+
+
+def start_session_lock() -> None:
+    global _lock_task
+    SESSION_LOCK.touch()
+    loop = asyncio.get_event_loop()
+    if _lock_task is None or _lock_task.done():
+        _lock_task = loop.create_task(_touch_lock())
+
+
+def stop_session_lock() -> None:
+    global _lock_task
+    if _lock_task:
+        _lock_task.cancel()
+        _lock_task = None
+    if SESSION_LOCK.exists():
+        SESSION_LOCK.unlink()
 
 
 def register_log_name(cid: str, name: str, log_type: str = "charger") -> None:

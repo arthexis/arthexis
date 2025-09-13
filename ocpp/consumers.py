@@ -225,6 +225,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, close_code):
         store.connections.pop(self.charger_id, None)
         store.end_session_log(self.charger_id)
+        store.stop_session_lock()
         store.add_log(
             self.charger_id, f"Closed (code={close_code})", log_type="charger"
         )
@@ -303,6 +304,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     )
                     store.transactions[self.charger_id] = tx_obj
                     store.start_session_log(self.charger_id, tx_obj.pk)
+                    store.start_session_lock()
                     store.add_session_message(self.charger_id, text_data)
                     reply_payload = {
                         "transactionId": tx_obj.pk,
@@ -332,6 +334,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     await database_sync_to_async(tx_obj.save)()
                 reply_payload = {"idTagInfo": {"status": "Accepted"}}
                 store.end_session_log(self.charger_id)
+                store.stop_session_lock()
             response = [3, msg_id, reply_payload]
             await self.send(json.dumps(response))
             store.add_log(

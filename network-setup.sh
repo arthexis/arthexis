@@ -16,11 +16,12 @@ LOCK_DIR="$BASE_DIR/locks"
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--no-firewall] [--unsafe] [--interactive|-i]
+Usage: $0 [--password] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog]
   --password      Prompt for a new WiFi password even if one is already configured.
   --no-firewall   Skip firewall port validation.
   --unsafe        Allow modification of the active internet connection.
   --interactive, -i  Collect user decisions for each step before executing.
+  --no-watchdog   Skip installing the WiFi watchdog service.
 USAGE
 }
 
@@ -28,6 +29,7 @@ FORCE_PASSWORD=false
 SKIP_FIREWALL=false
 INTERACTIVE=false
 UNSAFE=false
+INSTALL_WATCHDOG=true
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --password)
@@ -41,6 +43,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         -i|--interactive)
             INTERACTIVE=true
+            ;;
+        --no-watchdog)
+            INSTALL_WATCHDOG=false
             ;;
         -h|--help)
             usage
@@ -193,6 +198,11 @@ fi
 ask_step RUN_SERVICES "Ensure required services"
 ask_step RUN_AP "Configure wlan0 access point"
 ask_step RUN_WLAN1_REFRESH "Install wlan1 device refresh service"
+if [[ $INSTALL_WATCHDOG == true ]]; then
+    ask_step RUN_WIFI_WATCHDOG "Install WiFi watchdog service"
+else
+    RUN_WIFI_WATCHDOG=false
+fi
 ask_step RUN_PACKAGES "Ensure required packages and SSH service"
 if [[ $SKIP_FIREWALL == false ]]; then
     ask_step RUN_FIREWALL "Validate firewall ports"
@@ -278,6 +288,39 @@ EOF
             systemctl enable "$WLAN1_REFRESH_SERVICE" >/dev/null 2>&1 || true
             "$WLAN1_REFRESH_SCRIPT" || true
         fi
+    fi
+fi
+
+if [[ $RUN_WIFI_WATCHDOG == true ]]; then
+    WATCHDOG_SCRIPT="$BASE_DIR/scripts/wifi-watchdog.sh"
+    WATCHDOG_SERVICE="wifi-watchdog"
+    WATCHDOG_SERVICE_FILE="/etc/systemd/system/${WATCHDOG_SERVICE}.service"
+    if [ -f "$WATCHDOG_SCRIPT" ]; then
+        cat > "$WATCHDOG_SERVICE_FILE" <<EOF
+[Unit]
+Description=WiFi connectivity watchdog
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$WATCHDOG_SCRIPT
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        systemctl daemon-reload
+        systemctl enable "$WATCHDOG_SERVICE" >/dev/null 2>&1 || true
+        systemctl restart "$WATCHDOG_SERVICE" || true
+    fi
+else
+    WATCHDOG_SERVICE="wifi-watchdog"
+    if systemctl list-unit-files | grep -Fq "${WATCHDOG_SERVICE}.service"; then
+        systemctl stop "$WATCHDOG_SERVICE" || true
+        systemctl disable "$WATCHDOG_SERVICE" || true
+        rm -f "/etc/systemd/system/${WATCHDOG_SERVICE}.service"
+        systemctl daemon-reload
     fi
 fi
 

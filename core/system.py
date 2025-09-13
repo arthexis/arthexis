@@ -6,6 +6,7 @@ import socket
 import subprocess
 import shutil
 import argparse
+import time
 
 from django import forms
 from django.conf import settings
@@ -100,10 +101,17 @@ def _system_view(request):
             if not request.user.check_password(password):
                 messages.error(request, _("Incorrect password."))
             else:
-                if info["service"]:
-                    args.append("--all")
-                subprocess.Popen(args)
-                return redirect(reverse("admin:index"))
+                lock_file = Path(settings.BASE_DIR) / "locks" / "charging.lck"
+                age = None
+                if lock_file.exists():
+                    age = time.time() - lock_file.stat().st_mtime
+                if lock_file.exists() and age is not None and age <= 600:
+                    messages.error(request, _("Charging session in progress."))
+                else:
+                    if info["service"]:
+                        args.append("--all")
+                    subprocess.Popen(args)
+                    return redirect(reverse("admin:index"))
         elif action == "restart":
             subprocess.Popen(args)
             return redirect(reverse("admin:index"))
