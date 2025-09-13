@@ -46,7 +46,7 @@ from .models import (
     Reference,
     OdooProfile,
     EmailInbox as CoreEmailInbox,
-    EmailCollector,
+    EmailCollector as CoreEmailCollector,
     Package,
     PackageRelease,
     ReleaseManager,
@@ -489,9 +489,23 @@ class OdooProfileAdminForm(forms.ModelForm):
         return pwd
 
 
+class EmailCollector(CoreEmailCollector):
+    class Meta:
+        proxy = True
+        app_label = "post_office"
+        verbose_name = CoreEmailCollector._meta.verbose_name
+        verbose_name_plural = CoreEmailCollector._meta.verbose_name_plural
+
+
 class EmailCollectorInline(admin.TabularInline):
-    model = EmailCollector
+    model = CoreEmailCollector
     extra = 0
+
+
+@admin.register(EmailCollector)
+class EmailCollectorAdmin(EntityModelAdmin):
+    list_display = ("inbox", "subject", "sender", "body", "fragment")
+    search_fields = ("subject", "sender", "body", "fragment")
 
 
 @admin.register(OdooProfile)

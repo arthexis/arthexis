@@ -9,6 +9,7 @@ from core.admin import (
     EmailInboxAdminForm,
     EmailInboxAdmin,
     EmailInbox as AdminEmailInbox,
+    EmailCollector as AdminEmailCollector,
 )
 
 
@@ -186,6 +187,37 @@ class EmailCollectorInlineTests(TestCase):
         self.assertEqual(inbox.collectors.count(), 2)
 
 
-class EmailCollectorStandaloneAdminTests(TestCase):
-    def test_collector_not_registered_standalone(self):
-        self.assertNotIn(EmailCollector, admin.site._registry)
+class EmailCollectorAdminTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="admin", email="a@example.com", password="pwd"
+        )
+        self.factory = RequestFactory()
+        self.inbox = EmailInbox.objects.create(
+            user=self.user,
+            host="imap.test",
+            port=993,
+            username="u",
+            password="p",
+            protocol=EmailInbox.IMAP,
+            use_ssl=True,
+        )
+        self.admin = admin.site._registry[AdminEmailCollector]
+
+    def test_collector_registered_standalone(self):
+        self.assertIn(AdminEmailCollector, admin.site._registry)
+
+    def test_changelist_and_change_view(self):
+        collector = EmailCollector.objects.create(inbox=self.inbox)
+        request = self.factory.get("/")
+        request.user = self.user
+        request.session = self.client.session
+        response = self.admin.changelist_view(request)
+        self.assertEqual(response.status_code, 200)
+
+        request2 = self.factory.get("/")
+        request2.user = self.user
+        request2.session = self.client.session
+        response2 = self.admin.changeform_view(request2, str(collector.pk))
+        self.assertEqual(response2.status_code, 200)
