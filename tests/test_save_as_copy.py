@@ -11,7 +11,7 @@ django.setup()
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
-from core.models import Address
+from ocpp.models import CPLocation
 
 
 class SaveAsCopyTests(TestCase):
@@ -22,7 +22,8 @@ class SaveAsCopyTests(TestCase):
         )
 
     def test_save_as_copy_creates_new_instance(self):
-        address = Address.objects.create(
+        location = CPLocation.objects.create(
+            name="Loc1",
             street="Main",
             number="1",
             municipality="Saltillo",
@@ -30,15 +31,18 @@ class SaveAsCopyTests(TestCase):
             postal_code="25000",
         )
         self.client.force_login(self.user)
-        url = reverse("admin:core_address_change", args=[address.pk])
+        url = reverse("admin:ocpp_cplocation_change", args=[location.pk])
         data = {
-            "street": address.street,
-            "number": address.number,
-            "municipality": address.municipality,
-            "state": address.state,
-            "postal_code": address.postal_code,
+            "name": location.name,
+            "street": location.street,
+            "number": location.number,
+            "municipality": location.municipality,
+            "state": location.state,
+            "postal_code": location.postal_code,
+            "latitude": "",
+            "longitude": "",
             "_saveacopy": "Save as a copy",
         }
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(Address.objects.count(), 2)
+        self.assertEqual(CPLocation.objects.count(), 2)

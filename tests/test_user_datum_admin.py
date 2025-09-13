@@ -26,7 +26,8 @@ env_refresh = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(env_refresh)
 run_database_tasks = env_refresh.run_database_tasks
 
-from core.models import Address, EnergyAccount, OdooProfile, SecurityGroup
+from core.models import EnergyAccount, OdooProfile, SecurityGroup
+from ocpp.models import CPLocation
 from core.user_data import UserDatum
 
 
@@ -242,37 +243,41 @@ class UserDatumAdminTests(TransactionTestCase):
         fixture.unlink(missing_ok=True)
 
     def test_copy_unmarks_user_datum(self):
-        address = Address.objects.create(
+        location = CPLocation.objects.create(
+            name="Main CP",
             street="Main",
             number="1",
             municipality="Saltillo",
             state="CO",
             postal_code="25000",
         )
-        url = reverse("admin:core_address_change", args=[address.pk])
+        url = reverse("admin:ocpp_cplocation_change", args=[location.pk])
         data = {
-            "street": address.street,
-            "number": address.number,
-            "municipality": address.municipality,
-            "state": address.state,
-            "postal_code": address.postal_code,
+            "name": location.name,
+            "street": location.street,
+            "number": location.number,
+            "municipality": location.municipality,
+            "state": location.state,
+            "postal_code": location.postal_code,
+            "latitude": "",
+            "longitude": "",
             "_user_datum": "on",
             "_save": "Save",
         }
         self.client.post(url, data)
-        ct = ContentType.objects.get_for_model(Address)
+        ct = ContentType.objects.get_for_model(CPLocation)
         self.assertTrue(
             UserDatum.objects.filter(
-                user=self.user, content_type=ct, object_id=address.pk
+                user=self.user, content_type=ct, object_id=location.pk
             ).exists()
         )
         copy_data = data | {"_saveacopy": "Save as a copy"}
         self.client.post(url, copy_data)
-        self.assertEqual(Address.objects.count(), 2)
-        new_addr = Address.objects.order_by("-pk").first()
+        self.assertEqual(CPLocation.objects.count(), 2)
+        new_loc = CPLocation.objects.order_by("-pk").first()
         self.assertFalse(
             UserDatum.objects.filter(
-                user=self.user, content_type=ct, object_id=new_addr.pk
+                user=self.user, content_type=ct, object_id=new_loc.pk
             ).exists()
         )
 

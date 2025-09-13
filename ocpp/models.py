@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.contrib.sites.models import Site
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import ValidationError
 
 from core.models import (
     EnergyAccount,
@@ -13,10 +14,123 @@ from core.models import (
 )
 
 
-class Location(Entity):
+class CPLocation(Entity):
     """Physical location shared by chargers."""
 
+    class State(models.TextChoices):
+        COAHUILA = "CO", "Coahuila"
+        NUEVO_LEON = "NL", "Nuevo León"
+
+    COAHUILA_MUNICIPALITIES = [
+        "Abasolo",
+        "Acuña",
+        "Allende",
+        "Arteaga",
+        "Candela",
+        "Castaños",
+        "Cuatro Ciénegas",
+        "Escobedo",
+        "Francisco I. Madero",
+        "Frontera",
+        "General Cepeda",
+        "Guerrero",
+        "Hidalgo",
+        "Jiménez",
+        "Juárez",
+        "Lamadrid",
+        "Matamoros",
+        "Monclova",
+        "Morelos",
+        "Múzquiz",
+        "Nadadores",
+        "Nava",
+        "Ocampo",
+        "Parras",
+        "Piedras Negras",
+        "Progreso",
+        "Ramos Arizpe",
+        "Sabinas",
+        "Sacramento",
+        "Saltillo",
+        "San Buenaventura",
+        "San Juan de Sabinas",
+        "San Pedro",
+        "Sierra Mojada",
+        "Torreón",
+        "Viesca",
+        "Villa Unión",
+        "Zaragoza",
+    ]
+
+    NUEVO_LEON_MUNICIPALITIES = [
+        "Abasolo",
+        "Agualeguas",
+        "Los Aldamas",
+        "Allende",
+        "Anáhuac",
+        "Apodaca",
+        "Aramberri",
+        "Bustamante",
+        "Cadereyta Jiménez",
+        "El Carmen",
+        "Cerralvo",
+        "Ciénega de Flores",
+        "China",
+        "Doctor Arroyo",
+        "Doctor Coss",
+        "Doctor González",
+        "Galeana",
+        "García",
+        "General Bravo",
+        "General Escobedo",
+        "General Terán",
+        "General Treviño",
+        "General Zaragoza",
+        "General Zuazua",
+        "Guadalupe",
+        "Los Herreras",
+        "Higueras",
+        "Hualahuises",
+        "Iturbide",
+        "Juárez",
+        "Lampazos de Naranjo",
+        "Linares",
+        "Marín",
+        "Melchor Ocampo",
+        "Mier y Noriega",
+        "Mina",
+        "Montemorelos",
+        "Monterrey",
+        "Parás",
+        "Pesquería",
+        "Los Ramones",
+        "Rayones",
+        "Sabinas Hidalgo",
+        "Salinas Victoria",
+        "San Nicolás de los Garza",
+        "San Pedro Garza García",
+        "Santa Catarina",
+        "Santiago",
+        "Vallecillo",
+        "Villaldama",
+        "Hidalgo",
+    ]
+
+    MUNICIPALITIES_BY_STATE = {
+        State.COAHUILA: COAHUILA_MUNICIPALITIES,
+        State.NUEVO_LEON: NUEVO_LEON_MUNICIPALITIES,
+    }
+
+    MUNICIPALITY_CHOICES = [
+        (name, name) for name in COAHUILA_MUNICIPALITIES + NUEVO_LEON_MUNICIPALITIES
+    ]
+
     name = models.CharField(max_length=200)
+    street = models.CharField(max_length=255)
+    number = models.CharField(max_length=20)
+    municipality = models.CharField(max_length=100, choices=MUNICIPALITY_CHOICES)
+    state = models.CharField(max_length=2, choices=State.choices)
+    postal_code = models.CharField(max_length=10)
     latitude = models.DecimalField(
         max_digits=9, decimal_places=6, null=True, blank=True
     )
@@ -24,12 +138,19 @@ class Location(Entity):
         max_digits=9, decimal_places=6, null=True, blank=True
     )
 
+    def clean(self):
+        allowed = self.MUNICIPALITIES_BY_STATE.get(self.state, [])
+        if self.municipality not in allowed:
+            raise ValidationError(
+                {"municipality": _("Invalid municipality for the selected state")}
+            )
+
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
 
     class Meta:
-        verbose_name = _("Charge Location")
-        verbose_name_plural = _("Charge Locations")
+        verbose_name = _("CP Location")
+        verbose_name_plural = _("CP Locations")
 
 
 class Charger(Entity):
@@ -62,7 +183,7 @@ class Charger(Entity):
         Reference, null=True, blank=True, on_delete=models.SET_NULL
     )
     location = models.ForeignKey(
-        Location,
+        CPLocation,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

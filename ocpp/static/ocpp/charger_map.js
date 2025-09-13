@@ -11,6 +11,8 @@
       $mapDiv = $('<div id="charger-map" style="height: 400px;" class="mb-3"></div>');
       var $row = $lng.closest('.form-row');
       $row.after($mapDiv);
+      var $btn = $('<button type="button" class="button" id="set-current-location">Set to current Location</button>');
+      $row.append($btn);
     }
 
     var startLat = parseFloat($lat.val()) || 25.6866;
@@ -36,6 +38,18 @@
     map.on('click', function(e) {
       marker.setLatLng(e.latlng);
       updateInputs(e.latlng.lat, e.latlng.lng);
+    });
+
+    $('#set-current-location').on('click', function() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(pos) {
+          var lat = pos.coords.latitude;
+          var lng = pos.coords.longitude;
+          map.setView([lat, lng], 13);
+          marker.setLatLng([lat, lng]);
+          updateInputs(lat, lng);
+        });
+      }
     });
   });
 })(django.jQuery);
