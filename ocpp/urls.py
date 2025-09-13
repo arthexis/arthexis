@@ -17,5 +17,4 @@ urlpatterns = [
     path("log/<str:cid>/", views.charger_log_page, name="charger-log"),
     path("c/<str:cid>/status/", views.charger_status, name="charger-status"),
     path("rfid/", include("ocpp.rfid.urls")),
-    path("efficiency/", views.efficiency_calculator, name="ev-efficiency"),
 ]

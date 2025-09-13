@@ -1,13 +1,13 @@
 [
   {
     "model": "pages.landing",
-    "pk": 3,
+    "pk": 1,
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "module": ["Terminal", "/ocpp/rfid/"],
-      "path": "/ocpp/rfid/",
-      "label": "RFID Scanner",
+      "module": ["Terminal", "/ocpp/"],
+      "path": "/ocpp/",
+      "label": "Dashboard",
       "enabled": true,
       "description": ""
     }

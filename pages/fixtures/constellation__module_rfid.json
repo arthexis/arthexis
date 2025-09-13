@@ -1,14 +1,14 @@
 [
   {
     "model": "pages.module",
-    "pk": 1,
+    "pk": 2,
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "node_role": ["Satellite"],
+      "node_role": ["Constellation"],
       "application": ["ocpp"],
-      "path": "/ocpp/",
-      "menu": "",
+      "path": "/ocpp/rfid/",
+      "menu": "RFID",
       "is_default": false,
       "favicon": ""
     }
