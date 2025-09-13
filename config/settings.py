@@ -330,6 +330,8 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # Email settings
+EMAIL_BACKEND = "post_office.EmailBackend"
+POST_OFFICE = {"EMAIL_BACKEND": "nodes.backends.OutboxEmailBackend"}
 DEFAULT_FROM_EMAIL = "arthexis@gmail.com"
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 # All outgoing mail is queued via django-post-office; Celery workers must process the queue.

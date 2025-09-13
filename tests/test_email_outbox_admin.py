@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, RequestFactory
 
 from nodes.admin import EmailOutboxAdmin, EmailOutbox as AdminEmailOutbox
-from nodes.models import EmailOutbox, Node
+from nodes.models import EmailOutbox
 
 
 class EmailOutboxAdminActionTests(TestCase):
@@ -14,14 +14,7 @@ class EmailOutboxAdminActionTests(TestCase):
         self.user = User.objects.create_superuser(
             username="admin", email="a@example.com", password="pwd"
         )
-        self.node = Node.objects.create(
-            hostname="host",
-            address="127.0.0.1",
-            port=8000,
-            mac_address="00:11:22:33:44:55",
-        )
         self.outbox = EmailOutbox.objects.create(
-            node=self.node,
             host="smtp.test",
             port=25,
             username="u",

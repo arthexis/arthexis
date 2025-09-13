@@ -91,14 +91,6 @@ class Migration(migrations.Migration):
                         help_text="Default From address; usually the same as username",
                     ),
                 ),
-                (
-                    "node",
-                    models.OneToOneField(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="email_outbox",
-                        to="nodes.node",
-                    ),
-                ),
             ],
             options={
                 "verbose_name": "Email Outbox",

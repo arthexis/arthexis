@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from django.core.mail import send_mail
+from core import mailer
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.cache import never_cache
@@ -235,12 +235,12 @@ def request_invite(request):
                         logger.exception(
                             "Node send_mail failed, falling back to default backend"
                         )
-                        result = send_mail(
-                            subject, body, settings.DEFAULT_FROM_EMAIL, [email]
+                        result = mailer.send(
+                            subject, body, [email], settings.DEFAULT_FROM_EMAIL
                         )
                 else:
-                    result = send_mail(
-                        subject, body, settings.DEFAULT_FROM_EMAIL, [email]
+                    result = mailer.send(
+                        subject, body, [email], settings.DEFAULT_FROM_EMAIL
                     )
                 lead.sent_on = timezone.now()
                 if node_error:

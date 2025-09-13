@@ -17,7 +17,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from django.contrib.auth import get_user_model
-from django.core.mail import get_connection, send_mail
+from django.core.mail import get_connection
+from core import mailer
 import logging
 
 
@@ -257,29 +258,24 @@ class Node(Entity):
         """Send an email using this node's configured outbox if available."""
         outbox = getattr(self, "email_outbox", None)
         logger.info(
-            "Node %s sending email to %s using %s backend",
+            "Node %s queueing email to %s using %s backend",
             self.pk,
             recipient_list,
             "outbox" if outbox else "default",
         )
-        if outbox:
-            result = outbox.send_mail(
-                subject, message, recipient_list, from_email, **kwargs
-            )
-            logger.info("Outbox send_mail result: %s", result)
-            return result
-        from_email = from_email or settings.DEFAULT_FROM_EMAIL
-        result = send_mail(subject, message, from_email, recipient_list, **kwargs)
-        logger.info("Default send_mail result: %s", result)
-        return result
+        return mailer.send(
+            subject,
+            message,
+            recipient_list,
+            from_email,
+            outbox=outbox,
+            **kwargs,
+        )
 
 
 class EmailOutbox(Entity):
-    """SMTP credentials for sending mail from a node."""
+    """SMTP credentials for sending mail."""
 
-    node = models.OneToOneField(
-        Node, on_delete=models.CASCADE, related_name="email_outbox"
-    )
     host = SigilShortAutoField(
         max_length=100,
         help_text=("Gmail: smtp.gmail.com. " "GoDaddy: smtpout.secureserver.net"),
@@ -317,12 +313,9 @@ class EmailOutbox(Entity):
         verbose_name = "Email Outbox"
         verbose_name_plural = "Email Outboxes"
 
-    class Meta:
-        verbose_name = "Email Outbox"
-        verbose_name_plural = "Email Outboxes"
-
     def get_connection(self):
         return get_connection(
+            "django.core.mail.backends.smtp.EmailBackend",
             host=self.host,
             port=self.port,
             username=self.username or None,
@@ -332,19 +325,16 @@ class EmailOutbox(Entity):
         )
 
     def send_mail(self, subject, message, recipient_list, from_email=None, **kwargs):
-        connection = self.get_connection()
         from_email = from_email or self.from_email or settings.DEFAULT_FROM_EMAIL
-        logger.info("EmailOutbox %s sending email to %s", self.pk, recipient_list)
-        result = send_mail(
+        logger.info("EmailOutbox %s queueing email to %s", self.pk, recipient_list)
+        return mailer.send(
             subject,
             message,
-            from_email,
             recipient_list,
-            connection=connection,
+            from_email,
+            outbox=self,
             **kwargs,
         )
-        logger.info("EmailOutbox send_mail result: %s", result)
-        return result
 
 
 class NetMessage(Entity):

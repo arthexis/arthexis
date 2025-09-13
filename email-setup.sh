@@ -29,10 +29,9 @@ if [[ "${SET_OUTBOX,,}" == "y" ]]; then
     read -rp "From email (leave blank to use default): " FROM_EMAIL
 
     "$PYTHON" manage.py shell <<PYTHON
-from nodes.models import Node, EmailOutbox
-node, _ = Node.register_current()
+from nodes.models import EmailOutbox
 outbox, _ = EmailOutbox.objects.update_or_create(
-    node=node,
+    id=1,
     defaults={
         "host": "$HOST",
         "port": int("$PORT"),
@@ -43,7 +42,7 @@ outbox, _ = EmailOutbox.objects.update_or_create(
         "from_email": "$FROM_EMAIL",
     },
 )
-print("Configured outbox for", node.hostname)
+print("Configured outbox")
 PYTHON
 
     read -rp "Save this outbox as a User Datum? [y/N]: " SAVE_UD
