@@ -68,6 +68,9 @@
 <p>{% trans 'Restarts' %}: {{ restart_count }}</p>
 <form method="get">
   <button type="submit" name="restart" value="1">{% trans 'Restart' %}</button>
+  {% if not done %}
+  <button type="submit" name="abort" value="1">{% trans 'Abort publish' %}</button>
+  {% endif %}
 </form>
 {% endblock %}
 

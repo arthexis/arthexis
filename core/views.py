@@ -9,6 +9,7 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from django.utils.translation import gettext as _
 from pathlib import Path
 import subprocess
 
@@ -390,6 +391,11 @@ def release_progress(request, pk: int, action: str):
         ctx = {"step": 0}
         if restart_path.exists():
             restart_path.unlink()
+    if request.GET.get("abort"):
+        ctx["error"] = _("Publish aborted")
+        request.session[session_key] = ctx
+        if lock_path.exists():
+            lock_path.unlink()
     restart_count = 0
     if restart_path.exists():
         try:
