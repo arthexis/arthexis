@@ -63,8 +63,18 @@ def delete_user_fixture(instance, user) -> None:
 
 def load_user_fixtures(user) -> None:
     paths = sorted(_data_dir(user).glob("*.json"))
-    if paths:
-        call_command("loaddata", *[str(p) for p in paths], ignorenonexistent=True)
+    for path in paths:
+        try:
+            call_command("loaddata", str(path), ignorenonexistent=True)
+        except UnicodeDecodeError:
+            try:
+                data = path.read_bytes().decode("latin-1")
+            except Exception:
+                continue
+            path.write_text(data, encoding="utf-8")
+            call_command("loaddata", str(path), ignorenonexistent=True)
+        except Exception:
+            continue
 
 
 @receiver(user_logged_in)
