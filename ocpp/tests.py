@@ -12,7 +12,7 @@ from nodes.models import Node, NodeRole
 
 from config.asgi import application
 
-from .models import Transaction, Charger, Simulator, MeterReading, Location
+from .models import Transaction, Charger, Simulator, MeterReading, CPLocation
 from core.models import EnergyAccount, EnergyCredit
 from core.models import RFID
 from . import store
@@ -586,7 +586,14 @@ class ChargerAdminTests(TestCase):
         self.assertContains(resp, charger.get_absolute_url())
 
     def test_admin_shows_location_name(self):
-        loc = Location.objects.create(name="AdminLoc")
+        loc = CPLocation.objects.create(
+            name="AdminLoc",
+            street="Main",
+            number="1",
+            municipality="Saltillo",
+            state="CO",
+            postal_code="25000",
+        )
         Charger.objects.create(charger_id="ADMINLOC", location=loc)
         url = reverse("admin:ocpp_charger_changelist")
         resp = self.client.get(url)
@@ -830,8 +837,15 @@ class SimulatorAdminTests(TestCase):
 
 class ChargerLocationTests(TestCase):
     def test_lat_lon_fields_saved(self):
-        loc = Location.objects.create(
-            name="Loc1", latitude=10.123456, longitude=-20.654321
+        loc = CPLocation.objects.create(
+            name="Loc1",
+            street="Main",
+            number="1",
+            municipality="Saltillo",
+            state="CO",
+            postal_code="25000",
+            latitude=10.123456,
+            longitude=-20.654321,
         )
         charger = Charger.objects.create(charger_id="LOC1", location=loc)
         self.assertAlmostEqual(float(charger.latitude), 10.123456)

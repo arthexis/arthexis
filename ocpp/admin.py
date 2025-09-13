@@ -15,7 +15,7 @@ from .models import (
     Simulator,
     MeterValue,
     Transaction,
-    Location,
+    CPLocation,
     ElectricVehicle,
 )
 from .simulator import ChargePointSimulator
@@ -29,9 +29,9 @@ from core.user_data import EntityModelAdmin
 from .models import RFID
 
 
-class LocationAdminForm(forms.ModelForm):
+class CPLocationAdminForm(forms.ModelForm):
     class Meta:
-        model = Location
+        model = CPLocation
         fields = "__all__"
 
         widgets = {
@@ -59,9 +59,9 @@ class TransactionImportForm(forms.Form):
     file = forms.FileField()
 
 
-@admin.register(Location)
-class LocationAdmin(EntityModelAdmin):
-    form = LocationAdminForm
+@admin.register(CPLocation)
+class CPLocationAdmin(EntityModelAdmin):
+    form = CPLocationAdminForm
     list_display = ("name", "latitude", "longitude")
 
 
@@ -149,7 +149,7 @@ class ChargerAdmin(EntityModelAdmin):
     def location_name(self, obj):
         return obj.location.name if obj.location else ""
 
-    location_name.short_description = "Location"
+    location_name.short_description = "CP Location"
 
     def purge_data(self, request, queryset):
         for charger in queryset:

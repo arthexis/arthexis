@@ -594,12 +594,12 @@ msgid "Calculator Templates"
 msgstr "Plantillas de calculadora"
 
 #: ocpp/models.py:22
-msgid "Charge Location"
-msgstr "Ubicación de Carga"
+msgid "CP Location"
+msgstr "Ubicación CP"
 
 #: ocpp/models.py:23
-msgid "Charge Locations"
-msgstr "Ubicaciones de Carga"
+msgid "CP Locations"
+msgstr "Ubicaciones CP"
 
 #: ocpp/models.py:44
 msgid "Charge Point"
