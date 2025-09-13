@@ -136,7 +136,15 @@ def future_action_items(context):
     for entry in user.admin_history.all()[:10]:
         if entry.content_type_id in seen or not entry.url:
             continue
-        model_items.append({"url": entry.url, "label": entry.admin_label})
+        model = entry.content_type.model_class() if entry.content_type else None
+        has_instances = bool(model and model.objects.exists())
+        model_items.append(
+            {
+                "url": entry.url,
+                "label": entry.admin_label,
+                "has_instances": has_instances,
+            }
+        )
         seen.add(entry.content_type_id)
 
     # Favorites
@@ -151,7 +159,10 @@ def future_action_items(context):
         )
         url = admin_changelist_url(ct)
         if url:
-            model_items.append({"url": url, "label": label})
+            has_instances = bool(model and model.objects.exists())
+            model_items.append(
+                {"url": url, "label": label, "has_instances": has_instances}
+            )
             seen.add(ct.id)
 
     # Models with user data
@@ -166,7 +177,7 @@ def future_action_items(context):
         label = model._meta.verbose_name_plural
         url = admin_changelist_url(ct)
         if url:
-            model_items.append({"url": url, "label": label})
+            model_items.append({"url": url, "label": label, "has_instances": True})
             seen.add(ct.id)
 
     todos = [

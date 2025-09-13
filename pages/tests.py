@@ -763,9 +763,16 @@ class FavoriteTests(TestCase):
             ).exists()
         )
 
-    def test_dashboard_uses_browse_label(self):
+    def test_dashboard_uses_create_label_when_no_instances(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
         Favorite.objects.create(user=self.user, content_type=ct)
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, "Create some Applications")
+
+    def test_dashboard_uses_browse_label_with_instances(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        Favorite.objects.create(user=self.user, content_type=ct)
+        Application.objects.create(name="app1")
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "Browse Applications")
 
