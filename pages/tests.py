@@ -7,7 +7,6 @@ from django.contrib import admin
 from django.core.exceptions import DisallowedHost
 import socket
 from pages.models import Application, Module, SiteBadge, Favorite
-from core.user_data import UserDatum
 from pages.admin import ApplicationAdmin
 from django.apps import apps as django_apps
 from core.models import AdminHistory, InviteLead, Todo, NewsArticle
@@ -732,9 +731,7 @@ class FavoriteTests(TestCase):
         Favorite.objects.create(
             user=self.user, content_type=fav_ct, custom_label="Apps"
         )
-        role = NodeRole.objects.create(name="DataRole")
-        ud_ct = ContentType.objects.get_for_model(NodeRole)
-        UserDatum.objects.create(user=self.user, content_type=ud_ct, object_id=role.pk)
+        NodeRole.objects.create(name="DataRole", is_user_data=True)
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, reverse("admin:pages_application_changelist"))
         self.assertContains(resp, reverse("admin:nodes_noderole_changelist"))
@@ -742,8 +739,7 @@ class FavoriteTests(TestCase):
     def test_dashboard_merges_duplicate_future_actions(self):
         ct = ContentType.objects.get_for_model(NodeRole)
         Favorite.objects.create(user=self.user, content_type=ct)
-        role = NodeRole.objects.create(name="DataRole2")
-        UserDatum.objects.create(user=self.user, content_type=ct, object_id=role.pk)
+        NodeRole.objects.create(name="DataRole2", is_user_data=True)
         AdminHistory.objects.create(
             user=self.user,
             content_type=ct,

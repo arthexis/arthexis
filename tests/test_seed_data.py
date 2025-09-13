@@ -34,7 +34,6 @@ class EntityInheritanceTests(TestCase):
         from core.entity import Entity
 
         allowed = {
-            "core.UserDatum",
             "core.SecurityGroup",
             "pages.SiteProxy",
         }

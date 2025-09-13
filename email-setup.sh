@@ -50,14 +50,15 @@ PYTHON
         read -rp "Username: " UD_USER
         "$PYTHON" manage.py shell <<PYTHON
 from django.contrib.auth import get_user_model
-from django.contrib.contenttypes.models import ContentType
-from core.user_data import UserDatum
-from nodes.models import EmailOutbox
-outbox = EmailOutbox.objects.latest("id")
+from core.user_data import dump_user_fixture
+from nodes.models import Node, EmailOutbox
+node = Node.get_local()
+outbox = EmailOutbox.objects.get(node=node)
 User = get_user_model()
 user = User.objects.get(username="$UD_USER")
-ct = ContentType.objects.get_for_model(EmailOutbox)
-UserDatum.objects.get_or_create(user=user, content_type=ct, object_id=outbox.pk)
+outbox.is_user_data = True
+outbox.save(update_fields=["is_user_data"])
+dump_user_fixture(outbox, user)
 print("User datum created for", user.username)
 PYTHON
     fi

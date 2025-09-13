@@ -39,7 +39,6 @@ from nodes.models import Node
 from django.contrib.sites.models import Site
 from django.contrib.auth import get_user_model
 
-from core.user_data import ensure_userdatum, load_user_fixtures
 from core.models import PackageRelease
 from core.sigil_builder import generate_model_sigils
 from utils import revision as revision_utils
@@ -301,8 +300,6 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                 for module in Module.objects.all():
                     module.create_landings()
                 Landing.objects.update(is_seed_data=True)
-                for name in patched:
-                    ensure_userdatum(Path(name))
             except DeserializationError:
                 pass
             finally:
@@ -323,7 +320,6 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
         )
 
     # Load personal user data fixtures last
-    load_user_fixtures()
 
     # Recreate any missing SigilRoots after loading fixtures
     generate_model_sigils()

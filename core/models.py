@@ -35,7 +35,7 @@ from utils import revision as revision_utils
 
 from .entity import Entity, EntityUserManager
 from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
-from .user_data import UserDatum  # noqa: F401 - ensure model registration
+from . import user_data  # noqa: F401 - ensure signal registration
 from .fields import SigilShortAutoField
 
 
@@ -260,6 +260,7 @@ class User(Entity, AbstractUser):
         blank=True,
         on_delete=models.SET_NULL,
     )
+    data_path = models.CharField(max_length=255, blank=True)
     has_charger = models.BooleanField(default=False)
     is_active = models.BooleanField(
         _("active"),

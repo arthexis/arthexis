@@ -30,6 +30,7 @@ class Entity(models.Model):
     """Base model providing seed data tracking and soft deletion."""
 
     is_seed_data = models.BooleanField(default=False, editable=False)
+    is_user_data = models.BooleanField(default=False, editable=False)
     is_deleted = models.BooleanField(default=False, editable=False)
 
     objects = EntityManager()
@@ -52,6 +53,7 @@ class Entity(models.Model):
                 pass
             else:
                 self.is_seed_data = old.is_seed_data
+                self.is_user_data = old.is_user_data
         super().save(*args, **kwargs)
 
     def resolve_sigils(self, field: str) -> str:
