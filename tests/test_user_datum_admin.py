@@ -131,7 +131,8 @@ class UserDatumAdminTests(TransactionTestCase):
         self.assertTrue(self.fixture_path.exists())
 
         call_command("flush", verbosity=0, interactive=False)
-        run_database_tasks()
+        with patch.object(env_refresh, "_unlink_sqlite_db", lambda p: None):
+            run_database_tasks()
 
         ct = ContentType.objects.get_for_model(OdooProfile)
         self.assertTrue(
@@ -216,6 +217,29 @@ class UserDatumAdminTests(TransactionTestCase):
         )
 
         shutil.rmtree(tmp_dir)
+
+    def test_env_refresh_handles_underscored_app_label(self):
+        from post_office.models import EmailTemplate
+
+        template = EmailTemplate.objects.create(name="Temp", subject="", content="")
+        ct = ContentType.objects.get_for_model(EmailTemplate)
+        UserDatum.objects.create(user=self.user, content_type=ct, object_id=template.pk)
+        fixture = (
+            self.data_dir
+            / f"{self.user.pk}_post_office_emailtemplate_{template.pk}.json"
+        )
+        self.assertTrue(fixture.exists())
+
+        call_command("flush", verbosity=0, interactive=False)
+        with patch.object(env_refresh, "_unlink_sqlite_db", lambda p: None):
+            run_database_tasks()
+
+        self.assertTrue(
+            UserDatum.objects.filter(
+                user_id=self.user.pk, content_type=ct, object_id=template.pk
+            ).exists()
+        )
+        fixture.unlink(missing_ok=True)
 
     def test_copy_unmarks_user_datum(self):
         address = Address.objects.create(
