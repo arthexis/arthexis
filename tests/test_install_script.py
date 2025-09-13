@@ -88,3 +88,9 @@ def test_install_script_role_defaults():
 
     assert "--virtual)" not in content
     assert "--particle)" not in content
+
+
+def test_install_script_uses_auto_upgrade_lockfile():
+    script_path = Path(__file__).resolve().parent.parent / "install.sh"
+    content = script_path.read_text()
+    assert "auto_upgrade.lck" in content
