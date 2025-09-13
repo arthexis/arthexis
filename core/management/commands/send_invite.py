@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
-from django.core.mail import send_mail
+from core import mailer
 from django.core.management.base import BaseCommand, CommandError
 from django.urls import reverse
 from django.utils.encoding import force_bytes
@@ -44,7 +44,7 @@ class Command(BaseCommand):
                 if node:
                     node.send_mail(subject, body, [email])
                 else:
-                    send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [email])
+                    mailer.send(subject, body, [email], settings.DEFAULT_FROM_EMAIL)
             except Exception as exc:  # pragma: no cover - log failures
                 self.stderr.write(self.style.WARNING(f"Email send failed: {exc}"))
 

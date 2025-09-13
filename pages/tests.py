@@ -19,11 +19,11 @@ from django.conf import settings
 from pathlib import Path
 from unittest.mock import patch, Mock
 from types import SimpleNamespace
-from django.core import mail
 from django.core.management import call_command
 import re
 from django.contrib.contenttypes.models import ContentType
 from datetime import date
+from post_office.models import Email
 
 from nodes.models import Node, ContentSample, NodeRole
 
@@ -102,8 +102,10 @@ class InvitationTests(TestCase):
             reverse("pages:request-invite"), {"email": "invite@example.com"}
         )
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(len(mail.outbox), 1)
-        link = re.search(r"http://testserver[\S]+", mail.outbox[0].body).group(0)
+        self.assertEqual(Email.objects.count(), 1)
+        link = re.search(
+            r"http://testserver[\S]+", Email.objects.first().message
+        ).group(0)
         resp = self.client.get(link)
         self.assertEqual(resp.status_code, 200)
         resp = self.client.post(link)
@@ -112,7 +114,7 @@ class InvitationTests(TestCase):
         self.assertIn("_auth_user_id", self.client.session)
 
     def test_request_invite_handles_email_errors(self):
-        with patch("pages.views.send_mail", side_effect=Exception("fail")):
+        with patch("pages.views.mailer.send", side_effect=Exception("fail")):
             resp = self.client.post(
                 reverse("pages:request-invite"), {"email": "invite@example.com"}
             )
@@ -122,6 +124,7 @@ class InvitationTests(TestCase):
         self.assertIsNone(lead.sent_on)
         self.assertIn("fail", lead.error)
         self.assertIn("email service", lead.error)
+        self.assertEqual(Email.objects.count(), 0)
 
     def test_request_invite_records_send_time(self):
         resp = self.client.post(
@@ -131,6 +134,7 @@ class InvitationTests(TestCase):
         lead = InviteLead.objects.get()
         self.assertIsNotNone(lead.sent_on)
         self.assertEqual(lead.error, "")
+        self.assertEqual(Email.objects.count(), 1)
 
     def test_request_invite_creates_lead_with_comment(self):
         resp = self.client.post(
@@ -143,6 +147,7 @@ class InvitationTests(TestCase):
         self.assertEqual(lead.comment, "Hello")
         self.assertIsNone(lead.sent_on)
         self.assertEqual(lead.error, "")
+        self.assertEqual(Email.objects.count(), 0)
 
     def test_request_invite_falls_back_to_send_mail(self):
         node = Node.objects.create(
@@ -153,7 +158,7 @@ class InvitationTests(TestCase):
             patch.object(
                 node, "send_mail", side_effect=Exception("node fail")
             ) as node_send,
-            patch("pages.views.send_mail", return_value=1) as fallback,
+            patch("pages.views.mailer.send", return_value=Mock()) as fallback,
         ):
             resp = self.client.post(
                 reverse("pages:request-invite"), {"email": "invite@example.com"}
@@ -165,6 +170,7 @@ class InvitationTests(TestCase):
         self.assertIn("default mail backend", lead.error)
         self.assertTrue(node_send.called)
         self.assertTrue(fallback.called)
+        self.assertEqual(Email.objects.count(), 1)
 
 
 class NavbarBrandTests(TestCase):

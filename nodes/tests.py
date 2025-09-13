@@ -7,6 +7,7 @@ django.setup()
 
 from pathlib import Path
 from unittest.mock import patch, call, MagicMock
+from post_office.models import Email
 import socket
 import base64
 import json
@@ -945,64 +946,34 @@ class ContentSampleAdminTests(TestCase):
 
 
 class EmailOutboxTests(TestCase):
-    def test_send_mail_uses_connection(self):
+    def test_node_send_mail_uses_outbox(self):
+        node = Node.objects.create(
+            hostname="outboxhost",
+            address="127.0.0.1",
+            port=8000,
+            mac_address="00:11:22:33:aa:bb",
+        )
         outbox = EmailOutbox.objects.create(
-            host="smtp.example.com", port=25, username="u", password="p"
+            node=node, host="smtp.example.com", port=25, username="u", password="p"
         )
-        with (
-            patch("nodes.models.get_connection") as gc,
-            patch("nodes.models.send_mail") as sm,
-        ):
-            conn = MagicMock()
-            gc.return_value = conn
-            outbox.send_mail("sub", "msg", ["to@example.com"])
-            gc.assert_called_once_with(
-                "django.core.mail.backends.smtp.EmailBackend",
-                host="smtp.example.com",
-                port=25,
-                username="u",
-                password="p",
-                use_tls=True,
-                use_ssl=False,
-            )
-            sm.assert_called_once_with(
-                "sub",
-                "msg",
-                settings.DEFAULT_FROM_EMAIL,
-                ["to@example.com"],
-                connection=conn,
+        with patch("nodes.models.mailer.send") as ms:
+            node.send_mail("sub", "msg", ["to@example.com"])
+            ms.assert_called_once_with(
+                "sub", "msg", ["to@example.com"], None, outbox=outbox
             )
 
-    def test_backend_selects_matching_outbox(self):
-        EmailOutbox.objects.create(host="smtp.example.com", from_email="sam@hot.com")
-        EmailOutbox.objects.create(
-            host="smtp.other.com", from_email="other@example.com"
+    def test_node_send_mail_queues_email(self):
+        node = Node.objects.create(
+            hostname="host",
+            address="127.0.0.1",
+            port=8000,
+            mac_address="00:11:22:33:cc:dd",
         )
-        backend = OutboxEmailBackend()
-        msg = EmailMessage("sub", "msg", "sam@hot.com", ["to@example.com"])
-        fake_conn = MagicMock()
-        fake_conn.send_messages.return_value = 1
-        fake_conn.close.return_value = None
-        with patch(
-            "nodes.backends.EmailOutbox.get_connection",
-            autospec=True,
-            return_value=fake_conn,
-        ) as gc:
-            backend.send_messages([msg])
-            used_outbox = gc.call_args[0][0]
-            self.assertEqual(used_outbox.from_email, "sam@hot.com")
-            fake_conn.send_messages.assert_called_once_with([msg])
-
-    def test_backend_falls_back_to_default(self):
-        backend = OutboxEmailBackend()
-        msg = EmailMessage("sub", "msg", "nobody@example.com", ["to@example.com"])
-        fake_conn = MagicMock()
-        fake_conn.send_messages.return_value = 1
-        fake_conn.close.return_value = None
-        with patch("nodes.backends.get_connection", return_value=fake_conn) as gc:
-            backend.send_messages([msg])
-            gc.assert_called_once_with("django.core.mail.backends.smtp.EmailBackend")
-            fake_conn.send_messages.assert_called_once_with([msg])
+        node.send_mail("sub", "msg", ["to@example.com"])
+        self.assertEqual(Email.objects.count(), 1)
+        email = Email.objects.first()
+        self.assertEqual(email.subject, "sub")
+        self.assertEqual(email.to, ["to@example.com"])
 
 
 class ClipboardTaskTests(TestCase):

@@ -8,7 +8,7 @@ from pathlib import Path
 from celery import shared_task
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.mail import send_mail
+from core import mailer
 from django.utils import timezone
 
 from nodes.models import NetMessage
@@ -31,11 +31,11 @@ def birthday_greetings() -> None:
     for user in User.objects.filter(birthday=today):
         NetMessage.broadcast("Happy bday!", user.username)
         if user.email:
-            send_mail(
+            mailer.send(
                 "Happy bday!",
                 f"Happy bday! {user.username}",
-                settings.DEFAULT_FROM_EMAIL,
                 [user.email],
+                settings.DEFAULT_FROM_EMAIL,
                 fail_silently=True,
             )
 
