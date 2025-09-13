@@ -7,7 +7,6 @@ from core.admin import (
     EmailInbox as PostOfficeEmailInbox,
     WorkgroupReleaseManager,
     WorkgroupSecurityGroup,
-    WorkgroupNewsArticle,
 )
 from nodes.admin import EmailOutbox as PostOfficeEmailOutbox
 
@@ -26,7 +25,6 @@ class WorkgroupAdminGroupTests(TestCase):
         self.assertIn(PostOfficeEmailOutbox, registry)
         self.assertIn(WorkgroupReleaseManager, registry)
         self.assertIn(WorkgroupSecurityGroup, registry)
-        self.assertIn(WorkgroupNewsArticle, registry)
         self.assertEqual(
             registry[PostOfficeEmailInbox].model._meta.app_label, "post_office"
         )
@@ -39,9 +37,6 @@ class WorkgroupAdminGroupTests(TestCase):
         self.assertEqual(
             registry[WorkgroupSecurityGroup].model._meta.app_label, "post_office"
         )
-        self.assertEqual(
-            registry[WorkgroupNewsArticle].model._meta.app_label, "post_office"
-        )
 
     def test_admin_index_shows_post_office_group(self):
         response = self.client.get(reverse("admin:index"))
@@ -51,4 +46,3 @@ class WorkgroupAdminGroupTests(TestCase):
         self.assertContains(response, "Chat Profiles")
         self.assertContains(response, "Release Managers")
         self.assertContains(response, "Security Groups")
-        self.assertContains(response, "News Articles")

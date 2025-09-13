@@ -13,8 +13,6 @@ from django.apps import apps
 from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
 from datetime import timedelta
-from django.utils.text import slugify
-from django.utils.safestring import mark_safe
 from django.contrib.contenttypes.models import ContentType
 import hashlib
 import os
@@ -28,7 +26,6 @@ import xmlrpc.client
 from django.utils import timezone
 import uuid
 from pathlib import Path
-from docutils.core import publish_parts
 from django.core import serializers
 from urllib.parse import urlparse
 from utils import revision as revision_utils
@@ -1468,47 +1465,6 @@ class ChatProfile(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"ChatProfile for {self.user}"
-
-
-class NewsArticle(Entity):
-    """Public-facing news items for system updates."""
-
-    name = models.CharField(max_length=200)
-    slug = models.SlugField(unique=True)
-    content = models.TextField()
-    published = models.DateField(default=timezone.now)
-    version = models.CharField(max_length=50, blank=True)
-
-    class Meta:
-        ordering = ["-published"]
-        verbose_name = "News Article"
-        verbose_name_plural = "News Articles"
-
-    def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.name)
-        super().save(*args, **kwargs)
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name
-
-    def changelog_html(self) -> str:
-        if not self.version:
-            return ""
-        changelog_path = Path(settings.BASE_DIR) / "CHANGELOG.rst"
-        try:
-            text = changelog_path.read_text(encoding="utf-8")
-        except OSError:
-            return ""
-        pattern = rf"(?ms)^{re.escape(self.version)}.*?\n-+\n(.*?)(?=\n(?:\d+\.\d+|Unreleased)\b.*?\n-+|\Z)"
-        match = re.search(pattern, text)
-        if not match:
-            return ""
-        section = match.group(1).strip()
-        if not section:
-            return ""
-        html = publish_parts(section, writer_name="html5")["html_body"]
-        return mark_safe(html)
 
 
 def validate_relative_url(value: str) -> None:
