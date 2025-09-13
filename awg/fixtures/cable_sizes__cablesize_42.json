@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "model": "awg.cablesize",
+    "pk": 42,
+    "fields": {
+      "awg_size": "14",
+      "material": "al",
+      "dia_in": 0.0641,
+      "dia_mm": 1.628,
+      "area_kcmil": 4.11,
+      "area_mm2": 2.08,
+      "k_ohm_km": 8.286,
+      "k_ohm_kft": 2.525,
+      "amps_60c": 0,
+      "amps_75c": 0,
+      "amps_90c": 0,
+      "line_num": 1
+    }
+  }
+]
