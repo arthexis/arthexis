@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from io import BytesIO
 from zipfile import ZipFile
+import json
 
 from django.conf import settings
 from django.contrib import admin, messages
@@ -27,6 +28,22 @@ def _fixture_path(user, instance) -> Path:
     ct = instance._meta
     filename = f"{ct.app_label}_{ct.model_name}_{instance.pk}.json"
     return _data_dir(user) / filename
+
+
+def _seed_fixture_path(instance) -> Path | None:
+    label = f"{instance._meta.app_label}.{instance._meta.model_name}"
+    base = Path(settings.BASE_DIR)
+    for path in base.glob("**/fixtures/*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(data, list) or not data:
+            continue
+        obj = data[0]
+        if obj.get("model") == label and obj.get("pk") == instance.pk:
+            return path
+    return None
 
 
 def dump_user_fixture(instance, user) -> None:
@@ -170,7 +187,8 @@ def _seed_data_view(request):
                 f"admin:{obj._meta.app_label}_{obj._meta.model_name}_change",
                 args=[obj.pk],
             )
-            items.append({"url": url, "label": str(obj), "fixture": ""})
+            fixture = _seed_fixture_path(obj)
+            items.append({"url": url, "label": str(obj), "fixture": fixture})
         sections.append({"opts": model._meta, "items": items})
     context = admin.site.each_context(request)
     context.update({"title": _("Seed Data"), "sections": sections})
@@ -192,7 +210,7 @@ def _user_data_view(request):
                 args=[obj.pk],
             )
             fixture = _fixture_path(request.user, obj)
-            items.append({"url": url, "label": str(obj), "fixture": fixture.name})
+            items.append({"url": url, "label": str(obj), "fixture": fixture})
         sections.append({"opts": model._meta, "items": items})
     context = admin.site.each_context(request)
     context.update(
