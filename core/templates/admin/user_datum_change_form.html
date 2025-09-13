@@ -8,13 +8,13 @@
         {% if show_user_datum %}
         <label style="color: var(--body-quiet-color); margin-left: 1em;">
             <input type="checkbox" name="_user_datum" form="{{ opts.model_name }}_form"{% if is_user_datum %} checked{% endif %}>
-            {% trans "User Datum" %}
+            {% trans "User Datum" %} [ <a href="{% url 'admin:user_data' %}">{% trans "View" %}</a> ]
         </label>
         {% endif %}
         {% if show_seed_datum %}
         <label style="color: var(--body-quiet-color); margin-left: 1em;">
             <input type="checkbox" name="_seed_datum" form="{{ opts.model_name }}_form"{% if original and original.is_seed_data %} checked{% endif %} disabled>
-            {% trans "Seed Datum" %}
+            {% trans "Seed Datum" %} [ <a href="{% url 'admin:seed_data' %}">{% trans "View" %}</a> ]
         </label>
         {% endif %}
     </div>
