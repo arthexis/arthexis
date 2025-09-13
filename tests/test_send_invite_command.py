@@ -16,10 +16,12 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.urls import reverse
 from core.models import InviteLead
+from post_office.models import Email
 
 
 def test_send_invite_generates_link_and_marks_sent():
     InviteLead.objects.all().delete()
+    Email.objects.all().delete()
     User = get_user_model()
     user = User.objects.create_user(username="test", email="invite@example.com")
     InviteLead.objects.create(email="invite@example.com")
@@ -36,3 +38,4 @@ def test_send_invite_generates_link_and_marks_sent():
 
     lead = InviteLead.objects.get(email="invite@example.com")
     assert lead.sent_on is not None
+    assert Email.objects.count() == 1

@@ -7,6 +7,7 @@ django.setup()
 
 from pathlib import Path
 from unittest.mock import patch, call, MagicMock
+from post_office.models import Email
 import socket
 import base64
 import json
@@ -950,31 +951,27 @@ class EmailOutboxTests(TestCase):
             port=8000,
             mac_address="00:11:22:33:aa:bb",
         )
-        EmailOutbox.objects.create(
+        outbox = EmailOutbox.objects.create(
             node=node, host="smtp.example.com", port=25, username="u", password="p"
         )
-        with (
-            patch("nodes.models.get_connection") as gc,
-            patch("nodes.models.send_mail") as sm,
-        ):
-            conn = MagicMock()
-            gc.return_value = conn
+        with patch("nodes.models.mailer.send") as ms:
             node.send_mail("sub", "msg", ["to@example.com"])
-            gc.assert_called_once_with(
-                host="smtp.example.com",
-                port=25,
-                username="u",
-                password="p",
-                use_tls=True,
-                use_ssl=False,
+            ms.assert_called_once_with(
+                "sub", "msg", ["to@example.com"], None, outbox=outbox
             )
-            sm.assert_called_once_with(
-                "sub",
-                "msg",
-                settings.DEFAULT_FROM_EMAIL,
-                ["to@example.com"],
-                connection=conn,
-            )
+
+    def test_node_send_mail_queues_email(self):
+        node = Node.objects.create(
+            hostname="host",
+            address="127.0.0.1",
+            port=8000,
+            mac_address="00:11:22:33:cc:dd",
+        )
+        node.send_mail("sub", "msg", ["to@example.com"])
+        self.assertEqual(Email.objects.count(), 1)
+        email = Email.objects.first()
+        self.assertEqual(email.subject, "sub")
+        self.assertEqual(email.to, ["to@example.com"])
 
 
 class ClipboardTaskTests(TestCase):
