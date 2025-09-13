@@ -24,6 +24,18 @@
         </div>
         <div class="col-sm-6 col-md-4">
           <div class="mb-2">
+            <label class="form-label" for="serial_number{{ idx }}">Serial Number</label>
+            <input id="serial_number{{ idx }}" name="serial_number" value="{{ cp.params.serial_number|default:default_serial_number }}" class="form-control form-control-sm">
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+          <div class="mb-2">
+            <label class="form-label" for="connector_id{{ idx }}">Connector ID</label>
+            <input id="connector_id{{ idx }}" name="connector_id" value="{{ cp.params.connector_id|default:default_connector_id }}" class="form-control form-control-sm">
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+          <div class="mb-2">
             <label class="form-label" for="rfid{{ idx }}">RFID</label>
             <input id="rfid{{ idx }}" name="rfid" value="{{ cp.params.rfid|default:default_rfid }}" class="form-control form-control-sm">
           </div>

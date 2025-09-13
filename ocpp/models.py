@@ -180,6 +180,7 @@ class Transaction(Entity):
         verbose_name=_("RFID"),
     )
     vin = models.CharField(max_length=17, blank=True)
+    connector_id = models.IntegerField(null=True, blank=True)
     meter_start = models.IntegerField(null=True, blank=True)
     meter_stop = models.IntegerField(null=True, blank=True)
     voltage_start = models.DecimalField(
@@ -300,6 +301,8 @@ class Simulator(Entity):
         verbose_name=_("RFID"),
     )
     vin = models.CharField(max_length=17, blank=True)
+    serial_number = models.CharField(_("Serial Number"), max_length=100, blank=True)
+    connector_id = models.IntegerField(_("Connector ID"), default=1)
     duration = models.IntegerField(default=600)
     interval = models.FloatField(default=5.0)
     pre_charge_delay = models.FloatField(_("Delay"), default=10.0)
@@ -324,6 +327,8 @@ class Simulator(Entity):
             rfid=self.rfid,
             vin=self.vin,
             cp_path=self.cp_path,
+            serial_number=self.serial_number,
+            connector_id=self.connector_id,
             duration=self.duration,
             interval=self.interval,
             pre_charge_delay=self.pre_charge_delay,

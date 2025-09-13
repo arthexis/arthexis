@@ -286,6 +286,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     await database_sync_to_async(CoreRFID.objects.get_or_create)(
                         rfid=id_tag.upper()
                     )
+                await self._assign_connector(payload.get("connectorId"))
                 if self.charger.require_rfid:
                     authorized = (
                         account is not None
@@ -299,6 +300,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         account=account,
                         rfid=(id_tag or ""),
                         vin=(payload.get("vin") or ""),
+                        connector_id=payload.get("connectorId"),
                         meter_start=payload.get("meterStart"),
                         start_time=timezone.now(),
                     )

@@ -153,6 +153,8 @@ def cp_simulator(request):
     default_host = "127.0.0.1"
     default_ws_port = "9000"
     default_cp_paths = ["CP1", "CP2"]
+    default_serial_numbers = default_cp_paths
+    default_connector_id = 1
     default_rfid = "FFFFFFFF"
     default_vins = ["WP0ZZZ00000000000", "WAUZZZ00000000000"]
 
@@ -165,6 +167,11 @@ def cp_simulator(request):
                 host=request.POST.get("host") or default_host,
                 ws_port=int(request.POST.get("ws_port") or default_ws_port),
                 cp_path=request.POST.get("cp_path") or default_cp_paths[cp_idx - 1],
+                serial_number=request.POST.get("serial_number")
+                or default_serial_numbers[cp_idx - 1],
+                connector_id=int(
+                    request.POST.get("connector_id") or default_connector_id
+                ),
                 rfid=request.POST.get("rfid") or default_rfid,
                 vin=request.POST.get("vin") or default_vins[cp_idx - 1],
                 duration=int(request.POST.get("duration") or 600),
@@ -211,6 +218,8 @@ def cp_simulator(request):
         "default_host": default_host,
         "default_ws_port": default_ws_port,
         "default_cp_paths": default_cp_paths,
+        "default_serial_numbers": default_serial_numbers,
+        "default_connector_id": default_connector_id,
         "default_rfid": default_rfid,
         "default_vins": default_vins,
         "params_jsons": params_jsons,

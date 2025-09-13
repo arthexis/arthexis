@@ -183,6 +183,16 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("vin", models.CharField(blank=True, max_length=17)),
+                (
+                    "serial_number",
+                    models.CharField(
+                        blank=True, max_length=100, verbose_name="Serial Number"
+                    ),
+                ),
+                (
+                    "connector_id",
+                    models.IntegerField(default=1, verbose_name="Connector ID"),
+                ),
                 ("duration", models.IntegerField(default=600)),
                 ("interval", models.FloatField(default=5.0)),
                 (
@@ -218,6 +228,7 @@ class Migration(migrations.Migration):
                     models.CharField(blank=True, max_length=20, verbose_name="RFID"),
                 ),
                 ("vin", models.CharField(blank=True, max_length=17)),
+                ("connector_id", models.IntegerField(blank=True, null=True)),
                 ("meter_start", models.IntegerField(blank=True, null=True)),
                 ("meter_stop", models.IntegerField(blank=True, null=True)),
                 (

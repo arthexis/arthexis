@@ -176,6 +176,8 @@ async def simulate_cp(
     rfid: str,
     vin: str,
     cp_path: str,
+    serial_number: str,
+    connector_id: int,
     duration: int,
     kw_min: float,
     kw_max: float,
@@ -273,6 +275,7 @@ async def simulate_cp(
                         {
                             "chargePointModel": "Simulator",
                             "chargePointVendor": "SimVendor",
+                            "serialNumber": serial_number,
                         },
                     ]
                 )
@@ -310,7 +313,7 @@ async def simulate_cp(
                                     "meter",
                                     "MeterValues",
                                     {
-                                        "connectorId": 1,
+                                        "connectorId": connector_id,
                                         "meterValue": [
                                             {
                                                 "timestamp": time.strftime(
@@ -364,6 +367,7 @@ async def simulate_cp(
                     {
                         "chargePointModel": "Simulator",
                         "chargePointVendor": "SimVendor",
+                        "serialNumber": serial_number,
                     },
                 ]
             )
@@ -401,7 +405,7 @@ async def simulate_cp(
                                 "meter",
                                 "MeterValues",
                                 {
-                                    "connectorId": 1,
+                                    "connectorId": connector_id,
                                     "meterValue": [
                                         {
                                             "timestamp": time.strftime(
@@ -431,7 +435,7 @@ async def simulate_cp(
                     "start",
                     "StartTransaction",
                     {
-                        "connectorId": 1,
+                        "connectorId": connector_id,
                         "idTag": rfid,
                         "meterStart": meter_start,
                         "vin": vin,
@@ -459,7 +463,7 @@ async def simulate_cp(
                         "meter",
                         "MeterValues",
                         {
-                            "connectorId": 1,
+                            "connectorId": connector_id,
                             "transactionId": tx_id,
                             "meterValue": [
                                 {
@@ -522,7 +526,7 @@ async def simulate_cp(
                             "meter",
                             "MeterValues",
                             {
-                                "connectorId": 1,
+                                "connectorId": connector_id,
                                 "meterValue": [
                                     {
                                         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
@@ -582,6 +586,8 @@ def simulate(
     rfid: str = "FFFFFFFF",
     cp_path: str = "CPX",
     vin: str = "",
+    serial_number: str = "",
+    connector_id: int = 1,
     duration: int = 600,
     kw_min: float = 30.0,
     kw_max: float = 60.0,
@@ -614,6 +620,8 @@ def simulate(
         "rfid": rfid,
         "cp_path": cp_path,
         "vin": vin,
+        "serial_number": serial_number,
+        "connector_id": connector_id,
         "duration": duration,
         "kw_min": kw_min,
         "kw_max": kw_max,
@@ -642,6 +650,8 @@ def simulate(
                 rfid,
                 vin,
                 this_cp_path,
+                serial_number,
+                connector_id,
                 duration,
                 kw_min,
                 kw_max,
@@ -662,6 +672,8 @@ def simulate(
                     rfid,
                     vin,
                     this_cp_path,
+                    serial_number,
+                    connector_id,
                     duration,
                     kw_min,
                     kw_max,
@@ -712,6 +724,8 @@ def simulate(
                 rfid,
                 vin,
                 cp_path,
+                serial_number,
+                connector_id,
                 duration,
                 kw_min,
                 kw_max,
@@ -736,6 +750,8 @@ def simulate(
                     rfid,
                     vin,
                     this_cp_path,
+                    serial_number,
+                    connector_id,
                     duration,
                     kw_min,
                     kw_max,
