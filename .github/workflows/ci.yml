@@ -58,9 +58,9 @@ jobs:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_HOST: postgres
+      POSTGRES_HOST: localhost
       POSTGRES_PORT: 5432
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
     strategy:
       matrix:
         role: ${{ fromJson(needs.detect-roles.outputs.roles) }}
