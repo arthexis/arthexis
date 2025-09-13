@@ -1,1 +1,23 @@
-[]
+[
+  {
+    "model": "awg.conduitfill",
+    "pk": 14,
+    "fields": {
+      "trade_size": "1 1/4",
+      "conduit": "IMC",
+      "awg_14": 68,
+      "awg_4": 8,
+      "awg_000": 2,
+      "awg_10": 31,
+      "awg_8": 18,
+      "awg_12": 49,
+      "awg_6": 13,
+      "awg_1": 4,
+      "awg_0": 3,
+      "awg_00": 3,
+      "awg_0000": 1,
+      "awg_3": 6,
+      "awg_2": 5
+    }
+  }
+]

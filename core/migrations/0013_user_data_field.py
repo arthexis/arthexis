@@ -11,11 +11,6 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.AddField(
-            model_name="address",
-            name="is_user_data",
-            field=models.BooleanField(default=False, editable=False),
-        ),
-        migrations.AddField(
             model_name="adminhistory",
             name="is_user_data",
             field=models.BooleanField(default=False, editable=False),

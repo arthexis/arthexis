@@ -74,3 +74,14 @@ class ReleaseProgressViewTests(TestCase):
         run.assert_any_call(
             ["git", "commit", "-m", "chore: update fixtures"], check=True
         )
+
+    def test_abort_publish_stops_process(self):
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        self.client.get(url)
+        lock_path = Path("locks") / f"release_publish_{self.release.pk}.json"
+        self.assertTrue(lock_path.exists())
+
+        response = self.client.get(f"{url}?abort=1")
+        self.assertContains(response, "Publish aborted")
+        self.assertIsNone(response.context["next_step"])
+        self.assertFalse(lock_path.exists())

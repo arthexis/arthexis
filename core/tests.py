@@ -20,7 +20,6 @@ from .models import (
     EnergyAccount,
     ElectricVehicle,
     EnergyCredit,
-    Address,
     Product,
     LiveSubscription,
     Brand,

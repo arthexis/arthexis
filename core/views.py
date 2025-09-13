@@ -9,6 +9,7 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from django.utils.translation import gettext as _
 from pathlib import Path
 import subprocess
 
@@ -16,6 +17,28 @@ from utils.api import api_login_required
 
 from .models import Product, LiveSubscription, EnergyAccount, PackageRelease, Todo
 from .models import RFID
+
+
+@staff_member_required
+def odoo_products(request):
+    """Return available products from the user's Odoo instance."""
+
+    profile = getattr(request.user, "odoo_profile", None)
+    if not profile or not profile.is_verified:
+        raise Http404
+    try:
+        products = profile.execute(
+            "product.product",
+            "search_read",
+            [],
+            {"fields": ["name"], "limit": 50},
+        )
+    except Exception:
+        return JsonResponse({"detail": "Unable to fetch products"}, status=502)
+    items = [{"id": p.get("id"), "name": p.get("name", "")} for p in products]
+    return JsonResponse(items, safe=False)
+
+
 from . import release as release_utils
 
 
@@ -390,6 +413,11 @@ def release_progress(request, pk: int, action: str):
         ctx = {"step": 0}
         if restart_path.exists():
             restart_path.unlink()
+    if request.GET.get("abort"):
+        ctx["error"] = _("Publish aborted")
+        request.session[session_key] = ctx
+        if lock_path.exists():
+            lock_path.unlink()
     restart_count = 0
     if restart_path.exists():
         try:

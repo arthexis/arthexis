@@ -1,1 +1,23 @@
-[]
+[
+  {
+    "model": "awg.conduitfill",
+    "pk": 21,
+    "fields": {
+      "trade_size": "2",
+      "conduit": "EMT",
+      "awg_14": 138,
+      "awg_4": 16,
+      "awg_000": 5,
+      "awg_10": 63,
+      "awg_8": 36,
+      "awg_12": 101,
+      "awg_6": 26,
+      "awg_1": 8,
+      "awg_0": 7,
+      "awg_00": 6,
+      "awg_0000": 4,
+      "awg_3": 13,
+      "awg_2": 11
+    }
+  }
+]
