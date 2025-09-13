@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "model": "nodes.noderole",
+    "pk": 3,
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Control",
+      "description": "Single-Device Testing & Special Task Appliances"
+    }
+  }
+]
