@@ -34,7 +34,6 @@ from .models import (
     ElectricVehicle,
     EnergyCredit,
     EnergyReport,
-    Address,
     Product,
     Subscription,
     Brand,
@@ -453,25 +452,11 @@ class EnergyAccountRFIDInline(admin.TabularInline):
 
 class UserAdmin(DjangoUserAdmin):
     fieldsets = DjangoUserAdmin.fieldsets + (
-        ("Contact", {"fields": ("phone_number", "address", "has_charger")}),
+        ("Contact", {"fields": ("phone_number", "has_charger")}),
     )
     add_fieldsets = DjangoUserAdmin.add_fieldsets + (
-        ("Contact", {"fields": ("phone_number", "address", "has_charger")}),
+        ("Contact", {"fields": ("phone_number", "has_charger")}),
     )
-
-
-@admin.register(Address)
-class AddressAdmin(EntityModelAdmin):
-    change_form_template = "admin/user_datum_change_form.html"
-    list_display = ("street", "number", "municipality", "state", "postal_code")
-    search_fields = ("street", "municipality", "postal_code")
-
-    def save_model(self, request, obj, form, change):
-        if "_saveacopy" in request.POST:
-            obj.pk = None
-            super().save_model(request, obj, form, False)
-        else:
-            super().save_model(request, obj, form, change)
 
 
 class OdooProfileAdminForm(forms.ModelForm):
