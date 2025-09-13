@@ -39,10 +39,16 @@ def generate_model_sigils(**kwargs) -> None:
         # Ensure built-in configuration roots exist without violating the
         # unique ``prefix`` constraint, even if older databases already have
         # entries with a different ``context_type``.
-        SigilRoot.objects.update_or_create(
-            prefix__iexact=prefix,
-            defaults={"prefix": prefix, "context_type": SigilRoot.Context.CONFIG},
-        )
+        root = SigilRoot.objects.filter(prefix__iexact=prefix).first()
+        if root:
+            root.prefix = prefix
+            root.context_type = SigilRoot.Context.CONFIG
+            root.save(update_fields=["prefix", "context_type"])
+        else:
+            SigilRoot.objects.create(
+                prefix=prefix,
+                context_type=SigilRoot.Context.CONFIG,
+            )
 
     existing = {p.upper() for p in SigilRoot.objects.values_list("prefix", flat=True)}
     for model in apps.get_models():
