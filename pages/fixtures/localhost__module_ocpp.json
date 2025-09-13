@@ -1,1 +1,16 @@
-[]
+[
+  {
+    "model": "pages.module",
+    "pk": 1,
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "node_role": ["Terminal"],
+      "application": ["ocpp"],
+      "path": "/ocpp/",
+      "menu": "",
+      "is_default": false,
+      "favicon": ""
+    }
+  }
+]

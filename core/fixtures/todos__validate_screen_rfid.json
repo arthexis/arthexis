@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "pk": 12,
+    "fields": {
+      "description": "Validate screen RFID Scanner",
+      "url": "/ocpp/rfid/"
+    }
+  }
+]

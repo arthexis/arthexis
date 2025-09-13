@@ -313,32 +313,6 @@ def charger_log_page(request, cid):
     )
 
 
-@login_required
-@landing("EV Efficiency")
-def efficiency_calculator(request):
-    """Simple EV efficiency calculator."""
-    form = {
-        k: v for k, v in (request.POST or request.GET).items() if v not in (None, "")
-    }
-    context: dict[str, object] = {"form": form}
-    if request.method == "POST":
-        try:
-            distance = float(request.POST.get("distance"))
-            energy = float(request.POST.get("energy"))
-            if distance <= 0 or energy <= 0:
-                raise ValueError
-        except (TypeError, ValueError):
-            context["error"] = _("Invalid input values")
-        else:
-            km_per_kwh = distance / energy
-            wh_per_km = (energy * 1000) / distance
-            context["result"] = {
-                "km_per_kwh": km_per_kwh,
-                "wh_per_km": wh_per_km,
-            }
-    return render(request, "ocpp/efficiency_calculator.html", context)
-
-
 @csrf_exempt
 @api_login_required
 def dispatch_action(request, cid):
