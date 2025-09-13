@@ -74,3 +74,15 @@ class CoreConfig(AppConfig):
                     pass
 
             post_migrate.connect(ensure_email_collector_task, sender=self)
+
+        from django.db.backends.signals import connection_created
+
+        def enable_sqlite_wal(**kwargs):
+            connection = kwargs.get("connection")
+            if connection.vendor == "sqlite":
+                cursor = connection.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL;")
+                cursor.execute("PRAGMA busy_timeout=60000;")
+                cursor.close()
+
+        connection_created.connect(enable_sqlite_wal)
