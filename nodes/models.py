@@ -254,32 +254,17 @@ class Node(Entity):
         from_email: str | None = None,
         **kwargs,
     ):
-        """Send an email using this node's configured outbox if available."""
-        outbox = getattr(self, "email_outbox", None)
-        logger.info(
-            "Node %s sending email to %s using %s backend",
-            self.pk,
-            recipient_list,
-            "outbox" if outbox else "default",
-        )
-        if outbox:
-            result = outbox.send_mail(
-                subject, message, recipient_list, from_email, **kwargs
-            )
-            logger.info("Outbox send_mail result: %s", result)
-            return result
+        """Send an email using the default backend."""
+        logger.info("Node %s sending email to %s", self.pk, recipient_list)
         from_email = from_email or settings.DEFAULT_FROM_EMAIL
         result = send_mail(subject, message, from_email, recipient_list, **kwargs)
-        logger.info("Default send_mail result: %s", result)
+        logger.info("send_mail result: %s", result)
         return result
 
 
 class EmailOutbox(Entity):
-    """SMTP credentials for sending mail from a node."""
+    """SMTP credentials for sending mail."""
 
-    node = models.OneToOneField(
-        Node, on_delete=models.CASCADE, related_name="email_outbox"
-    )
     host = SigilShortAutoField(
         max_length=100,
         help_text=("Gmail: smtp.gmail.com. " "GoDaddy: smtpout.secureserver.net"),
@@ -312,10 +297,6 @@ class EmailOutbox(Entity):
         max_length=254,
         help_text="Default From address; usually the same as username",
     )
-
-    class Meta:
-        verbose_name = "Email Outbox"
-        verbose_name_plural = "Email Outboxes"
 
     class Meta:
         verbose_name = "Email Outbox"

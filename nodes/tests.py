@@ -943,15 +943,9 @@ class ContentSampleAdminTests(TestCase):
 
 
 class EmailOutboxTests(TestCase):
-    def test_node_send_mail_uses_outbox(self):
-        node = Node.objects.create(
-            hostname="outboxhost",
-            address="127.0.0.1",
-            port=8000,
-            mac_address="00:11:22:33:aa:bb",
-        )
-        EmailOutbox.objects.create(
-            node=node, host="smtp.example.com", port=25, username="u", password="p"
+    def test_send_mail_uses_connection(self):
+        outbox = EmailOutbox.objects.create(
+            host="smtp.example.com", port=25, username="u", password="p"
         )
         with (
             patch("nodes.models.get_connection") as gc,
@@ -959,7 +953,7 @@ class EmailOutboxTests(TestCase):
         ):
             conn = MagicMock()
             gc.return_value = conn
-            node.send_mail("sub", "msg", ["to@example.com"])
+            outbox.send_mail("sub", "msg", ["to@example.com"])
             gc.assert_called_once_with(
                 host="smtp.example.com",
                 port=25,

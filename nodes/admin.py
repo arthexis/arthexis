@@ -197,7 +197,7 @@ class EmailOutbox(NodeEmailOutbox):
 
 @admin.register(EmailOutbox)
 class EmailOutboxAdmin(EntityModelAdmin):
-    list_display = ("node", "host", "port", "username", "use_tls", "use_ssl")
+    list_display = ("host", "port", "username", "use_tls", "use_ssl")
     change_form_template = "admin/nodes/emailoutbox/change_form.html"
 
     def get_urls(self):
