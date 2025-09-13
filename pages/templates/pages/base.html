@@ -331,27 +331,40 @@
           const modalEl = document.getElementById('shareModal');
           if (!btn || !modalEl) {
             return;
-        }
-        const modal = new bootstrap.Modal(modalEl);
-        btn.addEventListener('click', () => {
-          modal.show();
-        });
-        modalEl.addEventListener('shown.bs.modal', () => {
-          const url = window.location.href;
-          const input = document.getElementById('share-url');
-          const qr = document.getElementById('share-qr');
-          input.value = url;
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(url).catch(() => {});
           }
-          qr.innerHTML = '';
-          new QRCode(qr, {text: url, width: 128, height: 128});
-        });
+          const modal = new bootstrap.Modal(modalEl);
+          btn.addEventListener('click', () => {
+            modal.show();
+          });
+          modalEl.addEventListener('shown.bs.modal', () => {
+            const url = window.location.href;
+            const input = document.getElementById('share-url');
+            const qr = document.getElementById('share-qr');
+            input.value = url;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(url).catch(() => {});
+            }
+            qr.innerHTML = '';
+            new QRCode(qr, {text: url, width: 128, height: 128});
+            if (window.liveUpdateIntervalId) {
+              clearInterval(window.liveUpdateIntervalId);
+              window.liveUpdateIntervalId = null;
+            }
+          });
+          modalEl.addEventListener('hidden.bs.modal', () => {
+            if (window.LIVE_UPDATE_INTERVAL && !window.liveUpdateIntervalId) {
+              window.liveUpdateIntervalId = setInterval(
+                () => location.reload(),
+                window.LIVE_UPDATE_INTERVAL,
+              );
+            }
+          });
         })();
       </script>
     {% if request.live_update_interval %}
     <script>
-      setInterval(() => location.reload(), {{ request.live_update_interval }} * 1000);
+      window.LIVE_UPDATE_INTERVAL = {{ request.live_update_interval }} * 1000;
+      window.liveUpdateIntervalId = setInterval(() => location.reload(), window.LIVE_UPDATE_INTERVAL);
     </script>
     {% endif %}
     <svg xmlns="http://www.w3.org/2000/svg" class="base-svgs">
