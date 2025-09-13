@@ -60,10 +60,8 @@ fi
 # Determine default port based on nginx mode if present
 PORT=""
 RELOAD=false
-CELERY=false
-if [ -f "$LOCK_DIR/celery.lck" ]; then
-  CELERY=true
-fi
+# Celery workers process Post Office's email queue; enable by default.
+CELERY=true
 if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
   MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
 else
@@ -101,14 +99,14 @@ while [[ $# -gt 0 ]]; do
       PORT=8888
       shift
       ;;
-    *)
+      *)
       echo "Usage: $0 [--port PORT] [--reload] [--public|--internal] [--celery|--no-celery]" >&2
       exit 1
       ;;
   esac
 done
 
-# Start required Celery components if requested
+# Start Celery components to handle queued email if enabled
 if [ "$CELERY" = true ]; then
   celery -A config worker -l info &
   CELERY_WORKER_PID=$!

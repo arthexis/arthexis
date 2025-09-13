@@ -332,6 +332,8 @@ MEDIA_ROOT = BASE_DIR / "media"
 # Email settings
 DEFAULT_FROM_EMAIL = "arthexis@gmail.com"
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
+# All outgoing mail is queued via django-post-office; Celery workers must process the queue.
+EMAIL_BACKEND = "post_office.EmailBackend"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
