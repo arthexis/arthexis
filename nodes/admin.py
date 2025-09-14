@@ -19,7 +19,7 @@ from .actions import NodeAction
 
 from .models import (
     Node,
-    EmailOutbox as NodeEmailOutbox,
+    EmailOutbox,
     NodeRole,
     NodeFeature,
     ContentSample,
@@ -188,14 +188,6 @@ class NodeAdmin(EntityModelAdmin):
         return redirect(reverse("admin:nodes_node_change", args=[node_id]))
 
 
-class EmailOutbox(NodeEmailOutbox):
-    class Meta:
-        proxy = True
-        app_label = "post_office"
-        verbose_name = NodeEmailOutbox._meta.verbose_name
-        verbose_name_plural = NodeEmailOutbox._meta.verbose_name_plural
-
-
 @admin.register(EmailOutbox)
 class EmailOutboxAdmin(EntityModelAdmin):
     list_display = ("host", "port", "username", "use_tls", "use_ssl")
@@ -207,7 +199,7 @@ class EmailOutboxAdmin(EntityModelAdmin):
             path(
                 "<path:object_id>/test/",
                 self.admin_site.admin_view(self.test_outbox),
-                name="post_office_emailoutbox_test",
+                name="nodes_emailoutbox_test",
             )
         ]
         return custom + urls
@@ -233,13 +225,9 @@ class EmailOutboxAdmin(EntityModelAdmin):
         extra_context = extra_context or {}
         if object_id:
             extra_context["test_url"] = reverse(
-                "admin:post_office_emailoutbox_test", args=[object_id]
+                "admin:nodes_emailoutbox_test", args=[object_id]
             )
         return super().changeform_view(request, object_id, form_url, extra_context)
-
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        obj.__class__ = EmailOutbox
 
 
 class NodeRoleAdminForm(forms.ModelForm):

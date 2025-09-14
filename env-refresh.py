@@ -213,14 +213,8 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
         except InconsistentMigrationHistory:
             call_command("reset_ocpp_migrations")
             call_command("migrate", interactive=False)
-        except InvalidBasesError as exc:
-            if "post_office.WorkgroupNewsArticle" in str(exc):
-                call_command(
-                    "migrate", "post_office", "0015", fake=True, interactive=False
-                )
-                call_command("migrate", interactive=False)
-            else:
-                raise
+        except InvalidBasesError:
+            raise
         except OperationalError as exc:
             if using_sqlite:
                 _unlink_sqlite_db(Path(default_db["NAME"]))

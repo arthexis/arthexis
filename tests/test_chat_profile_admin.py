@@ -21,7 +21,7 @@ class ChatProfileAdminTests(TestCase):
 
     def test_change_form_has_generate_key_link(self):
         url = reverse(
-            "admin:post_office_workgroupchatprofile_change",
+            "admin:core_chatprofile_change",
             args=[self.profile.pk],
         )
         response = self.client.get(url)
@@ -29,7 +29,7 @@ class ChatProfileAdminTests(TestCase):
 
     def test_change_form_shows_gpt_instructions(self):
         url = reverse(
-            "admin:post_office_workgroupchatprofile_change",
+            "admin:core_chatprofile_change",
             args=[self.profile.pk],
         )
         response = self.client.get(url)
@@ -39,7 +39,7 @@ class ChatProfileAdminTests(TestCase):
 
     def test_generate_key_button(self):
         url = reverse(
-            "admin:post_office_workgroupchatprofile_generate_key",
+            "admin:core_chatprofile_generate_key",
             args=[self.profile.pk],
         )
         response = self.client.get(url)

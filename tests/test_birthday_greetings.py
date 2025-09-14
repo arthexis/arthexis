@@ -1,7 +1,7 @@
 from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from post_office.models import Email
+from django.core import mail
 
 from core.tasks import birthday_greetings
 from nodes.models import NetMessage
@@ -24,7 +24,7 @@ class BirthdayGreetingsTaskTests(TestCase):
         msg = NetMessage.objects.order_by("-created").first()
         self.assertEqual(msg.subject, "Happy bday!")
         self.assertEqual(msg.body, user.username)
-        self.assertEqual(Email.objects.count(), 1)
-        email = Email.objects.first()
+        self.assertEqual(len(mail.outbox), 1)
+        email = mail.outbox[0]
         self.assertIn("Happy bday!", email.subject)
-        self.assertIn(user.username, email.message)
+        self.assertIn(user.username, email.body)
