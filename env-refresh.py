@@ -13,8 +13,6 @@ import json
 import tempfile
 import hashlib
 import time
-import shutil
-from datetime import datetime
 
 import django
 import importlib.util
@@ -44,11 +42,10 @@ from django.contrib.auth import get_user_model
 
 from core.models import PackageRelease
 from core.sigil_builder import generate_model_sigils
-from utils import revision as revision_utils
 
 
 def _unlink_sqlite_db(path: Path) -> None:
-    """Close database connections, back up, and remove only the SQLite DB file."""
+    """Close database connections and remove only the SQLite DB file."""
     connections.close_all()
     try:
         base_dir = Path(settings.BASE_DIR).resolve()
@@ -61,19 +58,6 @@ def _unlink_sqlite_db(path: Path) -> None:
         raise RuntimeError(f"Refusing to delete database outside {base_dir}: {path}")
     if path.name != "db.sqlite3":
         raise RuntimeError(f"Refusing to delete unexpected database file: {path.name}")
-    if path.exists():
-        backup_dir = base_dir / "backups"
-        backup_dir.mkdir(exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        version_file = base_dir / "VERSION"
-        version = (
-            version_file.read_text().strip() if version_file.exists() else "unknown"
-        )
-        revision = revision_utils.get_revision() or "unknown"
-        shutil.copy2(
-            path,
-            backup_dir / f"{path.name}.{version}.{revision}.{timestamp}.bak",
-        )
     for _ in range(5):
         try:
             path.unlink(missing_ok=True)
