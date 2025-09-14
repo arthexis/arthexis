@@ -1,7 +1,6 @@
 [
   {
     "model": "core.reference",
-    "pk": 12,
     "fields": {
       "value": "https://ko-fi.com/arthexis/gallery",
       "alt_text": "Mysteric Gallery",

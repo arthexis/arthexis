@@ -1,7 +1,6 @@
 [
   {
     "model": "core.reference",
-    "pk": 1,
     "fields": {
       "value": "https://arthexis.com",
       "alt_text": "Arthexis Online",

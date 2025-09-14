@@ -1,7 +1,6 @@
 [
   {
     "model": "core.reference",
-    "pk": 11,
     "fields": {
       "value": "https://en.wikipedia.org/wiki/MIT_License",
       "alt_text": "MIT License",

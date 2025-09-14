@@ -1,7 +1,6 @@
 [
   {
     "model": "core.reference",
-    "pk": 7,
     "fields": {
       "value": "https://docs.celeryq.dev/en/stable/",
       "alt_text": "Celery",

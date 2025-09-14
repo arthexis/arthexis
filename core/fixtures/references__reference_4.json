@@ -1,7 +1,6 @@
 [
   {
     "model": "core.reference",
-    "pk": 4,
     "fields": {
       "value": "https://www.python.org/",
       "alt_text": "Python",

@@ -1,7 +1,6 @@
 [
   {
     "model": "core.reference",
-    "pk": 2,
     "fields": {
       "value": "https://pypi.org/project/arthexis/",
       "alt_text": "Arthexis on PyPI",

@@ -1,7 +1,6 @@
 [
   {
     "model": "core.todo",
-    "pk": 20,
     "fields": {
       "request": "Validate screen Client Report",
       "url": "/client-report/"

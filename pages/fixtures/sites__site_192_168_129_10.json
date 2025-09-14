@@ -1,7 +1,6 @@
 [
   {
     "model": "sites.site",
-    "pk": 2,
     "fields": {
       "domain": "192.168.129.10",
       "name": "Gateway"
