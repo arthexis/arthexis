@@ -74,6 +74,13 @@ def _changelog_notes(version: str) -> str:
     return ""
 
 
+def _step_check_todos(release, ctx, log_path: Path) -> None:
+    pending = list(Todo.objects.filter(is_deleted=False).values("description", "url"))
+    if pending:
+        ctx["todos"] = pending
+        raise Exception("Resolve open TODO items before publishing")
+
+
 def _step_check_pypi(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
     from packaging.version import Version
@@ -211,6 +218,7 @@ def _step_publish(release, ctx, log_path: Path) -> None:
 
 
 PUBLISH_STEPS = [
+    ("Verify pending TODOs", _step_check_todos),
     ("Check version availability", _step_check_pypi),
     ("Generate build", _step_promote_build),
     ("Publish", _step_publish),
@@ -479,6 +487,7 @@ def release_progress(request, pk: int, action: str):
         "log_path": str(log_path),
         "cert_log": ctx.get("cert_log"),
         "fixtures": ctx.get("fixtures"),
+        "todos": ctx.get("todos"),
         "restart_count": restart_count,
     }
     request.session[session_key] = ctx
