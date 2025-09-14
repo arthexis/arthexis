@@ -256,6 +256,10 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     SigilRoot = apps.get_model("core", "SigilRoot")
     SigilRoot.objects.all().delete()
 
+    # Remove existing Site entries to avoid duplicate domain constraints
+    Site = apps.get_model("sites", "Site")
+    Site.objects.all().delete()
+
     fixtures = _fixture_files()
     fixture_hash = _fixture_hash(fixtures)
     if fixtures:
@@ -313,12 +317,22 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
             post_save.disconnect(_create_landings, sender=Module)
             try:
                 for priority in sorted(patched):
-                    call_command("loaddata", *patched[priority])
+                    for fixture in patched[priority]:
+                        try:
+                            try:
+                                call_command(
+                                    "loaddata",
+                                    fixture,
+                                    natural_foreign=True,
+                                    natural_primary=True,
+                                )
+                            except TypeError:
+                                call_command("loaddata", fixture)
+                        except DeserializationError as exc:
+                            print(f"Skipping fixture {fixture} due to: {exc}")
                 for module in Module.objects.all():
                     module.create_landings()
                 Landing.objects.update(is_seed_data=True)
-            except DeserializationError:
-                pass
             finally:
                 post_save.connect(_create_landings, sender=Module)
 
