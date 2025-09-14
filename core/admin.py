@@ -941,6 +941,7 @@ class EVModelAdmin(EntityModelAdmin):
     list_display = ("name", "brand")
     list_filter = ("brand",)
 
+
 admin.site.register(Product)
 admin.site.register(LiveSubscription)
 
