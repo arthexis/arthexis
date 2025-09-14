@@ -23,7 +23,10 @@ from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connections, connection
-from django.db.migrations.exceptions import InconsistentMigrationHistory
+from django.db.migrations.exceptions import (
+    InconsistentMigrationHistory,
+    InvalidBasesError,
+)
 from django.db.utils import OperationalError
 from django.db.migrations.recorder import MigrationRecorder
 from django.db.migrations.loader import MigrationLoader
@@ -225,6 +228,14 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
         except InconsistentMigrationHistory:
             call_command("reset_ocpp_migrations")
             call_command("migrate", interactive=False)
+        except InvalidBasesError as exc:
+            if "post_office.WorkgroupNewsArticle" in str(exc):
+                call_command(
+                    "migrate", "post_office", "0014", fake=True, interactive=False
+                )
+                call_command("migrate", interactive=False)
+            else:
+                raise
         except OperationalError as exc:
             if using_sqlite:
                 _unlink_sqlite_db(Path(default_db["NAME"]))
