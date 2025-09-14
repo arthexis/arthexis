@@ -1,15 +1,15 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 47,
+    "pk": 23,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "INV-LEAD",
+      "prefix": "EVB",
       "context_type": "entity",
       "content_type": [
         "core",
-        "invitelead"
+        "brand"
       ]
     }
   }

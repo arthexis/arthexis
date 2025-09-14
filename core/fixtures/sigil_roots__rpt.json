@@ -1,15 +1,15 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 40,
+    "pk": 34,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "CONT",
+      "prefix": "RPT",
       "context_type": "entity",
       "content_type": [
-        "nodes",
-        "contentsample"
+        "core",
+        "energyreport"
       ]
     }
   }

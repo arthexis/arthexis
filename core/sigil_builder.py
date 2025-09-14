@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import re
 
 from django.apps import apps
 from django.contrib import admin
-from django.contrib.contenttypes.models import ContentType
 from django.template.response import TemplateResponse
-from django.urls import path
+from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 
 from .fields import SigilAutoFieldMixin
@@ -16,24 +14,8 @@ from .sigil_resolver import (
 )
 
 
-def _generate_prefix(name: str, existing: set[str]) -> str:
-    words = [w for w in re.findall(r"[A-Z][^A-Z]*", name) if w]
-    base = "".join(word[0] for word in words).upper()
-    candidate = base
-    extra_index = 1
-    full_name = "".join(words)
-    while candidate.upper() in existing:
-        if extra_index < len(full_name):
-            candidate = base + full_name[extra_index].upper()
-            extra_index += 1
-        else:
-            candidate = f"{base}{extra_index}"
-            extra_index += 1
-    return candidate
-
-
 def generate_model_sigils(**kwargs) -> None:
-    """Create SigilRoot entries for all models using unique prefixes."""
+    """Ensure built-in configuration SigilRoot entries exist."""
     SigilRoot = apps.get_model("core", "SigilRoot")
     for prefix in ["ENV", "SYS", "CMD"]:
         # Ensure built-in configuration roots exist without violating the
@@ -50,23 +32,22 @@ def generate_model_sigils(**kwargs) -> None:
                 context_type=SigilRoot.Context.CONFIG,
             )
 
-    existing = {p.upper() for p in SigilRoot.objects.values_list("prefix", flat=True)}
-    for model in apps.get_models():
-        ct = ContentType.objects.get_for_model(model)
-        if SigilRoot.objects.filter(content_type=ct).exists():
-            continue
-        prefix = _generate_prefix(model.__name__, existing).upper()
-        SigilRoot.objects.create(
-            prefix=prefix,
-            context_type=SigilRoot.Context.ENTITY,
-            content_type=ct,
-        )
-        existing.add(prefix.upper())
-
 
 def _sigil_builder_view(request):
     SigilRoot = apps.get_model("core", "SigilRoot")
     grouped: dict[str, dict[str, object]] = {}
+    builtin_roots = [
+        {
+            "prefix": "ENV",
+            "url": reverse("admin:environment"),
+            "label": _("Environment"),
+        },
+        {
+            "prefix": "SYS",
+            "url": reverse("admin:system"),
+            "label": _("System"),
+        },
+    ]
     for root in SigilRoot.objects.filter(
         context_type=SigilRoot.Context.ENTITY
     ).select_related("content_type"):
@@ -123,6 +104,7 @@ def _sigil_builder_view(request):
         {
             "title": _("Sigil Builder"),
             "sigil_roots": roots,
+            "builtin_roots": builtin_roots,
             "auto_fields": auto_fields,
             "sigils_text": sigils_text,
             "resolved_text": resolved_text,

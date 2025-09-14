@@ -15,6 +15,12 @@
   <label for="resolved_text">{% trans "Result" %}</label>
   <textarea id="resolved_text" rows="10" cols="80" style="width:100%;" readonly>{{ resolved_text }}</textarea>
   {% endif %}
+  <h2>{% trans "Built-in Sigil Roots" %}</h2>
+  <ul>
+    {% for root in builtin_roots %}
+      <li>[{{ root.prefix }}] – <a href="{{ root.url }}">{{ root.label }}</a></li>
+    {% endfor %}
+  </ul>
   <input type="text" id="sigil-filter" placeholder="{% trans 'Filter' %}" />
   <table id="sigil-table">
     <thead>

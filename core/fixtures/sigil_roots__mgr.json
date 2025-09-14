@@ -1,15 +1,15 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 48,
+    "pk": 6,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "UD",
+      "prefix": "MGR",
       "context_type": "entity",
       "content_type": [
         "core",
-        "rfid"
+        "releasemanager"
       ]
     }
   }

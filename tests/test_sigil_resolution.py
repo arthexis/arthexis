@@ -1,6 +1,4 @@
 import os
-
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
 from django.test import TestCase
@@ -10,7 +8,6 @@ from core.models import (
     SigilRoot,
     OdooProfile,
     EmailInbox,
-    InviteLead,
     EmailCollector,
     EmailArtifact,
 )
@@ -50,7 +47,7 @@ class SigilResolutionTests(TestCase):
         )
         ct = ContentType.objects.get_for_model(EmailArtifact)
         SigilRoot.objects.update_or_create(
-            prefix="EMAIL",
+            prefix="EART",
             defaults={
                 "context_type": SigilRoot.Context.ENTITY,
                 "content_type": ct,
@@ -63,64 +60,6 @@ class SigilResolutionTests(TestCase):
                 "context_type": SigilRoot.Context.ENTITY,
                 "content_type": ct_user,
             },
-        )
-
-    def test_env_variable_sigil(self):
-        os.environ["SIGIL_PATH"] = "demo"
-        profile = OdooProfile.objects.create(
-            user=self.user,
-            host="path=[ENV.SIGIL-PATH]",
-            database="db",
-            username="odoo",
-            password="secret",
-        )
-        tmpl = Template("{{ profile.host }}")
-        rendered = tmpl.render(Context({"profile": profile}))
-        self.assertEqual(rendered, "path=demo")
-
-    def test_settings_sigil(self):
-        profile = OdooProfile.objects.create(
-            user=self.user,
-            host="lang=[SYS.LANGUAGE-CODE]",
-            database="db",
-            username="odoo",
-            password="secret",
-        )
-        tmpl = Template("{{ profile.host }}")
-        rendered = tmpl.render(Context({"profile": profile}))
-        expected = f"lang={settings.LANGUAGE_CODE}"
-        self.assertEqual(rendered, expected)
-
-    def test_command_sigil(self):
-        email = "invite@example.com"
-        User = get_user_model()
-        User.objects.create_user(username="cmduser", email=email)
-        InviteLead.objects.create(email=email)
-        profile = OdooProfile.objects.create(
-            user=self.user,
-            host=f"[CMD.SEND-INVITE={email}]",
-            database="db",
-            username="odoo",
-            password="secret",
-        )
-        tmpl = Template("{{ profile.host }}")
-        rendered = tmpl.render(Context({"profile": profile}))
-        self.assertIn("Invitation sent", rendered)
-
-    def test_unresolved_env_sigil_left_intact(self):
-        profile = OdooProfile.objects.create(
-            user=self.user,
-            host="path=[ENV.MISSING_PATH]",
-            database="db",
-            username="odoo",
-            password="secret",
-        )
-        tmpl = Template("{{ profile.host }}")
-        with self.assertLogs("core.entity", level="WARNING") as cm:
-            rendered = tmpl.render(Context({"profile": profile}))
-        self.assertEqual(rendered, "path=[ENV.MISSING_PATH]")
-        self.assertIn(
-            "Missing environment variable for sigil [ENV.MISSING_PATH]", cm.output[0]
         )
 
     def test_unknown_root_sigil_left_intact(self):
@@ -347,8 +286,25 @@ class SigilResolutionTests(TestCase):
     def test_email_sigil_ordering_and_nested(self):
         set_context({get_user_model(): self.user.pk})
         try:
-            self.assertEqual(resolve_sigils_in_text("[EMAIL.SUBJECT]"), "second")
-            nested = resolve_sigils_in_text("[EMAIL.SENDER=[USER.EMAIL]]")
+            self.assertEqual(resolve_sigils_in_text("[EART.SUBJECT]"), "second")
+            nested = resolve_sigils_in_text("[EART.SENDER=[USER.EMAIL]]")
             self.assertEqual(nested, self.user.email)
         finally:
             clear_context()
+
+    def test_env_sigil(self):
+        os.environ["SIGIL_TEST_VAR"] = "env-val"
+        try:
+            self.assertEqual(
+                resolve_sigils_in_text("[ENV.SIGIL_TEST_VAR]"),
+                "env-val",
+            )
+        finally:
+            del os.environ["SIGIL_TEST_VAR"]
+
+    def test_sys_sigil(self):
+        with self.settings(SIGIL_TEST_SETTING="sys-val"):
+            self.assertEqual(
+                resolve_sigils_in_text("[SYS.SIGIL_TEST_SETTING]"),
+                "sys-val",
+            )

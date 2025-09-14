@@ -1,15 +1,15 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 54,
+    "pk": 3,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "REL-MGR",
+      "prefix": "TYPE",
       "context_type": "entity",
       "content_type": [
-        "core",
-        "releasemanager"
+        "contenttypes",
+        "contenttype"
       ]
     }
   }

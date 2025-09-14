@@ -1,15 +1,15 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 67,
+    "pk": 9,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "G",
+      "prefix": "EV",
       "context_type": "entity",
       "content_type": [
-        "auth",
-        "group"
+        "core",
+        "electricvehicle"
       ]
     }
   }

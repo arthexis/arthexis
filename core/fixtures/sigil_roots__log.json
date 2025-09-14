@@ -1,15 +1,15 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 19,
+    "pk": 2,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "POW-LEAD",
+      "prefix": "LOG",
       "context_type": "entity",
       "content_type": [
-        "awg",
-        "powerlead"
+        "admin",
+        "logentry"
       ]
     }
   }

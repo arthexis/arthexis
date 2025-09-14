@@ -1,15 +1,15 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 65,
+    "pk": 31,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "S",
+      "prefix": "EART",
       "context_type": "entity",
       "content_type": [
-        "sessions",
-        "session"
+        "core",
+        "emailartifact"
       ]
     }
   }

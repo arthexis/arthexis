@@ -1,7 +1,7 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 42,
+    "pk": 20,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
