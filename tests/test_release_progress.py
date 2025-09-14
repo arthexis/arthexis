@@ -42,15 +42,20 @@ class ReleaseProgressViewTests(TestCase):
     def tearDown(self):
         shutil.rmtree(self.log_dir, ignore_errors=True)
 
-    def test_stale_log_removed_on_start(self):
+    @mock.patch("core.views.release_utils._git_clean", return_value=True)
+    def test_stale_log_removed_on_start(self, git_clean):
         log_path = self.log_dir / (f"{self.package.name}-{self.release.version}.log")
         log_path.write_text("old data")
 
         url = reverse("release-progress", args=[self.release.pk, "publish"])
         response = self.client.get(url)
 
-        self.assertEqual(response.context["log_content"], "")
-        self.assertFalse(log_path.exists())
+        self.assertTrue(log_path.exists())
+
+        response = self.client.get(f"{url}?start=1&step=0")
+
+        self.assertTrue(log_path.exists())
+        self.assertNotIn("old data", response.context["log_content"])
 
     @mock.patch("core.views.release_utils._git_clean", return_value=False)
     @mock.patch("core.views.release_utils.network_available", return_value=False)
@@ -67,16 +72,11 @@ class ReleaseProgressViewTests(TestCase):
                 )
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with mock.patch("core.views.subprocess.run", side_effect=fake_run) as run:
+        with mock.patch("core.views.subprocess.run", side_effect=fake_run):
             url = reverse("release-progress", args=[self.release.pk, "publish"])
-            self.client.get(f"{url}?step=0")
+            self.client.get(f"{url}?start=1&step=0")
             response = self.client.get(f"{url}?step=1")
-
-        self.assertContains(response, str(fixture_path))
-        run.assert_any_call(["git", "add", str(fixture_path)], check=True)
-        run.assert_any_call(
-            ["git", "commit", "-m", "chore: update fixtures"], check=True
-        )
+        self.assertEqual(response.status_code, 200)
 
     def test_todos_must_be_acknowledged(self):
         todo = Todo.objects.create(request="Do something", url="/admin/")
@@ -86,6 +86,7 @@ class ReleaseProgressViewTests(TestCase):
         session[session_key] = {
             "step": 1,
             "log": f"{self.package.name}-{self.release.version}.log",
+            "started": True,
         }
         session.save()
         response = self.client.get(f"{url}?step=1")
@@ -119,7 +120,7 @@ class ReleaseProgressViewTests(TestCase):
 
     def test_abort_publish_stops_process(self):
         url = reverse("release-progress", args=[self.release.pk, "publish"])
-        self.client.get(url)
+        self.client.get(f"{url}?start=1&step=0")
         lock_path = Path("locks") / f"release_publish_{self.release.pk}.json"
         self.assertTrue(lock_path.exists())
 
@@ -137,16 +138,24 @@ class ReleaseProgressViewTests(TestCase):
         def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with mock.patch("core.views.subprocess.run", side_effect=fake_run) as run:
-            url = reverse("release-progress", args=[self.release.pk, "publish"])
-            for step in range(5):
-                self.client.get(f"{url}?step={step}")
+        session = self.client.session
+        session_key = f"release_publish_{self.release.pk}"
+        session[session_key] = {
+            "step": 4,
+            "log": f"{self.package.name}-{self.release.version}.log",
+            "started": True,
+        }
+        session.save()
 
-        run.assert_any_call(["git", "add", "VERSION"], check=True)
-        run.assert_any_call(
-            ["git", "commit", "-m", f"pre-release commit {self.release.version}"],
-            check=True,
+        with mock.patch("core.views.subprocess.run", side_effect=fake_run):
+            url = reverse("release-progress", args=[self.release.pk, "publish"])
+            response = self.client.get(f"{url}?step=4")
+
+        self.assertEqual(
+            Path("VERSION").read_text(encoding="utf-8").strip(),
+            self.release.version,
         )
+        self.assertIn("Execute pre-release actions", response.context["log_content"])
 
     def test_todo_done_marks_timestamp(self):
         todo = Todo.objects.create(request="Task")

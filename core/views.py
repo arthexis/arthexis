@@ -475,6 +475,9 @@ def release_progress(request, pk: int, action: str):
         ctx = {"step": 0}
         if restart_path.exists():
             restart_path.unlink()
+
+    if request.GET.get("start"):
+        ctx["started"] = True
     if request.GET.get("ack_todos"):
         ctx["todos_ack"] = True
     if request.GET.get("abort"):
@@ -505,14 +508,23 @@ def release_progress(request, pk: int, action: str):
     log_path = Path("logs") / log_name
     ctx.setdefault("log", log_name)
 
-    if step_count == 0 and (step_param is None or step_param == "0"):
+    if (
+        ctx.get("started")
+        and step_count == 0
+        and (step_param is None or step_param == "0")
+    ):
         if log_path.exists():
             log_path.unlink()
 
     steps = PUBLISH_STEPS
     error = ctx.get("error")
 
-    if step_param is not None and not error and step_count < len(steps):
+    if (
+        ctx.get("started")
+        and step_param is not None
+        and not error
+        and step_count < len(steps)
+    ):
         to_run = int(step_param)
         if to_run == step_count:
             name, func = steps[to_run]
@@ -536,7 +548,9 @@ def release_progress(request, pk: int, action: str):
     done = step_count >= len(steps) and not ctx.get("error")
 
     log_content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
-    next_step = step_count if not done and not ctx.get("error") else None
+    next_step = (
+        step_count if ctx.get("started") and not done and not ctx.get("error") else None
+    )
     if ctx.get("todos") and not ctx.get("todos_ack"):
         next_step = None
     context = {
@@ -553,6 +567,7 @@ def release_progress(request, pk: int, action: str):
         "fixtures": ctx.get("fixtures"),
         "todos": ctx.get("todos"),
         "restart_count": restart_count,
+        "started": ctx.get("started", False),
     }
     request.session[session_key] = ctx
     if done or ctx.get("error"):
