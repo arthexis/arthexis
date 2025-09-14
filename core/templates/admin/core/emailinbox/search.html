@@ -1,11 +1,11 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
+{% load i18n admin_urls %}
 
 {% block breadcrumbs %}
 <div class="breadcrumbs">
   <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
-  <a href="{% url 'admin:app_list' 'core' %}">{% trans 'Core' %}</a> ›
-  <a href="{% url 'admin:core_emailinbox_changelist' %}">{% trans 'Email Inboxes' %}</a> ›
+  <a href="{% url 'admin:app_list' opts.app_label %}">{{ opts.app_config.verbose_name }}</a> ›
+  <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a> ›
   {% trans 'Search Email Inboxes' %}
 </div>
 {% endblock %}

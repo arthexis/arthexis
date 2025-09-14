@@ -4,12 +4,12 @@ from django.contrib.admin.sites import AdminSite
 from django.contrib import admin
 from unittest.mock import patch
 
-from core.models import EmailInbox, EmailCollector
+from teams.models import EmailInbox, EmailCollector
+from core.models import EmailCollector as CoreEmailCollector
 from core.admin import (
     EmailInboxAdminForm,
     EmailInboxAdmin,
-    EmailInbox as AdminEmailInbox,
-    EmailCollector as AdminEmailCollector,
+    EmailCollectorAdmin,
 )
 
 
@@ -88,7 +88,7 @@ class EmailInboxAdminActionTests(TestCase):
             use_ssl=True,
         )
         self.factory = RequestFactory()
-        self.admin = EmailInboxAdmin(AdminEmailInbox, AdminSite())
+        self.admin = EmailInboxAdmin(EmailInbox, AdminSite())
 
     def test_test_inbox_action(self):
         request = self.factory.get("/")
@@ -119,7 +119,7 @@ class EmailInboxAdminActionTests(TestCase):
         from django.contrib.messages.storage.fallback import FallbackStorage
 
         request._messages = FallbackStorage(request)
-        with patch.object(EmailCollector, "collect") as mock_collect:
+        with patch.object(CoreEmailCollector, "collect") as mock_collect:
             self.admin.test_collectors(
                 request, EmailInbox.objects.filter(pk=self.inbox.pk)
             )
@@ -131,7 +131,7 @@ class EmailInboxAdminActionTests(TestCase):
         request2.user = self.user
         request2.session = self.client.session
         request2._messages = FallbackStorage(request2)
-        with patch.object(EmailCollector, "collect") as mock_collect2:
+        with patch.object(CoreEmailCollector, "collect") as mock_collect2:
             self.admin.test_collectors_action(request2, self.inbox)
             mock_collect2.assert_called_once_with(limit=1)
         messages2 = list(request2._messages)
@@ -145,7 +145,7 @@ class EmailCollectorInlineTests(TestCase):
             username="admin", email="a@example.com", password="pwd"
         )
         self.factory = RequestFactory()
-        self.admin = EmailInboxAdmin(AdminEmailInbox, AdminSite())
+        self.admin = EmailInboxAdmin(EmailInbox, AdminSite())
 
     def test_can_add_multiple_collectors(self):
         data = {
@@ -203,10 +203,10 @@ class EmailCollectorAdminTests(TestCase):
             protocol=EmailInbox.IMAP,
             use_ssl=True,
         )
-        self.admin = admin.site._registry[AdminEmailCollector]
+        self.admin = admin.site._registry[EmailCollector]
 
     def test_collector_registered_standalone(self):
-        self.assertIn(AdminEmailCollector, admin.site._registry)
+        self.assertIn(EmailCollector, admin.site._registry)
 
     def test_changelist_and_change_view(self):
         collector = EmailCollector.objects.create(inbox=self.inbox)

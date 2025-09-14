@@ -208,7 +208,6 @@ class ReferenceAdmin(EntityModelAdmin):
     qr_code.short_description = "QR Code"
 
 
-@admin.register(ReleaseManager)
 class ReleaseManagerAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     list_display = ("user", "pypi_username", "pypi_url")
     actions = ["test_credentials"]
@@ -360,14 +359,12 @@ class SecurityGroupAdminForm(forms.ModelForm):
         return instance
 
 
-@admin.register(SecurityGroup)
 class SecurityGroupAdmin(DjangoGroupAdmin):
     form = SecurityGroupAdminForm
     fieldsets = ((None, {"fields": ("name", "parent", "users", "permissions")}),)
     filter_horizontal = ("permissions",)
 
 
-@admin.register(InviteLead)
 class InviteLeadAdmin(EntityModelAdmin):
     list_display = ("email", "created_on", "sent_on", "short_error")
     search_fields = ("email", "comment")
@@ -455,13 +452,11 @@ class EmailCollectorInline(admin.TabularInline):
     extra = 0
 
 
-@admin.register(EmailCollector)
 class EmailCollectorAdmin(EntityModelAdmin):
     list_display = ("inbox", "subject", "sender", "body", "fragment")
     search_fields = ("subject", "sender", "body", "fragment")
 
 
-@admin.register(OdooProfile)
 class OdooProfileAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     change_form_template = "django_object_actions/change_form.html"
     form = OdooProfileAdminForm
@@ -536,7 +531,6 @@ class EmailSearchForm(forms.Form):
     )
 
 
-@admin.register(EmailInbox)
 class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     form = EmailInboxAdminForm
     list_display = ("user", "username", "host", "protocol")
@@ -653,6 +647,7 @@ class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                     "results": results,
                     "queryset": queryset,
                     "action": "search_inbox",
+                    "opts": self.model._meta,
                 }
                 return TemplateResponse(
                     request, "admin/core/emailinbox/search.html", context
@@ -663,11 +658,11 @@ class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             "form": form,
             "queryset": queryset,
             "action": "search_inbox",
+            "opts": self.model._meta,
         }
         return TemplateResponse(request, "admin/core/emailinbox/search.html", context)
 
 
-@admin.register(ChatProfile)
 class ChatProfileAdmin(EntityModelAdmin):
     list_display = ("user", "created_at", "last_used_at", "is_active")
     readonly_fields = ("user_key_hash",)
