@@ -1,9 +1,10 @@
 # Release Checklist
 
-1. Ensure all tests pass.
-2. Generate `CHANGELOG.rst` from commit messages using `scripts/generate-changelog.sh`.
-3. Run `scripts/release.sh <version>` to:
-   - bump the version number
-   - freeze the current migrations
-   - create a source archive for the release
-   - commit changes and tag the release
+1. Check version number availability
+2. Confirm release TODO completion
+3. Freeze, squash and approve migrations
+4. Compose CHANGELOG and documentation
+5. Execute pre-release actions
+6. Build release artifacts
+7. Complete test suite with --all flag
+8. Upload final build to PyPI

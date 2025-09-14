@@ -1,5 +1,4 @@
 from django.contrib import admin
-from django.contrib.admin.sites import NotRegistered
 
 from core.models import (
     InviteLead as CoreInviteLead,
@@ -37,23 +36,6 @@ from .models import (
     OdooProfile,
     ChatProfile,
 )
-
-
-for model in [
-    CoreInviteLead,
-    CoreSecurityGroup,
-    CoreEmailInbox,
-    CoreEmailCollector,
-    CoreReleaseManager,
-    CoreOdooProfile,
-    CoreChatProfile,
-    CoreUser,
-    CoreEmailOutbox,
-]:
-    try:
-        admin.site.unregister(model)
-    except NotRegistered:
-        pass
 
 
 @admin.register(InviteLead)

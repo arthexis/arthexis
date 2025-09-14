@@ -236,7 +236,7 @@ def get_admin_urls(original_get_urls):
                 name="favorite_clear",
             ),
         ]
-        return my_urls + urls
+        return my_urls + original_get_urls()
 
     return get_urls
 

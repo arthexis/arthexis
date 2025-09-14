@@ -88,8 +88,12 @@ def _sigil_builder_view(request):
         entry["prefixes"].sort()
 
     auto_fields = []
+    seen = set()
     for model in apps.get_models():
         model_name = model._meta.object_name
+        if model_name in seen:
+            continue
+        seen.add(model_name)
         prefixes = grouped.get(model_name, {}).get("prefixes", [])
         for field in model._meta.fields:
             if isinstance(field, SigilAutoFieldMixin):

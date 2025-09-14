@@ -13,8 +13,8 @@ from django.apps import apps
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.contrib.admin import autodiscover
 from django.urls import include, path
+import teams.admin  # noqa: F401
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import RedirectView
 from django.views.i18n import set_language
@@ -23,7 +23,6 @@ from core import views as core_views
 from core.admindocs import CommandsView, OrderedModelIndexView
 from man import views as man_views
 
-autodiscover()
 admin.site.site_header = _("Constellation")
 admin.site.site_title = _("Constellation")
 

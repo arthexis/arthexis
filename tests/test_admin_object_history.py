@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.admin.models import LogEntry, ADDITION, CHANGE
 
-from core.models import Brand
+from ocpp.models import Brand
 
 
 class AdminObjectHistoryTests(TestCase):
@@ -25,7 +25,7 @@ class AdminObjectHistoryTests(TestCase):
         self.client.force_login(self.user)
 
     def test_history_tracks_old_and_new_values(self):
-        add_url = reverse("admin:core_brand_add")
+        add_url = reverse("admin:ocpp_brand_add")
         self.client.post(
             add_url,
             {
@@ -48,7 +48,7 @@ class AdminObjectHistoryTests(TestCase):
         self.assertIn("Added", msg)
         self.assertIn("name='OldBrand'", msg)
 
-        change_url = reverse("admin:core_brand_change", args=[brand.pk])
+        change_url = reverse("admin:ocpp_brand_change", args=[brand.pk])
         self.client.post(
             change_url,
             {

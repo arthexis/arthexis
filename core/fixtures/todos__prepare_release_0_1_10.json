@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "pk": 28,
+    "fields": {
+      "description": "Prepare release 0.1.10",
+      "url": "/admin/core/package/prepare-next-release/"
+    }
+  }
+]

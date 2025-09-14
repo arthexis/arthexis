@@ -38,6 +38,7 @@ class EntityInheritanceTests(TestCase):
         allowed = {
             "core.SecurityGroup",
             "pages.SiteProxy",
+            "teams.SecurityGroup",
         }
         for app_label in getattr(settings, "LOCAL_APPS", []):
             config = apps.get_app_config(app_label)
