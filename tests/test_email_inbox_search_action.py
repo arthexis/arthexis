@@ -4,8 +4,9 @@ from unittest.mock import patch
 from django.contrib.admin.sites import AdminSite
 from django.test import TestCase, RequestFactory
 
-from core.admin import EmailInboxAdmin, EmailInbox as AdminEmailInbox
-from core.models import EmailInbox, User
+from core.admin import EmailInboxAdmin
+from teams.models import EmailInbox
+from core.models import User
 
 
 class DummyIMAPSearch:
@@ -97,11 +98,11 @@ class EmailInboxSearchTests(TestCase):
             use_ssl=True,
         )
         site = AdminSite()
-        ma = EmailInboxAdmin(AdminEmailInbox, site)
+        ma = EmailInboxAdmin(EmailInbox, site)
         factory = RequestFactory()
         request = factory.post("/", {"apply": "yes", "subject": "S"})
         request.user = admin
-        response = ma.search_inbox(request, AdminEmailInbox.objects.filter(id=inbox.id))
+        response = ma.search_inbox(request, EmailInbox.objects.filter(id=inbox.id))
         self.assertEqual(response.status_code, 200)
         content = response.render().content.decode()
         self.assertIn("S", content)

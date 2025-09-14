@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.management import call_command
 from django.contrib.messages import get_messages
 
-from core.models import OdooProfile
+from teams.models import OdooProfile
 
 
 class UserDataAdminTests(TransactionTestCase):
@@ -28,19 +28,19 @@ class UserDataAdminTests(TransactionTestCase):
             username="odoo",
             password="secret",
         )
-        self.fixture_path = self.data_dir / f"core_odooprofile_{self.profile.pk}.json"
+        self.fixture_path = self.data_dir / f"teams_odooprofile_{self.profile.pk}.json"
 
     def tearDown(self):
         self.fixture_path.unlink(missing_ok=True)
         call_command("flush", verbosity=0, interactive=False)
 
     def test_userdatum_checkbox(self):
-        url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
+        url = reverse("admin:teams_odooprofile_change", args=[self.profile.pk])
         response = self.client.get(url)
         self.assertContains(response, 'name="_user_datum"')
 
     def test_save_user_datum_creates_fixture(self):
-        url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
+        url = reverse("admin:teams_odooprofile_change", args=[self.profile.pk])
         data = {
             "user": self.user.pk,
             "host": "http://test",
@@ -60,7 +60,7 @@ class UserDataAdminTests(TransactionTestCase):
     def test_unchecking_removes_fixture(self):
         self.profile.is_user_data = True
         self.profile.save()
-        url = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
+        url = reverse("admin:teams_odooprofile_change", args=[self.profile.pk])
         data = {
             "user": self.user.pk,
             "host": "http://test",
