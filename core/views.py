@@ -163,6 +163,13 @@ def _step_changelog_docs(release, ctx, log_path: Path) -> None:
 
 def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Execute pre-release actions")
+    version_path = Path("VERSION")
+    version_path.write_text(f"{release.version}\n", encoding="utf-8")
+    subprocess.run(["git", "add", "VERSION"], check=True)
+    subprocess.run(
+        ["git", "commit", "-m", f"pre-release commit {release.version}"],
+        check=True,
+    )
 
 
 def _step_run_tests(release, ctx, log_path: Path) -> None:
