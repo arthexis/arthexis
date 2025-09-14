@@ -1,7 +1,6 @@
 [
   {
     "model": "core.reference",
-    "pk": 6,
     "fields": {
       "value": "https://openchargealliance.org/protocols/open-charge-point-protocol/",
       "alt_text": "OCPP",

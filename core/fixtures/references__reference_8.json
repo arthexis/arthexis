@@ -1,7 +1,6 @@
 [
   {
     "model": "core.reference",
-    "pk": 8,
     "fields": {
       "value": "https://github.com/arthexis/arthexis",
       "alt_text": "GitHub Repo",

@@ -1,13 +1,22 @@
 [
   {
     "model": "nodes.nodefeature",
-    "pk": 2,
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
       "slug": "rfid-scanner",
       "display": "RFID Scanner",
-      "roles": [["Terminal"], ["Satellite"], ["Constellation"]]
+      "roles": [
+        [
+          "Terminal"
+        ],
+        [
+          "Satellite"
+        ],
+        [
+          "Constellation"
+        ]
+      ]
     }
   }
 ]

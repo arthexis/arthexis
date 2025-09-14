@@ -1,7 +1,6 @@
 [
   {
     "model": "core.reference",
-    "pk": 5,
     "fields": {
       "value": "https://www.djangoproject.com/",
       "alt_text": "Django",

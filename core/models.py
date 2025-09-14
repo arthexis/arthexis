@@ -32,7 +32,7 @@ from django.core import serializers
 from urllib.parse import urlparse
 from utils import revision as revision_utils
 
-from .entity import Entity, EntityUserManager
+from .entity import Entity, EntityUserManager, EntityManager
 from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
 from . import user_data  # noqa: F401 - ensure signal registration
 from .fields import SigilShortAutoField
@@ -52,6 +52,11 @@ class SecurityGroup(Group):
         verbose_name_plural = "Security Groups"
 
 
+class SigilRootManager(EntityManager):
+    def get_by_natural_key(self, prefix: str):
+        return self.get(prefix=prefix)
+
+
 class SigilRoot(Entity):
     class Context(models.TextChoices):
         CONFIG = "config", "Configuration"
@@ -63,8 +68,13 @@ class SigilRoot(Entity):
         ContentType, null=True, blank=True, on_delete=models.CASCADE
     )
 
+    objects = SigilRootManager()
+
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.prefix
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        return (self.prefix,)
 
     class Meta:
         verbose_name = "Sigil Root"
@@ -483,6 +493,11 @@ class EmailArtifact(Entity):
         ordering = ["-id"]
 
 
+class ReferenceManager(EntityManager):
+    def get_by_natural_key(self, alt_text: str):
+        return self.get(alt_text=alt_text)
+
+
 class Reference(Entity):
     """Store a piece of reference content which can be text or an image."""
 
@@ -534,6 +549,8 @@ class Reference(Entity):
         blank=True,
     )
 
+    objects = ReferenceManager()
+
     def save(self, *args, **kwargs):
         if self.pk:
             original = type(self).all_objects.get(pk=self.pk)
@@ -554,6 +571,9 @@ class Reference(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.alt_text
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        return (self.alt_text,)
 
 
 class RFID(Entity):
@@ -1354,6 +1374,11 @@ def validate_relative_url(value: str) -> None:
         raise ValidationError("URL must be relative")
 
 
+class TodoManager(EntityManager):
+    def get_by_natural_key(self, request: str):
+        return self.get(request=request)
+
+
 class Todo(Entity):
     """Tasks requested for the Release Manager."""
 
@@ -1363,6 +1388,8 @@ class Todo(Entity):
     )
     request_details = models.TextField(blank=True, default="")
     done_on = models.DateTimeField(null=True, blank=True)
+
+    objects = TodoManager()
 
     class Meta:
         verbose_name = "TODO"
@@ -1386,3 +1413,6 @@ class Todo(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.request
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        return (self.request,)

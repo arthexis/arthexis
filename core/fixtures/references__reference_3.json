@@ -1,7 +1,6 @@
 [
   {
     "model": "core.reference",
-    "pk": 3,
     "fields": {
       "value": "https://www.gelectriic.com",
       "alt_text": "Gelectriic Solutions",

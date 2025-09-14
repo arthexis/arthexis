@@ -1,7 +1,6 @@
 [
   {
     "model": "core.todo",
-    "pk": 12,
     "fields": {
       "request": "Validate screen System",
       "url": "/admin/system/"

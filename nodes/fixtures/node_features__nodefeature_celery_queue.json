@@ -1,13 +1,25 @@
 [
   {
     "model": "nodes.nodefeature",
-    "pk": 3,
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
       "slug": "celery-queue",
       "display": "Celery Queue",
-      "roles": [["Terminal"], ["Satellite"], ["Control"], ["Constellation"]]
+      "roles": [
+        [
+          "Terminal"
+        ],
+        [
+          "Satellite"
+        ],
+        [
+          "Control"
+        ],
+        [
+          "Constellation"
+        ]
+      ]
     }
   }
 ]

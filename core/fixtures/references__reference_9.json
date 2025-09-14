@@ -1,7 +1,6 @@
 [
   {
     "model": "core.reference",
-    "pk": 9,
     "fields": {
       "value": "https://www.odoo.com/partners",
       "alt_text": "Odoo Partners",

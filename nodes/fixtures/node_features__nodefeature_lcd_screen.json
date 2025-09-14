@@ -1,13 +1,19 @@
 [
   {
     "model": "nodes.nodefeature",
-    "pk": 1,
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
       "slug": "lcd-screen",
       "display": "LCD Screen",
-      "roles": [["Terminal"], ["Control"]]
+      "roles": [
+        [
+          "Terminal"
+        ],
+        [
+          "Control"
+        ]
+      ]
     }
   }
 ]

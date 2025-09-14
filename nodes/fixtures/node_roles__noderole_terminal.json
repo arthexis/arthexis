@@ -1,7 +1,6 @@
 [
   {
     "model": "nodes.noderole",
-    "pk": 1,
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
