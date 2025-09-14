@@ -569,6 +569,12 @@ class RFID(Entity):
             )
         ],
     )
+    custom_label = models.CharField(
+        max_length=32,
+        blank=True,
+        verbose_name="Custom Label",
+        help_text="Optional custom label for this RFID.",
+    )
     key_a = models.CharField(
         max_length=12,
         default="FFFFFFFFFFFF",

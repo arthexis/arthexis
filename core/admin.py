@@ -953,6 +953,7 @@ class RFIDResource(resources.ModelResource):
         fields = (
             "label_id",
             "rfid",
+            "custom_label",
             "reference",
             "allowed",
             "color",
@@ -993,6 +994,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     list_display = (
         "label_id",
         "rfid",
+        "custom_label",
         "color",
         "kind",
         "released",
@@ -1002,7 +1004,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         "last_seen_on",
     )
     list_filter = ("color", "released", "allowed")
-    search_fields = ("label_id", "rfid")
+    search_fields = ("label_id", "rfid", "custom_label")
     autocomplete_fields = ["energy_accounts"]
     raw_id_fields = ["reference"]
     actions = ["scan_rfids"]
