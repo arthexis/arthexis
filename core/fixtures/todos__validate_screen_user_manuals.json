@@ -3,7 +3,7 @@
     "model": "core.todo",
     "pk": 12,
     "fields": {
-      "description": "Validate screen User Manuals",
+      "request": "Validate screen User Manuals",
       "url": "/man/"
     }
   }

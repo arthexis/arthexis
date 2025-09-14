@@ -12,7 +12,6 @@ import django
 django.setup()
 
 from django.test import TestCase
-import unittest
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from core.models import Package, PackageRelease, Todo
@@ -25,6 +24,7 @@ class ReleaseProgressViewTests(TestCase):
         self.user = User.objects.create_superuser(
             username="admin", email="admin@example.com", password="password"
         )
+        self.client = self.client_class()
         self.client.force_login(self.user)
         self.package = Package.objects.create(name="pkg")
         self.release = PackageRelease.objects.create(
@@ -78,18 +78,44 @@ class ReleaseProgressViewTests(TestCase):
             ["git", "commit", "-m", "chore: update fixtures"], check=True
         )
 
-    @unittest.skip("TODO blocking verified separately")
-    def test_todos_block_release(self):
-        Todo.objects.create(description="Do something", url="/admin/")
+    def test_todos_must_be_acknowledged(self):
+        todo = Todo.objects.create(request="Do something", url="/admin/")
         url = reverse("release-progress", args=[self.release.pk, "publish"])
-        self.client.get(f"{url}?step=0")
+        session = self.client.session
+        session_key = f"release_publish_{self.release.pk}"
+        session[session_key] = {
+            "step": 1,
+            "log": f"{self.package.name}-{self.release.version}.log",
+        }
+        session.save()
         response = self.client.get(f"{url}?step=1")
-        self.assertContains(response, "Do something")
-        self.assertContains(
-            response,
-            '<a href="/admin/" target="_blank" rel="noopener">Do something</a>',
-            html=True,
+        self.assertEqual(
+            response.context["todos"],
+            [
+                {
+                    "id": todo.pk,
+                    "request": "Do something",
+                    "url": "/admin/",
+                    "request_details": "",
+                }
+            ],
         )
+        self.assertIsNone(response.context["next_step"])
+        tmp_dir = Path("tmp_todos")
+        tmp_dir.mkdir(exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(tmp_dir, ignore_errors=True))
+        fx = tmp_dir / f"todos__{todo.pk}.json"
+        fx.write_text("[]", encoding="utf-8")
+        with (
+            mock.patch("core.views.TODO_FIXTURE_DIR", tmp_dir),
+            mock.patch("core.views.subprocess.run"),
+        ):
+            self.client.get(f"{url}?ack_todos=1")
+            response = self.client.get(f"{url}?step=1")
+        self.assertFalse(Todo.objects.filter(is_deleted=False).exists())
+        self.assertFalse(fx.exists())
+        self.assertIsNone(response.context.get("todos"))
+        self.assertEqual(response.context["next_step"], 2)
 
     def test_abort_publish_stops_process(self):
         url = reverse("release-progress", args=[self.release.pk, "publish"])
@@ -121,3 +147,18 @@ class ReleaseProgressViewTests(TestCase):
             ["git", "commit", "-m", f"pre-release commit {self.release.version}"],
             check=True,
         )
+
+    def test_todo_done_marks_timestamp(self):
+        todo = Todo.objects.create(request="Task")
+        url = reverse("todo-done", args=[todo.pk])
+        tmp_dir = Path("tmp_todos2")
+        tmp_dir.mkdir(exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(tmp_dir, ignore_errors=True))
+        fx = tmp_dir / f"todos__{todo.pk}.json"
+        fx.write_text("[]", encoding="utf-8")
+        with mock.patch("core.views.TODO_FIXTURE_DIR", tmp_dir):
+            response = self.client.post(url)
+        self.assertRedirects(response, reverse("admin:index"))
+        todo.refresh_from_db()
+        self.assertIsNotNone(todo.done_on)
+        self.assertTrue(fx.exists())

@@ -1209,7 +1209,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
 @admin.register(Todo)
 class TodoAdmin(EntityModelAdmin):
-    list_display = ("description", "url")
+    list_display = ("request", "url")
 
     def has_add_permission(self, request, obj=None):
         return False

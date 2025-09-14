@@ -34,6 +34,14 @@
 
 {% block content %}
 <h1>{{ action|capfirst }} {{ release.package.name }} {{ release.version }}</h1>
+<div>
+  <form method="get" style="display:inline;">
+    <button type="submit" name="abort" value="1">{% trans 'Stop Publish' %}</button>
+  </form>
+  <form method="get" style="display:inline;">
+    <button type="submit" name="restart" value="1">{% trans 'Restart Publish' %}</button>
+  </form>
+</div>
 <ol>
 {% for step in steps %}
   <li>{% if forloop.counter0 < current_step %}✅{% elif forloop.counter0 == current_step and not done and not error %}⏳{% else %}⬜{% endif %} {{ step }}</li>
@@ -61,28 +69,39 @@
 </table>
 {% endif %}
 <pre>{{ log_content }}</pre>
-{% if error %}
-<p class="error">{{ error }}</p>
 {% if todos %}
 <h2>{% trans 'Pending TODOs' %}</h2>
-<ul>
+<form method="get">
+  <input type="hidden" name="step" value="{{ current_step }}">
+  <ul>
   {% for todo in todos %}
   <li class="todo-item">
-    {% if todo.url %}
-    <a href="{{ todo.url }}" target="_blank" rel="noopener" class="todo-link">{{ todo.description }}</a>
-    {% else %}
-    {{ todo.description }}
-    {% endif %}
+    <label>
+      <input type="checkbox" class="todo-check">
+      {% if todo.url %}
+      <a href="{{ todo.url }}" target="_blank" rel="noopener" class="todo-link">{{ todo.request }}</a>
+      {% else %}
+      {{ todo.request }}
+      {% endif %}
+    </label>
     {% if todo.request_details %}
     <div class="todo-details">{{ todo.request_details }}</div>
     {% endif %}
   </li>
   {% endfor %}
- </ul>
-{% endif %}
-<form method="get">
-  <button type="submit" name="restart" value="1">{% trans 'Restart' %}</button>
+  </ul>
+  <button type="submit" name="ack_todos" value="1" id="continue-btn" disabled>{% trans 'Continue' %}</button>
 </form>
+<script>
+  const btn = document.getElementById('continue-btn');
+  const checks = document.querySelectorAll('.todo-check');
+  function updateBtn(){ btn.disabled = !Array.from(checks).every(c=>c.checked); }
+  checks.forEach(c=>c.addEventListener('change', updateBtn));
+  updateBtn();
+</script>
+{% endif %}
+{% if error %}
+<p class="error">{{ error }}</p>
 {% elif not done %}
 {% if next_step is not None %}
 <meta http-equiv="refresh" content="1; url={{ request.path }}?step={{ next_step }}">
@@ -103,9 +122,9 @@
 {% endif %}
 <p>{% trans 'Restarts' %}: {{ restart_count }}</p>
 <form method="get">
-  <button type="submit" name="restart" value="1">{% trans 'Restart' %}</button>
+  <button type="submit" name="restart" value="1">{% trans 'Restart Publish' %}</button>
   {% if not done %}
-  <button type="submit" name="abort" value="1">{% trans 'Abort publish' %}</button>
+  <button type="submit" name="abort" value="1">{% trans 'Stop Publish' %}</button>
   {% endif %}
 </form>
 {% endblock %}
