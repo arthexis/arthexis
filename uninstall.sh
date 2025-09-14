@@ -115,10 +115,21 @@ done
 pkill -f "celery -A config" || true
 
 # Remove the local SQLite database if it exists
-DB_FILE="$BASE_DIR/db.sqlite3"
+get_db_file() {
+    local lock_file="$BASE_DIR/locks/db-revision.lck"
+    if [ -f "$lock_file" ]; then
+        local hash
+        hash=$(cat "$lock_file")
+        echo "$BASE_DIR/db_${hash: -6}.sqlite3"
+    else
+        echo "$BASE_DIR/db.sqlite3"
+    fi
+}
+DB_FILE="$(get_db_file)"
 if [ -f "$DB_FILE" ]; then
     rm -f "$DB_FILE"
 fi
+rm -f "$BASE_DIR/locks/db-revision.lck"
 
 # Clear lock directory and other cached configuration
 rm -rf "$LOCK_DIR"
