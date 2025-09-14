@@ -6,6 +6,8 @@ if /I "%SCRIPT_DIR%"=="%SYSTEMDRIVE%\\" (
     exit /b 1
 )
 pushd "%SCRIPT_DIR%" >nul
+set "LOCKFILES=%SCRIPT_DIR%\lockfiles"
+if not exist "%LOCKFILES%" mkdir "%LOCKFILES%"
 set VENV=%SCRIPT_DIR%\.venv
 set LATEST=0
 set CLEAN=0
@@ -46,12 +48,12 @@ if exist "%SCRIPT_DIR%\requirements.txt" (
     for /f "skip=1 tokens=1" %%h in ('certutil -hashfile "%SCRIPT_DIR%\requirements.txt" MD5') do (
         if not defined REQ_HASH set REQ_HASH=%%h
     )
-    if exist "%SCRIPT_DIR%\requirements.md5" (
-        set /p STORED_HASH=<"%SCRIPT_DIR%\requirements.md5"
+    if exist "%LOCKFILES%\requirements.md5" (
+        set /p STORED_HASH<"%LOCKFILES%\requirements.md5"
     )
     if /I not "%REQ_HASH%"=="%STORED_HASH%" (
         "%VENV%\Scripts\python.exe" -m pip install -r "%SCRIPT_DIR%\requirements.txt"
-        echo %REQ_HASH%>"%SCRIPT_DIR%\requirements.md5"
+        echo %REQ_HASH%>"%LOCKFILES%\requirements.md5"
     )
 )
 set "ARGS="

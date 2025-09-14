@@ -122,6 +122,6 @@ fi
 
 # Clear lock directory and other cached configuration
 rm -rf "$LOCK_DIR"
-rm -f "$BASE_DIR/requirements.md5"
+rm -f "$BASE_DIR/lockfiles/requirements.md5"
 
 echo "Uninstall complete."

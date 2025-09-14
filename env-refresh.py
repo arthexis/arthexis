@@ -116,7 +116,9 @@ def _fixture_hash(files: list[str]) -> str:
 
 def _write_fixture_hash(value: str) -> None:
     """Persist the fixtures hash to disk."""
-    (Path(settings.BASE_DIR) / "fixtures.md5").write_text(value)
+    hash_dir = Path(settings.BASE_DIR) / "lockfiles"
+    hash_dir.mkdir(exist_ok=True)
+    (hash_dir / "fixtures.md5").write_text(value)
 
 
 def _migration_hash(app_labels: list[str]) -> str:

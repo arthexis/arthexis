@@ -28,7 +28,8 @@ class FixtureCheckTests(TestCase):
                 [{"model": "nodes.noderole", "pk": 12345, "fields": {"name": "X"}}]
             )
         )
-        self.hash_file = self.base_dir / "fixtures.md5"
+        self.hash_file = self.base_dir / "lockfiles" / "fixtures.md5"
+        self.hash_file.parent.mkdir(exist_ok=True)
         self.original_hash = (
             self.hash_file.read_text().strip() if self.hash_file.exists() else ""
         )

@@ -15,7 +15,7 @@ def _fixture_hash() -> str:
 @checks.register(checks.Tags.database)
 def check_unapplied_fixtures(app_configs=None, **kwargs):
     """Warn if fixture files have changed since last refresh."""
-    hash_file = Path(settings.BASE_DIR) / "fixtures.md5"
+    hash_file = Path(settings.BASE_DIR) / "lockfiles" / "fixtures.md5"
     stored = hash_file.read_text().strip() if hash_file.exists() else ""
     current = _fixture_hash()
     if stored != current:

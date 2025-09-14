@@ -8,7 +8,8 @@ if [ -z "$SCRIPT_DIR" ] || [ "$SCRIPT_DIR" = "/" ]; then
 fi
 cd "$SCRIPT_DIR"
 LOG_DIR="$SCRIPT_DIR/logs"
-mkdir -p "$LOG_DIR"
+LOCKFILES_DIR="$SCRIPT_DIR/lockfiles"
+mkdir -p "$LOG_DIR" "$LOCKFILES_DIR"
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 
@@ -95,7 +96,7 @@ if [ "$USE_SYSTEM_PYTHON" -eq 0 ] && [ -f "$REQ_FILE" ]; then
   if ! "$PYTHON" -m pip --version >/dev/null 2>&1; then
     "$PYTHON" -m ensurepip --upgrade
   fi
-  MD5_FILE="$SCRIPT_DIR/requirements.md5"
+  MD5_FILE="$LOCKFILES_DIR/requirements.md5"
   NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
   STORED_HASH=""
   [ -f "$MD5_FILE" ] && STORED_HASH=$(cat "$MD5_FILE")

@@ -2,6 +2,7 @@
 setlocal
 set BASE_DIR=%~dp0
 cd /d %BASE_DIR%
+if not exist lockfiles mkdir lockfiles
 
 if "%1"=="--revert" goto revert
 
@@ -27,7 +28,7 @@ if not exist .venv\Scripts\python.exe (
 
 set VENV=.venv
 set REQ=requirements.txt
-set MD5=requirements.md5
+set MD5=lockfiles\requirements.md5
 for /f "skip=1 tokens=1" %%h in ('certutil -hashfile %REQ% MD5') do if not defined NEW_HASH set NEW_HASH=%%h
 if exist %MD5% (
     set /p STORED_HASH=<%MD5%
