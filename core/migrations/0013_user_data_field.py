@@ -106,6 +106,16 @@ class Migration(migrations.Migration):
             field=models.BooleanField(default=False, editable=False),
         ),
         migrations.AddField(
+            model_name="rfid",
+            name="custom_label",
+            field=models.CharField(
+                blank=True,
+                max_length=32,
+                verbose_name="Custom Label",
+                help_text="Optional custom label for this RFID.",
+            ),
+        ),
+        migrations.AddField(
             model_name="sigilroot",
             name="is_user_data",
             field=models.BooleanField(default=False, editable=False),

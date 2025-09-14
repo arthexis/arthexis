@@ -36,6 +36,7 @@ class Command(BaseCommand):
         rows = (
             (
                 t.rfid,
+                t.custom_label,
                 ",".join(str(a.id) for a in t.energy_accounts.all()),
                 str(t.allowed),
                 t.color,
@@ -47,11 +48,27 @@ class Command(BaseCommand):
             with open(path, "w", newline="", encoding="utf-8") as fh:
                 writer = csv.writer(fh)
                 writer.writerow(
-                    ["rfid", "energy_accounts", "allowed", "color", "released"]
+                    [
+                        "rfid",
+                        "custom_label",
+                        "energy_accounts",
+                        "allowed",
+                        "color",
+                        "released",
+                    ]
                 )
                 writer.writerows(rows)
         else:
             writer = csv.writer(self.stdout)
-            writer.writerow(["rfid", "energy_accounts", "allowed", "color", "released"])
+            writer.writerow(
+                [
+                    "rfid",
+                    "custom_label",
+                    "energy_accounts",
+                    "allowed",
+                    "color",
+                    "released",
+                ]
+            )
             writer.writerows(rows)
         self.stdout.write(self.style.SUCCESS("Exported {} tags".format(qs.count())))

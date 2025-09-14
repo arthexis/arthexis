@@ -32,6 +32,7 @@ class Command(BaseCommand):
                 for row in reader:
                     rfid = row.get("rfid", "").strip()
                     energy_accounts = row.get("energy_accounts", "").strip()
+                    custom_label = row.get("custom_label", "").strip()
                     allowed = row.get("allowed", "True").strip().lower() != "false"
                     color = row.get("color", RFID.BLACK).strip().upper() or RFID.BLACK
                     released = row.get("released", "False").strip().lower() == "true"
@@ -46,6 +47,7 @@ class Command(BaseCommand):
                     tag, _ = RFID.objects.update_or_create(
                         rfid=rfid.upper(),
                         defaults={
+                            "custom_label": custom_label,
                             "allowed": allowed,
                             "color": color,
                             "released": released,

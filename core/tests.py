@@ -113,7 +113,7 @@ class RFIDBatchApiTests(TestCase):
         self.client.force_login(self.user)
 
     def test_export_rfids(self):
-        tag_black = RFID.objects.create(rfid="CARD999")
+        tag_black = RFID.objects.create(rfid="CARD999", custom_label="Main Tag")
         tag_white = RFID.objects.create(rfid="CARD998", color=RFID.WHITE)
         self.account.rfids.add(tag_black, tag_white)
         response = self.client.get(reverse("rfid-batch"))
@@ -124,6 +124,7 @@ class RFIDBatchApiTests(TestCase):
                 "rfids": [
                     {
                         "rfid": "CARD999",
+                        "custom_label": "Main Tag",
                         "energy_accounts": [self.account.id],
                         "allowed": True,
                         "color": "B",
@@ -142,6 +143,7 @@ class RFIDBatchApiTests(TestCase):
                 "rfids": [
                     {
                         "rfid": "CARD111",
+                        "custom_label": "",
                         "energy_accounts": [],
                         "allowed": True,
                         "color": "W",
@@ -161,6 +163,7 @@ class RFIDBatchApiTests(TestCase):
                 "rfids": [
                     {
                         "rfid": "CARD112",
+                        "custom_label": "",
                         "energy_accounts": [],
                         "allowed": True,
                         "color": "B",
@@ -175,6 +178,7 @@ class RFIDBatchApiTests(TestCase):
             "rfids": [
                 {
                     "rfid": "A1B2C3D4",
+                    "custom_label": "Imported Tag",
                     "energy_accounts": [self.account.id],
                     "allowed": True,
                     "color": "W",
@@ -192,6 +196,7 @@ class RFIDBatchApiTests(TestCase):
         self.assertTrue(
             RFID.objects.filter(
                 rfid="A1B2C3D4",
+                custom_label="Imported Tag",
                 energy_accounts=self.account,
                 color=RFID.WHITE,
                 released=True,
@@ -237,6 +242,11 @@ class RFIDValidationTests(TestCase):
         acc.rfids.add(tag)
         found = RFID.get_account_by_rfid("abcd1234")
         self.assertEqual(found, acc)
+
+    def test_custom_label_length(self):
+        tag = RFID(rfid="FACE1234", custom_label="x" * 33)
+        with self.assertRaises(ValidationError):
+            tag.full_clean()
 
 
 class RFIDAssignmentTests(TestCase):
