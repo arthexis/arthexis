@@ -5,7 +5,7 @@
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "EAM",
+      "prefix": "EART",
       "context_type": "entity",
       "content_type": [
         "core",

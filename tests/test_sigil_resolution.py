@@ -1,3 +1,4 @@
+import os
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
 from django.test import TestCase
@@ -46,7 +47,7 @@ class SigilResolutionTests(TestCase):
         )
         ct = ContentType.objects.get_for_model(EmailArtifact)
         SigilRoot.objects.update_or_create(
-            prefix="EMAIL",
+            prefix="EART",
             defaults={
                 "context_type": SigilRoot.Context.ENTITY,
                 "content_type": ct,
@@ -285,8 +286,25 @@ class SigilResolutionTests(TestCase):
     def test_email_sigil_ordering_and_nested(self):
         set_context({get_user_model(): self.user.pk})
         try:
-            self.assertEqual(resolve_sigils_in_text("[EMAIL.SUBJECT]"), "second")
-            nested = resolve_sigils_in_text("[EMAIL.SENDER=[USER.EMAIL]]")
+            self.assertEqual(resolve_sigils_in_text("[EART.SUBJECT]"), "second")
+            nested = resolve_sigils_in_text("[EART.SENDER=[USER.EMAIL]]")
             self.assertEqual(nested, self.user.email)
         finally:
             clear_context()
+
+    def test_env_sigil(self):
+        os.environ["SIGIL_TEST_VAR"] = "env-val"
+        try:
+            self.assertEqual(
+                resolve_sigils_in_text("[ENV.SIGIL_TEST_VAR]"),
+                "env-val",
+            )
+        finally:
+            del os.environ["SIGIL_TEST_VAR"]
+
+    def test_sys_sigil(self):
+        with self.settings(SIGIL_TEST_SETTING="sys-val"):
+            self.assertEqual(
+                resolve_sigils_in_text("[SYS.SIGIL_TEST_SETTING]"),
+                "sys-val",
+            )
