@@ -101,15 +101,6 @@ fi
 # Remove existing database if requested
 if [ "$CLEAN" -eq 1 ]; then
   DB_FILE="db.sqlite3"
-  if [ -f "$DB_FILE" ]; then
-    BACKUP_DIR="$BASE_DIR/backups"
-    mkdir -p "$BACKUP_DIR"
-    VERSION="unknown"
-    [ -f "$BASE_DIR/VERSION" ] && VERSION="$(cat "$BASE_DIR/VERSION")"
-    REVISION="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
-    STAMP="$(date +%Y%m%d%H%M%S)"
-    cp "$DB_FILE" "$BACKUP_DIR/db.sqlite3.${VERSION}.${REVISION}.${STAMP}.bak"
-  fi
   rm -f "$DB_FILE"
 fi
 

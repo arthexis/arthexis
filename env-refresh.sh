@@ -73,14 +73,6 @@ if [ "$CLEAN" -eq 1 ]; then
       ;;
   esac
   if [ -f "$DB_FILE" ]; then
-    BACKUP_DIR="$SCRIPT_DIR/backups"
-    mkdir -p "$BACKUP_DIR"
-    VERSION="unknown"
-    [ -f "$SCRIPT_DIR/VERSION" ] && VERSION="$(cat "$SCRIPT_DIR/VERSION")"
-    REVISION="unknown"
-    REVISION="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
-    STAMP="$(date +%Y%m%d%H%M%S)"
-    cp "$DB_FILE" "$BACKUP_DIR/db.sqlite3.${VERSION}.${REVISION}.${STAMP}.bak"
     rm "$DB_FILE"
   fi
 fi
