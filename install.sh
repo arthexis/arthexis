@@ -89,6 +89,15 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/0
 EOF
 }
 
+ensure_i2c_packages() {
+    if ! python3 -c 'import smbus' >/dev/null 2>&1 \
+        && ! python3 -c 'import smbus2' >/dev/null 2>&1; then
+        echo "smbus module not found. Installing i2c-tools and python3-smbus"
+        sudo apt-get update
+        sudo apt-get install -y i2c-tools python3-smbus
+    fi
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --service)
@@ -240,6 +249,7 @@ fi
 LCD_LOCK="$LOCK_DIR/lcd_screen.lck"
 if [ "$ENABLE_LCD_SCREEN" = true ]; then
     touch "$LCD_LOCK"
+    ensure_i2c_packages
 else
     rm -f "$LCD_LOCK"
 fi
