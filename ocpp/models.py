@@ -10,6 +10,8 @@ from core.models import (
     Reference,
     RFID as CoreRFID,
     ElectricVehicle as CoreElectricVehicle,
+    Brand as CoreBrand,
+    EVModel as CoreEVModel,
 )
 
 
@@ -360,3 +362,19 @@ class ElectricVehicle(CoreElectricVehicle):
         app_label = "ocpp"
         verbose_name = _("Electric Vehicle")
         verbose_name_plural = _("Electric Vehicles")
+
+
+class Brand(CoreBrand):
+    class Meta:
+        proxy = True
+        app_label = "ocpp"
+        verbose_name = CoreBrand._meta.verbose_name
+        verbose_name_plural = CoreBrand._meta.verbose_name_plural
+
+
+class EVModel(CoreEVModel):
+    class Meta:
+        proxy = True
+        app_label = "ocpp"
+        verbose_name = CoreEVModel._meta.verbose_name
+        verbose_name_plural = CoreEVModel._meta.verbose_name_plural
