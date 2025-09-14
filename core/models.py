@@ -790,7 +790,7 @@ class EnergyCredit(Entity):
         db_table = "core_credit"
 
 
-class EnergyReport(Entity):
+class ClientReport(Entity):
     """Snapshot of energy usage over a period."""
 
     start_date = models.DateField()
@@ -799,9 +799,9 @@ class EnergyReport(Entity):
     data = models.JSONField(default=dict)
 
     class Meta:
-        verbose_name = "Energy Report"
-        verbose_name_plural = "Energy Reports"
-        db_table = "core_energy_report"
+        verbose_name = "Client Report"
+        verbose_name_plural = "Client Reports"
+        db_table = "core_client_report"
         ordering = ["-created_on"]
 
     @classmethod

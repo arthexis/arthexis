@@ -759,7 +759,7 @@ class NodeActionTests(TestCase):
 
 
 class StartupNotificationTests(TestCase):
-    def test_startup_notification_uses_ip_and_revision(self):
+    def test_startup_notification_uses_hostname_and_revision(self):
         from nodes.apps import _startup_notification
 
         with TemporaryDirectory() as tmp:
@@ -773,17 +773,13 @@ class StartupNotificationTests(TestCase):
                         with patch(
                             "nodes.apps.socket.gethostname", return_value="host"
                         ):
-                            with patch(
-                                "nodes.apps.socket.gethostbyname",
-                                return_value="1.2.3.4",
-                            ):
-                                with patch.dict(os.environ, {"PORT": "9000"}):
-                                    _startup_notification()
-                                    time.sleep(0.1)
+                            with patch.dict(os.environ, {"PORT": "9000"}):
+                                _startup_notification()
+                                time.sleep(0.1)
 
         mock_broadcast.assert_called_once()
         _, kwargs = mock_broadcast.call_args
-        self.assertEqual(kwargs["subject"], "1.2.3.4:9000")
+        self.assertEqual(kwargs["subject"], "host:9000")
         self.assertTrue(kwargs["body"].startswith("1.2.3 r"))
 
 

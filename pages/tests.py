@@ -828,11 +828,11 @@ class DatasetteTests(TestCase):
             lock_file.unlink(missing_ok=True)
 
 
-class EnergyReportLiveUpdateTests(TestCase):
+class ClientReportLiveUpdateTests(TestCase):
     def setUp(self):
         self.client = Client()
 
-    def test_energy_report_includes_interval(self):
-        resp = self.client.get(reverse("pages:energy-report"))
+    def test_client_report_includes_interval(self):
+        resp = self.client.get(reverse("pages:client-report"))
         self.assertEqual(resp.context["request"].live_update_interval, 5)
         self.assertContains(resp, "setInterval(() => location.reload()")

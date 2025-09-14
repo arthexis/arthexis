@@ -16,13 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 def _startup_notification() -> None:
-    """Queue a Net Message with ``ip:port`` and version info."""
+    """Queue a Net Message with ``hostname:port`` and version info."""
 
     host = socket.gethostname()
-    try:
-        address = socket.gethostbyname(host)
-    except socket.gaierror:
-        address = host
 
     port = os.environ.get("PORT", "8000")
 
@@ -44,7 +40,7 @@ def _startup_notification() -> None:
             try:
                 from nodes.models import NetMessage
 
-                NetMessage.broadcast(subject=f"{address}:{port}", body=body)
+                NetMessage.broadcast(subject=f"{host}:{port}", body=body)
                 break
             except Exception:
                 time.sleep(1)
