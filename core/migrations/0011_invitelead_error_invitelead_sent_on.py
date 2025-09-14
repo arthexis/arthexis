@@ -88,34 +88,6 @@ class Migration(migrations.Migration):
                 ),
             ],
         ),
-        migrations.CreateModel(
-            name="NewsArticle",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("is_seed_data", models.BooleanField(default=False, editable=False)),
-                ("is_deleted", models.BooleanField(default=False, editable=False)),
-                ("name", models.CharField(max_length=200)),
-                ("slug", models.SlugField(unique=True)),
-                ("content", models.TextField()),
-                (
-                    "published",
-                    models.DateField(default=django.utils.timezone.now),
-                ),
-            ],
-            options={
-                "ordering": ["-published"],
-                "verbose_name": "News Article",
-                "verbose_name_plural": "News Articles",
-            },
-        ),
         migrations.AddField(
             model_name="evmodel",
             name="battery_capacity_kwh",

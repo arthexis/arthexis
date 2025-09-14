@@ -71,11 +71,6 @@ class Migration(migrations.Migration):
             field=models.BooleanField(default=False, editable=False),
         ),
         migrations.AddField(
-            model_name="newsarticle",
-            name="is_user_data",
-            field=models.BooleanField(default=False, editable=False),
-        ),
-        migrations.AddField(
             model_name="odooprofile",
             name="is_user_data",
             field=models.BooleanField(default=False, editable=False),
