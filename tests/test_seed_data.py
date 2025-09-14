@@ -3,6 +3,8 @@ import sys
 import json
 import shutil
 import importlib.util
+import io
+from contextlib import redirect_stdout
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -167,9 +169,14 @@ class EnvRefreshFixtureTests(TestCase):
             # ignore other commands
 
         env_refresh.call_command = fake_call_command
-        env_refresh.run_database_tasks()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            env_refresh.run_database_tasks()
+        output = buf.getvalue()
         role = NodeRole.all_objects.get(pk=999)
         self.assertTrue(role.is_seed_data)
+        self.assertIn(".", output)
+        self.assertIn("nodes.NodeRole: 1", output)
         shutil.rmtree(tmp_dir)
 
 
