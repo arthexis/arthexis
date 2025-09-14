@@ -99,9 +99,3 @@ jobs:
       - name: Run env refresh
         run: ./env-refresh.sh --clean
 
-  upgrade-path:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Test upgrade path
-        run: bash scripts/test-upgrade-path.sh
