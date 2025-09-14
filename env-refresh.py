@@ -10,6 +10,7 @@ import os
 import subprocess
 from pathlib import Path
 import json
+from collections import defaultdict
 import tempfile
 import hashlib
 import time
@@ -257,6 +258,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             patched: dict[int, list[str]] = {}
             user_pk_map: dict[int, int] = {}
+            model_counts: dict[str, int] = defaultdict(int)
             for name in fixtures:
                 priority, _ = _fixture_sort_key(name)
                 source = Path(settings.BASE_DIR, name)
@@ -299,6 +301,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     if any(f.name == "is_seed_data" for f in model._meta.fields):
                         obj.setdefault("fields", {})["is_seed_data"] = True
                     patched_data.append(obj)
+                    model_counts[model._meta.label] += 1
                 dest = Path(tmpdir, Path(name).name)
                 with dest.open("w") as f:
                     json.dump(patched_data, f)
@@ -315,14 +318,21 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                                     fixture,
                                     natural_foreign=True,
                                     natural_primary=True,
+                                    verbosity=0,
                                 )
                             except TypeError:
-                                call_command("loaddata", fixture)
+                                call_command("loaddata", fixture, verbosity=0)
                         except DeserializationError as exc:
                             print(f"Skipping fixture {fixture} due to: {exc}")
+                        else:
+                            print(".", end="", flush=True)
                 for module in Module.objects.all():
                     module.create_landings()
                 Landing.objects.update(is_seed_data=True)
+                if model_counts:
+                    print()
+                    for label, count in sorted(model_counts.items()):
+                        print(f"{label}: {count}")
             finally:
                 post_save.connect(_create_landings, sender=Module)
 
