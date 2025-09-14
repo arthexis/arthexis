@@ -1,4 +1,5 @@
 import argparse
+import inspect
 from django.core.management import get_commands, load_command_class
 from django.apps import apps
 from django.contrib.admindocs.views import (
@@ -52,10 +53,11 @@ class OrderedModelIndexView(BaseAdminDocsView):
     template_name = "admin_doc/model_index.html"
 
     def get_context_data(self, **kwargs):
-        models = [
-            m._meta
-            for m in apps.get_models()
-            if user_has_model_view_permission(self.request.user, m._meta)
-        ]
+        models = []
+        for m in apps.get_models():
+            if user_has_model_view_permission(self.request.user, m._meta):
+                meta = m._meta
+                meta.docstring = inspect.getdoc(m) or ""
+                models.append(meta)
         models.sort(key=lambda m: str(m.app_config.verbose_name))
         return super().get_context_data(**{**kwargs, "models": models})
