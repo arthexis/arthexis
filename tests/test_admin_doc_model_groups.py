@@ -30,7 +30,7 @@ class AdminDocsModelGroupsTests(TestCase):
         expected_numbered = [
             "1. Power",
             "2. Business",
-            "3. Protocols",
+            "3. Protocol",
             "4. Infrastructure",
             "5. Horologia",
             "6. Workgroup",
