@@ -1,15 +1,15 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 61,
+    "pk": 44,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "WRM",
+      "prefix": "SIM",
       "context_type": "entity",
       "content_type": [
-        "core",
-        "releasemanager"
+        "ocpp",
+        "simulator"
       ]
     }
   }

@@ -1,15 +1,15 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 29,
+    "pk": 16,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "ADDR",
+      "prefix": "INVL",
       "context_type": "entity",
       "content_type": [
         "core",
-        "address"
+        "invitelead"
       ]
     }
   }

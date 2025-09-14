@@ -1,15 +1,15 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 60,
+    "pk": 4,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "WSG",
+      "prefix": "SESS",
       "context_type": "entity",
       "content_type": [
-        "core",
-        "odooprofile"
+        "sessions",
+        "session"
       ]
     }
   }

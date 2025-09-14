@@ -1,15 +1,15 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 25,
+    "pk": 7,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "ECRED",
+      "prefix": "ODOO",
       "context_type": "entity",
       "content_type": [
         "core",
-        "energycredit"
+        "odooprofile"
       ]
     }
   }

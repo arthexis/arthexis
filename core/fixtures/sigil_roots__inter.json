@@ -1,11 +1,11 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 51,
+    "pk": 13,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "INT",
+      "prefix": "INTER",
       "context_type": "entity",
       "content_type": [
         "django_celery_beat",

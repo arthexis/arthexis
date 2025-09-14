@@ -1,15 +1,15 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 24,
+    "pk": 9,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "ERPT",
+      "prefix": "EV",
       "context_type": "entity",
       "content_type": [
         "core",
-        "energyreport"
+        "electricvehicle"
       ]
     }
   }
