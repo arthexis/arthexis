@@ -21,7 +21,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.cache import never_cache
 from django.utils.cache import patch_vary_headers
-from core.models import InviteLead, EnergyReport
+from core.models import InviteLead, ClientReport
 
 import markdown
 from pages.utils import landing
@@ -271,7 +271,7 @@ def invitation_login(request, uidb64, token):
     return render(request, "pages/invitation_login.html", {"form": form})
 
 
-class EnergyReportForm(forms.Form):
+class ClientReportForm(forms.Form):
     PERIOD_CHOICES = [
         ("range", _("Date range")),
         ("week", _("Week")),
@@ -327,15 +327,15 @@ class EnergyReportForm(forms.Form):
 
 
 @live_update()
-def energy_report(request):
-    form = EnergyReportForm(request.POST or None)
+def client_report(request):
+    form = ClientReportForm(request.POST or None)
     report = None
     if request.method == "POST" and form.is_valid():
-        report = EnergyReport.generate(
+        report = ClientReport.generate(
             form.cleaned_data["start"], form.cleaned_data["end"]
         )
     context = {"form": form, "report": report}
-    return render(request, "pages/energy_report.html", context)
+    return render(request, "pages/client_report.html", context)
 
 
 def csrf_failure(request, reason=""):

@@ -14,11 +14,11 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import RFID, EnergyReport, EnergyAccount
+from core.models import RFID, ClientReport, EnergyAccount
 from ocpp.models import Charger, Transaction
 
 
-class AdminEnergyReportTests(TestCase):
+class AdminClientReportTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_superuser(
@@ -51,14 +51,14 @@ class AdminEnergyReportTests(TestCase):
 
     def test_generate_report_via_admin(self):
         day = timezone.now().date()
-        url = reverse("admin:core_energyreport_generate")
+        url = reverse("admin:core_clientreport_generate")
         resp = self.client.post(url, {"period": "range", "start": day, "end": day})
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, self.account.name)
         self.assertContains(resp, str(self.rfid2.label_id))
         self.assertNotContains(resp, self.rfid1.rfid)
         self.assertNotContains(resp, self.rfid2.rfid)
-        report = EnergyReport.objects.get()
+        report = ClientReport.objects.get()
         self.assertEqual(report.start_date, day)
         self.assertEqual(report.end_date, day)
         subjects = {row["subject"] for row in report.data["rows"]}
