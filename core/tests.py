@@ -759,7 +759,7 @@ class TodoDoneTests(TestCase):
     def test_mark_done_deletes_and_updates_fixture(self):
         todo = Todo.objects.create(description="Task", is_seed_data=True)
         tmp_dir = Path("core/fixtures")
-        tmp_file = tmp_dir / f"todos__todo_{todo.pk}.json"
+        tmp_file = tmp_dir / "todos__custom_task.json"
         tmp_file.write_text(
             json.dumps(
                 [
@@ -800,6 +800,13 @@ class TodoUrlValidationTests(TestCase):
         todo = Todo(description="Task", url="https://example.com/path")
         with self.assertRaises(ValidationError):
             todo.full_clean()
+
+
+class TodoUniqueTests(TestCase):
+    def test_description_unique_case_insensitive(self):
+        Todo.objects.create(description="Task")
+        with self.assertRaises(IntegrityError):
+            Todo.objects.create(description="task")
 
 
 class TodoAdminPermissionTests(TestCase):

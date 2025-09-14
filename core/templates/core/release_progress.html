@@ -1,6 +1,25 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .todo-item { position: relative; }
+  .todo-item .todo-details {
+    display: none;
+    position: absolute;
+    left: 0;
+    top: 100%;
+    background: var(--body-bg);
+    border: 1px solid var(--hairline-color);
+    padding: 8px;
+    z-index: 1000;
+    width: 200px;
+  }
+  .todo-item:hover .todo-details { display: block; }
+</style>
+{% endblock %}
+
 {% block nav-breadcrumbs %}
 <nav aria-label="{% translate 'Breadcrumbs' %}">
   <div class="breadcrumbs">
@@ -48,11 +67,14 @@
 <h2>{% trans 'Pending TODOs' %}</h2>
 <ul>
   {% for todo in todos %}
-  <li>
+  <li class="todo-item">
     {% if todo.url %}
-    <a href="{{ todo.url }}" target="_blank" rel="noopener">{{ todo.description }}</a>
+    <a href="{{ todo.url }}" target="_blank" rel="noopener" class="todo-link">{{ todo.description }}</a>
     {% else %}
     {{ todo.description }}
+    {% endif %}
+    {% if todo.request_details %}
+    <div class="todo-details">{{ todo.request_details }}</div>
     {% endif %}
   </li>
   {% endfor %}

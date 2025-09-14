@@ -12,6 +12,7 @@ from django.views.decorators.http import require_POST
 from django.utils.translation import gettext as _
 from pathlib import Path
 import subprocess
+import json
 
 from utils.api import api_login_required
 
@@ -75,7 +76,11 @@ def _changelog_notes(version: str) -> str:
 
 
 def _step_check_todos(release, ctx, log_path: Path) -> None:
-    pending = list(Todo.objects.filter(is_deleted=False).values("description", "url"))
+    pending = list(
+        Todo.objects.filter(is_deleted=False).values(
+            "description", "url", "request_details"
+        )
+    )
     if pending:
         ctx["todos"] = pending
         raise Exception("Resolve open TODO items before publishing")
@@ -532,10 +537,21 @@ def release_progress(request, pk: int, action: str):
 def todo_done(request, pk: int):
     todo = get_object_or_404(Todo, pk=pk, is_deleted=False)
     todo.delete()
-    path = TODO_FIXTURE_DIR / f"todos__todo_{pk}.json"
-    if path.exists():
-        path.unlink()
-        subprocess.run(["git", "add", str(path)], check=False)
+    removed = None
+    for path in TODO_FIXTURE_DIR.glob("todos__*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        objs = data if isinstance(data, list) else [data]
+        for obj in objs:
+            if isinstance(obj, dict) and obj.get("pk") == todo.pk:
+                path.unlink()
+                removed = path
+                subprocess.run(["git", "add", str(path)], check=False)
+                break
+        if removed:
+            break
     subprocess.run(["git", "commit", "-m", todo.description], check=False)
     subprocess.run(["git", "push"], check=False)
     return redirect("admin:index")

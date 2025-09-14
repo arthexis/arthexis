@@ -4,6 +4,8 @@ from django.contrib.auth.models import (
     UserManager as DjangoUserManager,
 )
 from django.db import models
+from django.db.models import Q
+from django.db.models.functions import Lower
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
@@ -1359,10 +1361,27 @@ class Todo(Entity):
     url = models.CharField(
         max_length=200, blank=True, default="", validators=[validate_relative_url]
     )
+    request_details = models.TextField(blank=True, default="")
 
     class Meta:
         verbose_name = "TODO"
         verbose_name_plural = "TODOs"
+        constraints = [
+            models.UniqueConstraint(
+                Lower("description"),
+                condition=Q(is_deleted=False),
+                name="unique_active_todo_description",
+            )
+        ]
+
+    def clean(self):
+        super().clean()
+        if (
+            Todo.objects.filter(description__iexact=self.description, is_deleted=False)
+            .exclude(pk=self.pk)
+            .exists()
+        ):
+            raise ValidationError({"description": "Similar TODO already exists."})
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.description
