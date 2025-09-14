@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "pk": 22,
+    "fields": {
+      "description": "Validate screen Language switcher",
+      "url": "/"
+    }
+  }
+]
