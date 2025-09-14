@@ -39,7 +39,9 @@ def admin_manual_detail(request, slug):
 def manual_pdf(request, slug):
     manual = get_object_or_404(UserManual, slug=slug)
     pdf_data = base64.b64decode(manual.content_pdf)
-    return HttpResponse(pdf_data, content_type="application/pdf")
+    response = HttpResponse(pdf_data, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{manual.slug}.pdf"'
+    return response
 
 
 def admin_manual_list(request):

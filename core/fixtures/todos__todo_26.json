@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "pk": 26,
+    "fields": {
+      "description": "Validate view manual_pdf",
+      "url": ""
+    }
+  }
+]
