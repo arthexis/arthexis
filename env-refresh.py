@@ -231,7 +231,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
         except InvalidBasesError as exc:
             if "post_office.WorkgroupNewsArticle" in str(exc):
                 call_command(
-                    "migrate", "post_office", "0014", fake=True, interactive=False
+                    "migrate", "post_office", "0015", fake=True, interactive=False
                 )
                 call_command("migrate", interactive=False)
             else:
