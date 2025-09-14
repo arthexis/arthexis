@@ -12,9 +12,7 @@ class FixturePresenceTests(TestCase):
         files = glob("core/fixtures/references__*.json")
         self.assertTrue(files, "Reference fixtures are missing")
         call_command("loaddata", *files)
-        self.assertTrue(
-            Reference.objects.filter(include_in_footer=True).exists()
-        )
+        self.assertTrue(Reference.objects.filter(include_in_footer=True).exists())
 
     def test_calculator_template_fixtures_exist(self):
         files = glob("awg/fixtures/calculator_templates__*.json")
