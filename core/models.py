@@ -1357,31 +1357,32 @@ def validate_relative_url(value: str) -> None:
 class Todo(Entity):
     """Tasks requested for the Release Manager."""
 
-    description = models.CharField(max_length=255)
+    request = models.CharField(max_length=255)
     url = models.CharField(
         max_length=200, blank=True, default="", validators=[validate_relative_url]
     )
     request_details = models.TextField(blank=True, default="")
+    done_on = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = "TODO"
         verbose_name_plural = "TODOs"
         constraints = [
             models.UniqueConstraint(
-                Lower("description"),
+                Lower("request"),
                 condition=Q(is_deleted=False),
-                name="unique_active_todo_description",
+                name="unique_active_todo_request",
             )
         ]
 
     def clean(self):
         super().clean()
         if (
-            Todo.objects.filter(description__iexact=self.description, is_deleted=False)
+            Todo.objects.filter(request__iexact=self.request, is_deleted=False)
             .exclude(pk=self.pk)
             .exists()
         ):
-            raise ValidationError({"description": "Similar TODO already exists."})
+            raise ValidationError({"request": "Similar TODO already exists."})
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.description
+        return self.request

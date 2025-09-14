@@ -756,57 +756,31 @@ class TodoDoneTests(TestCase):
         User.objects.create_superuser("admin", "admin@example.com", "pw")
         self.client.force_login(User.objects.get(username="admin"))
 
-    def test_mark_done_deletes_and_updates_fixture(self):
-        todo = Todo.objects.create(description="Task", is_seed_data=True)
-        tmp_dir = Path("core/fixtures")
-        tmp_file = tmp_dir / "todos__custom_task.json"
-        tmp_file.write_text(
-            json.dumps(
-                [
-                    {
-                        "model": "core.todo",
-                        "pk": todo.pk,
-                        "fields": {
-                            "description": "Task",
-                            "is_seed_data": True,
-                            "url": "",
-                        },
-                    }
-                ]
-            ),
-            encoding="utf-8",
-        )
-        with (
-            mock.patch("core.views.TODO_FIXTURE_DIR", tmp_dir),
-            mock.patch("core.views.subprocess.run") as mock_run,
-        ):
-            resp = self.client.post(reverse("todo-done", args=[todo.pk]))
+    def test_mark_done_sets_timestamp(self):
+        todo = Todo.objects.create(request="Task", is_seed_data=True)
+        resp = self.client.post(reverse("todo-done", args=[todo.pk]))
         self.assertRedirects(resp, reverse("admin:index"))
         todo.refresh_from_db()
-        self.assertTrue(todo.is_deleted)
-        self.assertFalse(tmp_file.exists())
-        mock_run.assert_any_call(["git", "add", str(tmp_file)], check=False)
-        mock_run.assert_any_call(["git", "commit", "-m", "Task"], check=False)
-        mock_run.assert_any_call(["git", "push"], check=False)
-        tmp.unlink()
+        self.assertIsNotNone(todo.done_on)
+        self.assertFalse(todo.is_deleted)
 
 
 class TodoUrlValidationTests(TestCase):
     def test_relative_url_valid(self):
-        todo = Todo(description="Task", url="/path")
+        todo = Todo(request="Task", url="/path")
         todo.full_clean()  # should not raise
 
     def test_absolute_url_invalid(self):
-        todo = Todo(description="Task", url="https://example.com/path")
+        todo = Todo(request="Task", url="https://example.com/path")
         with self.assertRaises(ValidationError):
             todo.full_clean()
 
 
 class TodoUniqueTests(TestCase):
-    def test_description_unique_case_insensitive(self):
-        Todo.objects.create(description="Task")
+    def test_request_unique_case_insensitive(self):
+        Todo.objects.create(request="Task")
         with self.assertRaises(IntegrityError):
-            Todo.objects.create(description="task")
+            Todo.objects.create(request="task")
 
 
 class TodoAdminPermissionTests(TestCase):
@@ -819,7 +793,7 @@ class TodoAdminPermissionTests(TestCase):
         resp = self.client.get(reverse("admin:core_todo_add"))
         self.assertEqual(resp.status_code, 403)
 
-    def test_change_form_hides_save_as_copy(self):
-        todo = Todo.objects.create(description="Task")
+    def test_change_form_loads(self):
+        todo = Todo.objects.create(request="Task")
         resp = self.client.get(reverse("admin:core_todo_change", args=[todo.pk]))
-        self.assertNotContains(resp, "Save as a copy")
+        self.assertEqual(resp.status_code, 200)

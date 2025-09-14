@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, render, redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.utils.translation import gettext as _
+from django.utils import timezone
 from pathlib import Path
 import subprocess
 import json
@@ -75,15 +76,33 @@ def _changelog_notes(version: str) -> str:
     return ""
 
 
+class PendingTodos(Exception):
+    """Raised when TODO items require acknowledgment before proceeding."""
+
+
 def _step_check_todos(release, ctx, log_path: Path) -> None:
-    pending = list(
-        Todo.objects.filter(is_deleted=False).values(
-            "description", "url", "request_details"
+    pending_qs = Todo.objects.filter(is_deleted=False, done_on__isnull=True)
+    if pending_qs.exists():
+        ctx["todos"] = list(
+            pending_qs.values("id", "request", "url", "request_details")
         )
-    )
-    if pending:
-        ctx["todos"] = pending
-        raise Exception("Resolve open TODO items before publishing")
+        if not ctx.get("todos_ack"):
+            raise PendingTodos()
+    todos = list(Todo.objects.filter(is_deleted=False))
+    for todo in todos:
+        todo.delete()
+    removed = []
+    for path in TODO_FIXTURE_DIR.glob("todos__*.json"):
+        removed.append(str(path))
+        path.unlink()
+    if removed:
+        subprocess.run(["git", "add", *removed], check=False)
+        subprocess.run(
+            ["git", "commit", "-m", "chore: remove TODO fixtures"],
+            check=False,
+        )
+    ctx.pop("todos", None)
+    ctx.pop("todos_ack", None)
 
 
 def _step_check_version(release, ctx, log_path: Path) -> None:
@@ -456,6 +475,8 @@ def release_progress(request, pk: int, action: str):
         ctx = {"step": 0}
         if restart_path.exists():
             restart_path.unlink()
+    if request.GET.get("ack_todos"):
+        ctx["todos_ack"] = True
     if request.GET.get("abort"):
         ctx["error"] = _("Publish aborted")
         request.session[session_key] = ctx
@@ -469,6 +490,12 @@ def release_progress(request, pk: int, action: str):
             restart_count = 0
     step_count = ctx.get("step", 0)
     step_param = request.GET.get("step")
+
+    pending = Todo.objects.filter(is_deleted=False, done_on__isnull=True)
+    if pending.exists() and not ctx.get("todos_ack"):
+        ctx["todos"] = list(pending.values("id", "request", "url", "request_details"))
+    else:
+        ctx.pop("todos", None)
 
     identifier = f"{release.package.name}-{release.version}"
     log_name = f"{identifier}.log"
@@ -491,14 +518,17 @@ def release_progress(request, pk: int, action: str):
             name, func = steps[to_run]
             try:
                 func(release, ctx, log_path)
-                step_count += 1
-                ctx["step"] = step_count
-                request.session[session_key] = ctx
-                lock_path.parent.mkdir(parents=True, exist_ok=True)
-                lock_path.write_text(json.dumps(ctx), encoding="utf-8")
+            except PendingTodos:
+                pass
             except Exception as exc:  # pragma: no cover - best effort logging
                 _append_log(log_path, f"{name} failed: {exc}")
                 ctx["error"] = str(exc)
+                request.session[session_key] = ctx
+                lock_path.parent.mkdir(parents=True, exist_ok=True)
+                lock_path.write_text(json.dumps(ctx), encoding="utf-8")
+            else:
+                step_count += 1
+                ctx["step"] = step_count
                 request.session[session_key] = ctx
                 lock_path.parent.mkdir(parents=True, exist_ok=True)
                 lock_path.write_text(json.dumps(ctx), encoding="utf-8")
@@ -507,6 +537,8 @@ def release_progress(request, pk: int, action: str):
 
     log_content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
     next_step = step_count if not done and not ctx.get("error") else None
+    if ctx.get("todos") and not ctx.get("todos_ack"):
+        next_step = None
     context = {
         "release": release,
         "action": "publish",
@@ -535,23 +567,7 @@ def release_progress(request, pk: int, action: str):
 @staff_member_required
 @require_POST
 def todo_done(request, pk: int):
-    todo = get_object_or_404(Todo, pk=pk, is_deleted=False)
-    todo.delete()
-    removed = None
-    for path in TODO_FIXTURE_DIR.glob("todos__*.json"):
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        objs = data if isinstance(data, list) else [data]
-        for obj in objs:
-            if isinstance(obj, dict) and obj.get("pk") == todo.pk:
-                path.unlink()
-                removed = path
-                subprocess.run(["git", "add", str(path)], check=False)
-                break
-        if removed:
-            break
-    subprocess.run(["git", "commit", "-m", todo.description], check=False)
-    subprocess.run(["git", "push"], check=False)
+    todo = get_object_or_404(Todo, pk=pk, is_deleted=False, done_on__isnull=True)
+    todo.done_on = timezone.now()
+    todo.save(update_fields=["done_on"])
     return redirect("admin:index")
