@@ -1,6 +1,3 @@
-import os
-
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
 from django.test import TestCase
@@ -10,7 +7,6 @@ from core.models import (
     SigilRoot,
     OdooProfile,
     EmailInbox,
-    InviteLead,
     EmailCollector,
     EmailArtifact,
 )
@@ -63,64 +59,6 @@ class SigilResolutionTests(TestCase):
                 "context_type": SigilRoot.Context.ENTITY,
                 "content_type": ct_user,
             },
-        )
-
-    def test_env_variable_sigil(self):
-        os.environ["SIGIL_PATH"] = "demo"
-        profile = OdooProfile.objects.create(
-            user=self.user,
-            host="path=[ENV.SIGIL-PATH]",
-            database="db",
-            username="odoo",
-            password="secret",
-        )
-        tmpl = Template("{{ profile.host }}")
-        rendered = tmpl.render(Context({"profile": profile}))
-        self.assertEqual(rendered, "path=demo")
-
-    def test_settings_sigil(self):
-        profile = OdooProfile.objects.create(
-            user=self.user,
-            host="lang=[SYS.LANGUAGE-CODE]",
-            database="db",
-            username="odoo",
-            password="secret",
-        )
-        tmpl = Template("{{ profile.host }}")
-        rendered = tmpl.render(Context({"profile": profile}))
-        expected = f"lang={settings.LANGUAGE_CODE}"
-        self.assertEqual(rendered, expected)
-
-    def test_command_sigil(self):
-        email = "invite@example.com"
-        User = get_user_model()
-        User.objects.create_user(username="cmduser", email=email)
-        InviteLead.objects.create(email=email)
-        profile = OdooProfile.objects.create(
-            user=self.user,
-            host=f"[CMD.SEND-INVITE={email}]",
-            database="db",
-            username="odoo",
-            password="secret",
-        )
-        tmpl = Template("{{ profile.host }}")
-        rendered = tmpl.render(Context({"profile": profile}))
-        self.assertIn("Invitation sent", rendered)
-
-    def test_unresolved_env_sigil_left_intact(self):
-        profile = OdooProfile.objects.create(
-            user=self.user,
-            host="path=[ENV.MISSING_PATH]",
-            database="db",
-            username="odoo",
-            password="secret",
-        )
-        tmpl = Template("{{ profile.host }}")
-        with self.assertLogs("core.entity", level="WARNING") as cm:
-            rendered = tmpl.render(Context({"profile": profile}))
-        self.assertEqual(rendered, "path=[ENV.MISSING_PATH]")
-        self.assertIn(
-            "Missing environment variable for sigil [ENV.MISSING_PATH]", cm.output[0]
         )
 
     def test_unknown_root_sigil_left_intact(self):

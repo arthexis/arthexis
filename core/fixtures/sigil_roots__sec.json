@@ -1,15 +1,15 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 67,
+    "pk": 11,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "G",
+      "prefix": "SEC",
       "context_type": "entity",
       "content_type": [
-        "auth",
-        "group"
+        "core",
+        "securitygroup"
       ]
     }
   }

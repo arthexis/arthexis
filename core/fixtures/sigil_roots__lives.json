@@ -1,15 +1,15 @@
 [
   {
     "model": "core.sigilroot",
-    "pk": 46,
+    "pk": 8,
     "fields": {
       "is_seed_data": false,
       "is_deleted": false,
-      "prefix": "UDATA",
+      "prefix": "LIVES",
       "context_type": "entity",
       "content_type": [
         "core",
-        "userdatum"
+        "livesubscription"
       ]
     }
   }
