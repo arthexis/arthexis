@@ -31,6 +31,7 @@ from .models import (
     EnergyAccount,
     ElectricVehicle,
     EnergyCredit,
+    EnergyDebit,
     EnergyReport,
     Product,
     LiveSubscription,
@@ -699,13 +700,6 @@ class ChatProfileAdmin(EntityModelAdmin):
         return TemplateResponse(request, "admin/chatprofile_key.html", context)
 
 
-class EnergyCreditInline(admin.TabularInline):
-    model = EnergyCredit
-    fields = ("amount_kw", "created_by", "created_on")
-    readonly_fields = ("created_by", "created_on")
-    extra = 0
-
-
 @admin.register(EnergyAccount)
 class EnergyAccountAdmin(EntityModelAdmin):
     change_list_template = "admin/core/energyaccount/change_list.html"
@@ -732,8 +726,13 @@ class EnergyAccountAdmin(EntityModelAdmin):
         "balance_kw",
         "authorized",
     )
-    inlines = [EnergyAccountRFIDInline, EnergyCreditInline]
-    actions = ["test_authorization"]
+    inlines = [EnergyAccountRFIDInline]
+    actions = ["test_authorization", "apply_credit", "debit_account"]
+
+    class CreditDebitForm(forms.Form):
+        amount = forms.DecimalField(required=True, label="kW amount")
+
+    action_form = CreditDebitForm
     fieldsets = (
         (
             None,
@@ -763,11 +762,41 @@ class EnergyAccountAdmin(EntityModelAdmin):
 
     test_authorization.short_description = "Test authorization"
 
+    def apply_credit(self, request, queryset):
+        amount = request.POST.get("amount")
+        if not amount:
+            self.message_user(request, "Amount is required", level=messages.ERROR)
+            return
+        for acc in queryset:
+            EnergyCredit.objects.create(
+                account=acc, amount_kw=amount, created_by=request.user
+            )
+        self.message_user(
+            request,
+            f"Applied {amount} kW credit to {queryset.count()} account(s)",
+        )
+
+    apply_credit.short_description = "Apply Credit"
+
+    def debit_account(self, request, queryset):
+        amount = request.POST.get("amount")
+        if not amount:
+            self.message_user(request, "Amount is required", level=messages.ERROR)
+            return
+        for acc in queryset:
+            EnergyDebit.objects.create(
+                account=acc, amount_kw=amount, created_by=request.user
+            )
+        self.message_user(
+            request,
+            f"Debited {amount} kW from {queryset.count()} account(s)",
+        )
+
+    debit_account.short_description = "Debit Account"
+
     def save_formset(self, request, form, formset, change):
         objs = formset.save(commit=False)
         for obj in objs:
-            if isinstance(obj, EnergyCredit) and not obj.created_by:
-                obj.created_by = request.user
             obj.save()
         formset.save_m2m()
 

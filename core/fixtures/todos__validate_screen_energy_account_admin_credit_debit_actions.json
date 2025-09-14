@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "pk": 29,
+    "fields": {
+      "description": "Validate screen Energy Account admin credit/debit actions",
+      "url": "/admin/core/energyaccount/"
+    }
+  }
+]

@@ -20,6 +20,7 @@ from .models import (
     EnergyAccount,
     ElectricVehicle,
     EnergyCredit,
+    EnergyDebit,
     Product,
     LiveSubscription,
     Brand,
@@ -301,6 +302,50 @@ class EnergyAccountTests(TestCase):
         acc.rfids.add(tag)
         self.assertIsNone(acc.user)
         self.assertTrue(acc.rfids.filter(rfid="NOUSER1").exists())
+
+    def test_debit_reduces_balance(self):
+        user = User.objects.create_user(username="deb", password="x")
+        acc = EnergyAccount.objects.create(user=user, name="DEB")
+        EnergyCredit.objects.create(account=acc, amount_kw=20)
+        EnergyDebit.objects.create(account=acc, amount_kw=5)
+        self.assertEqual(acc.balance_kw, 15)
+
+
+class EnergyAccountAdminActionTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.admin = User.objects.create_superuser(
+            username="admin", email="admin@example.com", password="pwd"
+        )
+        self.client.login(username="admin", password="pwd")
+        self.account = EnergyAccount.objects.create(user=self.admin, name="ADMINACC")
+
+    def test_apply_credit_action(self):
+        url = reverse("admin:core_energyaccount_changelist")
+        data = {
+            "action": "apply_credit",
+            "amount": "10",
+            "_selected_action": [str(self.account.pk)],
+        }
+        self.client.post(url, data)
+        self.assertTrue(
+            EnergyCredit.objects.filter(account=self.account, amount_kw=10).exists()
+        )
+
+    def test_debit_account_action(self):
+        EnergyCredit.objects.create(account=self.account, amount_kw=20)
+        url = reverse("admin:core_energyaccount_changelist")
+        data = {
+            "action": "debit_account",
+            "amount": "5",
+            "_selected_action": [str(self.account.pk)],
+        }
+        self.client.post(url, data)
+        self.assertTrue(
+            EnergyDebit.objects.filter(account=self.account, amount_kw=5).exists()
+        )
+        self.account.refresh_from_db()
+        self.assertEqual(self.account.balance_kw, 15)
 
 
 class ElectricVehicleTests(TestCase):

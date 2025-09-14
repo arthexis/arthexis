@@ -722,6 +722,15 @@ class EnergyAccount(Entity):
         return total if total is not None else Decimal("0")
 
     @property
+    def debits_kw(self):
+        """Total kW energy debits applied to the energy account."""
+        from django.db.models import Sum
+        from decimal import Decimal
+
+        total = self.debits.aggregate(total=Sum("amount_kw"))["total"]
+        return total if total is not None else Decimal("0")
+
+    @property
     def total_kw_spent(self):
         """Total kW consumed across all transactions."""
         from django.db.models import F, Sum, ExpressionWrapper, FloatField
@@ -740,7 +749,7 @@ class EnergyAccount(Entity):
     @property
     def balance_kw(self):
         """Remaining kW available for the energy account."""
-        return self.credits_kw - self.total_kw_spent
+        return self.credits_kw - self.debits_kw - self.total_kw_spent
 
     def save(self, *args, **kwargs):
         if self.name:
@@ -786,6 +795,38 @@ class EnergyCredit(Entity):
         verbose_name = "Energy Credit"
         verbose_name_plural = "Energy Credits"
         db_table = "core_credit"
+
+
+class EnergyDebit(Entity):
+    """Energy debits applied to an energy account."""
+
+    account = models.ForeignKey(
+        EnergyAccount, on_delete=models.CASCADE, related_name="debits"
+    )
+    amount_kw = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name="Energy (kW)"
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="debit_entries",
+    )
+    created_on = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:  # pragma: no cover
+        user = (
+            self.account.user
+            if self.account.user
+            else f"Energy Account {self.account_id}"
+        )
+        return f"{self.amount_kw} kW for {user}"
+
+    class Meta:
+        verbose_name = "Energy Debit"
+        verbose_name_plural = "Energy Debits"
+        db_table = "core_debit"
 
 
 class EnergyReport(Entity):
