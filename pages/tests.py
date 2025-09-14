@@ -781,6 +781,13 @@ class FavoriteTests(TestCase):
         self.assertContains(resp, f'action="{done_url}"')
         self.assertContains(resp, "DONE")
 
+    def test_dashboard_shows_request_details(self):
+        Todo.objects.create(description="Do thing", request_details="More info")
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(
+            resp, '<div class="todo-details">More info</div>', html=True
+        )
+
     def test_dashboard_excludes_todo_changelist_link(self):
         ct = ContentType.objects.get_for_model(Todo)
         Favorite.objects.create(user=self.user, content_type=ct)

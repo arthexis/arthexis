@@ -69,14 +69,18 @@ def parse_command(path: str) -> str | None:
 
 def ensure_todo(entries: list, description: str) -> None:
     for item in entries:
-        if item["fields"]["description"] == description:
+        if item["fields"]["description"].lower() == description.lower():
             return
     next_pk = max((e["pk"] for e in entries), default=0) + 1
     entries.append(
         {
             "model": "core.todo",
             "pk": next_pk,
-            "fields": {"description": description, "url": ""},
+            "fields": {
+                "description": description,
+                "url": "",
+                "request_details": "",
+            },
         }
     )
 

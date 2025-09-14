@@ -1,0 +1,11 @@
+[
+  {
+    "model": "core.todo",
+    "pk": 29,
+    "fields": {
+      "description": "Validate screen admin dashboard TODO details",
+      "url": "/admin/",
+      "request_details": "Verify hover displays request details."
+    }
+  }
+]

@@ -178,6 +178,7 @@ def future_action_items(context):
         {
             "url": todo.url or reverse("admin:core_todo_change", args=[todo.pk]),
             "label": todo.description,
+            "details": todo.request_details,
             "done_url": reverse("todo-done", args=[todo.pk]),
         }
         for todo in Todo.objects.filter(is_deleted=False)
