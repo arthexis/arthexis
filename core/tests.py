@@ -800,3 +800,19 @@ class TodoUrlValidationTests(TestCase):
         todo = Todo(description="Task", url="https://example.com/path")
         with self.assertRaises(ValidationError):
             todo.full_clean()
+
+
+class TodoAdminPermissionTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User.objects.create_superuser("admin", "admin@example.com", "pw")
+        self.client.force_login(User.objects.get(username="admin"))
+
+    def test_add_view_disallowed(self):
+        resp = self.client.get(reverse("admin:core_todo_add"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_change_form_hides_save_as_copy(self):
+        todo = Todo.objects.create(description="Task")
+        resp = self.client.get(reverse("admin:core_todo_change", args=[todo.pk]))
+        self.assertNotContains(resp, "Save as a copy")
