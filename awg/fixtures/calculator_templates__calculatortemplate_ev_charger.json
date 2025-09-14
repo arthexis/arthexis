@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "model": "awg.calculatortemplate",
+    "pk": 1,
+    "fields": {
+      "name": "EV Charger",
+      "description": "Residential charging for a single EV.",
+      "amps": 40,
+      "volts": 220,
+      "material": "cu",
+      "max_lines": 1,
+      "phases": 2,
+      "temperature": 60,
+      "ground": 1,
+      "show_in_pages": true
+    }
+  }
+]
