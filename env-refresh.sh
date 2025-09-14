@@ -12,6 +12,32 @@ mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 
+create_failover_branch() {
+  local date
+  date=$(date +%Y%m%d)
+  local i=1
+  while git rev-parse --verify "failover-$date-$i" >/dev/null 2>&1; do
+    i=$((i+1))
+  done
+  local branch="failover-$date-$i"
+  if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+    git add -A
+    local tree
+    tree=$(git write-tree)
+    local commit
+    commit=$(printf "Failover backup %s" "$(date -Is)" | git commit-tree "$tree" -p HEAD)
+    git branch "$branch" "$commit"
+    git reset --mixed HEAD
+  else
+    git branch "$branch"
+  fi
+  echo "Created failover branch $branch"
+}
+
+if [ -z "$FAILOVER_CREATED" ]; then
+  create_failover_branch
+fi
+
 VENV_DIR="$SCRIPT_DIR/.venv"
 PYTHON="$VENV_DIR/bin/python"
 USE_SYSTEM_PYTHON=0
@@ -61,7 +87,6 @@ fi
 
 if [ "$CLEAN" -eq 1 ]; then
   find "$SCRIPT_DIR" -maxdepth 1 -name 'db*.sqlite3' -delete
-  rm -f "$SCRIPT_DIR/locks/db-revision.lck"
 fi
 
 REQ_FILE="$SCRIPT_DIR/requirements.txt"

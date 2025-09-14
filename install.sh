@@ -215,17 +215,7 @@ DATASETTE_PORT=$((PORT + 1))
 
 BASE_DIR="$SCRIPT_DIR"
 cd "$BASE_DIR"
-get_db_file() {
-    local lock_file="$BASE_DIR/locks/db-revision.lck"
-    if [ -f "$lock_file" ]; then
-        local hash
-        hash=$(cat "$lock_file")
-        echo "$BASE_DIR/db_${hash: -6}.sqlite3"
-    else
-        echo "$BASE_DIR/db.sqlite3"
-    fi
-}
-DB_FILE="$(get_db_file)"
+DB_FILE="$BASE_DIR/db.sqlite3"
 if [ -f "$DB_FILE" ]; then
     if [ "$CLEAN" = true ]; then
         BACKUP_DIR="$BASE_DIR/backups"
