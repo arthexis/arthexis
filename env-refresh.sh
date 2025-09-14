@@ -60,21 +60,8 @@ fi
 
 
 if [ "$CLEAN" -eq 1 ]; then
-  DB_FILE="$SCRIPT_DIR/db.sqlite3"
-  if [ "$(basename "$DB_FILE")" != "db.sqlite3" ]; then
-    echo "Unexpected database file: $DB_FILE" >&2
-    exit 1
-  fi
-  case "$DB_FILE" in
-    "$SCRIPT_DIR"/*) ;;
-    *)
-      echo "Database path outside repository: $DB_FILE" >&2
-      exit 1
-      ;;
-  esac
-  if [ -f "$DB_FILE" ]; then
-    rm "$DB_FILE"
-  fi
+  find "$SCRIPT_DIR" -maxdepth 1 -name 'db*.sqlite3' -delete
+  rm -f "$SCRIPT_DIR/locks/db-revision.lck"
 fi
 
 REQ_FILE="$SCRIPT_DIR/requirements.txt"

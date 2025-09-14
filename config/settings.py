@@ -23,6 +23,7 @@ from django.middleware.csrf import CsrfViewMiddleware
 from django.core.exceptions import DisallowedHost
 from urllib.parse import urlsplit
 import django.utils.encoding as encoding
+from utils.db_revision import get_db_revision
 
 if not hasattr(encoding, "force_text"):  # pragma: no cover - Django>=5 compatibility
     from django.utils.encoding import force_str
@@ -228,9 +229,15 @@ AUTHENTICATION_BACKENDS = [
     "core.backends.RFIDBackend",
 ]
 
+# Override migrations for third-party apps
+MIGRATION_MODULES = {"post_office": "post_office_migrations"}
+
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+
+
+DB_REVISION = get_db_revision(INSTALLED_APPS)
 
 
 def _postgres_available() -> bool:
@@ -273,9 +280,9 @@ else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+            "NAME": BASE_DIR / f"db_{DB_REVISION[-6:]}.sqlite3",
             "OPTIONS": {"timeout": 60},
-            "TEST": {"NAME": BASE_DIR / "test_db.sqlite3"},
+            "TEST": {"NAME": BASE_DIR / f"test_db_{DB_REVISION[-6:]}.sqlite3"},
         }
     }
 

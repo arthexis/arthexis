@@ -100,8 +100,10 @@ fi
 
 # Remove existing database if requested
 if [ "$CLEAN" -eq 1 ]; then
-  DB_FILE="db.sqlite3"
+  DB_FILE=$(ls db_*.sqlite3 2>/dev/null | head -n 1)
+  [ -z "$DB_FILE" ] && DB_FILE="db.sqlite3"
   rm -f "$DB_FILE"
+  rm -f locks/db-revision.lck
 fi
 
 # Refresh environment and restart service

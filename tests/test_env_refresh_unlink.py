@@ -1,4 +1,5 @@
 import ast
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,7 +14,7 @@ def load_unlink_function():
     )
     module = ast.Module([func_node], [])  # type: ignore[arg-type]
     ast.fix_missing_locations(module)
-    namespace: dict[str, object] = {"Path": Path}
+    namespace: dict[str, object] = {"Path": Path, "re": re}
     code = compile(module, filename="env-refresh.py", mode="exec")
     exec(code, namespace)
     return namespace["_unlink_sqlite_db"]  # type: ignore[return-value]
@@ -21,7 +22,7 @@ def load_unlink_function():
 
 def test_unlink_sqlite_db_retries(monkeypatch, tmp_path):
     unlink_func = load_unlink_function()
-    path = tmp_path / "db.sqlite3"
+    path = tmp_path / "db_abcdef.sqlite3"
     path.touch()
 
     calls = {"count": 0}
