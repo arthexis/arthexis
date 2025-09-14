@@ -101,3 +101,23 @@ class ReleaseProgressViewTests(TestCase):
         self.assertContains(response, "Publish aborted")
         self.assertIsNone(response.context["next_step"])
         self.assertFalse(lock_path.exists())
+
+    @mock.patch("core.views.release_utils._git_clean", return_value=True)
+    @mock.patch("core.views.release_utils.network_available", return_value=False)
+    def test_pre_release_commit(self, net, git_clean):
+        original = Path("VERSION").read_text(encoding="utf-8")
+        self.addCleanup(lambda: Path("VERSION").write_text(original, encoding="utf-8"))
+
+        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with mock.patch("core.views.subprocess.run", side_effect=fake_run) as run:
+            url = reverse("release-progress", args=[self.release.pk, "publish"])
+            for step in range(5):
+                self.client.get(f"{url}?step={step}")
+
+        run.assert_any_call(["git", "add", "VERSION"], check=True)
+        run.assert_any_call(
+            ["git", "commit", "-m", f"pre-release commit {self.release.version}"],
+            check=True,
+        )
