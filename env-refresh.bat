@@ -27,24 +27,17 @@ if not exist "%VENV%\Scripts\python.exe" (
     exit /b 1
 )
 
-set "DB_FILE=%SCRIPT_DIR%db.sqlite3"
+set "LOCK_FILE=%SCRIPT_DIR%locks\db-revision.lck"
+if exist "%LOCK_FILE%" (
+    set /p HASH=<"%LOCK_FILE%"
+    set "DB_FILE=%SCRIPT_DIR%db_%HASH:~-6%.sqlite3"
+) else (
+    set "DB_FILE=%SCRIPT_DIR%db.sqlite3"
+)
 
 if %CLEAN%==1 (
-    for %%I in ("%DB_FILE%") do (
-        if /I not "%%~nxI"=="db.sqlite3" (
-            echo Unexpected database file: %%~fI
-            popd >nul
-            exit /b 1
-        )
-        if /I not "%%~dpI"=="%SCRIPT_DIR%" (
-            echo Database path outside repository: %%~fI
-            popd >nul
-            exit /b 1
-        )
-    )
-    if exist "%DB_FILE%" (
-        del "%DB_FILE%" >nul 2>&1
-    )
+    del "%SCRIPT_DIR%db*.sqlite3" >nul 2>&1
+    if exist "%LOCK_FILE%" del "%LOCK_FILE%" >nul 2>&1
 )
 if exist "%SCRIPT_DIR%\requirements.txt" (
     for /f "skip=1 tokens=1" %%h in ('certutil -hashfile "%SCRIPT_DIR%\requirements.txt" MD5') do (
