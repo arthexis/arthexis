@@ -1,4 +1,5 @@
 @echo off
+setlocal EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 if /I "%SCRIPT_DIR%"=="%SYSTEMDRIVE%\\" (
     echo Refusing to run from drive root.
@@ -8,6 +9,17 @@ pushd "%SCRIPT_DIR%" >nul
 set VENV=%SCRIPT_DIR%\.venv
 set LATEST=0
 set CLEAN=0
+if not defined FAILOVER_CREATED (
+    for /f %%b in ('powershell -NoProfile -Command "$d=(Get-Date).ToString(\"yyyyMMdd\"); $i=1; while (Test-Path (\".git/refs/heads/failover-$d-$i\")) { $i++ }; Write-Output \"failover-$d-$i\""') do set BRANCH=%%b
+    for /f %%s in ('git stash create') do set STASH=%%s
+    if defined STASH (
+        git branch !BRANCH! %%STASH%% >nul 2>&1
+        git reset --mixed >nul 2>&1
+    ) else (
+        git branch !BRANCH! >nul 2>&1
+    )
+    echo Created failover branch !BRANCH!
+)
 :parse
 if "%1"=="" goto after_parse
 if "%1"=="--latest" (
@@ -27,17 +39,8 @@ if not exist "%VENV%\Scripts\python.exe" (
     exit /b 1
 )
 
-set "LOCK_FILE=%SCRIPT_DIR%locks\db-revision.lck"
-if exist "%LOCK_FILE%" (
-    set /p HASH=<"%LOCK_FILE%"
-    set "DB_FILE=%SCRIPT_DIR%db_%HASH:~-6%.sqlite3"
-) else (
-    set "DB_FILE=%SCRIPT_DIR%db.sqlite3"
-)
-
 if %CLEAN%==1 (
     del "%SCRIPT_DIR%db*.sqlite3" >nul 2>&1
-    if exist "%LOCK_FILE%" del "%LOCK_FILE%" >nul 2>&1
 )
 if exist "%SCRIPT_DIR%\requirements.txt" (
     for /f "skip=1 tokens=1" %%h in ('certutil -hashfile "%SCRIPT_DIR%\requirements.txt" MD5') do (

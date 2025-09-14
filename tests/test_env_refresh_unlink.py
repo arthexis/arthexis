@@ -22,7 +22,7 @@ def load_unlink_function():
 
 def test_unlink_sqlite_db_retries(monkeypatch, tmp_path):
     unlink_func = load_unlink_function()
-    path = tmp_path / "db_abcdef.sqlite3"
+    path = tmp_path / "db.sqlite3"
     path.touch()
 
     calls = {"count": 0}
@@ -52,12 +52,6 @@ def test_unlink_sqlite_db_retries(monkeypatch, tmp_path):
     monkeypatch.setitem(
         unlink_func.__globals__, "shutil", SimpleNamespace(copy2=lambda *a, **k: None)
     )
-    monkeypatch.setitem(
-        unlink_func.__globals__,
-        "revision_utils",
-        SimpleNamespace(get_revision=lambda: "rev"),
-    )
-
     unlink_func(path)
 
     assert calls["count"] == 1

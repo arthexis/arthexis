@@ -12,6 +12,7 @@ FORCE=0
 CLEAN=0
 NO_RESTART=0
 CANARY=0
+REVERT=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --latest)
@@ -30,12 +31,70 @@ while [[ $# -gt 0 ]]; do
       CANARY=1
       shift
       ;;
+    --revert)
+      REVERT=1
+      shift
+      ;;
     *)
       echo "Unknown option: $1" >&2
       exit 1
       ;;
   esac
 done
+
+create_failover_branch() {
+  local date
+  date=$(date +%Y%m%d)
+  local i=1
+  while git rev-parse --verify "failover-$date-$i" >/dev/null 2>&1; do
+    i=$((i+1))
+  done
+  local branch="failover-$date-$i"
+  if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+    git add -A
+    local tree
+    tree=$(git write-tree)
+    local commit
+    commit=$(printf "Failover backup %s" "$(date -Is)" | git commit-tree "$tree" -p HEAD)
+    git branch "$branch" "$commit"
+    git reset --hard HEAD
+  else
+    git branch "$branch"
+  fi
+  echo "Created failover branch $branch"
+}
+
+if [[ $REVERT -eq 1 ]]; then
+  latest=$(git for-each-ref --format='%(refname:short)' refs/heads/failover-* | sort | tail -n 1)
+  if [ -z "$latest" ]; then
+    echo "No failover branches found." >&2
+    exit 1
+  fi
+  if git cat-file -e "$latest:db.sqlite3" 2>/dev/null; then
+    current_kb=0
+    [ -f db.sqlite3 ] && current_kb=$(du -k db.sqlite3 | cut -f1)
+    prev_bytes=$(git cat-file -s "$latest:db.sqlite3")
+    prev_kb=$(((prev_bytes + 1023) / 1024))
+    if [ "$current_kb" -ne "$prev_kb" ]; then
+      diff=$((current_kb - prev_kb))
+      [ $diff -lt 0 ] && diff=$(( -diff ))
+      echo "Warning: reverting will replace database (current ${current_kb}KB vs failover ${prev_kb}KB; diff ${diff}KB)"
+      read -r -p "Proceed? [y/N]: " resp
+      if [[ ! $resp =~ ^[Yy]$ ]]; then
+        echo "Revert cancelled."
+        exit 1
+      fi
+    fi
+  fi
+  echo "Stashing current changes..." >&2
+  git stash push -u -m "upgrade-revert $(date -Is)" >/dev/null || true
+  echo "Reverting to $latest"
+  git reset --hard "$latest"
+  if git cat-file -e "$latest:db.sqlite3" 2>/dev/null; then
+    git show "$latest:db.sqlite3" > db.sqlite3
+  fi
+  exit 0
+fi
 
 # Run in canary mode if requested
 if [[ $CANARY -eq 1 ]]; then
@@ -62,13 +121,7 @@ if [[ $FORCE -ne 1 && "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
   exit 0
 fi
 
-# Stash local changes if any
-STASHED=0
-if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
-  echo "Warning: stashing local changes before upgrade" >&2
-  git stash push -u -m "auto-upgrade $(date -Is)" >/dev/null || true
-  STASHED=1
-fi
+create_failover_branch
 
 # Track if the node is installed (virtual environment present)
 VENV_PRESENT=1
@@ -84,14 +137,6 @@ fi
 echo "Pulling latest changes..."
 git pull --rebase
 
-# Restore stashed changes
-if [ "$STASHED" -eq 1 ]; then
-  echo "Restoring local changes..."
-  git stash pop || true
-  echo "Removing untracked files..."
-  git clean -fd || true
-fi
-
 # Exit after pulling if the node isn't installed
 if [ $VENV_PRESENT -eq 0 ]; then
   echo "Virtual environment not found. Run ./install.sh to install the node. Skipping remaining steps." >&2
@@ -100,10 +145,8 @@ fi
 
 # Remove existing database if requested
 if [ "$CLEAN" -eq 1 ]; then
-  DB_FILE=$(ls db_*.sqlite3 2>/dev/null | head -n 1)
-  [ -z "$DB_FILE" ] && DB_FILE="db.sqlite3"
-  rm -f "$DB_FILE"
-  rm -f locks/db-revision.lck
+  rm -f db.sqlite3
+  rm -f db_*.sqlite3 2>/dev/null || true
 fi
 
 # Refresh environment and restart service
@@ -112,7 +155,7 @@ if [[ $FORCE -eq 1 ]]; then
   ENV_ARGS="--latest"
 fi
 echo "Refreshing environment..."
-./env-refresh.sh $ENV_ARGS
+FAILOVER_CREATED=1 ./env-refresh.sh $ENV_ARGS
 
 # Reload personal user data fixtures
 

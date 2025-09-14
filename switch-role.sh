@@ -143,17 +143,7 @@ if [ "$REQUIRES_REDIS" = true ]; then
     require_redis "$NODE_ROLE"
 fi
 
-get_db_file() {
-    local lock_file="$BASE_DIR/locks/db-revision.lck"
-    if [ -f "$lock_file" ]; then
-        local hash
-        hash=$(cat "$lock_file")
-        echo "$BASE_DIR/db_${hash: -6}.sqlite3"
-    else
-        echo "$BASE_DIR/db.sqlite3"
-    fi
-}
-DB_FILE="$(get_db_file)"
+DB_FILE="$BASE_DIR/db.sqlite3"
 if [ "$CLEAN" = true ] && [ -f "$DB_FILE" ]; then
     BACKUP_DIR="$BASE_DIR/backups"
     mkdir -p "$BACKUP_DIR"
@@ -163,7 +153,6 @@ if [ "$CLEAN" = true ] && [ -f "$DB_FILE" ]; then
     STAMP="$(date +%Y%m%d%H%M%S)"
     cp "$DB_FILE" "$BACKUP_DIR/db.sqlite3.${VERSION}.${REVISION}.${STAMP}.bak"
     rm "$DB_FILE"
-    rm -f "$BASE_DIR/locks/db-revision.lck"
 fi
 
 SERVICE_ACTIVE=false
