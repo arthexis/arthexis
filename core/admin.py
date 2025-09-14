@@ -25,8 +25,6 @@ import requests
 import datetime
 import calendar
 from django_object_actions import DjangoObjectActions
-from post_office.admin import LogAdmin as PostOfficeLogAdmin
-from post_office.models import Log as PostOfficeLog
 from ocpp.models import Transaction
 from .models import (
     User,
@@ -44,8 +42,8 @@ from .models import (
     CustomSigil,
     Reference,
     OdooProfile,
-    EmailInbox as CoreEmailInbox,
-    EmailCollector as CoreEmailCollector,
+    EmailInbox,
+    EmailCollector,
     Package,
     PackageRelease,
     ReleaseManager,
@@ -59,7 +57,6 @@ from .widgets import OdooProductWidget
 
 
 admin.site.unregister(Group)
-admin.site.unregister(PostOfficeLog)
 
 
 # Add object links for small datasets in changelist view
@@ -82,22 +79,6 @@ def changelist_view_with_object_links(self, request, extra_context=None):
 
 
 admin.ModelAdmin.changelist_view = changelist_view_with_object_links
-
-
-class WorkgroupReleaseManager(ReleaseManager):
-    class Meta:
-        proxy = True
-        app_label = "post_office"
-        verbose_name = ReleaseManager._meta.verbose_name
-        verbose_name_plural = ReleaseManager._meta.verbose_name_plural
-
-
-class WorkgroupSecurityGroup(SecurityGroup):
-    class Meta:
-        proxy = True
-        app_label = "post_office"
-        verbose_name = SecurityGroup._meta.verbose_name
-        verbose_name_plural = SecurityGroup._meta.verbose_name_plural
 
 
 class ExperienceReference(Reference):
@@ -230,7 +211,7 @@ class ReferenceAdmin(EntityModelAdmin):
     qr_code.short_description = "QR Code"
 
 
-@admin.register(WorkgroupReleaseManager)
+@admin.register(ReleaseManager)
 class ReleaseManagerAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     list_display = ("user", "pypi_username", "pypi_url")
     actions = ["test_credentials"]
@@ -364,7 +345,7 @@ class SecurityGroupAdminForm(forms.ModelForm):
     )
 
     class Meta:
-        model = WorkgroupSecurityGroup
+        model = SecurityGroup
         fields = "__all__"
 
     def __init__(self, *args, **kwargs):
@@ -382,7 +363,7 @@ class SecurityGroupAdminForm(forms.ModelForm):
         return instance
 
 
-@admin.register(WorkgroupSecurityGroup)
+@admin.register(SecurityGroup)
 class SecurityGroupAdmin(DjangoGroupAdmin):
     form = SecurityGroupAdminForm
     fieldsets = ((None, {"fields": ("name", "parent", "users", "permissions")}),)
@@ -472,16 +453,8 @@ class OdooProfileAdminForm(forms.ModelForm):
         return pwd
 
 
-class EmailCollector(CoreEmailCollector):
-    class Meta:
-        proxy = True
-        app_label = "post_office"
-        verbose_name = CoreEmailCollector._meta.verbose_name
-        verbose_name_plural = CoreEmailCollector._meta.verbose_name_plural
-
-
 class EmailCollectorInline(admin.TabularInline):
-    model = CoreEmailCollector
+    model = EmailCollector
     extra = 0
 
 
@@ -523,22 +496,6 @@ class OdooProfileAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     verify_credentials_action.short_description = "Test credentials"
 
 
-class EmailInbox(CoreEmailInbox):
-    class Meta:
-        proxy = True
-        app_label = "post_office"
-        verbose_name = CoreEmailInbox._meta.verbose_name
-        verbose_name_plural = CoreEmailInbox._meta.verbose_name_plural
-
-
-class EmailLog(PostOfficeLog):
-    class Meta:
-        proxy = True
-        app_label = "post_office"
-        verbose_name = "Email Log"
-        verbose_name_plural = "Email Logs"
-
-
 class EmailInboxAdminForm(forms.ModelForm):
     """Admin form for :class:`core.models.EmailInbox` with hidden password."""
 
@@ -549,7 +506,7 @@ class EmailInboxAdminForm(forms.ModelForm):
     )
 
     class Meta:
-        model = CoreEmailInbox
+        model = EmailInbox
         fields = "__all__"
 
     def __init__(self, *args, **kwargs):
@@ -582,11 +539,6 @@ class EmailSearchForm(forms.Form):
     )
 
 
-@admin.register(EmailLog)
-class EmailLogAdmin(PostOfficeLogAdmin):
-    pass
-
-
 @admin.register(EmailInbox)
 class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     form = EmailInboxAdminForm
@@ -602,7 +554,7 @@ class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             path(
                 "<path:object_id>/test/",
                 self.admin_site.admin_view(self.test_inbox),
-                name="post_office_emailinbox_test",
+                name="core_emailinbox_test",
             )
         ]
         return custom + urls
@@ -623,7 +575,7 @@ class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         extra_context = extra_context or {}
         if object_id:
             extra_context["test_url"] = reverse(
-                "admin:post_office_emailinbox_test", args=[object_id]
+                "admin:core_emailinbox_test", args=[object_id]
             )
         return super().changeform_view(request, object_id, form_url, extra_context)
 
@@ -646,7 +598,6 @@ class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
-        obj.__class__ = EmailInbox
 
     @admin.action(description="Test selected inboxes")
     def test_connection(self, request, queryset):
@@ -719,15 +670,7 @@ class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         return TemplateResponse(request, "admin/core/emailinbox/search.html", context)
 
 
-class WorkgroupChatProfile(ChatProfile):
-    class Meta:
-        proxy = True
-        app_label = "post_office"
-        verbose_name = ChatProfile._meta.verbose_name
-        verbose_name_plural = ChatProfile._meta.verbose_name_plural
-
-
-@admin.register(WorkgroupChatProfile)
+@admin.register(ChatProfile)
 class ChatProfileAdmin(EntityModelAdmin):
     list_display = ("user", "created_at", "last_used_at", "is_active")
     readonly_fields = ("user_key_hash",)
@@ -740,7 +683,7 @@ class ChatProfileAdmin(EntityModelAdmin):
             path(
                 "<path:object_id>/generate-key/",
                 self.admin_site.admin_view(self.generate_key),
-                name="post_office_workgroupchatprofile_generate_key",
+                name="core_chatprofile_generate_key",
             ),
         ]
         return custom + urls

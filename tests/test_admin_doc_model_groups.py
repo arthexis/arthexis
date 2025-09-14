@@ -33,7 +33,6 @@ class AdminDocsModelGroupsTests(TestCase):
             "3. Protocols",
             "4. Infrastructure",
             "5. Horologia",
-            "6. Workgroup",
             "7. Experience",
         ]
         self.assertEqual(group_names[: len(expected_numbered)], expected_numbered)

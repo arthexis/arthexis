@@ -153,7 +153,6 @@ INSTALLED_APPS = [
     "django_object_actions",
     "django.contrib.sites",
     "channels",
-    "config.workgroup_app.WorkgroupConfig",
     "config.horologia_app.HorologiaConfig",
 ] + LOCAL_APPS
 
@@ -228,10 +227,6 @@ AUTHENTICATION_BACKENDS = [
     "core.backends.LocalhostAdminBackend",
     "core.backends.RFIDBackend",
 ]
-
-# Override migrations for third-party apps
-MIGRATION_MODULES = {"post_office": "post_office_migrations"}
-
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
@@ -337,12 +332,9 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # Email settings
-EMAIL_BACKEND = "post_office.EmailBackend"
-POST_OFFICE = {"EMAIL_BACKEND": "nodes.backends.OutboxEmailBackend"}
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 DEFAULT_FROM_EMAIL = "arthexis@gmail.com"
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
-# All outgoing mail is queued via django-post-office; Celery workers must process the queue.
-EMAIL_BACKEND = "post_office.EmailBackend"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

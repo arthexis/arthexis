@@ -5,7 +5,7 @@ from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
 
-from core.admin import ReleaseManagerAdmin, WorkgroupReleaseManager
+from core.admin import ReleaseManagerAdmin
 from core.models import ReleaseManager
 
 
@@ -21,9 +21,8 @@ class ReleaseManagerAdminActionTests(TestCase):
             pypi_url="https://upload.pypi.org/legacy/",
             pypi_token="tok",
         )
-        self.manager = WorkgroupReleaseManager.objects.get(pk=self.manager.pk)
         self.factory = RequestFactory()
-        self.admin = ReleaseManagerAdmin(WorkgroupReleaseManager, AdminSite())
+        self.admin = ReleaseManagerAdmin(ReleaseManager, AdminSite())
 
     def _get_request(self):
         request = self.factory.get("/")
@@ -51,7 +50,7 @@ class ReleaseManagerAdminActionTests(TestCase):
     def test_test_credentials_bulk_action(self, mock_get):
         mock_get.return_value = MagicMock(ok=False, status_code=401)
         request = self._get_request()
-        queryset = WorkgroupReleaseManager.objects.filter(pk=self.manager.pk)
+        queryset = ReleaseManager.objects.filter(pk=self.manager.pk)
         self.admin.test_credentials(request, queryset)
         mock_get.assert_called_once()
         messages = [m.message.lower() for m in request._messages]

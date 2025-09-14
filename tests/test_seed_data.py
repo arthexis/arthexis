@@ -91,19 +91,14 @@ class SeedDataAdminTests(TestCase):
 
     def test_checkbox_not_displayed_for_non_entity(self):
         group = SecurityGroup.objects.create(name="Temp")
-        url = reverse(
-            "admin:post_office_workgroupsecuritygroup_change", args=[group.pk]
-        )
+        url = reverse("admin:core_securitygroup_change", args=[group.pk])
         response = self.client.get(url)
         self.assertNotContains(response, 'name="_seed_datum"')
         self.assertNotContains(response, 'name="_user_datum"')
         from django.contrib import admin
-        from core.admin import WorkgroupSecurityGroup
         from core.user_data import EntityModelAdmin
 
-        self.assertNotIsInstance(
-            admin.site._registry[WorkgroupSecurityGroup], EntityModelAdmin
-        )
+        self.assertNotIsInstance(admin.site._registry[SecurityGroup], EntityModelAdmin)
 
     def test_entity_admins_auto_patched(self):
         from django.contrib import admin

@@ -22,7 +22,7 @@ from django.core.management import call_command
 import re
 from django.contrib.contenttypes.models import ContentType
 from datetime import date
-from post_office.models import Email
+from django.core import mail
 
 from nodes.models import Node, ContentSample, NodeRole
 
@@ -68,6 +68,7 @@ class LoginViewTests(TestCase):
         self.assertRedirects(resp, "/nodes/list/")
 
 
+@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 class InvitationTests(TestCase):
     def setUp(self):
         self.client = Client()
@@ -101,10 +102,8 @@ class InvitationTests(TestCase):
             reverse("pages:request-invite"), {"email": "invite@example.com"}
         )
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(Email.objects.count(), 1)
-        link = re.search(
-            r"http://testserver[\S]+", Email.objects.first().message
-        ).group(0)
+        self.assertEqual(len(mail.outbox), 1)
+        link = re.search(r"http://testserver[\S]+", mail.outbox[0].body).group(0)
         resp = self.client.get(link)
         self.assertEqual(resp.status_code, 200)
         resp = self.client.post(link)
@@ -123,7 +122,7 @@ class InvitationTests(TestCase):
         self.assertIsNone(lead.sent_on)
         self.assertIn("fail", lead.error)
         self.assertIn("email service", lead.error)
-        self.assertEqual(Email.objects.count(), 0)
+        self.assertEqual(len(mail.outbox), 0)
 
     def test_request_invite_records_send_time(self):
         resp = self.client.post(
@@ -133,7 +132,7 @@ class InvitationTests(TestCase):
         lead = InviteLead.objects.get()
         self.assertIsNotNone(lead.sent_on)
         self.assertEqual(lead.error, "")
-        self.assertEqual(Email.objects.count(), 1)
+        self.assertEqual(len(mail.outbox), 1)
 
     def test_request_invite_creates_lead_with_comment(self):
         resp = self.client.post(
@@ -146,7 +145,7 @@ class InvitationTests(TestCase):
         self.assertEqual(lead.comment, "Hello")
         self.assertIsNone(lead.sent_on)
         self.assertEqual(lead.error, "")
-        self.assertEqual(Email.objects.count(), 0)
+        self.assertEqual(len(mail.outbox), 0)
 
     def test_request_invite_falls_back_to_send_mail(self):
         node = Node.objects.create(
@@ -169,7 +168,7 @@ class InvitationTests(TestCase):
         self.assertIn("default mail backend", lead.error)
         self.assertTrue(node_send.called)
         self.assertTrue(fallback.called)
-        self.assertEqual(Email.objects.count(), 1)
+        self.assertEqual(len(mail.outbox), 1)
 
 
 class NavbarBrandTests(TestCase):

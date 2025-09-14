@@ -7,7 +7,7 @@ django.setup()
 
 from pathlib import Path
 from unittest.mock import patch, call, MagicMock
-from post_office.models import Email
+from django.core import mail
 import socket
 import base64
 import json
@@ -23,7 +23,6 @@ from django.contrib import admin
 from django.contrib.sites.models import Site
 from django_celery_beat.models import PeriodicTask
 from django.conf import settings
-from django.core.mail import EmailMessage
 from .actions import NodeAction
 from selenium.common.exceptions import WebDriverException
 from .utils import capture_screenshot
@@ -946,6 +945,7 @@ class ContentSampleAdminTests(TestCase):
         self.assertContains(resp, "Duplicate sample not created")
 
 
+@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 class EmailOutboxTests(TestCase):
     def test_node_send_mail_uses_outbox(self):
         node = Node.objects.create(
@@ -971,8 +971,8 @@ class EmailOutboxTests(TestCase):
             mac_address="00:11:22:33:cc:dd",
         )
         node.send_mail("sub", "msg", ["to@example.com"])
-        self.assertEqual(Email.objects.count(), 1)
-        email = Email.objects.first()
+        self.assertEqual(len(mail.outbox), 1)
+        email = mail.outbox[0]
         self.assertEqual(email.subject, "sub")
         self.assertEqual(email.to, ["to@example.com"])
 

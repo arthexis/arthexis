@@ -2,8 +2,7 @@ import logging
 from typing import Sequence
 
 from django.conf import settings
-from post_office import mail
-from post_office.connections import connections as po_connections
+from django.core.mail import EmailMessage
 
 logger = logging.getLogger(__name__)
 
@@ -17,33 +16,22 @@ def send(
     outbox=None,
     **kwargs,
 ):
-    """Queue an email using post_office, optionally via an EmailOutbox.
+    """Send an email using Django's email utilities.
 
-    If ``outbox`` is provided, its connection is registered under a unique
-    backend alias so that Post Office can use it when dispatching.
+    If ``outbox`` is provided, its connection will be used when sending.
     """
     sender = (
         from_email or getattr(outbox, "from_email", None) or settings.DEFAULT_FROM_EMAIL
     )
-    backend = ""
-    if outbox is not None:
-        alias = f"outbox_{getattr(outbox, 'pk', 'tmp')}"
-        if not hasattr(settings, "POST_OFFICE"):
-            settings.POST_OFFICE = {}
-        settings.POST_OFFICE.setdefault("BACKENDS", {})[
-            alias
-        ] = "django.core.mail.backends.smtp.EmailBackend"
-        if not hasattr(po_connections._connections, "connections"):
-            po_connections._connections.connections = {}
-        po_connections._connections.connections[alias] = outbox.get_connection()
-        backend = alias
-        logger.info("Queueing email via EmailOutbox %s", alias)
-    kwargs.pop("fail_silently", None)
-    return mail.send(
-        recipients=recipient_list,
-        sender=sender,
+    connection = outbox.get_connection() if outbox is not None else None
+    fail_silently = kwargs.pop("fail_silently", False)
+    email = EmailMessage(
         subject=subject,
-        message=message,
-        backend=backend,
+        body=message,
+        from_email=sender,
+        to=list(recipient_list),
+        connection=connection,
         **kwargs,
     )
+    email.send(fail_silently=fail_silently)
+    return email
