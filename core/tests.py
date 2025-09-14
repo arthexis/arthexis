@@ -38,7 +38,7 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import IntegrityError
 from .backends import LocalhostAdminBackend
-from core.views import _step_check_pypi, _step_promote_build, _step_publish
+from core.views import _step_check_version, _step_promote_build, _step_publish
 
 
 class DefaultAdminTests(TestCase):
@@ -482,14 +482,14 @@ class ReleaseProcessTests(TestCase):
     @mock.patch("core.views.release_utils._git_clean", return_value=False)
     def test_step_check_requires_clean_repo(self, git_clean):
         with self.assertRaises(Exception):
-            _step_check_pypi(self.release, {}, Path("rel.log"))
+            _step_check_version(self.release, {}, Path("rel.log"))
 
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     @mock.patch("core.views.release_utils.network_available", return_value=False)
     def test_step_check_keeps_repo_clean(self, network_available, git_clean):
         version_path = Path("VERSION")
         original = version_path.read_text(encoding="utf-8")
-        _step_check_pypi(self.release, {}, Path("rel.log"))
+        _step_check_version(self.release, {}, Path("rel.log"))
         proc = subprocess.run(
             ["git", "status", "--porcelain", str(version_path)],
             capture_output=True,

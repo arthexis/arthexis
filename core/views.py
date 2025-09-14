@@ -81,7 +81,7 @@ def _step_check_todos(release, ctx, log_path: Path) -> None:
         raise Exception("Resolve open TODO items before publishing")
 
 
-def _step_check_pypi(release, ctx, log_path: Path) -> None:
+def _step_check_version(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
     from packaging.version import Version
 
@@ -153,6 +153,22 @@ def _step_check_pypi(release, ctx, log_path: Path) -> None:
         _append_log(log_path, "Network unavailable, skipping PyPI check")
 
 
+def _step_handle_migrations(release, ctx, log_path: Path) -> None:
+    _append_log(log_path, "Freeze, squash and approve migrations")
+
+
+def _step_changelog_docs(release, ctx, log_path: Path) -> None:
+    _append_log(log_path, "Compose CHANGELOG and documentation")
+
+
+def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
+    _append_log(log_path, "Execute pre-release actions")
+
+
+def _step_run_tests(release, ctx, log_path: Path) -> None:
+    _append_log(log_path, "Complete test suite with --all flag")
+
+
 def _step_promote_build(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
 
@@ -218,10 +234,14 @@ def _step_publish(release, ctx, log_path: Path) -> None:
 
 
 PUBLISH_STEPS = [
-    ("Verify pending TODOs", _step_check_todos),
-    ("Check version availability", _step_check_pypi),
-    ("Generate build", _step_promote_build),
-    ("Publish", _step_publish),
+    ("Check version number availability", _step_check_version),
+    ("Confirm release TODO completion", _step_check_todos),
+    ("Freeze, squash and approve migrations", _step_handle_migrations),
+    ("Compose CHANGELOG and documentation", _step_changelog_docs),
+    ("Execute pre-release actions", _step_pre_release_actions),
+    ("Build release artifacts", _step_promote_build),
+    ("Complete test suite with --all flag", _step_run_tests),
+    ("Upload final build to PyPI", _step_publish),
 ]
 
 
