@@ -14,7 +14,7 @@ django.setup()
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
-from core.models import Package, PackageRelease
+from core.models import Package, PackageRelease, Todo
 
 
 class ReleaseProgressViewTests(TestCase):
@@ -36,6 +36,7 @@ class ReleaseProgressViewTests(TestCase):
         lock_path = Path("locks") / f"release_publish_{self.release.pk}.json"
         if lock_path.exists():
             lock_path.unlink()
+        Todo.objects.all().delete()
 
     def tearDown(self):
         shutil.rmtree(self.log_dir, ignore_errors=True)
@@ -67,12 +68,25 @@ class ReleaseProgressViewTests(TestCase):
 
         with mock.patch("core.views.subprocess.run", side_effect=fake_run) as run:
             url = reverse("release-progress", args=[self.release.pk, "publish"])
-            response = self.client.get(f"{url}?step=0")
+            self.client.get(f"{url}?step=0")
+            response = self.client.get(f"{url}?step=1")
 
         self.assertContains(response, str(fixture_path))
         run.assert_any_call(["git", "add", str(fixture_path)], check=True)
         run.assert_any_call(
             ["git", "commit", "-m", "chore: update fixtures"], check=True
+        )
+
+    def test_todos_block_release(self):
+        Todo.objects.create(description="Do something", url="/admin/")
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        response = self.client.get(f"{url}?step=0")
+        self.assertContains(response, "Resolve open TODO items")
+        self.assertContains(response, "Do something")
+        self.assertContains(
+            response,
+            '<a href="/admin/" target="_blank" rel="noopener">Do something</a>',
+            html=True,
         )
 
     def test_abort_publish_stops_process(self):

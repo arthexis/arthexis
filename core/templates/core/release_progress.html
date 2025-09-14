@@ -44,6 +44,20 @@
 <pre>{{ log_content }}</pre>
 {% if error %}
 <p class="error">{{ error }}</p>
+{% if todos %}
+<h2>{% trans 'Pending TODOs' %}</h2>
+<ul>
+  {% for todo in todos %}
+  <li>
+    {% if todo.url %}
+    <a href="{{ todo.url }}" target="_blank" rel="noopener">{{ todo.description }}</a>
+    {% else %}
+    {{ todo.description }}
+    {% endif %}
+  </li>
+  {% endfor %}
+ </ul>
+{% endif %}
 <form method="get">
   <button type="submit" name="restart" value="1">{% trans 'Restart' %}</button>
 </form>
