@@ -942,7 +942,18 @@ class EVModelAdmin(EntityModelAdmin):
     list_filter = ("brand",)
 
 
-admin.site.register(Product)
+class ProductAdminForm(forms.ModelForm):
+    class Meta:
+        model = Product
+        fields = "__all__"
+        widgets = {"odoo_product": OdooProductWidget}
+
+
+@admin.register(Product)
+class ProductAdmin(EntityModelAdmin):
+    form = ProductAdminForm
+
+
 admin.site.register(LiveSubscription)
 
 
