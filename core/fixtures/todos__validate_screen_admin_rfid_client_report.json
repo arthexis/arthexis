@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "pk": 22,
+    "fields": {
+      "request": "Validate screen Admin RFID Client Report",
+      "url": "/admin/core/rfid/report/"
+    }
+  }
+]

@@ -31,7 +31,7 @@ from .models import (
     EnergyAccount,
     ElectricVehicle,
     EnergyCredit,
-    EnergyReport,
+    ClientReport,
     Product,
     LiveSubscription,
     RFID,
@@ -955,7 +955,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
 
     def report_view(self, request):
         context = self.admin_site.each_context(request)
-        context["report"] = EnergyReport.build_rows()
+        context["report"] = ClientReport.build_rows()
         return TemplateResponse(request, "admin/core/rfid/report.html", context)
 
     def scan_view(self, request):
@@ -974,14 +974,14 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         return JsonResponse(result, status=status)
 
 
-@admin.register(EnergyReport)
-class EnergyReportAdmin(EntityModelAdmin):
+@admin.register(ClientReport)
+class ClientReportAdmin(EntityModelAdmin):
     list_display = ("created_on", "start_date", "end_date")
     readonly_fields = ("created_on", "data")
 
-    change_list_template = "admin/core/energyreport/change_list.html"
+    change_list_template = "admin/core/clientreport/change_list.html"
 
-    class EnergyReportForm(forms.Form):
+    class ClientReportForm(forms.Form):
         PERIOD_CHOICES = [
             ("range", "Date range"),
             ("week", "Week"),
@@ -1041,22 +1041,22 @@ class EnergyReportAdmin(EntityModelAdmin):
             path(
                 "generate/",
                 self.admin_site.admin_view(self.generate_view),
-                name="core_energyreport_generate",
+                name="core_clientreport_generate",
             ),
         ]
         return custom + urls
 
     def generate_view(self, request):
-        form = self.EnergyReportForm(request.POST or None)
+        form = self.ClientReportForm(request.POST or None)
         report = None
         if request.method == "POST" and form.is_valid():
-            report = EnergyReport.generate(
+            report = ClientReport.generate(
                 form.cleaned_data["start"], form.cleaned_data["end"]
             )
         context = self.admin_site.each_context(request)
         context.update({"form": form, "report": report})
         return TemplateResponse(
-            request, "admin/core/energyreport/generate.html", context
+            request, "admin/core/clientreport/generate.html", context
         )
 
 
