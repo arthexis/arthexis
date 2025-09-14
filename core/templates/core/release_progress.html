@@ -35,11 +35,17 @@
 {% block content %}
 <h1>{{ action|capfirst }} {{ release.package.name }} {{ release.version }}</h1>
 <div>
+  {% if not started %}
   <form method="get" style="display:inline;">
-    <button type="submit" name="abort" value="1">{% trans 'Stop Publish' %}</button>
+    <input type="hidden" name="step" value="0">
+    <button type="submit" name="start" value="1">▶️ {% trans 'Start Publish' %}</button>
+  </form>
+  {% endif %}
+  <form method="get" style="display:inline;">
+    <button type="submit" name="abort" value="1" {% if not started %}disabled{% endif %}>⏹️ {% trans 'Stop Publish' %}</button>
   </form>
   <form method="get" style="display:inline;">
-    <button type="submit" name="restart" value="1">{% trans 'Restart Publish' %}</button>
+    <button type="submit" name="restart" value="1" {% if not started %}disabled{% endif %}>🔄 {% trans 'Restart Publish' %}</button>
   </form>
 </div>
 <ol>
@@ -103,10 +109,14 @@
 {% if error %}
 <p class="error">{{ error }}</p>
 {% elif not done %}
-{% if next_step is not None %}
+{% if started and next_step is not None %}
 <meta http-equiv="refresh" content="1; url={{ request.path }}?step={{ next_step }}">
 {% endif %}
+{% if started %}
 <p>Running...</p>
+{% else %}
+<p>{% trans 'Waiting to start' %}</p>
+{% endif %}
 {% else %}
 <p>All steps completed.</p>
 {% if release.pypi_url %}
@@ -122,9 +132,9 @@
 {% endif %}
 <p>{% trans 'Restarts' %}: {{ restart_count }}</p>
 <form method="get">
-  <button type="submit" name="restart" value="1">{% trans 'Restart Publish' %}</button>
+  <button type="submit" name="restart" value="1" {% if not started %}disabled{% endif %}>🔄 {% trans 'Restart Publish' %}</button>
   {% if not done %}
-  <button type="submit" name="abort" value="1">{% trans 'Stop Publish' %}</button>
+  <button type="submit" name="abort" value="1" {% if not started %}disabled{% endif %}>⏹️ {% trans 'Stop Publish' %}</button>
   {% endif %}
 </form>
 {% endblock %}
