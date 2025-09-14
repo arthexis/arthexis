@@ -229,6 +229,9 @@ AUTHENTICATION_BACKENDS = [
     "core.backends.RFIDBackend",
 ]
 
+# Override migrations for third-party apps
+MIGRATION_MODULES = {"post_office": "post_office_migrations"}
+
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases

@@ -78,6 +78,9 @@ db.sqlite3
 db.sqlite3-journal
 db.sqlite3-shm
 db.sqlite3-wal
+# revisioned sqlite databases
+db_*.sqlite3
+test_db_*.sqlite3
 media/
 
 # Flask stuff:
