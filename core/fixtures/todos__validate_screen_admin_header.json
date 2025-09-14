@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "pk": 18,
+    "fields": {
+      "description": "Validate screen Admin header",
+      "url": "/admin/"
+    }
+  }
+]
