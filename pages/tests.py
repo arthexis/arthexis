@@ -773,12 +773,25 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, 'href="/docs/"')
 
-    def test_dashboard_shows_done_button(self):
+    def test_dashboard_shows_todo_with_done_button(self):
         todo = Todo.objects.create(description="Do thing")
         resp = self.client.get(reverse("admin:index"))
         done_url = reverse("todo-done", args=[todo.pk])
+        self.assertContains(resp, todo.description)
         self.assertContains(resp, f'action="{done_url}"')
         self.assertContains(resp, "DONE")
+
+    def test_dashboard_excludes_todo_changelist_link(self):
+        ct = ContentType.objects.get_for_model(Todo)
+        Favorite.objects.create(user=self.user, content_type=ct)
+        AdminHistory.objects.create(
+            user=self.user,
+            content_type=ct,
+            url=reverse("admin:core_todo_changelist"),
+        )
+        Todo.objects.create(description="Task", is_user_data=True)
+        resp = self.client.get(reverse("admin:index"))
+        self.assertNotContains(resp, reverse("admin:core_todo_changelist"))
 
 
 class DatasetteTests(TestCase):

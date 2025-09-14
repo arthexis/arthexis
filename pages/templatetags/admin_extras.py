@@ -131,10 +131,15 @@ def future_action_items(context):
 
     model_items = []
     seen = set()
+    todo_ct = ContentType.objects.get_for_model(Todo)
 
     # Recently visited changelists (history)
     for entry in user.admin_history.all()[:10]:
-        if entry.content_type_id in seen or not entry.url:
+        if (
+            entry.content_type_id in seen
+            or not entry.url
+            or entry.content_type_id == todo_ct.id
+        ):
             continue
         model_items.append({"url": entry.url, "label": entry.admin_label})
         seen.add(entry.content_type_id)
@@ -143,7 +148,7 @@ def future_action_items(context):
     favorites = user.favorites.select_related("content_type")
     for fav in favorites:
         ct = fav.content_type
-        if ct.id in seen:
+        if ct.id in seen or ct.id == todo_ct.id:
             continue
         model = ct.model_class()
         label = fav.custom_label or (
@@ -156,12 +161,12 @@ def future_action_items(context):
 
     # Models with user data
     for model, model_admin in admin.site._registry.items():
-        if not issubclass(model, Entity):
+        if model is Todo or not issubclass(model, Entity):
             continue
         if not model.objects.filter(is_user_data=True).exists():
             continue
         ct = ContentType.objects.get_for_model(model)
-        if ct.id in seen:
+        if ct.id in seen or ct.id == todo_ct.id:
             continue
         label = model._meta.verbose_name_plural
         url = admin_changelist_url(ct)
