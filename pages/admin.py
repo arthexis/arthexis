@@ -213,8 +213,9 @@ def favorite_clear(request):
     return redirect("admin:favorite_list")
 
 
-def get_admin_urls(urls):
+def get_admin_urls(original_get_urls):
     def get_urls():
+        urls = original_get_urls()
         my_urls = [
             path(
                 "favorites/<int:ct_id>/",
@@ -240,4 +241,4 @@ def get_admin_urls(urls):
     return get_urls
 
 
-admin.site.get_urls = get_admin_urls(admin.site.get_urls())
+admin.site.get_urls = get_admin_urls(admin.site.get_urls)
