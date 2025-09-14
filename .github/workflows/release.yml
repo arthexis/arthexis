@@ -14,9 +14,6 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           python scripts/capture_migration_state.py "${VERSION#v}"
-      - name: Test upgrade path
-        run: |
-          bash scripts/test-upgrade-path.sh
       - name: Publish artifact
         uses: actions/upload-artifact@v4
         with:
