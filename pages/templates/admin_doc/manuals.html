@@ -20,7 +20,7 @@
       <a href="{% url 'django-admindocs-manual-detail' manual.slug %}">{{ manual.title }}</a>
       - {{ manual.description }}
       - {% translate 'Languages' %}: {{ manual.languages }}
-      - <a href="{% url 'django-admindocs-manual-pdf' manual.slug %}">{% translate 'Download PDF' %}</a>
+      - <a href="{% url 'django-admindocs-manual-pdf' manual.slug %}" download>{% translate 'Download PDF' %}</a>
     </li>
   {% endfor %}
   </ul>

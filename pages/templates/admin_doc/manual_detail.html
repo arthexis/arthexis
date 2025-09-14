@@ -17,7 +17,7 @@
 <div id="content-main">
   <div class="object-tools">
     <ul>
-      <li><a href="{% url 'django-admindocs-manual-pdf' manual.slug %}">{% translate 'Download PDF' %}</a></li>
+      <li><a href="{% url 'django-admindocs-manual-pdf' manual.slug %}" download>{% translate 'Download PDF' %}</a></li>
     </ul>
   </div>
   {{ manual.content_html|safe }}

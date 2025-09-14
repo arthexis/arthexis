@@ -57,6 +57,7 @@ class ManTests(TestCase):
         self.assertContains(
             response, reverse("django-admindocs-manual-pdf", args=["test-manual"])
         )
+        self.assertContains(response, "download")
         self.assertContains(response, 'id="nav-sidebar"')
         self.assertContains(response, 'id="nav-filter"')
         self.assertNotContains(
@@ -72,6 +73,7 @@ class ManTests(TestCase):
         self.assertContains(
             response, reverse("django-admindocs-manual-pdf", args=["test-manual"])
         )
+        self.assertContains(response, "download")
         self.assertContains(response, 'id="nav-sidebar"')
         self.assertContains(response, 'id="nav-filter"')
         self.assertNotContains(
@@ -84,10 +86,20 @@ class ManTests(TestCase):
         self.assertContains(response, "Test description")
         self.assertContains(response, "Languages: en,fr")
         self.assertContains(response, reverse("man:manual-pdf", args=["test-manual"]))
+        self.assertContains(response, "download")
         self.assertNotContains(response, 'id="nav-sidebar"')
 
     def test_public_manual_detail(self):
         response = self.client.get(reverse("man:manual-html", args=["test-manual"]))
         self.assertContains(response, "hi")
         self.assertContains(response, reverse("man:manual-pdf", args=["test-manual"]))
+        self.assertContains(response, "download")
         self.assertNotContains(response, 'id="nav-sidebar"')
+
+    def test_manual_pdf_download(self):
+        response = self.client.get(reverse("man:manual-pdf", args=["test-manual"]))
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertEqual(
+            response["Content-Disposition"],
+            'attachment; filename="test-manual.pdf"',
+        )
