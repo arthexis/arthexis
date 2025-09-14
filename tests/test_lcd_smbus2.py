@@ -2,6 +2,7 @@ import importlib
 import sys
 import types
 import builtins
+import pytest
 
 
 def test_charlcd1602_falls_back_to_smbus2(monkeypatch):
@@ -52,3 +53,27 @@ def test_init_lcd_defaults_when_scan_unavailable(monkeypatch):
     lcd.init_lcd()
 
     assert lcd.LCD_ADDR == lcd.PCF8574_address
+
+
+def test_error_message_advises_installation(monkeypatch):
+    """LCDUnavailableError suggests installing I2C dependencies."""
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name in {"smbus", "smbus2"}:
+            raise ImportError
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    if "nodes.lcd" in sys.modules:
+        del sys.modules["nodes.lcd"]
+    lcd_module = importlib.import_module("nodes.lcd")
+
+    with pytest.raises(lcd_module.LCDUnavailableError) as exc:
+        lcd_module.CharLCD1602()
+
+    msg = str(exc.value)
+    assert "sudo apt-get install i2c-tools python3-smbus" in msg
+    assert "pip install smbus2" in msg

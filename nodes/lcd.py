@@ -21,6 +21,12 @@ except Exception:  # pragma: no cover - missing dependency
     except Exception:  # pragma: no cover - missing dependency
         smbus = None  # type: ignore
 
+SMBUS_HINT = (
+    "smbus module not found. Enable the I2C interface and install the dependencies.\n"
+    "For Debian/Ubuntu run: sudo apt-get install i2c-tools python3-smbus\n"
+    "Within the virtualenv: pip install smbus2"
+)
+
 
 class LCDUnavailableError(RuntimeError):
     """Raised when the LCD cannot be initialised."""
@@ -36,7 +42,7 @@ class _BusWrapper:
         self, addr: int, data: int
     ) -> None:  # pragma: no cover - thin wrapper
         if smbus is None:
-            raise LCDUnavailableError("smbus not available")
+            raise LCDUnavailableError(SMBUS_HINT)
         bus = smbus.SMBus(self.channel)
         bus.write_byte(addr, data)
         bus.close()
@@ -47,7 +53,7 @@ class CharLCD1602:
 
     def __init__(self, bus: _BusWrapper | None = None) -> None:
         if smbus is None:  # pragma: no cover - hardware dependent
-            raise LCDUnavailableError("smbus not available")
+            raise LCDUnavailableError(SMBUS_HINT)
         self.bus = bus or _BusWrapper(1)
         self.BLEN = 1
         self.PCF8574_address = 0x27
