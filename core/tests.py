@@ -9,6 +9,7 @@ from django.test import Client, TestCase, RequestFactory
 from django.urls import reverse
 from django.http import HttpRequest
 import json
+from decimal import Decimal
 from unittest import mock
 from pathlib import Path
 import subprocess
@@ -407,8 +408,8 @@ class EVBrandFixtureTests(TestCase):
     def test_ev_brand_fixture_loads(self):
         call_command(
             "loaddata",
-            *glob("core/fixtures/ev_brands__*.json"),
-            *glob("core/fixtures/ev_models__*.json"),
+            *sorted(glob("core/fixtures/ev_brands__*.json")),
+            *sorted(glob("core/fixtures/ev_models__*.json")),
             verbosity=0,
         )
         porsche = Brand.objects.get(name="Porsche")
@@ -422,11 +423,13 @@ class EVBrandFixtureTests(TestCase):
         self.assertTrue(EVModel.objects.filter(brand=porsche, name="Taycan").exists())
         self.assertTrue(EVModel.objects.filter(brand=audi, name="e-tron GT").exists())
         self.assertTrue(EVModel.objects.filter(brand=porsche, name="Macan").exists())
+        model3 = EVModel.objects.get(brand__name="Tesla", name="Model 3 RWD")
+        self.assertEqual(model3.est_battery_kwh, Decimal("57.50"))
 
     def test_brand_from_vin(self):
         call_command(
             "loaddata",
-            *glob("core/fixtures/ev_brands__*.json"),
+            *sorted(glob("core/fixtures/ev_brands__*.json")),
             verbosity=0,
         )
         self.assertEqual(Brand.from_vin("WP0ZZZ12345678901").name, "Porsche")

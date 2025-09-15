@@ -1,0 +1,9 @@
+[
+  {
+    "model": "core.wmicode",
+    "fields": {
+      "brand": ["Audi"],
+      "code": "WAU"
+    }
+  }
+]

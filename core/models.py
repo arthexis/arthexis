@@ -870,10 +870,17 @@ class ClientReport(Entity):
         return rows
 
 
+class BrandManager(EntityManager):
+    def get_by_natural_key(self, name: str):
+        return self.get(name=name)
+
+
 class Brand(Entity):
     """Vehicle manufacturer or brand."""
 
     name = models.CharField(max_length=100, unique=True)
+
+    objects = BrandManager()
 
     class Meta:
         verbose_name = _("EV Brand")
@@ -881,6 +888,9 @@ class Brand(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        return (self.name,)
 
     @classmethod
     def from_vin(cls, vin: str) -> "Brand | None":
@@ -916,6 +926,13 @@ class EVModel(Entity):
         null=True,
         blank=True,
         verbose_name="Battery Capacity (kWh)",
+    )
+    est_battery_kwh = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Estimated Battery (kWh)",
     )
     ac_110v_power_kw = models.DecimalField(
         max_digits=5,

@@ -1,0 +1,8 @@
+[
+  {
+    "model": "core.brand",
+    "fields": {
+      "name": "JAC"
+    }
+  }
+]
