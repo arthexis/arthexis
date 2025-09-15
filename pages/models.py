@@ -196,14 +196,34 @@ class Landing(Entity):
             existing = (
                 type(self).objects.filter(module=self.module, path=self.path).first()
             )
-            if existing:
-                self.pk = existing.pk
+        if existing:
+            self.pk = existing.pk
         super().save(*args, **kwargs)
 
     def natural_key(self):  # pragma: no cover - simple representation
         return (self.module.node_role.name, self.module.path, self.path)
 
     natural_key.dependencies = ["nodes.NodeRole", "pages.Module"]
+
+
+class ViewHistory(Entity):
+    """Record of public site visits."""
+
+    path = models.CharField(max_length=500)
+    method = models.CharField(max_length=10)
+    status_code = models.PositiveSmallIntegerField()
+    status_text = models.CharField(max_length=100, blank=True)
+    error_message = models.TextField(blank=True)
+    view_name = models.CharField(max_length=200, blank=True)
+    visited_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-visited_at"]
+        verbose_name = _("View History")
+        verbose_name_plural = _("View Histories")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.method} {self.path} ({self.status_code})"
 
 
 class Favorite(Entity):

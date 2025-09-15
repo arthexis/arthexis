@@ -6,7 +6,7 @@ from django.contrib.sites.models import Site
 from django.contrib import admin
 from django.core.exceptions import DisallowedHost
 import socket
-from pages.models import Application, Module, SiteBadge, Favorite
+from pages.models import Application, Module, SiteBadge, Favorite, ViewHistory
 from pages.admin import ApplicationAdmin
 from django.apps import apps as django_apps
 from core.models import AdminHistory, InviteLead, Todo
@@ -21,8 +21,9 @@ from types import SimpleNamespace
 from django.core.management import call_command
 import re
 from django.contrib.contenttypes.models import ContentType
-from datetime import date
+from datetime import date, timedelta
 from django.core import mail
+from django.utils import timezone
 
 from nodes.models import Node, ContentSample, NodeRole
 
@@ -277,6 +278,91 @@ class AdminSidebarTests(TestCase):
         url = reverse("admin:nodes_node_changelist")
         resp = self.client.get(url)
         self.assertContains(resp, 'id="admin-collapsible-apps"')
+
+
+class ViewHistoryLoggingTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        Site.objects.update_or_create(id=1, defaults={"name": "Terminal"})
+
+    def test_successful_visit_creates_entry(self):
+        resp = self.client.get(reverse("pages:index"))
+        self.assertEqual(resp.status_code, 200)
+        entry = ViewHistory.objects.order_by("-visited_at").first()
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.path, "/")
+        self.assertEqual(entry.status_code, 200)
+        self.assertEqual(entry.error_message, "")
+
+    def test_error_visit_records_message(self):
+        resp = self.client.get("/missing-page/")
+        self.assertEqual(resp.status_code, 404)
+        entry = (
+            ViewHistory.objects.filter(path="/missing-page/")
+            .order_by("-visited_at")
+            .first()
+        )
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.status_code, 404)
+        self.assertNotEqual(entry.error_message, "")
+
+
+class ViewHistoryAdminTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="history_admin", password="pwd", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "test", "domain": "testserver"}
+        )
+
+    def _create_history(self, path: str, days_offset: int = 0, count: int = 1):
+        for _ in range(count):
+            entry = ViewHistory.objects.create(
+                path=path,
+                method="GET",
+                status_code=200,
+                status_text="OK",
+                error_message="",
+                view_name="pages:index",
+            )
+            if days_offset:
+                entry.visited_at = timezone.now() - timedelta(days=days_offset)
+                entry.save(update_fields=["visited_at"])
+
+    def test_change_list_includes_graph_link(self):
+        resp = self.client.get(reverse("admin:pages_viewhistory_changelist"))
+        self.assertContains(resp, reverse("admin:pages_viewhistory_traffic_graph"))
+        self.assertContains(resp, "Traffic graph")
+
+    def test_graph_view_renders_canvas(self):
+        resp = self.client.get(reverse("admin:pages_viewhistory_traffic_graph"))
+        self.assertContains(resp, "viewhistory-chart")
+        self.assertContains(resp, reverse("admin:pages_viewhistory_changelist"))
+
+    def test_graph_data_endpoint(self):
+        self._create_history("/", count=2)
+        self._create_history("/about/", days_offset=1)
+        url = reverse("admin:pages_viewhistory_traffic_data")
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("labels", data)
+        self.assertIn("datasets", data)
+        self.assertGreater(len(data["labels"]), 0)
+        totals = {
+            dataset["label"]: sum(dataset["data"]) for dataset in data["datasets"]
+        }
+        self.assertEqual(totals.get("/"), 2)
+        self.assertEqual(totals.get("/about/"), 1)
+
+    def test_admin_index_displays_widget(self):
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, "viewhistory-mini-module")
+        self.assertContains(resp, reverse("admin:pages_viewhistory_traffic_graph"))
 
 
 class AdminModelStatusTests(TestCase):

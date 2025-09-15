@@ -30,3 +30,4 @@ class ExperienceAdminGroupTests(TestCase):
         self.assertContains(response, "7. Experience")
         self.assertContains(response, "References")
         self.assertContains(response, "Custom Sigils")
+        self.assertContains(response, "View Histories")
