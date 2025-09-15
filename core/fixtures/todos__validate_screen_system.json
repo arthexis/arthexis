@@ -1,9 +1,0 @@
-[
-  {
-    "model": "core.todo",
-    "fields": {
-      "request": "Validate screen System",
-      "url": "/admin/system/"
-    }
-  }
-]

@@ -1,9 +1,0 @@
-[
-  {
-    "model": "core.todo",
-    "fields": {
-      "request": "Validate screen Release progress is current check",
-      "url": "/admin/core/releases/1/publish/"
-    }
-  }
-]

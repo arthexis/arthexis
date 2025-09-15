@@ -1,9 +1,0 @@
-[
-  {
-    "model": "core.todo",
-    "fields": {
-      "request": "Validate screen Client Report",
-      "url": "/client-report/"
-    }
-  }
-]
