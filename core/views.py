@@ -80,6 +80,10 @@ class PendingTodos(Exception):
     """Raised when TODO items require acknowledgment before proceeding."""
 
 
+class ApprovalRequired(Exception):
+    """Raised when release manager approval is required before continuing."""
+
+
 def _step_check_todos(release, ctx, log_path: Path) -> None:
     pending_qs = Todo.objects.filter(is_deleted=False, done_on__isnull=True)
     if pending_qs.exists():
@@ -255,6 +259,28 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
     _append_log(new_log, "Build complete")
 
 
+def _step_release_manager_approval(release, ctx, log_path: Path) -> None:
+    decision = ctx.get("release_approval")
+    if decision == "approved":
+        ctx.pop("release_approval", None)
+        ctx.pop("awaiting_approval", None)
+        _append_log(log_path, "Release manager approved release")
+        return
+    if decision == "rejected":
+        ctx.pop("release_approval", None)
+        ctx.pop("awaiting_approval", None)
+        _append_log(log_path, "Release manager rejected release")
+        raise RuntimeError(
+            _("Release manager rejected the release. Restart required."),
+        )
+    if not ctx.get("awaiting_approval"):
+        ctx["awaiting_approval"] = True
+        _append_log(log_path, "Awaiting release manager approval")
+    else:
+        ctx["awaiting_approval"] = True
+    raise ApprovalRequired()
+
+
 def _step_publish(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
 
@@ -280,6 +306,7 @@ PUBLISH_STEPS = [
     ("Execute pre-release actions", _step_pre_release_actions),
     ("Build release artifacts", _step_promote_build),
     ("Complete test suite with --all flag", _step_run_tests),
+    ("Get Release Manager Approval", _step_release_manager_approval),
     ("Upload final build to PyPI", _step_publish),
 ]
 
@@ -491,6 +518,11 @@ def release_progress(request, pk: int, action: str):
         ctx["paused"] = False
     if request.GET.get("ack_todos"):
         ctx["todos_ack"] = True
+    if ctx.get("awaiting_approval"):
+        if request.GET.get("approve"):
+            ctx["release_approval"] = "approved"
+        if request.GET.get("reject"):
+            ctx["release_approval"] = "rejected"
     if request.GET.get("pause") and ctx.get("started"):
         ctx["paused"] = True
     restart_count = 0
@@ -546,6 +578,8 @@ def release_progress(request, pk: int, action: str):
                 func(release, ctx, log_path)
             except PendingTodos:
                 pass
+            except ApprovalRequired:
+                pass
             except Exception as exc:  # pragma: no cover - best effort logging
                 _append_log(log_path, f"{name} failed: {exc}")
                 ctx["error"] = str(exc)
@@ -577,6 +611,9 @@ def release_progress(request, pk: int, action: str):
     has_pending_todos = bool(ctx.get("todos") and not ctx.get("todos_ack"))
     if has_pending_todos:
         next_step = None
+    awaiting_approval = bool(ctx.get("awaiting_approval"))
+    if awaiting_approval:
+        next_step = None
     paused = ctx.get("paused", False)
 
     step_names = [s[0] for s in steps]
@@ -603,6 +640,15 @@ def release_progress(request, pk: int, action: str):
             status = "blocked"
             icon = "📝"
             label = _("Awaiting checklist")
+        elif (
+            awaiting_approval
+            and ctx.get("started")
+            and index == step_count
+            and not done
+        ):
+            status = "awaiting-approval"
+            icon = "🤝"
+            label = _("Awaiting approval")
         elif ctx.get("started") and index == step_count and not done:
             status = "active"
             icon = "⏳"
@@ -642,6 +688,7 @@ def release_progress(request, pk: int, action: str):
         "show_log": show_log,
         "step_states": step_states,
         "has_pending_todos": has_pending_todos,
+        "awaiting_approval": awaiting_approval,
         "is_running": is_running,
         "can_resume": can_resume,
     }

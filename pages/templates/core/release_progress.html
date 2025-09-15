@@ -64,39 +64,44 @@
   .log-column h2 {
     margin-top: 0;
   }
-  .log-status-list {
-    list-style: none;
-    margin: 0 0 1rem;
-    padding: 0;
+  .progress-steps li.status-awaiting-approval .progress-name {
+    color: var(--link-fg);
   }
-  .log-status-list li {
-    padding: 0.5rem 0;
-    border-bottom: 1px solid var(--hairline-color);
+  .approval-actions {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    border: 1px solid var(--hairline-color);
+    border-radius: 6px;
+    background: var(--body-bg);
   }
-  .log-status-list li:last-child {
-    border-bottom: none;
+  .approval-actions h2 {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
   }
-  .log-step-header {
+  .approval-actions p {
+    margin: 0;
+  }
+  .approval-buttons {
     display: flex;
     gap: 0.75rem;
-    align-items: baseline;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
   }
-  .log-step-icon {
-    font-size: 1.1em;
+  .approval-buttons form {
+    display: inline;
   }
-  .log-step-title {
-    flex: 1;
-    font-weight: 600;
+  .approval-buttons button {
+    min-width: 7rem;
+    padding-inline: 1rem;
+    padding-block: 0.45rem 0.6rem;
   }
-  .log-step-status {
-    color: var(--body-quiet-color);
-    font-size: 0.85rem;
-  }
-  .log-status-list .status-error .log-step-title {
+  .approval-buttons .reject-btn {
+    border-color: var(--error-fg, #ba2121);
     color: var(--error-fg, #ba2121);
+    background: rgba(186, 33, 33, 0.15);
   }
-  .log-status-list .status-blocked .log-step-title {
-    color: var(--warning-fg, #c09853);
+  .approval-buttons .reject-btn:hover {
+    background: rgba(186, 33, 33, 0.25);
   }
   .log-text {
     background: var(--body-bg);
@@ -237,6 +242,22 @@
       updateBtn();
     </script>
     {% endif %}
+    {% if awaiting_approval %}
+    <div class="approval-actions">
+      <h2>{% trans 'Release manager approval required' %}</h2>
+      <p>{% trans 'A release manager must approve before publishing can continue.' %}</p>
+      <div class="approval-buttons">
+        <form method="get">
+          <input type="hidden" name="step" value="{{ current_step }}">
+          <button type="submit" name="approve" value="1">{% trans 'Approve' %}</button>
+        </form>
+        <form method="get">
+          <input type="hidden" name="step" value="{{ current_step }}">
+          <button type="submit" name="reject" value="1" class="reject-btn">{% trans 'Reject' %}</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
     {% if error %}
     <p class="error">{{ error }}</p>
     {% elif not done %}
@@ -246,6 +267,8 @@
     {% if started %}
       {% if has_pending_todos %}
       <p class="status-message">{% trans 'Waiting for checklist acknowledgment' %}</p>
+      {% elif awaiting_approval %}
+      <p class="status-message">{% trans 'Waiting for release manager approval' %}</p>
       {% elif paused %}
       {# Paused message shown above #}
       {% else %}
@@ -271,17 +294,6 @@
   </div>
   <div class="log-column">
     <h2>{% trans 'Logs' %}</h2>
-    <ol class="log-status-list">
-    {% for step in step_states %}
-      <li class="status-{{ step.status }}">
-        <div class="log-step-header">
-          <span class="log-step-icon">{{ step.icon }}</span>
-          <span class="log-step-title">{% blocktrans with number=step.index name=step.name %}Step {{ number }}: {{ name }}{% endblocktrans %}</span>
-          <span class="log-step-status">{{ step.label }}</span>
-        </div>
-      </li>
-    {% endfor %}
-    </ol>
     {% if show_log %}
       {% if log_content %}
       <pre class="log-text">{{ log_content }}</pre>
