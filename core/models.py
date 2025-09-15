@@ -1414,5 +1414,8 @@ class Todo(Entity):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.request
 
-    def natural_key(self):  # pragma: no cover - simple representation
+    def natural_key(self):
+        """Use the request field as the natural key."""
         return (self.request,)
+
+    natural_key.dependencies = []
