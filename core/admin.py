@@ -30,6 +30,9 @@ from .models import (
     User,
     EnergyAccount,
     ElectricVehicle,
+    Brand,
+    EVModel,
+    WMICode,
     EnergyCredit,
     ClientReport,
     Product,
@@ -823,7 +826,37 @@ class EnergyAccountAdmin(EntityModelAdmin):
 @admin.register(ElectricVehicle)
 class ElectricVehicleAdmin(EntityModelAdmin):
     list_display = ("vin", "license_plate", "brand", "model", "account")
+    search_fields = (
+        "vin",
+        "license_plate",
+        "brand__name",
+        "model__name",
+        "account__name",
+    )
     fields = ("account", "vin", "license_plate", "brand", "model")
+
+
+class WMICodeInline(admin.TabularInline):
+    model = WMICode
+    extra = 0
+
+
+@admin.register(Brand)
+class BrandAdmin(EntityModelAdmin):
+    fields = ("name",)
+    list_display = ("name", "wmi_codes_display")
+    inlines = [WMICodeInline]
+
+    def wmi_codes_display(self, obj):
+        return ", ".join(obj.wmi_codes.values_list("code", flat=True))
+
+    wmi_codes_display.short_description = "WMI codes"
+
+
+@admin.register(EVModel)
+class EVModelAdmin(EntityModelAdmin):
+    fields = ("brand", "name")
+    list_display = ("name", "brand")
 
 
 @admin.register(EnergyCredit)
