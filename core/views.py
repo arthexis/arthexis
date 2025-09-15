@@ -442,6 +442,8 @@ def release_progress(request, pk: int, action: str):
     release = get_object_or_404(PackageRelease, pk=pk)
     if action != "publish":
         raise Http404("Unknown action")
+    if not release.is_current:
+        raise Http404("Release is not current")
     session_key = f"release_publish_{pk}"
     lock_path = Path("locks") / f"release_publish_{pk}.json"
     restart_path = Path("locks") / f"release_publish_{pk}.restarts"
