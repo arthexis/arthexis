@@ -26,11 +26,19 @@ class ReleaseProgressViewTests(TestCase):
         )
         self.client = self.client_class()
         self.client.force_login(self.user)
-        self.package = Package.objects.create(name="pkg")
+        self.package = Package.objects.create(name="pkg", is_active=True)
         self.release = PackageRelease.objects.create(
             package=self.package,
             version="1.0",
             revision="",
+        )
+        self.version_path = Path("VERSION")
+        self.original_version = self.version_path.read_text(encoding="utf-8")
+        self.version_path.write_text(self.release.version, encoding="utf-8")
+        self.addCleanup(
+            lambda: self.version_path.write_text(
+                self.original_version, encoding="utf-8"
+            )
         )
         self.log_dir = Path("logs")
         self.log_dir.mkdir(exist_ok=True)
@@ -56,6 +64,14 @@ class ReleaseProgressViewTests(TestCase):
 
         self.assertTrue(log_path.exists())
         self.assertNotIn("old data", response.context["log_content"])
+
+    def test_non_current_release_returns_404(self):
+        other = PackageRelease.objects.create(
+            package=self.package, version="2.0", revision=""
+        )
+        url = reverse("release-progress", args=[other.pk, "publish"])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
 
     @mock.patch("core.views.release_utils._git_clean", return_value=False)
     @mock.patch("core.views.release_utils.network_available", return_value=False)
