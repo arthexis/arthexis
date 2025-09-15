@@ -107,18 +107,6 @@ def _fixture_sort_key(name: str) -> tuple[int, str]:
     return (priority, filename)
 
 
-def _fixture_hash(files: list[str]) -> str:
-    md5 = hashlib.md5()
-    for name in files:
-        md5.update(Path(settings.BASE_DIR, name).read_bytes())
-    return md5.hexdigest()
-
-
-def _write_fixture_hash(value: str) -> None:
-    """Persist the fixtures hash to disk."""
-    (Path(settings.BASE_DIR) / "fixtures.md5").write_text(value)
-
-
 def _migration_hash(app_labels: list[str]) -> str:
     """Return an md5 hash of all migration files for the given apps."""
     md5 = hashlib.md5()
@@ -252,7 +240,6 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     Site.objects.all().delete()
 
     fixtures = _fixture_files()
-    fixture_hash = _fixture_hash(fixtures)
     if fixtures:
         fixtures.sort(key=_fixture_sort_key)
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -355,8 +342,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     # Recreate any missing SigilRoots after loading fixtures
     generate_model_sigils()
 
-    # Update the fixtures and migrations hash files after a successful run.
-    _write_fixture_hash(fixture_hash)
+    # Update the migrations hash file after a successful run.
     hash_file.write_text(new_hash)
 
 
