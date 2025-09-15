@@ -21,7 +21,6 @@ class CoreConfig(AppConfig):
             generate_model_sigils,
         )
         from .admin_history import patch_admin_history
-        from . import checks  # noqa: F401
 
         def create_default_arthexis(**kwargs):
             User = get_user_model()
