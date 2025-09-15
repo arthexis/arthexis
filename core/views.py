@@ -190,10 +190,18 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     version_path = Path("VERSION")
     version_path.write_text(f"{release.version}\n", encoding="utf-8")
     subprocess.run(["git", "add", "VERSION"], check=True)
-    subprocess.run(
-        ["git", "commit", "-m", f"pre-release commit {release.version}"],
-        check=True,
+    diff = subprocess.run(
+        ["git", "diff", "--cached", "--quiet", "--", "VERSION"],
+        check=False,
     )
+    if diff.returncode != 0:
+        subprocess.run(
+            ["git", "commit", "-m", f"pre-release commit {release.version}"],
+            check=True,
+        )
+    else:
+        _append_log(log_path, "No changes detected for VERSION; skipping commit")
+        subprocess.run(["git", "reset", "HEAD", "VERSION"], check=False)
 
 
 def _step_run_tests(release, ctx, log_path: Path) -> None:
