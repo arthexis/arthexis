@@ -190,10 +190,18 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     version_path = Path("VERSION")
     version_path.write_text(f"{release.version}\n", encoding="utf-8")
     subprocess.run(["git", "add", "VERSION"], check=True)
-    subprocess.run(
-        ["git", "commit", "-m", f"pre-release commit {release.version}"],
-        check=True,
+    diff = subprocess.run(
+        ["git", "diff", "--cached", "--quiet", "--", "VERSION"],
+        check=False,
     )
+    if diff.returncode != 0:
+        subprocess.run(
+            ["git", "commit", "-m", f"pre-release commit {release.version}"],
+            check=True,
+        )
+    else:
+        _append_log(log_path, "No changes detected for VERSION; skipping commit")
+        subprocess.run(["git", "reset", "HEAD", "VERSION"], check=False)
 
 
 def _step_run_tests(release, ctx, log_path: Path) -> None:
@@ -549,7 +557,11 @@ def release_progress(request, pk: int, action: str):
 
     done = step_count >= len(steps) and not ctx.get("error")
 
-    log_content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+    show_log = ctx.get("started") or step_count > 0 or done or ctx.get("error")
+    if show_log and log_path.exists():
+        log_content = log_path.read_text(encoding="utf-8")
+    else:
+        log_content = ""
     next_step = (
         step_count if ctx.get("started") and not done and not ctx.get("error") else None
     )

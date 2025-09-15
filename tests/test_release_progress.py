@@ -65,6 +65,15 @@ class ReleaseProgressViewTests(TestCase):
         self.assertTrue(log_path.exists())
         self.assertNotIn("old data", response.context["log_content"])
 
+    def test_log_hidden_before_start(self):
+        log_path = self.log_dir / (f"{self.package.name}-{self.release.version}.log")
+        log_path.write_text("old data")
+
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        response = self.client.get(url)
+
+        self.assertEqual(response.context["log_content"], "")
+
     def test_non_current_release_returns_404(self):
         other = PackageRelease.objects.create(
             package=self.package, version="2.0", revision=""

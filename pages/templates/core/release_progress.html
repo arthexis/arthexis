@@ -44,9 +44,11 @@
   <form method="get" style="display:inline;">
     <button type="submit" name="abort" value="1" {% if not started %}disabled{% endif %}>⏹️ {% trans 'Stop Publish' %}</button>
   </form>
+  {% if started %}
   <form method="get" style="display:inline;">
-    <button type="submit" name="restart" value="1" {% if not started %}disabled{% endif %}>🔄 {% trans 'Restart Publish' %}</button>
+    <button type="submit" name="restart" value="1">🔄 {% trans 'Restart Publish' %}</button>
   </form>
+  {% endif %}
 </div>
 <ol>
 {% for step in steps %}
@@ -131,11 +133,5 @@
 {% endif %}
 {% endif %}
 <p>{% trans 'Restarts' %}: {{ restart_count }}</p>
-<form method="get">
-  <button type="submit" name="restart" value="1" {% if not started %}disabled{% endif %}>🔄 {% trans 'Restart Publish' %}</button>
-  {% if not done %}
-  <button type="submit" name="abort" value="1" {% if not started %}disabled{% endif %}>⏹️ {% trans 'Stop Publish' %}</button>
-  {% endif %}
-</form>
 {% endblock %}
 

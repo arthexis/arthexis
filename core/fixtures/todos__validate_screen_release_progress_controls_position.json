@@ -1,0 +1,9 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Release progress controls placement",
+      "url": "/admin/core/releases/1/publish/"
+    }
+  }
+]
