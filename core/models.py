@@ -119,6 +119,35 @@ class InviteLead(Lead):
         return self.email
 
 
+class WiFiLead(Lead):
+    """Lead generated when users access the provided WiFi access point."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="wifi_lead",
+    )
+    mac_address = models.CharField(
+        max_length=17,
+        blank=True,
+        validators=[
+            RegexValidator(
+                regex=r"^[0-9A-F]{2}(:[0-9A-F]{2}){5}$",
+                message=_("Enter a valid MAC address (e.g. AA:BB:CC:DD:EE:FF)."),
+            )
+        ],
+    )
+    last_seen = models.DateTimeField(null=True, blank=True)
+    lease_expires = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("WiFi Lead")
+        verbose_name_plural = _("WiFi Leads")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.user} @ {self.ip_address}"
+
+
 class User(Entity, AbstractUser):
     objects = EntityUserManager()
     all_objects = DjangoUserManager()

@@ -49,6 +49,7 @@ from .models import (
     ReleaseManager,
     SecurityGroup,
     InviteLead,
+    WiFiLead,
     ChatProfile,
     Todo,
 )
@@ -397,6 +398,22 @@ class InviteLeadAdmin(EntityModelAdmin):
         return (obj.error[:40] + "…") if len(obj.error) > 40 else obj.error
 
     short_error.short_description = "error"
+
+
+@admin.register(WiFiLead)
+class WiFiLeadAdmin(EntityModelAdmin):
+    list_display = ("user", "ip_address", "mac_address", "last_seen", "lease_expires")
+    search_fields = ("user__username", "ip_address", "mac_address")
+    readonly_fields = (
+        "user",
+        "created_on",
+        "path",
+        "referer",
+        "user_agent",
+        "ip_address",
+        "last_seen",
+        "lease_expires",
+    )
 
 
 class EnergyAccountRFIDForm(forms.ModelForm):

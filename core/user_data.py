@@ -8,6 +8,8 @@ import json
 from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.auth.signals import user_logged_in
+import logging
+
 from django.core.management import call_command
 from django.dispatch import receiver
 from django.http import HttpResponse, HttpResponseRedirect
@@ -16,6 +18,10 @@ from django.urls import path, reverse
 from django.utils.translation import gettext as _
 
 from .entity import Entity
+from . import wifi
+
+
+logger = logging.getLogger(__name__)
 
 
 def _data_dir(user) -> Path:
@@ -100,6 +106,10 @@ def load_user_fixtures(user) -> None:
 @receiver(user_logged_in)
 def _on_login(sender, request, user, **kwargs):
     load_user_fixtures(user)
+    try:
+        wifi.handle_user_login(request, user)
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception("Unable to update WiFi lead for user %s", user)
 
 
 class UserDatumAdminMixin(admin.ModelAdmin):

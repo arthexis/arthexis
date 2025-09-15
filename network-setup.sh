@@ -16,8 +16,7 @@ LOCK_DIR="$BASE_DIR/locks"
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog]
-  --password      Prompt for a new WiFi password even if one is already configured.
+Usage: $0 [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog]
   --no-firewall   Skip firewall port validation.
   --unsafe        Allow modification of the active internet connection.
   --interactive, -i  Collect user decisions for each step before executing.
@@ -25,16 +24,12 @@ Usage: $0 [--password] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watch
 USAGE
 }
 
-FORCE_PASSWORD=false
 SKIP_FIREWALL=false
 INTERACTIVE=false
 UNSAFE=false
 INSTALL_WATCHDOG=true
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --password)
-            FORCE_PASSWORD=true
-            ;;
         --no-firewall)
             SKIP_FIREWALL=true
             ;;
@@ -178,22 +173,6 @@ fi
 # Determine access point name and password before running steps
 AP_NAME="gelectriic-ap"
 HYPERLINE_NAME="hyperline"
-EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null || true)"
-if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
-    while true; do
-        read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
-        read -rsp "Confirm password: " WIFI_PASS2; echo
-        if [[ "$WIFI_PASS1" == "$WIFI_PASS2" && -n "$WIFI_PASS1" ]]; then
-            WIFI_PASS="$WIFI_PASS1"
-            break
-        else
-            echo "Passwords do not match or are empty." >&2
-        fi
-    done
-else
-    WIFI_PASS="$EXISTING_PASS"
-fi
-
 # Collect user decisions for each step in advance
 ask_step RUN_SERVICES "Ensure required services"
 ask_step RUN_AP "Configure wlan0 access point"
@@ -235,8 +214,8 @@ if [[ $RUN_AP == true ]]; then
                 wifi.ssid "$AP_NAME" \
                 wifi.mode ap \
                 wifi.band bg \
-                wifi-sec.key-mgmt wpa-psk \
-                wifi-sec.psk "$WIFI_PASS" \
+                wifi-sec.key-mgmt none \
+                wifi-sec.psk "" \
                 ipv4.method shared \
                 ipv4.addresses 10.42.0.1/16 \
                 ipv4.never-default yes \
@@ -249,13 +228,46 @@ if [[ $RUN_AP == true ]]; then
                 connection.interface-name wlan0 autoconnect yes connection.autoconnect-priority 0 \
                 ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
                 ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
-                wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
+                wifi.band bg wifi-sec.key-mgmt none
         fi
         nmcli connection up eth0-shared || true
         nmcli connection up "$AP_NAME"
         if command -v iptables >/dev/null 2>&1; then
-            iptables -C INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT 2>/dev/null || \
-                iptables -A INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT
+            AP_INPUT_CHAIN="GELECTRIIC_AP_INPUT"
+            AP_INPUT_ALLOW_CHAIN="GELECTRIIC_AP_INPUT_ALLOW"
+            AP_FORWARD_CHAIN="GELECTRIIC_AP_FORWARD"
+            AP_FORWARD_ALLOW_CHAIN="GELECTRIIC_AP_FORWARD_ALLOW"
+            AP_ALLOWED_PORTS=(80 443 8000 8888 21114)
+
+            iptables -N "$AP_INPUT_CHAIN" >/dev/null 2>&1 || iptables -F "$AP_INPUT_CHAIN"
+            iptables -N "$AP_INPUT_ALLOW_CHAIN" >/dev/null 2>&1 || true
+            iptables -C INPUT -i wlan0 -j "$AP_INPUT_CHAIN" >/dev/null 2>&1 || \
+                iptables -I INPUT -i wlan0 -j "$AP_INPUT_CHAIN"
+
+            iptables -F "$AP_INPUT_CHAIN"
+            iptables -A "$AP_INPUT_CHAIN" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+            iptables -A "$AP_INPUT_CHAIN" -j "$AP_INPUT_ALLOW_CHAIN"
+            iptables -A "$AP_INPUT_CHAIN" -p udp --dport 67:68 -j ACCEPT
+            iptables -A "$AP_INPUT_CHAIN" -p udp --dport 53 -j ACCEPT
+            iptables -A "$AP_INPUT_CHAIN" -p tcp --dport 53 -j ACCEPT
+            for port in "${AP_ALLOWED_PORTS[@]}"; do
+                iptables -A "$AP_INPUT_CHAIN" -p tcp --dport "$port" -j ACCEPT
+            done
+            iptables -A "$AP_INPUT_CHAIN" -j REJECT
+            iptables -C "$AP_INPUT_ALLOW_CHAIN" -j RETURN >/dev/null 2>&1 || \
+                iptables -A "$AP_INPUT_ALLOW_CHAIN" -j RETURN
+
+            iptables -N "$AP_FORWARD_CHAIN" >/dev/null 2>&1 || iptables -F "$AP_FORWARD_CHAIN"
+            iptables -N "$AP_FORWARD_ALLOW_CHAIN" >/dev/null 2>&1 || true
+            iptables -C FORWARD -i wlan0 -j "$AP_FORWARD_CHAIN" >/dev/null 2>&1 || \
+                iptables -I FORWARD -i wlan0 -j "$AP_FORWARD_CHAIN"
+
+            iptables -F "$AP_FORWARD_CHAIN"
+            iptables -A "$AP_FORWARD_CHAIN" -j "$AP_FORWARD_ALLOW_CHAIN"
+            iptables -A "$AP_FORWARD_CHAIN" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+            iptables -A "$AP_FORWARD_CHAIN" -j REJECT
+            iptables -C "$AP_FORWARD_ALLOW_CHAIN" -j RETURN >/dev/null 2>&1 || \
+                iptables -A "$AP_FORWARD_ALLOW_CHAIN" -j RETURN
         fi
         if ! nmcli -t -f NAME connection show --active | grep -Fxq "$AP_NAME"; then
             echo "Access point $AP_NAME failed to start." >&2

@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.contrib.admin.sites import site
 
-from teams.models import PowerLead
+from teams.models import PowerLead, WiFiLead
 
 
 class WorkgroupAdminGroupTests(TestCase):
@@ -19,7 +19,13 @@ class WorkgroupAdminGroupTests(TestCase):
         self.assertIn(PowerLead, registry)
         self.assertEqual(registry[PowerLead].model._meta.app_label, "teams")
 
+    def test_wifilead_registered(self):
+        registry = site._registry
+        self.assertIn(WiFiLead, registry)
+        self.assertEqual(registry[WiFiLead].model._meta.app_label, "teams")
+
     def test_admin_index_shows_powerlead(self):
         response = self.client.get(reverse("admin:index"))
         self.assertContains(response, "6. Workgroup MODELS")
         self.assertContains(response, "Power Leads")
+        self.assertContains(response, "WiFi Leads")

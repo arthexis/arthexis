@@ -20,6 +20,7 @@ from core.admin import (
     ReleaseManagerAdmin,
     OdooProfileAdmin,
     ChatProfileAdmin,
+    WiFiLeadAdmin,
 )
 from awg.admin import PowerLeadAdmin
 from nodes.admin import EmailOutboxAdmin
@@ -27,6 +28,7 @@ from nodes.admin import EmailOutboxAdmin
 from .models import (
     InviteLead,
     PowerLead,
+    WiFiLead,
     User,
     SecurityGroup,
     EmailInbox,
@@ -45,6 +47,11 @@ class InviteLeadAdminProxy(InviteLeadAdmin):
 
 @admin.register(PowerLead)
 class PowerLeadAdminProxy(PowerLeadAdmin):
+    pass
+
+
+@admin.register(WiFiLead)
+class WiFiLeadAdminProxy(WiFiLeadAdmin):
     pass
 
 
