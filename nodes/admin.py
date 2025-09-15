@@ -24,9 +24,7 @@ from .models import (
     NodeFeature,
     ContentSample,
     NetMessage,
-    User,
 )
-from core.admin import UserAdmin as CoreUserAdmin
 from core.user_data import EntityModelAdmin
 
 
@@ -367,6 +365,3 @@ class NetMessageAdmin(EntityModelAdmin):
         self.message_user(request, f"{queryset.count()} messages sent")
 
     send_messages.short_description = "Send selected messages"
-
-
-admin.site.register(User, CoreUserAdmin)
