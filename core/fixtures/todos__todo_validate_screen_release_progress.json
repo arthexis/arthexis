@@ -6,7 +6,7 @@
       "is_deleted": false,
       "request": "Validate screen Release progress",
       "url": "/admin/core/packagerelease/",
-      "request_details": ""
+      "request_details": "Confirm release manager approval controls and log-only panel on the publish screen."
     }
   }
 ]
