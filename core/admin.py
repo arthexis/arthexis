@@ -211,7 +211,18 @@ class ReferenceAdmin(EntityModelAdmin):
     qr_code.short_description = "QR Code"
 
 
+class ReleaseManagerAdminForm(forms.ModelForm):
+    class Meta:
+        model = ReleaseManager
+        fields = "__all__"
+        widgets = {
+            "pypi_token": forms.Textarea(attrs={"rows": 3, "style": "width: 40em;"}),
+            "github_token": forms.Textarea(attrs={"rows": 3, "style": "width: 40em;"}),
+        }
+
+
 class ReleaseManagerAdmin(SaveBeforeChangeAction, EntityModelAdmin):
+    form = ReleaseManagerAdminForm
     list_display = ("user", "pypi_username", "pypi_url")
     actions = ["test_credentials"]
     change_actions = ["test_credentials_action"]
