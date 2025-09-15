@@ -16,8 +16,9 @@ LOCK_DIR="$BASE_DIR/locks"
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog]
+Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog]
   --password      Prompt for a new WiFi password even if one is already configured.
+  --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --no-firewall   Skip firewall port validation.
   --unsafe        Allow modification of the active internet connection.
   --interactive, -i  Collect user decisions for each step before executing.
@@ -30,10 +31,31 @@ SKIP_FIREWALL=false
 INTERACTIVE=false
 UNSAFE=false
 INSTALL_WATCHDOG=true
+DEFAULT_AP_NAME="gelectriic-ap"
+AP_NAME="$DEFAULT_AP_NAME"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --password)
             FORCE_PASSWORD=true
+            ;;
+        --ap)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --ap requires a name." >&2
+                exit 1
+            fi
+            AP_NAME="$2"
+            if [[ -z "$AP_NAME" ]]; then
+                echo "Error: --ap requires a non-empty name." >&2
+                exit 1
+            fi
+            shift
+            ;;
+        --ap=*)
+            AP_NAME="${1#--ap=}"
+            if [[ -z "$AP_NAME" ]]; then
+                echo "Error: --ap requires a non-empty name." >&2
+                exit 1
+            fi
             ;;
         --no-firewall)
             SKIP_FIREWALL=true
@@ -176,9 +198,11 @@ if [[ $INITIAL_CONNECTIVITY == true ]]; then
 fi
 
 # Determine access point name and password before running steps
-AP_NAME="gelectriic-ap"
 HYPERLINE_NAME="hyperline"
 EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null || true)"
+if [[ -z "$EXISTING_PASS" && "$AP_NAME" != "$DEFAULT_AP_NAME" ]]; then
+    EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$DEFAULT_AP_NAME" 2>/dev/null || true)"
+fi
 if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
     while true; do
         read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
