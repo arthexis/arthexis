@@ -488,13 +488,11 @@ def release_progress(request, pk: int, action: str):
 
     if request.GET.get("start"):
         ctx["started"] = True
+        ctx["paused"] = False
     if request.GET.get("ack_todos"):
         ctx["todos_ack"] = True
-    if request.GET.get("abort"):
-        ctx["error"] = _("Publish aborted")
-        request.session[session_key] = ctx
-        if lock_path.exists():
-            lock_path.unlink()
+    if request.GET.get("pause") and ctx.get("started"):
+        ctx["paused"] = True
     restart_count = 0
     if restart_path.exists():
         try:
@@ -513,10 +511,15 @@ def release_progress(request, pk: int, action: str):
     identifier = f"{release.package.name}-{release.version}"
     log_name = f"{identifier}.log"
     if ctx.get("log") != log_name:
-        ctx = {"step": 0, "log": log_name}
+        ctx = {
+            "step": 0,
+            "log": log_name,
+            "started": ctx.get("started", False),
+        }
         step_count = 0
     log_path = Path("logs") / log_name
     ctx.setdefault("log", log_name)
+    ctx.setdefault("paused", False)
 
     if (
         ctx.get("started")
@@ -531,6 +534,7 @@ def release_progress(request, pk: int, action: str):
 
     if (
         ctx.get("started")
+        and not ctx.get("paused")
         and step_param is not None
         and not error
         and step_count < len(steps)
@@ -563,14 +567,66 @@ def release_progress(request, pk: int, action: str):
     else:
         log_content = ""
     next_step = (
-        step_count if ctx.get("started") and not done and not ctx.get("error") else None
+        step_count
+        if ctx.get("started")
+        and not ctx.get("paused")
+        and not done
+        and not ctx.get("error")
+        else None
     )
-    if ctx.get("todos") and not ctx.get("todos_ack"):
+    has_pending_todos = bool(ctx.get("todos") and not ctx.get("todos_ack"))
+    if has_pending_todos:
         next_step = None
+    paused = ctx.get("paused", False)
+
+    step_names = [s[0] for s in steps]
+    step_states = []
+    for index, name in enumerate(step_names):
+        if index < step_count:
+            status = "complete"
+            icon = "✅"
+            label = _("Completed")
+        elif error and index == step_count:
+            status = "error"
+            icon = "❌"
+            label = _("Failed")
+        elif paused and ctx.get("started") and index == step_count and not done:
+            status = "paused"
+            icon = "⏸️"
+            label = _("Paused")
+        elif (
+            has_pending_todos
+            and ctx.get("started")
+            and index == step_count
+            and not done
+        ):
+            status = "blocked"
+            icon = "📝"
+            label = _("Awaiting checklist")
+        elif ctx.get("started") and index == step_count and not done:
+            status = "active"
+            icon = "⏳"
+            label = _("In progress")
+        else:
+            status = "pending"
+            icon = "⬜"
+            label = _("Pending")
+        step_states.append(
+            {
+                "index": index + 1,
+                "name": name,
+                "status": status,
+                "icon": icon,
+                "label": label,
+            }
+        )
+
+    is_running = ctx.get("started") and not paused and not done and not ctx.get("error")
+    can_resume = ctx.get("started") and paused and not done and not ctx.get("error")
     context = {
         "release": release,
         "action": "publish",
-        "steps": [s[0] for s in steps],
+        "steps": step_names,
         "current_step": step_count,
         "next_step": next_step,
         "done": done,
@@ -582,6 +638,12 @@ def release_progress(request, pk: int, action: str):
         "todos": ctx.get("todos"),
         "restart_count": restart_count,
         "started": ctx.get("started", False),
+        "paused": paused,
+        "show_log": show_log,
+        "step_states": step_states,
+        "has_pending_todos": has_pending_todos,
+        "is_running": is_running,
+        "can_resume": can_resume,
     }
     request.session[session_key] = ctx
     if done or ctx.get("error"):

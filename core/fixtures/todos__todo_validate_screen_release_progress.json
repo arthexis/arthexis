@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Validate screen Release progress",
+      "url": "/admin/core/packagerelease/",
+      "request_details": ""
+    }
+  }
+]
