@@ -144,6 +144,18 @@ class CustomLoginView(LoginView):
             return redirect(self.get_success_url())
         return super().dispatch(request, *args, **kwargs)
 
+    def get_context_data(self, **kwargs):
+        context = super(LoginView, self).get_context_data(**kwargs)
+        current_site = get_site(self.request)
+        context.update(
+            {
+                "site": current_site,
+                "site_name": getattr(current_site, "name", ""),
+                "next": self.get_success_url(),
+            }
+        )
+        return context
+
     def get_success_url(self):
         redirect_url = self.get_redirect_url()
         if redirect_url:

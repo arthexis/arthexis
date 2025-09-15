@@ -1,0 +1,9 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Login",
+      "url": "/login/"
+    }
+  }
+]
