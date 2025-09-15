@@ -1,7 +1,6 @@
 [
   {
     "model": "awg.cablesize",
-    "pk": 14,
     "fields": {
       "awg_size": "2",
       "material": "cu",
