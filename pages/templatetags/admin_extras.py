@@ -9,7 +9,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import connection
 from django.urls import NoReverseMatch, reverse
 
-from core.models import Todo
+from core.models import ReleaseManager, Todo
 from core.entity import Entity
 
 register = template.Library()
@@ -174,14 +174,16 @@ def future_action_items(context):
             model_items.append({"url": url, "label": label})
             seen.add(ct.id)
 
-    todos = [
-        {
-            "url": todo.url or reverse("admin:core_todo_change", args=[todo.pk]),
-            "label": todo.request,
-            "details": todo.request_details,
-            "done_url": reverse("todo-done", args=[todo.pk]),
-        }
-        for todo in Todo.objects.filter(is_deleted=False, done_on__isnull=True)
-    ]
+    todos: list[dict[str, str]] = []
+    if ReleaseManager.objects.filter(user=user).exists():
+        todos = [
+            {
+                "url": todo.url or reverse("admin:core_todo_change", args=[todo.pk]),
+                "label": todo.request,
+                "details": todo.request_details,
+                "done_url": reverse("todo-done", args=[todo.pk]),
+            }
+            for todo in Todo.objects.filter(is_deleted=False, done_on__isnull=True)
+        ]
 
     return {"models": model_items, "todos": todos}

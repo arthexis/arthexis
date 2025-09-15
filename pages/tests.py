@@ -9,7 +9,7 @@ import socket
 from pages.models import Application, Module, SiteBadge, Favorite, ViewHistory
 from pages.admin import ApplicationAdmin
 from django.apps import apps as django_apps
-from core.models import AdminHistory, InviteLead, Todo
+from core.models import AdminHistory, InviteLead, ReleaseManager, Todo
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
 import tempfile
@@ -767,6 +767,7 @@ class FavoriteTests(TestCase):
         self.user = User.objects.create_superuser(
             username="favadmin", password="pwd", email="fav@example.com"
         )
+        ReleaseManager.objects.create(user=self.user)
         self.client.force_login(self.user)
         Site.objects.update_or_create(
             id=1, defaults={"name": "test", "domain": "testserver"}
@@ -886,6 +887,17 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         changelist = reverse("admin:core_todo_changelist")
         self.assertNotContains(resp, f'href="{changelist}"')
+
+    def test_dashboard_hides_todos_without_release_manager(self):
+        todo = Todo.objects.create(request="Only Release Manager")
+        User = get_user_model()
+        other_user = User.objects.create_superuser(
+            username="norole", password="pwd", email="norole@example.com"
+        )
+        self.client.force_login(other_user)
+        resp = self.client.get(reverse("admin:index"))
+        self.assertNotContains(resp, "Release manager tasks")
+        self.assertNotContains(resp, todo.request)
 
 
 class DatasetteTests(TestCase):

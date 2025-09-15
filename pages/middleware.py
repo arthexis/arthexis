@@ -81,7 +81,9 @@ class ViewHistoryMiddleware:
                 view_name=view_name,
             )
         except Exception:  # pragma: no cover - best effort logging
-            logger.debug("Failed to record ViewHistory for %s", full_path, exc_info=True)
+            logger.debug(
+                "Failed to record ViewHistory for %s", full_path, exc_info=True
+            )
 
     def _resolve_view_name(self, request) -> str:
         match = getattr(request, "resolver_match", None)
@@ -103,4 +105,3 @@ class ViewHistoryMiddleware:
         if module and name:
             return f"{module}.{name}"
         return name or module or ""
-
