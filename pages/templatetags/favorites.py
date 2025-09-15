@@ -12,6 +12,7 @@ def favorite_ct_id(app_label, model_name):
         model = apps.get_model(app_label, model_name)
     except LookupError:
         return None
+    ContentType.objects.clear_cache()
     ct = ContentType.objects.get_for_model(model)
     return ct.id
 
