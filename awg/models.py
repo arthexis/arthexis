@@ -1,11 +1,31 @@
 from django.db import models
-from core.entity import Entity
+from core.entity import Entity, EntityManager
 from django.utils.translation import gettext_lazy as _
 from core.models import Lead
 
 
+class CableSizeManager(EntityManager):
+    def get_by_natural_key(self, awg_size, material):
+        return self.get(awg_size=awg_size, material=material)
+
+
+class ConduitFillManager(EntityManager):
+    def get_by_natural_key(self, trade_size, conduit):
+        return self.get(trade_size=trade_size, conduit=conduit)
+
+
+class CalculatorTemplateManager(EntityManager):
+    def get_by_natural_key(self, name):
+        return self.get(name=name)
+
+
 class CableSize(Entity):
     """AWG cable size specification."""
+
+    objects = CableSizeManager()
+
+    def natural_key(self):
+        return (self.awg_size, self.material)
 
     awg_size = models.CharField(max_length=5)
     material = models.CharField(max_length=2)
@@ -30,6 +50,11 @@ class CableSize(Entity):
 
 class ConduitFill(Entity):
     """Maximum wires allowed in a conduit."""
+
+    objects = ConduitFillManager()
+
+    def natural_key(self):
+        return (self.trade_size, self.conduit)
 
     trade_size = models.CharField(max_length=10)
     conduit = models.CharField(max_length=10)
@@ -57,6 +82,11 @@ class ConduitFill(Entity):
 
 class CalculatorTemplate(Entity):
     """Template containing parameters for an AWG calculation."""
+
+    objects = CalculatorTemplateManager()
+
+    def natural_key(self):
+        return (self.name,)
 
     name = models.CharField(max_length=100, blank=True)
     description = models.CharField(max_length=255, blank=True)

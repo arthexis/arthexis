@@ -1,11 +1,10 @@
 [
 {
   "model": "core.releasemanager",
-  "pk": 1,
   "fields": {
     "is_seed_data": false,
     "is_deleted": false,
-    "user": 1,
+    "user": ["arthexis"],
     "pypi_username": "arthexis",
     "pypi_token": "",
     "github_token": "",

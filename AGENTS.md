@@ -16,6 +16,14 @@
 - When stub code is necessary, use a NonImplemented exception and add a corresponding `Todo` fixture to track completion.
 - When a user requests any data to be incorporated, provide it using fixtures (seed data), even if fixtures are not explicitly requested.
 - Store each fixture object in its own file to avoid merge conflicts, giving each file a unique name related to the item it contains.
+- Fixtures must not include numeric primary keys; use natural keys instead.
+  - awg.CableSize: (awg_size, material)
+  - awg.ConduitFill: (trade_size, conduit)
+  - awg.CalculatorTemplate: name
+  - core.Package: name
+  - core.ReleaseManager: (user.username, package.name)
+  - core.PackageRelease: (package.name, version)
+- Avoid committing empty fixtures.
 - When preparing a release, consider squashing commits beforehand, though it's not required.
 - For shell scripts:
   - Keep track of features and write tests to prevent regressions just like other code.

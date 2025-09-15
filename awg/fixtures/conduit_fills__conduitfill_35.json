@@ -1,7 +1,6 @@
 [
   {
     "model": "awg.conduitfill",
-    "pk": 35,
     "fields": {
       "trade_size": "3 1/2",
       "conduit": "RMC",

@@ -1,7 +1,6 @@
 [
   {
     "model": "awg.conduitfill",
-    "pk": 20,
     "fields": {
       "trade_size": "1 1/2",
       "conduit": "FMC",

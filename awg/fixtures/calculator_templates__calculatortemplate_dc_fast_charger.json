@@ -1,7 +1,6 @@
 [
   {
     "model": "awg.calculatortemplate",
-    "pk": 2,
     "fields": {
       "name": "DC Fast Charger",
       "description": "Commercial DC charging for 1 or 2 EVs.",

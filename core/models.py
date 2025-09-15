@@ -1055,8 +1055,29 @@ class AdminHistory(Entity):
         return model._meta.verbose_name_plural if model else self.content_type.name
 
 
+class ReleaseManagerManager(EntityManager):
+    def get_by_natural_key(self, user, package=None):
+        return self.get(user__username=user)
+
+
+class PackageManager(EntityManager):
+    def get_by_natural_key(self, name):
+        return self.get(name=name)
+
+
+class PackageReleaseManager(EntityManager):
+    def get_by_natural_key(self, package, version):
+        return self.get(package__name=package, version=version)
+
+
 class ReleaseManager(Entity):
     """Store credentials for publishing packages."""
+
+    objects = ReleaseManagerManager()
+
+    def natural_key(self):
+        pkg = self.package_set.first()
+        return (self.user.get_username(), pkg.name if pkg else "")
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -1098,6 +1119,11 @@ class ReleaseManager(Entity):
 
 class Package(Entity):
     """Package details shared across releases."""
+
+    objects = PackageManager()
+
+    def natural_key(self):
+        return (self.name,)
 
     name = models.CharField(max_length=100, default=DEFAULT_PACKAGE.name, unique=True)
     description = models.CharField(max_length=255, default=DEFAULT_PACKAGE.description)
@@ -1152,6 +1178,11 @@ class Package(Entity):
 
 class PackageRelease(Entity):
     """Store metadata for a specific package version."""
+
+    objects = PackageReleaseManager()
+
+    def natural_key(self):
+        return (self.package.name, self.version)
 
     package = models.ForeignKey(
         Package, on_delete=models.CASCADE, related_name="releases"

@@ -1,7 +1,6 @@
 [
 {
   "model": "core.package",
-  "pk": 1,
   "fields": {
     "is_seed_data": false,
     "is_deleted": false,
@@ -13,7 +12,7 @@
     "license": "MIT",
     "repository_url": "https://github.com/arthexis/arthexis",
     "homepage_url": "https://arthexis.com",
-    "release_manager": 1,
+    "release_manager": ["arthexis", "arthexis"],
     "is_active": true
   }
 }

@@ -1,7 +1,6 @@
 [
   {
     "model": "awg.conduitfill",
-    "pk": 5,
     "fields": {
       "trade_size": "3/4",
       "conduit": "EMT",
