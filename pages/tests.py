@@ -9,7 +9,7 @@ import socket
 from pages.models import Application, Module, SiteBadge, Favorite, ViewHistory
 from pages.admin import ApplicationAdmin
 from django.apps import apps as django_apps
-from core.models import AdminHistory, InviteLead, ReleaseManager, Todo
+from core.models import AdminHistory, InviteLead, Package, ReleaseManager, Todo
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
 import tempfile
@@ -772,6 +772,7 @@ class FavoriteTests(TestCase):
         Site.objects.update_or_create(
             id=1, defaults={"name": "test", "domain": "testserver"}
         )
+        ContentType.objects.clear_cache()
 
     def test_add_favorite(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
@@ -835,6 +836,80 @@ class FavoriteTests(TestCase):
         url = reverse("admin:nodes_noderole_changelist")
         self.assertGreaterEqual(resp.content.decode().count(url), 1)
         self.assertContains(resp, NodeRole._meta.verbose_name_plural)
+
+    def test_dashboard_limits_future_actions_to_top_four(self):
+        from pages.templatetags.admin_extras import future_action_items
+
+        role_ct = ContentType.objects.get_for_model(NodeRole)
+        role_url = reverse("admin:nodes_noderole_changelist")
+        AdminHistory.objects.create(
+            user=self.user,
+            content_type=role_ct,
+            url=role_url,
+        )
+        AdminHistory.objects.create(
+            user=self.user,
+            content_type=role_ct,
+            url=f"{role_url}?page=2",
+        )
+        AdminHistory.objects.create(
+            user=self.user,
+            content_type=role_ct,
+            url=f"{role_url}?page=3",
+        )
+
+        app_ct = ContentType.objects.get_for_model(Application)
+        app_url = reverse("admin:pages_application_changelist")
+        AdminHistory.objects.create(
+            user=self.user,
+            content_type=app_ct,
+            url=app_url,
+        )
+        AdminHistory.objects.create(
+            user=self.user,
+            content_type=app_ct,
+            url=f"{app_url}?page=2",
+        )
+
+        module_ct = ContentType.objects.get_for_model(Module)
+        module_url = reverse("admin:pages_module_changelist")
+        AdminHistory.objects.create(
+            user=self.user,
+            content_type=module_ct,
+            url=module_url,
+        )
+        AdminHistory.objects.create(
+            user=self.user,
+            content_type=module_ct,
+            url=f"{module_url}?page=2",
+        )
+
+        package_ct = ContentType.objects.get_for_model(Package)
+        package_url = reverse("admin:core_package_changelist")
+        AdminHistory.objects.create(
+            user=self.user,
+            content_type=package_ct,
+            url=package_url,
+        )
+
+        view_history_ct = ContentType.objects.get_for_model(ViewHistory)
+        view_history_url = reverse("admin:pages_viewhistory_changelist")
+        AdminHistory.objects.create(
+            user=self.user,
+            content_type=view_history_ct,
+            url=view_history_url,
+        )
+
+        resp = self.client.get(reverse("admin:index"))
+        items = future_action_items({"request": resp.wsgi_request})["models"]
+        labels = {item["label"] for item in items}
+        self.assertEqual(len(items), 4)
+        self.assertIn("Node Roles", labels)
+        self.assertIn("Modules", labels)
+        self.assertIn("applications", labels)
+        self.assertIn("View Histories", labels)
+        self.assertNotIn("Packages", labels)
+        ContentType.objects.clear_cache()
 
     def test_favorite_ct_id_recreates_missing_content_type(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")

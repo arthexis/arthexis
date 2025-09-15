@@ -129,35 +129,49 @@ def future_action_items(context):
     if not user or not user.is_authenticated:
         return {"models": [], "todos": []}
 
-    model_items = []
-    seen = set()
+    model_data = {}
+    first_seen = 0
     todo_ct = ContentType.objects.get_for_model(Todo)
 
+    def register_model(ct: ContentType, label: str, url: str, priority: int) -> None:
+        nonlocal first_seen
+        if not ct or ct.id == todo_ct.id or not url:
+            return
+        entry = model_data.get(ct.id)
+        if entry is None:
+            entry = {
+                "url": url,
+                "label": label,
+                "count": 0,
+                "priority": priority,
+                "first_seen": first_seen,
+            }
+            model_data[ct.id] = entry
+            first_seen += 1
+        else:
+            if priority < entry["priority"]:
+                entry.update({"url": url, "label": label, "priority": priority})
+        entry["count"] += 1
+
     # Recently visited changelists (history)
-    for entry in user.admin_history.all()[:10]:
-        if (
-            entry.content_type_id in seen
-            or not entry.url
-            or entry.content_type_id == todo_ct.id
-        ):
+    history = user.admin_history.select_related("content_type").all()[:10]
+    for entry in history:
+        ct = entry.content_type
+        if not ct or not entry.url:
             continue
-        model_items.append({"url": entry.url, "label": entry.admin_label})
-        seen.add(entry.content_type_id)
+        register_model(ct, entry.admin_label, entry.url, priority=0)
 
     # Favorites
     favorites = user.favorites.select_related("content_type")
     for fav in favorites:
         ct = fav.content_type
-        if ct.id in seen or ct.id == todo_ct.id:
-            continue
         model = ct.model_class()
         label = fav.custom_label or (
             model._meta.verbose_name_plural if model else ct.name
         )
         url = admin_changelist_url(ct)
         if url:
-            model_items.append({"url": url, "label": label})
-            seen.add(ct.id)
+            register_model(ct, label, url, priority=1)
 
     # Models with user data
     for model, model_admin in admin.site._registry.items():
@@ -166,13 +180,23 @@ def future_action_items(context):
         if not model.objects.filter(is_user_data=True).exists():
             continue
         ct = ContentType.objects.get_for_model(model)
-        if ct.id in seen or ct.id == todo_ct.id:
-            continue
         label = model._meta.verbose_name_plural
         url = admin_changelist_url(ct)
         if url:
-            model_items.append({"url": url, "label": label})
-            seen.add(ct.id)
+            register_model(ct, label, url, priority=2)
+
+    sorted_models = sorted(
+        model_data.values(),
+        key=lambda item: (
+            -item["count"],
+            item["priority"],
+            item["first_seen"],
+            item["label"],
+        ),
+    )
+    model_items = [
+        {"url": item["url"], "label": item["label"]} for item in sorted_models[:4]
+    ]
 
     todos: list[dict[str, str]] = []
     if ReleaseManager.objects.filter(user=user).exists():
