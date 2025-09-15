@@ -143,16 +143,20 @@ class ReleaseProgressViewTests(TestCase):
         self.assertIsNone(response.context.get("todos"))
         self.assertEqual(response.context["next_step"], 2)
 
-    def test_abort_publish_stops_process(self):
+    @mock.patch("core.views.release_utils.network_available", return_value=False)
+    @mock.patch("core.views.release_utils._git_clean", return_value=True)
+    def test_pause_publish_suspends_process(self, git_clean, net_available):
         url = reverse("release-progress", args=[self.release.pk, "publish"])
+        self.client.get(url)
         self.client.get(f"{url}?start=1&step=0")
         lock_path = Path("locks") / f"release_publish_{self.release.pk}.json"
         self.assertTrue(lock_path.exists())
 
-        response = self.client.get(f"{url}?abort=1")
-        self.assertContains(response, "Publish aborted")
+        response = self.client.get(f"{url}?pause=1")
+        self.assertTrue(response.context["paused"])
         self.assertIsNone(response.context["next_step"])
-        self.assertFalse(lock_path.exists())
+        self.assertTrue(lock_path.exists())
+        self.assertContains(response, "Continue Publish")
 
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     @mock.patch("core.views.release_utils.network_available", return_value=False)

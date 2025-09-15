@@ -4,7 +4,119 @@
 {% block extrastyle %}
 {{ block.super }}
 <style>
-  .todo-item { position: relative; }
+  .release-progress-layout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+    margin-top: 1.5rem;
+  }
+  .progress-column,
+  .log-column {
+    flex: 1 1 320px;
+    min-width: 280px;
+  }
+  .progress-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+  }
+  .progress-actions form {
+    display: inline;
+  }
+  .progress-actions button {
+    min-width: 8rem;
+  }
+  .progress-steps {
+    margin: 0 0 1.5rem;
+    padding-left: 1.5rem;
+  }
+  .progress-steps li {
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .progress-steps li .progress-icon {
+    font-size: 1.1em;
+  }
+  .progress-steps li.status-active .progress-name,
+  .progress-steps li.status-paused .progress-name,
+  .progress-steps li.status-complete .progress-name {
+    font-weight: 600;
+  }
+  .progress-steps li.status-error .progress-name {
+    color: var(--error-fg, #ba2121);
+  }
+  .progress-steps li.status-blocked .progress-name {
+    color: var(--warning-fg, #c09853);
+  }
+  .log-column {
+    background: var(--darkened-bg, rgba(0, 0, 0, 0.05));
+    padding: 1rem;
+    border-radius: 6px;
+  }
+  .log-column h2 {
+    margin-top: 0;
+  }
+  .log-status-list {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+  }
+  .log-status-list li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--hairline-color);
+  }
+  .log-status-list li:last-child {
+    border-bottom: none;
+  }
+  .log-step-header {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+  }
+  .log-step-icon {
+    font-size: 1.1em;
+  }
+  .log-step-title {
+    flex: 1;
+    font-weight: 600;
+  }
+  .log-step-status {
+    color: var(--body-quiet-color);
+    font-size: 0.85rem;
+  }
+  .log-status-list .status-error .log-step-title {
+    color: var(--error-fg, #ba2121);
+  }
+  .log-status-list .status-blocked .log-step-title {
+    color: var(--warning-fg, #c09853);
+  }
+  .log-text {
+    background: var(--body-bg);
+    padding: 0.75rem;
+    border: 1px solid var(--hairline-color);
+    border-radius: 4px;
+    white-space: pre-wrap;
+    max-height: 400px;
+    overflow: auto;
+  }
+  .log-empty {
+    color: var(--body-quiet-color);
+    font-style: italic;
+  }
+  .status-message {
+    margin: 1rem 0;
+  }
+  .status-message.paused {
+    color: var(--link-fg);
+    font-weight: 600;
+  }
+  .todo-item {
+    position: relative;
+  }
   .todo-item .todo-details {
     display: none;
     position: absolute;
@@ -16,7 +128,9 @@
     z-index: 1000;
     width: 200px;
   }
-  .todo-item:hover .todo-details { display: block; }
+  .todo-item:hover .todo-details {
+    display: block;
+  }
 </style>
 {% endblock %}
 
@@ -34,104 +148,146 @@
 
 {% block content %}
 <h1>{{ action|capfirst }} {{ release.package.name }} {{ release.version }}</h1>
-<div>
-  {% if not started %}
-  <form method="get" style="display:inline;">
-    <input type="hidden" name="step" value="0">
-    <button type="submit" name="start" value="1">▶️ {% trans 'Start Publish' %}</button>
-  </form>
-  {% endif %}
-  <form method="get" style="display:inline;">
-    <button type="submit" name="abort" value="1" {% if not started %}disabled{% endif %}>⏹️ {% trans 'Stop Publish' %}</button>
-  </form>
-  {% if started %}
-  <form method="get" style="display:inline;">
-    <button type="submit" name="restart" value="1">🔄 {% trans 'Restart Publish' %}</button>
-  </form>
-  {% endif %}
-</div>
-<ol>
-{% for step in steps %}
-  <li>{% if forloop.counter0 < current_step %}✅{% elif forloop.counter0 == current_step and not done and not error %}⏳{% else %}⬜{% endif %} {{ step }}</li>
-{% endfor %}
-</ol>
-{% if fixtures %}
-<h2>{% trans 'Fixture changes' %}</h2>
-<table>
-  <thead>
-    <tr>
-      <th>{% trans 'Fixture' %}</th>
-      <th>{% trans 'Entries' %}</th>
-      <th>{% trans 'Models' %}</th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for fx in fixtures %}
-    <tr>
-      <td>{{ fx.path }}</td>
-      <td>{{ fx.count }}</td>
-      <td>{{ fx.models|join:', ' }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% endif %}
-<pre>{{ log_content }}</pre>
-{% if todos %}
-<h2>{% trans 'Pending TODOs' %}</h2>
-<form method="get">
-  <input type="hidden" name="step" value="{{ current_step }}">
-  <ul>
-  {% for todo in todos %}
-  <li class="todo-item">
-    <label>
-      <input type="checkbox" class="todo-check">
-      {% if todo.url %}
-      <a href="{{ todo.url }}" target="_blank" rel="noopener" class="todo-link">{{ todo.request }}</a>
-      {% else %}
-      {{ todo.request }}
+<div class="release-progress-layout">
+  <div class="progress-column">
+    <div class="progress-actions">
+      <form method="get">
+        <input type="hidden" name="step" value="{{ current_step }}">
+        <button type="submit" name="start" value="1" {% if is_running or done or error %}disabled{% endif %}>
+          {% if can_resume %}
+          ▶️ {% trans 'Continue Publish' %}
+          {% else %}
+          ▶️ {% trans 'Start Publish' %}
+          {% endif %}
+        </button>
+      </form>
+      <form method="get">
+        <button type="submit" name="pause" value="1" {% if not is_running %}disabled{% endif %}>⏸️ {% trans 'Pause Publish' %}</button>
+      </form>
+      {% if started %}
+      <form method="get">
+        <button type="submit" name="restart" value="1">🔄 {% trans 'Restart Publish' %}</button>
+      </form>
       {% endif %}
-    </label>
-    {% if todo.request_details %}
-    <div class="todo-details">{{ todo.request_details }}</div>
+    </div>
+    <ol class="progress-steps">
+    {% for step in step_states %}
+      <li class="status-{{ step.status }}">
+        <span class="progress-icon">{{ step.icon }}</span>
+        <span class="progress-name">{{ step.name }}</span>
+      </li>
+    {% endfor %}
+    </ol>
+    {% if paused and started and not done and not error %}
+    <p class="status-message paused">{% trans 'Publishing paused. Press Continue to resume.' %}</p>
     {% endif %}
-  </li>
-  {% endfor %}
-  </ul>
-  <button type="submit" name="ack_todos" value="1" id="continue-btn" disabled>{% trans 'Continue' %}</button>
-</form>
-<script>
-  const btn = document.getElementById('continue-btn');
-  const checks = document.querySelectorAll('.todo-check');
-  function updateBtn(){ btn.disabled = !Array.from(checks).every(c=>c.checked); }
-  checks.forEach(c=>c.addEventListener('change', updateBtn));
-  updateBtn();
-</script>
-{% endif %}
-{% if error %}
-<p class="error">{{ error }}</p>
-{% elif not done %}
-{% if started and next_step is not None %}
-<meta http-equiv="refresh" content="1; url={{ request.path }}?step={{ next_step }}">
-{% endif %}
-{% if started %}
-<p>Running...</p>
-{% else %}
-<p>{% trans 'Waiting to start' %}</p>
-{% endif %}
-{% else %}
-<p>All steps completed.</p>
-{% if release.pypi_url %}
-<p><a href="{{ release.pypi_url }}" target="_blank" rel="noopener">{{ release.pypi_url }}</a></p>
-{% endif %}
-<div>
-  <input type="text" id="logpath" value="{{ log_path }}" readonly>
-  <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('logpath').value)">Copy log path</button>
+    {% if fixtures %}
+    <h2>{% trans 'Fixture changes' %}</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>{% trans 'Fixture' %}</th>
+          <th>{% trans 'Entries' %}</th>
+          <th>{% trans 'Models' %}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for fx in fixtures %}
+        <tr>
+          <td>{{ fx.path }}</td>
+          <td>{{ fx.count }}</td>
+          <td>{{ fx.models|join:', ' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if todos %}
+    <h2>{% trans 'Pending TODOs' %}</h2>
+    <form method="get">
+      <input type="hidden" name="step" value="{{ current_step }}">
+      <ul>
+      {% for todo in todos %}
+      <li class="todo-item">
+        <label>
+          <input type="checkbox" class="todo-check">
+          {% if todo.url %}
+          <a href="{{ todo.url }}" target="_blank" rel="noopener" class="todo-link">{{ todo.request }}</a>
+          {% else %}
+          {{ todo.request }}
+          {% endif %}
+        </label>
+        {% if todo.request_details %}
+        <div class="todo-details">{{ todo.request_details }}</div>
+        {% endif %}
+      </li>
+      {% endfor %}
+      </ul>
+      <button type="submit" name="ack_todos" value="1" id="continue-btn" disabled>{% trans 'Continue' %}</button>
+    </form>
+    <script>
+      const btn = document.getElementById('continue-btn');
+      const checks = document.querySelectorAll('.todo-check');
+      function updateBtn(){ btn.disabled = !Array.from(checks).every(c=>c.checked); }
+      checks.forEach(c=>c.addEventListener('change', updateBtn));
+      updateBtn();
+    </script>
+    {% endif %}
+    {% if error %}
+    <p class="error">{{ error }}</p>
+    {% elif not done %}
+    {% if started and next_step is not None %}
+    <meta http-equiv="refresh" content="1; url={{ request.path }}?step={{ next_step }}">
+    {% endif %}
+    {% if started %}
+      {% if has_pending_todos %}
+      <p class="status-message">{% trans 'Waiting for checklist acknowledgment' %}</p>
+      {% elif paused %}
+      {# Paused message shown above #}
+      {% else %}
+      <p class="status-message">{% trans 'Running…' %}</p>
+      {% endif %}
+    {% else %}
+    <p class="status-message">{% trans 'Waiting to start' %}</p>
+    {% endif %}
+    {% else %}
+    <p>{% trans 'All steps completed.' %}</p>
+    {% if release.pypi_url %}
+    <p><a href="{{ release.pypi_url }}" target="_blank" rel="noopener">{{ release.pypi_url }}</a></p>
+    {% endif %}
+    <div>
+      <input type="text" id="logpath" value="{{ log_path }}" readonly>
+      <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('logpath').value)">{% trans 'Copy log path' %}</button>
+    </div>
+    {% if cert_log %}
+    <p>{% blocktrans %}Certification logged in {{ cert_log }}{% endblocktrans %}</p>
+    {% endif %}
+    {% endif %}
+    <p>{% trans 'Restarts' %}: {{ restart_count }}</p>
+  </div>
+  <div class="log-column">
+    <h2>{% trans 'Logs' %}</h2>
+    <ol class="log-status-list">
+    {% for step in step_states %}
+      <li class="status-{{ step.status }}">
+        <div class="log-step-header">
+          <span class="log-step-icon">{{ step.icon }}</span>
+          <span class="log-step-title">{% blocktrans with number=step.index name=step.name %}Step {{ number }}: {{ name }}{% endblocktrans %}</span>
+          <span class="log-step-status">{{ step.label }}</span>
+        </div>
+      </li>
+    {% endfor %}
+    </ol>
+    {% if show_log %}
+      {% if log_content %}
+      <pre class="log-text">{{ log_content }}</pre>
+      {% else %}
+      <p class="log-empty">{% trans 'Logs will appear here as steps progress.' %}</p>
+      {% endif %}
+    {% else %}
+    <p class="log-empty">{% trans 'Logs will appear here after publishing starts.' %}</p>
+    {% endif %}
+  </div>
 </div>
-{% if cert_log %}
-<p>Certification logged in {{ cert_log }}</p>
-{% endif %}
-{% endif %}
-<p>{% trans 'Restarts' %}: {{ restart_count }}</p>
 {% endblock %}
 
