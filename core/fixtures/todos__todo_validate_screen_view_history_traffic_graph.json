@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen View history traffic graph",
+      "url": "/admin/pages/viewhistory/traffic-graph/",
+      "request_details": "Review the full analytics graph for accuracy and styling."
+    }
+  }
+]

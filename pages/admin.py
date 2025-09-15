@@ -7,6 +7,12 @@ from core.widgets import CopyColorWidget
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import path, reverse
 from django.utils.html import format_html
+from django.template.response import TemplateResponse
+from django.http import JsonResponse
+from django.utils import timezone
+from django.db.models import Count
+from django.db.models.functions import TruncDate
+from datetime import timedelta
 import ipaddress
 from django.apps import apps as django_apps
 from django.conf import settings
@@ -14,7 +20,15 @@ from django.conf import settings
 from nodes.models import Node
 from nodes.utils import capture_screenshot, save_screenshot
 
-from .models import SiteBadge, Application, SiteProxy, Module, Landing, Favorite
+from .models import (
+    SiteBadge,
+    Application,
+    SiteProxy,
+    Module,
+    Landing,
+    Favorite,
+    ViewHistory,
+)
 from django.contrib.contenttypes.models import ContentType
 from core.user_data import EntityModelAdmin
 
@@ -164,6 +178,144 @@ class ModuleAdmin(EntityModelAdmin):
     list_filter = ("node_role", "application")
     fields = ("node_role", "application", "path", "menu", "is_default", "favicon")
     inlines = [LandingInline]
+
+
+@admin.register(ViewHistory)
+class ViewHistoryAdmin(EntityModelAdmin):
+    date_hierarchy = "visited_at"
+    list_display = (
+        "path",
+        "status_code",
+        "status_text",
+        "method",
+        "visited_at",
+    )
+    list_filter = ("method", "status_code")
+    search_fields = ("path", "error_message", "view_name", "status_text")
+    readonly_fields = (
+        "path",
+        "method",
+        "status_code",
+        "status_text",
+        "error_message",
+        "view_name",
+        "visited_at",
+    )
+    ordering = ("-visited_at",)
+    change_list_template = "admin/pages/viewhistory/change_list.html"
+    actions = ["view_traffic_graph"]
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description="View traffic graph")
+    def view_traffic_graph(self, request, queryset):
+        return redirect("admin:pages_viewhistory_traffic_graph")
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "traffic-graph/",
+                self.admin_site.admin_view(self.traffic_graph_view),
+                name="pages_viewhistory_traffic_graph",
+            ),
+            path(
+                "traffic-data/",
+                self.admin_site.admin_view(self.traffic_data_view),
+                name="pages_viewhistory_traffic_data",
+            ),
+        ]
+        return custom + urls
+
+    def traffic_graph_view(self, request):
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": "Public site traffic",
+            "chart_endpoint": reverse("admin:pages_viewhistory_traffic_data"),
+        }
+        return TemplateResponse(
+            request,
+            "admin/pages/viewhistory/traffic_graph.html",
+            context,
+        )
+
+    def traffic_data_view(self, request):
+        return JsonResponse(self._build_chart_data())
+
+    def _build_chart_data(self, days: int = 30, max_pages: int = 8) -> dict:
+        end_date = timezone.localdate()
+        start_date = end_date - timedelta(days=days - 1)
+        queryset = ViewHistory.objects.filter(
+            visited_at__date__range=(start_date, end_date)
+        )
+
+        meta = {
+            "start": start_date.isoformat(),
+            "end": end_date.isoformat(),
+        }
+
+        if not queryset.exists():
+            meta["pages"] = []
+            return {"labels": [], "datasets": [], "meta": meta}
+
+        top_paths = list(
+            queryset.values("path")
+            .annotate(total=Count("id"))
+            .order_by("-total")[:max_pages]
+        )
+        paths = [entry["path"] for entry in top_paths]
+        meta["pages"] = paths
+
+        labels = [
+            (start_date + timedelta(days=offset)).isoformat() for offset in range(days)
+        ]
+
+        aggregates = (
+            queryset.filter(path__in=paths)
+            .annotate(day=TruncDate("visited_at"))
+            .values("day", "path")
+            .order_by("day")
+            .annotate(total=Count("id"))
+        )
+
+        counts: dict[str, dict[str, int]] = {
+            path: {label: 0 for label in labels} for path in paths
+        }
+        for row in aggregates:
+            day = row["day"].isoformat()
+            path = row["path"]
+            if day in counts.get(path, {}):
+                counts[path][day] = row["total"]
+
+        palette = [
+            "#1f77b4",
+            "#ff7f0e",
+            "#2ca02c",
+            "#d62728",
+            "#9467bd",
+            "#8c564b",
+            "#e377c2",
+            "#7f7f7f",
+            "#bcbd22",
+            "#17becf",
+        ]
+        datasets = []
+        for index, path in enumerate(paths):
+            color = palette[index % len(palette)]
+            datasets.append(
+                {
+                    "label": path,
+                    "data": [counts[path][label] for label in labels],
+                    "borderColor": color,
+                    "backgroundColor": color,
+                    "fill": False,
+                    "tension": 0.3,
+                }
+            )
+
+        return {"labels": labels, "datasets": datasets, "meta": meta}
 
 
 def favorite_toggle(request, ct_id):

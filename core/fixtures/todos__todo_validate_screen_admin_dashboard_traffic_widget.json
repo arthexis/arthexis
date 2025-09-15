@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Admin dashboard traffic widget",
+      "url": "/admin/",
+      "request_details": "Confirm the mini traffic chart renders with data and fallback messaging."
+    }
+  }
+]

@@ -41,8 +41,28 @@ def _seed_fixture_path(instance) -> Path | None:
         if not isinstance(data, list) or not data:
             continue
         obj = data[0]
-        if obj.get("model") == label and obj.get("pk") == instance.pk:
+        if obj.get("model") != label:
+            continue
+        pk = obj.get("pk")
+        if pk is not None and pk == instance.pk:
             return path
+        fields = obj.get("fields", {}) or {}
+        comparable_fields = {
+            key: value
+            for key, value in fields.items()
+            if key not in {"is_seed_data", "is_deleted", "is_user_data"}
+        }
+        if comparable_fields:
+            match = True
+            for field_name, value in comparable_fields.items():
+                if not hasattr(instance, field_name):
+                    match = False
+                    break
+                if getattr(instance, field_name) != value:
+                    match = False
+                    break
+            if match:
+                return path
     return None
 
 

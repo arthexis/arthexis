@@ -95,6 +95,27 @@
     .dashboard-side .actionlist li:hover .todo-details {
         display: block;
     }
+    #viewhistory-mini-module {
+        margin-top: 16px;
+    }
+    #viewhistory-mini-module .chart-wrapper {
+        position: relative;
+        padding: 0 16px 16px;
+    }
+    #viewhistory-mini-module canvas {
+        display: block;
+        width: 100%;
+        height: 180px;
+    }
+    #viewhistory-mini-empty {
+        padding: 0 16px;
+        margin: 0;
+        color: var(--body-quiet-color);
+    }
+    #viewhistory-mini-module .chart-link {
+        padding: 0 16px 16px;
+        margin: 0;
+    }
   </style>
 {% endblock %}
 
@@ -155,6 +176,14 @@
             <p>{% translate 'None available' %}</p>
         {% endif %}
     </div>
+    <div class="module" id="viewhistory-mini-module">
+        <h2>{% translate 'Public site traffic' %}</h2>
+        <div class="chart-wrapper">
+            <canvas id="viewhistory-mini-chart" role="img" aria-label="{% translate 'Mini chart of public visits' %}" height="160"></canvas>
+            <p id="viewhistory-mini-empty" class="quiet" hidden>{% translate 'No visit data yet.' %}</p>
+        </div>
+        <p class="chart-link"><a id="viewhistory-mini-link" href="{% url 'admin:pages_viewhistory_traffic_graph' %}">{% translate 'Open full report' %}</a></p>
+    </div>
     <div class="module" id="recent-actions-module">
         <h2>{% translate 'Recent actions' %}</h2>
         <h3>{% translate 'My actions' %}</h3>
@@ -213,6 +242,93 @@
       }
       fetchMessage();
       setInterval(fetchMessage, 6000);
+    });
+  </script>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const canvas = document.getElementById('viewhistory-mini-chart');
+      const emptyLabel = document.getElementById('viewhistory-mini-empty');
+      if (!canvas) return;
+
+      const ensureChartJs = () => {
+        if (window.Chart) {
+          return Promise.resolve(window.Chart);
+        }
+        return new Promise((resolve) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+          script.async = true;
+          script.onload = () => resolve(window.Chart);
+          script.onerror = () => resolve(null);
+          document.head.appendChild(script);
+        });
+      };
+
+      const fetchData = () =>
+        fetch('{% url "admin:pages_viewhistory_traffic_data" %}', {
+          headers: { Accept: 'application/json' },
+        }).then((response) => (response.ok ? response.json() : Promise.reject()));
+
+      ensureChartJs()
+        .then((Chart) => {
+          if (!Chart) {
+            throw new Error('chartjs');
+          }
+          return fetchData().then((data) => ({ Chart, data }));
+        })
+        .then(({ Chart, data }) => {
+          if (!data || !Array.isArray(data.datasets) || !data.datasets.length) {
+            canvas.hidden = true;
+            if (emptyLabel) {
+              emptyLabel.hidden = false;
+              emptyLabel.textContent = '{% translate "No visit data yet." %}';
+            }
+            return;
+          }
+
+          if (emptyLabel) {
+            emptyLabel.hidden = true;
+          }
+          canvas.hidden = false;
+          const context = canvas.getContext('2d');
+          new Chart(context, {
+            type: 'line',
+            data: {
+              labels: data.labels,
+              datasets: data.datasets.map((dataset) => ({
+                ...dataset,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                borderWidth: 2,
+              })),
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false },
+                tooltip: {
+                  mode: 'nearest',
+                  intersect: false,
+                },
+              },
+              elements: {
+                line: { tension: 0.3 },
+              },
+              scales: {
+                x: { display: false },
+                y: { display: false, beginAtZero: true },
+              },
+            },
+          });
+        })
+        .catch(() => {
+          canvas.hidden = true;
+          if (emptyLabel) {
+            emptyLabel.hidden = false;
+            emptyLabel.textContent = '{% translate "Unable to load visit data at this time." %}';
+          }
+        });
     });
   </script>
 {% endblock %}

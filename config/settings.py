@@ -177,6 +177,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "core.middleware.AdminHistoryMiddleware",
     "core.middleware.SigilContextMiddleware",
+    "pages.middleware.ViewHistoryMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
