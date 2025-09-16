@@ -1,4 +1,5 @@
 import os
+from unittest import mock
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
 from django.test import TestCase
@@ -14,6 +15,7 @@ from core.models import (
 from nodes.models import NodeRole
 from core.sigil_builder import _resolve_sigil, resolve_sigils_in_text
 from core.sigil_context import set_context, clear_context
+from core import sigil_resolver
 
 
 class SigilResolutionTests(TestCase):
@@ -302,9 +304,57 @@ class SigilResolutionTests(TestCase):
         finally:
             del os.environ["SIGIL_TEST_VAR"]
 
+    def test_env_sigil_case_insensitive(self):
+        os.environ["sigil_test_var"] = "env-lower"
+        try:
+            self.assertEqual(
+                resolve_sigils_in_text("[env.sigil_test_var]"),
+                "env-lower",
+            )
+            self.assertEqual(
+                resolve_sigils_in_text("[ENV.sigil_test_var]"),
+                "env-lower",
+            )
+            self.assertEqual(
+                resolve_sigils_in_text("[Env.SIGIL_TEST_VAR]"),
+                "env-lower",
+            )
+        finally:
+            del os.environ["sigil_test_var"]
+
     def test_sys_sigil(self):
         with self.settings(SIGIL_TEST_SETTING="sys-val"):
             self.assertEqual(
                 resolve_sigils_in_text("[SYS.SIGIL_TEST_SETTING]"),
                 "sys-val",
             )
+
+    def test_sys_sigil_case_insensitive(self):
+        with self.settings(sigil_case_setting="sys-lower"):
+            self.assertEqual(
+                resolve_sigils_in_text("[SYS.sigil_case_setting]"),
+                "sys-lower",
+            )
+
+    def test_gway_fallback_invoked_for_unknown_sigil(self):
+        sigil_resolver._find_gway_command.cache_clear()
+        self.addCleanup(sigil_resolver._find_gway_command.cache_clear)
+        with mock.patch(
+            "core.sigil_resolver._find_gway_command",
+            return_value="/usr/local/bin/gway",
+        ) as mock_find, mock.patch("core.sigil_resolver.subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(
+                returncode=0,
+                stdout="gway-output\n",
+                stderr="",
+            )
+            result = resolve_sigils_in_text("[unknown.sigil]")
+        self.assertEqual(result, "gway-output")
+        mock_find.assert_called_once()
+        mock_run.assert_called_once()
+        args, kwargs = mock_run.call_args
+        self.assertEqual(args[0], ["/usr/local/bin/gway", "-e", "[unknown.sigil]"])
+        self.assertFalse(kwargs.get("check"))
+        self.assertEqual(kwargs.get("stdout"), sigil_resolver.subprocess.PIPE)
+        self.assertEqual(kwargs.get("stderr"), sigil_resolver.subprocess.PIPE)
+        self.assertTrue(kwargs.get("text"))

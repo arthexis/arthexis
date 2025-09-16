@@ -1,5 +1,8 @@
 import logging
 import os
+import shutil
+import subprocess
+from functools import lru_cache
 from io import StringIO
 from typing import Optional
 
@@ -24,7 +27,53 @@ def _first_instance(model: type[models.Model]) -> Optional[models.Model]:
     return qs.first()
 
 
+@lru_cache(maxsize=1)
+def _find_gway_command() -> Optional[str]:
+    path = shutil.which("gway")
+    if path:
+        return path
+    for candidate in ("~/.local/bin/gway", "/usr/local/bin/gway"):
+        expanded = os.path.expanduser(candidate)
+        if os.path.isfile(expanded) and os.access(expanded, os.X_OK):
+            return expanded
+    return None
+
+
+def _resolve_with_gway(sigil: str) -> Optional[str]:
+    command = _find_gway_command()
+    if not command:
+        return None
+    try:
+        result = subprocess.run(
+            [command, "-e", sigil],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except Exception:
+        logger.exception("Failed executing gway for sigil %s", sigil)
+        return None
+    if result.returncode != 0:
+        logger.warning(
+            "gway exited with status %s while resolving sigil %s",
+            result.returncode,
+            sigil,
+        )
+        return None
+    return result.stdout.strip()
+
+
+def _failed_resolution(token: str) -> str:
+    sigil = f"[{token}]"
+    resolved = _resolve_with_gway(sigil)
+    if resolved is not None:
+        return resolved
+    return sigil
+
+
 def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
+    original_token = token
     i = 0
     n = len(token)
     root_name = ""
@@ -32,7 +81,7 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
         root_name += token[i]
         i += 1
     if not root_name:
-        return f"[{token}]"
+        return _failed_resolution(original_token)
     filter_field = None
     if i < n and token[i] == ":":
         i += 1
@@ -41,7 +90,7 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
             field += token[i]
             i += 1
         if i == n:
-            return f"[{token}]"
+            return _failed_resolution(original_token)
         filter_field = field.replace("-", "_")
     instance_id = None
     if i < n and token[i] == "=":
@@ -68,35 +117,67 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
     param = None
     if i < n and token[i] == "=":
         param = token[i + 1 :]
-    root_name = root_name.replace("-", "_").upper()
+    normalized_root = root_name.replace("-", "_")
+    lookup_root = normalized_root.upper()
+    raw_key = key
+    normalized_key = None
+    key_upper = None
+    key_lower = None
     if key:
-        key = key.replace("-", "_").upper()
+        normalized_key = key.replace("-", "_")
+        key_upper = normalized_key.upper()
+        key_lower = normalized_key.lower()
     if param:
         param = resolve_sigils(param, current)
     if instance_id:
         instance_id = resolve_sigils(instance_id, current)
     SigilRoot = apps.get_model("core", "SigilRoot")
     try:
-        root = SigilRoot.objects.get(prefix__iexact=root_name)
+        root = SigilRoot.objects.get(prefix__iexact=lookup_root)
         if root.context_type == SigilRoot.Context.CONFIG:
-            if not key:
+            if not normalized_key:
                 return ""
             if root.prefix.upper() == "ENV":
-                val = os.environ.get(key.upper())
-                if val is None:
-                    logger.warning(
-                        "Missing environment variable for sigil [ENV.%s]", key.upper()
-                    )
-                    return f"[{token}]"
-                return val
+                candidates = []
+                if raw_key:
+                    candidates.append(raw_key.replace("-", "_"))
+                if normalized_key:
+                    candidates.append(normalized_key)
+                if key_upper:
+                    candidates.append(key_upper)
+                if key_lower:
+                    candidates.append(key_lower)
+                seen_candidates: set[str] = set()
+                for candidate in candidates:
+                    if not candidate or candidate in seen_candidates:
+                        continue
+                    seen_candidates.add(candidate)
+                    val = os.environ.get(candidate)
+                    if val is not None:
+                        return val
+                logger.warning(
+                    "Missing environment variable for sigil [ENV.%s]",
+                    key_upper or normalized_key or raw_key or "",
+                )
+                return _failed_resolution(original_token)
             if root.prefix.upper() == "SYS":
-                return str(getattr(settings, key.upper(), ""))
+                for candidate in [normalized_key, key_upper, key_lower]:
+                    if not candidate:
+                        continue
+                    sentinel = object()
+                    value = getattr(settings, candidate, sentinel)
+                    if value is not sentinel:
+                        return str(value)
+                fallback = _resolve_with_gway(f"[{original_token}]")
+                if fallback is not None:
+                    return fallback
+                return ""
             if root.prefix.upper() == "CMD":
                 out = StringIO()
                 args: list[str] = []
                 if param:
                     args.append(param)
-                call_command(key.lower(), *args, stdout=out)
+                call_command((normalized_key or "").lower(), *args, stdout=out)
                 return out.getvalue().strip()
         elif root.context_type == SigilRoot.Context.ENTITY:
             model = root.content_type.model_class() if root.content_type else None
@@ -138,26 +219,30 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                     if instance is None:
                         instance = _first_instance(model)
             if instance:
-                if key:
+                if normalized_key:
                     field = next(
                         (
                             f
                             for f in model._meta.fields
-                            if f.name.lower() == key.lower()
+                            if f.name.lower() == (key_lower or "")
                         ),
                         None,
                     )
                     if field:
                         val = getattr(instance, field.attname)
                         return "" if val is None else str(val)
-                    return f"[{token}]"
+                    return _failed_resolution(original_token)
                 return serializers.serialize("json", [instance])
-        return f"[{token}]"
+        return _failed_resolution(original_token)
     except SigilRoot.DoesNotExist:
-        logger.warning("Unknown sigil root [%s]", root_name)
+        logger.warning("Unknown sigil root [%s]", lookup_root)
     except Exception:
-        logger.exception("Error resolving sigil [%s.%s]", root_name, key)
-    return f"[{token}]"
+        logger.exception(
+            "Error resolving sigil [%s.%s]",
+            lookup_root,
+            key_upper or normalized_key or raw_key,
+        )
+    return _failed_resolution(original_token)
 
 
 def resolve_sigils(text: str, current: Optional[models.Model] = None) -> str:
