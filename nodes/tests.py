@@ -33,6 +33,7 @@ from .models import (
     ContentSample,
     NodeRole,
     NodeFeature,
+    NodeFeatureAssignment,
     NetMessage,
 )
 from .backends import OutboxEmailBackend
@@ -118,7 +119,8 @@ class NodeTests(TestCase):
         hostnames = {n["hostname"] for n in data["nodes"]}
         self.assertEqual(hostnames, {"dup", "local2"})
 
-    def test_register_node_has_lcd_screen_toggle(self):
+    def test_register_node_feature_toggle(self):
+        NodeFeature.objects.get_or_create(slug="clipboard-poll", defaults={"display": "Clipboard Poll"})
         url = reverse("register-node")
         first = self.client.post(
             url,
@@ -127,13 +129,13 @@ class NodeTests(TestCase):
                 "address": "127.0.0.1",
                 "port": 8000,
                 "mac_address": "00:aa:bb:cc:dd:ee",
-                "has_lcd_screen": True,
+                "features": ["clipboard-poll"],
             },
             content_type="application/json",
         )
         self.assertEqual(first.status_code, 200)
         node = Node.objects.get(mac_address="00:aa:bb:cc:dd:ee")
-        self.assertTrue(node.has_lcd_screen)
+        self.assertTrue(node.has_feature("clipboard-poll"))
 
         self.client.post(
             url,
@@ -142,12 +144,12 @@ class NodeTests(TestCase):
                 "address": "127.0.0.1",
                 "port": 8000,
                 "mac_address": "00:aa:bb:cc:dd:ee",
-                "has_lcd_screen": False,
+                "features": [],
             },
             content_type="application/json",
         )
         node.refresh_from_db()
-        self.assertFalse(node.has_lcd_screen)
+        self.assertFalse(node.has_feature("clipboard-poll"))
 
 
 class NodeRegisterCurrentTests(TestCase):
@@ -158,12 +160,16 @@ class NodeRegisterCurrentTests(TestCase):
         self.client.force_login(self.user)
         NodeRole.objects.get_or_create(name="Terminal")
 
-    def test_register_current_sets_and_retains_lcd(self):
+    def test_register_current_refreshes_lcd_feature(self):
+        NodeFeature.objects.get_or_create(
+            slug="lcd-screen", defaults={"display": "LCD Screen"}
+        )
         with TemporaryDirectory() as tmp:
             base = Path(tmp)
             locks = base / "locks"
             locks.mkdir()
-            (locks / "lcd_screen.lck").touch()
+            lock = locks / "lcd_screen.lck"
+            lock.touch()
             with override_settings(BASE_DIR=base):
                 with (
                     patch(
@@ -179,11 +185,9 @@ class NodeRegisterCurrentTests(TestCase):
                 ):
                     node, created = Node.register_current()
             self.assertTrue(created)
-            self.assertTrue(node.has_lcd_screen)
+            self.assertTrue(node.has_feature("lcd-screen"))
 
-            node.has_lcd_screen = False
-            node.save(update_fields=["has_lcd_screen"])
-
+            lock.unlink()
             with override_settings(BASE_DIR=base):
                 with (
                     patch(
@@ -197,10 +201,29 @@ class NodeRegisterCurrentTests(TestCase):
                     patch("nodes.models.revision.get_revision", return_value="rev"),
                     patch.object(Node, "ensure_keys"),
                 ):
-                    node2, created2 = Node.register_current()
+                    _, created2 = Node.register_current()
             self.assertFalse(created2)
             node.refresh_from_db()
-            self.assertFalse(node.has_lcd_screen)
+            self.assertFalse(node.has_feature("lcd-screen"))
+
+            lock.touch()
+            with override_settings(BASE_DIR=base):
+                with (
+                    patch(
+                        "nodes.models.Node.get_current_mac",
+                        return_value="00:ff:ee:dd:cc:bb",
+                    ),
+                    patch("nodes.models.socket.gethostname", return_value="testhost"),
+                    patch(
+                        "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
+                    ),
+                    patch("nodes.models.revision.get_revision", return_value="rev"),
+                    patch.object(Node, "ensure_keys"),
+                ):
+                    node, created3 = Node.register_current()
+            self.assertFalse(created3)
+            node.refresh_from_db()
+            self.assertTrue(node.has_feature("lcd-screen"))
 
     @patch("nodes.views.capture_screenshot")
     def test_capture_screenshot(self, mock_capture):
@@ -352,6 +375,9 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertTrue(NetMessage.objects.filter(uuid=msg_id).exists())
 
     def test_clipboard_polling_creates_task(self):
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="clipboard-poll", defaults={"display": "Clipboard Poll"}
+        )
         node = Node.objects.create(
             hostname="clip",
             address="127.0.0.1",
@@ -359,15 +385,16 @@ class NodeRegisterCurrentTests(TestCase):
             mac_address="00:11:22:33:44:99",
         )
         task_name = f"poll_clipboard_node_{node.pk}"
-        self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
-        node.clipboard_polling = True
-        node.save()
+        PeriodicTask.objects.filter(name=task_name).delete()
+        NodeFeatureAssignment.objects.create(node=node, feature=feature)
         self.assertTrue(PeriodicTask.objects.filter(name=task_name).exists())
-        node.clipboard_polling = False
-        node.save()
+        NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
 
     def test_screenshot_polling_creates_task(self):
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="screenshot-poll", defaults={"display": "Screenshot Poll"}
+        )
         node = Node.objects.create(
             hostname="shot",
             address="127.0.0.1",
@@ -375,12 +402,10 @@ class NodeRegisterCurrentTests(TestCase):
             mac_address="00:11:22:33:44:aa",
         )
         task_name = f"capture_screenshot_node_{node.pk}"
-        self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
-        node.screenshot_polling = True
-        node.save()
+        PeriodicTask.objects.filter(name=task_name).delete()
+        NodeFeatureAssignment.objects.create(node=node, feature=feature)
         self.assertTrue(PeriodicTask.objects.filter(name=task_name).exists())
-        node.screenshot_polling = False
-        node.save()
+        NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
 
 
@@ -1114,14 +1139,12 @@ class NodeFeatureTests(TestCase):
     def test_lcd_screen_enabled(self):
         feature = NodeFeature.objects.create(slug="lcd-screen", display="LCD")
         feature.roles.add(self.role)
-        self.node.has_lcd_screen = True
-        self.node.save(update_fields=["has_lcd_screen"])
+        NodeFeatureAssignment.objects.create(node=self.node, feature=feature)
         with patch(
             "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
         ):
             self.assertTrue(feature.is_enabled)
-        self.node.has_lcd_screen = False
-        self.node.save(update_fields=["has_lcd_screen"])
+        NodeFeatureAssignment.objects.filter(node=self.node, feature=feature).delete()
         with patch(
             "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
         ):

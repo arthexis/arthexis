@@ -1,0 +1,12 @@
+[
+  {
+    "model": "nodes.nodefeature",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "screenshot-poll",
+      "display": "Screenshot Poll",
+      "roles": []
+    }
+  }
+]

@@ -1,4 +1,7 @@
+from collections.abc import Iterable
 from django.db import models
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 from core.entity import Entity
 from core.fields import SigilShortAutoField
 import re
@@ -81,21 +84,25 @@ class NodeFeature(Entity):
         from pathlib import Path
 
         node = Node.get_local()
-        if self.slug == "lcd-screen":
-            return bool(node and node.has_lcd_screen)
+        if not node:
+            return False
+        if node.features.filter(pk=self.pk).exists():
+            return True
         if self.slug == "gui-toast":
             from core.notifications import supports_gui_toast
 
             return supports_gui_toast()
         lock_map = {
+            "lcd-screen": "lcd_screen.lck",
             "rfid-scanner": "rfid.lck",
             "celery-queue": "celery.lck",
             "nginx-server": "nginx_mode.lck",
         }
         lock = lock_map.get(self.slug)
         if lock:
-            return (Path(settings.BASE_DIR) / "locks" / lock).exists()
-        if node and node.role:
+            base_path = Path(node.base_path or settings.BASE_DIR)
+            return (base_path / "locks" / lock).exists()
+        if node.role:
             return self.roles.filter(pk=node.role.pk).exists()
         return False
 
@@ -120,8 +127,6 @@ class Node(Entity):
         verbose_name="enable public API",
     )
     public_endpoint = models.SlugField(blank=True, unique=True)
-    clipboard_polling = models.BooleanField(default=False)
-    screenshot_polling = models.BooleanField(default=False)
     uuid = models.UUIDField(
         default=uuid.uuid4,
         unique=True,
@@ -132,7 +137,21 @@ class Node(Entity):
     base_path = models.CharField(max_length=255, blank=True)
     installed_version = models.CharField(max_length=20, blank=True)
     installed_revision = models.CharField(max_length=40, blank=True)
-    has_lcd_screen = models.BooleanField(default=False)
+    features = models.ManyToManyField(
+        NodeFeature,
+        through="NodeFeatureAssignment",
+        related_name="nodes",
+        blank=True,
+    )
+
+    FEATURE_LOCK_MAP = {
+        "lcd-screen": "lcd_screen.lck",
+        "rfid-scanner": "rfid.lck",
+        "celery-queue": "celery.lck",
+        "nginx-server": "nginx_mode.lck",
+    }
+    AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {"gui-toast"}
+    MANUAL_FEATURE_SLUGS = {"clipboard-poll", "screenshot-poll"}
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.hostname}:{self.port}"
@@ -167,7 +186,6 @@ class Node(Entity):
         node = cls.objects.filter(mac_address=mac).first()
         if not node:
             node = cls.objects.filter(public_endpoint=slug).first()
-        lcd_lock = Path(settings.BASE_DIR) / "locks" / "lcd_screen.lck"
         defaults = {
             "hostname": hostname,
             "address": address,
@@ -177,14 +195,11 @@ class Node(Entity):
             "installed_revision": installed_revision,
             "public_endpoint": slug,
             "mac_address": mac,
-            "has_lcd_screen": lcd_lock.exists(),
         }
         if node:
             for field, value in defaults.items():
-                if field == "has_lcd_screen":
-                    continue
                 setattr(node, field, value)
-            update_fields = [k for k in defaults.keys() if k != "has_lcd_screen"]
+            update_fields = list(defaults.keys())
             node.save(update_fields=update_fields)
             created = False
         else:
@@ -242,22 +257,78 @@ class Node(Entity):
             self.mac_address = self.mac_address.lower()
         if not self.public_endpoint:
             self.public_endpoint = slugify(self.hostname)
-        previous_clipboard = previous_screenshot = None
-        if self.pk:
-            previous = Node.objects.get(pk=self.pk)
-            previous_clipboard = previous.clipboard_polling
-            previous_screenshot = previous.screenshot_polling
         super().save(*args, **kwargs)
-        if previous_clipboard != self.clipboard_polling:
-            self._sync_clipboard_task()
-        if previous_screenshot != self.screenshot_polling:
-            self._sync_screenshot_task()
+        if self.pk:
+            self.refresh_features()
 
-    def _sync_clipboard_task(self):
+    def has_feature(self, slug: str) -> bool:
+        return self.features.filter(slug=slug).exists()
+
+    def refresh_features(self):
+        if not self.pk:
+            return
+        if not self.is_local:
+            self.sync_feature_tasks()
+            return
+        detected_slugs = set()
+        base_path = Path(self.base_path or settings.BASE_DIR)
+        locks_dir = base_path / "locks"
+        for slug, filename in self.FEATURE_LOCK_MAP.items():
+            if (locks_dir / filename).exists():
+                detected_slugs.add(slug)
+        try:
+            from core.notifications import supports_gui_toast
+        except Exception:
+            pass
+        else:
+            try:
+                if supports_gui_toast():
+                    detected_slugs.add("gui-toast")
+            except Exception:
+                pass
+        current_slugs = set(
+            self.features.filter(slug__in=self.AUTO_MANAGED_FEATURES).values_list(
+                "slug", flat=True
+            )
+        )
+        add_slugs = detected_slugs - current_slugs
+        if add_slugs:
+            for feature in NodeFeature.objects.filter(slug__in=add_slugs):
+                NodeFeatureAssignment.objects.update_or_create(
+                    node=self, feature=feature
+                )
+        remove_slugs = current_slugs - detected_slugs
+        if remove_slugs:
+            NodeFeatureAssignment.objects.filter(
+                node=self, feature__slug__in=remove_slugs
+            ).delete()
+        self.sync_feature_tasks()
+
+    def update_manual_features(self, slugs: Iterable[str]):
+        desired = {slug for slug in slugs if slug in self.MANUAL_FEATURE_SLUGS}
+        remove_slugs = self.MANUAL_FEATURE_SLUGS - desired
+        if remove_slugs:
+            NodeFeatureAssignment.objects.filter(
+                node=self, feature__slug__in=remove_slugs
+            ).delete()
+        if desired:
+            for feature in NodeFeature.objects.filter(slug__in=desired):
+                NodeFeatureAssignment.objects.update_or_create(
+                    node=self, feature=feature
+                )
+        self.sync_feature_tasks()
+
+    def sync_feature_tasks(self):
+        clipboard_enabled = self.has_feature("clipboard-poll")
+        screenshot_enabled = self.has_feature("screenshot-poll")
+        self._sync_clipboard_task(clipboard_enabled)
+        self._sync_screenshot_task(screenshot_enabled)
+
+    def _sync_clipboard_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
         task_name = f"poll_clipboard_node_{self.pk}"
-        if self.clipboard_polling:
+        if enabled:
             schedule, _ = IntervalSchedule.objects.get_or_create(
                 every=5, period=IntervalSchedule.SECONDS
             )
@@ -271,12 +342,12 @@ class Node(Entity):
         else:
             PeriodicTask.objects.filter(name=task_name).delete()
 
-    def _sync_screenshot_task(self):
+    def _sync_screenshot_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
         import json
 
         task_name = f"capture_screenshot_node_{self.pk}"
-        if self.screenshot_polling:
+        if enabled:
             schedule, _ = IntervalSchedule.objects.get_or_create(
                 every=1, period=IntervalSchedule.MINUTES
             )
@@ -323,9 +394,50 @@ class Node(Entity):
         )
 
 
+class NodeFeatureAssignment(models.Model):
+    """Bridge between :class:`Node` and :class:`NodeFeature`."""
+
+    node = models.ForeignKey(
+        Node, on_delete=models.CASCADE, related_name="feature_assignments"
+    )
+    feature = models.ForeignKey(
+        NodeFeature, on_delete=models.CASCADE, related_name="node_assignments"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("node", "feature")
+        verbose_name = "Node Feature Assignment"
+        verbose_name_plural = "Node Feature Assignments"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.node} -> {self.feature}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.node.sync_feature_tasks()
+
+
+@receiver(post_delete, sender=NodeFeatureAssignment)
+def _sync_tasks_on_assignment_delete(sender, instance, **kwargs):
+    node_id = getattr(instance, "node_id", None)
+    if not node_id:
+        return
+    node = Node.objects.filter(pk=node_id).first()
+    if node:
+        node.sync_feature_tasks()
+
+
 class EmailOutbox(Entity):
     """SMTP credentials for sending mail."""
 
+    node = models.OneToOneField(
+        Node,
+        on_delete=models.CASCADE,
+        related_name="email_outbox",
+        null=True,
+        blank=True,
+    )
     host = SigilShortAutoField(
         max_length=100,
         help_text=("Gmail: smtp.gmail.com. " "GoDaddy: smtpout.secureserver.net"),
