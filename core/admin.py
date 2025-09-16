@@ -1233,6 +1233,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                     package=package,
                     release_manager=package.release_manager,
                     version=version,
+                    revision="",
                     pypi_url=f"https://pypi.org/project/{package.name}/{version}/",
                 )
                 created += 1

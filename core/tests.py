@@ -754,7 +754,8 @@ class PackageReleaseAdminActionTests(TestCase):
             "releases": {"1.0.0": [], "1.1.0": []}
         }
         self.admin.refresh_from_pypi(self.request, PackageRelease.objects.none())
-        self.assertTrue(PackageRelease.objects.filter(version="1.1.0").exists())
+        new_release = PackageRelease.objects.get(version="1.1.0")
+        self.assertEqual(new_release.revision, "")
         dump.assert_called_once()
 
 
