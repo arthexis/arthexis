@@ -59,6 +59,22 @@ from .widgets import OdooProductWidget
 admin.site.unregister(Group)
 
 
+def _append_operate_as(fieldsets):
+    updated = []
+    for name, options in fieldsets:
+        opts = options.copy()
+        fields = opts.get("fields")
+        if fields and "is_staff" in fields and "operate_as" not in fields:
+            if not isinstance(fields, (list, tuple)):
+                fields = list(fields)
+            else:
+                fields = list(fields)
+            fields.append("operate_as")
+            opts["fields"] = tuple(fields)
+        updated.append((name, opts))
+    return tuple(updated)
+
+
 # Add object links for small datasets in changelist view
 original_changelist_view = admin.ModelAdmin.changelist_view
 
@@ -425,10 +441,10 @@ class EnergyAccountRFIDInline(admin.TabularInline):
 
 
 class UserAdmin(DjangoUserAdmin):
-    fieldsets = DjangoUserAdmin.fieldsets + (
+    fieldsets = _append_operate_as(DjangoUserAdmin.fieldsets) + (
         ("Contact", {"fields": ("phone_number", "has_charger")}),
     )
-    add_fieldsets = DjangoUserAdmin.add_fieldsets + (
+    add_fieldsets = _append_operate_as(DjangoUserAdmin.add_fieldsets) + (
         ("Contact", {"fields": ("phone_number", "has_charger")}),
     )
 

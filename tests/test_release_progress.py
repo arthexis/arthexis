@@ -158,7 +158,9 @@ class ReleaseProgressViewTests(TestCase):
 
         self.assertTrue(response.context["awaiting_approval"])
         self.assertIsNone(response.context["next_step"])
-        self.assertIn("Awaiting release manager approval", response.context["log_content"])
+        self.assertIn(
+            "Awaiting release manager approval", response.context["log_content"]
+        )
 
     def test_release_manager_approval_accepts(self):
         url = reverse("release-progress", args=[self.release.pk, "publish"])
@@ -177,7 +179,9 @@ class ReleaseProgressViewTests(TestCase):
         self.assertFalse(response.context["awaiting_approval"])
         self.assertEqual(response.context["current_step"], 8)
         self.assertEqual(response.context["next_step"], 8)
-        self.assertIn("Release manager approved release", response.context["log_content"])
+        self.assertIn(
+            "Release manager approved release", response.context["log_content"]
+        )
 
     def test_release_manager_rejection_aborts(self):
         url = reverse("release-progress", args=[self.release.pk, "publish"])
@@ -199,7 +203,9 @@ class ReleaseProgressViewTests(TestCase):
         )
         self.assertFalse(response.context["awaiting_approval"])
         self.assertIsNone(response.context["next_step"])
-        self.assertIn("Release manager rejected release", response.context["log_content"])
+        self.assertIn(
+            "Release manager rejected release", response.context["log_content"]
+        )
 
     @mock.patch("core.views.release_utils.network_available", return_value=False)
     @mock.patch("core.views.release_utils._git_clean", return_value=True)

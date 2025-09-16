@@ -22,7 +22,9 @@ def test_message_management_command_calls_netmessage_broadcast():
 
 def test_message_management_command_passes_optional_arguments():
     with patch("nodes.management.commands.message.NetMessage.broadcast") as broadcast:
-        call_command("message", "subject", "body", "--reach", "Control", "--seen", "a", "b")
+        call_command(
+            "message", "subject", "body", "--reach", "Control", "--seen", "a", "b"
+        )
     broadcast.assert_called_once_with(
         subject="subject", body="body", reach="Control", seen=["a", "b"]
     )
