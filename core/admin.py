@@ -449,6 +449,34 @@ class UserAdmin(DjangoUserAdmin):
     )
 
 
+def _raw_instance_value(instance, field_name):
+    """Return the stored value for ``field_name`` without resolving sigils."""
+
+    field = instance._meta.get_field(field_name)
+    if not instance.pk:
+        return field.value_from_object(instance)
+    manager = type(instance)._default_manager
+    try:
+        return (
+            manager.filter(pk=instance.pk).values_list(field.attname, flat=True).get()
+        )
+    except type(instance).DoesNotExist:  # pragma: no cover - instance deleted
+        return field.value_from_object(instance)
+
+
+def _restore_sigil_values(form, field_names):
+    """Reset sigil fields on ``form.instance`` to their raw form values."""
+
+    for name in field_names:
+        if name not in form.fields:
+            continue
+        if name in form.cleaned_data:
+            raw = form.cleaned_data[name]
+        else:
+            raw = _raw_instance_value(form.instance, name)
+        setattr(form.instance, name, raw)
+
+
 class OdooProfileAdminForm(forms.ModelForm):
     """Admin form for :class:`core.models.OdooProfile` with hidden password."""
 
@@ -473,8 +501,15 @@ class OdooProfileAdminForm(forms.ModelForm):
     def clean_password(self):
         pwd = self.cleaned_data.get("password")
         if not pwd and self.instance.pk:
-            return self.instance.password
+            return _raw_instance_value(self.instance, "password")
         return pwd
+
+    def _post_clean(self):
+        super()._post_clean()
+        _restore_sigil_values(
+            self,
+            ["host", "database", "username", "password"],
+        )
 
 
 class EmailCollectorInline(admin.TabularInline):
@@ -542,8 +577,15 @@ class EmailInboxAdminForm(forms.ModelForm):
     def clean_password(self):
         pwd = self.cleaned_data.get("password")
         if not pwd and self.instance.pk:
-            return self.instance.password
+            return _raw_instance_value(self.instance, "password")
         return pwd
+
+    def _post_clean(self):
+        super()._post_clean()
+        _restore_sigil_values(
+            self,
+            ["username", "host", "password", "protocol"],
+        )
 
 
 class EmailSearchForm(forms.Form):
