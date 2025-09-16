@@ -437,7 +437,7 @@ class Node(Entity):
         )
 
 
-class NodeFeatureAssignment(models.Model):
+class NodeFeatureAssignment(Entity):
     """Bridge between :class:`Node` and :class:`NodeFeature`."""
 
     node = models.ForeignKey(
