@@ -1,4 +1,6 @@
 from unittest.mock import patch
+import os
+
 import pytest
 
 from django.contrib.admin.sites import AdminSite
@@ -60,6 +62,40 @@ class OdooProfileAdminFormTests(TestCase):
         form.save()
         profile.refresh_from_db()
         self.assertEqual(profile.password, "newpass")
+
+    def test_blank_password_preserves_sigil_placeholder(self):
+        self.addCleanup(lambda: os.environ.pop("ODOO_PASSWORD", None))
+        os.environ.pop("ODOO_PASSWORD", None)
+        profile = self._create_profile(password="[ENV.ODOO_PASSWORD]")
+        original = (
+            OdooProfile.objects.filter(pk=profile.pk)
+            .values_list("password", flat=True)
+            .get()
+        )
+        self.assertEqual(original, "[ENV.ODOO_PASSWORD]")
+        os.environ["ODOO_PASSWORD"] = "odoo-secret"
+        data = {
+            "user": self.user.pk,
+            "host": "http://test",
+            "database": "db",
+            "username": "odoo",
+            "password": "",
+        }
+        form = OdooProfileAdminForm(data, instance=profile)
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["password"], "[ENV.ODOO_PASSWORD]")
+        field = form.instance._meta.get_field("password")
+        self.assertEqual(field.value_from_object(form.instance), "[ENV.ODOO_PASSWORD]")
+        saved = form.save()
+        field = saved._meta.get_field("password")
+        self.assertEqual(field.value_from_object(saved), "[ENV.ODOO_PASSWORD]")
+        stored = (
+            OdooProfile.objects.filter(pk=saved.pk)
+            .values_list("password", flat=True)
+            .get()
+        )
+        self.assertEqual(stored, "[ENV.ODOO_PASSWORD]")
+        self.assertEqual(saved.password, "odoo-secret")
 
 
 class OdooProfileAdminActionTests(TestCase):
