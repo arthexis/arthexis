@@ -33,6 +33,16 @@ class ReleaseManagerAdminActionTests(TestCase):
         request._messages = FallbackStorage(request)
         return request
 
+    def test_secret_fields_redacted(self):
+        self.assertEqual(self.manager.pypi_token, "[REDACTED]")
+        self.assertEqual(
+            self.manager.resolve_sigils("pypi_token"),
+            "tok",
+        )
+        creds = self.manager.to_credentials()
+        self.assertIsNotNone(creds)
+        self.assertEqual(creds.token, "tok")
+
     @pytest.mark.skip("Release manager credentials action not exercised in environment")
     @patch("core.admin.requests.get")
     def test_test_credentials_action(self, mock_get):

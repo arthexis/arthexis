@@ -2,8 +2,17 @@ from django.db import models
 from django.db.models.fields import DeferredAttribute
 
 
+REDACTED_DISPLAY = "[REDACTED]"
+
+
 class _BaseSigilDescriptor(DeferredAttribute):
     def __set__(self, instance, value):
+        if (
+            getattr(self.field, "redact", False)
+            and value == REDACTED_DISPLAY
+            and instance.__dict__.get(self.field.attname)
+        ):
+            return
         instance.__dict__[self.field.attname] = value
 
 
@@ -22,6 +31,8 @@ class _AutoSigilDescriptor(_BaseSigilDescriptor):
         value = super().__get__(instance, cls)
         if instance is None:
             return value
+        if getattr(self.field, "redact", False):
+            return REDACTED_DISPLAY if value else value
         return instance.resolve_sigils(self.field.name)
 
 
@@ -49,8 +60,18 @@ class SigilCheckFieldMixin(_SigilBaseField):
 class SigilAutoFieldMixin(_SigilBaseField):
     descriptor_class = _AutoSigilDescriptor
 
+    def __init__(self, *args, redact: bool = False, **kwargs):
+        self.redact = redact
+        super().__init__(*args, **kwargs)
+
     def contribute_to_class(self, cls, name, private_only=False):
         super().contribute_to_class(cls, name, private_only=private_only)
+
+    def deconstruct(self):
+        name, path, args, kwargs = super().deconstruct()
+        if self.redact:
+            kwargs["redact"] = True
+        return name, path, args, kwargs
 
 
 class SigilShortCheckField(SigilCheckFieldMixin, models.CharField):

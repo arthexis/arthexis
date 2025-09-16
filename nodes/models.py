@@ -339,6 +339,7 @@ class EmailOutbox(Entity):
         max_length=100,
         blank=True,
         help_text="Email account password or app password",
+        redact=True,
     )
     use_tls = models.BooleanField(
         default=True,
@@ -360,12 +361,13 @@ class EmailOutbox(Entity):
         verbose_name_plural = "Email Outboxes"
 
     def get_connection(self):
+        password = self.resolve_sigils("password")
         return get_connection(
             "django.core.mail.backends.smtp.EmailBackend",
             host=self.host,
             port=self.port,
             username=self.username or None,
-            password=self.password or None,
+            password=password or None,
             use_tls=self.use_tls,
             use_ssl=self.use_ssl,
         )

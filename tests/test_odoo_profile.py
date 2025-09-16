@@ -7,8 +7,10 @@ from core.models import User, OdooProfile
 class FakeCommon:
     def __init__(self, uid):
         self.uid = uid
+        self.last_password = None
 
     def authenticate(self, db, username, password, _):
+        self.last_password = password
         return self.uid
 
 
@@ -16,18 +18,23 @@ class FakeModels:
     def __init__(self, info=None, raise_error=False):
         self.info = info or {"name": "Odoo User", "email": "user@example.com"}
         self.raise_error = raise_error
+        self.last_password = None
 
     def execute_kw(self, db, uid, password, model, method, args, kwargs):
         if self.raise_error:
             raise Exception("fail")
+        self.last_password = password
         return [self.info]
 
 
 def test_verify_success(monkeypatch):
+    common = FakeCommon(uid=42)
+    models = FakeModels()
+
     def fake_proxy(url):
         if url.endswith("/common"):
-            return FakeCommon(uid=42)
-        return FakeModels()
+            return common
+        return models
 
     monkeypatch.setattr(xmlrpc.client, "ServerProxy", fake_proxy)
     user = User.objects.create(username="u0")
@@ -44,6 +51,8 @@ def test_verify_success(monkeypatch):
     assert profile.name == "Odoo User"
     assert profile.email == "user@example.com"
     assert profile.verified_on is not None
+    assert common.last_password == "p"
+    assert models.last_password == "p"
 
 
 def test_credentials_change_resets_verification(monkeypatch):

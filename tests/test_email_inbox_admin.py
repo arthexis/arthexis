@@ -51,7 +51,8 @@ class EmailInboxAdminFormTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
         form.save()
         inbox.refresh_from_db()
-        self.assertEqual(inbox.password, "secret")
+        self.assertEqual(inbox.password, "[REDACTED]")
+        self.assertEqual(inbox.resolve_sigils("password"), "secret")
         self.assertEqual(inbox.host, "mail2.test")
 
     def test_new_password_saved(self):
@@ -69,7 +70,8 @@ class EmailInboxAdminFormTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
         form.save()
         inbox.refresh_from_db()
-        self.assertEqual(inbox.password, "newpass")
+        self.assertEqual(inbox.password, "[REDACTED]")
+        self.assertEqual(inbox.resolve_sigils("password"), "newpass")
 
 
 class EmailInboxAdminActionTests(TestCase):
@@ -89,6 +91,16 @@ class EmailInboxAdminActionTests(TestCase):
         )
         self.factory = RequestFactory()
         self.admin = EmailInboxAdmin(EmailInbox, AdminSite())
+
+    def test_secret_password_redacted(self):
+        self.assertEqual(self.inbox.password, "[REDACTED]")
+        self.assertEqual(self.inbox.resolve_sigils("password"), "p")
+
+    @patch("imaplib.IMAP4_SSL")
+    def test_test_connection_uses_resolved_password(self, mock_imap):
+        conn = mock_imap.return_value
+        self.inbox.test_connection()
+        conn.login.assert_called_once_with("u", "p")
 
     def test_test_inbox_action(self):
         request = self.factory.get("/")

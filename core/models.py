@@ -155,7 +155,7 @@ class OdooProfile(Entity):
     host = SigilShortAutoField(max_length=255)
     database = SigilShortAutoField(max_length=255)
     username = SigilShortAutoField(max_length=255)
-    password = SigilShortAutoField(max_length=255)
+    password = SigilShortAutoField(max_length=255, redact=True)
     verified_on = models.DateTimeField(null=True, blank=True)
     odoo_uid = models.PositiveIntegerField(null=True, blank=True, editable=False)
     name = models.CharField(max_length=255, blank=True, editable=False)
@@ -172,7 +172,8 @@ class OdooProfile(Entity):
             old = type(self).all_objects.get(pk=self.pk)
             if (
                 old.username != self.username
-                or old.password != self.password
+                or old.resolve_sigils("password")
+                != self.resolve_sigils("password")
                 or old.database != self.database
                 or old.host != self.host
             ):
@@ -186,7 +187,8 @@ class OdooProfile(Entity):
     def verify(self):
         """Check credentials against Odoo and pull user info."""
         common = xmlrpc.client.ServerProxy(f"{self.host}/xmlrpc/2/common")
-        uid = common.authenticate(self.database, self.username, self.password, {})
+        password = self.resolve_sigils("password")
+        uid = common.authenticate(self.database, self.username, password, {})
         if not uid:
             self._clear_verification()
             raise ValidationError(_("Invalid Odoo credentials"))
@@ -194,7 +196,7 @@ class OdooProfile(Entity):
         info = models_proxy.execute_kw(
             self.database,
             uid,
-            self.password,
+            password,
             "res.users",
             "read",
             [uid],
@@ -211,10 +213,11 @@ class OdooProfile(Entity):
         """Execute an Odoo RPC call, invalidating credentials on failure."""
         try:
             client = xmlrpc.client.ServerProxy(f"{self.host}/xmlrpc/2/object")
+            password = self.resolve_sigils("password")
             return client.execute_kw(
                 self.database,
                 self.odoo_uid,
-                self.password,
+                password,
                 model,
                 method,
                 args,
@@ -266,7 +269,7 @@ class EmailInbox(Entity):
             "GoDaddy IMAP 993, GoDaddy POP3 995"
         ),
     )
-    password = SigilShortAutoField(max_length=255)
+    password = SigilShortAutoField(max_length=255, redact=True)
     protocol = SigilShortAutoField(
         max_length=5,
         choices=PROTOCOL_CHOICES,
@@ -285,6 +288,7 @@ class EmailInbox(Entity):
     def test_connection(self):
         """Attempt to connect to the configured mailbox."""
         try:
+            password = self.resolve_sigils("password")
             if self.protocol == self.IMAP:
                 import imaplib
 
@@ -293,7 +297,7 @@ class EmailInbox(Entity):
                     if self.use_ssl
                     else imaplib.IMAP4(self.host, self.port)
                 )
-                conn.login(self.username, self.password)
+                conn.login(self.username, password)
                 conn.logout()
             else:
                 import poplib
@@ -304,7 +308,7 @@ class EmailInbox(Entity):
                     else poplib.POP3(self.host, self.port)
                 )
                 conn.user(self.username)
-                conn.pass_(self.password)
+                conn.pass_(password)
                 conn.quit()
             return True
         except Exception as exc:
@@ -316,6 +320,8 @@ class EmailInbox(Entity):
         Parameters are case-insensitive fragments. Results are returned as a list
         of dictionaries with ``subject``, ``from`` and ``body`` keys.
         """
+
+        password = self.resolve_sigils("password")
 
         def _get_body(msg):
             if msg.is_multipart():
@@ -341,7 +347,7 @@ class EmailInbox(Entity):
                 if self.use_ssl
                 else imaplib.IMAP4(self.host, self.port)
             )
-            conn.login(self.username, self.password)
+            conn.login(self.username, password)
             conn.select("INBOX")
             criteria = []
             if subject:
@@ -377,7 +383,7 @@ class EmailInbox(Entity):
             else poplib.POP3(self.host, self.port)
         )
         conn.user(self.username)
-        conn.pass_(self.password)
+        conn.pass_(password)
         count = len(conn.list()[1])
         messages = []
         for i in range(count, 0, -1):
@@ -1102,7 +1108,9 @@ class ReleaseManager(Entity):
         related_name="release_manager",
     )
     pypi_username = SigilShortAutoField("PyPI username", max_length=100, blank=True)
-    pypi_token = SigilShortAutoField("PyPI token", max_length=200, blank=True)
+    pypi_token = SigilShortAutoField(
+        "PyPI token", max_length=200, blank=True, redact=True
+    )
     github_token = SigilShortAutoField(
         max_length=200,
         blank=True,
@@ -1110,8 +1118,11 @@ class ReleaseManager(Entity):
             "Personal access token for GitHub operations. "
             "Used before the GITHUB_TOKEN environment variable."
         ),
+        redact=True,
     )
-    pypi_password = SigilShortAutoField("PyPI password", max_length=200, blank=True)
+    pypi_password = SigilShortAutoField(
+        "PyPI password", max_length=200, blank=True, redact=True
+    )
     pypi_url = SigilShortAutoField("PyPI URL", max_length=200, blank=True)
 
     class Meta:
@@ -1127,10 +1138,12 @@ class ReleaseManager(Entity):
 
     def to_credentials(self) -> Credentials | None:
         """Return credentials for this release manager."""
-        if self.pypi_token:
-            return Credentials(token=self.pypi_token)
-        if self.pypi_username and self.pypi_password:
-            return Credentials(username=self.pypi_username, password=self.pypi_password)
+        token = self.resolve_sigils("pypi_token")
+        if token:
+            return Credentials(token=token)
+        password = self.resolve_sigils("pypi_password")
+        if self.pypi_username and password:
+            return Credentials(username=self.pypi_username, password=password)
         return None
 
 
@@ -1252,8 +1265,10 @@ class PackageRelease(Entity):
     def get_github_token(self) -> str | None:
         """Return GitHub token from the associated release manager or environment."""
         manager = self.release_manager or self.package.release_manager
-        if manager and manager.github_token:
-            return manager.github_token
+        if manager:
+            token = manager.resolve_sigils("github_token")
+            if token:
+                return token
         return os.environ.get("GITHUB_TOKEN")
 
     @property

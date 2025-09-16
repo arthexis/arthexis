@@ -43,7 +43,8 @@ class OdooProfileAdminFormTests(TestCase):
         self.assertTrue(form.is_valid())
         form.save()
         profile.refresh_from_db()
-        self.assertEqual(profile.password, "secret")
+        self.assertEqual(profile.password, "[REDACTED]")
+        self.assertEqual(profile.resolve_sigils("password"), "secret")
         self.assertEqual(profile.host, "http://test2")
 
     def test_new_password_saved(self):
@@ -59,7 +60,8 @@ class OdooProfileAdminFormTests(TestCase):
         self.assertTrue(form.is_valid())
         form.save()
         profile.refresh_from_db()
-        self.assertEqual(profile.password, "newpass")
+        self.assertEqual(profile.password, "[REDACTED]")
+        self.assertEqual(profile.resolve_sigils("password"), "newpass")
 
 
 class OdooProfileAdminActionTests(TestCase):

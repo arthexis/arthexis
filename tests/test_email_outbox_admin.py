@@ -23,6 +23,17 @@ class EmailOutboxAdminActionTests(TestCase):
         self.factory = RequestFactory()
         self.admin = EmailOutboxAdmin(AdminEmailOutbox, AdminSite())
 
+    def test_secret_password_redacted(self):
+        self.assertEqual(self.outbox.password, "[REDACTED]")
+        self.assertEqual(self.outbox.resolve_sigils("password"), "p")
+
+    @patch("nodes.models.get_connection")
+    def test_get_connection_uses_resolved_password(self, mock_get):
+        self.outbox.get_connection()
+        self.assertTrue(mock_get.called)
+        _, kwargs = mock_get.call_args
+        self.assertEqual(kwargs.get("password"), "p")
+
     def test_test_outbox_action(self):
         request = self.factory.get("/")
         request.user = self.user

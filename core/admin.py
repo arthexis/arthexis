@@ -457,7 +457,8 @@ class OdooProfileAdminForm(forms.ModelForm):
     def clean_password(self):
         pwd = self.cleaned_data.get("password")
         if not pwd and self.instance.pk:
-            return self.instance.password
+            field = self.instance._meta.get_field("password")
+            return field.value_from_object(self.instance)
         return pwd
 
 
@@ -526,7 +527,8 @@ class EmailInboxAdminForm(forms.ModelForm):
     def clean_password(self):
         pwd = self.cleaned_data.get("password")
         if not pwd and self.instance.pk:
-            return self.instance.password
+            field = self.instance._meta.get_field("password")
+            return field.value_from_object(self.instance)
         return pwd
 
 
