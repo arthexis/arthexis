@@ -65,11 +65,19 @@ class LocalhostAdminBackend(ModelBackend):
                     "is_superuser": True,
                 },
             )
+            arthexis_user = (
+                User.all_objects.filter(username="arthexis").exclude(pk=user.pk).first()
+            )
             if created:
+                if arthexis_user and user.operate_as_id is None:
+                    user.operate_as = arthexis_user
                 user.set_password("admin")
                 user.save()
             elif not user.check_password("admin"):
                 return None
+            elif arthexis_user and user.operate_as_id is None:
+                user.operate_as = arthexis_user
+                user.save(update_fields=["operate_as"])
             return user
         return super().authenticate(request, username, password, **kwargs)
 
