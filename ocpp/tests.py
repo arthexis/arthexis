@@ -597,8 +597,17 @@ class ChargerAdminTests(TestCase):
         charger = Charger.objects.create(charger_id="LOG1")
         url = reverse("admin:ocpp_charger_changelist")
         resp = self.client.get(url)
-        log_url = reverse("charger-log", args=["LOG1"]) + "?type=charger"
+        log_url = reverse("admin:ocpp_charger_log", args=[charger.pk])
         self.assertContains(resp, log_url)
+
+    def test_admin_log_view_displays_entries(self):
+        charger = Charger.objects.create(charger_id="LOG2")
+        store.add_log("LOG2", "entry", log_type="charger")
+        url = reverse("admin:ocpp_charger_log", args=[charger.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "entry")
+        store.clear_log("LOG2", log_type="charger")
 
     def test_admin_lists_console_link(self):
         charger = Charger.objects.create(
@@ -737,13 +746,43 @@ class SimulatorAdminTests(TestCase):
             username="admin2", password="secret", email="admin2@example.com"
         )
         self.client.force_login(self.admin)
+        store.simulators.clear()
+        store.logs["simulator"].clear()
+        store.log_names["simulator"].clear()
 
     def test_admin_lists_log_link(self):
         sim = Simulator.objects.create(name="SIM", cp_path="SIMX")
         url = reverse("admin:ocpp_simulator_changelist")
         resp = self.client.get(url)
-        log_url = reverse("charger-log", args=["SIMX"]) + "?type=simulator"
+        log_url = reverse("admin:ocpp_simulator_log", args=[sim.pk])
         self.assertContains(resp, log_url)
+
+    def test_admin_log_view_displays_entries(self):
+        sim = Simulator.objects.create(name="SIMLOG", cp_path="SIMLOG")
+        store.add_log("SIMLOG", "entry", log_type="simulator")
+        url = reverse("admin:ocpp_simulator_log", args=[sim.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "entry")
+        store.clear_log("SIMLOG", log_type="simulator")
+
+    @patch("ocpp.admin.ChargePointSimulator.start")
+    def test_start_simulator_message_includes_log_link(self, mock_start):
+        sim = Simulator.objects.create(name="SIMMSG", cp_path="SIMMSG")
+        mock_start.return_value = (True, "Connection accepted", "/tmp/sim.log")
+        url = reverse("admin:ocpp_simulator_changelist")
+        resp = self.client.post(
+            url,
+            {"action": "start_simulator", "_selected_action": [sim.pk]},
+            follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        log_url = reverse("admin:ocpp_simulator_log", args=[sim.pk])
+        self.assertContains(resp, "View Log")
+        self.assertContains(resp, log_url)
+        self.assertContains(resp, "/tmp/sim.log")
+        mock_start.assert_called_once()
+        store.simulators.clear()
 
     def test_admin_shows_ws_url(self):
         sim = Simulator.objects.create(
