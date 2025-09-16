@@ -132,6 +132,17 @@ class User(Entity, AbstractUser):
     birthday = models.DateField(null=True, blank=True)
     data_path = models.CharField(max_length=255, blank=True)
     has_charger = models.BooleanField(default=False)
+    operate_as = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="operated_users",
+        help_text=(
+            "Operate using another user's permissions when additional authority is "
+            "required."
+        ),
+    )
     is_active = models.BooleanField(
         _("active"),
         default=True,
@@ -142,6 +153,65 @@ class User(Entity, AbstractUser):
 
     def __str__(self):
         return self.username
+
+    def clean(self):
+        super().clean()
+        if not self.operate_as_id:
+            return
+        try:
+            delegate = self.operate_as
+        except type(self).DoesNotExist:
+            raise ValidationError({"operate_as": _("Selected user is not available.")})
+        errors = []
+        if delegate.pk == self.pk:
+            errors.append(_("Cannot operate as yourself."))
+        if getattr(delegate, "is_deleted", False):
+            errors.append(_("Cannot operate as a deleted user."))
+        if not self.is_staff:
+            errors.append(_("Only staff members may operate as another user."))
+        if delegate.is_staff and not self.is_superuser:
+            errors.append(_("Only superusers may operate as staff members."))
+        if errors:
+            raise ValidationError({"operate_as": errors})
+
+    def _delegate_for_permissions(self):
+        if not self.is_staff or not self.operate_as_id:
+            return None
+        try:
+            delegate = self.operate_as
+        except type(self).DoesNotExist:
+            return None
+        if delegate.pk == self.pk:
+            return None
+        if getattr(delegate, "is_deleted", False):
+            return None
+        if delegate.is_staff and not self.is_superuser:
+            return None
+        return delegate
+
+    def _check_operate_as_chain(self, predicate, visited=None):
+        if visited is None:
+            visited = set()
+        identifier = self.pk or id(self)
+        if identifier in visited:
+            return False
+        visited.add(identifier)
+        if predicate(self):
+            return True
+        delegate = self._delegate_for_permissions()
+        if not delegate:
+            return False
+        return delegate._check_operate_as_chain(predicate, visited)
+
+    def has_perm(self, perm, obj=None):
+        return self._check_operate_as_chain(
+            lambda user: super(User, user).has_perm(perm, obj)
+        )
+
+    def has_module_perms(self, app_label):
+        return self._check_operate_as_chain(
+            lambda user: super(User, user).has_module_perms(app_label)
+        )
 
 
 class OdooProfile(Entity):

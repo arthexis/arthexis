@@ -16,6 +16,7 @@ import subprocess
 from glob import glob
 
 from django.utils import timezone
+from django.contrib.auth.models import Permission
 from .models import (
     User,
     EnergyAccount,
@@ -78,6 +79,86 @@ class DefaultAdminTests(TestCase):
         self.assertIsNone(
             backend.authenticate(blocked, username="admin", password="admin")
         )
+
+
+class UserOperateAsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.permission = Permission.objects.get(codename="view_todo")
+
+    def test_staff_user_delegates_permissions(self):
+        delegate = User.objects.create_user(username="delegate", password="secret")
+        delegate.user_permissions.add(self.permission)
+        operator = User.objects.create_user(
+            username="operator", password="secret", is_staff=True
+        )
+        self.assertFalse(operator.has_perm("core.view_todo"))
+        operator.operate_as = delegate
+        operator.full_clean()
+        operator.save()
+        operator.refresh_from_db()
+        self.assertTrue(operator.has_perm("core.view_todo"))
+
+    def test_only_staff_may_operate_as(self):
+        delegate = User.objects.create_user(username="delegate", password="secret")
+        operator = User.objects.create_user(username="operator", password="secret")
+        operator.operate_as = delegate
+        with self.assertRaises(ValidationError):
+            operator.full_clean()
+
+    def test_non_superuser_cannot_operate_as_staff(self):
+        staff_delegate = User.objects.create_user(
+            username="delegate", password="secret", is_staff=True
+        )
+        operator = User.objects.create_user(
+            username="operator", password="secret", is_staff=True
+        )
+        operator.operate_as = staff_delegate
+        with self.assertRaises(ValidationError):
+            operator.full_clean()
+
+    def test_recursive_chain_and_cycle_detection(self):
+        base = User.objects.create_user(username="base", password="secret")
+        base.user_permissions.add(self.permission)
+        middle = User.objects.create_user(
+            username="middle", password="secret", is_staff=True
+        )
+        middle.operate_as = base
+        middle.full_clean()
+        middle.save()
+        top = User.objects.create_superuser(
+            username="top", email="top@example.com", password="secret"
+        )
+        top.operate_as = middle
+        top.full_clean()
+        top.save()
+        top.refresh_from_db()
+        self.assertTrue(top.has_perm("core.view_todo"))
+
+        first = User.objects.create_superuser(
+            username="first", email="first@example.com", password="secret"
+        )
+        second = User.objects.create_superuser(
+            username="second", email="second@example.com", password="secret"
+        )
+        first.operate_as = second
+        first.full_clean()
+        first.save()
+        second.operate_as = first
+        second.full_clean()
+        second.save()
+        self.assertFalse(first._check_operate_as_chain(lambda user: False))
+
+    def test_module_permissions_fall_back(self):
+        delegate = User.objects.create_user(username="helper", password="secret")
+        delegate.user_permissions.add(self.permission)
+        operator = User.objects.create_user(
+            username="mod", password="secret", is_staff=True
+        )
+        operator.operate_as = delegate
+        operator.full_clean()
+        operator.save()
+        self.assertTrue(operator.has_module_perms("core"))
 
 
 class RFIDLoginTests(TestCase):
