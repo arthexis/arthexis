@@ -27,8 +27,31 @@ usage() {
     exit 1
 }
 
+ensure_nginx_in_path() {
+    if command -v nginx >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local -a extra_paths=("/usr/sbin" "/usr/local/sbin" "/sbin")
+    local dir
+    for dir in "${extra_paths[@]}"; do
+        if [ -x "$dir/nginx" ]; then
+            case ":$PATH:" in
+                *":$dir:"*) ;;
+                *) PATH="${PATH:+$PATH:}$dir"
+                   export PATH ;;
+            esac
+            if command -v nginx >/dev/null 2>&1; then
+                return 0
+            fi
+        fi
+    done
+
+    return 1
+}
+
 require_nginx() {
-    if ! command -v nginx >/dev/null 2>&1; then
+    if ! ensure_nginx_in_path; then
         echo "Nginx is required for the $1 role but is not installed."
         echo "Install nginx and re-run this script. For Debian/Ubuntu:"
         echo "  sudo apt-get update && sudo apt-get install nginx"
@@ -59,7 +82,7 @@ check_nginx_and_redis() {
     local role="$1"
     local missing=()
 
-    if ! command -v nginx >/dev/null 2>&1; then
+    if ! ensure_nginx_in_path; then
         missing+=("nginx")
     fi
     if ! command -v redis-cli >/dev/null 2>&1; then
