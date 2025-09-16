@@ -3,13 +3,11 @@ import os
 import shutil
 import subprocess
 from functools import lru_cache
-from io import StringIO
 from typing import Optional
 
 from django.apps import apps
 from django.conf import settings
 from django.core import serializers
-from django.core.management import call_command
 from django.db import models
 
 from .sigil_context import get_context
@@ -172,13 +170,6 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                 if fallback is not None:
                     return fallback
                 return ""
-            if root.prefix.upper() == "CMD":
-                out = StringIO()
-                args: list[str] = []
-                if param:
-                    args.append(param)
-                call_command((normalized_key or "").lower(), *args, stdout=out)
-                return out.getvalue().strip()
         elif root.context_type == SigilRoot.Context.ENTITY:
             model = root.content_type.model_class() if root.content_type else None
             instance = None

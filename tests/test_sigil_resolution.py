@@ -13,7 +13,11 @@ from core.models import (
     EmailArtifact,
 )
 from nodes.models import NodeRole
-from core.sigil_builder import _resolve_sigil, resolve_sigils_in_text
+from core.sigil_builder import (
+    generate_model_sigils,
+    _resolve_sigil,
+    resolve_sigils_in_text,
+)
 from core.sigil_context import set_context, clear_context
 from core import sigil_resolver
 
@@ -77,6 +81,12 @@ class SigilResolutionTests(TestCase):
             rendered = tmpl.render(Context({"profile": profile}))
         self.assertEqual(rendered, "url=[FOO.BAR]")
         self.assertIn("Unknown sigil root [FOO]", cm.output[0])
+
+    def test_cmd_sigil_root_removed(self):
+        SigilRoot.objects.filter(prefix__iexact="CMD").delete()
+        generate_model_sigils()
+        self.assertFalse(SigilRoot.objects.filter(prefix__iexact="CMD").exists())
+        self.assertEqual(_resolve_sigil("[CMD.showmigrations]"), "[CMD.showmigrations]")
 
     def test_entity_sigil(self):
         ct = ContentType.objects.get_for_model(OdooProfile)
@@ -339,10 +349,13 @@ class SigilResolutionTests(TestCase):
     def test_gway_fallback_invoked_for_unknown_sigil(self):
         sigil_resolver._find_gway_command.cache_clear()
         self.addCleanup(sigil_resolver._find_gway_command.cache_clear)
-        with mock.patch(
-            "core.sigil_resolver._find_gway_command",
-            return_value="/usr/local/bin/gway",
-        ) as mock_find, mock.patch("core.sigil_resolver.subprocess.run") as mock_run:
+        with (
+            mock.patch(
+                "core.sigil_resolver._find_gway_command",
+                return_value="/usr/local/bin/gway",
+            ) as mock_find,
+            mock.patch("core.sigil_resolver.subprocess.run") as mock_run,
+        ):
             mock_run.return_value = mock.Mock(
                 returncode=0,
                 stdout="gway-output\n",
