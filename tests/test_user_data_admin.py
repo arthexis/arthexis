@@ -9,6 +9,11 @@ from django.contrib.messages import get_messages
 
 from teams.models import OdooProfile
 
+from awg.models import CalculatorTemplate
+
+from core.models import OdooProfile as CoreOdooProfile, Todo
+from core.user_data import dump_user_fixture, load_user_fixtures
+
 
 class UserDataAdminTests(TransactionTestCase):
     def setUp(self):
@@ -31,7 +36,8 @@ class UserDataAdminTests(TransactionTestCase):
         self.fixture_path = self.data_dir / f"teams_odooprofile_{self.profile.pk}.json"
 
     def tearDown(self):
-        self.fixture_path.unlink(missing_ok=True)
+        for path in self.data_dir.glob("*.json"):
+            path.unlink(missing_ok=True)
         call_command("flush", verbosity=0, interactive=False)
 
     def test_userdatum_checkbox(self):
@@ -73,3 +79,28 @@ class UserDataAdminTests(TransactionTestCase):
         self.profile.refresh_from_db()
         self.assertFalse(self.profile.is_user_data)
         self.assertFalse(self.fixture_path.exists())
+
+    def test_load_user_fixture_marks_user_data_flag(self):
+        core_profile = CoreOdooProfile.objects.get(pk=self.profile.pk)
+        todo = Todo.objects.create(request="Test TODO")
+        calculator = CalculatorTemplate.objects.create(name="Test Template")
+
+        for instance in (core_profile, todo, calculator):
+            with self.subTest(model=instance._meta.label_lower):
+                path = self.data_dir / (
+                    f"{instance._meta.app_label}_{instance._meta.model_name}_{instance.pk}.json"
+                )
+                type(instance).all_objects.filter(pk=instance.pk).update(
+                    is_user_data=True
+                )
+                instance.refresh_from_db()
+                dump_user_fixture(instance, self.user)
+                self.assertTrue(path.exists())
+                type(instance).all_objects.filter(pk=instance.pk).update(
+                    is_user_data=False
+                )
+                instance.refresh_from_db()
+                self.assertFalse(instance.is_user_data)
+                load_user_fixtures(self.user)
+                instance.refresh_from_db()
+                self.assertTrue(instance.is_user_data)
