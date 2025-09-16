@@ -867,7 +867,19 @@ class BrandAdmin(EntityModelAdmin):
 @admin.register(EVModel)
 class EVModelAdmin(EntityModelAdmin):
     fields = ("brand", "name")
-    list_display = ("name", "brand")
+    list_display = ("name", "brand", "brand_wmi_codes")
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.select_related("brand").prefetch_related("brand__wmi_codes")
+
+    def brand_wmi_codes(self, obj):
+        if not obj.brand:
+            return ""
+        codes = [wmi.code for wmi in obj.brand.wmi_codes.all()]
+        return ", ".join(codes)
+
+    brand_wmi_codes.short_description = "WMI codes"
 
 
 @admin.register(EnergyCredit)
