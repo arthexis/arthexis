@@ -5,6 +5,7 @@ from io import BytesIO
 from zipfile import ZipFile
 import json
 
+from django.apps import apps
 from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.auth.signals import user_logged_in
@@ -81,20 +82,65 @@ def delete_user_fixture(instance, user) -> None:
     _fixture_path(user, instance).unlink(missing_ok=True)
 
 
+def _mark_fixture_user_data(path: Path) -> None:
+    try:
+        content = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        try:
+            content = path.read_bytes().decode("latin-1")
+        except Exception:
+            return
+    except Exception:
+        return
+    try:
+        data = json.loads(content)
+    except Exception:
+        return
+    if not isinstance(data, list):
+        return
+    for obj in data:
+        label = obj.get("model")
+        if not label:
+            continue
+        try:
+            model = apps.get_model(label)
+        except LookupError:
+            continue
+        if not issubclass(model, Entity):
+            continue
+        pk = obj.get("pk")
+        if pk is None:
+            continue
+        model.all_objects.filter(pk=pk).update(is_user_data=True)
+
+
+def _load_fixture(path: Path, *, mark_user_data: bool = True) -> bool:
+    loaded = False
+    try:
+        call_command("loaddata", str(path), ignorenonexistent=True)
+        loaded = True
+    except UnicodeDecodeError:
+        try:
+            data = path.read_bytes().decode("latin-1")
+        except Exception:
+            return False
+        path.write_text(data, encoding="utf-8")
+        try:
+            call_command("loaddata", str(path), ignorenonexistent=True)
+            loaded = True
+        except Exception:
+            return False
+    except Exception:
+        return False
+    if loaded and mark_user_data:
+        _mark_fixture_user_data(path)
+    return loaded
+
+
 def load_user_fixtures(user) -> None:
     paths = sorted(_data_dir(user).glob("*.json"))
     for path in paths:
-        try:
-            call_command("loaddata", str(path), ignorenonexistent=True)
-        except UnicodeDecodeError:
-            try:
-                data = path.read_bytes().decode("latin-1")
-            except Exception:
-                continue
-            path.write_text(data, encoding="utf-8")
-            call_command("loaddata", str(path), ignorenonexistent=True)
-        except Exception:
-            continue
+        _load_fixture(path)
 
 
 @receiver(user_logged_in)
@@ -276,7 +322,8 @@ def _user_data_import(request):
                     f.write(content)
                 paths.append(target)
         if paths:
-            call_command("loaddata", *[str(p) for p in paths], ignorenonexistent=True)
+            for path in paths:
+                _load_fixture(path)
     return HttpResponseRedirect(reverse("admin:user_data"))
 
 
