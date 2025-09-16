@@ -60,6 +60,9 @@ class ViewHistoryMiddleware:
         if path.startswith("/favicon") or path.startswith("/robots.txt"):
             return False
 
+        if "djdt" in request.GET:
+            return False
+
         return True
 
     def _record_visit(self, request, status_code: int, error_message: str) -> None:

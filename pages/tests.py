@@ -306,6 +306,11 @@ class ViewHistoryLoggingTests(TestCase):
         self.assertEqual(entry.status_code, 404)
         self.assertNotEqual(entry.error_message, "")
 
+    def test_debug_toolbar_requests_not_tracked(self):
+        resp = self.client.get(reverse("pages:index"), {"djdt": "toolbar"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(ViewHistory.objects.exists())
+
 
 class ViewHistoryAdminTests(TestCase):
     def setUp(self):
