@@ -29,6 +29,12 @@ class _SigilBaseField:
     def value_from_object(self, obj):
         return obj.__dict__.get(self.attname)
 
+    def pre_save(self, model_instance, add):
+        # ``models.Field.pre_save`` uses ``getattr`` which would resolve the
+        # sigil descriptor. Persist the raw database value instead so env-based
+        # placeholders remain intact when editing through admin forms.
+        return self.value_from_object(model_instance)
+
 
 class SigilCheckFieldMixin(_SigilBaseField):
     descriptor_class = _CheckSigilDescriptor

@@ -1,6 +1,8 @@
 from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.contrib.admin.sites import AdminSite
+import os
+
 from django.contrib import admin
 from unittest.mock import patch
 
@@ -70,6 +72,42 @@ class EmailInboxAdminFormTests(TestCase):
         form.save()
         inbox.refresh_from_db()
         self.assertEqual(inbox.password, "newpass")
+
+    def test_blank_password_preserves_sigil_placeholder(self):
+        self.addCleanup(lambda: os.environ.pop("SMTP_PASSWORD", None))
+        os.environ.pop("SMTP_PASSWORD", None)
+        inbox = self._create_inbox(password="[ENV.SMTP_PASSWORD]")
+        original = (
+            EmailInbox.objects.filter(pk=inbox.pk)
+            .values_list("password", flat=True)
+            .get()
+        )
+        self.assertEqual(original, "[ENV.SMTP_PASSWORD]")
+        os.environ["SMTP_PASSWORD"] = "env-secret"
+        data = {
+            "user": self.user.pk,
+            "host": "mail.test",
+            "port": 993,
+            "username": "mail",
+            "password": "",
+            "protocol": EmailInbox.IMAP,
+            "use_ssl": True,
+        }
+        form = EmailInboxAdminForm(data, instance=inbox)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["password"], "[ENV.SMTP_PASSWORD]")
+        field = form.instance._meta.get_field("password")
+        self.assertEqual(field.value_from_object(form.instance), "[ENV.SMTP_PASSWORD]")
+        saved = form.save()
+        field = saved._meta.get_field("password")
+        self.assertEqual(field.value_from_object(saved), "[ENV.SMTP_PASSWORD]")
+        stored = (
+            EmailInbox.objects.filter(pk=saved.pk)
+            .values_list("password", flat=True)
+            .get()
+        )
+        self.assertEqual(stored, "[ENV.SMTP_PASSWORD]")
+        self.assertEqual(saved.password, "env-secret")
 
 
 class EmailInboxAdminActionTests(TestCase):
