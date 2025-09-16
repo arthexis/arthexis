@@ -1,0 +1,141 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  zap-baseline:
+    name: OWASP ZAP Baseline Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run ZAP baseline scan
+        id: zap_scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: https://arthexis.com
+          cmd_options: >-
+            -a
+            -J zap-report.json
+            -w zap-report.md
+            -r zap-report.html
+          fail_action: false
+          allow_issue_writing: false
+          artifact_name: zap-baseline-report
+
+      - name: Summarize high risk alerts
+        id: evaluate
+        run: |
+          set -euo pipefail
+
+          report_json="zap-report.json"
+          if [ ! -f "$report_json" ]; then
+            echo "Report file ${report_json} not found. Ensure the ZAP scan completed successfully." >&2
+            exit 1
+          fi
+
+          high_count=$(jq '[.site[]?.alerts[]? | select((.riskcode // "") == "3")] | length' "$report_json")
+          echo "High risk alerts detected: $high_count"
+          echo "high_alerts=${high_count}" >> "$GITHUB_OUTPUT"
+
+          if [ "$high_count" -gt 0 ]; then
+            high_summary=$(jq -r '
+              .site[]?.alerts[]?
+              | select((.riskcode // "") == "3")
+              | "- **" + (.alert // "Unknown alert") + "**"
+                + "\n  - Risk: " + (.riskdesc // "High risk")
+                + "\n  - URL: " + (
+                    (
+                      (.instances // [])
+                      | map(.uri // .url)
+                      | map(select(. != null))
+                      | first
+                    )
+                    // (.url // "N/A")
+                  )
+            ' "$report_json")
+
+            printf '%s\n' "$high_summary" > high-alerts-summary.md
+            {
+              echo "high_alerts_summary<<EOF"
+              cat high-alerts-summary.md
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            : > high-alerts-summary.md
+            echo "high_alerts_summary=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload ZAP reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-baseline-report
+          path: |
+            zap-report.html
+            zap-report.md
+            zap-report.json
+            high-alerts-summary.md
+          if-no-files-found: warn
+
+      - name: Create issue for high risk alerts
+        if: steps.evaluate.outputs.high_alerts != '0'
+        uses: actions/github-script@v7
+        env:
+          HIGH_ALERTS: ${{ steps.evaluate.outputs.high_alerts }}
+          ALERT_SUMMARY: ${{ steps.evaluate.outputs.high_alerts_summary }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueTitle = 'OWASP ZAP High-Risk Alerts Detected';
+            const highCount = Number(process.env.HIGH_ALERTS || '0');
+            const summary = process.env.ALERT_SUMMARY?.trim() || '- No alert details captured.';
+            const body = [
+              `The scheduled OWASP ZAP baseline scan detected **${highCount}** high-risk alert(s) for https://arthexis.com.`,
+              '',
+              '### Alert summary',
+              summary,
+              '',
+              `View the full report in the workflow run artifacts: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            ].join('\n');
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            });
+
+            const existing = issues.find(issue => issue.title === issueTitle && !issue.pull_request);
+
+            if (existing) {
+              core.info(`Updating existing issue #${existing.number}`);
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body
+              });
+            } else {
+              core.info('Creating a new issue for high-risk ZAP alerts');
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: issueTitle,
+                body
+              });
+            }
+
+      - name: Fail workflow when high risk alerts are found
+        if: steps.evaluate.outputs.high_alerts != '0'
+        run: |
+          echo "Failing workflow because ${{ steps.evaluate.outputs.high_alerts }} high-risk alert(s) were detected."
+          exit 1
