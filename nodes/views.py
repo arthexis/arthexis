@@ -20,15 +20,16 @@ from .utils import capture_screenshot, save_screenshot
 def node_list(request):
     """Return a JSON list of all known nodes."""
 
-    nodes = list(
-        Node.objects.values(
-            "hostname",
-            "address",
-            "port",
-            "last_seen",
-            "has_lcd_screen",
-        )
-    )
+    nodes = [
+        {
+            "hostname": node.hostname,
+            "address": node.address,
+            "port": node.port,
+            "last_seen": node.last_seen,
+            "features": list(node.features.values_list("slug", flat=True)),
+        }
+        for node in Node.objects.prefetch_related("features")
+    ]
     return JsonResponse({"nodes": nodes})
 
 
@@ -47,7 +48,7 @@ def node_info(request):
         "port": node.port,
         "mac_address": node.mac_address,
         "public_key": node.public_key,
-        "has_lcd_screen": node.has_lcd_screen,
+        "features": list(node.features.values_list("slug", flat=True)),
     }
 
     if token:
@@ -94,7 +95,7 @@ def register_node(request):
     public_key = data.get("public_key")
     token = data.get("token")
     signature = data.get("signature")
-    has_lcd_screen = data.get("has_lcd_screen")
+    features = data.get("features")
 
     if not hostname or not address or not mac_address:
         return JsonResponse(
@@ -120,7 +121,6 @@ def register_node(request):
         "hostname": hostname,
         "address": address,
         "port": port,
-        "has_lcd_screen": bool(has_lcd_screen),
     }
     if verified:
         defaults["public_key"] = public_key
@@ -137,13 +137,23 @@ def register_node(request):
         if verified:
             node.public_key = public_key
             update_fields.append("public_key")
-        if has_lcd_screen is not None:
-            node.has_lcd_screen = bool(has_lcd_screen)
-            update_fields.append("has_lcd_screen")
         node.save(update_fields=update_fields)
+        if features is not None:
+            if isinstance(features, (str, bytes)):
+                feature_list = [features]
+            else:
+                feature_list = list(features)
+            node.update_manual_features(feature_list)
         return JsonResponse(
             {"id": node.id, "detail": f"Node already exists (id: {node.id})"}
         )
+
+    if features is not None:
+        if isinstance(features, (str, bytes)):
+            feature_list = [features]
+        else:
+            feature_list = list(features)
+        node.update_manual_features(feature_list)
 
     return JsonResponse({"id": node.id})
 
@@ -181,6 +191,7 @@ def public_node_endpoint(request, endpoint):
             "port": node.port,
             "badge_color": node.badge_color,
             "last_seen": node.last_seen,
+            "features": list(node.features.values_list("slug", flat=True)),
         }
         return JsonResponse(data)
 

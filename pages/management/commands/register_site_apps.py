@@ -29,8 +29,6 @@ class Command(BaseCommand):
                 "address": "127.0.0.1",
                 "port": 8000,
                 "enable_public_api": False,
-                "clipboard_polling": False,
-                "screenshot_polling": False,
                 "role": role,
             },
         )

@@ -22,6 +22,7 @@ from .models import (
     EmailOutbox,
     NodeRole,
     NodeFeature,
+    NodeFeatureAssignment,
     ContentSample,
     NetMessage,
 )
@@ -33,6 +34,10 @@ class NodeAdminForm(forms.ModelForm):
         model = Node
         fields = "__all__"
         widgets = {"badge_color": CopyColorWidget()}
+class NodeFeatureAssignmentInline(admin.TabularInline):
+    model = NodeFeatureAssignment
+    extra = 0
+    autocomplete_fields = ("feature",)
 
 
 @admin.register(Node)
@@ -50,6 +55,7 @@ class NodeAdmin(EntityModelAdmin):
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
     actions = ["run_task", "take_screenshots"]
+    inlines = [NodeFeatureAssignmentInline]
 
     def get_urls(self):
         urls = super().get_urls()
@@ -270,6 +276,7 @@ class NodeFeatureAdmin(EntityModelAdmin):
     filter_horizontal = ("roles",)
     list_display = ("display", "slug", "is_enabled")
     readonly_fields = ("is_enabled",)
+    search_fields = ("display", "slug")
 
 
 @admin.register(ContentSample)
