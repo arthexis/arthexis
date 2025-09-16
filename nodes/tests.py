@@ -1142,3 +1142,21 @@ class NodeFeatureTests(TestCase):
                     self.assertFalse(feature.is_enabled)
                     (locks / "rfid.lck").touch()
                     self.assertTrue(feature.is_enabled)
+
+    def test_gui_toast_detection(self):
+        feature = NodeFeature.objects.create(slug="gui-toast", display="GUI Toast")
+        feature.roles.add(self.role)
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            with patch(
+                "core.notifications.supports_gui_toast", return_value=True
+            ):
+                self.assertTrue(feature.is_enabled)
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            with patch(
+                "core.notifications.supports_gui_toast", return_value=False
+            ):
+                self.assertFalse(feature.is_enabled)

@@ -83,6 +83,10 @@ class NodeFeature(Entity):
         node = Node.get_local()
         if self.slug == "lcd-screen":
             return bool(node and node.has_lcd_screen)
+        if self.slug == "gui-toast":
+            from core.notifications import supports_gui_toast
+
+            return supports_gui_toast()
         lock_map = {
             "rfid-scanner": "rfid.lck",
             "celery-queue": "celery.lck",

@@ -21,6 +21,15 @@ except Exception:  # pragma: no cover - plyer may not be installed
 logger = logging.getLogger(__name__)
 
 
+def supports_gui_toast() -> bool:
+    """Return ``True`` when a GUI toast notification is available."""
+
+    if not sys.platform.startswith("win"):
+        return False
+    notify = getattr(plyer_notification, "notify", None)
+    return callable(notify)
+
+
 class NotificationManager:
     """Write notifications to a lock file or fall back to GUI/log output."""
 
@@ -69,7 +78,7 @@ class NotificationManager:
 
     # GUI/log fallback ------------------------------------------------
     def _gui_display(self, subject: str, body: str) -> None:
-        if sys.platform.startswith("win") and plyer_notification:
+        if supports_gui_toast():
             try:  # pragma: no cover - depends on platform
                 plyer_notification.notify(
                     title="Arthexis", message=f"{subject}\n{body}", timeout=6

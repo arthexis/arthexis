@@ -1,0 +1,19 @@
+[
+  {
+    "model": "nodes.nodefeature",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "gui-toast",
+      "display": "GUI Toast",
+      "roles": [
+        [
+          "Terminal"
+        ],
+        [
+          "Control"
+        ]
+      ]
+    }
+  }
+]

@@ -20,6 +20,24 @@ def test_gui_display_uses_plyer_when_available(monkeypatch):
     assert fake.calls[0]["timeout"] == 6
 
 
+def test_supports_gui_toast_true_on_windows(monkeypatch):
+    class FakePlyer:
+        def notify(self, **kwargs):
+            return None
+
+    monkeypatch.setattr(notifications.sys, "platform", "win32")
+    monkeypatch.setattr(notifications, "plyer_notification", FakePlyer())
+
+    assert notifications.supports_gui_toast() is True
+
+
+def test_supports_gui_toast_false_when_missing_plyer(monkeypatch):
+    monkeypatch.setattr(notifications.sys, "platform", "win32")
+    monkeypatch.setattr(notifications, "plyer_notification", None)
+
+    assert notifications.supports_gui_toast() is False
+
+
 def test_send_returns_true_on_gui_failure(monkeypatch, tmp_path):
     class BadPlyer:
         def notify(self, **kwargs):
