@@ -1,10 +1,11 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django import forms
 
 import asyncio
 from datetime import timedelta
 import json
 
+from django.shortcuts import redirect
 from django.utils import timezone
 from django.urls import path
 from django.http import HttpResponse, HttpResponseRedirect
@@ -56,6 +57,50 @@ class TransactionImportForm(forms.Form):
     file = forms.FileField()
 
 
+class LogViewAdminMixin:
+    """Mixin providing an admin view to display charger or simulator logs."""
+
+    log_type = "charger"
+    log_template_name = "admin/ocpp/log_view.html"
+
+    def get_log_identifier(self, obj):  # pragma: no cover - mixin hook
+        raise NotImplementedError
+
+    def get_log_title(self, obj):
+        return f"Log for {obj}"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        info = self.model._meta.app_label, self.model._meta.model_name
+        custom = [
+            path(
+                "<path:object_id>/log/",
+                self.admin_site.admin_view(self.log_view),
+                name=f"{info[0]}_{info[1]}_log",
+            ),
+        ]
+        return custom + urls
+
+    def log_view(self, request, object_id):
+        obj = self.get_object(request, object_id)
+        if obj is None:
+            self.message_user(request, "Log is not available.", messages.ERROR)
+            return redirect("..")
+        identifier = self.get_log_identifier(obj)
+        log_entries = store.get_logs(identifier, log_type=self.log_type)
+        log_file = store._file_path(identifier, log_type=self.log_type)
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "original": obj,
+            "title": self.get_log_title(obj),
+            "log_entries": log_entries,
+            "log_file": str(log_file),
+            "log_identifier": identifier,
+        }
+        return TemplateResponse(request, self.log_template_name, context)
+
+
 @admin.register(Location)
 class LocationAdmin(EntityModelAdmin):
     form = LocationAdminForm
@@ -63,7 +108,7 @@ class LocationAdmin(EntityModelAdmin):
 
 
 @admin.register(Charger)
-class ChargerAdmin(EntityModelAdmin):
+class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     fieldsets = (
         (
             "General",
@@ -142,10 +187,13 @@ class ChargerAdmin(EntityModelAdmin):
         from django.utils.html import format_html
         from django.urls import reverse
 
-        url = reverse("charger-log", args=[obj.charger_id]) + "?type=charger"
+        url = reverse("admin:ocpp_charger_log", args=[obj.pk])
         return format_html('<a href="{}" target="_blank">view</a>', url)
 
     log_link.short_description = "Log"
+
+    def get_log_identifier(self, obj):
+        return obj.charger_id
 
     def status_link(self, obj):
         from django.utils.html import format_html
@@ -187,7 +235,7 @@ class ChargerAdmin(EntityModelAdmin):
 
 
 @admin.register(Simulator)
-class SimulatorAdmin(EntityModelAdmin):
+class SimulatorAdmin(LogViewAdminMixin, EntityModelAdmin):
     list_display = (
         "name",
         "cp_path",
@@ -211,12 +259,17 @@ class SimulatorAdmin(EntityModelAdmin):
     )
     actions = ("start_simulator", "stop_simulator")
 
+    log_type = "simulator"
+
     def running(self, obj):
         return obj.pk in store.simulators
 
     running.boolean = True
 
     def start_simulator(self, request, queryset):
+        from django.urls import reverse
+        from django.utils.html import format_html
+
         for obj in queryset:
             if obj.pk in store.simulators:
                 self.message_user(request, f"{obj.name}: already running")
@@ -226,7 +279,17 @@ class SimulatorAdmin(EntityModelAdmin):
             started, status, log_file = sim.start()
             if started:
                 store.simulators[obj.pk] = sim
-            self.message_user(request, f"{obj.name}: {status}. Log: {log_file}")
+            log_url = reverse("admin:ocpp_simulator_log", args=[obj.pk])
+            self.message_user(
+                request,
+                format_html(
+                    "{}: {}. Log: <code>{}</code> (<a href=\"{}\" target=\"_blank\">View Log</a>)",
+                    obj.name,
+                    status,
+                    log_file,
+                    log_url,
+                ),
+            )
 
     start_simulator.short_description = "Start selected simulators"
 
@@ -246,10 +309,13 @@ class SimulatorAdmin(EntityModelAdmin):
         from django.utils.html import format_html
         from django.urls import reverse
 
-        url = reverse("charger-log", args=[obj.cp_path]) + "?type=simulator"
+        url = reverse("admin:ocpp_simulator_log", args=[obj.pk])
         return format_html('<a href="{}" target="_blank">view</a>', url)
 
     log_link.short_description = "Log"
+
+    def get_log_identifier(self, obj):
+        return obj.cp_path
 
 
 class MeterValueInline(admin.TabularInline):

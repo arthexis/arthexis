@@ -1,0 +1,90 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block breadcrumbs %}
+{% if has_permission %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name|capfirst }}</a>
+  &rsaquo; <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  {% if original %}
+  &rsaquo; <a href="{% url opts|admin_urlname:'change' original.pk %}">{{ original }}</a>
+  {% endif %}
+  &rsaquo; {% trans 'Log' %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{{ title }}</h1>
+  {% if log_file %}
+  <p class="help">{% trans 'Log file' %}: <code>{{ log_file }}</code></p>
+  {% endif %}
+  <div class="form-row">
+    <label>
+      <input type="checkbox" id="auto-reload">
+      {% trans 'Auto reload' %}
+    </label>
+  </div>
+  <pre id="log" class="log-output">
+{% for entry in log_entries %}{{ entry }}
+{% empty %}{% trans 'No log entries recorded yet.' %}
+{% endfor %}
+  </pre>
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  #log.log-output {
+    max-height: calc(1em * 40);
+    overflow-y: auto;
+    overflow-x: auto;
+  }
+</style>
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const logEl = document.getElementById('log');
+  if (!logEl) {
+    return;
+  }
+  function scrollToBottom() {
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function fetchLog() {
+    fetch(window.location.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(resp => resp.text())
+      .then(html => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const newLog = doc.getElementById('log');
+        if (newLog) {
+          logEl.textContent = newLog.textContent;
+          scrollToBottom();
+        }
+      })
+      .catch(() => {});
+  }
+  scrollToBottom();
+  let reloadTimer;
+  const checkbox = document.getElementById('auto-reload');
+  if (checkbox) {
+    checkbox.addEventListener('change', function () {
+      if (this.checked) {
+        reloadTimer = setInterval(fetchLog, 3000);
+      } else if (reloadTimer) {
+        clearInterval(reloadTimer);
+        reloadTimer = null;
+      }
+    });
+  }
+});
+</script>
+{% endblock %}
