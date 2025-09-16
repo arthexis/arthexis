@@ -12,7 +12,10 @@ from django.conf import settings
 from django.contrib.sites.models import Site
 import uuid
 import os
+import shutil
 import socket
+import stat
+import subprocess
 from pathlib import Path
 from utils import revision
 from django.core.exceptions import ValidationError
@@ -92,6 +95,8 @@ class NodeFeature(Entity):
             from core.notifications import supports_gui_toast
 
             return supports_gui_toast()
+        if self.slug == "rpi-camera":
+            return Node._has_rpi_camera()
         lock_map = {
             "lcd-screen": "lcd_screen.lck",
             "rfid-scanner": "rfid.lck",
@@ -150,7 +155,9 @@ class Node(Entity):
         "celery-queue": "celery.lck",
         "nginx-server": "nginx_mode.lck",
     }
-    AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {"gui-toast"}
+    RPI_CAMERA_DEVICE = Path("/dev/video0")
+    RPI_CAMERA_BINARIES = ("rpicam-hello", "rpicam-still", "rpicam-vid")
+    AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {"gui-toast", "rpi-camera"}
     MANUAL_FEATURE_SLUGS = {"clipboard-poll", "screenshot-poll"}
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
@@ -264,6 +271,40 @@ class Node(Entity):
     def has_feature(self, slug: str) -> bool:
         return self.features.filter(slug=slug).exists()
 
+    @classmethod
+    def _has_rpi_camera(cls) -> bool:
+        """Return ``True`` when the Raspberry Pi camera stack is available."""
+
+        device = cls.RPI_CAMERA_DEVICE
+        if not device.exists():
+            return False
+        device_path = str(device)
+        try:
+            mode = os.stat(device_path).st_mode
+        except OSError:
+            return False
+        if not stat.S_ISCHR(mode):
+            return False
+        if not os.access(device_path, os.R_OK | os.W_OK):
+            return False
+        for binary in cls.RPI_CAMERA_BINARIES:
+            tool_path = shutil.which(binary)
+            if not tool_path:
+                return False
+            try:
+                result = subprocess.run(
+                    [tool_path, "--help"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=5,
+                )
+            except Exception:
+                return False
+            if result.returncode != 0:
+                return False
+        return True
+
     def refresh_features(self):
         if not self.pk:
             return
@@ -276,6 +317,8 @@ class Node(Entity):
         for slug, filename in self.FEATURE_LOCK_MAP.items():
             if (locks_dir / filename).exists():
                 detected_slugs.add(slug)
+        if self._has_rpi_camera():
+            detected_slugs.add("rpi-camera")
         try:
             from core.notifications import supports_gui_toast
         except Exception:
