@@ -6,6 +6,7 @@ import django
 django.setup()
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch, call, MagicMock
 from django.core import mail
 import socket
@@ -14,6 +15,7 @@ import json
 import uuid
 from tempfile import TemporaryDirectory
 import shutil
+import stat
 import time
 
 from django.test import Client, TestCase, TransactionTestCase, override_settings
@@ -120,7 +122,9 @@ class NodeTests(TestCase):
         self.assertEqual(hostnames, {"dup", "local2"})
 
     def test_register_node_feature_toggle(self):
-        NodeFeature.objects.get_or_create(slug="clipboard-poll", defaults={"display": "Clipboard Poll"})
+        NodeFeature.objects.get_or_create(
+            slug="clipboard-poll", defaults={"display": "Clipboard Poll"}
+        )
         url = reverse("register-node")
         first = self.client.post(
             url,
@@ -1172,14 +1176,123 @@ class NodeFeatureTests(TestCase):
         with patch(
             "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
         ):
-            with patch(
-                "core.notifications.supports_gui_toast", return_value=True
-            ):
+            with patch("core.notifications.supports_gui_toast", return_value=True):
                 self.assertTrue(feature.is_enabled)
         with patch(
             "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
         ):
-            with patch(
-                "core.notifications.supports_gui_toast", return_value=False
-            ):
+            with patch("core.notifications.supports_gui_toast", return_value=False):
                 self.assertFalse(feature.is_enabled)
+
+    @patch("nodes.models.Node._has_rpi_camera", return_value=True)
+    def test_rpi_camera_detection(self, mock_camera):
+        feature = NodeFeature.objects.create(
+            slug="rpi-camera", display="Raspberry Pi Camera"
+        )
+        feature.roles.add(self.role)
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            self.node.refresh_features()
+        self.assertTrue(
+            NodeFeatureAssignment.objects.filter(
+                node=self.node, feature=feature
+            ).exists()
+        )
+
+    @patch("nodes.models.Node._has_rpi_camera", side_effect=[True, False])
+    def test_rpi_camera_removed_when_unavailable(self, mock_camera):
+        feature = NodeFeature.objects.create(
+            slug="rpi-camera", display="Raspberry Pi Camera"
+        )
+        feature.roles.add(self.role)
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            self.node.refresh_features()
+            self.assertTrue(
+                NodeFeatureAssignment.objects.filter(
+                    node=self.node, feature=feature
+                ).exists()
+            )
+            self.node.refresh_features()
+        self.assertFalse(
+            NodeFeatureAssignment.objects.filter(
+                node=self.node, feature=feature
+            ).exists()
+        )
+
+
+class NodeRpiCameraDetectionTests(TestCase):
+    @patch("nodes.models.subprocess.run")
+    @patch("nodes.models.shutil.which")
+    @patch("nodes.models.os.access")
+    @patch("nodes.models.os.stat")
+    @patch("nodes.models.Path.exists")
+    def test_has_rpi_camera_true(
+        self,
+        mock_exists,
+        mock_stat,
+        mock_access,
+        mock_which,
+        mock_run,
+    ):
+        mock_exists.return_value = True
+        mock_stat.return_value = SimpleNamespace(st_mode=stat.S_IFCHR)
+        mock_access.return_value = True
+        mock_which.side_effect = lambda name: f"/usr/bin/{name}"
+        mock_run.return_value = SimpleNamespace(returncode=0)
+
+        self.assertTrue(Node._has_rpi_camera())
+        self.assertEqual(mock_which.call_count, len(Node.RPI_CAMERA_BINARIES))
+        self.assertEqual(mock_run.call_count, len(Node.RPI_CAMERA_BINARIES))
+
+    @patch("nodes.models.subprocess.run")
+    @patch("nodes.models.shutil.which")
+    @patch("nodes.models.os.access")
+    @patch("nodes.models.os.stat")
+    @patch("nodes.models.Path.exists")
+    def test_has_rpi_camera_missing_device(
+        self,
+        mock_exists,
+        mock_stat,
+        mock_access,
+        mock_which,
+        mock_run,
+    ):
+        mock_exists.return_value = False
+
+        self.assertFalse(Node._has_rpi_camera())
+        mock_stat.assert_not_called()
+        mock_access.assert_not_called()
+        mock_which.assert_not_called()
+        mock_run.assert_not_called()
+
+    @patch("nodes.models.subprocess.run")
+    @patch("nodes.models.shutil.which")
+    @patch("nodes.models.os.access")
+    @patch("nodes.models.os.stat")
+    @patch("nodes.models.Path.exists")
+    def test_has_rpi_camera_missing_tool(
+        self,
+        mock_exists,
+        mock_stat,
+        mock_access,
+        mock_which,
+        mock_run,
+    ):
+        mock_exists.return_value = True
+        mock_stat.return_value = SimpleNamespace(st_mode=stat.S_IFCHR)
+        mock_access.return_value = True
+        mock_run.return_value = SimpleNamespace(returncode=0)
+
+        def tool_lookup(name):
+            if name == Node.RPI_CAMERA_BINARIES[-1]:
+                return None
+            return f"/usr/bin/{name}"
+
+        mock_which.side_effect = tool_lookup
+
+        self.assertFalse(Node._has_rpi_camera())
+        missing_index = Node.RPI_CAMERA_BINARIES.index(Node.RPI_CAMERA_BINARIES[-1])
+        self.assertEqual(mock_run.call_count, missing_index)

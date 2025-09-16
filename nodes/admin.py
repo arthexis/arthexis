@@ -34,6 +34,8 @@ class NodeAdminForm(forms.ModelForm):
         model = Node
         fields = "__all__"
         widgets = {"badge_color": CopyColorWidget()}
+
+
 class NodeFeatureAssignmentInline(admin.TabularInline):
     model = NodeFeatureAssignment
     extra = 0
