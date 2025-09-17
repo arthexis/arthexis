@@ -357,6 +357,10 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
     {% if docsroot %}
       <a href="{{ docsroot }}">{% trans 'Documentation' %}</a> /
     {% endif %}
+    {% if user.pk and (user.has_perm('core.change_user') or user.has_perm('core.view_user')) %}
+      {% url 'admin:core_user_change' user.pk as profile_url %}
+      <a href="{{ profile_url }}">{% trans 'MY PROFILE' %}</a> /
+    {% endif %}
   {% endif %}
   {% if user.has_usable_password %}
     <a href="{% url 'admin:password_change' %}">{% trans 'Change password' %}</a> /
