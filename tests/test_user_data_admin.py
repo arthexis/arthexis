@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 
 from django import forms
 from django.contrib import admin
@@ -169,3 +170,13 @@ class UserDataAdminTests(TransactionTestCase):
                 load_user_fixtures(self.user)
                 instance.refresh_from_db()
                 self.assertTrue(instance.is_user_data)
+
+    def test_load_user_fixture_skips_empty_files(self):
+        empty = self.data_dir / "core_todo_1.json"
+        empty.write_text("[]", encoding="utf-8")
+
+        with patch("core.user_data.call_command") as mock_call:
+            load_user_fixtures(self.user)
+
+        self.assertFalse(empty.exists())
+        mock_call.assert_not_called()
