@@ -3,6 +3,7 @@ from django.db import models
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from core.entity import Entity
+from core.models import Profile
 from core.fields import SigilShortAutoField
 import re
 import json
@@ -471,8 +472,18 @@ def _sync_tasks_on_assignment_delete(sender, instance, **kwargs):
         node.sync_feature_tasks()
 
 
-class EmailOutbox(Entity):
+class EmailOutbox(Profile):
     """SMTP credentials for sending mail."""
+
+    profile_fields = (
+        "host",
+        "port",
+        "username",
+        "password",
+        "use_tls",
+        "use_ssl",
+        "from_email",
+    )
 
     node = models.OneToOneField(
         Node,
@@ -518,6 +529,12 @@ class EmailOutbox(Entity):
         verbose_name = "Email Outbox"
         verbose_name_plural = "Email Outboxes"
 
+    def clean(self):
+        if self.user_id or self.group_id:
+            super().clean()
+        else:
+            super(Profile, self).clean()
+
     def get_connection(self):
         return get_connection(
             "django.core.mail.backends.smtp.EmailBackend",
@@ -540,6 +557,12 @@ class EmailOutbox(Entity):
             outbox=self,
             **kwargs,
         )
+
+    def owner_display(self):
+        owner = super().owner_display()
+        if owner:
+            return owner
+        return str(self.node) if self.node_id else ""
 
 
 class NetMessage(Entity):
