@@ -962,6 +962,17 @@ class UserAdmin(DjangoUserAdmin):
         context["show_seed_datum"] = False
         return context
 
+    def get_inline_instances(self, request, obj=None):
+        inline_instances = super().get_inline_instances(request, obj)
+        if obj and getattr(obj, "is_system_user", False):
+            profile_inline_classes = tuple(USER_PROFILE_INLINES)
+            inline_instances = [
+                inline
+                for inline in inline_instances
+                if inline.__class__ not in profile_inline_classes
+            ]
+        return inline_instances
+
     def _update_profile_fixture(self, instance, owner, *, store: bool) -> None:
         if not getattr(instance, "pk", None):
             return

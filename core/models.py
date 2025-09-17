@@ -87,6 +87,28 @@ class Profile(Entity):
             raise ValidationError(
                 _("Profiles must be assigned to a user or a security group."),
             )
+        if self.user_id:
+            user_model = get_user_model()
+            system_username = getattr(user_model, "SYSTEM_USERNAME", None)
+            if system_username:
+                user_obj = getattr(self, "user", None)
+                username = getattr(user_obj, "username", None)
+                if not username:
+                    manager = getattr(user_model, "all_objects", user_model._default_manager)
+                    username = (
+                        manager.filter(pk=self.user_id)
+                        .values_list("username", flat=True)
+                        .first()
+                    )
+                if user_model.is_system_username(username):
+                    raise ValidationError(
+                        {
+                            "user": _(
+                                "The %(username)s account cannot have profiles attached."
+                            )
+                            % {"username": username}
+                        }
+                    )
 
     @property
     def owner(self):
@@ -192,6 +214,8 @@ class APLead(Lead):
 
 
 class User(Entity, AbstractUser):
+    SYSTEM_USERNAME = "arthexis"
+
     objects = EntityUserManager()
     all_objects = DjangoUserManager()
     """Custom user model."""
@@ -218,6 +242,14 @@ class User(Entity, AbstractUser):
 
     def __str__(self):
         return self.username
+
+    @classmethod
+    def is_system_username(cls, username):
+        return bool(username) and username == cls.SYSTEM_USERNAME
+
+    @property
+    def is_system_user(self) -> bool:
+        return self.is_system_username(self.username)
 
     def clean(self):
         super().clean()
@@ -311,8 +343,8 @@ class User(Entity, AbstractUser):
     def _direct_profile(self, model_label: str):
         model = apps.get_model("core", model_label)
         try:
-            return model.objects.get(user=self)
-        except model.DoesNotExist:
+            return self.get_profile(model)
+        except TypeError:
             return None
 
     def get_phones_by_priority(self):
