@@ -5,6 +5,7 @@ from django.urls import path, reverse
 from django.shortcuts import redirect, render
 from django.http import JsonResponse, HttpResponseBase, HttpResponseRedirect
 from django.template.response import TemplateResponse
+from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
 from django.contrib import messages
@@ -54,12 +55,13 @@ from .models import (
     SecurityGroup,
     InviteLead,
     APLead,
-    ChatProfile,
+    AssistantProfile,
     Todo,
     hash_key,
 )
 from .user_data import EntityModelAdmin, delete_user_fixture, dump_user_fixture
 from .widgets import OdooProductWidget
+from .mcp import process as mcp_process
 
 
 admin.site.unregister(Group)
@@ -243,6 +245,7 @@ class ReleaseManagerAdminForm(forms.ModelForm):
         }
 
 
+@admin.register(ReleaseManager)
 class ReleaseManagerAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     form = ReleaseManagerAdminForm
     list_display = ("owner", "pypi_username", "pypi_url")
@@ -776,7 +779,7 @@ class ReleaseManagerInlineForm(ProfileFormMixin, forms.ModelForm):
         }
 
 
-class ChatProfileInlineForm(ProfileFormMixin, forms.ModelForm):
+class AssistantProfileInlineForm(ProfileFormMixin, forms.ModelForm):
     user_key = forms.CharField(
         required=False,
         widget=forms.PasswordInput(render_value=True),
@@ -785,7 +788,7 @@ class ChatProfileInlineForm(ProfileFormMixin, forms.ModelForm):
     profile_fields = ("user_key", "scopes", "is_active")
 
     class Meta:
-        model = ChatProfile
+        model = AssistantProfile
         fields = ("scopes", "is_active")
 
     def __init__(self, *args, **kwargs):
@@ -800,7 +803,7 @@ class ChatProfileInlineForm(ProfileFormMixin, forms.ModelForm):
         if not self.instance.pk and not cleaned.get("user_key"):
             if cleaned.get("scopes") or cleaned.get("is_active"):
                 raise forms.ValidationError(
-                    "Provide a user key to create a chat profile."
+                    "Provide a user key to create an assistant profile."
                 )
         return cleaned
 
@@ -877,8 +880,8 @@ PROFILE_INLINE_CONFIG = {
             "pypi_url",
         ),
     },
-    ChatProfile: {
-        "form": ChatProfileInlineForm,
+    AssistantProfile: {
+        "form": AssistantProfileInlineForm,
         "fields": ("user_datum", "user_key", "scopes", "is_active"),
         "readonly_fields": ("user_key_hash", "created_at", "last_used_at"),
     },
@@ -917,7 +920,13 @@ def _build_profile_inline(model, owner_field):
     )
 
 
-PROFILE_MODELS = (OdooProfile, EmailInbox, EmailOutbox, ReleaseManager, ChatProfile)
+PROFILE_MODELS = (
+    OdooProfile,
+    EmailInbox,
+    EmailOutbox,
+    ReleaseManager,
+    AssistantProfile,
+)
 USER_PROFILE_INLINES = [
     _build_profile_inline(model, "user") for model in PROFILE_MODELS
 ]
@@ -995,6 +1004,7 @@ class EmailCollectorAdmin(EntityModelAdmin):
     search_fields = ("subject", "sender", "body", "fragment")
 
 
+@admin.register(OdooProfile)
 class OdooProfileAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     change_form_template = "django_object_actions/change_form.html"
     form = OdooProfileAdminForm
@@ -1191,11 +1201,13 @@ class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         return TemplateResponse(request, "admin/core/emailinbox/search.html", context)
 
 
-class ChatProfileAdmin(EntityModelAdmin):
+@admin.register(AssistantProfile)
+class AssistantProfileAdmin(EntityModelAdmin):
     list_display = ("owner", "created_at", "last_used_at", "is_active")
     readonly_fields = ("user_key_hash", "created_at", "last_used_at")
 
-    change_form_template = "admin/workgroupchatprofile_change_form.html"
+    change_form_template = "admin/workgroupassistantprofile_change_form.html"
+    change_list_template = "admin/assistantprofile_change_list.html"
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
         (
@@ -1219,14 +1231,62 @@ class ChatProfileAdmin(EntityModelAdmin):
 
     def get_urls(self):
         urls = super().get_urls()
+        opts = self.model._meta
+        app_label = opts.app_label
+        model_name = opts.model_name
         custom = [
             path(
                 "<path:object_id>/generate-key/",
                 self.admin_site.admin_view(self.generate_key),
-                name="core_chatprofile_generate_key",
+                name=f"{app_label}_{model_name}_generate_key",
+            ),
+            path(
+                "server/start/",
+                self.admin_site.admin_view(self.start_server),
+                name=f"{app_label}_{model_name}_start_server",
+            ),
+            path(
+                "server/stop/",
+                self.admin_site.admin_view(self.stop_server),
+                name=f"{app_label}_{model_name}_stop_server",
+            ),
+            path(
+                "server/status/",
+                self.admin_site.admin_view(self.server_status),
+                name=f"{app_label}_{model_name}_status",
             ),
         ]
         return custom + urls
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        status = mcp_process.get_status()
+        opts = self.model._meta
+        app_label = opts.app_label
+        model_name = opts.model_name
+        extra_context.update(
+            {
+                "mcp_status": status,
+                "mcp_server_actions": {
+                    "start": reverse(
+                        f"admin:{app_label}_{model_name}_start_server"
+                    ),
+                    "stop": reverse(
+                        f"admin:{app_label}_{model_name}_stop_server"
+                    ),
+                    "status": reverse(
+                        f"admin:{app_label}_{model_name}_status"
+                    ),
+                },
+            }
+        )
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def _redirect_to_changelist(self):
+        opts = self.model._meta
+        return HttpResponseRedirect(
+            reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
+        )
 
     def generate_key(self, request, object_id, *args, **kwargs):
         profile = self.get_object(request, object_id)
@@ -1239,14 +1299,76 @@ class ChatProfileAdmin(EntityModelAdmin):
                 level=messages.ERROR,
             )
             return HttpResponseRedirect("../")
-        profile, key = ChatProfile.issue_key(profile.user)
+        profile, key = AssistantProfile.issue_key(profile.user)
         context = {
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
             "original": profile,
             "user_key": key,
         }
-        return TemplateResponse(request, "admin/chatprofile_key.html", context)
+        return TemplateResponse(request, "admin/assistantprofile_key.html", context)
+
+    def render_change_form(
+        self, request, context, add=False, change=False, form_url="", obj=None
+    ):
+        response = super().render_change_form(
+            request, context, add=add, change=change, form_url=form_url, obj=obj
+        )
+        config = dict(getattr(settings, "MCP_SIGIL_SERVER", {}))
+        host = config.get("host") or "127.0.0.1"
+        port = config.get("port", 8800)
+        if isinstance(response, dict):
+            response.setdefault("mcp_server_host", host)
+            response.setdefault("mcp_server_port", port)
+        else:
+            context_data = getattr(response, "context_data", None)
+            if context_data is not None:
+                context_data.setdefault("mcp_server_host", host)
+                context_data.setdefault("mcp_server_port", port)
+        return response
+
+    def start_server(self, request):
+        try:
+            pid = mcp_process.start_server()
+        except mcp_process.ServerAlreadyRunningError as exc:
+            self.message_user(request, str(exc), level=messages.WARNING)
+        except mcp_process.ServerStartError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+        else:
+            self.message_user(
+                request,
+                f"Started MCP server (PID {pid}).",
+                level=messages.SUCCESS,
+            )
+        return self._redirect_to_changelist()
+
+    def stop_server(self, request):
+        try:
+            pid = mcp_process.stop_server()
+        except mcp_process.ServerNotRunningError as exc:
+            self.message_user(request, str(exc), level=messages.WARNING)
+        except mcp_process.ServerStopError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+        else:
+            self.message_user(
+                request,
+                f"Stopped MCP server (PID {pid}).",
+                level=messages.SUCCESS,
+            )
+        return self._redirect_to_changelist()
+
+    def server_status(self, request):
+        status = mcp_process.get_status()
+        if status["running"]:
+            msg = f"MCP server is running (PID {status['pid']})."
+            level = messages.INFO
+        else:
+            msg = "MCP server is not running."
+            level = messages.WARNING
+        if status.get("last_error"):
+            msg = f"{msg} {status['last_error']}"
+        self.message_user(request, msg, level=level)
+        return self._redirect_to_changelist()
 
     def get_model_perms(self, request):
         return {}

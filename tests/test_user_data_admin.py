@@ -18,7 +18,7 @@ from awg.models import CalculatorTemplate
 from core.models import (
     OdooProfile as CoreOdooProfile,
     ReleaseManager as CoreReleaseManager,
-    ChatProfile as CoreChatProfile,
+    AssistantProfile as CoreAssistantProfile,
     Todo,
 )
 from core.user_data import dump_user_fixture, load_user_fixtures
@@ -109,7 +109,7 @@ class UserDataAdminTests(TransactionTestCase):
 
     def test_user_user_data_fixture_includes_profiles(self):
         release_manager = CoreReleaseManager.objects.create(user=self.user)
-        chat_profile, _ = CoreChatProfile.issue_key(self.user)
+        chat_profile, _ = CoreAssistantProfile.issue_key(self.user)
         core_profile = CoreOdooProfile.objects.get(pk=self.profile.pk)
         UserModel = get_user_model()
         admin_model = None
@@ -163,7 +163,7 @@ class UserDataAdminTests(TransactionTestCase):
         expected_paths = [
             self.data_dir / f"core_odooprofile_{core_profile.pk}.json",
             self.data_dir / f"core_releasemanager_{release_manager.pk}.json",
-            self.data_dir / f"core_chatprofile_{chat_profile.pk}.json",
+            self.data_dir / f"core_assistantprofile_{chat_profile.pk}.json",
         ]
         for path in expected_paths:
             with self.subTest(path=path.name):
