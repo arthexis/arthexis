@@ -10,6 +10,8 @@ from typing import Optional
 
 from django.conf import settings
 
+from .constants import DEFAULT_IRQ_PIN
+
 logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - hardware dependent
@@ -17,7 +19,7 @@ try:  # pragma: no cover - hardware dependent
 except Exception:  # pragma: no cover - hardware dependent
     GPIO = None  # type: ignore
 
-IRQ_PIN = int(os.environ.get("RFID_IRQ_PIN", "4"))
+IRQ_PIN = int(os.environ.get("RFID_IRQ_PIN", str(DEFAULT_IRQ_PIN)))
 _tag_queue: "queue.Queue[dict]" = queue.Queue()
 _thread: Optional[threading.Thread] = None
 _stop_event = threading.Event()
