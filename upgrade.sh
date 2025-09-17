@@ -14,6 +14,7 @@ CLEAN=0
 NO_RESTART=0
 CANARY=0
 REVERT=0
+FAILOVER_BRANCH_CREATED=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --latest)
@@ -63,7 +64,49 @@ create_failover_branch() {
     git branch "$branch"
   fi
   echo "Created failover branch $branch"
+  FAILOVER_BRANCH_CREATED=1
 }
+
+cleanup_failover_branches() {
+  if [[ $FAILOVER_BRANCH_CREATED -ne 1 ]]; then
+    return
+  fi
+
+  local -a failover_branches
+  if ! readarray -t failover_branches < <(git for-each-ref --format='%(refname:short)' refs/heads/failover-* | sort); then
+    echo "Failed to enumerate failover branches for cleanup." >&2
+    return
+  fi
+
+  local total=${#failover_branches[@]}
+  if (( total <= 1 )); then
+    return
+  fi
+
+  local current_branch
+  current_branch=$(git rev-parse --abbrev-ref HEAD)
+  local keep_branch
+  if [[ $current_branch == failover-* ]]; then
+    keep_branch="$current_branch"
+  else
+    keep_branch="${failover_branches[$((total-1))]}"
+  fi
+
+  echo "Pruning older failover branches (keeping $keep_branch)..."
+  local branch
+  for branch in "${failover_branches[@]}"; do
+    if [[ $branch == "$keep_branch" ]]; then
+      continue
+    fi
+    if git branch -D "$branch" >/dev/null 2>&1; then
+      echo "Deleted failover branch $branch"
+    else
+      echo "Failed to delete failover branch $branch" >&2
+    fi
+  done
+}
+
+trap 'status=$?; if [[ $status -eq 0 ]]; then cleanup_failover_branches; fi' EXIT
 
 if [[ $REVERT -eq 1 ]]; then
   latest=$(git for-each-ref --format='%(refname:short)' refs/heads/failover-* | sort | tail -n 1)
