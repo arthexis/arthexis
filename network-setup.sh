@@ -17,11 +17,12 @@ LOCK_DIR="$BASE_DIR/locks"
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog]
+Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--interactive|-i] [--no-watchdog]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --no-firewall   Skip firewall port validation.
   --unsafe        Allow modification of the active internet connection.
+  --public        Configure an open access point without internet sharing.
   --interactive, -i  Collect user decisions for each step before executing.
   --no-watchdog   Skip installing the WiFi watchdog service.
 USAGE
@@ -31,6 +32,7 @@ FORCE_PASSWORD=false
 SKIP_FIREWALL=false
 INTERACTIVE=false
 UNSAFE=false
+PUBLIC_MODE=false
 INSTALL_WATCHDOG=true
 DEFAULT_AP_NAME="gelectriic-ap"
 AP_NAME="$DEFAULT_AP_NAME"
@@ -68,6 +70,9 @@ while [[ $# -gt 0 ]]; do
         --unsafe)
             UNSAFE=true
             ;;
+        --public)
+            PUBLIC_MODE=true
+            ;;
         -i|--interactive)
             INTERACTIVE=true
             ;;
@@ -86,6 +91,11 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+
+if [[ $PUBLIC_MODE == true && $FORCE_PASSWORD == true ]]; then
+    echo "Warning: --password ignored in public mode." >&2
+    FORCE_PASSWORD=false
+fi
 
 if [[ $EUID -ne 0 ]]; then
     echo "This script must be run as root" >&2
@@ -207,23 +217,27 @@ HYPERLINE_NAME="hyperline"
 EXISTING_PASS=""
 WIFI_PASS=""
 if [[ $SKIP_AP == false ]]; then
-    EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null || true)"
-    if [[ -z "$EXISTING_PASS" && "$AP_NAME" != "$DEFAULT_AP_NAME" ]]; then
-        EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$DEFAULT_AP_NAME" 2>/dev/null || true)"
-    fi
-    if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
-        while true; do
-            read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
-            read -rsp "Confirm password: " WIFI_PASS2; echo
-            if [[ "$WIFI_PASS1" == "$WIFI_PASS2" && -n "$WIFI_PASS1" ]]; then
-                WIFI_PASS="$WIFI_PASS1"
-                break
-            else
-                echo "Passwords do not match or are empty." >&2
-            fi
-        done
+    if [[ $PUBLIC_MODE == true ]]; then
+        WIFI_PASS=""
     else
-        WIFI_PASS="$EXISTING_PASS"
+        EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null || true)"
+        if [[ -z "$EXISTING_PASS" && "$AP_NAME" != "$DEFAULT_AP_NAME" ]]; then
+            EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$DEFAULT_AP_NAME" 2>/dev/null || true)"
+        fi
+        if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
+            while true; do
+                read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
+                read -rsp "Confirm password: " WIFI_PASS2; echo
+                if [[ "$WIFI_PASS1" == "$WIFI_PASS2" && -n "$WIFI_PASS1" ]]; then
+                    WIFI_PASS="$WIFI_PASS1"
+                    break
+                else
+                    echo "Passwords do not match or are empty." >&2
+                fi
+            done
+        else
+            WIFI_PASS="$EXISTING_PASS"
+        fi
     fi
 fi
 
@@ -266,14 +280,18 @@ if [[ $RUN_AP == true ]]; then
             nmcli connection delete "$con"
         done
 
+        security_args=(wifi-sec.key-mgmt none)
+        if [[ $PUBLIC_MODE == false ]]; then
+            security_args=(wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS")
+        fi
+
         if nmcli -t -f NAME connection show | grep -Fxq "$AP_NAME"; then
             nmcli connection modify "$AP_NAME" \
                 connection.interface-name wlan0 \
                 wifi.ssid "$AP_NAME" \
                 wifi.mode ap \
                 wifi.band bg \
-                wifi-sec.key-mgmt wpa-psk \
-                wifi-sec.psk "$WIFI_PASS" \
+                "${security_args[@]}" \
                 ipv4.method shared \
                 ipv4.addresses 10.42.0.1/16 \
                 ipv4.never-default yes \
@@ -281,18 +299,33 @@ if [[ $RUN_AP == true ]]; then
                 ipv6.never-default yes \
                 connection.autoconnect yes \
                 connection.autoconnect-priority 0
+            if [[ $PUBLIC_MODE == true ]]; then
+                nmcli connection modify "$AP_NAME" -wifi-sec.psk >/dev/null 2>&1 || true
+            fi
         else
             nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" \
                 connection.interface-name wlan0 autoconnect yes connection.autoconnect-priority 0 \
                 ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
                 ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
-                wifi.band bg wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS"
+                wifi.band bg "${security_args[@]}"
         fi
-        nmcli connection up eth0-shared || true
+        if [[ $PUBLIC_MODE == false ]]; then
+            nmcli connection up eth0-shared || true
+        else
+            nmcli connection down eth0-shared >/dev/null 2>&1 || true
+        fi
         nmcli connection up "$AP_NAME"
         if command -v iptables >/dev/null 2>&1; then
             iptables -C INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT 2>/dev/null || \
                 iptables -A INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT
+            if [[ $PUBLIC_MODE == true ]]; then
+                iptables -C FORWARD -i wlan0 -j DROP 2>/dev/null || \
+                    iptables -I FORWARD 1 -i wlan0 -j DROP
+            else
+                while iptables -C FORWARD -i wlan0 -j DROP 2>/dev/null; do
+                    iptables -D FORWARD -i wlan0 -j DROP
+                done
+            fi
         fi
         if ! nmcli -t -f NAME connection show --active | grep -Fxq "$AP_NAME"; then
             echo "Access point $AP_NAME failed to start." >&2
