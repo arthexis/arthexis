@@ -14,8 +14,12 @@ SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
 logger = logging.getLogger(__name__)
 
 
-def capture_screenshot(url: str) -> Path:
-    """Capture a screenshot of ``url`` and save it to :data:`SCREENSHOT_DIR`."""
+def capture_screenshot(url: str, cookies=None) -> Path:
+    """Capture a screenshot of ``url`` and save it to :data:`SCREENSHOT_DIR`.
+
+    ``cookies`` can be an iterable of Selenium cookie mappings which will be
+    applied after the initial navigation and before the screenshot is taken.
+    """
     options = Options()
     options.add_argument("-headless")
     try:
@@ -27,6 +31,13 @@ def capture_screenshot(url: str) -> Path:
                 browser.get(url)
             except WebDriverException as exc:
                 logger.error("Failed to load %s: %s", url, exc)
+            if cookies:
+                for cookie in cookies:
+                    try:
+                        browser.add_cookie(cookie)
+                    except WebDriverException as exc:
+                        logger.error("Failed to apply cookie for %s: %s", url, exc)
+                browser.get(url)
             if not browser.save_screenshot(str(filename)):
                 raise RuntimeError("Screenshot capture failed")
             return filename
