@@ -1,3 +1,4 @@
+import io
 import os
 import sys
 import types
@@ -19,6 +20,7 @@ from nodes.models import Node, NodeRole
 
 from core.models import RFID
 from ocpp.rfid.reader import read_rfid, enable_deep_read
+from ocpp.rfid.detect import detect_scanner, main as detect_main
 from ocpp.rfid import background_reader
 from ocpp.rfid.constants import (
     DEFAULT_IRQ_PIN,
@@ -174,6 +176,58 @@ class RFIDLastSeenTests(TestCase):
         self.assertIsNotNone(tag.last_seen_on)
         self.assertEqual(result["kind"], RFID.CLASSIC)
 
+
+class RFIDDetectionScriptTests(SimpleTestCase):
+    @patch("ocpp.rfid.detect._ensure_django")
+    @patch(
+        "ocpp.rfid.irq_wiring_check.check_irq_pin",
+        return_value={"irq_pin": DEFAULT_IRQ_PIN},
+    )
+    def test_detect_scanner_success(self, mock_check, _mock_setup):
+        result = detect_scanner()
+        self.assertEqual(
+            result,
+            {
+                "detected": True,
+                "irq_pin": DEFAULT_IRQ_PIN,
+            },
+        )
+        mock_check.assert_called_once()
+
+    @patch("ocpp.rfid.detect._ensure_django")
+    @patch(
+        "ocpp.rfid.irq_wiring_check.check_irq_pin",
+        return_value={"error": "no scanner detected"},
+    )
+    def test_detect_scanner_failure(self, mock_check, _mock_setup):
+        result = detect_scanner()
+        self.assertFalse(result["detected"])
+        self.assertEqual(result["reason"], "no scanner detected")
+        mock_check.assert_called_once()
+
+    @patch(
+        "ocpp.rfid.detect.detect_scanner",
+        return_value={"detected": True, "irq_pin": DEFAULT_IRQ_PIN},
+    )
+    def test_detect_main_success_output(self, mock_detect):
+        buffer = io.StringIO()
+        with patch("sys.stdout", new=buffer):
+            exit_code = detect_main([])
+        self.assertEqual(exit_code, 0)
+        self.assertIn("IRQ pin", buffer.getvalue())
+        mock_detect.assert_called_once()
+
+    @patch(
+        "ocpp.rfid.detect.detect_scanner",
+        return_value={"detected": False, "reason": "missing hardware"},
+    )
+    def test_detect_main_failure_output(self, mock_detect):
+        buffer = io.StringIO()
+        with patch("sys.stdout", new=buffer):
+            exit_code = detect_main([])
+        self.assertEqual(exit_code, 1)
+        self.assertIn("missing hardware", buffer.getvalue())
+        mock_detect.assert_called_once()
 
 class RestartViewTests(SimpleTestCase):
     @patch("config.middleware.Node.get_local", return_value=None)
