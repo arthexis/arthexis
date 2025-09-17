@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Admin change form sidebar",
+      "url": "/admin/auth/user/add/",
+      "request_details": "Open any admin change form and confirm the sections sidebar toggles without overlapping the main form."
+    }
+  }
+]
