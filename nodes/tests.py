@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch, call, MagicMock
 from django.core import mail
+from django.core.management import call_command
 import socket
 import base64
 import json
@@ -1124,6 +1125,21 @@ class NodeRoleAdminTests(TestCase):
         )
         resp = self.client.get(reverse("admin:nodes_noderole_changelist"))
         self.assertContains(resp, '<td class="field-registered">1</td>', html=True)
+
+
+class NodeFeatureFixtureTests(TestCase):
+    def test_rfid_scanner_fixture_includes_control_role(self):
+        for name in ("Terminal", "Satellite", "Constellation", "Control"):
+            NodeRole.objects.get_or_create(name=name)
+        fixture_path = (
+            Path(__file__).resolve().parent
+            / "fixtures"
+            / "node_features__nodefeature_rfid_scanner.json"
+        )
+        call_command("loaddata", str(fixture_path), verbosity=0)
+        feature = NodeFeature.objects.get(slug="rfid-scanner")
+        role_names = set(feature.roles.values_list("name", flat=True))
+        self.assertIn("Control", role_names)
 
 
 class NodeFeatureTests(TestCase):

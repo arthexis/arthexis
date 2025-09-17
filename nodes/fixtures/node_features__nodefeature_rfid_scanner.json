@@ -8,6 +8,9 @@
       "display": "RFID Scanner",
       "roles": [
         [
+          "Control"
+        ],
+        [
           "Terminal"
         ],
         [
