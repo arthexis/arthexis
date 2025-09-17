@@ -220,6 +220,31 @@ ASGI_APPLICATION = "config.asgi.application"
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
 
+# MCP sigil resolver configuration
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        return default
+
+
+def _split_env_list(name: str) -> list[str]:
+    raw = os.environ.get(name)
+    if not raw:
+        return []
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+MCP_SIGIL_SERVER = {
+    "host": os.environ.get("MCP_SIGIL_HOST", "127.0.0.1"),
+    "port": _env_int("MCP_SIGIL_PORT", 8800),
+    "api_keys": _split_env_list("MCP_SIGIL_API_KEYS"),
+    "required_scopes": ["sigils:read"],
+    "issuer_url": os.environ.get("MCP_SIGIL_ISSUER_URL"),
+    "resource_server_url": os.environ.get("MCP_SIGIL_RESOURCE_URL"),
+}
+
+
 # Custom user model
 AUTH_USER_MODEL = "core.User"
 
