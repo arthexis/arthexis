@@ -14,7 +14,7 @@ django.setup()
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
-from core.models import Package, PackageRelease, Todo
+from core.models import Package, PackageRelease, Todo, ReleaseManager
 
 
 class ReleaseProgressViewTests(TestCase):
@@ -49,6 +49,15 @@ class ReleaseProgressViewTests(TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.log_dir, ignore_errors=True)
+
+    def _assign_release_manager(self):
+        manager = ReleaseManager.objects.create(
+            user=self.user,
+            pypi_token="pypi-test-token",
+        )
+        self.release.release_manager = manager
+        self.release.save(update_fields=["release_manager"])
+        return manager
 
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     def test_stale_log_removed_on_start(self, git_clean):
@@ -158,12 +167,18 @@ class ReleaseProgressViewTests(TestCase):
 
         self.assertTrue(response.context["awaiting_approval"])
         self.assertIsNone(response.context["next_step"])
+        self.assertFalse(response.context["approval_credentials_ready"])
+        self.assertTrue(response.context["approval_credentials_missing"])
         self.assertIn(
-            "Awaiting release manager approval", response.context["log_content"]
+            "Release manager publishing credentials missing",
+            response.context["log_content"],
         )
+        self.assertNotContains(response, 'name="approve"')
+        self.assertContains(response, "Publishing credentials required")
 
     def test_release_manager_approval_accepts(self):
         url = reverse("release-progress", args=[self.release.pk, "publish"])
+        self._assign_release_manager()
         session = self.client.session
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
@@ -173,7 +188,8 @@ class ReleaseProgressViewTests(TestCase):
         }
         session.save()
 
-        self.client.get(f"{url}?step=7")
+        initial = self.client.get(f"{url}?step=7")
+        self.assertTrue(initial.context["approval_credentials_ready"])
         response = self.client.get(f"{url}?approve=1&step=7")
 
         self.assertFalse(response.context["awaiting_approval"])
@@ -185,6 +201,7 @@ class ReleaseProgressViewTests(TestCase):
 
     def test_release_manager_rejection_aborts(self):
         url = reverse("release-progress", args=[self.release.pk, "publish"])
+        self._assign_release_manager()
         session = self.client.session
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
@@ -194,7 +211,8 @@ class ReleaseProgressViewTests(TestCase):
         }
         session.save()
 
-        self.client.get(f"{url}?step=7")
+        initial = self.client.get(f"{url}?step=7")
+        self.assertTrue(initial.context["approval_credentials_ready"])
         response = self.client.get(f"{url}?reject=1&step=7")
 
         self.assertEqual(

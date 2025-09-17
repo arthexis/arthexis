@@ -11,6 +11,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.utils.translation import gettext as _
 from django.utils import timezone
+from django.urls import NoReverseMatch, reverse
 from pathlib import Path
 import subprocess
 import json
@@ -260,15 +261,28 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
 
 
 def _step_release_manager_approval(release, ctx, log_path: Path) -> None:
+    if release.to_credentials() is None:
+        ctx.pop("release_approval", None)
+        if not ctx.get("approval_credentials_missing"):
+            _append_log(log_path, "Release manager publishing credentials missing")
+        ctx["approval_credentials_missing"] = True
+        ctx["awaiting_approval"] = True
+        raise ApprovalRequired()
+
+    missing_before = ctx.pop("approval_credentials_missing", None)
+    if missing_before:
+        ctx.pop("awaiting_approval", None)
     decision = ctx.get("release_approval")
     if decision == "approved":
         ctx.pop("release_approval", None)
         ctx.pop("awaiting_approval", None)
+        ctx.pop("approval_credentials_missing", None)
         _append_log(log_path, "Release manager approved release")
         return
     if decision == "rejected":
         ctx.pop("release_approval", None)
         ctx.pop("awaiting_approval", None)
+        ctx.pop("approval_credentials_missing", None)
         _append_log(log_path, "Release manager rejected release")
         raise RuntimeError(
             _("Release manager rejected the release. Restart required."),
@@ -513,12 +527,21 @@ def release_progress(request, pk: int, action: str):
         if restart_path.exists():
             restart_path.unlink()
 
+    manager = release.release_manager or release.package.release_manager
+    credentials_ready = bool(release.to_credentials())
+    if credentials_ready and ctx.get("approval_credentials_missing"):
+        ctx.pop("approval_credentials_missing", None)
+
     if request.GET.get("start"):
         ctx["started"] = True
         ctx["paused"] = False
     if request.GET.get("ack_todos"):
         ctx["todos_ack"] = True
-    if ctx.get("awaiting_approval"):
+    if (
+        ctx.get("awaiting_approval")
+        and not ctx.get("approval_credentials_missing")
+        and credentials_ready
+    ):
         if request.GET.get("approve"):
             ctx["release_approval"] = "approved"
         if request.GET.get("reject"):
@@ -612,11 +635,18 @@ def release_progress(request, pk: int, action: str):
     if has_pending_todos:
         next_step = None
     awaiting_approval = bool(ctx.get("awaiting_approval"))
+    approval_credentials_missing = bool(ctx.get("approval_credentials_missing"))
     if awaiting_approval:
+        next_step = None
+    if approval_credentials_missing:
         next_step = None
     paused = ctx.get("paused", False)
 
     step_names = [s[0] for s in steps]
+    approval_credentials_ready = credentials_ready
+    credentials_blocking = approval_credentials_missing or (
+        awaiting_approval and not approval_credentials_ready
+    )
     step_states = []
     for index, name in enumerate(step_names):
         if index < step_count:
@@ -641,7 +671,17 @@ def release_progress(request, pk: int, action: str):
             icon = "📝"
             label = _("Awaiting checklist")
         elif (
+            credentials_blocking
+            and ctx.get("started")
+            and index == step_count
+            and not done
+        ):
+            status = "missing-credentials"
+            icon = "🔐"
+            label = _("Credentials required")
+        elif (
             awaiting_approval
+            and approval_credentials_ready
             and ctx.get("started")
             and index == step_count
             and not done
@@ -669,6 +709,16 @@ def release_progress(request, pk: int, action: str):
 
     is_running = ctx.get("started") and not paused and not done and not ctx.get("error")
     can_resume = ctx.get("started") and paused and not done and not ctx.get("error")
+    release_manager_owner = manager.owner_display() if manager else ""
+    try:
+        current_user_admin_url = reverse(
+            "admin:teams_user_change", args=[request.user.pk]
+        )
+    except NoReverseMatch:
+        current_user_admin_url = reverse(
+            "admin:core_user_change", args=[request.user.pk]
+        )
+
     context = {
         "release": release,
         "action": "publish",
@@ -689,6 +739,11 @@ def release_progress(request, pk: int, action: str):
         "step_states": step_states,
         "has_pending_todos": has_pending_todos,
         "awaiting_approval": awaiting_approval,
+        "approval_credentials_missing": approval_credentials_missing,
+        "approval_credentials_ready": approval_credentials_ready,
+        "release_manager_owner": release_manager_owner,
+        "has_release_manager": bool(manager),
+        "current_user_admin_url": current_user_admin_url,
         "is_running": is_running,
         "can_resume": can_resume,
     }
