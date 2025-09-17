@@ -19,6 +19,7 @@ from django.utils import timezone
 from django.contrib.auth.models import Permission
 from .models import (
     User,
+    UserPhoneNumber,
     EnergyAccount,
     ElectricVehicle,
     EnergyCredit,
@@ -186,6 +187,41 @@ class UserOperateAsTests(TestCase):
         profile = ReleaseManager.objects.create(group=group)
         self.assertEqual(member.get_profile(ReleaseManager), profile)
         self.assertTrue(member.has_profile(ReleaseManager))
+
+
+class UserPhoneNumberTests(TestCase):
+    def test_get_phone_numbers_by_priority(self):
+        user = User.objects.create_user(username="phone-user", password="secret")
+        later = UserPhoneNumber.objects.create(
+            user=user, number="+15555550101", priority=10
+        )
+        earlier = UserPhoneNumber.objects.create(
+            user=user, number="+15555550100", priority=1
+        )
+        immediate = UserPhoneNumber.objects.create(
+            user=user, number="+15555550099", priority=0
+        )
+
+        phones = user.get_phones_by_priority()
+        self.assertEqual(phones, [immediate, earlier, later])
+
+    def test_get_phone_numbers_by_priority_orders_by_id_when_equal(self):
+        user = User.objects.create_user(username="phone-order", password="secret")
+        first = UserPhoneNumber.objects.create(
+            user=user, number="+19995550000", priority=0
+        )
+        second = UserPhoneNumber.objects.create(
+            user=user, number="+19995550001", priority=0
+        )
+
+        phones = user.get_phones_by_priority()
+        self.assertEqual(phones, [first, second])
+
+    def test_get_phone_numbers_by_priority_alias(self):
+        user = User.objects.create_user(username="phone-alias", password="secret")
+        phone = UserPhoneNumber.objects.create(user=user, number="+14445550000", priority=3)
+
+        self.assertEqual(user.get_phone_numbers_by_priority(), [phone])
 
 
 class RFIDLoginTests(TestCase):

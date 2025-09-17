@@ -29,6 +29,7 @@ from django_object_actions import DjangoObjectActions
 from ocpp.models import Transaction
 from .models import (
     User,
+    UserPhoneNumber,
     EnergyAccount,
     ElectricVehicle,
     Brand,
@@ -748,14 +749,16 @@ GROUP_PROFILE_INLINES = [
 SecurityGroupAdmin.inlines = GROUP_PROFILE_INLINES
 
 
+class UserPhoneNumberInline(admin.TabularInline):
+    model = UserPhoneNumber
+    extra = 0
+    fields = ("number", "priority")
+
+
 class UserAdmin(DjangoUserAdmin):
-    fieldsets = _append_operate_as(DjangoUserAdmin.fieldsets) + (
-        ("Contact", {"fields": ("phone_number", "has_charger")}),
-    )
-    add_fieldsets = _append_operate_as(DjangoUserAdmin.add_fieldsets) + (
-        ("Contact", {"fields": ("phone_number", "has_charger")}),
-    )
-    inlines = USER_PROFILE_INLINES
+    fieldsets = _append_operate_as(DjangoUserAdmin.fieldsets)
+    add_fieldsets = _append_operate_as(DjangoUserAdmin.add_fieldsets)
+    inlines = USER_PROFILE_INLINES + [UserPhoneNumberInline]
 
     def _remove_stale_profile_fixtures(self, data_dir, model, user_pk, active_ids):
         pattern = f"{model._meta.app_label}_{model._meta.model_name}_*.json"
