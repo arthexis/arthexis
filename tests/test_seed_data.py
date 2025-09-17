@@ -237,12 +237,28 @@ class EnvRefreshUserDataTests(TransactionTestCase):
         spec.loader.exec_module(self.env_refresh)
         self.data_dir = Path(settings.BASE_DIR) / "data"
         self.data_dir.mkdir(exist_ok=True)
-        for path in self.data_dir.glob("*.json"):
-            path.unlink()
+        for item in list(self.data_dir.iterdir()):
+            if item.is_file() and item.suffix == ".json":
+                item.unlink()
+            elif item.is_dir():
+                for child in item.glob("*.json"):
+                    child.unlink()
+                try:
+                    item.rmdir()
+                except OSError:
+                    pass
 
     def tearDown(self):
-        for path in self.data_dir.glob("*.json"):
-            path.unlink()
+        for item in list(self.data_dir.iterdir()):
+            if item.is_file() and item.suffix == ".json":
+                item.unlink(missing_ok=True)
+            elif item.is_dir():
+                for child in item.glob("*.json"):
+                    child.unlink(missing_ok=True)
+                try:
+                    item.rmdir()
+                except OSError:
+                    pass
 
     def test_env_refresh_loads_user_fixtures(self):
         self._run_clean_env_refresh()
@@ -251,7 +267,7 @@ class EnvRefreshUserDataTests(TransactionTestCase):
         todo = Todo.objects.create(request="Personal TODO")
         Todo.all_objects.filter(pk=todo.pk).update(is_user_data=True)
         dump_user_fixture(todo, user)
-        fixture_path = self.data_dir / f"core_todo_{todo.pk}.json"
+        fixture_path = self.data_dir / user.username / f"core_todo_{todo.pk}.json"
         self.assertTrue(fixture_path.exists())
 
         Todo.objects.all().delete()

@@ -44,7 +44,7 @@ from django.contrib.auth import get_user_model
 
 from core.models import PackageRelease
 from core.sigil_builder import generate_model_sigils
-from core.user_data import load_user_fixtures
+from core.user_data import load_shared_user_fixtures, load_user_fixtures
 
 
 def _unlink_sqlite_db(path: Path) -> None:
@@ -337,6 +337,9 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
             domain=node.public_endpoint,
             defaults={"name": "Control"},
         )
+
+    # Load shared fixtures once before personal data
+    load_shared_user_fixtures(force=True)
 
     # Load personal user data fixtures last
     for user in get_user_model().objects.all():

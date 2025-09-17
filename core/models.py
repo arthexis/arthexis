@@ -339,7 +339,7 @@ class User(Entity, AbstractUser):
         return self._direct_profile("ChatProfile")
 
 
-class UserPhoneNumber(models.Model):
+class UserPhoneNumber(Entity):
     """Store phone numbers associated with a user."""
 
     user = models.ForeignKey(

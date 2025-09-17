@@ -32,9 +32,12 @@ class UserDataAdminTests(TransactionTestCase):
         self.client.login(username="udadmin", password="pw")
         data_root = Path(self.user.data_path or Path(settings.BASE_DIR) / "data")
         data_root.mkdir(exist_ok=True)
-        for f in data_root.glob("*.json"):
+        user_dir = data_root / self.user.username
+        user_dir.mkdir(exist_ok=True)
+        for f in user_dir.glob("*.json"):
             f.unlink()
-        self.data_dir = data_root
+        self.data_root = data_root
+        self.data_dir = user_dir
         self.profile = OdooProfile.objects.create(
             user=self.user,
             host="http://test",
@@ -53,6 +56,21 @@ class UserDataAdminTests(TransactionTestCase):
         url = reverse("admin:teams_odooprofile_change", args=[self.profile.pk])
         response = self.client.get(url)
         self.assertContains(response, 'name="_user_datum"')
+
+    def test_user_change_view_hides_user_datum_checkbox(self):
+        UserModel = get_user_model()
+        admin_model = None
+        for model in admin.site._registry:
+            if model._meta.concrete_model is UserModel:
+                admin_model = model
+                break
+        self.assertIsNotNone(admin_model)
+        url = reverse(
+            f"admin:{admin_model._meta.app_label}_{admin_model._meta.model_name}_change",
+            args=[self.user.pk],
+        )
+        response = self.client.get(url)
+        self.assertNotContains(response, 'name="_user_datum"')
 
     def test_save_user_datum_creates_fixture(self):
         url = reverse("admin:teams_odooprofile_change", args=[self.profile.pk])
@@ -104,7 +122,7 @@ class UserDataAdminTests(TransactionTestCase):
         self.assertIsNotNone(user_admin)
         admin_user = admin_model.objects.get(pk=self.user.pk)
         rf = RequestFactory()
-        request = rf.post("/", {"_user_datum": "on"})
+        request = rf.post("/", {})
         request.user = self.user
         request.session = self.client.session
         setattr(request, "_messages", FallbackStorage(request))
@@ -119,8 +137,30 @@ class UserDataAdminTests(TransactionTestCase):
 
         user_admin.save_model(request, admin_user, form, True)
 
+        class DummyInlineForm:
+            def __init__(self, instance, cleaned_data):
+                self.instance = instance
+                self.cleaned_data = cleaned_data
+
+        class DummyFormset:
+            def __init__(self, forms):
+                self.forms = forms
+                self.deleted_objects = []
+
+            def save(self):
+                return self.forms
+
+        def run_formset(instance):
+            formset = DummyFormset(
+                [DummyInlineForm(instance, {"user_datum": True, "DELETE": False})]
+            )
+            user_admin.save_formset(request, form, formset, True)
+
+        run_formset(core_profile)
+        run_formset(release_manager)
+        run_formset(chat_profile)
+
         expected_paths = [
-            self.data_dir / f"core_user_{self.user.pk}.json",
             self.data_dir / f"core_odooprofile_{core_profile.pk}.json",
             self.data_dir / f"core_releasemanager_{release_manager.pk}.json",
             self.data_dir / f"core_chatprofile_{chat_profile.pk}.json",
@@ -129,9 +169,12 @@ class UserDataAdminTests(TransactionTestCase):
             with self.subTest(path=path.name):
                 self.assertTrue(path.exists())
 
+        user_fixture = self.data_dir / f"core_user_{self.user.pk}.json"
+        self.assertFalse(user_fixture.exists())
+
         core_user = UserModel.objects.get(pk=self.user.pk)
-        instances = [core_user, core_profile, release_manager, chat_profile]
-        for instance in instances:
+        profile_instances = [core_profile, release_manager, chat_profile]
+        for instance in [core_user] + profile_instances:
             with self.subTest(instance=instance._meta.label_lower):
                 type(instance).all_objects.filter(pk=instance.pk).update(
                     is_user_data=False
@@ -141,10 +184,13 @@ class UserDataAdminTests(TransactionTestCase):
 
         load_user_fixtures(self.user)
 
-        for instance in instances:
+        for instance in profile_instances:
             with self.subTest(reloaded=instance._meta.label_lower):
                 instance.refresh_from_db()
                 self.assertTrue(instance.is_user_data)
+
+        core_user.refresh_from_db()
+        self.assertFalse(core_user.is_user_data)
 
     def test_load_user_fixture_marks_user_data_flag(self):
         core_profile = CoreOdooProfile.objects.get(pk=self.profile.pk)

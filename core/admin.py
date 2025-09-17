@@ -19,6 +19,7 @@ from import_export.widgets import ForeignKeyWidget
 from django.contrib.auth.models import Group
 from django.templatetags.static import static
 from django.utils.html import format_html
+from django.utils.translation import gettext_lazy as _
 from django.forms.models import BaseInlineFormSet
 import json
 import uuid
@@ -56,12 +57,7 @@ from .models import (
     Todo,
     hash_key,
 )
-from .user_data import (
-    EntityModelAdmin,
-    delete_user_fixture,
-    dump_user_fixture,
-    _data_dir,
-)
+from .user_data import EntityModelAdmin, delete_user_fixture, dump_user_fixture
 from .widgets import OdooProductWidget
 
 
@@ -571,6 +567,11 @@ class ProfileFormMixin(forms.ModelForm):
     """Mark profiles for deletion when no data is provided."""
 
     profile_fields: tuple[str, ...] = ()
+    user_datum = forms.BooleanField(
+        required=False,
+        label=_("User Datum"),
+        help_text=_("Store this profile in the user's data directory."),
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -581,6 +582,10 @@ class ProfileFormMixin(forms.ModelForm):
             field = self.fields.get(name)
             if field is not None:
                 field.required = False
+        if "user_datum" in self.fields:
+            self.fields["user_datum"].initial = getattr(
+                self.instance, "is_user_data", False
+            )
 
     @staticmethod
     def _is_empty_value(value) -> bool:
@@ -704,7 +709,18 @@ PROFILE_INLINE_CONFIG = {
     OdooProfile: {
         "form": OdooProfileInlineForm,
         "fieldsets": (
-            (None, {"fields": ("host", "database", "username", "password")}),
+            (
+                None,
+                {
+                    "fields": (
+                        "user_datum",
+                        "host",
+                        "database",
+                        "username",
+                        "password",
+                    )
+                },
+            ),
             (
                 "Odoo Employee",
                 {
@@ -717,6 +733,7 @@ PROFILE_INLINE_CONFIG = {
     ReleaseManager: {
         "form": ReleaseManagerInlineForm,
         "fields": (
+            "user_datum",
             "pypi_username",
             "pypi_token",
             "github_token",
@@ -726,7 +743,7 @@ PROFILE_INLINE_CONFIG = {
     },
     ChatProfile: {
         "form": ChatProfileInlineForm,
-        "fields": ("user_key", "scopes", "is_active"),
+        "fields": ("user_datum", "user_key", "scopes", "is_active"),
         "readonly_fields": ("user_key_hash", "created_at", "last_used_at"),
     },
 }
@@ -785,56 +802,51 @@ class UserAdmin(DjangoUserAdmin):
     fieldsets = _append_operate_as(DjangoUserAdmin.fieldsets)
     add_fieldsets = _append_operate_as(DjangoUserAdmin.add_fieldsets)
     inlines = USER_PROFILE_INLINES + [UserPhoneNumberInline]
+    change_form_template = "admin/user_profile_change_form.html"
 
-    def _remove_stale_profile_fixtures(self, data_dir, model, user_pk, active_ids):
-        pattern = f"{model._meta.app_label}_{model._meta.model_name}_*.json"
-        for path in data_dir.glob(pattern):
-            try:
-                content = path.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                try:
-                    content = path.read_bytes().decode("latin-1")
-                except Exception:
-                    continue
-            except Exception:
-                continue
-            try:
-                data = json.loads(content)
-            except Exception:
-                continue
-            if not data:
-                continue
-            entry = data[0]
-            fields = entry.get("fields", {}) or {}
-            if fields.get("user") != user_pk:
-                continue
-            if entry.get("pk") in active_ids:
-                continue
-            path.unlink(missing_ok=True)
+    def render_change_form(
+        self, request, context, add=False, change=False, form_url="", obj=None
+    ):
+        context = super().render_change_form(
+            request, context, add=add, change=change, form_url=form_url, obj=obj
+        )
+        context["show_user_datum"] = False
+        context["show_seed_datum"] = False
+        return context
 
-    def _sync_profile_fixtures(self, request, obj, *, enable):
-        if not obj.pk:
+    def _update_profile_fixture(self, instance, owner, *, store: bool) -> None:
+        if not getattr(instance, "pk", None):
             return
-        data_dir = _data_dir(request.user)
-        for model in PROFILE_MODELS:
-            profiles = list(model.objects.filter(user=obj))
-            active_ids = {profile.pk for profile in profiles}
-            self._remove_stale_profile_fixtures(data_dir, model, obj.pk, active_ids)
-            for profile in profiles:
-                type(profile).all_objects.filter(pk=profile.pk).update(
-                    is_user_data=enable
-                )
-                profile.is_user_data = enable
-                if enable:
-                    dump_user_fixture(profile, request.user)
-                else:
-                    delete_user_fixture(profile, request.user)
+        manager = getattr(type(instance), "all_objects", None)
+        if manager is not None:
+            manager.filter(pk=instance.pk).update(is_user_data=store)
+        instance.is_user_data = store
+        if owner is None:
+            owner = getattr(instance, "user", None)
+        if owner is None:
+            return
+        if store:
+            dump_user_fixture(instance, owner)
+        else:
+            delete_user_fixture(instance, owner)
 
-    def user_datum_saved(self, request, obj):
-        self._sync_profile_fixtures(request, obj, enable=True)
-
-    def user_datum_deleted(self, request, obj):
-        self._sync_profile_fixtures(request, obj, enable=False)
+    def save_formset(self, request, form, formset, change):
+        super().save_formset(request, form, formset, change)
+        owner = form.instance if isinstance(form.instance, User) else None
+        for deleted in getattr(formset, "deleted_objects", []):
+            owner_user = getattr(deleted, "user", None) or owner
+            self._update_profile_fixture(deleted, owner_user, store=False)
+        for inline_form in getattr(formset, "forms", []):
+            if not hasattr(inline_form, "cleaned_data"):
+                continue
+            if inline_form.cleaned_data.get("DELETE"):
+                continue
+            if "user_datum" not in inline_form.cleaned_data:
+                continue
+            instance = inline_form.instance
+            owner_user = getattr(instance, "user", None) or owner
+            should_store = bool(inline_form.cleaned_data.get("user_datum"))
+            self._update_profile_fixture(instance, owner_user, store=should_store)
 
 
 class EmailCollectorInline(admin.TabularInline):
