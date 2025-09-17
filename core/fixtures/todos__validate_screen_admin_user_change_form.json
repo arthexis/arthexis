@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Admin user change form",
+      "url": "/admin/teams/user/1/change/",
+      "request_details": "Open a user change form in the admin and confirm the sections sidebar is rendered once and aligned with the main form."
+    }
+  }
+]

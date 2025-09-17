@@ -69,4 +69,4 @@ class UserAdminSidebarTests(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertIn('id="user-section-nav"', content)
+        self.assertIn('id="user-changeform-sections"', content)
