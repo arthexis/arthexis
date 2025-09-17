@@ -2,8 +2,26 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOG_DIR="$SCRIPT_DIR/logs"
-mkdir -p "$LOG_DIR"
+DEFAULT_LOG_DIR="$SCRIPT_DIR/logs"
+STATE_LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/arthexis/logs"
+FALLBACK_LOG_DIR="$HOME/.arthexis/logs"
+
+LOG_DIR=""
+for candidate in "$DEFAULT_LOG_DIR" "$STATE_LOG_DIR" "$FALLBACK_LOG_DIR"; do
+    if mkdir -p "$candidate" >/dev/null 2>&1 && [ -d "$candidate" ] && [ -w "$candidate" ]; then
+        LOG_DIR="$candidate"
+        if [ "$candidate" != "$DEFAULT_LOG_DIR" ]; then
+            echo "Log directory $DEFAULT_LOG_DIR is not writable; using $candidate" >&2
+        fi
+        break
+    fi
+done
+
+if [ -z "$LOG_DIR" ]; then
+    echo "Unable to create a writable log directory. Tried: $DEFAULT_LOG_DIR, $STATE_LOG_DIR, $FALLBACK_LOG_DIR" >&2
+    exit 1
+fi
+
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 
