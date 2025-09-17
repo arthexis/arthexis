@@ -22,6 +22,15 @@ class AdminDocsModelGroupsTests(TestCase):
         )
         self.client.force_login(self.user)
 
+    def _get_group_section(self, content: str, group_name: str) -> str:
+        pattern = re.compile(
+            rf'<div class="module">\s*<h2 id="app-[^"]+">{re.escape(group_name)} \([^)]+\)</h2>(?P<body>.*?)</table>',
+            re.S,
+        )
+        match = pattern.search(content)
+        self.assertIsNotNone(match, f"{group_name} group should be present in admin docs")
+        return match.group("body")
+
     def test_model_groups_ordered(self):
         response = self.client.get(reverse("django-admindocs-models-index"))
         self.assertEqual(response.status_code, 200)
@@ -37,3 +46,43 @@ class AdminDocsModelGroupsTests(TestCase):
         ]
         self.assertEqual(group_names[: len(expected_numbered)], expected_numbered)
         self.assertIn("User Manuals", group_names)
+
+    def test_selected_models_render_in_expected_groups(self):
+        response = self.client.get(reverse("django-admindocs-models-index"))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+
+        business_section = self._get_group_section(content, "2. Business")
+        protocol_section = self._get_group_section(content, "3. Protocol")
+        workgroup_section = self._get_group_section(content, "6. Workgroup")
+
+        location_link = reverse(
+            "django-admindocs-models-detail",
+            kwargs={"app_label": "ocpp", "model_name": "location"},
+        )
+        rfid_link = reverse(
+            "django-admindocs-models-detail",
+            kwargs={"app_label": "core", "model_name": "rfid"},
+        )
+        ap_lead_link = reverse(
+            "django-admindocs-models-detail",
+            kwargs={"app_label": "core", "model_name": "aplead"},
+        )
+        package_link = reverse(
+            "django-admindocs-models-detail",
+            kwargs={"app_label": "core", "model_name": "package"},
+        )
+        package_release_link = reverse(
+            "django-admindocs-models-detail",
+            kwargs={"app_label": "core", "model_name": "packagerelease"},
+        )
+
+        self.assertIn(f'href="{location_link}"', business_section)
+        self.assertNotIn(f'href="{location_link}"', protocol_section)
+
+        self.assertIn(f'href="{rfid_link}"', protocol_section)
+        self.assertNotIn(f'href="{rfid_link}"', business_section)
+
+        for link in (ap_lead_link, package_link, package_release_link):
+            self.assertIn(f'href="{link}"', workgroup_section)
+            self.assertNotIn(f'href="{link}"', business_section)
