@@ -1,9 +1,0 @@
-[
-  {
-    "model": "core.todo",
-    "fields": {
-      "request": "Validate screen Security Group profile assignments",
-      "url": "/admin/core/securitygroup/"
-    }
-  }
-]
