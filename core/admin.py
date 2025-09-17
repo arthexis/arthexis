@@ -54,7 +54,12 @@ from .models import (
     Todo,
     hash_key,
 )
-from .user_data import EntityModelAdmin
+from .user_data import (
+    EntityModelAdmin,
+    delete_user_fixture,
+    dump_user_fixture,
+    _data_dir,
+)
 from .widgets import OdooProductWidget
 
 
@@ -304,6 +309,9 @@ class ReleaseManagerAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 request, f"{manager} credentials check failed: {exc}", messages.ERROR
             )
 
+    def get_model_perms(self, request):
+        return {}
+
 
 @admin.register(Package)
 class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
@@ -535,6 +543,13 @@ class ProfileInlineFormSet(BaseInlineFormSet):
             form.fields["DELETE"].required = False
 
 
+def _title_case(value):
+    text = str(value or "")
+    return " ".join(
+        word[:1].upper() + word[1:] if word else word for word in text.split()
+    )
+
+
 class ProfileFormMixin(forms.ModelForm):
     """Mark profiles for deletion when no data is provided."""
 
@@ -648,7 +663,7 @@ PROFILE_INLINE_CONFIG = {
         "fieldsets": (
             (None, {"fields": ("host", "database", "username", "password")}),
             (
-                "Odoo",
+                "Odoo Employee",
                 {
                     "fields": ("verified_on", "odoo_uid", "name", "email"),
                 },
@@ -676,6 +691,12 @@ PROFILE_INLINE_CONFIG = {
 
 def _build_profile_inline(model, owner_field):
     config = PROFILE_INLINE_CONFIG[model]
+    verbose_name = config.get("verbose_name")
+    if verbose_name is None:
+        verbose_name = _title_case(model._meta.verbose_name)
+    verbose_name_plural = config.get("verbose_name_plural")
+    if verbose_name_plural is None:
+        verbose_name_plural = _title_case(model._meta.verbose_name_plural)
     attrs = {
         "model": model,
         "fk_name": owner_field,
@@ -684,8 +705,8 @@ def _build_profile_inline(model, owner_field):
         "extra": 1,
         "max_num": 1,
         "can_delete": True,
-        "verbose_name": model._meta.verbose_name,
-        "verbose_name_plural": model._meta.verbose_name_plural,
+        "verbose_name": verbose_name,
+        "verbose_name_plural": verbose_name_plural,
     }
     if "fieldsets" in config:
         attrs["fieldsets"] = config["fieldsets"]
@@ -720,6 +741,56 @@ class UserAdmin(DjangoUserAdmin):
     )
     inlines = USER_PROFILE_INLINES
 
+    def _remove_stale_profile_fixtures(self, data_dir, model, user_pk, active_ids):
+        pattern = f"{model._meta.app_label}_{model._meta.model_name}_*.json"
+        for path in data_dir.glob(pattern):
+            try:
+                content = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                try:
+                    content = path.read_bytes().decode("latin-1")
+                except Exception:
+                    continue
+            except Exception:
+                continue
+            try:
+                data = json.loads(content)
+            except Exception:
+                continue
+            if not data:
+                continue
+            entry = data[0]
+            fields = entry.get("fields", {}) or {}
+            if fields.get("user") != user_pk:
+                continue
+            if entry.get("pk") in active_ids:
+                continue
+            path.unlink(missing_ok=True)
+
+    def _sync_profile_fixtures(self, request, obj, *, enable):
+        if not obj.pk:
+            return
+        data_dir = _data_dir(request.user)
+        for model in PROFILE_MODELS:
+            profiles = list(model.objects.filter(user=obj))
+            active_ids = {profile.pk for profile in profiles}
+            self._remove_stale_profile_fixtures(data_dir, model, obj.pk, active_ids)
+            for profile in profiles:
+                type(profile).all_objects.filter(pk=profile.pk).update(
+                    is_user_data=enable
+                )
+                profile.is_user_data = enable
+                if enable:
+                    dump_user_fixture(profile, request.user)
+                else:
+                    delete_user_fixture(profile, request.user)
+
+    def user_datum_saved(self, request, obj):
+        self._sync_profile_fixtures(request, obj, enable=True)
+
+    def user_datum_deleted(self, request, obj):
+        self._sync_profile_fixtures(request, obj, enable=False)
+
 
 class EmailCollectorInline(admin.TabularInline):
     model = EmailCollector
@@ -741,7 +812,10 @@ class OdooProfileAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
         (None, {"fields": ("host", "database", "username", "password")}),
-        ("Odoo", {"fields": ("verified_on", "odoo_uid", "name", "email")}),
+        (
+            "Odoo Employee",
+            {"fields": ("verified_on", "odoo_uid", "name", "email")},
+        ),
     )
 
     def owner(self, obj):
@@ -768,6 +842,9 @@ class OdooProfileAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
     verify_credentials_action.label = "Test credentials"
     verify_credentials_action.short_description = "Test credentials"
+
+    def get_model_perms(self, request):
+        return {}
 
 
 class EmailInboxAdminForm(forms.ModelForm):
@@ -1008,6 +1085,9 @@ class ChatProfileAdmin(EntityModelAdmin):
             "user_key": key,
         }
         return TemplateResponse(request, "admin/chatprofile_key.html", context)
+
+    def get_model_perms(self, request):
+        return {}
 
 
 class EnergyCreditInline(admin.TabularInline):

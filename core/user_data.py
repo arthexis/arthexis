@@ -26,8 +26,8 @@ def _data_dir(user) -> Path:
 
 
 def _fixture_path(user, instance) -> Path:
-    ct = instance._meta
-    filename = f"{ct.app_label}_{ct.model_name}_{instance.pk}.json"
+    model_meta = instance._meta.concrete_model._meta
+    filename = f"{model_meta.app_label}_{model_meta.model_name}_{instance.pk}.json"
     return _data_dir(user) / filename
 
 
@@ -68,10 +68,12 @@ def _seed_fixture_path(instance) -> Path | None:
 
 
 def dump_user_fixture(instance, user) -> None:
+    model = instance._meta.concrete_model
+    meta = model._meta
     path = _fixture_path(user, instance)
     call_command(
         "dumpdata",
-        f"{instance._meta.app_label}.{instance._meta.model_name}",
+        f"{meta.app_label}.{meta.model_name}",
         indent=2,
         pks=str(instance.pk),
         output=str(path),
@@ -137,8 +139,15 @@ def _load_fixture(path: Path, *, mark_user_data: bool = True) -> bool:
     return loaded
 
 
+def _fixture_sort_key(path: Path) -> tuple[int, str]:
+    parts = path.name.split("_", 2)
+    model_part = parts[1].lower() if len(parts) >= 2 else ""
+    is_user = model_part == "user"
+    return (0 if is_user else 1, path.name)
+
+
 def load_user_fixtures(user) -> None:
-    paths = sorted(_data_dir(user).glob("*.json"))
+    paths = sorted(_data_dir(user).glob("*.json"), key=_fixture_sort_key)
     for path in paths:
         _load_fixture(path)
 
@@ -200,12 +209,18 @@ class EntityModelAdmin(UserDatumAdminMixin, admin.ModelAdmin):
                 type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=True)
                 obj.is_user_data = True
             dump_user_fixture(obj, request.user)
+            handler = getattr(self, "user_datum_saved", None)
+            if callable(handler):
+                handler(request, obj)
             path = _fixture_path(request.user, obj)
             self.message_user(request, f"User datum saved to {path}")
         elif obj.is_user_data:
             type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=False)
             obj.is_user_data = False
             delete_user_fixture(obj, request.user)
+            handler = getattr(self, "user_datum_deleted", None)
+            if callable(handler):
+                handler(request, obj)
 
 
 def patch_admin_user_datum() -> None:
