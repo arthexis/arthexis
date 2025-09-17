@@ -365,6 +365,10 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# GitHub issue reporting
+GITHUB_ISSUE_REPORTING_ENABLED = True
+GITHUB_ISSUE_REPORTING_COOLDOWN = 3600  # seconds
+
 # Logging configuration
 LOG_DIR = select_log_dir(BASE_DIR)
 os.environ.setdefault("ARTHEXIS_LOG_DIR", str(LOG_DIR))
