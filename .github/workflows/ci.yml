@@ -99,3 +99,31 @@ jobs:
       - name: Run env refresh
         run: ./env-refresh.sh --clean
 
+  ui-screenshots:
+    needs: detect-roles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Install Firefox
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y firefox firefox-geckodriver
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Run screenshot specs
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python scripts/ci/run_screenshots.py --base-ref "${GITHUB_BASE_REF}" --output-dir artifacts/ui-screens $(if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then echo "--run-all"; fi)
+      - name: Upload screenshot artefacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ui-screenshots
+          path: artifacts/ui-screens
+
