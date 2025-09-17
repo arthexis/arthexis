@@ -105,6 +105,7 @@ class LogViewAdminMixin:
 class LocationAdmin(EntityModelAdmin):
     form = LocationAdminForm
     list_display = ("name", "latitude", "longitude")
+    change_form_template = "admin/ocpp/location/change_form.html"
 
 
 @admin.register(Charger)

@@ -1,0 +1,12 @@
+{% extends "admin/user_datum_change_form.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  {% if original and original.latitude != None and original.longitude != None %}
+    {% with coord=original.latitude|stringformat:"s"|add:","|add:original.longitude|stringformat:"s" %}
+      <li><a href="https://www.waze.com/ul?ll={{ coord|urlencode }}&navigate=yes" target="_blank" rel="noopener noreferrer">{% trans "Open in Waze" %}</a></li>
+      <li><a href="https://maps.google.com/?q={{ coord|urlencode }}" target="_blank" rel="noopener noreferrer">{% trans "Open in Maps" %}</a></li>
+    {% endwith %}
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

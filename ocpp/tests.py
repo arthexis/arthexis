@@ -938,6 +938,18 @@ class ChargerLocationTests(TestCase):
         self.assertAlmostEqual(float(charger.longitude), -20.654321)
         self.assertEqual(charger.name, "Loc1")
 
+    def test_location_created_when_missing(self):
+        charger = Charger.objects.create(charger_id="AUTOLOC")
+        self.assertIsNotNone(charger.location)
+        self.assertEqual(charger.location.name, "AUTOLOC")
+
+    def test_location_reused_for_matching_serial(self):
+        first = Charger.objects.create(charger_id="SHARE", connector_id="1")
+        first.location.name = "Custom"
+        first.location.save()
+        second = Charger.objects.create(charger_id="SHARE", connector_id="2")
+        self.assertEqual(second.location, first.location)
+
 
 class MeterReadingTests(TransactionTestCase):
     async def test_meter_values_saved_as_readings(self):
