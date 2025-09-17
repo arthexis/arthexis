@@ -283,7 +283,7 @@ class SimulatorAdmin(LogViewAdminMixin, EntityModelAdmin):
             self.message_user(
                 request,
                 format_html(
-                    "{}: {}. Log: <code>{}</code> (<a href=\"{}\" target=\"_blank\">View Log</a>)",
+                    '{}: {}. Log: <code>{}</code> (<a href="{}" target="_blank">View Log</a>)',
                     obj.name,
                     status,
                     log_file,

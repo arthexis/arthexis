@@ -199,7 +199,7 @@ def future_action_items(context):
     ]
 
     todos: list[dict[str, str]] = []
-    if ReleaseManager.objects.filter(user=user).exists():
+    if user.has_profile(ReleaseManager):
         todos = [
             {
                 "url": todo.url or reverse("admin:core_todo_change", args=[todo.pk]),

@@ -30,6 +30,7 @@ from .models import (
     SecurityGroup,
     Package,
     PackageRelease,
+    ReleaseManager,
     Todo,
 )
 from django.contrib.admin.sites import AdminSite
@@ -159,6 +160,32 @@ class UserOperateAsTests(TestCase):
         operator.full_clean()
         operator.save()
         self.assertTrue(operator.has_module_perms("core"))
+
+    def test_has_profile_via_delegate(self):
+        delegate = User.objects.create_user(
+            username="delegate", password="secret", is_staff=True
+        )
+        ReleaseManager.objects.create(user=delegate)
+        operator = User.objects.create_superuser(
+            username="operator",
+            email="operator@example.com",
+            password="secret",
+        )
+        operator.operate_as = delegate
+        operator.full_clean()
+        operator.save()
+        profile = operator.get_profile(ReleaseManager)
+        self.assertIsNotNone(profile)
+        self.assertEqual(profile.user, delegate)
+        self.assertTrue(operator.has_profile(ReleaseManager))
+
+    def test_has_profile_via_group_membership(self):
+        member = User.objects.create_user(username="member", password="secret")
+        group = SecurityGroup.objects.create(name="Managers")
+        group.user_set.add(member)
+        profile = ReleaseManager.objects.create(group=group)
+        self.assertEqual(member.get_profile(ReleaseManager), profile)
+        self.assertTrue(member.has_profile(ReleaseManager))
 
 
 class RFIDLoginTests(TestCase):

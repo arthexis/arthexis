@@ -31,6 +31,7 @@ from pathlib import Path
 from django.core import serializers
 from urllib.parse import urlparse
 from utils import revision as revision_utils
+from typing import Type
 
 from .entity import Entity, EntityUserManager, EntityManager
 from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
@@ -50,6 +51,60 @@ class SecurityGroup(Group):
     class Meta:
         verbose_name = "Security Group"
         verbose_name_plural = "Security Groups"
+
+
+class Profile(Entity):
+    """Abstract base class for user or group scoped configuration."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    group = models.OneToOneField(
+        "core.SecurityGroup",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+
+    class Meta:
+        abstract = True
+
+    def clean(self):
+        super().clean()
+        if self.user_id and self.group_id:
+            raise ValidationError(
+                {
+                    "user": _("Select either a user or a security group, not both."),
+                    "group": _("Select either a user or a security group, not both."),
+                }
+            )
+        if not self.user_id and not self.group_id:
+            raise ValidationError(
+                _("Profiles must be assigned to a user or a security group."),
+            )
+
+    @property
+    def owner(self):
+        """Return the assigned user or group."""
+
+        return self.user if self.user_id else self.group
+
+    def owner_display(self) -> str:
+        """Return a human readable owner label."""
+
+        owner = self.owner
+        if owner is None:  # pragma: no cover - guarded by ``clean``
+            return ""
+        if hasattr(owner, "get_username"):
+            return owner.get_username()
+        if hasattr(owner, "name"):
+            return owner.name
+        return str(owner)
 
 
 class SigilRootManager(EntityManager):
@@ -213,15 +268,60 @@ class User(Entity, AbstractUser):
             lambda user: super(User, user).has_module_perms(app_label)
         )
 
+    def _profile_for(self, profile_cls: Type[Profile], user: "User"):
+        profile = profile_cls.objects.filter(user=user).first()
+        if profile:
+            return profile
+        group_ids = list(user.groups.values_list("id", flat=True))
+        if group_ids:
+            return profile_cls.objects.filter(group_id__in=group_ids).first()
+        return None
 
-class OdooProfile(Entity):
+    def get_profile(self, profile_cls: Type[Profile]):
+        """Return the first matching profile for the user or their delegate chain."""
+
+        if not isinstance(profile_cls, type) or not issubclass(profile_cls, Profile):
+            raise TypeError("profile_cls must be a Profile subclass")
+
+        result = None
+
+        def predicate(user: "User"):
+            nonlocal result
+            result = self._profile_for(profile_cls, user)
+            return result is not None
+
+        self._check_operate_as_chain(predicate)
+        return result
+
+    def has_profile(self, profile_cls: Type[Profile]) -> bool:
+        """Return ``True`` when a profile is available for the user or delegate chain."""
+
+        return self.get_profile(profile_cls) is not None
+
+    def _direct_profile(self, model_label: str):
+        model = apps.get_model("core", model_label)
+        try:
+            return model.objects.get(user=self)
+        except model.DoesNotExist:
+            return None
+
+    @property
+    def release_manager(self):
+        return self._direct_profile("ReleaseManager")
+
+    @property
+    def odoo_profile(self):
+        return self._direct_profile("OdooProfile")
+
+    @property
+    def chat_profile(self):
+        return self._direct_profile("ChatProfile")
+
+
+class OdooProfile(Profile):
     """Store Odoo API credentials for a user."""
 
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        related_name="odoo_profile",
-        on_delete=models.CASCADE,
-    )
+    profile_fields = ("host", "database", "username", "password")
     host = SigilShortAutoField(max_length=255)
     database = SigilShortAutoField(max_length=255)
     username = SigilShortAutoField(max_length=255)
@@ -296,11 +396,21 @@ class OdooProfile(Entity):
             raise
 
     def __str__(self):  # pragma: no cover - simple representation
-        return f"{self.user} @ {self.host}"
+        owner = self.owner_display()
+        return f"{owner} @ {self.host}" if owner else self.host
 
     class Meta:
         verbose_name = _("Odoo Profile")
         verbose_name_plural = _("Odoo Profiles")
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (Q(user__isnull=False) & Q(group__isnull=True))
+                    | (Q(user__isnull=True) & Q(group__isnull=False))
+                ),
+                name="odooprofile_requires_owner",
+            )
+        ]
 
 
 class EmailInbox(Entity):
@@ -1143,8 +1253,12 @@ class AdminHistory(Entity):
 
 
 class ReleaseManagerManager(EntityManager):
-    def get_by_natural_key(self, user, package=None):
-        return self.get(user__username=user)
+    def get_by_natural_key(self, owner, package=None):
+        owner = owner or ""
+        if owner.startswith("group:"):
+            group_name = owner.split(":", 1)[1]
+            return self.get(group__name=group_name)
+        return self.get(user__username=owner)
 
 
 class PackageManager(EntityManager):
@@ -1157,19 +1271,24 @@ class PackageReleaseManager(EntityManager):
         return self.get(package__name=package, version=version)
 
 
-class ReleaseManager(Entity):
+class ReleaseManager(Profile):
     """Store credentials for publishing packages."""
 
     objects = ReleaseManagerManager()
 
     def natural_key(self):
         pkg = self.package_set.first()
-        return (self.user.get_username(), pkg.name if pkg else "")
+        owner = self.owner_display()
+        if self.group_id and owner:
+            owner = f"group:{owner}"
+        return (owner or "", pkg.name if pkg else "")
 
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="release_manager",
+    profile_fields = (
+        "pypi_username",
+        "pypi_token",
+        "github_token",
+        "pypi_password",
+        "pypi_url",
     )
     pypi_username = SigilShortAutoField("PyPI username", max_length=100, blank=True)
     pypi_token = SigilShortAutoField("PyPI token", max_length=200, blank=True)
@@ -1187,13 +1306,23 @@ class ReleaseManager(Entity):
     class Meta:
         verbose_name = "Release Manager"
         verbose_name_plural = "Release Managers"
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (Q(user__isnull=False) & Q(group__isnull=True))
+                    | (Q(user__isnull=True) & Q(group__isnull=False))
+                ),
+                name="releasemanager_requires_owner",
+            )
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name
 
     @property
     def name(self) -> str:  # pragma: no cover - simple proxy
-        return self.user.get_username()
+        owner = self.owner_display()
+        return owner or ""
 
     def to_credentials(self) -> Credentials | None:
         """Return credentials for this release manager."""
@@ -1435,7 +1564,7 @@ def hash_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
 
-class ChatProfile(Entity):
+class ChatProfile(Profile):
     """Stores a hashed user key used by the assistant for authentication.
 
     The plain-text ``user_key`` is generated server-side and shown only once.
@@ -1444,9 +1573,7 @@ class ChatProfile(Entity):
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="chat_profile"
-    )
+    profile_fields = ("user_key_hash", "scopes", "is_active")
     user_key_hash = models.CharField(max_length=64, unique=True)
     scopes = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1457,6 +1584,15 @@ class ChatProfile(Entity):
         db_table = "workgroup_chatprofile"
         verbose_name = "Chat Profile"
         verbose_name_plural = "Chat Profiles"
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (Q(user__isnull=False) & Q(group__isnull=True))
+                    | (Q(user__isnull=True) & Q(group__isnull=False))
+                ),
+                name="chatprofile_requires_owner",
+            )
+        ]
 
     @classmethod
     def issue_key(cls, user) -> tuple["ChatProfile", str]:
@@ -1464,6 +1600,9 @@ class ChatProfile(Entity):
 
         key = secrets.token_hex(32)
         key_hash = hash_key(key)
+        if user is None:
+            raise ValueError("Chat profiles require a user instance")
+
         profile, _ = cls.objects.update_or_create(
             user=user,
             defaults={
@@ -1481,7 +1620,8 @@ class ChatProfile(Entity):
         self.save(update_fields=["last_used_at"])
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"ChatProfile for {self.user}"
+        owner = self.owner_display()
+        return f"ChatProfile for {owner}" if owner else "ChatProfile"
 
 
 def validate_relative_url(value: str) -> None:

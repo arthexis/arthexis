@@ -19,6 +19,7 @@ from import_export.widgets import ForeignKeyWidget
 from django.contrib.auth.models import Group
 from django.templatetags.static import static
 from django.utils.html import format_html
+from django.forms.models import BaseInlineFormSet
 import json
 import uuid
 import requests
@@ -51,6 +52,7 @@ from .models import (
     InviteLead,
     ChatProfile,
     Todo,
+    hash_key,
 )
 from .user_data import EntityModelAdmin
 from .widgets import OdooProductWidget
@@ -239,9 +241,29 @@ class ReleaseManagerAdminForm(forms.ModelForm):
 
 class ReleaseManagerAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     form = ReleaseManagerAdminForm
-    list_display = ("user", "pypi_username", "pypi_url")
+    list_display = ("owner", "pypi_username", "pypi_url")
     actions = ["test_credentials"]
     change_actions = ["test_credentials_action"]
+    fieldsets = (
+        ("Owner", {"fields": ("user", "group")}),
+        (
+            "Credentials",
+            {
+                "fields": (
+                    "pypi_username",
+                    "pypi_token",
+                    "pypi_password",
+                    "github_token",
+                    "pypi_url",
+                )
+            },
+        ),
+    )
+
+    def owner(self, obj):
+        return obj.owner_display()
+
+    owner.short_description = "Owner"
 
     @admin.action(description="Test credentials")
     def test_credentials(self, request, queryset):
@@ -440,15 +462,6 @@ class EnergyAccountRFIDInline(admin.TabularInline):
     verbose_name_plural = "RFIDs"
 
 
-class UserAdmin(DjangoUserAdmin):
-    fieldsets = _append_operate_as(DjangoUserAdmin.fieldsets) + (
-        ("Contact", {"fields": ("phone_number", "has_charger")}),
-    )
-    add_fieldsets = _append_operate_as(DjangoUserAdmin.add_fieldsets) + (
-        ("Contact", {"fields": ("phone_number", "has_charger")}),
-    )
-
-
 def _raw_instance_value(instance, field_name):
     """Return the stored value for ``field_name`` without resolving sigils."""
 
@@ -512,6 +525,202 @@ class OdooProfileAdminForm(forms.ModelForm):
         )
 
 
+class ProfileInlineFormSet(BaseInlineFormSet):
+    """Hide deletion controls and allow implicit removal when empty."""
+
+    def add_fields(self, form, index):
+        super().add_fields(form, index)
+        if "DELETE" in form.fields:
+            form.fields["DELETE"].widget = forms.HiddenInput()
+            form.fields["DELETE"].required = False
+
+
+class ProfileFormMixin(forms.ModelForm):
+    """Mark profiles for deletion when no data is provided."""
+
+    profile_fields: tuple[str, ...] = ()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        model_fields = getattr(self._meta.model, "profile_fields", tuple())
+        explicit = getattr(self, "profile_fields", tuple())
+        self._profile_fields = tuple(explicit or model_fields)
+
+    @staticmethod
+    def _is_empty_value(value) -> bool:
+        if isinstance(value, bool):
+            return not value
+        if value in (None, "", [], (), {}, set()):
+            return True
+        if isinstance(value, str):
+            return value.strip() == ""
+        return False
+
+    def _has_profile_data(self) -> bool:
+        for name in self._profile_fields:
+            if name in self.cleaned_data:
+                value = self.cleaned_data.get(name)
+            elif hasattr(self.instance, name):
+                value = getattr(self.instance, name)
+            else:
+                continue
+            if not self._is_empty_value(value):
+                return True
+        return False
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("DELETE") or not self._profile_fields:
+            return cleaned
+        if not self._has_profile_data():
+            cleaned["DELETE"] = True
+        return cleaned
+
+
+class OdooProfileInlineForm(ProfileFormMixin, OdooProfileAdminForm):
+    profile_fields = OdooProfile.profile_fields
+
+    class Meta(OdooProfileAdminForm.Meta):
+        exclude = ("user", "group", "verified_on", "odoo_uid", "name", "email")
+
+
+class ReleaseManagerInlineForm(ProfileFormMixin, forms.ModelForm):
+    profile_fields = ReleaseManager.profile_fields
+
+    class Meta:
+        model = ReleaseManager
+        fields = (
+            "pypi_username",
+            "pypi_token",
+            "github_token",
+            "pypi_password",
+            "pypi_url",
+        )
+        widgets = {
+            "pypi_token": forms.Textarea(attrs={"rows": 3, "style": "width: 40em;"}),
+            "github_token": forms.Textarea(attrs={"rows": 3, "style": "width: 40em;"}),
+        }
+
+
+class ChatProfileInlineForm(ProfileFormMixin, forms.ModelForm):
+    user_key = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=True),
+        help_text="Provide a plain key to create or rotate credentials.",
+    )
+    profile_fields = ("user_key", "scopes", "is_active")
+
+    class Meta:
+        model = ChatProfile
+        fields = ("scopes", "is_active")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.pk and "is_active" in self.fields:
+            self.fields["is_active"].initial = False
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("DELETE"):
+            return cleaned
+        if not self.instance.pk and not cleaned.get("user_key"):
+            if cleaned.get("scopes") or cleaned.get("is_active"):
+                raise forms.ValidationError(
+                    "Provide a user key to create a chat profile."
+                )
+        return cleaned
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        user_key = self.cleaned_data.get("user_key")
+        if user_key:
+            instance.user_key_hash = hash_key(user_key)
+            instance.last_used_at = None
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
+
+
+PROFILE_INLINE_CONFIG = {
+    OdooProfile: {
+        "form": OdooProfileInlineForm,
+        "fieldsets": (
+            (None, {"fields": ("host", "database", "username", "password")}),
+            (
+                "Odoo",
+                {
+                    "fields": ("verified_on", "odoo_uid", "name", "email"),
+                },
+            ),
+        ),
+        "readonly_fields": ("verified_on", "odoo_uid", "name", "email"),
+    },
+    ReleaseManager: {
+        "form": ReleaseManagerInlineForm,
+        "fields": (
+            "pypi_username",
+            "pypi_token",
+            "github_token",
+            "pypi_password",
+            "pypi_url",
+        ),
+    },
+    ChatProfile: {
+        "form": ChatProfileInlineForm,
+        "fields": ("user_key", "scopes", "is_active"),
+        "readonly_fields": ("user_key_hash", "created_at", "last_used_at"),
+    },
+}
+
+
+def _build_profile_inline(model, owner_field):
+    config = PROFILE_INLINE_CONFIG[model]
+    attrs = {
+        "model": model,
+        "fk_name": owner_field,
+        "form": config["form"],
+        "formset": ProfileInlineFormSet,
+        "extra": 1,
+        "max_num": 1,
+        "can_delete": True,
+        "verbose_name": model._meta.verbose_name,
+        "verbose_name_plural": model._meta.verbose_name_plural,
+    }
+    if "fieldsets" in config:
+        attrs["fieldsets"] = config["fieldsets"]
+    if "fields" in config:
+        attrs["fields"] = config["fields"]
+    if "readonly_fields" in config:
+        attrs["readonly_fields"] = config["readonly_fields"]
+    return type(
+        f"{model.__name__}{owner_field.title()}Inline",
+        (admin.StackedInline,),
+        attrs,
+    )
+
+
+PROFILE_MODELS = (OdooProfile, ReleaseManager, ChatProfile)
+USER_PROFILE_INLINES = [
+    _build_profile_inline(model, "user") for model in PROFILE_MODELS
+]
+GROUP_PROFILE_INLINES = [
+    _build_profile_inline(model, "group") for model in PROFILE_MODELS
+]
+
+SecurityGroupAdmin.inlines = GROUP_PROFILE_INLINES
+
+
+class UserAdmin(DjangoUserAdmin):
+    fieldsets = _append_operate_as(DjangoUserAdmin.fieldsets) + (
+        ("Contact", {"fields": ("phone_number", "has_charger")}),
+    )
+    add_fieldsets = _append_operate_as(DjangoUserAdmin.add_fieldsets) + (
+        ("Contact", {"fields": ("phone_number", "has_charger")}),
+    )
+    inlines = USER_PROFILE_INLINES
+
+
 class EmailCollectorInline(admin.TabularInline):
     model = EmailCollector
     extra = 0
@@ -525,21 +734,29 @@ class EmailCollectorAdmin(EntityModelAdmin):
 class OdooProfileAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     change_form_template = "django_object_actions/change_form.html"
     form = OdooProfileAdminForm
-    list_display = ("user", "host", "database", "verified_on")
+    list_display = ("owner", "host", "database", "verified_on")
     readonly_fields = ("verified_on", "odoo_uid", "name", "email")
     actions = ["verify_credentials"]
     change_actions = ["verify_credentials_action"]
     fieldsets = (
-        (None, {"fields": ("user", "host", "database", "username", "password")}),
+        ("Owner", {"fields": ("user", "group")}),
+        (None, {"fields": ("host", "database", "username", "password")}),
         ("Odoo", {"fields": ("verified_on", "odoo_uid", "name", "email")}),
     )
+
+    def owner(self, obj):
+        return obj.owner_display()
+
+    owner.short_description = "Owner"
 
     def _verify_credentials(self, request, profile):
         try:
             profile.verify()
-            self.message_user(request, f"{profile.user} verified")
+            self.message_user(request, f"{profile.owner_display()} verified")
         except Exception as exc:  # pragma: no cover - admin feedback
-            self.message_user(request, f"{profile.user}: {exc}", level=messages.ERROR)
+            self.message_user(
+                request, f"{profile.owner_display()}: {exc}", level=messages.ERROR
+            )
 
     @admin.action(description="Test credentials")
     def verify_credentials(self, request, queryset):
@@ -736,10 +953,30 @@ class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
 
 class ChatProfileAdmin(EntityModelAdmin):
-    list_display = ("user", "created_at", "last_used_at", "is_active")
-    readonly_fields = ("user_key_hash",)
+    list_display = ("owner", "created_at", "last_used_at", "is_active")
+    readonly_fields = ("user_key_hash", "created_at", "last_used_at")
 
     change_form_template = "admin/workgroupchatprofile_change_form.html"
+    fieldsets = (
+        ("Owner", {"fields": ("user", "group")}),
+        (
+            None,
+            {
+                "fields": (
+                    "scopes",
+                    "is_active",
+                    "user_key_hash",
+                    "created_at",
+                    "last_used_at",
+                )
+            },
+        ),
+    )
+
+    def owner(self, obj):
+        return obj.owner_display()
+
+    owner.short_description = "Owner"
 
     def get_urls(self):
         urls = super().get_urls()
@@ -755,6 +992,13 @@ class ChatProfileAdmin(EntityModelAdmin):
     def generate_key(self, request, object_id, *args, **kwargs):
         profile = self.get_object(request, object_id)
         if profile is None:
+            return HttpResponseRedirect("../")
+        if profile.user is None:
+            self.message_user(
+                request,
+                "Assign a user before generating a key.",
+                level=messages.ERROR,
+            )
             return HttpResponseRedirect("../")
         profile, key = ChatProfile.issue_key(profile.user)
         context = {

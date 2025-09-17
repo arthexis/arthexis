@@ -1,0 +1,9 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen User profile assignments",
+      "url": "/admin/core/user/"
+    }
+  }
+]
