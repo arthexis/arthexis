@@ -9,6 +9,7 @@ from celery import shared_task
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from core import mailer
+from core import github_issues
 from django.utils import timezone
 
 from nodes.models import NetMessage
@@ -150,3 +151,31 @@ def poll_email_collectors() -> None:
 
     for collector in EmailCollector.objects.all():
         collector.collect()
+
+
+@shared_task
+def report_runtime_issue(
+    title: str,
+    body: str,
+    labels: list[str] | None = None,
+    fingerprint: str | None = None,
+):
+    """Report a runtime issue to GitHub using :mod:`core.github_issues`."""
+
+    try:
+        response = github_issues.create_issue(
+            title,
+            body,
+            labels=labels,
+            fingerprint=fingerprint,
+        )
+    except Exception:
+        logger.exception("Failed to report runtime issue '%s'", title)
+        raise
+
+    if response is None:
+        logger.info("Skipped GitHub issue creation for fingerprint %s", fingerprint)
+    else:
+        logger.info("Reported runtime issue '%s' to GitHub", title)
+
+    return response
