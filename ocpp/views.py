@@ -3,6 +3,7 @@ import json
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.http import JsonResponse, HttpResponse, Http404
+from django.http.request import split_domain_port
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
 from django.core.paginator import Paginator
@@ -150,8 +151,11 @@ def dashboard(request):
 @live_update()
 def cp_simulator(request):
     """Public landing page to control the OCPP charge point simulator."""
-    default_host = "127.0.0.1"
-    default_ws_port = "9000"
+    host_header = request.get_host()
+    default_host, host_port = split_domain_port(host_header)
+    if not default_host:
+        default_host = "127.0.0.1"
+    default_ws_port = request.get_port() or host_port or "8000"
     default_cp_paths = ["CP1", "CP2"]
     default_serial_numbers = default_cp_paths
     default_connector_id = 1
