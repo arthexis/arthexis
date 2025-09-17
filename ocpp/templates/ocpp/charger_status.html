@@ -88,6 +88,11 @@
     <a href="?page={{ page_obj.next_page_number }}">{% trans "Next 10" %}</a>
     {% endif %}
   </div>
+  {% if request.user.is_staff and charger.console_url %}
+  <div class="mt-4 text-end">
+    <a class="btn btn-outline-secondary" href="{% url 'charger-console' charger.charger_id %}" target="_blank" rel="noopener">{% trans "View Console" %}</a>
+  </div>
+  {% endif %}
  </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
