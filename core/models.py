@@ -195,15 +195,8 @@ class User(Entity, AbstractUser):
     objects = EntityUserManager()
     all_objects = DjangoUserManager()
     """Custom user model."""
-
-    phone_number = models.CharField(
-        max_length=20,
-        blank=True,
-        help_text="Optional contact phone number",
-    )
     birthday = models.DateField(null=True, blank=True)
     data_path = models.CharField(max_length=255, blank=True)
-    has_charger = models.BooleanField(default=False)
     operate_as = models.ForeignKey(
         "self",
         null=True,
@@ -322,6 +315,17 @@ class User(Entity, AbstractUser):
         except model.DoesNotExist:
             return None
 
+    def get_phones_by_priority(self):
+        """Return a list of ``UserPhoneNumber`` instances ordered by priority."""
+
+        ordered_numbers = self.phone_numbers.order_by("priority", "pk")
+        return list(ordered_numbers)
+
+    def get_phone_numbers_by_priority(self):
+        """Backward-compatible alias for :meth:`get_phones_by_priority`."""
+
+        return self.get_phones_by_priority()
+
     @property
     def release_manager(self):
         return self._direct_profile("ReleaseManager")
@@ -333,6 +337,29 @@ class User(Entity, AbstractUser):
     @property
     def chat_profile(self):
         return self._direct_profile("ChatProfile")
+
+
+class UserPhoneNumber(models.Model):
+    """Store phone numbers associated with a user."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="phone_numbers",
+    )
+    number = models.CharField(
+        max_length=20,
+        help_text="Contact phone number",
+    )
+    priority = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ("priority", "id")
+        verbose_name = "Phone Number"
+        verbose_name_plural = "Phone Numbers"
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return f"{self.number} ({self.priority})"
 
 
 class OdooProfile(Profile):
