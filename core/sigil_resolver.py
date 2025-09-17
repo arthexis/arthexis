@@ -15,6 +15,15 @@ from .sigil_context import get_context
 logger = logging.getLogger("core.entity")
 
 
+def _is_wizard_mode() -> bool:
+    """Return ``True`` when the application is running in wizard mode."""
+
+    flag = getattr(settings, "WIZARD_MODE", False)
+    if isinstance(flag, str):
+        return flag.lower() in {"1", "true", "yes", "on"}
+    return bool(flag)
+
+
 def _first_instance(model: type[models.Model]) -> Optional[models.Model]:
     qs = model.objects
     ordering = list(getattr(model._meta, "ordering", []))
@@ -41,6 +50,7 @@ def _resolve_with_gway(sigil: str) -> Optional[str]:
     command = _find_gway_command()
     if not command:
         return None
+    timeout = 60 if _is_wizard_mode() else 1
     try:
         result = subprocess.run(
             [command, "-e", sigil],
@@ -48,7 +58,15 @@ def _resolve_with_gway(sigil: str) -> Optional[str]:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            timeout=timeout,
         )
+    except subprocess.TimeoutExpired:
+        logger.warning(
+            "gway timed out after %s seconds while resolving sigil %s",
+            timeout,
+            sigil,
+        )
+        return None
     except Exception:
         logger.exception("Failed executing gway for sigil %s", sigil)
         return None
