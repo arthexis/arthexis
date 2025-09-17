@@ -97,6 +97,25 @@ class Charger(Entity):
         return f"{scheme}://{domain}{self.get_absolute_url()}"
 
     def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        if not self.location_id:
+            existing = (
+                type(self)
+                .objects.filter(charger_id=self.charger_id, location__isnull=False)
+                .exclude(pk=self.pk)
+                .select_related("location")
+                .first()
+            )
+            if existing:
+                self.location = existing.location
+            else:
+                location, _ = Location.objects.get_or_create(name=self.charger_id)
+                self.location = location
+            if update_fields is not None:
+                update_list = list(update_fields)
+                if "location" not in update_list:
+                    update_list.append("location")
+                kwargs["update_fields"] = update_list
         super().save(*args, **kwargs)
         ref_value = self._full_url()
         if not self.reference or self.reference.value != ref_value:
