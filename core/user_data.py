@@ -8,8 +8,10 @@ import json
 from django.apps import apps
 from django.conf import settings
 from django.contrib import admin, messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.signals import user_logged_in
 from django.core.management import call_command
+from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.http import HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -19,8 +21,28 @@ from django.utils.translation import gettext as _
 from .entity import Entity
 
 
+def _data_root(user=None) -> Path:
+    path = Path(getattr(user, "data_path", "") or Path(settings.BASE_DIR) / "data")
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _username_for(user) -> str:
+    username = ""
+    if hasattr(user, "get_username"):
+        username = user.get_username()
+    if not username and hasattr(user, "username"):
+        username = user.username
+    if not username and getattr(user, "pk", None):
+        username = str(user.pk)
+    return username
+
+
 def _data_dir(user) -> Path:
-    path = Path(getattr(user, "data_path") or Path(settings.BASE_DIR) / "data")
+    username = _username_for(user)
+    if not username:
+        raise ValueError("Cannot determine username for fixture directory")
+    path = _data_root(user) / username
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -67,21 +89,46 @@ def _seed_fixture_path(instance) -> Path | None:
     return None
 
 
-def dump_user_fixture(instance, user) -> None:
+def _resolve_fixture_user(instance, fallback=None):
+    UserModel = get_user_model()
+    owner = getattr(instance, "user", None)
+    if isinstance(owner, UserModel):
+        return owner
+    if hasattr(instance, "owner"):
+        try:
+            owner_value = instance.owner
+        except Exception:
+            owner_value = None
+        if isinstance(owner_value, UserModel):
+            return owner_value
+    return fallback
+
+
+def dump_user_fixture(instance, user=None) -> None:
     model = instance._meta.concrete_model
+    UserModel = get_user_model()
+    if issubclass(UserModel, Entity) and isinstance(instance, UserModel):
+        return
+    target_user = user or _resolve_fixture_user(instance)
+    if target_user is None:
+        return
     meta = model._meta
-    path = _fixture_path(user, instance)
+    path = _fixture_path(target_user, instance)
     call_command(
         "dumpdata",
         f"{meta.app_label}.{meta.model_name}",
         indent=2,
         pks=str(instance.pk),
         output=str(path),
+        use_natural_foreign_keys=True,
     )
 
 
-def delete_user_fixture(instance, user) -> None:
-    _fixture_path(user, instance).unlink(missing_ok=True)
+def delete_user_fixture(instance, user=None) -> None:
+    target_user = user or _resolve_fixture_user(instance)
+    if target_user is None:
+        return
+    _fixture_path(target_user, instance).unlink(missing_ok=True)
 
 
 def _mark_fixture_user_data(path: Path) -> None:
@@ -161,15 +208,47 @@ def _fixture_sort_key(path: Path) -> tuple[int, str]:
     return (0 if is_user else 1, path.name)
 
 
-def load_user_fixtures(user) -> None:
+def _is_user_fixture(path: Path) -> bool:
+    parts = path.name.split("_", 2)
+    return len(parts) >= 2 and parts[1].lower() == "user"
+
+
+_shared_fixtures_loaded = False
+
+
+def load_shared_user_fixtures(*, force: bool = False, user=None) -> None:
+    global _shared_fixtures_loaded
+    if _shared_fixtures_loaded and not force:
+        return
+    root = _data_root(user)
+    paths = sorted(root.glob("*.json"), key=_fixture_sort_key)
+    for path in paths:
+        if _is_user_fixture(path):
+            continue
+        _load_fixture(path)
+    _shared_fixtures_loaded = True
+
+
+def load_user_fixtures(user, *, include_shared: bool = False) -> None:
+    if include_shared:
+        load_shared_user_fixtures(user=user)
     paths = sorted(_data_dir(user).glob("*.json"), key=_fixture_sort_key)
     for path in paths:
+        if _is_user_fixture(path):
+            continue
         _load_fixture(path)
 
 
 @receiver(user_logged_in)
 def _on_login(sender, request, user, **kwargs):
-    load_user_fixtures(user)
+    load_user_fixtures(user, include_shared=not _shared_fixtures_loaded)
+
+
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+def _on_user_created(sender, instance, created, **kwargs):
+    if created:
+        load_shared_user_fixtures(force=True, user=instance)
+        load_user_fixtures(instance)
 
 
 class UserDatumAdminMixin(admin.ModelAdmin):
@@ -219,20 +298,24 @@ class EntityModelAdmin(UserDatumAdminMixin, admin.ModelAdmin):
                 )
         if copied:
             return
+        target_user = _resolve_fixture_user(obj, request.user)
         if request.POST.get("_user_datum") == "on":
             if not obj.is_user_data:
                 type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=True)
                 obj.is_user_data = True
-            dump_user_fixture(obj, request.user)
+            dump_user_fixture(obj, target_user)
             handler = getattr(self, "user_datum_saved", None)
             if callable(handler):
                 handler(request, obj)
-            path = _fixture_path(request.user, obj)
+            if target_user is not None:
+                path = _fixture_path(target_user, obj)
+            else:
+                path = _fixture_path(request.user, obj)
             self.message_user(request, f"User datum saved to {path}")
         elif obj.is_user_data:
             type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=False)
             obj.is_user_data = False
-            delete_user_fixture(obj, request.user)
+            delete_user_fixture(obj, target_user)
             handler = getattr(self, "user_datum_deleted", None)
             if callable(handler):
                 handler(request, obj)
