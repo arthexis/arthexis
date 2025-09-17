@@ -639,7 +639,15 @@ class ProfileFormMixin(forms.ModelForm):
             raw_value = None
             if field is not None and not isinstance(field, forms.BooleanField):
                 try:
-                    raw_value = self._raw_value(name)
+                    if hasattr(self, "_raw_value"):
+                        raw_value = self._raw_value(name)
+                    elif self.is_bound:
+                        bound = self[name]
+                        raw_value = bound.field.widget.value_from_datadict(
+                            self.data,
+                            self.files,
+                            bound.html_name,
+                        )
                 except (AttributeError, KeyError):
                     raw_value = None
             if raw_value is not None:

@@ -6,6 +6,7 @@ import pytest
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
+from django.http import QueryDict
 
 from core.models import OdooProfile
 from core.admin import OdooProfileAdmin, OdooProfileAdminForm, OdooProfileInlineForm
@@ -169,3 +170,26 @@ class OdooProfileInlineFormTests(TestCase):
         )
         self.assertFalse(form.is_valid())
         self.assertIn("Provide host, database, username, and password", form.non_field_errors()[0])
+
+    def test_clearing_existing_profile_marks_delete(self):
+        profile = OdooProfile.objects.create(
+            user=self.user,
+            host="http://odoo",
+            database="db",
+            username="user",
+            password="secret",
+        )
+        prefix = "odoo_profile_set-0"
+        data = QueryDict(mutable=True)
+        data.update(
+            {
+                f"{prefix}-id": str(profile.pk),
+                f"{prefix}-host": "",
+                f"{prefix}-database": "",
+                f"{prefix}-username": "",
+                f"{prefix}-password": "",
+            }
+        )
+        form = OdooProfileInlineForm(data=data, instance=profile, prefix=prefix)
+        self.assertTrue(form.is_valid())
+        self.assertTrue(form.cleaned_data.get("DELETE"))
