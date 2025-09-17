@@ -8,12 +8,19 @@ from django.core.exceptions import DisallowedHost
 import socket
 from pages.models import Application, Module, SiteBadge, Favorite, ViewHistory
 from pages.admin import ApplicationAdmin
+from pages.screenshot_specs import (
+    ScreenshotSpec,
+    ScreenshotSpecRunner,
+    ScreenshotUnavailable,
+    registry,
+)
 from django.apps import apps as django_apps
 from core.models import AdminHistory, InviteLead, Package, ReleaseManager, Todo
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
 import tempfile
 import shutil
+from io import StringIO
 from django.conf import settings
 from pathlib import Path
 from unittest.mock import patch, Mock
@@ -1036,3 +1043,89 @@ class ClientReportLiveUpdateTests(TestCase):
         resp = self.client.get(reverse("pages:client-report"))
         self.assertEqual(resp.context["request"].live_update_interval, 5)
         self.assertContains(resp, "setInterval(() => location.reload()")
+
+
+class ScreenshotSpecInfrastructureTests(TestCase):
+    def test_runner_creates_outputs_and_cleans_old_samples(self):
+        spec = ScreenshotSpec(slug="spec-test", url="/")
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_dir = Path(tmp)
+            screenshot_path = temp_dir / "source.png"
+            screenshot_path.write_bytes(b"fake")
+            ContentSample.objects.create(
+                kind=ContentSample.IMAGE,
+                path="old.png",
+                method="spec:old",
+                hash="old-hash",
+            )
+            ContentSample.objects.filter(hash="old-hash").update(
+                created_at=timezone.now() - timedelta(days=8)
+            )
+            with patch(
+                "pages.screenshot_specs.base.capture_screenshot", return_value=screenshot_path
+            ) as capture_mock, patch(
+                "pages.screenshot_specs.base.save_screenshot", return_value=None
+            ) as save_mock:
+                with ScreenshotSpecRunner(temp_dir) as runner:
+                    result = runner.run(spec)
+            self.assertTrue(result.image_path.exists())
+            self.assertTrue(result.base64_path.exists())
+            self.assertEqual(
+                ContentSample.objects.filter(hash="old-hash").count(), 0
+            )
+            capture_mock.assert_called_once()
+            save_mock.assert_called_once_with(screenshot_path, method="spec:spec-test")
+
+    def test_runner_respects_manual_reason(self):
+        spec = ScreenshotSpec(slug="manual-spec", url="/", manual_reason="hardware")
+        with tempfile.TemporaryDirectory() as tmp:
+            with ScreenshotSpecRunner(Path(tmp)) as runner:
+                with self.assertRaises(ScreenshotUnavailable):
+                    runner.run(spec)
+
+
+class CaptureUIScreenshotsCommandTests(TestCase):
+    def tearDown(self):
+        registry.unregister("manual-cmd")
+        registry.unregister("auto-cmd")
+
+    def test_manual_spec_emits_warning(self):
+        spec = ScreenshotSpec(slug="manual-cmd", url="/", manual_reason="manual")
+        registry.register(spec)
+        out = StringIO()
+        call_command("capture_ui_screenshots", "--spec", spec.slug, stdout=out)
+        self.assertIn("Skipping manual screenshot", out.getvalue())
+
+    def test_command_invokes_runner(self):
+        spec = ScreenshotSpec(slug="auto-cmd", url="/")
+        registry.register(spec)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            image_path = tmp_path / "auto-cmd.png"
+            base64_path = tmp_path / "auto-cmd.base64"
+            image_path.write_bytes(b"fake")
+            base64_path.write_text("Zg==", encoding="utf-8")
+            runner = Mock()
+            runner.__enter__ = Mock(return_value=runner)
+            runner.__exit__ = Mock(return_value=None)
+            runner.run.return_value = SimpleNamespace(
+                image_path=image_path,
+                base64_path=base64_path,
+                sample=None,
+            )
+            with patch(
+                "pages.management.commands.capture_ui_screenshots.ScreenshotSpecRunner",
+                return_value=runner,
+            ) as runner_cls:
+                out = StringIO()
+                call_command(
+                    "capture_ui_screenshots",
+                    "--spec",
+                    spec.slug,
+                    "--output-dir",
+                    tmp_path,
+                    stdout=out,
+                )
+            runner_cls.assert_called_once()
+            runner.run.assert_called_once_with(spec)
+            self.assertIn("Captured 'auto-cmd'", out.getvalue())
