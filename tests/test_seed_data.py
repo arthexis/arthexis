@@ -13,7 +13,8 @@ import django
 
 django.setup()
 
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
+from django.db import connection, connections
 from django.conf import settings
 from nodes.models import Node, NodeRole
 from teams.models import OdooProfile, SecurityGroup
@@ -22,6 +23,8 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 import socket
+from core.models import Todo
+from core.user_data import dump_user_fixture
 
 
 class SeedDataEntityTests(TestCase):
@@ -222,6 +225,50 @@ class EnvRefreshNodeTests(TestCase):
             )
         finally:
             control_lock.unlink(missing_ok=True)
+
+
+class EnvRefreshUserDataTests(TransactionTestCase):
+    def setUp(self):
+        base_dir = Path(settings.BASE_DIR)
+        spec = importlib.util.spec_from_file_location(
+            "env_refresh_user_data", base_dir / "env-refresh.py"
+        )
+        self.env_refresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.env_refresh)
+        self.data_dir = Path(settings.BASE_DIR) / "data"
+        self.data_dir.mkdir(exist_ok=True)
+        for path in self.data_dir.glob("*.json"):
+            path.unlink()
+
+    def tearDown(self):
+        for path in self.data_dir.glob("*.json"):
+            path.unlink()
+
+    def test_env_refresh_loads_user_fixtures(self):
+        self._run_clean_env_refresh()
+        User = get_user_model()
+        user = User.objects.get(username="arthexis")
+        todo = Todo.objects.create(request="Personal TODO")
+        Todo.all_objects.filter(pk=todo.pk).update(is_user_data=True)
+        dump_user_fixture(todo, user)
+        fixture_path = self.data_dir / f"core_todo_{todo.pk}.json"
+        self.assertTrue(fixture_path.exists())
+
+        Todo.objects.all().delete()
+        self.assertFalse(Todo.objects.filter(request="Personal TODO").exists())
+
+        self._run_clean_env_refresh()
+
+        reloaded = Todo.all_objects.get(request="Personal TODO")
+        self.assertTrue(reloaded.is_user_data)
+
+    def _run_clean_env_refresh(self):
+        connections.close_all()
+        db_name = connection.settings_dict.get("NAME")
+        if db_name:
+            db_path = Path(db_name)
+            db_path.unlink(missing_ok=True)
+        self.env_refresh.run_database_tasks(clean=True)
 
 
 class SeedDataViewTests(TestCase):
