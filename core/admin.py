@@ -424,8 +424,17 @@ class SecurityGroupAdmin(DjangoGroupAdmin):
 
 
 class InviteLeadAdmin(EntityModelAdmin):
-    list_display = ("email", "created_on", "sent_on", "short_error")
-    search_fields = ("email", "comment")
+    list_display = (
+        "email",
+        "status",
+        "assigned_to",
+        "created_on",
+        "sent_on",
+        "short_error",
+    )
+    search_fields = ("email", "comment", "assigned_to__username")
+    list_filter = ("status", "sent_on", "created_on")
+    raw_id_fields = ("assigned_to",)
     readonly_fields = (
         "created_on",
         "user",
@@ -445,9 +454,10 @@ class InviteLeadAdmin(EntityModelAdmin):
 
 @admin.register(APLead)
 class APLeadAdmin(EntityModelAdmin):
-    list_display = ("ssid", "mode", "created_on", "user")
-    list_filter = ("mode", "created_on")
-    search_fields = ("ssid", "notes", "user__username")
+    list_display = ("ssid", "mode", "status", "assigned_to", "created_on", "user")
+    list_filter = ("mode", "status", "created_on")
+    search_fields = ("ssid", "notes", "user__username", "assigned_to__username")
+    raw_id_fields = ("assigned_to",)
     readonly_fields = (
         "created_on",
         "user",

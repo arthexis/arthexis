@@ -147,8 +147,26 @@ class CustomSigil(SigilRoot):
 class Lead(Entity):
     """Common request lead information."""
 
+    class Status(models.TextChoices):
+        NEW = "new", _("New")
+        IN_PROGRESS = "in_progress", _("In progress")
+        CLOSED = "closed", _("Closed")
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="%(app_label)s_%(class)s_assigned",
+        related_query_name="%(app_label)s_%(class)s_assigned",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.NEW,
     )
     path = models.TextField(blank=True)
     referer = models.TextField(blank=True)

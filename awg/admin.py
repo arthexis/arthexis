@@ -120,8 +120,10 @@ class CalculatorTemplateAdmin(EntityModelAdmin):
 
 
 class PowerLeadAdmin(EntityModelAdmin):
-    list_display = ("created_on", "user", "ip_address")
-    search_fields = ("user__username", "ip_address")
+    list_display = ("created_on", "user", "assigned_to", "status", "ip_address")
+    search_fields = ("user__username", "assigned_to__username", "ip_address")
+    list_filter = ("status", "created_on")
+    raw_id_fields = ("assigned_to",)
     readonly_fields = (
         "created_on",
         "user",
