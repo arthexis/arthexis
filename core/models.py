@@ -400,8 +400,8 @@ class OdooProfile(Profile):
         return f"{owner} @ {self.host}" if owner else self.host
 
     class Meta:
-        verbose_name = _("Odoo Profile")
-        verbose_name_plural = _("Odoo Profiles")
+        verbose_name = _("Odoo Employee")
+        verbose_name_plural = _("Odoo Employees")
         constraints = [
             models.CheckConstraint(
                 check=(
