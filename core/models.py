@@ -1294,11 +1294,16 @@ class ReleaseManager(Profile):
     objects = ReleaseManagerManager()
 
     def natural_key(self):
-        pkg = self.package_set.first()
         owner = self.owner_display()
         if self.group_id and owner:
             owner = f"group:{owner}"
-        return (owner or "", pkg.name if pkg else "")
+
+        pkg_name = ""
+        if self.pk:
+            pkg = self.package_set.first()
+            pkg_name = pkg.name if pkg else ""
+
+        return (owner or "", pkg_name)
 
     profile_fields = (
         "pypi_username",
