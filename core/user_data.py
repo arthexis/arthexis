@@ -117,26 +117,41 @@ def _mark_fixture_user_data(path: Path) -> None:
 
 
 def _load_fixture(path: Path, *, mark_user_data: bool = True) -> bool:
-    loaded = False
+    """Load a fixture from *path* and optionally flag loaded entities."""
+
+    text = None
     try:
-        call_command("loaddata", str(path), ignorenonexistent=True)
-        loaded = True
+        text = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         try:
-            data = path.read_bytes().decode("latin-1")
+            text = path.read_bytes().decode("latin-1")
         except Exception:
             return False
-        path.write_text(data, encoding="utf-8")
+        path.write_text(text, encoding="utf-8")
+    except Exception:
+        # Continue without cached text so ``call_command`` can surface the
+        # underlying error just as before.
+        pass
+
+    if text is not None:
         try:
-            call_command("loaddata", str(path), ignorenonexistent=True)
-            loaded = True
+            data = json.loads(text)
         except Exception:
-            return False
+            data = None
+        else:
+            if isinstance(data, list) and not data:
+                path.unlink(missing_ok=True)
+                return False
+
+    try:
+        call_command("loaddata", str(path), ignorenonexistent=True)
     except Exception:
         return False
-    if loaded and mark_user_data:
+
+    if mark_user_data:
         _mark_fixture_user_data(path)
-    return loaded
+
+    return True
 
 
 def _fixture_sort_key(path: Path) -> tuple[int, str]:
