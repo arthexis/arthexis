@@ -196,8 +196,29 @@ class NodeAdmin(EntityModelAdmin):
 
 @admin.register(EmailOutbox)
 class EmailOutboxAdmin(EntityModelAdmin):
-    list_display = ("host", "port", "username", "use_tls", "use_ssl")
+    list_display = ("owner_label", "host", "port", "username", "use_tls", "use_ssl")
     change_form_template = "admin/nodes/emailoutbox/change_form.html"
+    fieldsets = (
+        ("Owner", {"fields": ("user", "group", "node")}),
+        (
+            None,
+            {
+                "fields": (
+                    "host",
+                    "port",
+                    "username",
+                    "password",
+                    "use_tls",
+                    "use_ssl",
+                    "from_email",
+                )
+            },
+        ),
+    )
+
+    @admin.display(description="Owner")
+    def owner_label(self, obj):
+        return obj.owner_display()
 
     def get_urls(self):
         urls = super().get_urls()

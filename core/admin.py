@@ -28,6 +28,7 @@ import datetime
 import calendar
 from django_object_actions import DjangoObjectActions
 from ocpp.models import Transaction
+from nodes.models import EmailOutbox
 from .models import (
     User,
     UserPhoneNumber,
@@ -546,6 +547,41 @@ class OdooProfileAdminForm(forms.ModelForm):
         )
 
 
+class EmailInboxAdminForm(forms.ModelForm):
+    """Admin form for :class:`core.models.EmailInbox` with hidden password."""
+
+    password = forms.CharField(
+        widget=forms.PasswordInput(render_value=True),
+        required=False,
+        help_text="Leave blank to keep the current password.",
+    )
+
+    class Meta:
+        model = EmailInbox
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["password"].initial = ""
+            self.initial["password"] = ""
+        else:
+            self.fields["password"].required = True
+
+    def clean_password(self):
+        pwd = self.cleaned_data.get("password")
+        if not pwd and self.instance.pk:
+            return _raw_instance_value(self.instance, "password")
+        return pwd
+
+    def _post_clean(self):
+        super()._post_clean()
+        _restore_sigil_values(
+            self,
+            ["username", "host", "password", "protocol"],
+        )
+
+
 class ProfileInlineFormSet(BaseInlineFormSet):
     """Hide deletion controls and allow implicit removal when empty."""
 
@@ -647,6 +683,55 @@ class OdooProfileInlineForm(ProfileFormMixin, OdooProfileAdminForm):
         return cleaned
 
 
+class EmailInboxInlineForm(ProfileFormMixin, EmailInboxAdminForm):
+    profile_fields = EmailInbox.profile_fields
+
+    class Meta(EmailInboxAdminForm.Meta):
+        exclude = ("user", "group")
+
+
+class EmailOutboxInlineForm(ProfileFormMixin, forms.ModelForm):
+    profile_fields = EmailOutbox.profile_fields
+    password = forms.CharField(
+        widget=forms.PasswordInput(render_value=True),
+        required=False,
+        help_text="Leave blank to keep the current password.",
+    )
+
+    class Meta:
+        model = EmailOutbox
+        fields = (
+            "password",
+            "host",
+            "port",
+            "username",
+            "use_tls",
+            "use_ssl",
+            "from_email",
+        )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["password"].initial = ""
+            self.initial["password"] = ""
+        else:
+            self.fields["password"].required = True
+
+    def clean_password(self):
+        pwd = self.cleaned_data.get("password")
+        if not pwd and self.instance.pk:
+            return _raw_instance_value(self.instance, "password")
+        return pwd
+
+    def _post_clean(self):
+        super()._post_clean()
+        _restore_sigil_values(
+            self,
+            ["password", "host", "username", "from_email"],
+        )
+
+
 class ReleaseManagerInlineForm(ProfileFormMixin, forms.ModelForm):
     profile_fields = ReleaseManager.profile_fields
 
@@ -730,6 +815,31 @@ PROFILE_INLINE_CONFIG = {
         ),
         "readonly_fields": ("verified_on", "odoo_uid", "name", "email"),
     },
+    EmailInbox: {
+        "form": EmailInboxInlineForm,
+        "fields": (
+            "user_datum",
+            "username",
+            "host",
+            "port",
+            "password",
+            "protocol",
+            "use_ssl",
+        ),
+    },
+    EmailOutbox: {
+        "form": EmailOutboxInlineForm,
+        "fields": (
+            "user_datum",
+            "password",
+            "host",
+            "port",
+            "username",
+            "use_tls",
+            "use_ssl",
+            "from_email",
+        ),
+    },
     ReleaseManager: {
         "form": ReleaseManagerInlineForm,
         "fields": (
@@ -781,7 +891,7 @@ def _build_profile_inline(model, owner_field):
     )
 
 
-PROFILE_MODELS = (OdooProfile, ReleaseManager, ChatProfile)
+PROFILE_MODELS = (OdooProfile, EmailInbox, EmailOutbox, ReleaseManager, ChatProfile)
 USER_PROFILE_INLINES = [
     _build_profile_inline(model, "user") for model in PROFILE_MODELS
 ]
@@ -904,41 +1014,6 @@ class OdooProfileAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         return {}
 
 
-class EmailInboxAdminForm(forms.ModelForm):
-    """Admin form for :class:`core.models.EmailInbox` with hidden password."""
-
-    password = forms.CharField(
-        widget=forms.PasswordInput(render_value=True),
-        required=False,
-        help_text="Leave blank to keep the current password.",
-    )
-
-    class Meta:
-        model = EmailInbox
-        fields = "__all__"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance.pk:
-            self.fields["password"].initial = ""
-            self.initial["password"] = ""
-        else:
-            self.fields["password"].required = True
-
-    def clean_password(self):
-        pwd = self.cleaned_data.get("password")
-        if not pwd and self.instance.pk:
-            return _raw_instance_value(self.instance, "password")
-        return pwd
-
-    def _post_clean(self):
-        super()._post_clean()
-        _restore_sigil_values(
-            self,
-            ["username", "host", "password", "protocol"],
-        )
-
-
 class EmailSearchForm(forms.Form):
     subject = forms.CharField(
         required=False, widget=forms.TextInput(attrs={"style": "width: 40em;"})
@@ -956,7 +1031,7 @@ class EmailSearchForm(forms.Form):
 
 class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     form = EmailInboxAdminForm
-    list_display = ("user", "username", "host", "protocol")
+    list_display = ("owner_label", "username", "host", "protocol")
     actions = ["test_connection", "search_inbox", "test_collectors"]
     change_actions = ["test_collectors_action"]
     change_form_template = "admin/core/emailinbox/change_form.html"
@@ -994,11 +1069,11 @@ class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         return super().changeform_view(request, object_id, form_url, extra_context)
 
     fieldsets = (
+        ("Owner", {"fields": ("user", "group")}),
         (
             None,
             {
                 "fields": (
-                    "user",
                     "username",
                     "host",
                     "port",
@@ -1009,6 +1084,10 @@ class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             },
         ),
     )
+
+    @admin.display(description="Owner")
+    def owner_label(self, obj):
+        return obj.owner_display()
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)

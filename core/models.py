@@ -457,7 +457,7 @@ class OdooProfile(Profile):
         ]
 
 
-class EmailInbox(Entity):
+class EmailInbox(Profile):
     """Credentials and configuration for connecting to an email mailbox."""
 
     IMAP = "imap"
@@ -467,10 +467,13 @@ class EmailInbox(Entity):
         (POP3, "POP3"),
     ]
 
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        related_name="email_inboxes",
-        on_delete=models.CASCADE,
+    profile_fields = (
+        "username",
+        "host",
+        "port",
+        "password",
+        "protocol",
+        "use_ssl",
     )
     username = SigilShortAutoField(
         max_length=255,
