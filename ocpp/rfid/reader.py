@@ -3,6 +3,13 @@ from django.utils import timezone
 from core.models import RFID
 from core.notifications import notify_async
 
+from .constants import (
+    DEFAULT_RST_PIN,
+    GPIO_PIN_MODE_BCM,
+    SPI_BUS,
+    SPI_DEVICE,
+)
+
 
 _deep_read_until: float = 0.0
 
@@ -35,7 +42,12 @@ def read_rfid(
         if mfrc is None:
             from mfrc522 import MFRC522  # type: ignore
 
-            mfrc = MFRC522()
+            mfrc = MFRC522(
+                bus=SPI_BUS,
+                device=SPI_DEVICE,
+                pin_mode=GPIO_PIN_MODE_BCM,
+                pin_rst=DEFAULT_RST_PIN,
+            )
     except Exception as exc:  # pragma: no cover - hardware dependent
         return {"error": str(exc)}
 

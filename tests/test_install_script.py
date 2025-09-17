@@ -94,3 +94,10 @@ def test_install_script_uses_auto_upgrade_lockfile():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()
     assert "auto_upgrade.lck" in content
+
+
+def test_install_script_checks_rfid_for_control_nodes():
+    script_path = Path(__file__).resolve().parent.parent / "install.sh"
+    content = script_path.read_text()
+    assert "python -m ocpp.rfid.detect" in content
+    assert "rfid-scanner" in content

@@ -285,6 +285,11 @@ else
     rm -f "$CONTROL_LOCK"
 fi
 
+RFID_LOCK="$LOCK_DIR/rfid.lck"
+if [ "$ENABLE_CONTROL" != true ]; then
+    rm -f "$RFID_LOCK"
+fi
+
 DATASETTE_LOCK="$LOCK_DIR/datasette.lck"
 if [ "$ENABLE_DATASETTE" = true ]; then
     touch "$DATASETTE_LOCK"
@@ -419,6 +424,17 @@ fi
 
 if [ "$ENABLE_DATASETTE" = true ]; then
     pip install datasette
+fi
+
+if [ "$ENABLE_CONTROL" = true ]; then
+    echo "Checking for RFID scanner hardware..."
+    if python -m ocpp.rfid.detect; then
+        touch "$RFID_LOCK"
+        echo "Enabled node feature 'rfid-scanner' based on detected hardware."
+    else
+        rm -f "$RFID_LOCK"
+        echo "Skipped enabling 'rfid-scanner'; hardware not detected during install."
+    fi
 fi
 
 python manage.py migrate --noinput

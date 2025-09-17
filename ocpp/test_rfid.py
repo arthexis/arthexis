@@ -1,4 +1,7 @@
+import io
 import os
+import sys
+import types
 from unittest.mock import patch, MagicMock, call
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -17,6 +20,16 @@ from nodes.models import Node, NodeRole
 
 from core.models import RFID
 from ocpp.rfid.reader import read_rfid, enable_deep_read
+from ocpp.rfid.detect import detect_scanner, main as detect_main
+from ocpp.rfid import background_reader
+from ocpp.rfid.constants import (
+    DEFAULT_IRQ_PIN,
+    DEFAULT_RST_PIN,
+    GPIO_PIN_MODE_BCM,
+    MODULE_WIRING,
+    SPI_BUS,
+    SPI_DEVICE,
+)
 
 
 class ScanNextViewTests(TestCase):
@@ -163,6 +176,58 @@ class RFIDLastSeenTests(TestCase):
         self.assertIsNotNone(tag.last_seen_on)
         self.assertEqual(result["kind"], RFID.CLASSIC)
 
+
+class RFIDDetectionScriptTests(SimpleTestCase):
+    @patch("ocpp.rfid.detect._ensure_django")
+    @patch(
+        "ocpp.rfid.irq_wiring_check.check_irq_pin",
+        return_value={"irq_pin": DEFAULT_IRQ_PIN},
+    )
+    def test_detect_scanner_success(self, mock_check, _mock_setup):
+        result = detect_scanner()
+        self.assertEqual(
+            result,
+            {
+                "detected": True,
+                "irq_pin": DEFAULT_IRQ_PIN,
+            },
+        )
+        mock_check.assert_called_once()
+
+    @patch("ocpp.rfid.detect._ensure_django")
+    @patch(
+        "ocpp.rfid.irq_wiring_check.check_irq_pin",
+        return_value={"error": "no scanner detected"},
+    )
+    def test_detect_scanner_failure(self, mock_check, _mock_setup):
+        result = detect_scanner()
+        self.assertFalse(result["detected"])
+        self.assertEqual(result["reason"], "no scanner detected")
+        mock_check.assert_called_once()
+
+    @patch(
+        "ocpp.rfid.detect.detect_scanner",
+        return_value={"detected": True, "irq_pin": DEFAULT_IRQ_PIN},
+    )
+    def test_detect_main_success_output(self, mock_detect):
+        buffer = io.StringIO()
+        with patch("sys.stdout", new=buffer):
+            exit_code = detect_main([])
+        self.assertEqual(exit_code, 0)
+        self.assertIn("IRQ pin", buffer.getvalue())
+        mock_detect.assert_called_once()
+
+    @patch(
+        "ocpp.rfid.detect.detect_scanner",
+        return_value={"detected": False, "reason": "missing hardware"},
+    )
+    def test_detect_main_failure_output(self, mock_detect):
+        buffer = io.StringIO()
+        with patch("sys.stdout", new=buffer):
+            exit_code = detect_main([])
+        self.assertEqual(exit_code, 1)
+        self.assertIn("missing hardware", buffer.getvalue())
+        mock_detect.assert_called_once()
 
 class RestartViewTests(SimpleTestCase):
     @patch("config.middleware.Node.get_local", return_value=None)
@@ -351,3 +416,53 @@ class DeepReadAuthTests(TestCase):
         self.assertGreaterEqual(len(reader.auth_calls), 2)
         self.assertEqual(reader.auth_calls[0], reader.PICC_AUTHENT1A)
         self.assertEqual(reader.auth_calls[1], reader.PICC_AUTHENT1B)
+
+
+class RFIDWiringConfigTests(SimpleTestCase):
+    def test_module_wiring_map(self):
+        expected = [
+            ("SDA", "CE0"),
+            ("SCK", "SCLK"),
+            ("MOSI", "MOSI"),
+            ("MISO", "MISO"),
+            ("IRQ", "IO4"),
+            ("GND", "GND"),
+            ("RST", "IO25"),
+            ("3v3", "3v3"),
+        ]
+        self.assertEqual(list(MODULE_WIRING.items()), expected)
+        self.assertEqual(DEFAULT_IRQ_PIN, 4)
+        self.assertEqual(DEFAULT_RST_PIN, 25)
+
+    def test_background_reader_uses_default_irq_pin(self):
+        self.assertEqual(background_reader.IRQ_PIN, DEFAULT_IRQ_PIN)
+
+    def test_reader_instantiation_uses_configured_pins(self):
+        class DummyReader:
+            init_args = None
+            init_kwargs = None
+
+            def __init__(self, *args, **kwargs):
+                DummyReader.init_args = args
+                DummyReader.init_kwargs = kwargs
+                self.MI_OK = 1
+                self.PICC_REQIDL = 0
+
+        fake_mfrc = types.ModuleType("mfrc522")
+        fake_mfrc.MFRC522 = DummyReader
+        fake_gpio = types.ModuleType("RPi.GPIO")
+        fake_rpi = types.ModuleType("RPi")
+        fake_rpi.GPIO = fake_gpio
+
+        with patch.dict(
+            "sys.modules",
+            {"mfrc522": fake_mfrc, "RPi": fake_rpi, "RPi.GPIO": fake_gpio},
+        ):
+            result = read_rfid(timeout=0, cleanup=False)
+
+        self.assertEqual(result, {"rfid": None, "label_id": None})
+        self.assertIsNotNone(DummyReader.init_kwargs)
+        self.assertEqual(DummyReader.init_kwargs["bus"], SPI_BUS)
+        self.assertEqual(DummyReader.init_kwargs["device"], SPI_DEVICE)
+        self.assertEqual(DummyReader.init_kwargs["pin_mode"], GPIO_PIN_MODE_BCM)
+        self.assertEqual(DummyReader.init_kwargs["pin_rst"], DEFAULT_RST_PIN)
