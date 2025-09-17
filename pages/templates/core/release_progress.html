@@ -67,6 +67,9 @@
   .progress-steps li.status-awaiting-approval .progress-name {
     color: var(--link-fg);
   }
+  .progress-steps li.status-missing-credentials .progress-name {
+    color: var(--warning-fg, #c09853);
+  }
   .approval-actions {
     margin: 1.5rem 0;
     padding: 1rem;
@@ -94,6 +97,13 @@
     min-width: 7rem;
     padding-inline: 1rem;
     padding-block: 0.45rem 0.6rem;
+  }
+  .approval-requirements {
+    margin: 0.75rem 0 0;
+    padding-left: 1.2rem;
+  }
+  .approval-requirements li {
+    margin-bottom: 0.25rem;
   }
   .approval-buttons .reject-btn {
     border-color: var(--error-fg, #ba2121);
@@ -244,6 +254,7 @@
     {% endif %}
     {% if awaiting_approval %}
     <div class="approval-actions">
+      {% if approval_credentials_ready %}
       <h2>{% trans 'Release manager approval required' %}</h2>
       <p>{% trans 'A release manager must approve before publishing can continue.' %}</p>
       <div class="approval-buttons">
@@ -256,6 +267,19 @@
           <button type="submit" name="reject" value="1" class="reject-btn">{% trans 'Reject' %}</button>
         </form>
       </div>
+      {% else %}
+      <h2>{% trans 'Publishing credentials required' %}</h2>
+      {% if has_release_manager %}
+      <p>{% blocktrans trimmed with owner=release_manager_owner %}{{ owner }} must configure PyPI publishing credentials before this step can continue.{% endblocktrans %}</p>
+      {% else %}
+      <p>{% trans 'Assign a release manager with PyPI publishing credentials before this step can continue.' %}</p>
+      {% endif %}
+      <p>{% blocktrans trimmed with profile_url=current_user_admin_url %}Add a PyPI token or PyPI username and password in your <a href="{{ profile_url }}" target="_blank" rel="noopener">user profile</a> under the Release Manager section.{% endblocktrans %}</p>
+      <ul class="approval-requirements">
+        <li>{% trans 'PyPI token (recommended)' %}</li>
+        <li>{% trans 'or PyPI username and password' %}</li>
+      </ul>
+      {% endif %}
     </div>
     {% endif %}
     {% if error %}
@@ -268,7 +292,11 @@
       {% if has_pending_todos %}
       <p class="status-message">{% trans 'Waiting for checklist acknowledgment' %}</p>
       {% elif awaiting_approval %}
-      <p class="status-message">{% trans 'Waiting for release manager approval' %}</p>
+        {% if approval_credentials_ready %}
+        <p class="status-message">{% trans 'Waiting for release manager approval' %}</p>
+        {% else %}
+        <p class="status-message">{% trans 'Waiting for release manager credentials' %}</p>
+        {% endif %}
       {% elif paused %}
       {# Paused message shown above #}
       {% else %}
