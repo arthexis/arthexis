@@ -979,6 +979,28 @@ class FavoriteTests(TestCase):
         self.assertNotContains(resp, "Release manager tasks")
         self.assertNotContains(resp, todo.request)
 
+    def test_dashboard_shows_todos_for_delegate_release_manager(self):
+        todo = Todo.objects.create(request="Delegate Task")
+        User = get_user_model()
+        delegate = User.objects.create_superuser(
+            username="delegate",
+            password="pwd",
+            email="delegate@example.com",
+        )
+        ReleaseManager.objects.create(user=delegate)
+        operator = User.objects.create_superuser(
+            username="operator",
+            password="pwd",
+            email="operator@example.com",
+        )
+        operator.operate_as = delegate
+        operator.full_clean()
+        operator.save()
+        self.client.force_login(operator)
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, "Release manager tasks")
+        self.assertContains(resp, todo.request)
+
 
 class DatasetteTests(TestCase):
     def setUp(self):
