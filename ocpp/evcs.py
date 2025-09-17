@@ -582,7 +582,7 @@ async def simulate_cp(
 def simulate(
     *,
     host: str = "127.0.0.1",
-    ws_port: int = 9000,
+    ws_port: int = 8000,
     rfid: str = "FFFFFFFF",
     cp_path: str = "CPX",
     vin: str = "",
