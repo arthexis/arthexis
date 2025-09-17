@@ -4,6 +4,7 @@ import logging
 import subprocess
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from celery import shared_task
 from django.conf import settings
@@ -150,3 +151,15 @@ def poll_email_collectors() -> None:
 
     for collector in EmailCollector.objects.all():
         collector.collect()
+
+
+@shared_task
+def report_github_issue(payload: dict[str, Any]) -> None:
+    """Send the prepared payload to GitHub asynchronously."""
+
+    from . import github
+
+    try:
+        github.submit_issue(payload)
+    except Exception:  # pragma: no cover - network issues should not crash Celery
+        logger.exception("Failed to submit GitHub issue report")

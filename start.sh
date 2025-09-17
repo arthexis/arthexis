@@ -1,5 +1,105 @@
 #!/usr/bin/env bash
 set -e
+set -E
+set -o pipefail
+
+ARTHEXIS_TRACE_CURRENT=""
+ARTHEXIS_REPORTING=0
+declare -a ARTHEXIS_CELERY_PIDS=()
+
+trap 'ARTHEXIS_TRACE_CURRENT=$BASH_COMMAND' DEBUG
+
+cleanup_background_processes() {
+  if [ "${#ARTHEXIS_CELERY_PIDS[@]}" -eq 0 ]; then
+    return
+  fi
+
+  for pid in "${ARTHEXIS_CELERY_PIDS[@]}"; do
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+    fi
+  done
+}
+
+report_start_failure() {
+  local exit_code="$1"
+  if [ "$exit_code" -eq 0 ] || [ "$ARTHEXIS_REPORTING" -ne 0 ]; then
+    return
+  fi
+
+  ARTHEXIS_REPORTING=1
+
+  local failed_command
+  failed_command="${ARTHEXIS_TRACE_CURRENT:-${BASH_COMMAND:-unknown}}"
+  local host
+  host="$(hostname 2>/dev/null || echo "unknown")"
+
+  local version="unknown"
+  if [ -f "$BASE_DIR/VERSION" ]; then
+    version="$(tr -d '\r' <"$BASE_DIR/VERSION" | head -n 1)"
+  fi
+
+  local python_bin=""
+  if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "$VIRTUAL_ENV/bin/python" ]; then
+    python_bin="$VIRTUAL_ENV/bin/python"
+  elif [ -x "$BASE_DIR/.venv/bin/python" ]; then
+    python_bin="$BASE_DIR/.venv/bin/python"
+  elif command -v python3 >/dev/null 2>&1; then
+    python_bin="$(command -v python3)"
+  elif command -v python >/dev/null 2>&1; then
+    python_bin="$(command -v python)"
+  fi
+
+  local revision=""
+  if [ -n "$python_bin" ]; then
+    revision="$($python_bin - <<'PY' 2>/dev/null || true
+from utils.revision import get_revision
+print(get_revision())
+PY
+)"
+    revision="${revision%%$'\n'*}"
+  fi
+  if [ -z "$revision" ] && command -v git >/dev/null 2>&1; then
+    revision="$(git rev-parse HEAD 2>/dev/null || true)"
+    revision="${revision%%$'\n'*}"
+  fi
+
+  if [ -z "$python_bin" ]; then
+    echo "start.sh failed with exit code $exit_code while running: $failed_command" >&2
+    echo "Unable to report the failure automatically because Python is unavailable." >&2
+    return
+  fi
+
+  if [ -f "$LOG_FILE" ]; then
+    echo "----- Last 100 lines from $LOG_FILE -----" >&2
+    tail -n 100 "$LOG_FILE" >&2 || true
+    echo "----------------------------------------" >&2
+  fi
+
+  local -a report_args=(
+    "$python_bin" manage.py report_issue
+    --source start
+    --command "$failed_command"
+    --exit-code "$exit_code"
+    --host "$host"
+    --app-version "$version"
+    --revision "$revision"
+  )
+  if [ -f "$LOG_FILE" ]; then
+    report_args+=(--log-file "$LOG_FILE")
+  fi
+
+  "${report_args[@]}" >/dev/null 2>&1 || echo "Failed to queue GitHub issue for start failure." >&2
+}
+
+arthexis_exit_trap() {
+  local exit_code="$1"
+  report_start_failure "$exit_code"
+  cleanup_background_processes
+}
+
+trap 'report_start_failure $?' ERR
+trap 'arthexis_exit_trap $?' EXIT
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/helpers/logging.sh
@@ -113,7 +213,8 @@ if [ "$CELERY" = true ]; then
   CELERY_WORKER_PID=$!
   celery -A config beat -l info &
   CELERY_BEAT_PID=$!
-  trap 'kill "$CELERY_WORKER_PID" "$CELERY_BEAT_PID"' EXIT
+  ARTHEXIS_CELERY_PIDS=()
+  ARTHEXIS_CELERY_PIDS+=("$CELERY_WORKER_PID" "$CELERY_BEAT_PID")
 fi
 
 # Start the Django development server
