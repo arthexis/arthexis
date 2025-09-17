@@ -1,4 +1,4 @@
-"""REST endpoints for ChatProfile issuance and authentication."""
+"""REST endpoints for AssistantProfile issuance and authentication."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from .models import ChatProfile, hash_key
+from .models import AssistantProfile, hash_key
 
 
 @csrf_exempt
@@ -23,7 +23,7 @@ def issue_key(request, user_id: int) -> JsonResponse:
     """
 
     user = get_user_model().objects.get(pk=user_id)
-    profile, key = ChatProfile.issue_key(user)
+    profile, key = AssistantProfile.issue_key(user)
     return JsonResponse({"user_id": user_id, "user_key": key})
 
 
@@ -38,11 +38,14 @@ def authenticate(view_func):
 
         key_hash = hash_key(header.split(" ", 1)[1])
         try:
-            profile = ChatProfile.objects.get(user_key_hash=key_hash, is_active=True)
-        except ChatProfile.DoesNotExist:
+            profile = AssistantProfile.objects.get(
+                user_key_hash=key_hash, is_active=True
+            )
+        except AssistantProfile.DoesNotExist:
             return HttpResponse(status=401)
 
         profile.touch()
+        request.assistant_profile = profile
         request.chat_profile = profile
         return view_func(request, *args, **kwargs)
 
@@ -54,7 +57,8 @@ def authenticate(view_func):
 def assistant_test(request):
     """Return a simple greeting to confirm authentication."""
 
-    user_id = request.chat_profile.user_id
+    profile = getattr(request, "assistant_profile", None)
+    user_id = profile.user_id if profile else None
     return JsonResponse({"message": f"Hello from user {user_id}"})
 
 

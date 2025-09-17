@@ -6,11 +6,11 @@ from django.urls import reverse
 from django.test import TestCase
 
 
-class ChatDataEndpointTests(TestCase):
+class AssistantDataEndpointTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_user(username="alice", password="pwd")
-        issue_url = reverse("workgroup:chatprofile-issue", args=[self.user.id])
+        issue_url = reverse("workgroup:assistantprofile-issue", args=[self.user.id])
         self.api_key = self.client.post(issue_url).json()["user_key"]
 
     def test_requires_authentication(self):

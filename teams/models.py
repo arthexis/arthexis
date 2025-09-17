@@ -6,7 +6,7 @@ from core.models import (
     EmailCollector as CoreEmailCollector,
     ReleaseManager as CoreReleaseManager,
     OdooProfile as CoreOdooProfile,
-    ChatProfile as CoreChatProfile,
+    AssistantProfile as CoreAssistantProfile,
     APLead as CoreAPLead,
 )
 from awg.models import PowerLead as CorePowerLead
@@ -93,9 +93,9 @@ class OdooProfile(CoreOdooProfile):
         verbose_name_plural = CoreOdooProfile._meta.verbose_name_plural
 
 
-class ChatProfile(CoreChatProfile):
+class AssistantProfile(CoreAssistantProfile):
     class Meta:
         proxy = True
         app_label = "teams"
-        verbose_name = CoreChatProfile._meta.verbose_name
-        verbose_name_plural = CoreChatProfile._meta.verbose_name_plural
+        verbose_name = CoreAssistantProfile._meta.verbose_name
+        verbose_name_plural = CoreAssistantProfile._meta.verbose_name_plural

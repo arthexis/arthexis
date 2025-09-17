@@ -1,0 +1,22 @@
+{% extends "admin/user_datum_change_form.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    {% if original %}
+    <li><a href="../generate-key/" class="addlink">{% trans "Generate Key" %}</a></li>
+    {% endif %}
+    {{ block.super }}
+{% endblock %}
+
+{% block form_top %}
+<p class="help">
+    Use the Assistant Profiles list to start the MCP server and confirm it is
+    running before sharing credentials. Once online, open
+    <a href="https://platform.openai.com/docs/gpts/tools/model-context-protocol"
+       target="_blank" rel="noopener">ChatGPT Developer Mode</a>
+    and register a Model Context Protocol server pointing to
+    <code>http://{{ mcp_server_host|default:"127.0.0.1" }}:{{ mcp_server_port|default:"8800" }}</code>.
+    Requests must call <code>/api/chat/</code> and include the API key in the
+    <code>Authorization</code> header as <code>Bearer &lt;key&gt;</code>.
+</p>
+{% endblock %}

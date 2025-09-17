@@ -335,8 +335,12 @@ class User(Entity, AbstractUser):
         return self._direct_profile("OdooProfile")
 
     @property
+    def assistant_profile(self):
+        return self._direct_profile("AssistantProfile")
+
+    @property
     def chat_profile(self):
-        return self._direct_profile("ChatProfile")
+        return self.assistant_profile
 
 
 class UserPhoneNumber(Entity):
@@ -1616,7 +1620,7 @@ def hash_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
 
-class ChatProfile(Profile):
+class AssistantProfile(Profile):
     """Stores a hashed user key used by the assistant for authentication.
 
     The plain-text ``user_key`` is generated server-side and shown only once.
@@ -1633,27 +1637,27 @@ class ChatProfile(Profile):
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        db_table = "workgroup_chatprofile"
-        verbose_name = "Chat Profile"
-        verbose_name_plural = "Chat Profiles"
+        db_table = "workgroup_assistantprofile"
+        verbose_name = "Assistant Profile"
+        verbose_name_plural = "Assistant Profiles"
         constraints = [
             models.CheckConstraint(
                 check=(
                     (Q(user__isnull=False) & Q(group__isnull=True))
                     | (Q(user__isnull=True) & Q(group__isnull=False))
                 ),
-                name="chatprofile_requires_owner",
+                name="assistantprofile_requires_owner",
             )
         ]
 
     @classmethod
-    def issue_key(cls, user) -> tuple["ChatProfile", str]:
+    def issue_key(cls, user) -> tuple["AssistantProfile", str]:
         """Create or update a profile and return it with a new plain key."""
 
         key = secrets.token_hex(32)
         key_hash = hash_key(key)
         if user is None:
-            raise ValueError("Chat profiles require a user instance")
+            raise ValueError("Assistant profiles require a user instance")
 
         profile, _ = cls.objects.update_or_create(
             user=user,
@@ -1673,7 +1677,7 @@ class ChatProfile(Profile):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         owner = self.owner_display()
-        return f"ChatProfile for {owner}" if owner else "ChatProfile"
+        return f"AssistantProfile for {owner}" if owner else "AssistantProfile"
 
 
 def validate_relative_url(value: str) -> None:
