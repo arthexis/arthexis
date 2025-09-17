@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
 
 from core.models import OdooProfile
-from core.admin import OdooProfileAdmin, OdooProfileAdminForm
+from core.admin import OdooProfileAdmin, OdooProfileAdminForm, OdooProfileInlineForm
 
 
 class OdooProfileAdminFormTests(TestCase):
@@ -137,3 +137,35 @@ class OdooProfileAdminActionTests(TestCase):
         response = self.admin.changeform_view(request, str(self.profile.pk))
         content = response.render().content.decode()
         self.assertIn("Test credentials", content)
+
+
+class OdooProfileInlineFormTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username="inline", password="pwd")
+
+    def test_empty_inline_form_deletes_profile(self):
+        form = OdooProfileInlineForm(
+            data={
+                "host": "",
+                "database": "",
+                "username": "",
+                "password": "",
+            },
+            instance=OdooProfile(user=self.user),
+        )
+        self.assertTrue(form.is_valid())
+        self.assertTrue(form.cleaned_data.get("DELETE"))
+
+    def test_partial_data_requires_all_fields(self):
+        form = OdooProfileInlineForm(
+            data={
+                "host": "http://odoo",
+                "database": "",
+                "username": "",
+                "password": "",
+            },
+            instance=OdooProfile(user=self.user),
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("Provide host, database, username, and password", form.non_field_errors()[0])
