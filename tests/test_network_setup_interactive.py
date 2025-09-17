@@ -20,3 +20,4 @@ def test_network_setup_help_includes_flags() -> None:
     assert "--interactive" in result.stdout
     assert "--unsafe" in result.stdout
     assert "--no-watchdog" in result.stdout
+    assert "--public" in result.stdout

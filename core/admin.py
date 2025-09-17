@@ -50,6 +50,7 @@ from .models import (
     ReleaseManager,
     SecurityGroup,
     InviteLead,
+    APLead,
     ChatProfile,
     Todo,
     hash_key,
@@ -443,6 +444,21 @@ class InviteLeadAdmin(EntityModelAdmin):
         return (obj.error[:40] + "…") if len(obj.error) > 40 else obj.error
 
     short_error.short_description = "error"
+
+
+@admin.register(APLead)
+class APLeadAdmin(EntityModelAdmin):
+    list_display = ("ssid", "mode", "created_on", "user")
+    list_filter = ("mode", "created_on")
+    search_fields = ("ssid", "notes", "user__username")
+    readonly_fields = (
+        "created_on",
+        "user",
+        "path",
+        "referer",
+        "user_agent",
+        "ip_address",
+    )
 
 
 class EnergyAccountRFIDForm(forms.ModelForm):

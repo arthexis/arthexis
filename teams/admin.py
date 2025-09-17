@@ -13,6 +13,7 @@ from core.models import (
 from nodes.models import EmailOutbox as CoreEmailOutbox
 from core.admin import (
     InviteLeadAdmin,
+    APLeadAdmin,
     UserAdmin as CoreUserAdmin,
     SecurityGroupAdmin,
     EmailInboxAdmin,
@@ -27,6 +28,7 @@ from nodes.admin import EmailOutboxAdmin
 from .models import (
     InviteLead,
     PowerLead,
+    APLead,
     User,
     SecurityGroup,
     EmailInbox,
@@ -45,6 +47,11 @@ class InviteLeadAdminProxy(InviteLeadAdmin):
 
 @admin.register(PowerLead)
 class PowerLeadAdminProxy(PowerLeadAdmin):
+    pass
+
+
+@admin.register(APLead)
+class APLeadAdminProxy(APLeadAdmin):
     pass
 
 
