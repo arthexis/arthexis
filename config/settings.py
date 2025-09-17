@@ -22,6 +22,8 @@ from celery.schedules import crontab
 from django.http import request as http_request
 from django.middleware.csrf import CsrfViewMiddleware
 from django.core.exceptions import DisallowedHost
+from django.contrib.sites import shortcuts as sites_shortcuts
+from django.contrib.sites.requests import RequestSite
 from urllib.parse import urlsplit
 import django.utils.encoding as encoding
 
@@ -166,6 +168,22 @@ if DEBUG:
         INSTALLED_APPS += ["debug_toolbar"]
 
 SITE_ID = 1
+
+_original_get_current_site = sites_shortcuts.get_current_site
+
+
+def _get_current_site_with_request_fallback(request=None):
+    try:
+        return _original_get_current_site(request)
+    except Exception as exc:
+        from django.contrib.sites.models import Site
+
+        if request is not None and isinstance(exc, Site.DoesNotExist):
+            return RequestSite(request)
+        raise
+
+
+sites_shortcuts.get_current_site = _get_current_site_with_request_fallback
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

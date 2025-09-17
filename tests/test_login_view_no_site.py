@@ -20,3 +20,8 @@ class LoginViewNoSiteTests(TestCase):
     def test_login_page_renders_without_site(self):
         response = self.client.get(reverse("pages:login"))
         self.assertEqual(response.status_code, 200)
+
+    def test_admin_login_page_renders_without_site(self):
+        response = self.client.get(reverse("admin:login"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="username"')
