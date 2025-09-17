@@ -187,13 +187,13 @@ class AWGCalculatorTests(TestCase):
         self.assertEqual(form["phases"], "2")
         self.assertEqual(form["ground"], "1")
 
-    def test_dc_fast_charger_template_values(self):
-        tmpl = CalculatorTemplate.objects.get(name="DC Fast Charger")
-        self.assertEqual(tmpl.description, "Commercial DC charging for 1 or 2 EVs.")
-        self.assertEqual(tmpl.amps, 120)
-        self.assertEqual(tmpl.volts, 400)
-        self.assertEqual(tmpl.max_lines, 2)
-        self.assertEqual(tmpl.temperature, 75)
+    def test_ev_charger_template_values(self):
+        tmpl = CalculatorTemplate.objects.get(name="EV Charger")
+        self.assertEqual(tmpl.description, "Residential charging for a single EV.")
+        self.assertEqual(tmpl.amps, 40)
+        self.assertEqual(tmpl.volts, 220)
+        self.assertEqual(tmpl.max_lines, 1)
+        self.assertEqual(tmpl.temperature, 60)
 
 
 class CalculatorTemplateTests(TestCase):
