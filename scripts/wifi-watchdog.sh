@@ -1,9 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-LOG_FILE="$BASE_DIR/logs/wifi-watchdog.log"
+# shellcheck source=../scripts/helpers/logging.sh
+. "$BASE_DIR/scripts/helpers/logging.sh"
+arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
+LOG_FILE="$LOG_DIR/wifi-watchdog.log"
 LOCK_FILE="$BASE_DIR/locks/charging.lck"
-mkdir -p "$(dirname "$LOG_FILE")"
 FAILS=0
 while true; do
     if ping -c1 -W2 8.8.8.8 >/dev/null 2>&1; then

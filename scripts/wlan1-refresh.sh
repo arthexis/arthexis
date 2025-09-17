@@ -7,8 +7,9 @@ if (( EUID != 0 )); then
 fi
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-LOG_DIR="$REPO_DIR/logs"
-mkdir -p "$LOG_DIR"
+# shellcheck source=../scripts/helpers/logging.sh
+. "$REPO_DIR/scripts/helpers/logging.sh"
+arthexis_resolve_log_dir "$REPO_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 

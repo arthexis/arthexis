@@ -8,6 +8,8 @@ import json
 import re
 import asyncio
 
+from core.log_paths import select_log_dir
+
 connections = {}
 transactions = {}
 logs: dict[str, dict[str, list[str]]] = {"charger": {}, "simulator": {}}
@@ -18,11 +20,11 @@ simulators = {}
 # mapping of charger id / cp_path to friendly names used for log files
 log_names: dict[str, dict[str, str]] = {"charger": {}, "simulator": {}}
 
-LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+BASE_DIR = Path(__file__).resolve().parent.parent
+LOG_DIR = select_log_dir(BASE_DIR)
 SESSION_DIR = LOG_DIR / "sessions"
 SESSION_DIR.mkdir(exist_ok=True)
-LOCK_DIR = Path(__file__).resolve().parent.parent / "locks"
+LOCK_DIR = BASE_DIR / "locks"
 LOCK_DIR.mkdir(exist_ok=True)
 SESSION_LOCK = LOCK_DIR / "charging.lck"
 _lock_task: asyncio.Task | None = None
