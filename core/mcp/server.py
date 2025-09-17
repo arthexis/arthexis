@@ -33,8 +33,12 @@ class SigilResolverServer:
         self._sessions: WeakKeyDictionary[Any, SigilSessionState] = WeakKeyDictionary()
         self._save_uid = f"mcp_sigil_root_save_{id(self)}"
         self._delete_uid = f"mcp_sigil_root_delete_{id(self)}"
-        post_save.connect(self._handle_root_saved, sender=SigilRoot, dispatch_uid=self._save_uid)
-        post_delete.connect(self._handle_root_deleted, sender=SigilRoot, dispatch_uid=self._delete_uid)
+        post_save.connect(
+            self._handle_root_saved, sender=SigilRoot, dispatch_uid=self._save_uid
+        )
+        post_delete.connect(
+            self._handle_root_deleted, sender=SigilRoot, dispatch_uid=self._delete_uid
+        )
 
     def build_fastmcp(self) -> FastMCP:
         """Create and configure a :class:`FastMCP` instance."""
@@ -73,15 +77,21 @@ class SigilResolverServer:
         def resolve_sigils(
             text: str,
             context: dict[str, str | int | None] | None = None,
-            options: ResolveOptions | None = None,
+            options: ResolveOptions | Mapping[str, Any] | None = None,
             ctx: Context | None = None,
         ) -> dict[str, Any]:
             state = self._session_state(ctx)
+            resolved_options: ResolveOptions | None = None
+            if options is not None:
+                if isinstance(options, ResolveOptions):
+                    resolved_options = options
+                else:
+                    resolved_options = ResolveOptions.model_validate(options)
             result = self.service.resolve_text(
                 text,
                 session_context=state.context,
                 overrides=context,
-                options=options,
+                options=resolved_options,
             )
             return self._format_resolution(result)
 
@@ -131,7 +141,9 @@ class SigilResolverServer:
             mime_type="application/json",
         )
         def sigil_roots_resource() -> str:
-            entries = [root.model_dump(by_alias=True) for root in self.service.list_roots()]
+            entries = [
+                root.model_dump(by_alias=True) for root in self.service.list_roots()
+            ]
             return json.dumps({"roots": entries}, indent=2)
 
     def _session_state(self, ctx: Context | None) -> SigilSessionState:
@@ -174,8 +186,12 @@ class SigilResolverServer:
             "instructions": instructions,
         }
 
-    def _handle_root_saved(self, sender: type[SigilRoot], instance: SigilRoot, **kwargs: Any) -> None:
+    def _handle_root_saved(
+        self, sender: type[SigilRoot], instance: SigilRoot, **kwargs: Any
+    ) -> None:
         self.catalog.update_from_instance(instance)
 
-    def _handle_root_deleted(self, sender: type[SigilRoot], instance: SigilRoot, **kwargs: Any) -> None:
+    def _handle_root_deleted(
+        self, sender: type[SigilRoot], instance: SigilRoot, **kwargs: Any
+    ) -> None:
         self.catalog.remove(instance.prefix)
