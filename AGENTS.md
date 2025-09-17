@@ -6,7 +6,6 @@
 - Use meaningful commit messages that describe the original intent of the
   request.
 - Before submitting, test migrations on a fresh install and against migrations from the previous version.
-- Run `pre-commit run --all-files` to ensure migration checks pass. Use `env-refresh.sh --clean` for a fresh install.
 - Starting with release 0.1.9, do not rewrite existing migrations. Always create new migrations when changes are needed.
 - Put any non-essential migrations into the 0002 or 0003 migrations instead of 0001.
 - Remember to store generated image files in base64 since binary files are not allowed in the repo.

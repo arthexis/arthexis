@@ -34,6 +34,7 @@ UNSAFE=false
 INSTALL_WATCHDOG=true
 DEFAULT_AP_NAME="gelectriic-ap"
 AP_NAME="$DEFAULT_AP_NAME"
+SKIP_AP=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --password)
@@ -60,6 +61,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-firewall)
             SKIP_FIREWALL=true
+            ;;
+        --no-ap)
+            SKIP_AP=true
             ;;
         --unsafe)
             UNSAFE=true
@@ -200,28 +204,36 @@ fi
 
 # Determine access point name and password before running steps
 HYPERLINE_NAME="hyperline"
-EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null || true)"
-if [[ -z "$EXISTING_PASS" && "$AP_NAME" != "$DEFAULT_AP_NAME" ]]; then
-    EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$DEFAULT_AP_NAME" 2>/dev/null || true)"
-fi
-if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
-    while true; do
-        read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
-        read -rsp "Confirm password: " WIFI_PASS2; echo
-        if [[ "$WIFI_PASS1" == "$WIFI_PASS2" && -n "$WIFI_PASS1" ]]; then
-            WIFI_PASS="$WIFI_PASS1"
-            break
-        else
-            echo "Passwords do not match or are empty." >&2
-        fi
-    done
-else
-    WIFI_PASS="$EXISTING_PASS"
+EXISTING_PASS=""
+WIFI_PASS=""
+if [[ $SKIP_AP == false ]]; then
+    EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null || true)"
+    if [[ -z "$EXISTING_PASS" && "$AP_NAME" != "$DEFAULT_AP_NAME" ]]; then
+        EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$DEFAULT_AP_NAME" 2>/dev/null || true)"
+    fi
+    if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
+        while true; do
+            read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
+            read -rsp "Confirm password: " WIFI_PASS2; echo
+            if [[ "$WIFI_PASS1" == "$WIFI_PASS2" && -n "$WIFI_PASS1" ]]; then
+                WIFI_PASS="$WIFI_PASS1"
+                break
+            else
+                echo "Passwords do not match or are empty." >&2
+            fi
+        done
+    else
+        WIFI_PASS="$EXISTING_PASS"
+    fi
 fi
 
 # Collect user decisions for each step in advance
 ask_step RUN_SERVICES "Ensure required services"
-ask_step RUN_AP "Configure wlan0 access point"
+if [[ $SKIP_AP == true ]]; then
+    RUN_AP=false
+else
+    ask_step RUN_AP "Configure wlan0 access point"
+fi
 ask_step RUN_WLAN1_REFRESH "Install wlan1 device refresh service"
 if [[ $INSTALL_WATCHDOG == true ]]; then
     ask_step RUN_WIFI_WATCHDOG "Install WiFi watchdog service"
