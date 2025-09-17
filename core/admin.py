@@ -882,8 +882,9 @@ PROFILE_INLINE_CONFIG = {
     },
     AssistantProfile: {
         "form": AssistantProfileInlineForm,
-        "fields": ("user_datum", "user_key", "scopes", "is_active"),
+        "fields": ("user_key", "scopes", "is_active"),
         "readonly_fields": ("user_key_hash", "created_at", "last_used_at"),
+        "template": "admin/edit_inline/profile_stacked.html",
     },
 }
 
@@ -913,6 +914,8 @@ def _build_profile_inline(model, owner_field):
         attrs["fields"] = config["fields"]
     if "readonly_fields" in config:
         attrs["readonly_fields"] = config["readonly_fields"]
+    if "template" in config:
+        attrs["template"] = config["template"]
     return type(
         f"{model.__name__}{owner_field.title()}Inline",
         (admin.StackedInline,),
