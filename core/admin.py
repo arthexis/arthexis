@@ -635,6 +635,24 @@ class ProfileFormMixin(forms.ModelForm):
 
     def _has_profile_data(self) -> bool:
         for name in self._profile_fields:
+            field = self.fields.get(name)
+            raw_value = None
+            if field is not None and not isinstance(field, forms.BooleanField):
+                try:
+                    raw_value = self._raw_value(name)
+                except (AttributeError, KeyError):
+                    raw_value = None
+            if raw_value is not None:
+                if not isinstance(raw_value, (list, tuple)):
+                    values = [raw_value]
+                else:
+                    values = raw_value
+                if any(not self._is_empty_value(value) for value in values):
+                    return True
+                # When raw form data is present but empty (e.g. ""), skip the
+                # instance fallback so empty submissions mark the form deleted.
+                continue
+
             if name in self.cleaned_data:
                 value = self.cleaned_data.get(name)
             elif hasattr(self.instance, name):
