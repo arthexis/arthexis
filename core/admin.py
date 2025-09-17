@@ -577,6 +577,10 @@ class ProfileFormMixin(forms.ModelForm):
         model_fields = getattr(self._meta.model, "profile_fields", tuple())
         explicit = getattr(self, "profile_fields", tuple())
         self._profile_fields = tuple(explicit or model_fields)
+        for name in self._profile_fields:
+            field = self.fields.get(name)
+            if field is not None:
+                field.required = False
 
     @staticmethod
     def _is_empty_value(value) -> bool:
@@ -614,6 +618,28 @@ class OdooProfileInlineForm(ProfileFormMixin, OdooProfileAdminForm):
 
     class Meta(OdooProfileAdminForm.Meta):
         exclude = ("user", "group", "verified_on", "odoo_uid", "name", "email")
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("DELETE") or self.errors:
+            return cleaned
+
+        provided = [
+            name
+            for name in self._profile_fields
+            if not self._is_empty_value(cleaned.get(name))
+        ]
+        missing = [
+            name
+            for name in self._profile_fields
+            if self._is_empty_value(cleaned.get(name))
+        ]
+        if provided and missing:
+            raise forms.ValidationError(
+                "Provide host, database, username, and password to create an Odoo employee.",
+            )
+
+        return cleaned
 
 
 class ReleaseManagerInlineForm(ProfileFormMixin, forms.ModelForm):
