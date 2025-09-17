@@ -35,7 +35,12 @@ from .models import (
     Todo,
 )
 from django.contrib.admin.sites import AdminSite
-from core.admin import PackageReleaseAdmin, PackageAdmin
+from core.admin import (
+    PackageReleaseAdmin,
+    PackageAdmin,
+    UserAdmin,
+    USER_PROFILE_INLINES,
+)
 from ocpp.models import Transaction, Charger
 
 from django.core.exceptions import ValidationError
@@ -188,6 +193,21 @@ class UserOperateAsTests(TestCase):
         self.assertEqual(member.get_profile(ReleaseManager), profile)
         self.assertTrue(member.has_profile(ReleaseManager))
 
+    def test_release_manager_property_uses_delegate_profile(self):
+        delegate = User.objects.create_user(
+            username="delegate-property", password="secret", is_staff=True
+        )
+        profile = ReleaseManager.objects.create(user=delegate)
+        operator = User.objects.create_superuser(
+            username="operator-property",
+            email="operator-property@example.com",
+            password="secret",
+        )
+        operator.operate_as = delegate
+        operator.full_clean()
+        operator.save()
+        self.assertEqual(operator.release_manager, profile)
+
 
 class UserPhoneNumberTests(TestCase):
     def test_get_phone_numbers_by_priority(self):
@@ -222,6 +242,47 @@ class UserPhoneNumberTests(TestCase):
         phone = UserPhoneNumber.objects.create(user=user, number="+14445550000", priority=3)
 
         self.assertEqual(user.get_phone_numbers_by_priority(), [phone])
+
+
+class ProfileValidationTests(TestCase):
+    def test_system_user_cannot_receive_profiles(self):
+        system_user = User.objects.get(username=User.SYSTEM_USERNAME)
+        profile = ReleaseManager(user=system_user)
+        with self.assertRaises(ValidationError) as exc:
+            profile.full_clean()
+        self.assertIn("user", exc.exception.error_dict)
+
+
+class UserAdminInlineTests(TestCase):
+    def setUp(self):
+        self.site = AdminSite()
+        self.factory = RequestFactory()
+        self.admin = UserAdmin(User, self.site)
+        self.system_user = User.objects.get(username=User.SYSTEM_USERNAME)
+        self.superuser = User.objects.create_superuser(
+            username="inline-super",
+            email="inline-super@example.com",
+            password="secret",
+        )
+
+    def test_profile_inlines_hidden_for_system_user(self):
+        request = self.factory.get("/")
+        request.user = self.superuser
+        system_inlines = self.admin.get_inline_instances(request, self.system_user)
+        system_profiles = [
+            inline
+            for inline in system_inlines
+            if inline.__class__ in USER_PROFILE_INLINES
+        ]
+        self.assertFalse(system_profiles)
+
+        other_inlines = self.admin.get_inline_instances(request, self.superuser)
+        other_profiles = [
+            inline
+            for inline in other_inlines
+            if inline.__class__ in USER_PROFILE_INLINES
+        ]
+        self.assertEqual(len(other_profiles), len(USER_PROFILE_INLINES))
 
 
 class RFIDLoginTests(TestCase):
