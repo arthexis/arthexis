@@ -16,6 +16,7 @@ import os
 import sys
 import ipaddress
 import socket
+from core.log_paths import select_log_dir
 from django.utils.translation import gettext_lazy as _
 from celery.schedules import crontab
 from django.http import request as http_request
@@ -365,10 +366,10 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Logging configuration
-LOG_DIR = BASE_DIR / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+LOG_DIR = select_log_dir(BASE_DIR)
+os.environ.setdefault("ARTHEXIS_LOG_DIR", str(LOG_DIR))
 OLD_LOG_DIR = LOG_DIR / "old"
-OLD_LOG_DIR.mkdir(exist_ok=True)
+OLD_LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE_NAME = "tests.log" if "test" in sys.argv else f"{socket.gethostname()}.log"
 
 LOGGING = {
