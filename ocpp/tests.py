@@ -1,6 +1,6 @@
 from channels.testing import WebsocketCommunicator
 from channels.db import database_sync_to_async
-from django.test import Client, TransactionTestCase, TestCase
+from django.test import Client, TransactionTestCase, TestCase, override_settings
 from unittest import skip
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
@@ -53,6 +53,22 @@ class ChargerFixtureTests(TestCase):
         self.assertEqual(cp2.connector_id, "2")
         self.assertEqual(cp1.name, "Simulator #1")
         self.assertEqual(cp2.name, "Simulator #2")
+
+
+class ChargerUrlFallbackTests(TestCase):
+    @override_settings(ALLOWED_HOSTS=["fallback.example", "10.0.0.0/8"])
+    def test_reference_created_when_site_missing(self):
+        Site.objects.all().delete()
+        Site.objects.clear_cache()
+
+        charger = Charger.objects.create(charger_id="NO_SITE")
+        charger.refresh_from_db()
+
+        self.assertIsNotNone(charger.reference)
+        self.assertTrue(
+            charger.reference.value.startswith("http://fallback.example")
+        )
+        self.assertTrue(charger.reference.value.endswith("/c/NO_SITE/"))
 
 
 class SinkConsumerTests(TransactionTestCase):
