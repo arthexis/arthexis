@@ -175,6 +175,22 @@ class NodeTests(TestCase):
         )
         self.assertEqual(response["Access-Control-Allow-Credentials"], "true")
 
+    def test_register_node_allows_unauthenticated_preflight(self):
+        self.client.logout()
+        response = self.client.options(
+            reverse("register-node"),
+            HTTP_ORIGIN="http://example.com",
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST",
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS="Content-Type",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Access-Control-Allow-Origin"], "http://example.com"
+        )
+        self.assertEqual(
+            response["Access-Control-Allow-Methods"], "POST, OPTIONS"
+        )
+
     def test_register_node_accepts_text_plain_payload(self):
         payload = {
             "hostname": "plain",

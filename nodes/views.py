@@ -91,12 +91,17 @@ def _add_cors_headers(request, response):
 
 
 @csrf_exempt
-@api_login_required
 def register_node(request):
     """Register or update a node from POSTed JSON data."""
 
     if request.method == "OPTIONS":
         response = JsonResponse({"detail": "ok"})
+        return _add_cors_headers(request, response)
+
+    if not request.user.is_authenticated:
+        response = JsonResponse(
+            {"detail": "authentication required"}, status=401
+        )
         return _add_cors_headers(request, response)
 
     if request.method != "POST":
@@ -190,6 +195,9 @@ def register_node(request):
 
     response = JsonResponse({"id": node.id})
     return _add_cors_headers(request, response)
+
+
+register_node.login_required = True
 
 
 @api_login_required
