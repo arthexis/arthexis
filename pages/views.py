@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 import datetime
 import calendar
+import shutil
 from html import escape
 
 from django.conf import settings
@@ -30,8 +31,10 @@ from core.models import InviteLead, ClientReport
 
 try:  # pragma: no cover - optional dependency guard
     from graphviz import Digraph
+    from graphviz.backend import CalledProcessError, ExecutableNotFound
 except ImportError:  # pragma: no cover - handled gracefully in views
     Digraph = None
+    CalledProcessError = ExecutableNotFound = None
 
 import markdown
 from pages.utils import landing
@@ -196,6 +199,40 @@ def admin_model_graph(request, app_label: str):
     graph = _build_model_graph(models)
     graph_source = graph.source
 
+    graph_svg = ""
+    graph_error = ""
+    graph_engine = getattr(graph, "engine", "dot")
+    engine_path = shutil.which(str(graph_engine))
+
+    if engine_path is None:
+        graph_error = _(
+            "Graphviz executables are required to render this diagram. Install Graphviz on the server and try again."
+        )
+    else:
+        try:
+            svg_output = graph.pipe(format="svg", encoding="utf-8")
+        except (ExecutableNotFound, CalledProcessError) as exc:
+            logger.warning(
+                "Graphviz rendering failed for admin model graph (engine=%s)",
+                graph_engine,
+                exc_info=exc,
+            )
+            graph_error = _(
+                "An error occurred while rendering the diagram. Check the server logs for details."
+            )
+        else:
+            svg_start = svg_output.find("<svg")
+            if svg_start != -1:
+                svg_output = svg_output[svg_start:]
+            label = _("%(app)s model diagram") % {"app": app_config.verbose_name}
+            graph_svg = svg_output.replace(
+                "<svg", f'<svg role="img" aria-label="{escape(label)}"', 1
+            )
+            if not graph_svg:
+                graph_error = _(
+                    "Graphviz did not return any diagram output."
+                )
+
     model_links = []
     for model in models:
         opts = model._meta
@@ -216,6 +253,8 @@ def admin_model_graph(request, app_label: str):
             "app_label": app_label,
             "app_verbose_name": app_config.verbose_name,
             "graph_source": graph_source,
+            "graph_svg": graph_svg,
+            "graph_error": graph_error,
             "models": model_links,
             "title": _("%(app)s model graph") % {"app": app_config.verbose_name},
         }
