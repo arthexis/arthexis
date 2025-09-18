@@ -1572,6 +1572,9 @@ class EnergyCreditAdmin(EntityModelAdmin):
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
 
+    def get_model_perms(self, request):
+        return {}
+
 
 class ProductAdminForm(forms.ModelForm):
     class Meta:
