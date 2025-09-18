@@ -834,7 +834,6 @@ PROFILE_INLINE_CONFIG = {
                 None,
                 {
                     "fields": (
-                        "user_datum",
                         "host",
                         "database",
                         "username",
@@ -854,7 +853,6 @@ PROFILE_INLINE_CONFIG = {
     EmailInbox: {
         "form": EmailInboxInlineForm,
         "fields": (
-            "user_datum",
             "username",
             "host",
             "port",
@@ -866,7 +864,6 @@ PROFILE_INLINE_CONFIG = {
     EmailOutbox: {
         "form": EmailOutboxInlineForm,
         "fields": (
-            "user_datum",
             "password",
             "host",
             "port",
@@ -879,7 +876,6 @@ PROFILE_INLINE_CONFIG = {
     ReleaseManager: {
         "form": ReleaseManagerInlineForm,
         "fields": (
-            "user_datum",
             "pypi_username",
             "pypi_token",
             "github_token",
@@ -914,6 +910,7 @@ def _build_profile_inline(model, owner_field):
         "can_delete": True,
         "verbose_name": verbose_name,
         "verbose_name_plural": verbose_name_plural,
+        "template": "admin/edit_inline/profile_stacked.html",
     }
     if "fieldsets" in config:
         attrs["fieldsets"] = config["fieldsets"]
