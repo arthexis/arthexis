@@ -486,6 +486,25 @@ def _raw_instance_value(instance, field_name):
         return field.value_from_object(instance)
 
 
+class KeepExistingValue:
+    """Sentinel indicating a field should retain its stored value."""
+
+    __slots__ = ("field",)
+
+    def __init__(self, field: str):
+        self.field = field
+
+    def __bool__(self) -> bool:  # pragma: no cover - trivial
+        return False
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging helper
+        return f"<KeepExistingValue field={self.field!r}>"
+
+
+def keep_existing(field: str) -> KeepExistingValue:
+    return KeepExistingValue(field)
+
+
 def _restore_sigil_values(form, field_names):
     """Reset sigil fields on ``form.instance`` to their raw form values."""
 
@@ -494,6 +513,8 @@ def _restore_sigil_values(form, field_names):
             continue
         if name in form.cleaned_data:
             raw = form.cleaned_data[name]
+            if isinstance(raw, KeepExistingValue):
+                raw = _raw_instance_value(form.instance, name)
         else:
             raw = _raw_instance_value(form.instance, name)
         setattr(form.instance, name, raw)
@@ -523,7 +544,7 @@ class OdooProfileAdminForm(forms.ModelForm):
     def clean_password(self):
         pwd = self.cleaned_data.get("password")
         if not pwd and self.instance.pk:
-            return _raw_instance_value(self.instance, "password")
+            return keep_existing("password")
         return pwd
 
     def _post_clean(self):
@@ -558,7 +579,7 @@ class EmailInboxAdminForm(forms.ModelForm):
     def clean_password(self):
         pwd = self.cleaned_data.get("password")
         if not pwd and self.instance.pk:
-            return _raw_instance_value(self.instance, "password")
+            return keep_existing("password")
         return pwd
 
     def _post_clean(self):
@@ -612,6 +633,8 @@ class ProfileFormMixin(forms.ModelForm):
 
     @staticmethod
     def _is_empty_value(value) -> bool:
+        if isinstance(value, KeepExistingValue):
+            return True
         if isinstance(value, bool):
             return not value
         if value in (None, "", [], (), {}, set()):
@@ -734,7 +757,7 @@ class EmailOutboxInlineForm(ProfileFormMixin, forms.ModelForm):
     def clean_password(self):
         pwd = self.cleaned_data.get("password")
         if not pwd and self.instance.pk:
-            return _raw_instance_value(self.instance, "password")
+            return keep_existing("password")
         return pwd
 
     def _post_clean(self):

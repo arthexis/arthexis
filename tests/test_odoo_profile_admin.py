@@ -9,7 +9,12 @@ from django.test import RequestFactory, TestCase
 from django.http import QueryDict
 
 from core.models import OdooProfile
-from core.admin import OdooProfileAdmin, OdooProfileAdminForm, OdooProfileInlineForm
+from core.admin import (
+    KeepExistingValue,
+    OdooProfileAdmin,
+    OdooProfileAdminForm,
+    OdooProfileInlineForm,
+)
 
 
 class OdooProfileAdminFormTests(TestCase):
@@ -84,7 +89,10 @@ class OdooProfileAdminFormTests(TestCase):
         }
         form = OdooProfileAdminForm(data, instance=profile)
         self.assertTrue(form.is_valid())
-        self.assertEqual(form.cleaned_data["password"], "[ENV.ODOO_PASSWORD]")
+        value = form.cleaned_data["password"]
+        self.assertIsInstance(value, KeepExistingValue)
+        self.assertEqual(value.field, "password")
+        self.assertFalse(value)
         field = form.instance._meta.get_field("password")
         self.assertEqual(field.value_from_object(form.instance), "[ENV.ODOO_PASSWORD]")
         saved = form.save()
