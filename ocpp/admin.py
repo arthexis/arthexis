@@ -146,7 +146,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "charger_id",
         "connector_id",
         "location_name",
-        "require_rfid",
+        "require_rfid_display",
         "last_heartbeat",
         "session_kw",
         "total_kw_display",
@@ -161,6 +161,12 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     def get_view_on_site_url(self, obj=None):
         return obj.get_absolute_url() if obj else None
 
+    def require_rfid_display(self, obj):
+        return obj.require_rfid
+
+    require_rfid_display.boolean = True
+    require_rfid_display.short_description = "RFID Auth"
+
     def page_link(self, obj):
         from django.utils.html import format_html
 
@@ -168,7 +174,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             '<a href="{}" target="_blank">open</a>', obj.get_absolute_url()
         )
 
-    page_link.short_description = "Landing Page"
+    page_link.short_description = "Landing"
 
     def qr_link(self, obj):
         from django.utils.html import format_html
@@ -217,7 +223,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         )
         return format_html('<a href="{}" target="_blank">status</a>', url)
 
-    status_link.short_description = "Status Page"
+    status_link.short_description = "Status"
 
     def location_name(self, obj):
         return obj.location.name if obj.location else ""
