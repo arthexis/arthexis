@@ -14,6 +14,7 @@ class CoreConfig(AppConfig):
 
     def ready(self):  # pragma: no cover - called by Django
         from contextlib import suppress
+        from functools import wraps
         import hashlib
         import time
         import traceback
@@ -25,6 +26,7 @@ class CoreConfig(AppConfig):
         from django.core.signals import got_request_exception
 
         from core.github_helper import report_exception_to_github
+        from .entity import Entity
         from .user_data import (
             patch_admin_user_datum,
             patch_admin_user_data_views,
@@ -55,6 +57,46 @@ class CoreConfig(AppConfig):
         patch_admin_environment_view()
         patch_admin_sigil_builder_view()
         patch_admin_history()
+
+        from django.core.serializers import base as serializer_base
+
+        if not hasattr(serializer_base.DeserializedObject.save, "_entity_fixture_patch"):
+            original_save = serializer_base.DeserializedObject.save
+
+            @wraps(original_save)
+            def patched_save(self, save_m2m=True, using=None, **kwargs):
+                obj = self.object
+                if isinstance(obj, Entity):
+                    manager = getattr(type(obj), "all_objects", type(obj)._default_manager)
+                    if using:
+                        manager = manager.db_manager(using)
+                    for fields in obj._unique_field_groups():
+                        lookup = {}
+                        for field in fields:
+                            value = getattr(obj, field.attname)
+                            if value is None:
+                                lookup = {}
+                                break
+                            lookup[field.attname] = value
+                        if not lookup:
+                            continue
+                        existing = (
+                            manager.filter(**lookup)
+                            .only("pk", "is_seed_data", "is_user_data")
+                            .first()
+                        )
+                        if existing is not None:
+                            obj.pk = existing.pk
+                            obj.is_seed_data = existing.is_seed_data
+                            obj.is_user_data = existing.is_user_data
+                            obj._state.adding = False
+                            if using:
+                                obj._state.db = using
+                            break
+                return original_save(self, save_m2m=save_m2m, using=using, **kwargs)
+
+            patched_save._entity_fixture_patch = True
+            serializer_base.DeserializedObject.save = patched_save
 
         lock = Path(settings.BASE_DIR) / "locks" / "celery.lck"
 

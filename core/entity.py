@@ -1,8 +1,9 @@
 import copy
 import logging
 
-from django.db import models
 from django.contrib.auth.models import UserManager as DjangoUserManager
+from django.core.exceptions import FieldDoesNotExist
+from django.db import models
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,61 @@ class Entity(models.Model):
                 self.is_seed_data = old.is_seed_data
                 self.is_user_data = old.is_user_data
         super().save(*args, **kwargs)
+
+    @classmethod
+    def _unique_field_groups(cls):
+        """Return concrete field tuples enforcing uniqueness for this model."""
+
+        opts = cls._meta
+        groups: list[tuple[models.Field, ...]] = []
+
+        for field in opts.concrete_fields:
+            if field.unique and not field.primary_key:
+                groups.append((field,))
+
+        for unique in opts.unique_together:
+            fields: list[models.Field] = []
+            for name in unique:
+                try:
+                    field = opts.get_field(name)
+                except FieldDoesNotExist:
+                    fields = []
+                    break
+                if not getattr(field, "concrete", False) or field.primary_key:
+                    fields = []
+                    break
+                fields.append(field)
+            if fields:
+                groups.append(tuple(fields))
+
+        for constraint in opts.constraints:
+            if not isinstance(constraint, models.UniqueConstraint):
+                continue
+            if not constraint.fields or constraint.condition is not None:
+                continue
+            fields = []
+            for name in constraint.fields:
+                try:
+                    field = opts.get_field(name)
+                except FieldDoesNotExist:
+                    fields = []
+                    break
+                if not getattr(field, "concrete", False) or field.primary_key:
+                    fields = []
+                    break
+                fields.append(field)
+            if fields:
+                groups.append(tuple(fields))
+
+        unique_groups: list[tuple[models.Field, ...]] = []
+        seen: set[tuple[str, ...]] = set()
+        for fields in groups:
+            key = tuple(field.attname for field in fields)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_groups.append(fields)
+        return unique_groups
 
     def resolve_sigils(self, field: str) -> str:
         """Return ``field`` value with [ROOT.KEY] tokens resolved."""
