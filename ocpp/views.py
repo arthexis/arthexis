@@ -474,14 +474,16 @@ def charger_status(request, cid, connector=None):
     paginator = Paginator(transactions_qs, 10)
     page_obj = paginator.get_page(request.GET.get("page"))
     transactions = page_obj.object_list
-    chart_data = {"labels": [], "values": []}
-    if tx_obj and charger.connector_id is not None:
+    chart_data = {"labels": [], "datasets": []}
+
+    def _series_from_transaction(tx):
+        points: list[tuple[str, float]] = []
         readings = list(
-            tx_obj.meter_values.filter(energy__isnull=False).order_by("timestamp")
+            tx.meter_values.filter(energy__isnull=False).order_by("timestamp")
         )
         start_val = None
-        if tx_obj.meter_start is not None:
-            start_val = float(tx_obj.meter_start) / 1000.0
+        if tx.meter_start is not None:
+            start_val = float(tx.meter_start) / 1000.0
         for reading in readings:
             try:
                 val = float(reading.energy)
@@ -490,8 +492,45 @@ def charger_status(request, cid, connector=None):
             if start_val is None:
                 start_val = val
             total = val - start_val
-            chart_data["labels"].append(reading.timestamp.isoformat())
-            chart_data["values"].append(max(total, 0.0))
+            points.append((reading.timestamp.isoformat(), max(total, 0.0)))
+        return points
+
+    if tx_obj and (charger.connector_id is not None or past_session):
+        series_points = _series_from_transaction(tx_obj)
+        if series_points:
+            chart_data["labels"] = [ts for ts, _ in series_points]
+            chart_data["datasets"].append(
+                {
+                    "label": str(
+                        tx_obj.charger.connector_label
+                        if tx_obj.charger and tx_obj.charger.connector_id is not None
+                        else charger.connector_label
+                    ),
+                    "values": [value for _, value in series_points],
+                }
+            )
+    elif charger.connector_id is None:
+        dataset_points: list[tuple[str, list[tuple[str, float]]]] = []
+        for sibling, sibling_tx in sessions:
+            if sibling.connector_id is None or not sibling_tx:
+                continue
+            points = _series_from_transaction(sibling_tx)
+            if not points:
+                continue
+            dataset_points.append((str(sibling.connector_label), points))
+        if dataset_points:
+            all_labels: list[str] = sorted(
+                {ts for _, points in dataset_points for ts, _ in points}
+            )
+            chart_data["labels"] = all_labels
+            for label, points in dataset_points:
+                value_map = {ts: val for ts, val in points}
+                chart_data["datasets"].append(
+                    {
+                        "label": label,
+                        "values": [value_map.get(ts) for ts in all_labels],
+                    }
+                )
     overview = _connector_overview(charger)
     connector_links = [
         {
@@ -509,7 +548,6 @@ def charger_status(request, cid, connector=None):
     console_url = None
     if charger.console_url:
         console_url = _reverse_connector_url("charger-console", cid, connector_slug)
-    show_chart = bool(chart_data["labels"])
     return render(
         request,
         "ocpp/charger_status.html",
@@ -520,14 +558,20 @@ def charger_status(request, cid, connector=None):
             "color": color,
             "transactions": transactions,
             "page_obj": page_obj,
-            "chart_data": json.dumps(chart_data),
+            "chart_data": chart_data,
             "past_session": past_session,
             "connector_slug": connector_slug,
             "connector_links": connector_links,
             "connector_overview": connector_overview,
             "search_url": search_url,
             "console_url": console_url,
-            "show_chart": show_chart,
+            "show_chart": bool(
+                chart_data["datasets"]
+                and any(
+                    any(value is not None for value in dataset["values"])
+                    for dataset in chart_data["datasets"]
+                )
+            ),
         },
     )
 
