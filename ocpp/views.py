@@ -499,6 +499,11 @@ def charger_status(request, cid, connector=None):
         series_points = _series_from_transaction(tx_obj)
         if series_points:
             chart_data["labels"] = [ts for ts, _ in series_points]
+            connector_id = None
+            if tx_obj.charger and tx_obj.charger.connector_id is not None:
+                connector_id = tx_obj.charger.connector_id
+            elif charger.connector_id is not None:
+                connector_id = charger.connector_id
             chart_data["datasets"].append(
                 {
                     "label": str(
@@ -507,28 +512,32 @@ def charger_status(request, cid, connector=None):
                         else charger.connector_label
                     ),
                     "values": [value for _, value in series_points],
+                    "connector_id": connector_id,
                 }
             )
     elif charger.connector_id is None:
-        dataset_points: list[tuple[str, list[tuple[str, float]]]] = []
+        dataset_points: list[tuple[str, list[tuple[str, float]], int]] = []
         for sibling, sibling_tx in sessions:
             if sibling.connector_id is None or not sibling_tx:
                 continue
             points = _series_from_transaction(sibling_tx)
             if not points:
                 continue
-            dataset_points.append((str(sibling.connector_label), points))
+            dataset_points.append(
+                (str(sibling.connector_label), points, sibling.connector_id)
+            )
         if dataset_points:
             all_labels: list[str] = sorted(
-                {ts for _, points in dataset_points for ts, _ in points}
+                {ts for _, points, _ in dataset_points for ts, _ in points}
             )
             chart_data["labels"] = all_labels
-            for label, points in dataset_points:
+            for label, points, connector_id in dataset_points:
                 value_map = {ts: val for ts, val in points}
                 chart_data["datasets"].append(
                     {
                         "label": label,
                         "values": [value_map.get(ts) for ts in all_labels],
+                        "connector_id": connector_id,
                     }
                 )
     overview = _connector_overview(charger)

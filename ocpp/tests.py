@@ -1610,6 +1610,7 @@ class ChargerStatusViewTests(TestCase):
         self.assertEqual(len(chart["labels"]), 2)
         self.assertEqual(len(chart["datasets"]), 1)
         values = chart["datasets"][0]["values"]
+        self.assertEqual(chart["datasets"][0]["connector_id"], 1)
         self.assertAlmostEqual(values[0], 1.0)
         self.assertAlmostEqual(values[1], 1.5)
         store.transactions.pop(key, None)
@@ -1648,6 +1649,7 @@ class ChargerStatusViewTests(TestCase):
         self.assertEqual(len(chart["labels"]), 2)
         self.assertEqual(len(chart["datasets"]), 1)
         values = chart["datasets"][0]["values"]
+        self.assertEqual(chart["datasets"][0]["connector_id"], 1)
         self.assertAlmostEqual(values[0], 0.0)
         self.assertAlmostEqual(values[1], 0.02)
         self.assertAlmostEqual(resp.context["tx"].kw, 0.02)
@@ -1695,6 +1697,7 @@ class ChargerStatusViewTests(TestCase):
         chart = resp.context["chart_data"]
         self.assertEqual(len(chart["labels"]), 2)
         self.assertEqual(len(chart["datasets"]), 1)
+        self.assertEqual(chart["datasets"][0]["connector_id"], 1)
         self.assertTrue(resp.context["past_session"])
 
     def test_aggregate_chart_includes_multiple_connectors(self):
@@ -1758,12 +1761,19 @@ class ChargerStatusViewTests(TestCase):
             data_map = {
                 dataset["label"]: dataset["values"] for dataset in chart["datasets"]
             }
-            self.assertIn("1", data_map)
-            self.assertIn("2", data_map)
-            self.assertEqual(len(data_map["1"]), len(chart["labels"]))
-            self.assertEqual(len(data_map["2"]), len(chart["labels"]))
-            self.assertTrue(any(value is not None for value in data_map["1"]))
-            self.assertTrue(any(value is not None for value in data_map["2"]))
+            connector_id_map = {
+                dataset["label"]: dataset.get("connector_id")
+                for dataset in chart["datasets"]
+            }
+            label_one = str(connector_one.connector_label)
+            label_two = str(connector_two.connector_label)
+            self.assertEqual(set(data_map), {label_one, label_two})
+            self.assertEqual(len(data_map[label_one]), len(chart["labels"]))
+            self.assertEqual(len(data_map[label_two]), len(chart["labels"]))
+            self.assertTrue(any(value is not None for value in data_map[label_one]))
+            self.assertTrue(any(value is not None for value in data_map[label_two]))
+            self.assertEqual(connector_id_map[label_one], connector_one.connector_id)
+            self.assertEqual(connector_id_map[label_two], connector_two.connector_id)
         finally:
             store.transactions.pop(key_one, None)
             store.transactions.pop(key_two, None)
