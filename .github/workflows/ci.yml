@@ -3,6 +3,8 @@ name: CI
 on:
   push:
   pull_request:
+  schedule:
+    - cron: '0 2 * * *'
 
 jobs:
   detect-roles:
@@ -98,6 +100,18 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run env refresh
         run: ./env-refresh.sh --clean
+
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Run pip-audit
+        run: pip-audit -r requirements.txt
 
   ui-screenshots:
     needs: detect-roles
