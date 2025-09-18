@@ -24,7 +24,6 @@ import re
 from io import BytesIO
 from django.core.files.base import ContentFile
 import qrcode
-import xmlrpc.client
 from django.utils import timezone
 import uuid
 from pathlib import Path
@@ -32,6 +31,10 @@ from django.core import serializers
 from urllib.parse import urlparse
 from utils import revision as revision_utils
 from typing import Type
+from defusedxml import xmlrpc as defused_xmlrpc
+
+defused_xmlrpc.monkey_patch()
+xmlrpc_client = defused_xmlrpc.xmlrpc_client
 
 from .entity import Entity, EntityUserManager, EntityManager
 from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
@@ -418,12 +421,12 @@ class OdooProfile(Profile):
 
     def verify(self):
         """Check credentials against Odoo and pull user info."""
-        common = xmlrpc.client.ServerProxy(f"{self.host}/xmlrpc/2/common")
+        common = xmlrpc_client.ServerProxy(f"{self.host}/xmlrpc/2/common")
         uid = common.authenticate(self.database, self.username, self.password, {})
         if not uid:
             self._clear_verification()
             raise ValidationError(_("Invalid Odoo credentials"))
-        models_proxy = xmlrpc.client.ServerProxy(f"{self.host}/xmlrpc/2/object")
+        models_proxy = xmlrpc_client.ServerProxy(f"{self.host}/xmlrpc/2/object")
         info = models_proxy.execute_kw(
             self.database,
             uid,
@@ -443,7 +446,7 @@ class OdooProfile(Profile):
     def execute(self, model, method, *args, **kwargs):
         """Execute an Odoo RPC call, invalidating credentials on failure."""
         try:
-            client = xmlrpc.client.ServerProxy(f"{self.host}/xmlrpc/2/object")
+            client = xmlrpc_client.ServerProxy(f"{self.host}/xmlrpc/2/object")
             return client.execute_kw(
                 self.database,
                 self.odoo_uid,
@@ -730,7 +733,10 @@ class EmailArtifact(Entity):
         import hashlib
 
         data = (subject or "") + (sender or "") + (body or "")
-        return hashlib.md5(data.encode("utf-8")).hexdigest()
+        hasher = hashlib.md5(
+            data.encode("utf-8"), usedforsecurity=False
+        )
+        return hasher.hexdigest()
 
     class Meta:
         unique_together = ("collector", "fingerprint")

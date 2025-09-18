@@ -11,7 +11,6 @@ from __future__ import annotations
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import List
 
 try:  # pragma: no cover - hardware dependent
     import smbus  # type: ignore
@@ -93,7 +92,7 @@ class CharLCD1602:
         # Allow the LCD controller to catch up between data writes.
         time.sleep(0.001)
 
-    def i2c_scan(self) -> List[str]:  # pragma: no cover - requires hardware
+    def i2c_scan(self) -> list[str]:  # pragma: no cover - requires hardware
         """Return a list of detected I2C addresses.
 
         The implementation relies on the external ``i2cdetect`` command.  On
@@ -102,13 +101,18 @@ class CharLCD1602:
         list so callers can fall back to a sensible default address.
         """
 
-        cmd = "i2cdetect -y 1 | awk 'NR>1 {$1=\"\"; print}'"
         try:
-            out = subprocess.check_output(cmd, shell=True).decode()
+            output = subprocess.check_output(["i2cdetect", "-y", "1"], text=True)
         except Exception:  # pragma: no cover - depends on environment
             return []
-        out = out.replace("\n", "").replace(" --", "")
-        return [tok for tok in out.split(" ") if tok]
+
+        addresses: list[str] = []
+        for line in output.splitlines()[1:]:
+            parts = line.split()
+            for token in parts[1:]:
+                if token != "--":
+                    addresses.append(token)
+        return addresses
 
     def init_lcd(self, addr: int | None = None, bl: int = 1) -> None:
         self.BLEN = 1 if bl else 0
