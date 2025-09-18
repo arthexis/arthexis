@@ -156,6 +156,42 @@ class NodeTests(TestCase):
         node.refresh_from_db()
         self.assertFalse(node.has_feature("clipboard-poll"))
 
+    def test_register_node_sets_cors_headers(self):
+        payload = {
+            "hostname": "cors",
+            "address": "127.0.0.1",
+            "port": 8000,
+            "mac_address": "10:20:30:40:50:60",
+        }
+        response = self.client.post(
+            reverse("register-node"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_ORIGIN="http://example.com",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Access-Control-Allow-Origin"], "http://example.com"
+        )
+        self.assertEqual(response["Access-Control-Allow-Credentials"], "true")
+
+    def test_register_node_accepts_text_plain_payload(self):
+        payload = {
+            "hostname": "plain",
+            "address": "127.0.0.1",
+            "port": 8001,
+            "mac_address": "aa:bb:cc:dd:ee:ff",
+        }
+        response = self.client.post(
+            reverse("register-node"),
+            data=json.dumps(payload),
+            content_type="text/plain",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            Node.objects.filter(mac_address="aa:bb:cc:dd:ee:ff").exists()
+        )
+
 
 class NodeRegisterCurrentTests(TestCase):
     def setUp(self):

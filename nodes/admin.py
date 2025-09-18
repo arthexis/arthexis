@@ -68,6 +68,11 @@ class NodeAdmin(EntityModelAdmin):
                 name="nodes_node_register_current",
             ),
             path(
+                "register-visitor/",
+                self.admin_site.admin_view(self.register_visitor),
+                name="nodes_node_register_visitor",
+            ),
+            path(
                 "<int:node_id>/action/<str:action>/",
                 self.admin_site.admin_view(self.action_view),
                 name="nodes_node_action",
@@ -93,6 +98,25 @@ class NodeAdmin(EntityModelAdmin):
             "register_url": reverse("register-node"),
         }
         return render(request, "admin/nodes/node/register_remote.html", context)
+
+    def register_visitor(self, request):
+        """Exchange registration data with the visiting node."""
+
+        node, created = Node.register_current()
+        if created:
+            self.message_user(
+                request, f"Current host registered as {node}", messages.SUCCESS
+            )
+
+        token = uuid.uuid4().hex
+        context = {
+            "token": token,
+            "info_url": reverse("node-info"),
+            "register_url": reverse("register-node"),
+            "visitor_info_url": "http://localhost:8000/nodes/info/",
+            "visitor_register_url": "http://localhost:8000/nodes/register/",
+        }
+        return render(request, "admin/nodes/node/register_visitor.html", context)
 
     def public_key(self, request, node_id):
         node = self.get_object(request, node_id)
