@@ -1,3 +1,5 @@
+from unittest import mock
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -22,13 +24,35 @@ class AdminModelGraphTests(TestCase):
 
     def test_model_graph_view_renders_context(self):
         url = reverse("admin-model-graph", args=["teams"])
-        response = self.client.get(url)
+        with mock.patch(
+            "pages.views.shutil.which", return_value="/usr/bin/dot"
+        ), mock.patch(
+            "graphviz.graphs.Digraph.pipe",
+            return_value="<svg class='mock-diagram'></svg>",
+        ):
+            response = self.client.get(url)
+
         self.assertEqual(response.status_code, 200)
         graph_source = response.context["graph_source"]
         self.assertIn("digraph", graph_source)
         self.assertIn("PowerLead", graph_source)
-        self.assertContains(response, "viz-standalone.js")
+        self.assertIn("<svg", response.context["graph_svg"])
+        self.assertEqual(response.context["graph_error"], "")
         self.assertContains(response, "Included models")
+        self.assertContains(response, "role=\"img\"")
+
+    def test_model_graph_view_handles_missing_graphviz(self):
+        url = reverse("admin-model-graph", args=["teams"])
+        with mock.patch("pages.views.shutil.which", return_value=None):
+            response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["graph_svg"], "")
+        self.assertIn("Graphviz executables", response.context["graph_error"])
+        self.assertContains(
+            response,
+            "Graphviz executables are required to render this diagram.",
+        )
 
     def test_invalid_app_returns_404(self):
         response = self.client.get(reverse("admin-model-graph", args=["invalid"]))
