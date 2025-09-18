@@ -2,7 +2,7 @@
 
 {% load i18n %}
 
-{% block title %}{{ charger.name|default:charger.charger_id }} - {% trans "Status" %}{% endblock %}
+{% block title %}{{ charger.display_name|default:charger.name|default:charger.charger_id }} - {% trans "Status" %}{% endblock %}
 
 {% block content %}
 <div id="status-content">
@@ -21,7 +21,7 @@
       animation: text-update-fade 1s ease-out;
     }
   </style>
-    <h1>{{ charger.name|default:charger.charger_id }}</h1>
+    <h1>{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
     <p><a href="{% url 'charger-page' charger.charger_id %}">{% trans "Landing page" %}</a></p>
     {% if past_session %}
   <div class="alert alert-info" role="alert">

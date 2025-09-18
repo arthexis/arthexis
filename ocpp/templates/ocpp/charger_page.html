@@ -1,39 +1,58 @@
-<!DOCTYPE html>
-<html lang="{{ LANGUAGE_CODE }}">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ charger.name|default:charger.charger_id }}</title>
-  <script>
-    setInterval(function(){ location.reload(); }, 5000);
-  </script>
-  <style>
-    body { font-family: Arial, sans-serif; text-align: center; padding: 1em; }
-    .progress { width: 100%; background: #eee; height: 20px; border-radius: 10px; overflow: hidden; margin-top: 1em; }
-    .progress-bar { height: 100%; background: #4caf50; transition: width 0.5s; }
-  </style>
-</head>
-<body>
+{% extends "pages/base.html" %}
 {% load i18n %}
-<div style="position:absolute; top:1rem; right:1rem;">
-  <form action="{% url 'set_language' %}" method="post">
-    {% csrf_token %}
-    <input name="next" type="hidden" value="{{ request.get_full_path }}">
-    <select name="language" onchange="this.form.submit()">
-      {% for lang_code, lang_name in LANGUAGES %}
-        <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>{{ lang_code|slice:":2"|upper }}</option>
-      {% endfor %}
-    </select>
-  </form>
+
+{% block title %}{{ charger.display_name|default:charger.name|default:charger.charger_id }}{% endblock %}
+
+{% block content %}
+{% with charger.display_name|default:charger.name|default:charger.charger_id as charger_label %}
+<div class="row justify-content-center mt-4">
+  <div class="col-12 col-lg-8 col-xl-6">
+    <div class="card shadow-sm border-0 overflow-hidden">
+      <div class="card-header d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
+        <div>
+          <h1 class="h3 mb-1">{{ charger_label }}</h1>
+          <p class="text-muted mb-0">{% trans "Serial Number" %}: {{ charger.charger_id }}</p>
+        </div>
+        {% if request.user.is_authenticated %}
+        <a class="btn btn-outline-primary" href="{% url 'charger-status' charger.charger_id %}">
+          {% trans "Advanced View" %}
+        </a>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        {% if charger.require_rfid %}
+        <div class="alert alert-warning" role="alert">
+          {% trans "Require RFID Authorization" %}
+        </div>
+        {% endif %}
+        {% if tx %}
+        <p class="text-muted">{% trans "Charging" %}</p>
+        <div class="progress bg-body-secondary mb-3" role="progressbar" aria-valuenow="{{ tx.kw|default:0|floatformat:0 }}" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: {{ tx.kw|default:0|floatformat:0 }}%;"></div>
+        </div>
+        <div class="row text-center text-sm-start gy-3">
+          <div class="col-12 col-sm-6">
+            <h2 class="h6 text-uppercase text-muted mb-1">{% trans "Energy" %}</h2>
+            <p class="fs-4 fw-semibold mb-0">{{ tx.kw|floatformat:2 }} kW</p>
+          </div>
+          <div class="col-12 col-sm-6">
+            <h2 class="h6 text-uppercase text-muted mb-1">{% trans "Started" %}</h2>
+            <p class="fs-5 mb-0">{{ tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</p>
+          </div>
+        </div>
+        {% else %}
+        <div class="py-4 text-center">
+          <p class="lead mb-0">{% trans "Plug in your vehicle and slide your RFID card over the reader to begin charging." %}</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
 </div>
-{% if tx %}
-  <h1>{% trans "Charging" %}</h1>
-  <div class="progress"><div class="progress-bar" style="width: {{ tx.kw|floatformat:0 }}%;"></div></div>
-  <p>{% trans "Energy" %}: {{ tx.kw|floatformat:2 }} kW</p>
-  <p>{% trans "Started" %}: {{ tx.start_time }}</p>
-{% else %}
-  <h1>{{ charger.name|default:charger.charger_id }}</h1>
-  <p>{% trans "Plug in your vehicle and slide your RFID card over the reader to begin charging." %}</p>
-{% endif %}
-</body>
-</html>
+{% endwith %}
+<script>
+  setInterval(function () {
+    window.location.reload();
+  }, 5000);
+</script>
+{% endblock %}

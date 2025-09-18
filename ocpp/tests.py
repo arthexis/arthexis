@@ -7,6 +7,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.translation import override, gettext as _
 from django.contrib.sites.models import Site
 from pages.models import Application, Module
 from nodes.models import Node, NodeRole
@@ -563,9 +564,18 @@ class ChargerLandingTests(TestCase):
 
         response = self.client.get(reverse("charger-page", args=["PAGE1"]))
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["LANGUAGE_CODE"], "es")
+        with override("es"):
+            self.assertContains(
+                response,
+                _(
+                    "Plug in your vehicle and slide your RFID card over the reader to begin charging."
+                ),
+            )
+            self.assertContains(response, _("Advanced View"))
         self.assertContains(
             response,
-            "Plug in your vehicle and slide your RFID card over the reader to begin charging.",
+            reverse("charger-status", args=["PAGE1"]),
         )
 
     def test_status_page_renders(self):
@@ -583,8 +593,18 @@ class ChargerLandingTests(TestCase):
         )
         store.transactions[charger.charger_id] = tx
         resp = self.client.get(reverse("charger-page", args=["STATS"]))
-        self.assertContains(resp, "progress")
+        self.assertContains(resp, "progress-bar")
         store.transactions.pop(charger.charger_id, None)
+
+    def test_display_name_used_on_public_pages(self):
+        charger = Charger.objects.create(
+            charger_id="NAMED",
+            display_name="Entrada",
+        )
+        landing = self.client.get(reverse("charger-page", args=["NAMED"]))
+        self.assertContains(landing, "Entrada")
+        status = self.client.get(reverse("charger-status", args=["NAMED"]))
+        self.assertContains(status, "Entrada")
 
     def test_total_includes_ongoing_transaction(self):
         charger = Charger.objects.create(charger_id="ONGOING")
