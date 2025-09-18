@@ -14,7 +14,6 @@ from collections import defaultdict
 import tempfile
 import hashlib
 import time
-import re
 
 import django
 import importlib.util
@@ -45,30 +44,7 @@ from django.contrib.auth import get_user_model
 from core.models import PackageRelease
 from core.sigil_builder import generate_model_sigils
 from core.user_data import load_shared_user_fixtures, load_user_fixtures
-
-
-def _unlink_sqlite_db(path: Path) -> None:
-    """Close database connections and remove only the SQLite DB file."""
-    connections.close_all()
-    try:
-        base_dir = Path(settings.BASE_DIR).resolve()
-    except Exception:
-        base_dir = path.parent.resolve()
-    path = path.resolve()
-    try:
-        path.relative_to(base_dir)
-    except ValueError:
-        raise RuntimeError(f"Refusing to delete database outside {base_dir}: {path}")
-    if not re.fullmatch(r"(?:test_)?db(?:_[0-9a-f]{6})?\.sqlite3", path.name):
-        raise RuntimeError(f"Refusing to delete unexpected database file: {path.name}")
-    for _ in range(5):
-        try:
-            path.unlink(missing_ok=True)
-            break
-        except PermissionError:
-            time.sleep(0.1)
-            connections.close_all()
-
+from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
 
 def _local_app_labels() -> list[str]:
     base_dir = Path(settings.BASE_DIR)
@@ -110,7 +86,7 @@ def _fixture_sort_key(name: str) -> tuple[int, str]:
 
 def _migration_hash(app_labels: list[str]) -> str:
     """Return an md5 hash of all migration files for the given apps."""
-    md5 = hashlib.md5()
+    md5 = hashlib.md5(usedforsecurity=False)
     for label in app_labels:
         try:
             app_config = apps.get_app_config(label)

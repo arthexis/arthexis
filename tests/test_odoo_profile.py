@@ -1,7 +1,9 @@
-import xmlrpc.client
 from django.utils import timezone
-from django.core.exceptions import ValidationError
 from core.models import User, OdooProfile
+from defusedxml import xmlrpc as defused_xmlrpc
+
+defused_xmlrpc.monkey_patch()
+xmlrpc_client = defused_xmlrpc.xmlrpc_client
 
 
 class FakeCommon:
@@ -29,7 +31,7 @@ def test_verify_success(monkeypatch):
             return FakeCommon(uid=42)
         return FakeModels()
 
-    monkeypatch.setattr(xmlrpc.client, "ServerProxy", fake_proxy)
+    monkeypatch.setattr(xmlrpc_client, "ServerProxy", fake_proxy)
     user = User.objects.create(username="u0")
     profile = OdooProfile.objects.create(
         user=user,
@@ -79,7 +81,7 @@ def test_execute_failure_marks_unverified(monkeypatch):
     def fake_proxy(url):
         return FakeModels(raise_error=True)
 
-    monkeypatch.setattr(xmlrpc.client, "ServerProxy", fake_proxy)
+    monkeypatch.setattr(xmlrpc_client, "ServerProxy", fake_proxy)
     try:
         profile.execute("res.users", "read", [42])
     except Exception:

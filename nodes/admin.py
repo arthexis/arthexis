@@ -118,8 +118,12 @@ class NodeAdmin(EntityModelAdmin):
                         raise NotImplementedError(
                             "Remote node execution is not implemented"
                         )
+                    command = ["/bin/sh", "-c", recipe_text]
                     result = subprocess.run(
-                        recipe_text, shell=True, capture_output=True, text=True
+                        command,
+                        check=False,
+                        capture_output=True,
+                        text=True,
                     )
                     output = result.stdout + result.stderr
                 except Exception as exc:

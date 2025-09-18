@@ -4,7 +4,7 @@ from pathlib import Path
 from django import template
 from django.conf import settings
 from django.urls import reverse
-from django.utils.safestring import mark_safe
+from django.utils.html import format_html
 from django.utils import timezone
 
 from core.models import Reference, PackageRelease
@@ -28,8 +28,12 @@ def ref_img(value, size=200, alt=None):
         ref.alt_text = alt_text
     ref.uses += 1
     ref.save()
-    return mark_safe(
-        f'<img src="{ref.image.url}" width="{size}" height="{size}" alt="{ref.alt_text}" />'
+    return format_html(
+        '<img src="{}" width="{}" height="{}" alt="{}" />',
+        ref.image.url,
+        size,
+        size,
+        ref.alt_text,
     )
 
 
