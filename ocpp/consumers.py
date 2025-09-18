@@ -1,11 +1,9 @@
-import asyncio
 import json
 import base64
 import os
 from datetime import datetime
 from django.utils import timezone
 from core.models import EnergyAccount, RFID as CoreRFID
-import requests
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -68,8 +66,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             connector_id=None,
             defaults={"last_path": self.scope.get("path", "")},
         )
-        if created:
-            await self._set_console_url(self.charger)
+        await self._set_console_url(self.charger)
         location_name = await sync_to_async(
             lambda: self.charger.location.name if self.charger.location else ""
         )()
@@ -78,16 +75,23 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         )
 
     async def _set_console_url(self, charger: Charger) -> None:
-        ip = self.scope.get("client", ("", ""))[0]
+        client = self.scope.get("client")
+        ip = ""
+        if client and client[0]:
+            ip = client[0]
+        if not ip:
+            for header, value in self.scope.get("headers", []):
+                if header.lower() == b"x-forwarded-for" and value:
+                    ip = value.decode().split(",")[0].strip()
+                    break
+                if header.lower() == b"x-real-ip" and value and not ip:
+                    ip = value.decode().strip()
+        if not ip:
+            return
         port = os.getenv("OCPP_EVCS_PORT", "8900")
         url = f"http://{ip}:{port}"
-        try:
-            await asyncio.to_thread(requests.get, url, timeout=5)
-        except Exception:
-            return
-        await database_sync_to_async(Charger.objects.filter(pk=charger.pk).update)(
-            console_url=url
-        )
+        charger.console_url = url
+        await database_sync_to_async(charger.save)(update_fields=["console_url"])
 
     async def _get_account(self, id_tag: str) -> EnergyAccount | None:
         """Return the energy account for the provided RFID if valid."""

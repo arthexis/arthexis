@@ -1,3 +1,4 @@
+from asgiref.testing import ApplicationCommunicator
 from channels.testing import WebsocketCommunicator
 from channels.db import database_sync_to_async
 from django.test import Client, TransactionTestCase, TestCase, override_settings
@@ -28,6 +29,39 @@ from datetime import timedelta
 from .tasks import purge_meter_readings
 from django.db import close_old_connections
 from django.db.utils import OperationalError
+from urllib.parse import unquote, urlparse
+
+
+class ClientWebsocketCommunicator(WebsocketCommunicator):
+    """WebsocketCommunicator that injects a client address into the scope."""
+
+    def __init__(
+        self,
+        application,
+        path,
+        *,
+        client=None,
+        headers=None,
+        subprotocols=None,
+        spec_version=None,
+    ):
+        if not isinstance(path, str):
+            raise TypeError(f"Expected str, got {type(path)}")
+        parsed = urlparse(path)
+        scope = {
+            "type": "websocket",
+            "path": unquote(parsed.path),
+            "query_string": parsed.query.encode("utf-8"),
+            "headers": headers or [],
+            "subprotocols": subprotocols or [],
+        }
+        if client is not None:
+            scope["client"] = client
+        if spec_version:
+            scope["spec_version"] = spec_version
+        self.scope = scope
+        ApplicationCommunicator.__init__(self, application, self.scope)
+        self.response_headers = None
 
 
 class ChargerFixtureTests(TestCase):
@@ -263,24 +297,63 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertIn("1", connectors)
         self.assertIn("2", connectors)
 
-    @patch("ocpp.consumers.requests.get")
-    async def test_console_url_recorded(self, mock_get):
-        mock_get.return_value.status_code = 200
-        communicator = WebsocketCommunicator(application, "/CONS1/")
+    async def test_console_url_recorded(self):
+        communicator = ClientWebsocketCommunicator(
+            application,
+            "/CONS1/",
+            client=("10.11.12.13", 12345),
+            headers=[(b"x-forwarded-for", b"10.11.12.13")],
+        )
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
-        charger = await database_sync_to_async(Charger.objects.get)(charger_id="CONS1")
-        self.assertTrue(charger.console_url)
+        async def fetch_url():
+            def get_url():
+                return (
+                    Charger.objects.filter(charger_id="CONS1")
+                    .values_list("console_url", flat=True)
+                    .first()
+                )
+
+            return await database_sync_to_async(get_url)()
+
+        url = ""
+        for _ in range(5):
+            url = await fetch_url()
+            if url:
+                break
+            await asyncio.sleep(0.05)
+        self.assertEqual(url, "http://10.11.12.13:8900")
         await communicator.disconnect()
 
-    @patch("ocpp.consumers.requests.get")
-    async def test_console_url_not_recorded_when_unreachable(self, mock_get):
-        mock_get.side_effect = Exception("nope")
-        communicator = WebsocketCommunicator(application, "/CONS2/")
+    async def test_console_url_updated_for_existing_charger(self):
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id="CONS2", console_url="http://old.invalid"
+        )
+        communicator = ClientWebsocketCommunicator(
+            application,
+            "/CONS2/",
+            client=("172.16.0.5", 54321),
+            headers=[(b"x-forwarded-for", b"172.16.0.5")],
+        )
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
-        charger = await database_sync_to_async(Charger.objects.get)(charger_id="CONS2")
-        self.assertFalse(charger.console_url)
+        async def fetch_updated_url():
+            def get_url():
+                return (
+                    Charger.objects.filter(charger_id="CONS2")
+                    .values_list("console_url", flat=True)
+                    .first()
+                )
+
+            return await database_sync_to_async(get_url)()
+
+        url = ""
+        for _ in range(5):
+            url = await fetch_updated_url()
+            if url == "http://172.16.0.5:8900":
+                break
+            await asyncio.sleep(0.05)
+        self.assertEqual(url, "http://172.16.0.5:8900")
         await communicator.disconnect()
 
     async def test_transaction_created_from_meter_values(self):
