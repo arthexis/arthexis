@@ -10,6 +10,8 @@ from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.utils.translation import gettext_lazy as _
 from django.urls import reverse
+from django.conf import settings
+from django.utils import translation
 
 from utils.api import api_login_required
 
@@ -236,6 +238,15 @@ def charger_page(request, cid):
     """Public landing page for a charger displaying usage guidance or progress."""
     charger = get_object_or_404(Charger, charger_id=cid)
     tx = store.transactions.get(cid)
+    language_cookie = request.COOKIES.get(settings.LANGUAGE_COOKIE_NAME)
+    preferred_language = "es"
+    supported_languages = {code for code, _ in settings.LANGUAGES}
+    if (
+        preferred_language in supported_languages
+        and not language_cookie
+    ):
+        translation.activate(preferred_language)
+        request.LANGUAGE_CODE = translation.get_language()
     return render(request, "ocpp/charger_page.html", {"charger": charger, "tx": tx})
 
 

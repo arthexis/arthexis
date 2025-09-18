@@ -354,6 +354,10 @@ msgstr ""
 msgid "Landing page"
 msgstr ""
 
+#: ocpp/templates/ocpp/charger_page.html:19
+msgid "Advanced View"
+msgstr "Vista avanzada"
+
 #: ocpp/templates/ocpp/charger_status.html:27
 msgid "Viewing past session"
 msgstr ""
@@ -365,6 +369,10 @@ msgstr ""
 #: ocpp/templates/ocpp/charger_status.html:37
 msgid "Total Energy"
 msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:38
+msgid "Plug in your vehicle and slide your RFID card over the reader to begin charging."
+msgstr "Conecta tu vehículo y pasa tu tarjeta RFID por el lector para comenzar la carga."
 
 #: ocpp/templates/ocpp/charger_status.html:39
 msgid "Session"
@@ -608,6 +616,10 @@ msgstr "Punto de Carga"
 #: ocpp/models.py:31
 msgid "Require RFID Authorization"
 msgstr "Requiere autorización RFID"
+
+#: ocpp/models.py:48
+msgid "Display Name"
+msgstr "Nombre para mostrar"
 
 #: ocpp/models.py:140
 msgid "Transaction"

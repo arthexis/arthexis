@@ -116,13 +116,21 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             {
                 "fields": (
                     "charger_id",
+                    "display_name",
                     "connector_id",
-                    "require_rfid",
+                    "location",
                     "last_heartbeat",
                     "last_meter_values",
                     "last_path",
+                )
+            },
+        ),
+        (
+            "Configuration",
+            {
+                "fields": (
+                    "require_rfid",
                     "console_url",
-                    "location",
                 )
             },
         ),

@@ -45,6 +45,12 @@ class Charger(Entity):
         max_length=100,
         help_text="Unique identifier reported by the charger.",
     )
+    display_name = models.CharField(
+        _("Display Name"),
+        max_length=200,
+        blank=True,
+        help_text="Optional friendly name shown on public pages.",
+    )
     connector_id = models.CharField(
         _("Connector ID"),
         max_length=10,
