@@ -101,17 +101,41 @@ jobs:
       - name: Run env refresh
         run: ./env-refresh.sh --clean
 
-  pip-audit:
+  container-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
         with:
-          python-version: '3.x'
-      - name: Install pip-audit
-        run: pip install pip-audit
-      - name: Run pip-audit
-        run: pip-audit -r requirements.txt
+          platforms: linux/arm64
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build container image
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            --tag arthexis-ci:latest \
+            --file Dockerfile \
+            --load \
+            .
+      - name: Cache Trivy database
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-${{ hashFiles('Dockerfile', 'requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-trivy-
+      - name: Scan container image
+        uses: aquasecurity/trivy-action@v0
+        with:
+          scan-type: 'image'
+          image-ref: arthexis-ci:latest
+          severity: 'HIGH,CRITICAL'
+          vuln-type: 'os,library'
+          format: 'table'
+          exit-code: '1'
+          cache-dir: ~/.cache/trivy
 
   ui-screenshots:
     needs: detect-roles
