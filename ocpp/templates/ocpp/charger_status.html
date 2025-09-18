@@ -155,6 +155,43 @@
     { border: 'rgba(147,112,219,1)', background: 'rgba(147,112,219,0.3)' },
     { border: 'rgba(255,140,0,1)', background: 'rgba(255,140,0,0.3)' }
   ];
+  const CONNECTOR_COLOR_MAP = {
+    1: COLOR_PALETTE[0],
+    2: COLOR_PALETTE[1],
+  };
+
+  function parseConnectorId(dataset) {
+    if (!dataset) {
+      return null;
+    }
+    if (dataset.connector_id !== undefined && dataset.connector_id !== null) {
+      const numericId = Number(dataset.connector_id);
+      if (!Number.isNaN(numericId)) {
+        return numericId;
+      }
+    }
+    if (typeof dataset.label === 'string') {
+      const match = dataset.label.match(/connector\s*(\d+)/i) || dataset.label.match(/^(\d+)$/);
+      if (match) {
+        const numericId = Number(match[1]);
+        if (!Number.isNaN(numericId)) {
+          return numericId;
+        }
+      }
+    }
+    return null;
+  }
+
+  function getPaletteForDataset(dataset, index) {
+    const connectorId = parseConnectorId(dataset);
+    if (
+      connectorId !== null &&
+      Object.prototype.hasOwnProperty.call(CONNECTOR_COLOR_MAP, connectorId)
+    ) {
+      return CONNECTOR_COLOR_MAP[connectorId];
+    }
+    return COLOR_PALETTE[index % COLOR_PALETTE.length];
+  }
 
   function parseChartPayload(root) {
     if (!root || !root.querySelector) {
@@ -184,7 +221,7 @@
       return Number.isNaN(parsed.getTime()) ? ts : parsed.toLocaleTimeString();
     });
     chartData.datasets = (payload.datasets || []).map((dataset, index) => {
-      const palette = COLOR_PALETTE[index % COLOR_PALETTE.length];
+      const palette = getPaletteForDataset(dataset, index);
       const values = Array.isArray(dataset.values)
         ? dataset.values.map((value) => {
             if (value === null || value === undefined || value === '') {
