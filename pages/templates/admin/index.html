@@ -78,15 +78,25 @@
     .dashboard-main td.actions .actionlink:first-child {
         margin-left: 0;
     }
+    .dashboard-main .module table {
+        width: 100%;
+    }
     .dashboard-main .app-caption {
         display: flex;
         align-items: baseline;
         gap: 0.5rem;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .dashboard-main .app-caption .section {
+        flex: 1 1 auto;
     }
     .dashboard-main .diagram-link {
         font-size: 0.75rem;
         text-transform: none;
         font-weight: normal;
+        margin-left: auto;
+        white-space: nowrap;
     }
     .dashboard-side .actionlist li {
         position: relative;
