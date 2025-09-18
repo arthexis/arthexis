@@ -136,8 +136,16 @@ class Charger(Entity):
         """Return a short human readable label for this connector."""
 
         if self.connector_id is None:
-            return _("All")
-        return str(self.connector_id)
+            return _("All Connectors")
+
+        special_labels = {
+            1: _("Connector 1 (Left)"),
+            2: _("Connector 2 (Right)"),
+        }
+        if self.connector_id in special_labels:
+            return special_labels[self.connector_id]
+
+        return _("Connector %(number)s") % {"number": self.connector_id}
 
     def identity_slug(self) -> str:
         """Return a unique slug for this charger identity."""
