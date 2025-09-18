@@ -4,8 +4,14 @@
   {% for app in app_list %}
     <div class="app-{{ app.app_label }} module{% if app.app_url in request.path|urlencode %} current-app{% endif %}">
       <table>
-        <caption>
+        <caption class="app-caption">
           <a href="{{ app.app_url }}" class="section" title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}">{{ app.name }} MODELS</a>
+          <a
+            href="{% url 'admin-model-graph' app.app_label %}"
+            class="diagram-link"
+            data-app-graph="{{ app.app_label }}"
+            title="{% translate 'Open relationship diagram' %}"
+          >{% translate 'Model graph' %}</a>
         </caption>
         <thead class="visually-hidden">
           <tr>
