@@ -12,6 +12,7 @@ from core.admin import (
     EmailInboxAdminForm,
     EmailInboxAdmin,
     EmailCollectorAdmin,
+    KeepExistingValue,
 )
 
 
@@ -95,7 +96,10 @@ class EmailInboxAdminFormTests(TestCase):
         }
         form = EmailInboxAdminForm(data, instance=inbox)
         self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual(form.cleaned_data["password"], "[ENV.SMTP_PASSWORD]")
+        value = form.cleaned_data["password"]
+        self.assertIsInstance(value, KeepExistingValue)
+        self.assertEqual(value.field, "password")
+        self.assertFalse(value)
         field = form.instance._meta.get_field("password")
         self.assertEqual(field.value_from_object(form.instance), "[ENV.SMTP_PASSWORD]")
         saved = form.save()
