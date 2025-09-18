@@ -2,17 +2,22 @@ import logging
 from pathlib import Path
 import datetime
 import calendar
+from html import escape
 
 from django.conf import settings
+from django.contrib import admin
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import LoginView
 from django import forms
+from django.apps import apps as django_apps
 from utils.sites import get_site
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
 from nodes.models import Node
-from django.urls import reverse
+from django.template.response import TemplateResponse
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
@@ -23,6 +28,11 @@ from django.views.decorators.cache import never_cache
 from django.utils.cache import patch_vary_headers
 from core.models import InviteLead, ClientReport
 
+try:  # pragma: no cover - optional dependency guard
+    from graphviz import Digraph
+except ImportError:  # pragma: no cover - handled gracefully in views
+    Digraph = None
+
 import markdown
 from pages.utils import landing
 from core.liveupdate import live_update
@@ -30,6 +40,188 @@ from .models import Module
 
 
 logger = logging.getLogger(__name__)
+
+
+def _get_registered_models(app_label: str):
+    """Return admin-registered models for the given app label."""
+
+    registered = [
+        model
+        for model in admin.site._registry
+        if model._meta.app_label == app_label
+    ]
+    return sorted(registered, key=lambda model: str(model._meta.verbose_name))
+
+
+def _resolve_related_model(field, default_app_label: str):
+    """Resolve the Django model class referenced by ``field``."""
+
+    remote = getattr(getattr(field, "remote_field", None), "model", None)
+    if remote is None:
+        return None
+    if isinstance(remote, str):
+        if "." in remote:
+            app_label, model_name = remote.split(".", 1)
+        else:
+            app_label, model_name = default_app_label, remote
+        try:
+            remote = django_apps.get_model(app_label, model_name)
+        except LookupError:
+            return None
+    return remote
+
+
+def _graph_field_type(field, default_app_label: str) -> str:
+    """Format a field description for node labels."""
+
+    base = field.get_internal_type()
+    related = _resolve_related_model(field, default_app_label)
+    if related is not None:
+        base = f"{base} → {related._meta.object_name}"
+    return base
+
+
+def _build_model_graph(models):
+    """Generate a GraphViz ``Digraph`` for the provided ``models``."""
+
+    if Digraph is None:
+        raise RuntimeError("Graphviz is not installed")
+
+    graph = Digraph(
+        "admin_app_models",
+        graph_attr={
+            "rankdir": "LR",
+            "splines": "ortho",
+            "nodesep": "0.8",
+            "ranksep": "1.0",
+        },
+        node_attr={
+            "shape": "plaintext",
+            "fontname": "Helvetica",
+        },
+        edge_attr={"fontname": "Helvetica"},
+    )
+
+    node_ids = {}
+    for model in models:
+        node_id = f"{model._meta.app_label}.{model._meta.model_name}"
+        node_ids[model] = node_id
+
+        rows = [
+            "<tr><td bgcolor=\"#1f2933\" colspan=\"2\"><font color=\"white\"><b>"
+            f"{escape(model._meta.object_name)}"
+            "</b></font></td></tr>"
+        ]
+
+        verbose_name = str(model._meta.verbose_name)
+        if verbose_name and verbose_name != model._meta.object_name:
+            rows.append(
+                "<tr><td colspan=\"2\"><i>" f"{escape(verbose_name)}" "</i></td></tr>"
+            )
+
+        for field in model._meta.concrete_fields:
+            if field.auto_created and not field.concrete:
+                continue
+            name = escape(field.name)
+            if field.primary_key:
+                name = f"<u>{name}</u>"
+            type_label = escape(_graph_field_type(field, model._meta.app_label))
+            rows.append(
+                "<tr><td align=\"left\">" f"{name}" "</td><td align=\"left\">"
+                f"{type_label}" "</td></tr>"
+            )
+
+        for field in model._meta.local_many_to_many:
+            name = escape(field.name)
+            type_label = _graph_field_type(field, model._meta.app_label)
+            rows.append(
+                "<tr><td align=\"left\">" f"{name}" "</td><td align=\"left\">"
+                f"{escape(type_label)}" "</td></tr>"
+            )
+
+        label = "<\n  <table BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">\n    "
+        label += "\n    ".join(rows)
+        label += "\n  </table>\n>"
+        graph.node(node_id, label=label)
+
+    edges = set()
+    for model in models:
+        source_id = node_ids[model]
+        for field in model._meta.concrete_fields:
+            related = _resolve_related_model(field, model._meta.app_label)
+            if related not in node_ids:
+                continue
+            attrs = {"label": field.name}
+            if getattr(field, "one_to_one", False):
+                attrs.update({"arrowhead": "onormal", "arrowtail": "none"})
+            key = (source_id, node_ids[related], tuple(sorted(attrs.items())))
+            if key not in edges:
+                edges.add(key)
+                graph.edge(source_id, node_ids[related], **attrs)
+
+        for field in model._meta.local_many_to_many:
+            related = _resolve_related_model(field, model._meta.app_label)
+            if related not in node_ids:
+                continue
+            attrs = {
+                "label": f"{field.name} (M2M)",
+                "dir": "both",
+                "arrowhead": "normal",
+                "arrowtail": "normal",
+            }
+            key = (source_id, node_ids[related], tuple(sorted(attrs.items())))
+            if key not in edges:
+                edges.add(key)
+                graph.edge(source_id, node_ids[related], **attrs)
+
+    return graph
+
+
+@staff_member_required
+def admin_model_graph(request, app_label: str):
+    """Render a GraphViz-powered diagram for the admin app grouping."""
+
+    try:
+        app_config = django_apps.get_app_config(app_label)
+    except LookupError as exc:  # pragma: no cover - invalid app label
+        raise Http404("Unknown application") from exc
+
+    models = _get_registered_models(app_label)
+    if not models:
+        raise Http404("No admin models registered for this application")
+
+    if Digraph is None:  # pragma: no cover - dependency missing is unexpected
+        raise Http404("Graph visualization support is unavailable")
+
+    graph = _build_model_graph(models)
+    graph_source = graph.source
+
+    model_links = []
+    for model in models:
+        opts = model._meta
+        try:
+            url = reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
+        except NoReverseMatch:
+            url = ""
+        model_links.append(
+            {
+                "label": str(opts.verbose_name_plural),
+                "url": url,
+            }
+        )
+
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "app_label": app_label,
+            "app_verbose_name": app_config.verbose_name,
+            "graph_source": graph_source,
+            "models": model_links,
+            "title": _("%(app)s model graph") % {"app": app_config.verbose_name},
+        }
+    )
+
+    return TemplateResponse(request, "admin/model_graph.html", context)
 
 
 @landing("Home")

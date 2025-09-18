@@ -22,6 +22,7 @@ from django.utils.translation import gettext_lazy as _
 from core import views as core_views
 from core.admindocs import CommandsView, OrderedModelIndexView
 from man import views as man_views
+from pages import views as pages_views
 
 admin.site.site_header = _("Constellation")
 admin.site.site_title = _("Constellation")
@@ -96,8 +97,13 @@ urlpatterns = [
     ),
     path("admindocs/", include("django.contrib.admindocs.urls")),
     path(
-        "admin/doc/",
+        "admin/doc/", 
         RedirectView.as_view(pattern_name="django-admindocs-docroot"),
+    ),
+    path(
+        "admin/model-graph/<str:app_label>/",
+        admin.site.admin_view(pages_views.admin_model_graph),
+        name="admin-model-graph",
     ),
     path(
         "admin/core/releases/<int:pk>/<str:action>/",
