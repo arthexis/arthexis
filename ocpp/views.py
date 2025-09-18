@@ -9,7 +9,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import gettext_lazy as _, gettext, ngettext
 from django.urls import NoReverseMatch, reverse
 from django.conf import settings
 from django.utils import translation
@@ -123,6 +123,39 @@ def _live_sessions(charger: Charger) -> list[tuple[Charger, Transaction]]:
             seen.add(tx_obj.pk)
         sessions.append((sibling, tx_obj))
     return sessions
+
+
+def _landing_page_translations() -> dict[str, dict[str, str]]:
+    """Return static translations used by the charger public landing page."""
+
+    catalog: dict[str, dict[str, str]] = {}
+    for code in ("en", "es"):
+        with translation.override(code):
+            catalog[code] = {
+                "serial_number_label": gettext("Serial Number"),
+                "connector_label": gettext("Connector"),
+                "advanced_view_label": gettext("Advanced View"),
+                "require_rfid_label": gettext("Require RFID Authorization"),
+                "charging_label": gettext("Charging"),
+                "energy_label": gettext("Energy"),
+                "started_label": gettext("Started"),
+                "instruction_text": gettext(
+                    "Plug in your vehicle and slide your RFID card over the reader to begin charging."
+                ),
+                "connectors_heading": gettext("Connectors"),
+                "no_active_transaction": gettext("No active transaction"),
+                "connectors_active_singular": ngettext(
+                    "%(count)s connector active",
+                    "%(count)s connectors active",
+                    1,
+                ),
+                "connectors_active_plural": ngettext(
+                    "%(count)s connector active",
+                    "%(count)s connectors active",
+                    2,
+                ),
+            }
+    return catalog
 
 
 def _charger_state(charger: Charger, tx_obj: Transaction | None):
@@ -439,6 +472,7 @@ def charger_page(request, cid, connector=None):
             "connector_overview": connector_overview,
             "active_connector_count": active_connector_count,
             "status_url": status_url,
+            "landing_translations": _landing_page_translations(),
         },
     )
 
@@ -574,6 +608,7 @@ def charger_status(request, cid, connector=None):
             "connector_overview": connector_overview,
             "search_url": search_url,
             "console_url": console_url,
+            "page_url": _reverse_connector_url("charger-page", cid, connector_slug),
             "show_chart": bool(
                 chart_data["datasets"]
                 and any(

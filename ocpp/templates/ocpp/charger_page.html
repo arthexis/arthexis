@@ -1,99 +1,177 @@
-{% extends "pages/base.html" %}
+{% extends "ocpp/landing_base.html" %}
 {% load i18n %}
 
 {% block title %}{{ charger.display_name|default:charger.name|default:charger.charger_id }}{% endblock %}
 
 {% block content %}
 {% with charger.display_name|default:charger.name|default:charger.charger_id as charger_label %}
-{% if connector_links %}
-<div class="mb-3">
-  <div class="nav nav-pills flex-wrap gap-2">
-    {% for link in connector_links %}
-    <a class="nav-link {% if link.active %}active{% endif %}" href="{{ link.url }}">{{ link.label }}</a>
-    {% endfor %}
-  </div>
-</div>
-{% endif %}
-<div class="row justify-content-center mt-4">
-  <div class="col-12 col-lg-8 col-xl-6">
-    <div class="card shadow-sm border-0 overflow-hidden">
-      <div class="card-header d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
-        <div>
-          <h1 class="h3 mb-1">{{ charger_label }}</h1>
-          <p class="text-muted mb-0">
-            {% trans "Serial Number" %}: {{ charger.charger_id }}
-            &middot; {% trans "Connector" %}: {{ charger.connector_label }}
-          </p>
-        </div>
-        {% if request.user.is_authenticated %}
-        <a class="btn btn-outline-primary" href="{{ status_url }}">
-          {% trans "Advanced View" %}
-        </a>
-        {% endif %}
-      </div>
-      <div class="card-body">
-        {% if charger.require_rfid %}
-        <div class="alert alert-warning" role="alert">
-          {% trans "Require RFID Authorization" %}
-        </div>
-        {% endif %}
-        {% if tx %}
-        <p class="text-muted">{% trans "Charging" %}</p>
-        {% if charger.connector_id is None and active_connector_count %}
-        <p class="small text-muted">
-          {% blocktrans count active=active_connector_count %}{{ active }} connector active{% plural %}{{ active }} connectors active{% endblocktrans %}
-        </p>
-        {% endif %}
-        <div class="progress bg-body-secondary mb-3" role="progressbar" aria-valuenow="{{ tx.kw|default:0|floatformat:0 }}" aria-valuemin="0" aria-valuemax="100">
-          <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: {{ tx.kw|default:0|floatformat:0 }}%;"></div>
-        </div>
-        <div class="row text-center text-sm-start gy-3">
-          <div class="col-12 col-sm-6">
-            <h2 class="h6 text-uppercase text-muted mb-1">{% trans "Energy" %}</h2>
-            <p class="fs-4 fw-semibold mb-0">{{ tx.kw|floatformat:2 }} kW</p>
-          </div>
-          <div class="col-12 col-sm-6">
-            <h2 class="h6 text-uppercase text-muted mb-1">{% trans "Started" %}</h2>
-            <p class="fs-5 mb-0">{{ tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</p>
-          </div>
-        </div>
-        {% else %}
-        <div class="py-4 text-center">
-          <p class="lead mb-0">{% trans "Plug in your vehicle and slide your RFID card over the reader to begin charging." %}</p>
-        </div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-</div>
-{% if charger.connector_id is None and connector_overview %}
-<div class="row justify-content-center mt-4">
-  <div class="col-12 col-lg-10">
-    <h2 class="h5 mb-3">{% trans "Connectors" %}</h2>
-    <div class="row gy-3">
-      {% for item in connector_overview %}
-      <div class="col-12 col-md-6">
-        <div class="border rounded-3 p-3 h-100 position-relative">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <span class="fw-semibold">{{ item.label }}</span>
-            <span class="badge" style="background-color: {{ item.color }};">{{ item.status }}</span>
-          </div>
-          {% if item.tx %}
-          <p class="mb-1"><small>{% trans "Energy" %}: {{ item.tx.kw|floatformat:2 }} kW</small></p>
-          <p class="mb-0 text-muted"><small>{% trans "Started" %}: {{ item.tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</small></p>
-          {% else %}
-          <p class="mb-0 text-muted"><small>{% trans "No active transaction" %}</small></p>
-          {% endif %}
-          <a class="stretched-link" href="{{ item.url }}" aria-label="{{ item.label }}"></a>
-        </div>
-      </div>
+<div class="container px-0 px-sm-4" data-language-container>
+  {% if connector_links %}
+  <div class="mb-3">
+    <div class="nav nav-pills flex-wrap gap-2 justify-content-center justify-content-sm-start">
+      {% for link in connector_links %}
+      <a class="nav-link {% if link.active %}active{% endif %}" href="{{ link.url }}">{{ link.label }}</a>
       {% endfor %}
     </div>
   </div>
+  {% endif %}
+  <div class="row justify-content-center mt-2 mt-sm-4">
+    <div class="col-12 col-lg-8 col-xl-6">
+      <div class="card shadow-sm border-0 overflow-hidden">
+        <div class="card-header d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
+          <div>
+            <h1 class="h3 mb-1">{{ charger_label }}</h1>
+            <p class="text-muted mb-0 small">
+              <span data-i18n="serial_number_label">{% trans "Serial Number" %}</span>: {{ charger.charger_id }}
+              &middot;
+              <span data-i18n="connector_label">{% trans "Connector" %}</span>: {{ charger.connector_label }}
+            </p>
+          </div>
+          {% if request.user.is_authenticated %}
+          <a class="btn btn-outline-primary" href="{{ status_url }}" data-i18n="advanced_view_label">
+            {% trans "Advanced View" %}
+          </a>
+          {% endif %}
+        </div>
+        <div class="card-body">
+          {% if charger.require_rfid %}
+          <div class="alert alert-warning" role="alert" data-i18n="require_rfid_label">
+            {% trans "Require RFID Authorization" %}
+          </div>
+          {% endif %}
+          {% if tx %}
+          <p class="text-muted" data-i18n="charging_label">{% trans "Charging" %}</p>
+          {% if charger.connector_id is None and active_connector_count %}
+          <p class="small text-muted" data-i18n="connectors_active_message" data-count="{{ active_connector_count }}">
+            {% blocktrans count active=active_connector_count %}{{ active }} connector active{% plural %}{{ active }} connectors active{% endblocktrans %}
+          </p>
+          {% endif %}
+          <div class="progress bg-body-secondary mb-3" role="progressbar" aria-valuenow="{{ tx.kw|default:0|floatformat:0 }}" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: {{ tx.kw|default:0|floatformat:0 }}%;"></div>
+          </div>
+          <div class="row text-center text-sm-start gy-3">
+            <div class="col-12 col-sm-6">
+              <h2 class="h6 text-uppercase text-muted mb-1" data-i18n="energy_label">{% trans "Energy" %}</h2>
+              <p class="fs-4 fw-semibold mb-0">{{ tx.kw|floatformat:2 }} kW</p>
+            </div>
+            <div class="col-12 col-sm-6">
+              <h2 class="h6 text-uppercase text-muted mb-1" data-i18n="started_label">{% trans "Started" %}</h2>
+              <p class="fs-5 mb-0">{{ tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</p>
+            </div>
+          </div>
+          {% else %}
+          <div class="py-4 text-center">
+            <p class="lead mb-0" data-i18n="instruction_text">
+              {% trans "Plug in your vehicle and slide your RFID card over the reader to begin charging." %}
+            </p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% if charger.connector_id is None and connector_overview %}
+  <div class="row justify-content-center mt-4">
+    <div class="col-12 col-lg-10">
+      <h2 class="h5 mb-3 text-center text-lg-start" data-i18n="connectors_heading">{% trans "Connectors" %}</h2>
+      <div class="row gy-3">
+        {% for item in connector_overview %}
+        <div class="col-12 col-md-6">
+          <div class="border rounded-3 p-3 h-100 position-relative bg-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-semibold">{{ item.label }}</span>
+              <span class="badge" style="background-color: {{ item.color }};">{{ item.status }}</span>
+            </div>
+            {% if item.tx %}
+            <p class="mb-1"><small><span data-i18n="energy_label">{% trans "Energy" %}</span>: {{ item.tx.kw|floatformat:2 }} kW</small></p>
+            <p class="mb-0 text-muted"><small><span data-i18n="started_label">{% trans "Started" %}</span>: {{ item.tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</small></p>
+            {% else %}
+            <p class="mb-0 text-muted"><small data-i18n="no_active_transaction">{% trans "No active transaction" %}</small></p>
+            {% endif %}
+            <a class="stretched-link" href="{{ item.url }}" aria-label="{{ item.label }}"></a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
-{% endif %}
 {% endwith %}
+{% endblock %}
+
+{% block extra_js %}
+{{ landing_translations|json_script:"landing-translations" }}
 <script>
+  (function () {
+    const translationsNode = document.getElementById('landing-translations');
+    const languageContainer = document.querySelector('[data-language-container]');
+    if (!translationsNode || !languageContainer) {
+      return;
+    }
+    let translations;
+    try {
+      translations = JSON.parse(translationsNode.textContent);
+    } catch (error) {
+      console.error('Failed to parse landing page translations', error);
+      return;
+    }
+    const languageOrder = ['es', 'en'];
+    let currentIndex = languageOrder.findIndex((code) => code === document.documentElement.lang && translations[code]);
+    if (currentIndex === -1) {
+      currentIndex = languageOrder.findIndex((code) => Boolean(translations[code]));
+    }
+    if (currentIndex === -1) {
+      return;
+    }
+    let currentLang = languageOrder[currentIndex];
+    function applyLanguage(lang) {
+      const catalog = translations[lang];
+      if (!catalog) {
+        return;
+      }
+      document.querySelectorAll('[data-i18n]').forEach((element) => {
+        const key = element.getAttribute('data-i18n');
+        if (!key) {
+          return;
+        }
+        if (key === 'connectors_active_message') {
+          const countValue = Number.parseInt(element.getAttribute('data-count') || '0', 10);
+          const variant = countValue === 1 ? 'connectors_active_singular' : 'connectors_active_plural';
+          const template = catalog[variant];
+          if (template) {
+            element.textContent = template.replace('%(count)s', countValue);
+          }
+          return;
+        }
+        const text = catalog[key];
+        if (typeof text === 'string') {
+          element.textContent = text;
+        }
+      });
+      document.documentElement.setAttribute('lang', lang);
+    }
+    applyLanguage(currentLang);
+    setInterval(() => {
+      let nextIndex = (currentIndex + 1) % languageOrder.length;
+      let attempts = 0;
+      while (!translations[languageOrder[nextIndex]] && attempts < languageOrder.length) {
+        nextIndex = (nextIndex + 1) % languageOrder.length;
+        attempts += 1;
+      }
+      const nextLang = languageOrder[nextIndex];
+      if (!translations[nextLang] || nextLang === currentLang) {
+        return;
+      }
+      languageContainer.style.opacity = '0';
+      window.setTimeout(() => {
+        applyLanguage(nextLang);
+        languageContainer.style.opacity = '1';
+      }, 300);
+      currentIndex = nextIndex;
+      currentLang = nextLang;
+    }, 30000);
+  }());
   setInterval(function () {
     window.location.reload();
   }, 5000);
