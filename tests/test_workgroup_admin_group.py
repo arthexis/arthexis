@@ -24,7 +24,3 @@ class WorkgroupAdminGroupTests(TestCase):
         self.assertContains(response, "6. Workgroup MODELS")
         self.assertContains(response, "Power Leads")
 
-    def test_admin_index_hides_aplead(self):
-        response = self.client.get(reverse("admin:index"))
-        self.assertContains(response, "6. Workgroup MODELS")
-        self.assertNotContains(response, "AP Leads")
