@@ -1,0 +1,19 @@
+title = "ArtHexis Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+  description = "Ignore known placeholder credentials in tests"
+  regexes = [
+    '''password=\"password\"'''
+  ]
+
+[[rules]]
+id = "hashicorp-tf-password"
+
+[rules.allowlist]
+  regexTarget = "line"
+  regexes = [
+    '''password="password"'''
+  ]
