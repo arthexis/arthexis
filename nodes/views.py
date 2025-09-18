@@ -6,6 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
 from django.conf import settings
 from pathlib import Path
+from django.utils.cache import patch_vary_headers
 
 from utils.api import api_login_required
 
@@ -75,18 +76,48 @@ def node_info(request):
     return response
 
 
+def _add_cors_headers(request, response):
+    origin = request.headers.get("Origin")
+    if origin:
+        response["Access-Control-Allow-Origin"] = origin
+        response["Access-Control-Allow-Credentials"] = "true"
+        allow_headers = request.headers.get(
+            "Access-Control-Request-Headers", "Content-Type"
+        )
+        response["Access-Control-Allow-Headers"] = allow_headers
+        response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        patch_vary_headers(response, ["Origin"])
+    return response
+
+
 @csrf_exempt
 @api_login_required
 def register_node(request):
     """Register or update a node from POSTed JSON data."""
 
+    if request.method == "OPTIONS":
+        response = JsonResponse({"detail": "ok"})
+        return _add_cors_headers(request, response)
+
     if request.method != "POST":
-        return JsonResponse({"detail": "POST required"}, status=400)
+        response = JsonResponse({"detail": "POST required"}, status=400)
+        return _add_cors_headers(request, response)
 
     try:
         data = json.loads(request.body.decode())
     except json.JSONDecodeError:
         data = request.POST
+
+    if hasattr(data, "getlist"):
+        raw_features = data.getlist("features")
+        if not raw_features:
+            features = None
+        elif len(raw_features) == 1:
+            features = raw_features[0]
+        else:
+            features = raw_features
+    else:
+        features = data.get("features")
 
     hostname = data.get("hostname")
     address = data.get("address")
@@ -95,12 +126,12 @@ def register_node(request):
     public_key = data.get("public_key")
     token = data.get("token")
     signature = data.get("signature")
-    features = data.get("features")
 
     if not hostname or not address or not mac_address:
-        return JsonResponse(
+        response = JsonResponse(
             {"detail": "hostname, address and mac_address required"}, status=400
         )
+        return _add_cors_headers(request, response)
 
     verified = False
     if public_key and token and signature:
@@ -114,7 +145,8 @@ def register_node(request):
             )
             verified = True
         except Exception:
-            return JsonResponse({"detail": "invalid signature"}, status=403)
+            response = JsonResponse({"detail": "invalid signature"}, status=403)
+            return _add_cors_headers(request, response)
 
     mac_address = mac_address.lower()
     defaults = {
@@ -144,9 +176,10 @@ def register_node(request):
             else:
                 feature_list = list(features)
             node.update_manual_features(feature_list)
-        return JsonResponse(
+        response = JsonResponse(
             {"id": node.id, "detail": f"Node already exists (id: {node.id})"}
         )
+        return _add_cors_headers(request, response)
 
     if features is not None:
         if isinstance(features, (str, bytes)):
@@ -155,7 +188,8 @@ def register_node(request):
             feature_list = list(features)
         node.update_manual_features(feature_list)
 
-    return JsonResponse({"id": node.id})
+    response = JsonResponse({"id": node.id})
+    return _add_cors_headers(request, response)
 
 
 @api_login_required

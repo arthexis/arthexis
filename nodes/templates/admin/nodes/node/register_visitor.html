@@ -1,0 +1,145 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{% trans "Register Visitor Node" %}</h1>
+<p>{% trans "Attempting to exchange node information between this host and the visiting instance." %}</p>
+<ul>
+    <li id="host-result">{% trans "Registering the visiting node on this server…" %}</li>
+    <li id="visitor-result">{% trans "Registering this server on the visiting node…" %}</li>
+</ul>
+<p id="result"></p>
+<script>
+(function() {
+    const token = "{{ token|escapejs }}";
+    const hostInfoUrl = "{{ info_url|escapejs }}?token=" + token;
+    const hostRegisterUrl = "{{ register_url|escapejs }}";
+    const visitorInfoUrl = "{{ visitor_info_url|escapejs }}?token=" + token;
+    const visitorRegisterUrl = "{{ visitor_register_url|escapejs }}";
+    const hostResult = document.getElementById("host-result");
+    const visitorResult = document.getElementById("visitor-result");
+    const summary = document.getElementById("result");
+    const messages = {
+        hostRegistered: "{{ _('Visitor node registered with this server.')|escapejs }}",
+        visitorRegistered: "{{ _('Host node registered with visitor.')|escapejs }}",
+        success: "{{ _('Both nodes registered successfully.')|escapejs }}",
+        partial: "{{ _('One or more registrations failed.')|escapejs }}",
+        aborted: "{{ _('Registration aborted.')|escapejs }}",
+        visitorInfoError: "{{ _('Unable to read visitor node information.')|escapejs }}",
+        hostInfoError: "{{ _('Unable to read host node information.')|escapejs }}",
+    };
+
+    function setStatus(element, message, isError) {
+        if (!element) {
+            return;
+        }
+        element.textContent = message;
+        if (isError) {
+            element.classList.add("errornote");
+        } else {
+            element.classList.remove("errornote");
+        }
+    }
+
+    async function loadJson(url, options) {
+        const response = await fetch(url, options);
+        const text = await response.text();
+        let payload;
+        try {
+            payload = JSON.parse(text);
+        } catch (err) {
+            payload = text;
+        }
+        if (!response.ok) {
+            const detail = payload && payload.detail ? payload.detail : text || response.statusText;
+            throw new Error(detail);
+        }
+        return payload;
+    }
+
+    function buildPayload(info) {
+        return {
+            hostname: info.hostname,
+            address: info.address,
+            port: info.port,
+            mac_address: info.mac_address,
+            public_key: info.public_key,
+            features: info.features || [],
+        };
+    }
+
+    function addSignature(payload, info) {
+        if (info.token_signature) {
+            payload.token = token;
+            payload.signature = info.token_signature;
+        }
+    }
+
+    (async function() {
+        try {
+            const [visitorInfo, hostInfo] = await Promise.all([
+                loadJson(visitorInfoUrl),
+                loadJson(hostInfoUrl),
+            ]);
+
+            if (!visitorInfo || typeof visitorInfo !== "object") {
+                throw new Error(messages.visitorInfoError);
+            }
+            if (!hostInfo || typeof hostInfo !== "object") {
+                throw new Error(messages.hostInfoError);
+            }
+
+            const hostPayload = buildPayload(visitorInfo);
+            addSignature(hostPayload, visitorInfo);
+            try {
+                const result = await loadJson(hostRegisterUrl, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    credentials: "same-origin",
+                    body: JSON.stringify(hostPayload),
+                });
+                if (result && result.detail) {
+                    setStatus(hostResult, result.detail, false);
+                } else {
+                    setStatus(hostResult, messages.hostRegistered, false);
+                }
+            } catch (error) {
+                setStatus(hostResult, error.message, true);
+            }
+
+            const visitorPayload = buildPayload(hostInfo);
+            addSignature(visitorPayload, hostInfo);
+            try {
+                const result = await loadJson(visitorRegisterUrl, {
+                    method: "POST",
+                    credentials: "include",
+                    body: JSON.stringify(visitorPayload),
+                });
+                if (result && result.detail) {
+                    setStatus(visitorResult, result.detail, false);
+                } else {
+                    setStatus(visitorResult, messages.visitorRegistered, false);
+                }
+            } catch (error) {
+                setStatus(visitorResult, error.message, true);
+            }
+
+            if (!hostResult.classList.contains("errornote") && !visitorResult.classList.contains("errornote")) {
+                setStatus(summary, messages.success, false);
+            } else if (!summary.textContent) {
+                setStatus(summary, messages.partial, true);
+            }
+        } catch (error) {
+            const message = error.message || error;
+            setStatus(summary, message, true);
+            if (!hostResult.classList.contains("errornote")) {
+                setStatus(hostResult, messages.aborted, true);
+            }
+            if (!visitorResult.classList.contains("errornote")) {
+                setStatus(visitorResult, messages.aborted, true);
+            }
+        }
+    })();
+})();
+</script>
+{% endblock %}
