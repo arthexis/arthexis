@@ -3,6 +3,7 @@ import sys
 import json
 import shutil
 import importlib.util
+from glob import glob
 import io
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -23,7 +24,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 import socket
-from core.models import Todo
+from core.models import Brand, Todo, WMICode
 from core.user_data import dump_user_fixture
 
 
@@ -31,6 +32,21 @@ class SeedDataEntityTests(TestCase):
     def test_preserve_seed_data_on_create(self):
         role = NodeRole.objects.create(name="Tester", is_seed_data=True)
         self.assertTrue(NodeRole.all_objects.get(pk=role.pk).is_seed_data)
+
+
+class FixtureReloadTests(TestCase):
+    def test_reloading_unique_fixture_updates_existing(self):
+        fixtures = [
+            *sorted(glob("core/fixtures/ev_brands__*.json")),
+            *sorted(glob("core/fixtures/ev_models__*.json")),
+        ]
+        call_command("loaddata", *fixtures, verbosity=0)
+        code = WMICode.objects.get(code="TRU")
+        code.brand = Brand.objects.get(name="Porsche")
+        code.save()
+        call_command("loaddata", *fixtures, verbosity=0)
+        code.refresh_from_db()
+        self.assertEqual(code.brand.name, "Audi")
 
 
 class EntityInheritanceTests(TestCase):
