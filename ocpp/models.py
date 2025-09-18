@@ -1,9 +1,12 @@
-from django.db import models
-from core.entity import Entity
-from django.urls import reverse
-from django.contrib.sites.models import Site
+import socket
+
 from django.conf import settings
+from django.contrib.sites.models import Site
+from django.db import models
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
+
+from core.entity import Entity
 
 from core.models import (
     EnergyAccount,
@@ -90,9 +93,36 @@ class Charger(Entity):
     def get_absolute_url(self):
         return reverse("charger-page", args=[self.charger_id])
 
+    def _fallback_domain(self) -> str:
+        """Return a best-effort hostname when the Sites framework is unset."""
+
+        fallback = getattr(settings, "DEFAULT_SITE_DOMAIN", "") or getattr(
+            settings, "DEFAULT_DOMAIN", ""
+        )
+        if fallback:
+            return fallback.strip()
+
+        for host in getattr(settings, "ALLOWED_HOSTS", []):
+            if not isinstance(host, str):
+                continue
+            host = host.strip()
+            if not host or host.startswith("*") or "/" in host:
+                continue
+            return host
+
+        return socket.gethostname() or "localhost"
+
     def _full_url(self) -> str:
         """Return absolute URL for the charger landing page."""
-        domain = Site.objects.get_current().domain
+
+        try:
+            domain = Site.objects.get_current().domain.strip()
+        except Site.DoesNotExist:
+            domain = ""
+
+        if not domain:
+            domain = self._fallback_domain()
+
         scheme = getattr(settings, "DEFAULT_HTTP_PROTOCOL", "http")
         return f"{scheme}://{domain}{self.get_absolute_url()}"
 
