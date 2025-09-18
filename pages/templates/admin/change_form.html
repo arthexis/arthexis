@@ -36,9 +36,14 @@
     }
 
     @media (min-width: 1024px) {
-      #content-related.changeform-sections .changeform-sections__container {
+      #content-related.changeform-sections {
         position: sticky;
         top: 1.5rem;
+      }
+
+      #content-related.changeform-sections.is-collapsed {
+        position: static;
+        top: auto;
       }
     }
 
@@ -127,6 +132,8 @@
         float: none;
         width: auto;
         margin: 1.5rem 0 0;
+        position: static;
+        top: auto;
       }
 
       #content-related.changeform-sections .changeform-sections__panel {
