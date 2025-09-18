@@ -64,10 +64,6 @@ class AdminDocsModelGroupsTests(TestCase):
             "django-admindocs-models-detail",
             kwargs={"app_label": "core", "model_name": "rfid"},
         )
-        ap_lead_link = reverse(
-            "django-admindocs-models-detail",
-            kwargs={"app_label": "core", "model_name": "aplead"},
-        )
         package_link = reverse(
             "django-admindocs-models-detail",
             kwargs={"app_label": "core", "model_name": "package"},
@@ -83,6 +79,6 @@ class AdminDocsModelGroupsTests(TestCase):
         self.assertIn(f'href="{rfid_link}"', protocol_section)
         self.assertNotIn(f'href="{rfid_link}"', business_section)
 
-        for link in (ap_lead_link, package_link, package_release_link):
+        for link in (package_link, package_release_link):
             self.assertIn(f'href="{link}"', workgroup_section)
             self.assertNotIn(f'href="{link}"', business_section)

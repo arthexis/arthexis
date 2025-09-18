@@ -57,7 +57,6 @@ class OrderedModelIndexView(BaseAdminDocsView):
     GROUP_OVERRIDES = {
         "ocpp.location": "core",
         "core.rfid": "ocpp",
-        "core.aplead": "teams",
         "core.package": "teams",
         "core.packagerelease": "teams",
     }
