@@ -107,10 +107,15 @@ def import_transactions(data: dict) -> int:
     """
     charger_map: dict[str, Charger] = {}
     for item in data.get("chargers", []):
+        connector_value = item.get("connector_id", None)
+        if connector_value in ("", None):
+            connector_value = None
+        elif isinstance(connector_value, str):
+            connector_value = int(connector_value)
         charger, _ = Charger.objects.get_or_create(
             charger_id=item["charger_id"],
             defaults={
-                "connector_id": item.get("connector_id", None),
+                "connector_id": connector_value,
                 "require_rfid": item.get("require_rfid", False),
             },
         )
@@ -140,10 +145,13 @@ def import_transactions(data: dict) -> int:
             stop_time=_parse_dt(tx.get("stop_time")),
         )
         for mv in tx.get("meter_values", []):
+            connector_id = mv.get("connector_id")
+            if isinstance(connector_id, str):
+                connector_id = int(connector_id)
             MeterValue.objects.create(
                 charger=charger,
                 transaction=transaction,
-                connector_id=mv.get("connector_id"),
+                connector_id=connector_id,
                 timestamp=_parse_dt(mv.get("timestamp")),
                 context=mv.get("context", ""),
                 energy=mv.get("energy"),

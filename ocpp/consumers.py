@@ -42,23 +42,27 @@ class CSMSConsumer(AsyncWebsocketConsumer):
     @requires_network
     async def connect(self):
         self.charger_id = self.scope["url_route"]["kwargs"].get("cid", "")
+        self.connector_value: int | None = None
+        self.store_key = store.pending_key(self.charger_id)
+        self.aggregate_charger: Charger | None = None
         subprotocol = None
         offered = self.scope.get("subprotocols", [])
         if "ocpp1.6" in offered:
             subprotocol = "ocpp1.6"
-        # If a connection for this charger already exists, close it so a new
-        # simulator session can start immediately.
-        existing = store.connections.get(self.charger_id)
+        # Close any pending connection for this charger so reconnections do
+        # not leak stale consumers when the connector id has not been
+        # negotiated yet.
+        existing = store.connections.get(self.store_key)
         if existing is not None:
             await existing.close()
         await self.accept(subprotocol=subprotocol)
         store.add_log(
-            self.charger_id,
+            self.store_key,
             f"Connected (subprotocol={subprotocol or 'none'})",
             log_type="charger",
         )
-        store.connections[self.charger_id] = self
-        store.logs["charger"].setdefault(self.charger_id, [])
+        store.connections[self.store_key] = self
+        store.logs["charger"].setdefault(self.store_key, [])
         self.charger, created = await database_sync_to_async(
             Charger.objects.get_or_create
         )(
@@ -66,12 +70,20 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             connector_id=None,
             defaults={"last_path": self.scope.get("path", "")},
         )
+        self.aggregate_charger = self.charger
         await self._set_console_url(self.charger)
         location_name = await sync_to_async(
             lambda: self.charger.location.name if self.charger.location else ""
         )()
+        friendly_name = location_name or self.charger_id
+        store.register_log_name(self.store_key, friendly_name, log_type="charger")
         store.register_log_name(
-            self.charger_id, location_name or self.charger_id, log_type="charger"
+            self.charger_id, friendly_name, log_type="charger"
+        )
+        store.register_log_name(
+            store.identity_key(self.charger_id, None),
+            friendly_name,
+            log_type="charger",
         )
 
     async def _set_console_url(self, charger: Charger) -> None:
@@ -107,37 +119,85 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         """Ensure ``self.charger`` matches the provided connector id."""
         if connector is None:
             return
-        connector = str(connector)
-        if self.charger.connector_id == connector:
+        try:
+            connector_value = int(connector)
+        except (TypeError, ValueError):
             return
+        if (
+            self.connector_value == connector_value
+            and self.charger.connector_id == connector_value
+        ):
+            return
+        if not self.aggregate_charger or self.aggregate_charger.connector_id is not None:
+            self.aggregate_charger = await database_sync_to_async(
+                Charger.objects.get_or_create
+            )(
+                charger_id=self.charger_id,
+                connector_id=None,
+                defaults={"last_path": self.scope.get("path", "")},
+            )[0]
         existing = await database_sync_to_async(
             Charger.objects.filter(
-                charger_id=self.charger_id, connector_id=connector
+                charger_id=self.charger_id, connector_id=connector_value
             ).first
         )()
         if existing:
             self.charger = existing
-        elif self.charger.connector_id:
-            self.charger = await database_sync_to_async(Charger.objects.create)(
-                charger_id=self.charger_id,
-                connector_id=connector,
-                last_path=self.scope.get("path", ""),
-            )
-            await self._set_console_url(self.charger)
         else:
-            self.charger.connector_id = connector
-            await database_sync_to_async(self.charger.save)(
-                update_fields=["connector_id"]
-            )
+            def _create_connector():
+                charger, _ = Charger.objects.get_or_create(
+                    charger_id=self.charger_id,
+                    connector_id=connector_value,
+                    defaults={"last_path": self.scope.get("path", "")},
+                )
+                if self.scope.get("path") and charger.last_path != self.scope.get("path"):
+                    charger.last_path = self.scope.get("path")
+                    charger.save(update_fields=["last_path"])
+                return charger
+
+            self.charger = await database_sync_to_async(_create_connector)()
+            await self._set_console_url(self.charger)
+        previous_key = self.store_key
+        new_key = store.identity_key(self.charger_id, connector_value)
+        if previous_key != new_key:
+            existing_consumer = store.connections.get(new_key)
+            if existing_consumer is not None and existing_consumer is not self:
+                await existing_consumer.close()
+            store.reassign_identity(previous_key, new_key)
+            store.connections[new_key] = self
+            store.logs["charger"].setdefault(new_key, [])
+        connector_name = await sync_to_async(
+            lambda: self.charger.name or self.charger.charger_id
+        )()
+        store.register_log_name(new_key, connector_name, log_type="charger")
+        aggregate_name = ""
+        if self.aggregate_charger:
+            aggregate_name = await sync_to_async(
+                lambda: self.aggregate_charger.name
+                or self.aggregate_charger.charger_id
+            )()
+        store.register_log_name(
+            store.identity_key(self.charger_id, None),
+            aggregate_name or self.charger_id,
+            log_type="charger",
+        )
+        self.store_key = new_key
+        self.connector_value = connector_value
 
     async def _store_meter_values(self, payload: dict, raw_message: str) -> None:
         """Parse a MeterValues payload into MeterValue rows."""
-        connector = payload.get("connectorId")
-        await self._assign_connector(connector)
+        connector_raw = payload.get("connectorId")
+        connector_value = None
+        if connector_raw is not None:
+            try:
+                connector_value = int(connector_raw)
+            except (TypeError, ValueError):
+                connector_value = None
+        await self._assign_connector(connector_value)
         tx_id = payload.get("transactionId")
         tx_obj = None
         if tx_id is not None:
-            tx_obj = store.transactions.get(self.charger_id)
+            tx_obj = store.transactions.get(self.store_key)
             if not tx_obj or tx_obj.pk != int(tx_id):
                 tx_obj = await database_sync_to_async(
                     Transaction.objects.filter(pk=tx_id, charger=self.charger).first
@@ -146,11 +206,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 tx_obj = await database_sync_to_async(Transaction.objects.create)(
                     pk=tx_id, charger=self.charger, start_time=timezone.now()
                 )
-                store.start_session_log(self.charger_id, tx_obj.pk)
-                store.add_session_message(self.charger_id, raw_message)
-            store.transactions[self.charger_id] = tx_obj
+                store.start_session_log(self.store_key, tx_obj.pk)
+                store.add_session_message(self.store_key, raw_message)
+            store.transactions[self.store_key] = tx_obj
         else:
-            tx_obj = store.transactions.get(self.charger_id)
+            tx_obj = store.transactions.get(self.store_key)
 
         readings = []
         updated_fields: set[str] = set()
@@ -197,11 +257,23 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                             updated_fields.add(f"{field}_{suffix}")
                     else:
                         values[field] = val
+                        if (
+                            tx_obj
+                            and field == "energy"
+                            and tx_obj.meter_start is None
+                        ):
+                            mult = 1000 if unit in ("kW", "kWh") else 1
+                            try:
+                                tx_obj.meter_start = int(val * mult)
+                            except (TypeError, ValueError):
+                                pass
+                            else:
+                                updated_fields.add("meter_start")
             if values and context not in ("Transaction.Begin", "Transaction.End"):
                 readings.append(
                     MeterValue(
                         charger=self.charger,
-                        connector_id=connector,
+                        connector_id=connector_value,
                         transaction=tx_obj,
                         timestamp=ts,
                         context=context,
@@ -214,8 +286,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             await database_sync_to_async(tx_obj.save)(
                 update_fields=list(updated_fields)
             )
-        if connector is not None and not self.charger.connector_id:
-            self.charger.connector_id = str(connector)
+        if connector_value is not None and not self.charger.connector_id:
+            self.charger.connector_id = connector_value
             await database_sync_to_async(self.charger.save)(
                 update_fields=["connector_id"]
             )
@@ -227,11 +299,14 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             )
 
     async def disconnect(self, close_code):
-        store.connections.pop(self.charger_id, None)
-        store.end_session_log(self.charger_id)
+        store.connections.pop(self.store_key, None)
+        pending_key = store.pending_key(self.charger_id)
+        if self.store_key != pending_key:
+            store.connections.pop(pending_key, None)
+        store.end_session_log(self.store_key)
         store.stop_session_lock()
         store.add_log(
-            self.charger_id, f"Closed (code={close_code})", log_type="charger"
+            self.store_key, f"Closed (code={close_code})", log_type="charger"
         )
 
     async def receive(self, text_data=None, bytes_data=None):
@@ -240,8 +315,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             raw = base64.b64encode(bytes_data).decode("ascii")
         if raw is None:
             return
-        store.add_log(self.charger_id, raw, log_type="charger")
-        store.add_session_message(self.charger_id, raw)
+        store.add_log(self.store_key, raw, log_type="charger")
+        store.add_session_message(self.store_key, raw)
         try:
             msg = json.loads(raw)
         except json.JSONDecodeError:
@@ -308,10 +383,10 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         meter_start=payload.get("meterStart"),
                         start_time=timezone.now(),
                     )
-                    store.transactions[self.charger_id] = tx_obj
-                    store.start_session_log(self.charger_id, tx_obj.pk)
+                    store.transactions[self.store_key] = tx_obj
+                    store.start_session_log(self.store_key, tx_obj.pk)
                     store.start_session_lock()
-                    store.add_session_message(self.charger_id, text_data)
+                    store.add_session_message(self.store_key, text_data)
                     reply_payload = {
                         "transactionId": tx_obj.pk,
                         "idTagInfo": {"status": "Accepted"},
@@ -320,7 +395,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     reply_payload = {"idTagInfo": {"status": "Invalid"}}
             elif action == "StopTransaction":
                 tx_id = payload.get("transactionId")
-                tx_obj = store.transactions.pop(self.charger_id, None)
+                tx_obj = store.transactions.pop(self.store_key, None)
                 if not tx_obj and tx_id is not None:
                     tx_obj = await database_sync_to_async(
                         Transaction.objects.filter(pk=tx_id, charger=self.charger).first
@@ -339,10 +414,10 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     tx_obj.stop_time = timezone.now()
                     await database_sync_to_async(tx_obj.save)()
                 reply_payload = {"idTagInfo": {"status": "Accepted"}}
-                store.end_session_log(self.charger_id)
+                store.end_session_log(self.store_key)
                 store.stop_session_lock()
             response = [3, msg_id, reply_payload]
             await self.send(json.dumps(response))
             store.add_log(
-                self.charger_id, f"< {json.dumps(response)}", log_type="charger"
+                self.store_key, f"< {json.dumps(response)}", log_type="charger"
             )

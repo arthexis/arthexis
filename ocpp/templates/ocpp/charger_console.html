@@ -4,5 +4,16 @@
 {% block title %}{{ charger.charger_id }} - {% trans "Console" %}{% endblock %}
 
 {% block content %}
-<iframe src="{% url 'charger-console-proxy' charger.charger_id %}" style="width:100%;height:90vh;border:none;"></iframe>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="mb-0">{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
+  <a class="btn btn-secondary" href="{{ status_url }}">{% trans "Back to status" %}</a>
+</div>
+{% if connector_links %}
+<nav class="nav nav-pills mb-3">
+  {% for item in connector_links %}
+  <a class="nav-link{% if item.active %} active{% endif %}" href="{{ item.url }}">{{ item.label }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
+<iframe src="{{ proxy_url }}" style="width:100%;height:90vh;border:none;"></iframe>
 {% endblock %}

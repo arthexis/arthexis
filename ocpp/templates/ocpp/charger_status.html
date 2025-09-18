@@ -6,6 +6,15 @@
 
 {% block content %}
 <div id="status-content">
+  {% if connector_links %}
+  <div class="mb-3">
+    <div class="nav nav-pills flex-wrap gap-2">
+      {% for link in connector_links %}
+      <a class="nav-link {% if link.active %}active{% endif %}" href="{{ link.url }}">{{ link.label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
   <style>
     @keyframes text-update-fade {
       0% {
@@ -22,10 +31,11 @@
     }
   </style>
     <h1>{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
-    <p><a href="{% url 'charger-page' charger.charger_id %}">{% trans "Landing page" %}</a></p>
+    <p class="text-muted">{% trans "Connector" %}: {{ charger.connector_label }}</p>
+    <p><a href="{{ page_url }}">{% trans "Landing page" %}</a></p>
     {% if past_session %}
   <div class="alert alert-info" role="alert">
-    {% trans "Viewing past session" %} {{ tx.id }}. <a href="{% url 'charger-page' charger.charger_id %}">{% trans "Back to live" %}</a>
+    {% trans "Viewing past session" %} {{ tx.id }}. <a href="{{ page_url }}">{% trans "Back to live" %}</a>
   </div>
   {% endif %}
   <div class="row mb-4">
@@ -52,14 +62,45 @@
       {% endif %}
     </div>
     <div class="col-md-8">
+      {% if show_chart %}
       <canvas id="kw-chart" style="width:100%;height:300px;"></canvas>
+      {% else %}
+      <div class="alert alert-info" role="alert">
+        {% trans "Select a connector to view live chart data." %}
+      </div>
+      {% endif %}
     </div>
   </div>
+
+  {% if charger.connector_id is None and connector_overview %}
+  <h2 class="h5">{% trans "Connectors" %}</h2>
+  <div class="row g-3 mb-4">
+    {% for item in connector_overview %}
+    <div class="col-12 col-lg-6">
+      <div class="border rounded-3 p-3 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="fw-semibold">{{ item.label }}</span>
+          <span class="badge" style="background-color: {{ item.color }};">{{ item.status }}</span>
+        </div>
+        {% if item.tx %}
+        <p class="mb-1"><small>{% trans "Energy" %}: {{ item.tx.kw|floatformat:2 }} kW</small></p>
+        <p class="mb-0 text-muted"><small>{% trans "Started" %}: {{ item.tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</small></p>
+        {% else %}
+        <p class="mb-0 text-muted"><small>{% trans "No active transaction" %}</small></p>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   <h2>{% trans "Sessions" %}</h2>
   <table class="table">
     <thead>
       <tr>
+        {% if charger.connector_id is None %}
+        <th>{% trans "Connector" %}</th>
+        {% endif %}
         <th>{% trans "ID" %}</th>
         <th>{% trans "Start" %}</th>
         <th>{% trans "Stop" %}</th>
@@ -69,31 +110,39 @@
     <tbody>
       {% for tx in transactions %}
       <tr>
+        {% if charger.connector_id is None %}
+        <td>{{ tx.charger.connector_label|default:tx.charger.connector_id }}</td>
+        {% endif %}
         <td><a href="?session={{ tx.id }}">{{ tx.id }}</a></td>
         <td>{{ tx.start_time }}</td>
         <td>{{ tx.stop_time|default:"-" }}</td>
         <td>{{ tx.kw|floatformat:2 }}</td>
       </tr>
       {% empty %}
-      <tr><td colspan="4">{% trans "No sessions found." %}</td></tr>
+      <tr><td colspan="{% if charger.connector_id is None %}5{% else %}4{% endif %}">{% trans "No sessions found." %}</td></tr>
       {% endfor %}
     </tbody>
   </table>
   <div class="d-flex justify-content-between">
     {% if page_obj.has_previous %}
     <a href="?page={{ page_obj.previous_page_number }}">{% trans "Previous 10" %}</a>
+    {% else %}
+    <span></span>
     {% endif %}
-    <a href="{% url 'charger-session-search' charger.charger_id %}">{% trans "Search" %}</a>
+    <a href="{{ search_url }}">{% trans "Search" %}</a>
     {% if page_obj.has_next %}
     <a href="?page={{ page_obj.next_page_number }}">{% trans "Next 10" %}</a>
+    {% else %}
+    <span></span>
     {% endif %}
   </div>
-  {% if request.user.is_staff and charger.console_url %}
+  {% if request.user.is_staff and console_url %}
   <div class="mt-4 text-end">
-    <a class="btn btn-outline-secondary" href="{% url 'charger-console' charger.charger_id %}" target="_blank" rel="noopener">{% trans "View Console" %}</a>
+    <a class="btn btn-outline-secondary" href="{{ console_url }}" target="_blank" rel="noopener">{% trans "View Console" %}</a>
   </div>
   {% endif %}
  </div>
+{% if show_chart %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   let kwChart = null;
@@ -203,7 +252,45 @@
       }
     }
     setupChart();
-    setInterval(reloadStatus, 5000);
   });
+
+  setInterval(reloadStatus, 5000);
 </script>
+{% else %}
+<script>
+  function highlightChange(el) {
+    el.classList.add('text-update');
+    setTimeout(() => el.classList.remove('text-update'), 1000);
+  }
+
+  function reloadStatus() {
+    const current = document.getElementById('status-content');
+    fetch(window.location.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(resp => resp.text())
+      .then(html => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const newContent = doc.getElementById('status-content');
+        if (newContent) {
+          const changedIds = [];
+          newContent.querySelectorAll('[id]').forEach(el => {
+            const oldEl = current.querySelector(`#${el.id}`);
+            if (oldEl && oldEl.textContent !== el.textContent) {
+              changedIds.push(el.id);
+            }
+          });
+          current.innerHTML = newContent.innerHTML;
+          changedIds.forEach(id => {
+            const el = current.querySelector(`#${id}`);
+            if (el) {
+              highlightChange(el);
+            }
+          });
+        }
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', reloadStatus);
+  setInterval(reloadStatus, 5000);
+</script>
+{% endif %}
 {% endblock %}
