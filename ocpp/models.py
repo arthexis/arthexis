@@ -1,4 +1,5 @@
 import socket
+from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.contrib.sites.models import Site
@@ -6,7 +7,7 @@ from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
-from core.entity import Entity
+from core.entity import Entity, EntityManager
 
 from core.models import (
     EnergyAccount,
@@ -51,9 +52,8 @@ class Charger(Entity):
         blank=True,
         help_text="Optional friendly name shown on public pages.",
     )
-    connector_id = models.CharField(
+    connector_id = models.PositiveIntegerField(
         _("Connector ID"),
-        max_length=10,
         blank=True,
         null=True,
         help_text="Optional connector identifier for multi-connector chargers.",
@@ -96,8 +96,61 @@ class Charger(Entity):
             )
         ]
 
+    AGGREGATE_CONNECTOR_SLUG = "all"
+
+    def identity_tuple(self) -> tuple[str, int | None]:
+        """Return the canonical identity for this charger."""
+
+        return (
+            self.charger_id,
+            self.connector_id if self.connector_id is not None else None,
+        )
+
+    @classmethod
+    def connector_slug_from_value(cls, connector: int | None) -> str:
+        """Return the slug used in URLs for the given connector."""
+
+        return cls.AGGREGATE_CONNECTOR_SLUG if connector is None else str(connector)
+
+    @classmethod
+    def connector_value_from_slug(cls, slug: int | str | None) -> int | None:
+        """Return the connector integer represented by ``slug``."""
+
+        if slug in (None, "", cls.AGGREGATE_CONNECTOR_SLUG):
+            return None
+        if isinstance(slug, int):
+            return slug
+        try:
+            return int(str(slug))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid connector slug: {slug}") from exc
+
+    @property
+    def connector_slug(self) -> str:
+        """Return the slug representing this charger's connector."""
+
+        return type(self).connector_slug_from_value(self.connector_id)
+
+    @property
+    def connector_label(self) -> str:
+        """Return a short human readable label for this connector."""
+
+        if self.connector_id is None:
+            return _("All")
+        return str(self.connector_id)
+
+    def identity_slug(self) -> str:
+        """Return a unique slug for this charger identity."""
+
+        serial, connector = self.identity_tuple()
+        return f"{serial}#{type(self).connector_slug_from_value(connector)}"
+
     def get_absolute_url(self):
-        return reverse("charger-page", args=[self.charger_id])
+        serial, connector = self.identity_tuple()
+        connector_slug = type(self).connector_slug_from_value(connector)
+        if connector_slug == self.AGGREGATE_CONNECTOR_SLUG:
+            return reverse("charger-page", args=[serial])
+        return reverse("charger-page-connector", args=[serial, connector_slug])
 
     def _fallback_domain(self) -> str:
         """Return a best-effort hostname when the Sites framework is unset."""
@@ -163,11 +216,9 @@ class Charger(Entity):
     @property
     def name(self) -> str:
         if self.location:
-            return (
-                f"{self.location.name} #{self.connector_id}"
-                if self.connector_id
-                else self.location.name
-            )
+            if self.connector_id is not None:
+                return f"{self.location.name} #{self.connector_id}"
+            return self.location.name
         return ""
 
     @property
@@ -184,10 +235,51 @@ class Charger(Entity):
         from . import store
 
         total = 0.0
-        tx_active = store.transactions.get(self.charger_id)
+        for charger in self._target_chargers():
+            total += charger._total_kw_single(store)
+        return total
+
+    def _store_keys(self) -> list[str]:
+        """Return keys used for store lookups with fallbacks."""
+
+        from . import store
+
+        base = self.charger_id
+        connector = self.connector_id
+        keys: list[str] = []
+        keys.append(store.identity_key(base, connector))
+        if connector is not None:
+            keys.append(store.identity_key(base, None))
+        keys.append(store.pending_key(base))
+        keys.append(base)
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for key in keys:
+            if key not in seen:
+                seen.add(key)
+                deduped.append(key)
+        return deduped
+
+    def _target_chargers(self):
+        """Return chargers contributing to aggregate operations."""
+
+        qs = type(self).objects.filter(charger_id=self.charger_id)
+        if self.connector_id is None:
+            return qs
+        return qs.filter(pk=self.pk)
+
+    def _total_kw_single(self, store_module) -> float:
+        """Return total kW for this specific charger identity."""
+
+        tx_active = None
+        if self.connector_id is not None:
+            tx_active = store_module.get_transaction(
+                self.charger_id, self.connector_id
+            )
         qs = self.transactions.all()
         if tx_active and tx_active.pk is not None:
             qs = qs.exclude(pk=tx_active.pk)
+        total = 0.0
         for tx in qs:
             kw = tx.kw
             if kw:
@@ -201,24 +293,28 @@ class Charger(Entity):
     def purge(self):
         from . import store
 
-        self.transactions.all().delete()
-        self.meter_values.all().delete()
-        store.clear_log(self.charger_id, log_type="charger")
-        store.transactions.pop(self.charger_id, None)
-        store.history.pop(self.charger_id, None)
+        for charger in self._target_chargers():
+            charger.transactions.all().delete()
+            charger.meter_values.all().delete()
+            for key in charger._store_keys():
+                store.clear_log(key, log_type="charger")
+                store.transactions.pop(key, None)
+                store.history.pop(key, None)
 
     def delete(self, *args, **kwargs):
         from django.db.models.deletion import ProtectedError
         from . import store
 
-        if (
-            self.transactions.exists()
-            or self.meter_values.exists()
-            or store.get_logs(self.charger_id, log_type="charger")
-            or store.transactions.get(self.charger_id)
-            or store.history.get(self.charger_id)
-        ):
-            raise ProtectedError("Purge data before deleting charger.", [])
+        for charger in self._target_chargers():
+            has_data = (
+                charger.transactions.exists()
+                or charger.meter_values.exists()
+                or any(store.get_logs(key, log_type="charger") for key in charger._store_keys())
+                or any(store.transactions.get(key) for key in charger._store_keys())
+                or any(store.history.get(key) for key in charger._store_keys())
+            )
+            if has_data:
+                raise ProtectedError("Purge data before deleting charger.", [])
         super().delete(*args, **kwargs)
 
 
@@ -237,7 +333,7 @@ class Transaction(Entity):
         verbose_name=_("RFID"),
     )
     vin = models.CharField(max_length=17, blank=True)
-    connector_id = models.IntegerField(null=True, blank=True)
+    connector_id = models.PositiveIntegerField(null=True, blank=True)
     meter_start = models.IntegerField(null=True, blank=True)
     meter_stop = models.IntegerField(null=True, blank=True)
     voltage_start = models.DecimalField(
@@ -283,17 +379,30 @@ class Transaction(Entity):
     @property
     def kw(self) -> float:
         """Return consumed energy in kW for this session."""
-        if self.meter_start is not None and self.meter_stop is not None:
-            total = (self.meter_stop - self.meter_start) / 1000.0
-            return max(total, 0.0)
+        start_val = None
+        if self.meter_start is not None:
+            start_val = float(self.meter_start) / 1000.0
+
+        end_val = None
+        if self.meter_stop is not None:
+            end_val = float(self.meter_stop) / 1000.0
+
         readings = list(
             self.meter_values.filter(energy__isnull=False).order_by("timestamp")
         )
-        if not readings:
+        if readings:
+            if start_val is None:
+                start_val = float(readings[0].energy or 0)
+            # Always use the latest available reading for the end value when a
+            # stop meter has not been recorded yet. This allows active
+            # transactions to report totals using their most recent reading.
+            if end_val is None:
+                end_val = float(readings[-1].energy or 0)
+
+        if start_val is None or end_val is None:
             return 0.0
-        start_val = readings[0].energy or 0
-        end_val = readings[-1].energy or start_val
-        total = float(end_val - start_val)
+
+        total = end_val - start_val
         return max(total, 0.0)
 
 
@@ -303,7 +412,7 @@ class MeterValue(Entity):
     charger = models.ForeignKey(
         Charger, on_delete=models.CASCADE, related_name="meter_values"
     )
-    connector_id = models.IntegerField(null=True, blank=True)
+    connector_id = models.PositiveIntegerField(null=True, blank=True)
     transaction = models.ForeignKey(
         Transaction,
         on_delete=models.CASCADE,
@@ -331,13 +440,51 @@ class MeterValue(Entity):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.charger} {self.timestamp}"
 
+    @property
+    def value(self):
+        return self.energy
+
+    @value.setter
+    def value(self, new_value):
+        self.energy = new_value
+
     class Meta:
         verbose_name = _("Meter Value")
         verbose_name_plural = _("Meter Values")
 
 
+class MeterReadingManager(EntityManager):
+    def _normalize_kwargs(self, kwargs: dict) -> dict:
+        normalized = dict(kwargs)
+        value = normalized.pop("value", None)
+        unit = normalized.pop("unit", None)
+        if value is not None:
+            energy = value
+            try:
+                energy = Decimal(value)
+            except (InvalidOperation, TypeError, ValueError):
+                energy = None
+            if energy is not None:
+                unit_normalized = (unit or "").lower()
+                if unit_normalized in {"w", "wh"}:
+                    energy = energy / Decimal("1000")
+                normalized.setdefault("energy", energy)
+        normalized.pop("measurand", None)
+        return normalized
+
+    def create(self, **kwargs):
+        return super().create(**self._normalize_kwargs(kwargs))
+
+    def get_or_create(self, defaults=None, **kwargs):
+        if defaults:
+            defaults = self._normalize_kwargs(defaults)
+        return super().get_or_create(defaults=defaults, **self._normalize_kwargs(kwargs))
+
+
 class MeterReading(MeterValue):
     """Proxy model for backwards compatibility."""
+
+    objects = MeterReadingManager()
 
     class Meta:
         proxy = True

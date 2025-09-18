@@ -1,6 +1,7 @@
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone as dt_timezone
+from types import SimpleNamespace
 
 from django.http import JsonResponse, HttpResponse, Http404
 from django.http.request import split_domain_port
@@ -9,7 +10,7 @@ from django.shortcuts import render, get_object_or_404
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.utils.translation import gettext_lazy as _
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.conf import settings
 from django.utils import translation
 
@@ -30,10 +31,104 @@ from .evcs import (
 )
 
 
+def _normalize_connector_slug(slug: str | None) -> tuple[int | None, str]:
+    """Return connector value and normalized slug or raise 404."""
+
+    try:
+        value = Charger.connector_value_from_slug(slug)
+    except ValueError as exc:  # pragma: no cover - defensive guard
+        raise Http404("Invalid connector") from exc
+    return value, Charger.connector_slug_from_value(value)
+
+
+def _reverse_connector_url(name: str, serial: str, connector_slug: str) -> str:
+    """Return URL name for connector-aware routes."""
+
+    target = f"{name}-connector"
+    if connector_slug == Charger.AGGREGATE_CONNECTOR_SLUG:
+        try:
+            return reverse(target, args=[serial, connector_slug])
+        except NoReverseMatch:
+            return reverse(name, args=[serial])
+    return reverse(target, args=[serial, connector_slug])
+
+
+def _get_charger(serial: str, connector_slug: str | None) -> tuple[Charger, str]:
+    """Return charger for the requested identity, creating if necessary."""
+
+    connector_value, normalized_slug = _normalize_connector_slug(connector_slug)
+    if connector_value is None:
+        charger, _ = Charger.objects.get_or_create(
+            charger_id=serial,
+            connector_id=None,
+        )
+    else:
+        charger, _ = Charger.objects.get_or_create(
+            charger_id=serial,
+            connector_id=connector_value,
+        )
+    return charger, normalized_slug
+
+
+def _connector_set(charger: Charger) -> list[Charger]:
+    """Return chargers sharing the same serial ordered for navigation."""
+
+    siblings = list(Charger.objects.filter(charger_id=charger.charger_id))
+    siblings.sort(key=lambda c: (c.connector_id is not None, c.connector_id or 0))
+    return siblings
+
+
+def _connector_overview(charger: Charger) -> list[dict]:
+    """Return connector metadata used for navigation and summaries."""
+
+    overview: list[dict] = []
+    for sibling in _connector_set(charger):
+        tx_obj = store.get_transaction(sibling.charger_id, sibling.connector_id)
+        state, color = _charger_state(sibling, tx_obj)
+        overview.append(
+            {
+                "charger": sibling,
+                "slug": sibling.connector_slug,
+                "label": sibling.connector_label,
+                "url": _reverse_connector_url(
+                    "charger-page", sibling.charger_id, sibling.connector_slug
+                ),
+                "status": state,
+                "color": color,
+                "tx": tx_obj,
+                "connected": store.is_connected(
+                    sibling.charger_id, sibling.connector_id
+                ),
+            }
+        )
+    return overview
+
+
+def _live_sessions(charger: Charger) -> list[tuple[Charger, Transaction]]:
+    """Return active sessions grouped by connector for the charger."""
+
+    siblings = _connector_set(charger)
+    ordered = [c for c in siblings if c.connector_id is not None] + [
+        c for c in siblings if c.connector_id is None
+    ]
+    sessions: list[tuple[Charger, Transaction]] = []
+    seen: set[int] = set()
+    for sibling in ordered:
+        tx_obj = store.get_transaction(sibling.charger_id, sibling.connector_id)
+        if not tx_obj:
+            continue
+        if tx_obj.pk and tx_obj.pk in seen:
+            continue
+        if tx_obj.pk:
+            seen.add(tx_obj.pk)
+        sessions.append((sibling, tx_obj))
+    return sessions
+
+
 def _charger_state(charger: Charger, tx_obj: Transaction | None):
     """Return human readable state and color for a charger."""
     cid = charger.charger_id
-    connected = cid in store.connections
+    connected = store.is_connected(cid, charger.connector_id)
     if connected and tx_obj:
         return _("Charging"), "green"
     if connected:
@@ -47,7 +142,14 @@ def charger_list(request):
     data = []
     for charger in Charger.objects.all():
         cid = charger.charger_id
-        tx_obj = store.transactions.get(cid)
+        sessions: list[tuple[Charger, Transaction]] = []
+        tx_obj = store.get_transaction(cid, charger.connector_id)
+        if charger.connector_id is None:
+            sessions = _live_sessions(charger)
+            if sessions:
+                tx_obj = sessions[0][1]
+        elif tx_obj:
+            sessions = [(charger, tx_obj)]
         if not tx_obj:
             tx_obj = (
                 Transaction.objects.filter(charger__charger_id=cid)
@@ -67,31 +169,57 @@ def charger_list(request):
                 tx_data["meterStop"] = tx_obj.meter_stop
             if tx_obj.stop_time is not None:
                 tx_data["stopTime"] = tx_obj.stop_time.isoformat()
+        active_transactions = []
+        for session_charger, session_tx in sessions:
+            active_payload = {
+                "charger_id": session_charger.charger_id,
+                "connector_id": session_charger.connector_id,
+                "connector_slug": session_charger.connector_slug,
+                "transactionId": session_tx.pk,
+                "meterStart": session_tx.meter_start,
+                "startTime": session_tx.start_time.isoformat(),
+            }
+            if session_tx.vin:
+                active_payload["vin"] = session_tx.vin
+            if session_tx.meter_stop is not None:
+                active_payload["meterStop"] = session_tx.meter_stop
+            if session_tx.stop_time is not None:
+                active_payload["stopTime"] = session_tx.stop_time.isoformat()
+            active_transactions.append(active_payload)
         data.append(
             {
                 "charger_id": cid,
                 "name": charger.name,
+                "connector_id": charger.connector_id,
+                "connector_slug": charger.connector_slug,
+                "connector_label": charger.connector_label,
                 "require_rfid": charger.require_rfid,
                 "transaction": tx_data,
+                "activeTransactions": active_transactions,
                 "lastHeartbeat": (
                     charger.last_heartbeat.isoformat()
                     if charger.last_heartbeat
                     else None
                 ),
                 "lastMeterValues": charger.last_meter_values,
-                "connected": cid in store.connections,
+                "connected": store.is_connected(cid, charger.connector_id),
             }
         )
     return JsonResponse({"chargers": data})
 
 
 @api_login_required
-def charger_detail(request, cid):
-    charger = Charger.objects.filter(charger_id=cid).first()
-    if charger is None:
-        return JsonResponse({"detail": "not found"}, status=404)
+def charger_detail(request, cid, connector=None):
+    charger, connector_slug = _get_charger(cid, connector)
 
-    tx_obj = store.transactions.get(cid)
+    sessions: list[tuple[Charger, Transaction]] = []
+    tx_obj = store.get_transaction(cid, charger.connector_id)
+    if charger.connector_id is None:
+        sessions = _live_sessions(charger)
+        if sessions:
+            tx_obj = sessions[0][1]
+    elif tx_obj:
+        sessions = [(charger, tx_obj)]
     if not tx_obj:
         tx_obj = (
             Transaction.objects.filter(charger__charger_id=cid)
@@ -113,13 +241,35 @@ def charger_detail(request, cid):
         if tx_obj.stop_time is not None:
             tx_data["stopTime"] = tx_obj.stop_time.isoformat()
 
-    log = store.get_logs(cid, log_type="charger")
+    active_transactions = []
+    for session_charger, session_tx in sessions:
+        payload = {
+            "charger_id": session_charger.charger_id,
+            "connector_id": session_charger.connector_id,
+            "connector_slug": session_charger.connector_slug,
+            "transactionId": session_tx.pk,
+            "meterStart": session_tx.meter_start,
+            "startTime": session_tx.start_time.isoformat(),
+        }
+        if session_tx.vin:
+            payload["vin"] = session_tx.vin
+        if session_tx.meter_stop is not None:
+            payload["meterStop"] = session_tx.meter_stop
+        if session_tx.stop_time is not None:
+            payload["stopTime"] = session_tx.stop_time.isoformat()
+        active_transactions.append(payload)
+
+    log_key = store.identity_key(cid, charger.connector_id)
+    log = store.get_logs(log_key, log_type="charger")
     return JsonResponse(
         {
             "charger_id": cid,
+            "connector_id": charger.connector_id,
+            "connector_slug": connector_slug,
             "name": charger.name,
             "require_rfid": charger.require_rfid,
             "transaction": tx_data,
+            "activeTransactions": active_transactions,
             "lastHeartbeat": (
                 charger.last_heartbeat.isoformat() if charger.last_heartbeat else None
             ),
@@ -136,7 +286,7 @@ def dashboard(request):
     """Landing page listing all known chargers and their status."""
     chargers = []
     for charger in Charger.objects.all():
-        tx_obj = store.transactions.get(charger.charger_id)
+        tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
         if not tx_obj:
             tx_obj = (
                 Transaction.objects.filter(charger=charger)
@@ -234,10 +384,28 @@ def cp_simulator(request):
     return render(request, "ocpp/cp_simulator.html", context)
 
 
-def charger_page(request, cid):
+def charger_page(request, cid, connector=None):
     """Public landing page for a charger displaying usage guidance or progress."""
-    charger = get_object_or_404(Charger, charger_id=cid)
-    tx = store.transactions.get(cid)
+    charger, connector_slug = _get_charger(cid, connector)
+    overview = _connector_overview(charger)
+    sessions = _live_sessions(charger)
+    tx = None
+    active_connector_count = 0
+    if charger.connector_id is None:
+        if sessions:
+            total_kw = 0.0
+            start_times = [
+                tx_obj.start_time for _, tx_obj in sessions if tx_obj.start_time
+            ]
+            for _, tx_obj in sessions:
+                if tx_obj.kw:
+                    total_kw += tx_obj.kw
+            tx = SimpleNamespace(kw=total_kw, start_time=min(start_times) if start_times else None)
+            active_connector_count = len(sessions)
+    else:
+        tx = sessions[0][1] if sessions else store.get_transaction(cid, charger.connector_id)
+        if tx:
+            active_connector_count = 1
     language_cookie = request.COOKIES.get(settings.LANGUAGE_COOKIE_NAME)
     preferred_language = "es"
     supported_languages = {code for code, _ in settings.LANGUAGES}
@@ -247,33 +415,73 @@ def charger_page(request, cid):
     ):
         translation.activate(preferred_language)
         request.LANGUAGE_CODE = translation.get_language()
-    return render(request, "ocpp/charger_page.html", {"charger": charger, "tx": tx})
+    connector_links = [
+        {
+            "slug": item["slug"],
+            "label": item["label"],
+            "url": item["url"],
+            "active": item["slug"] == connector_slug,
+        }
+        for item in overview
+    ]
+    connector_overview = [
+        item for item in overview if item["charger"].connector_id is not None
+    ]
+    status_url = _reverse_connector_url("charger-status", cid, connector_slug)
+    return render(
+        request,
+        "ocpp/charger_page.html",
+        {
+            "charger": charger,
+            "tx": tx,
+            "connector_slug": connector_slug,
+            "connector_links": connector_links,
+            "connector_overview": connector_overview,
+            "active_connector_count": active_connector_count,
+            "status_url": status_url,
+        },
+    )
 
 
 @login_required
-def charger_status(request, cid):
-    charger = get_object_or_404(Charger, charger_id=cid)
+def charger_status(request, cid, connector=None):
+    charger, connector_slug = _get_charger(cid, connector)
     session_id = request.GET.get("session")
-    live_tx = store.transactions.get(cid)
+    sessions = _live_sessions(charger)
+    live_tx = None
+    if charger.connector_id is not None and sessions:
+        live_tx = sessions[0][1]
     tx_obj = live_tx
     past_session = False
     if session_id:
-        if not (live_tx and str(live_tx.pk) == session_id):
+        if charger.connector_id is None:
+            tx_obj = get_object_or_404(
+                Transaction, pk=session_id, charger__charger_id=cid
+            )
+            past_session = True
+        elif not (live_tx and str(live_tx.pk) == session_id):
             tx_obj = get_object_or_404(Transaction, pk=session_id, charger=charger)
             past_session = True
-    state, color = _charger_state(charger, live_tx)
-    transactions_qs = Transaction.objects.filter(charger=charger).order_by(
-        "-start_time"
-    )
+    state, color = _charger_state(charger, live_tx if charger.connector_id is not None else (sessions if sessions else None))
+    if charger.connector_id is None:
+        transactions_qs = Transaction.objects.filter(
+            charger__charger_id=cid
+        ).select_related("charger").order_by("-start_time")
+    else:
+        transactions_qs = Transaction.objects.filter(charger=charger).order_by(
+            "-start_time"
+        )
     paginator = Paginator(transactions_qs, 10)
     page_obj = paginator.get_page(request.GET.get("page"))
     transactions = page_obj.object_list
     chart_data = {"labels": [], "values": []}
-    if tx_obj:
+    if tx_obj and charger.connector_id is not None:
         readings = list(
             tx_obj.meter_values.filter(energy__isnull=False).order_by("timestamp")
         )
         start_val = None
+        if tx_obj.meter_start is not None:
+            start_val = float(tx_obj.meter_start) / 1000.0
         for reading in readings:
             try:
                 val = float(reading.energy)
@@ -284,6 +492,24 @@ def charger_status(request, cid):
             total = val - start_val
             chart_data["labels"].append(reading.timestamp.isoformat())
             chart_data["values"].append(max(total, 0.0))
+    overview = _connector_overview(charger)
+    connector_links = [
+        {
+            "slug": item["slug"],
+            "label": item["label"],
+            "url": _reverse_connector_url("charger-status", cid, item["slug"]),
+            "active": item["slug"] == connector_slug,
+        }
+        for item in overview
+    ]
+    connector_overview = [
+        item for item in overview if item["charger"].connector_id is not None
+    ]
+    search_url = _reverse_connector_url("charger-session-search", cid, connector_slug)
+    console_url = None
+    if charger.console_url:
+        console_url = _reverse_connector_url("charger-console", cid, connector_slug)
+    show_chart = bool(chart_data["labels"])
     return render(
         request,
         "ocpp/charger_status.html",
@@ -296,13 +522,19 @@ def charger_status(request, cid):
             "page_obj": page_obj,
             "chart_data": json.dumps(chart_data),
             "past_session": past_session,
+            "connector_slug": connector_slug,
+            "connector_links": connector_links,
+            "connector_overview": connector_overview,
+            "search_url": search_url,
+            "console_url": console_url,
+            "show_chart": show_chart,
         },
     )
 
 
 @login_required
-def charger_session_search(request, cid):
-    charger = get_object_or_404(Charger, charger_id=cid)
+def charger_session_search(request, cid, connector=None):
+    charger, connector_slug = _get_charger(cid, connector)
     date_str = request.GET.get("date")
     transactions = None
     if date_str:
@@ -312,38 +544,86 @@ def charger_session_search(request, cid):
                 date_obj, datetime.min.time(), tzinfo=dt_timezone.utc
             )
             end = start + timedelta(days=1)
-            transactions = Transaction.objects.filter(
-                charger=charger, start_time__gte=start, start_time__lt=end
-            ).order_by("-start_time")
+            qs = Transaction.objects.filter(start_time__gte=start, start_time__lt=end)
+            if charger.connector_id is None:
+                qs = qs.filter(charger__charger_id=cid)
+            else:
+                qs = qs.filter(charger=charger)
+            transactions = qs.order_by("-start_time")
         except ValueError:
             transactions = []
+    overview = _connector_overview(charger)
+    connector_links = [
+        {
+            "slug": item["slug"],
+            "label": item["label"],
+            "url": _reverse_connector_url("charger-session-search", cid, item["slug"]),
+            "active": item["slug"] == connector_slug,
+        }
+        for item in overview
+    ]
+    status_url = _reverse_connector_url("charger-status", cid, connector_slug)
     return render(
         request,
         "ocpp/charger_session_search.html",
-        {"charger": charger, "transactions": transactions, "date": date_str},
+        {
+            "charger": charger,
+            "transactions": transactions,
+            "date": date_str,
+            "connector_slug": connector_slug,
+            "connector_links": connector_links,
+            "status_url": status_url,
+        },
     )
 
 
 @login_required
-def charger_log_page(request, cid):
+def charger_log_page(request, cid, connector=None):
     """Render a simple page with the log for the charger or simulator."""
     log_type = request.GET.get("type", "charger")
-    try:
-        charger = Charger.objects.get(charger_id=cid)
-    except Charger.DoesNotExist:
-        charger = Charger(charger_id=cid)
-    log = store.get_logs(cid, log_type=log_type)
+    connector_links = []
+    connector_slug = None
+    status_url = None
+    if log_type == "charger":
+        charger, connector_slug = _get_charger(cid, connector)
+        log_key = store.identity_key(cid, charger.connector_id)
+        overview = _connector_overview(charger)
+        connector_links = [
+            {
+                "slug": item["slug"],
+                "label": item["label"],
+                "url": _reverse_connector_url("charger-log", cid, item["slug"]),
+                "active": item["slug"] == connector_slug,
+            }
+            for item in overview
+        ]
+        target_id = log_key
+        status_url = _reverse_connector_url("charger-status", cid, connector_slug)
+    else:
+        charger = Charger.objects.filter(charger_id=cid).first() or Charger(
+            charger_id=cid
+        )
+        target_id = cid
+    log = store.get_logs(target_id, log_type=log_type)
     return render(
         request,
         "ocpp/charger_logs.html",
-        {"charger": charger, "log": log},
+        {
+            "charger": charger,
+            "log": log,
+            "log_type": log_type,
+            "connector_slug": connector_slug,
+            "connector_links": connector_links,
+            "status_url": status_url,
+        },
     )
 
 
 @csrf_exempt
 @api_login_required
-def dispatch_action(request, cid):
-    ws = store.connections.get(cid)
+def dispatch_action(request, cid, connector=None):
+    connector_value, _ = _normalize_connector_slug(connector)
+    ws = store.get_connection(cid, connector_value)
     if ws is None:
         return JsonResponse({"detail": "no connection"}, status=404)
     try:
@@ -352,7 +632,7 @@ def dispatch_action(request, cid):
         data = {}
     action = data.get("action")
     if action == "remote_stop":
-        tx_obj = store.transactions.get(cid)
+        tx_obj = store.get_transaction(cid, connector_value)
         if not tx_obj:
             return JsonResponse({"detail": "no transaction"}, status=404)
         msg = json.dumps(
@@ -371,21 +651,44 @@ def dispatch_action(request, cid):
         asyncio.get_event_loop().create_task(ws.send(msg))
     else:
         return JsonResponse({"detail": "unknown action"}, status=400)
-    store.add_log(cid, f"< {msg}", log_type="charger")
+    log_key = store.identity_key(cid, connector_value)
+    store.add_log(log_key, f"< {msg}", log_type="charger")
     return JsonResponse({"sent": msg})
 
 
 @login_required
-def charger_console(request, cid):
-    charger = get_object_or_404(Charger, charger_id=cid)
+def charger_console(request, cid, connector=None):
+    charger, connector_slug = _get_charger(cid, connector)
     if not charger.console_url:
         raise Http404
-    return render(request, "ocpp/charger_console.html", {"charger": charger})
+    overview = _connector_overview(charger)
+    connector_links = [
+        {
+            "slug": item["slug"],
+            "label": item["label"],
+            "url": _reverse_connector_url("charger-console", cid, item["slug"]),
+            "active": item["slug"] == connector_slug,
+        }
+        for item in overview
+    ]
+    proxy_url = _reverse_connector_url("charger-console-proxy", cid, connector_slug)
+    status_url = _reverse_connector_url("charger-status", cid, connector_slug)
+    return render(
+        request,
+        "ocpp/charger_console.html",
+        {
+            "charger": charger,
+            "connector_slug": connector_slug,
+            "connector_links": connector_links,
+            "proxy_url": proxy_url,
+            "status_url": status_url,
+        },
+    )
 
 
 @login_required
-def charger_console_proxy(request, cid, path=""):
-    charger = get_object_or_404(Charger, charger_id=cid)
+def charger_console_proxy(request, cid, connector=None, path=""):
+    charger, connector_slug = _get_charger(cid, connector)
     if not charger.console_url:
         raise Http404
     base = charger.console_url.rstrip("/")
@@ -407,7 +710,7 @@ def charger_console_proxy(request, cid, path=""):
 
     content_type = resp.headers.get("Content-Type", "")
     if content_type.startswith("text/html"):
-        proxy_base = reverse("charger-console-proxy", args=[cid])
+        proxy_base = _reverse_connector_url("charger-console-proxy", cid, connector_slug)
         text = resp.text.replace('href="/', f'href="{proxy_base}/')
         text = text.replace('src="/', f'src="{proxy_base}/')
         proxy_resp = HttpResponse(text, status=resp.status_code)

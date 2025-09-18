@@ -1,4 +1,5 @@
 {% extends "pages/base.html" %}
+{% load i18n %}
 
 {% block title %}Log for {{ charger.display_name|default:charger.name|default:charger.charger_id }}{% endblock %}
 
@@ -13,7 +14,19 @@
 {% endblock %}
 
 {% block content %}
-<h1>Log for {{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="mb-0">Log for {{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
+  {% if status_url %}
+  <a class="btn btn-secondary" href="{{ status_url }}">{% trans "Back to status" %}</a>
+  {% endif %}
+</div>
+{% if log_type == "charger" and connector_links %}
+<nav class="nav nav-pills mb-3">
+  {% for item in connector_links %}
+  <a class="nav-link{% if item.active %} active{% endif %}" href="{{ item.url }}">{{ item.label }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
 <div class="form-check mb-2">
   <input class="form-check-input" type="checkbox" id="auto-reload">
   <label class="form-check-label" for="auto-reload">Auto reload</label>

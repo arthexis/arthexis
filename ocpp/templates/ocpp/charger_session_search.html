@@ -4,37 +4,56 @@
 {% block title %}{{ charger.display_name|default:charger.name|default:charger.charger_id }} - {% trans "Search Sessions" %}{% endblock %}
 
 {% block content %}
-<h1>{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="mb-0">{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
+  <a class="btn btn-secondary" href="{{ status_url }}">{% trans "Back to status" %}</a>
+</div>
+{% if connector_links %}
+<nav class="nav nav-pills mb-3">
+  {% for item in connector_links %}
+  <a class="nav-link{% if item.active %} active{% endif %}" href="{{ item.url }}">{{ item.label }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
 <form method="get" class="mb-3">
-  <label for="date">{% trans "Select date" %}</label>
-  <input type="date" id="date" name="date" value="{{ date|default:'' }}">
-  <button type="submit">{% trans "Search" %}</button>
+  <label class="form-label" for="date">{% trans "Select date" %}</label>
+  <div class="d-flex gap-2">
+    <input type="date" id="date" name="date" class="form-control" value="{{ date|default:'' }}">
+    <button type="submit" class="btn btn-primary">{% trans "Search" %}</button>
+  </div>
 </form>
 {% if transactions is not None %}
   {% if transactions %}
-  <table class="table">
-    <thead>
-      <tr>
-        <th>{% trans "ID" %}</th>
-        <th>{% trans "Start" %}</th>
-        <th>{% trans "Stop" %}</th>
-        <th>{% trans "Energy (kW)" %}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for tx in transactions %}
-      <tr>
-        <td>{{ tx.id }}</td>
-        <td>{{ tx.start_time }}</td>
-        <td>{{ tx.stop_time|default:"-" }}</td>
-        <td>{{ tx.kw|floatformat:2 }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead>
+        <tr>
+          <th scope="col">{% trans "ID" %}</th>
+          {% if charger.connector_id is None %}
+          <th scope="col">{% trans "Connector" %}</th>
+          {% endif %}
+          <th scope="col">{% trans "Start" %}</th>
+          <th scope="col">{% trans "Stop" %}</th>
+          <th scope="col">{% trans "Energy (kW)" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in transactions %}
+        <tr>
+          <td>{{ tx.id }}</td>
+          {% if charger.connector_id is None %}
+          <td>{{ tx.charger.connector_label }}</td>
+          {% endif %}
+          <td>{{ tx.start_time }}</td>
+          <td>{{ tx.stop_time|default:"-" }}</td>
+          <td>{{ tx.kw|floatformat:2 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% else %}
-  <p>{% trans "No sessions found." %}</p>
+  <p class="text-muted">{% trans "No sessions found." %}</p>
   {% endif %}
 {% endif %}
-<a href="{% url 'charger-status' charger.charger_id %}">{% trans "Back" %}</a>
 {% endblock %}

@@ -186,7 +186,10 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         from django.urls import reverse
 
         if obj.console_url:
-            url = reverse("charger-console", args=[obj.charger_id])
+            url = reverse(
+                "charger-console-connector",
+                args=[obj.charger_id, obj.connector_slug],
+            )
             return format_html('<a href="{}" target="_blank">console</a>', url)
         return ""
 
@@ -202,13 +205,16 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     log_link.short_description = "Log"
 
     def get_log_identifier(self, obj):
-        return obj.charger_id
+        return store.identity_key(obj.charger_id, obj.connector_id)
 
     def status_link(self, obj):
         from django.utils.html import format_html
         from django.urls import reverse
 
-        url = reverse("charger-status", args=[obj.charger_id])
+        url = reverse(
+            "charger-status-connector",
+            args=[obj.charger_id, obj.connector_slug],
+        )
         return format_html('<a href="{}" target="_blank">status</a>', url)
 
     status_link.short_description = "Status Page"
@@ -235,7 +241,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     total_kw_display.short_description = "Total kW"
 
     def session_kw(self, obj):
-        tx = store.transactions.get(obj.charger_id)
+        tx = store.get_transaction(obj.charger_id, obj.connector_id)
         if tx:
             return round(tx.kw, 2)
         return 0.0

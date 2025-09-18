@@ -73,6 +73,22 @@ class ChargerFixtureTests(TestCase):
         )
     ]
 
+    @classmethod
+    def setUpTestData(cls):
+        location = Location.objects.create(name="Simulator")
+        Charger.objects.create(
+            charger_id="CP1",
+            connector_id=1,
+            location=location,
+            require_rfid=False,
+        )
+        Charger.objects.create(
+            charger_id="CP2",
+            connector_id=2,
+            location=location,
+            require_rfid=True,
+        )
+
     def test_cp2_requires_rfid(self):
         cp2 = Charger.objects.get(charger_id="CP2")
         self.assertTrue(cp2.require_rfid)
@@ -84,8 +100,8 @@ class ChargerFixtureTests(TestCase):
     def test_charger_connector_ids(self):
         cp1 = Charger.objects.get(charger_id="CP1")
         cp2 = Charger.objects.get(charger_id="CP2")
-        self.assertEqual(cp1.connector_id, "1")
-        self.assertEqual(cp2.connector_id, "2")
+        self.assertEqual(cp1.connector_id, 1)
+        self.assertEqual(cp2.connector_id, 2)
         self.assertEqual(cp1.name, "Simulator #1")
         self.assertEqual(cp2.name, "Simulator #2")
 
@@ -241,8 +257,10 @@ class CSMSConsumerTests(TransactionTestCase):
         await communicator.send_json_to([2, "1", "MeterValues", payload])
         await communicator.receive_json_from()
 
-        charger = await database_sync_to_async(Charger.objects.get)(charger_id="NEWCID")
-        self.assertEqual(charger.connector_id, "7")
+        charger = await database_sync_to_async(Charger.objects.get)(
+            charger_id="NEWCID", connector_id=7
+        )
+        self.assertEqual(charger.connector_id, 7)
 
         await communicator.disconnect()
 
@@ -287,7 +305,7 @@ class CSMSConsumerTests(TransactionTestCase):
         count = await self._retry_db(
             lambda: Charger.objects.filter(charger_id="DUPC").count()
         )
-        self.assertEqual(count, 2)
+        self.assertEqual(count, 3)
         connectors = await self._retry_db(
             lambda: list(
                 Charger.objects.filter(charger_id="DUPC").values_list(
@@ -295,8 +313,9 @@ class CSMSConsumerTests(TransactionTestCase):
                 )
             )
         )
-        self.assertIn("1", connectors)
-        self.assertIn("2", connectors)
+        self.assertIn(1, connectors)
+        self.assertIn(2, connectors)
+        self.assertIn(None, connectors)
 
     async def test_console_url_recorded(self):
         communicator = ClientWebsocketCommunicator(
@@ -538,7 +557,8 @@ class CSMSConsumerTests(TransactionTestCase):
         communicator1 = WebsocketCommunicator(application, "/DUPLICATE/")
         connected, _ = await communicator1.connect()
         self.assertTrue(connected)
-        first_consumer = store.connections.get("DUPLICATE")
+        pending_key = store.pending_key("DUPLICATE")
+        first_consumer = store.connections.get(pending_key)
 
         communicator2 = WebsocketCommunicator(application, "/DUPLICATE/")
         connected2, _ = await communicator2.connect()
@@ -546,9 +566,47 @@ class CSMSConsumerTests(TransactionTestCase):
 
         # The first communicator should be closed when the second connects.
         await communicator1.wait()
-        self.assertIsNot(store.connections.get("DUPLICATE"), first_consumer)
+        self.assertIsNot(store.connections.get(pending_key), first_consumer)
 
         await communicator2.disconnect()
+
+    async def test_connectors_share_serial_without_disconnecting(self):
+        communicator1 = WebsocketCommunicator(application, "/MULTI/")
+        connected1, _ = await communicator1.connect()
+        self.assertTrue(connected1)
+        await communicator1.send_json_to(
+            [
+                2,
+                "1",
+                "StartTransaction",
+                {"connectorId": 1, "meterStart": 10},
+            ]
+        )
+        await communicator1.receive_json_from()
+
+        communicator2 = WebsocketCommunicator(application, "/MULTI/")
+        connected2, _ = await communicator2.connect()
+        self.assertTrue(connected2)
+        await communicator2.send_json_to(
+            [
+                2,
+                "2",
+                "StartTransaction",
+                {"connectorId": 2, "meterStart": 10},
+            ]
+        )
+        await communicator2.receive_json_from()
+
+        key1 = store.identity_key("MULTI", 1)
+        key2 = store.identity_key("MULTI", 2)
+        self.assertIn(key1, store.connections)
+        self.assertIn(key2, store.connections)
+        self.assertIsNot(store.connections[key1], store.connections[key2])
+
+        await communicator1.disconnect()
+        await communicator2.disconnect()
+        store.transactions.pop(key1, None)
+        store.transactions.pop(key2, None)
 
 
 class ChargerLandingTests(TestCase):
@@ -573,10 +631,8 @@ class ChargerLandingTests(TestCase):
                 ),
             )
             self.assertContains(response, _("Advanced View"))
-        self.assertContains(
-            response,
-            reverse("charger-status", args=["PAGE1"]),
-        )
+        status_url = reverse("charger-status-connector", args=["PAGE1", "all"])
+        self.assertContains(response, status_url)
 
     def test_status_page_renders(self):
         charger = Charger.objects.create(charger_id="PAGE2")
@@ -591,10 +647,11 @@ class ChargerLandingTests(TestCase):
             meter_start=1000,
             start_time=timezone.now(),
         )
-        store.transactions[charger.charger_id] = tx
+        key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.transactions[key] = tx
         resp = self.client.get(reverse("charger-page", args=["STATS"]))
         self.assertContains(resp, "progress-bar")
-        store.transactions.pop(charger.charger_id, None)
+        store.transactions.pop(key, None)
 
     def test_display_name_used_on_public_pages(self):
         charger = Charger.objects.create(
@@ -603,7 +660,9 @@ class ChargerLandingTests(TestCase):
         )
         landing = self.client.get(reverse("charger-page", args=["NAMED"]))
         self.assertContains(landing, "Entrada")
-        status = self.client.get(reverse("charger-status", args=["NAMED"]))
+        status = self.client.get(
+            reverse("charger-status-connector", args=["NAMED", "all"])
+        )
         self.assertContains(status, "Entrada")
 
     def test_total_includes_ongoing_transaction(self):
@@ -613,7 +672,8 @@ class ChargerLandingTests(TestCase):
             meter_start=1000,
             start_time=timezone.now(),
         )
-        store.transactions[charger.charger_id] = tx
+        key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.transactions[key] = tx
         MeterReading.objects.create(
             charger=charger,
             transaction=tx,
@@ -624,7 +684,30 @@ class ChargerLandingTests(TestCase):
         )
         resp = self.client.get(reverse("charger-status", args=["ONGOING"]))
         self.assertContains(resp, 'Total Energy: <span id="total-kw">1.50</span> kW')
-        store.transactions.pop(charger.charger_id, None)
+        store.transactions.pop(key, None)
+
+    def test_connector_specific_routes_render(self):
+        Charger.objects.create(charger_id="ROUTED")
+        connector = Charger.objects.create(charger_id="ROUTED", connector_id=1)
+        page = self.client.get(
+            reverse("charger-page-connector", args=["ROUTED", "1"])
+        )
+        self.assertEqual(page.status_code, 200)
+        status = self.client.get(
+            reverse("charger-status-connector", args=["ROUTED", "1"])
+        )
+        self.assertEqual(status.status_code, 200)
+        search = self.client.get(
+            reverse("charger-session-search-connector", args=["ROUTED", "1"])
+        )
+        self.assertEqual(search.status_code, 200)
+        log_id = store.identity_key("ROUTED", connector.connector_id)
+        store.add_log(log_id, "entry", log_type="charger")
+        log = self.client.get(
+            reverse("charger-log-connector", args=["ROUTED", "1"]) + "?type=charger"
+        )
+        self.assertContains(log, "entry")
+        store.clear_log(log_id, log_type="charger")
 
     def test_temperature_displayed(self):
         charger = Charger.objects.create(
@@ -635,20 +718,22 @@ class ChargerLandingTests(TestCase):
         self.assertContains(resp, "21.5")
 
     def test_log_page_renders_without_charger(self):
-        store.add_log("LOG1", "hello", log_type="charger")
-        entry = store.get_logs("LOG1", log_type="charger")[0]
+        log_id = store.identity_key("LOG1", None)
+        store.add_log(log_id, "hello", log_type="charger")
+        entry = store.get_logs(log_id, log_type="charger")[0]
         self.assertRegex(entry, r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} hello$")
         resp = self.client.get(reverse("charger-log", args=["LOG1"]) + "?type=charger")
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "hello")
-        store.clear_log("LOG1", log_type="charger")
+        store.clear_log(log_id, log_type="charger")
 
     def test_log_page_is_case_insensitive(self):
-        store.add_log("cp2", "entry", log_type="charger")
+        log_id = store.identity_key("cp2", None)
+        store.add_log(log_id, "entry", log_type="charger")
         resp = self.client.get(reverse("charger-log", args=["CP2"]) + "?type=charger")
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "entry")
-        store.clear_log("cp2", log_type="charger")
+        store.clear_log(log_id, log_type="charger")
 
 
 class SimulatorLandingTests(TestCase):
@@ -693,7 +778,9 @@ class ChargerAdminTests(TestCase):
         url = reverse("admin:ocpp_charger_changelist")
         resp = self.client.get(url)
         self.assertContains(resp, charger.get_absolute_url())
-        status_url = reverse("charger-status", args=["ADMIN1"])
+        status_url = reverse(
+            "charger-status-connector", args=["ADMIN1", "all"]
+        )
         self.assertContains(resp, status_url)
 
     def test_admin_does_not_list_qr_link(self):
@@ -711,12 +798,13 @@ class ChargerAdminTests(TestCase):
 
     def test_admin_log_view_displays_entries(self):
         charger = Charger.objects.create(charger_id="LOG2")
-        store.add_log("LOG2", "entry", log_type="charger")
+        log_id = store.identity_key(charger.charger_id, charger.connector_id)
+        store.add_log(log_id, "entry", log_type="charger")
         url = reverse("admin:ocpp_charger_log", args=[charger.pk])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "entry")
-        store.clear_log("LOG2", log_type="charger")
+        store.clear_log(log_id, log_type="charger")
 
     def test_admin_lists_console_link(self):
         charger = Charger.objects.create(
@@ -724,14 +812,18 @@ class ChargerAdminTests(TestCase):
         )
         url = reverse("admin:ocpp_charger_changelist")
         resp = self.client.get(url)
-        console_url = reverse("charger-console", args=["CON1"])
+        console_url = reverse(
+            "charger-console-connector", args=["CON1", "all"]
+        )
         self.assertContains(resp, console_url)
 
     def test_admin_hides_console_link_without_url(self):
         Charger.objects.create(charger_id="CON2")
         url = reverse("admin:ocpp_charger_changelist")
         resp = self.client.get(url)
-        console_url = reverse("charger-console", args=["CON2"])
+        console_url = reverse(
+            "charger-console-connector", args=["CON2", "all"]
+        )
         self.assertNotContains(resp, console_url)
 
     def test_admin_change_links_landing_page(self):
@@ -772,14 +864,16 @@ class ChargerAdminTests(TestCase):
             timestamp=timezone.now(),
             value=1,
         )
-        store.add_log("PURGE1", "entry", log_type="charger")
+        store.add_log(store.identity_key("PURGE1", None), "entry", log_type="charger")
         url = reverse("admin:ocpp_charger_changelist")
         self.client.post(
             url, {"action": "purge_data", "_selected_action": [charger.pk]}
         )
         self.assertFalse(Transaction.objects.filter(charger=charger).exists())
         self.assertFalse(MeterReading.objects.filter(charger=charger).exists())
-        self.assertNotIn("PURGE1", store.logs["charger"])
+        self.assertNotIn(
+            store.identity_key("PURGE1", None), store.logs["charger"]
+        )
 
     def test_delete_requires_purge(self):
         charger = Charger.objects.create(charger_id="DEL1")
@@ -817,7 +911,7 @@ class ConsoleProxyTests(TestCase):
         mock_resp.status_code = 200
         mock_resp.headers = {"Content-Type": "text/plain"}
         mock_resp.content = b"ok"
-        url = reverse("charger-console-proxy", args=["PROXY"])
+        url = reverse("charger-console-proxy-connector", args=["PROXY", "all"])
         resp = self.client.get(url)
         self.assertEqual(resp.content, b"ok")
         self.assertEqual(resp.status_code, 200)
@@ -847,7 +941,7 @@ class TransactionAdminTests(TestCase):
         self.assertContains(resp, str(reading.value))
 
 
-class SimulatorAdminTests(TestCase):
+class SimulatorAdminTests(TransactionTestCase):
     def setUp(self):
         self.client = Client()
         User = get_user_model()
@@ -1053,10 +1147,10 @@ class ChargerLocationTests(TestCase):
         self.assertEqual(charger.location.name, "AUTOLOC")
 
     def test_location_reused_for_matching_serial(self):
-        first = Charger.objects.create(charger_id="SHARE", connector_id="1")
+        first = Charger.objects.create(charger_id="SHARE", connector_id=1)
         first.location.name = "Custom"
         first.location.save()
-        second = Charger.objects.create(charger_id="SHARE", connector_id="2")
+        second = Charger.objects.create(charger_id="SHARE", connector_id=2)
         self.assertEqual(second.location, first.location)
 
 
@@ -1484,7 +1578,7 @@ class ChargerStatusViewTests(TestCase):
         self.client.force_login(self.user)
 
     def test_chart_data_populated_from_existing_readings(self):
-        charger = Charger.objects.create(charger_id="VIEW1")
+        charger = Charger.objects.create(charger_id="VIEW1", connector_id=1)
         tx = Transaction.objects.create(
             charger=charger, start_time=timezone.now(), meter_start=0
         )
@@ -1503,17 +1597,23 @@ class ChargerStatusViewTests(TestCase):
             value=Decimal("1500"),
             unit="W",
         )
-        store.transactions[charger.charger_id] = tx
-        resp = self.client.get(reverse("charger-status", args=[charger.charger_id]))
+        key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.transactions[key] = tx
+        resp = self.client.get(
+            reverse(
+                "charger-status-connector",
+                args=[charger.charger_id, charger.connector_slug],
+            )
+        )
         self.assertEqual(resp.status_code, 200)
         chart = json.loads(resp.context["chart_data"])
         self.assertEqual(len(chart["labels"]), 2)
         self.assertAlmostEqual(chart["values"][0], 1.0)
         self.assertAlmostEqual(chart["values"][1], 1.5)
-        store.transactions.pop(charger.charger_id, None)
+        store.transactions.pop(key, None)
 
     def test_chart_data_uses_meter_start_for_register_values(self):
-        charger = Charger.objects.create(charger_id="VIEWREG")
+        charger = Charger.objects.create(charger_id="VIEWREG", connector_id=1)
         tx = Transaction.objects.create(
             charger=charger, start_time=timezone.now(), meter_start=746060
         )
@@ -1534,14 +1634,20 @@ class ChargerStatusViewTests(TestCase):
             value=Decimal("746.080"),
             unit="kWh",
         )
-        store.transactions[charger.charger_id] = tx
-        resp = self.client.get(reverse("charger-status", args=[charger.charger_id]))
+        key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.transactions[key] = tx
+        resp = self.client.get(
+            reverse(
+                "charger-status-connector",
+                args=[charger.charger_id, charger.connector_slug],
+            )
+        )
         chart = json.loads(resp.context["chart_data"])
         self.assertEqual(len(chart["labels"]), 2)
         self.assertAlmostEqual(chart["values"][0], 0.0)
         self.assertAlmostEqual(chart["values"][1], 0.02)
         self.assertAlmostEqual(resp.context["tx"].kw, 0.02)
-        store.transactions.pop(charger.charger_id, None)
+        store.transactions.pop(key, None)
 
     def test_sessions_are_linked(self):
         charger = Charger.objects.create(charger_id="LINK1")
@@ -1555,7 +1661,7 @@ class ChargerStatusViewTests(TestCase):
         self.assertContains(resp, reverse("charger-page", args=[charger.charger_id]))
 
     def test_past_session_chart(self):
-        charger = Charger.objects.create(charger_id="PAST1")
+        charger = Charger.objects.create(charger_id="PAST1", connector_id=1)
         tx = Transaction.objects.create(
             charger=charger, start_time=timezone.now(), meter_start=0
         )
@@ -1575,7 +1681,11 @@ class ChargerStatusViewTests(TestCase):
             unit="W",
         )
         resp = self.client.get(
-            reverse("charger-status", args=[charger.charger_id]) + f"?session={tx.id}"
+            reverse(
+                "charger-status-connector",
+                args=[charger.charger_id, charger.connector_slug],
+            )
+            + f"?session={tx.id}"
         )
         self.assertContains(resp, "Back to live")
         chart = json.loads(resp.context["chart_data"])
