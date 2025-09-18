@@ -46,13 +46,18 @@
   <p class="help">{% blocktranslate %}This diagram is rendered with Graphviz and reflects the models registered in the {{ app_verbose_name }} admin group, including their relationships.{% endblocktranslate %}</p>
 
   <div class="model-graph-wrapper">
-    <div id="model-graph" class="model-graph" aria-live="polite">
-      <p class="model-graph__status">{% translate 'Rendering diagram…' %}</p>
+    <div id="model-graph" class="model-graph">
+      {% if graph_svg %}
+        <div class="model-graph__figure">
+          {{ graph_svg|safe }}
+        </div>
+      {% else %}
+        <p class="model-graph__status error">
+          {{ graph_error|default:_('Unable to render the diagram. Check the server logs for details.') }}
+        </p>
+      {% endif %}
     </div>
   </div>
-  <noscript>
-    <p class="model-graph__status error">{% translate 'Enable JavaScript to see the database model graph.' %}</p>
-  </noscript>
 
   {% if models %}
     <h2>{% translate 'Included models' %}</h2>
@@ -69,42 +74,6 @@
     </ul>
   {% endif %}
 
+  {# Retain the DOT source for debugging or external tooling if needed. #}
   {{ graph_source|json_script:"model-graph-data" }}
-  <script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3.4.0/lib/viz-standalone.js" crossorigin="anonymous"></script>
-  <script>
-    (function() {
-      const dataElement = document.getElementById('model-graph-data');
-      const container = document.getElementById('model-graph');
-      if (!dataElement || !container) {
-        return;
-      }
-      const dot = JSON.parse(dataElement.textContent);
-
-      function showStatus(text, isError) {
-        container.innerHTML = '';
-        const message = document.createElement('p');
-        message.className = 'model-graph__status' + (isError ? ' error' : '');
-        message.textContent = text;
-        container.appendChild(message);
-      }
-
-      if (typeof window.Viz !== 'function') {
-        showStatus('{% translate "The Graphviz renderer could not be loaded." %}', true);
-        return;
-      }
-
-      const viz = new window.Viz();
-      viz.renderSVGElement(dot)
-        .then(function(element) {
-          container.innerHTML = '';
-          element.setAttribute('role', 'img');
-          element.setAttribute('aria-label', '{{ app_verbose_name|escapejs }} {% translate "model diagram" %}');
-          container.appendChild(element);
-        })
-        .catch(function(error) {
-          console.error('Graph rendering failed', error);
-          showStatus('{% translate "Unable to render the diagram. Check the browser console for details." %}', true);
-        });
-    })();
-  </script>
 {% endblock %}
