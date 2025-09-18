@@ -1606,10 +1606,12 @@ class ChargerStatusViewTests(TestCase):
             )
         )
         self.assertEqual(resp.status_code, 200)
-        chart = json.loads(resp.context["chart_data"])
+        chart = resp.context["chart_data"]
         self.assertEqual(len(chart["labels"]), 2)
-        self.assertAlmostEqual(chart["values"][0], 1.0)
-        self.assertAlmostEqual(chart["values"][1], 1.5)
+        self.assertEqual(len(chart["datasets"]), 1)
+        values = chart["datasets"][0]["values"]
+        self.assertAlmostEqual(values[0], 1.0)
+        self.assertAlmostEqual(values[1], 1.5)
         store.transactions.pop(key, None)
 
     def test_chart_data_uses_meter_start_for_register_values(self):
@@ -1642,10 +1644,12 @@ class ChargerStatusViewTests(TestCase):
                 args=[charger.charger_id, charger.connector_slug],
             )
         )
-        chart = json.loads(resp.context["chart_data"])
+        chart = resp.context["chart_data"]
         self.assertEqual(len(chart["labels"]), 2)
-        self.assertAlmostEqual(chart["values"][0], 0.0)
-        self.assertAlmostEqual(chart["values"][1], 0.02)
+        self.assertEqual(len(chart["datasets"]), 1)
+        values = chart["datasets"][0]["values"]
+        self.assertAlmostEqual(values[0], 0.0)
+        self.assertAlmostEqual(values[1], 0.02)
         self.assertAlmostEqual(resp.context["tx"].kw, 0.02)
         store.transactions.pop(key, None)
 
@@ -1688,9 +1692,81 @@ class ChargerStatusViewTests(TestCase):
             + f"?session={tx.id}"
         )
         self.assertContains(resp, "Back to live")
-        chart = json.loads(resp.context["chart_data"])
+        chart = resp.context["chart_data"]
         self.assertEqual(len(chart["labels"]), 2)
+        self.assertEqual(len(chart["datasets"]), 1)
         self.assertTrue(resp.context["past_session"])
+
+    def test_aggregate_chart_includes_multiple_connectors(self):
+        aggregate = Charger.objects.create(charger_id="VIEWAGG")
+        connector_one = Charger.objects.create(
+            charger_id="VIEWAGG", connector_id=1
+        )
+        connector_two = Charger.objects.create(
+            charger_id="VIEWAGG", connector_id=2
+        )
+        base_time = timezone.now()
+        tx_one = Transaction.objects.create(
+            charger=connector_one, start_time=base_time, meter_start=0
+        )
+        tx_two = Transaction.objects.create(
+            charger=connector_two, start_time=base_time, meter_start=0
+        )
+        MeterReading.objects.create(
+            charger=connector_one,
+            transaction=tx_one,
+            timestamp=base_time,
+            value=Decimal("1000"),
+            unit="W",
+        )
+        MeterReading.objects.create(
+            charger=connector_one,
+            transaction=tx_one,
+            timestamp=base_time + timedelta(seconds=15),
+            value=Decimal("1500"),
+            unit="W",
+        )
+        MeterReading.objects.create(
+            charger=connector_two,
+            transaction=tx_two,
+            timestamp=base_time + timedelta(seconds=5),
+            value=Decimal("2000"),
+            unit="W",
+        )
+        MeterReading.objects.create(
+            charger=connector_two,
+            transaction=tx_two,
+            timestamp=base_time + timedelta(seconds=20),
+            value=Decimal("2600"),
+            unit="W",
+        )
+        key_one = store.identity_key(
+            connector_one.charger_id, connector_one.connector_id
+        )
+        key_two = store.identity_key(
+            connector_two.charger_id, connector_two.connector_id
+        )
+        store.transactions[key_one] = tx_one
+        store.transactions[key_two] = tx_two
+        try:
+            resp = self.client.get(
+                reverse("charger-status", args=[aggregate.charger_id])
+            )
+            chart = resp.context["chart_data"]
+            self.assertTrue(resp.context["show_chart"])
+            self.assertEqual(len(chart["datasets"]), 2)
+            data_map = {
+                dataset["label"]: dataset["values"] for dataset in chart["datasets"]
+            }
+            self.assertIn("1", data_map)
+            self.assertIn("2", data_map)
+            self.assertEqual(len(data_map["1"]), len(chart["labels"]))
+            self.assertEqual(len(data_map["2"]), len(chart["labels"]))
+            self.assertTrue(any(value is not None for value in data_map["1"]))
+            self.assertTrue(any(value is not None for value in data_map["2"]))
+        finally:
+            store.transactions.pop(key_one, None)
+            store.transactions.pop(key_two, None)
 
 
 class ChargerSessionPaginationTests(TestCase):

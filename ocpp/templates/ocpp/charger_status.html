@@ -64,6 +64,7 @@
     <div class="col-md-8">
       {% if show_chart %}
       <canvas id="kw-chart" style="width:100%;height:300px;"></canvas>
+      {{ chart_data|json_script:"chart-data" }}
       {% else %}
       <div class="alert alert-info" role="alert">
         {% trans "Select a connector to view live chart data." %}
@@ -146,47 +147,85 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   let kwChart = null;
-  const chartData = {
-    labels: [],
-    datasets: [{
-      label: 'Energy (kW)',
-      data: [],
-      fill: true,
-      borderColor: 'rgba(255,69,0,1)',
-      tension: 0.4
-    }]
-  };
+  const chartData = { labels: [], datasets: [] };
+  const COLOR_PALETTE = [
+    { border: 'rgba(255,69,0,1)', background: 'rgba(255,69,0,0.3)' },
+    { border: 'rgba(30,144,255,1)', background: 'rgba(30,144,255,0.3)' },
+    { border: 'rgba(34,139,34,1)', background: 'rgba(34,139,34,0.3)' },
+    { border: 'rgba(147,112,219,1)', background: 'rgba(147,112,219,0.3)' },
+    { border: 'rgba(255,140,0,1)', background: 'rgba(255,140,0,0.3)' }
+  ];
 
-  const initialChart = {{ chart_data|safe }};
-  chartData.labels = initialChart.labels.map(ts => new Date(ts).toLocaleTimeString());
-  chartData.datasets[0].data = initialChart.values;
-
-  function setupChart() {
-    const canvas = document.getElementById('kw-chart');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, 'rgba(255,0,0,0.5)');
-    gradient.addColorStop(1, 'rgba(255,165,0,0.5)');
-    chartData.datasets[0].backgroundColor = gradient;
-    if (kwChart) {
-      kwChart.destroy();
+  function parseChartPayload(root) {
+    if (!root || !root.querySelector) {
+      return null;
     }
-    kwChart = new Chart(ctx, {
-      type: 'line',
-      data: chartData,
-      options: {
-        scales: {
-          y: { beginAtZero: true }
-        }
-      }
+    const script = root.querySelector('#chart-data');
+    if (!script) {
+      return null;
+    }
+    try {
+      return JSON.parse(script.textContent);
+    } catch (err) {
+      console.error('Failed to parse chart data', err);
+      return null;
+    }
+  }
+
+  function applyChartPayload(payload) {
+    if (!payload) {
+      chartData.labels = [];
+      chartData.datasets = [];
+      return;
+    }
+    const labels = Array.isArray(payload.labels) ? payload.labels : [];
+    chartData.labels = labels.map((ts) => {
+      const parsed = new Date(ts);
+      return Number.isNaN(parsed.getTime()) ? ts : parsed.toLocaleTimeString();
+    });
+    chartData.datasets = (payload.datasets || []).map((dataset, index) => {
+      const palette = COLOR_PALETTE[index % COLOR_PALETTE.length];
+      const values = Array.isArray(dataset.values)
+        ? dataset.values.map((value) => {
+            if (value === null || value === undefined || value === '') {
+              return null;
+            }
+            const numeric = Number(value);
+            return Number.isNaN(numeric) ? null : numeric;
+          })
+        : [];
+      return {
+        label: dataset.label || `Connector ${index + 1}`,
+        data: values,
+        fill: true,
+        borderColor: palette.border,
+        backgroundColor: palette.background,
+        tension: 0.4,
+        spanGaps: true,
+      };
     });
   }
 
-  function addDataPoint(kw) {
-    const now = new Date();
-    chartData.labels.push(now.toLocaleTimeString());
-    chartData.datasets[0].data.push(kw);
+  function renderChart() {
+    const canvas = document.getElementById('kw-chart');
+    if (!canvas) return;
+    if (!kwChart) {
+      const ctx = canvas.getContext('2d');
+      kwChart = new Chart(ctx, {
+        type: 'line',
+        data: chartData,
+        options: {
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    } else {
+      kwChart.data.labels = chartData.labels;
+      kwChart.data.datasets = chartData.datasets;
+      kwChart.update();
+    }
   }
 
   function highlightChange(el) {
@@ -210,18 +249,7 @@
               changedIds.push(el.id);
             }
           });
-          const kwElem = newContent.querySelector('#session-kw');
-          const stateElem = newContent.querySelector('#charger-state');
-          const isCharging = stateElem && stateElem.textContent.trim() === 'Charging';
-          let chartNeedsUpdate = false;
-          if (kwElem && isCharging) {
-            const kw = parseFloat(kwElem.textContent);
-            const lastKw = chartData.datasets[0].data[chartData.datasets[0].data.length - 1];
-            if (kw !== lastKw) {
-              addDataPoint(kw);
-              chartNeedsUpdate = true;
-            }
-          }
+          const payload = parseChartPayload(newContent);
           current.innerHTML = newContent.innerHTML;
           if (oldCanvas) {
             const placeholder = current.querySelector('#kw-chart');
@@ -229,8 +257,9 @@
               placeholder.replaceWith(oldCanvas);
             }
           }
-          if (chartNeedsUpdate && kwChart) {
-            kwChart.update();
+          applyChartPayload(payload);
+          if (kwChart || (payload && chartData.datasets.length)) {
+            renderChart();
           }
           changedIds.forEach(id => {
             const el = current.querySelector(`#${id}`);
@@ -243,15 +272,9 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    if (chartData.datasets[0].data.length === 0) {
-      const kwElem = document.getElementById('session-kw');
-      const stateElem = document.getElementById('charger-state');
-      const isCharging = stateElem && stateElem.textContent.trim() === 'Charging';
-      if (kwElem && isCharging) {
-        addDataPoint(parseFloat(kwElem.textContent));
-      }
-    }
-    setupChart();
+    const payload = parseChartPayload(document);
+    applyChartPayload(payload);
+    renderChart();
   });
 
   setInterval(reloadStatus, 5000);
