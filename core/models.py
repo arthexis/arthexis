@@ -196,23 +196,6 @@ class InviteLead(Lead):
         return self.email
 
 
-class APLead(Lead):
-    class Mode(models.TextChoices):
-        SECURE = "secure", _("Secure")
-        PUBLIC = "public", _("Public")
-
-    ssid = models.CharField(max_length=32)
-    mode = models.CharField(max_length=16, choices=Mode.choices, default=Mode.SECURE)
-    notes = models.TextField(blank=True)
-
-    class Meta:
-        verbose_name = _("AP Lead")
-        verbose_name_plural = _("AP Leads")
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.ssid} ({self.get_mode_display()})"
-
-
 class User(Entity, AbstractUser):
     SYSTEM_USERNAME = "arthexis"
 

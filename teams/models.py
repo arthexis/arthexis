@@ -7,7 +7,6 @@ from core.models import (
     ReleaseManager as CoreReleaseManager,
     OdooProfile as CoreOdooProfile,
     AssistantProfile as CoreAssistantProfile,
-    APLead as CoreAPLead,
 )
 from awg.models import PowerLead as CorePowerLead
 from nodes.models import EmailOutbox as CoreEmailOutbox
@@ -27,14 +26,6 @@ class PowerLead(CorePowerLead):
         app_label = "teams"
         verbose_name = CorePowerLead._meta.verbose_name
         verbose_name_plural = CorePowerLead._meta.verbose_name_plural
-
-
-class APLead(CoreAPLead):
-    class Meta:
-        proxy = True
-        app_label = "teams"
-        verbose_name = CoreAPLead._meta.verbose_name
-        verbose_name_plural = CoreAPLead._meta.verbose_name_plural
 
 
 class User(CoreUser):

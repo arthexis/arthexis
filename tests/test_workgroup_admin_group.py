@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.contrib.admin.sites import site
 
-from teams.models import APLead, PowerLead
+from teams.models import PowerLead
 
 
 class WorkgroupAdminGroupTests(TestCase):
@@ -24,12 +24,7 @@ class WorkgroupAdminGroupTests(TestCase):
         self.assertContains(response, "6. Workgroup MODELS")
         self.assertContains(response, "Power Leads")
 
-    def test_aplead_registered(self):
-        registry = site._registry
-        self.assertIn(APLead, registry)
-        self.assertEqual(registry[APLead].model._meta.app_label, "teams")
-
-    def test_admin_index_shows_aplead(self):
+    def test_admin_index_hides_aplead(self):
         response = self.client.get(reverse("admin:index"))
         self.assertContains(response, "6. Workgroup MODELS")
-        self.assertContains(response, "AP Leads")
+        self.assertNotContains(response, "AP Leads")
