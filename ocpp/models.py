@@ -349,7 +349,9 @@ class Simulator(Entity):
     """Preconfigured simulator that can be started from the admin."""
 
     name = models.CharField(max_length=100, unique=True)
-    cp_path = models.CharField(_("CP Path"), max_length=100)
+    cp_path = models.CharField(
+        _("Serial Number"), max_length=100, help_text=_("Charge Point WS path")
+    )
     host = models.CharField(max_length=100, default="127.0.0.1")
     ws_port = models.IntegerField(_("WS Port"), default=8000)
     rfid = models.CharField(
