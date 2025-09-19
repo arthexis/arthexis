@@ -586,6 +586,12 @@ def charger_status(request, cid, connector=None):
         item for item in overview if item["charger"].connector_id is not None
     ]
     search_url = _reverse_connector_url("charger-session-search", cid, connector_slug)
+    configuration_url = None
+    if request.user.is_staff:
+        try:
+            configuration_url = reverse("admin:ocpp_charger_change", args=[charger.pk])
+        except NoReverseMatch:  # pragma: no cover - admin may be disabled
+            configuration_url = None
     return render(
         request,
         "ocpp/charger_status.html",
@@ -602,6 +608,7 @@ def charger_status(request, cid, connector=None):
             "connector_links": connector_links,
             "connector_overview": connector_overview,
             "search_url": search_url,
+            "configuration_url": configuration_url,
             "page_url": _reverse_connector_url("charger-page", cid, connector_slug),
             "show_chart": bool(
                 chart_data["datasets"]

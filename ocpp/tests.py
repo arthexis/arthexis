@@ -1627,6 +1627,22 @@ class ChargerStatusViewTests(TestCase):
         resp = self.client.get(reverse("charger-status", args=[charger.charger_id]))
         self.assertContains(resp, reverse("charger-page", args=[charger.charger_id]))
 
+    def test_configuration_link_hidden_for_non_staff(self):
+        charger = Charger.objects.create(charger_id="CFG-HIDE")
+        response = self.client.get(reverse("charger-status", args=[charger.charger_id]))
+        admin_url = reverse("admin:ocpp_charger_change", args=[charger.pk])
+        self.assertNotContains(response, admin_url)
+        self.assertNotContains(response, _("Configuration"))
+
+    def test_configuration_link_visible_for_staff(self):
+        charger = Charger.objects.create(charger_id="CFG-SHOW")
+        self.user.is_staff = True
+        self.user.save(update_fields=["is_staff"])
+        response = self.client.get(reverse("charger-status", args=[charger.charger_id]))
+        admin_url = reverse("admin:ocpp_charger_change", args=[charger.pk])
+        self.assertContains(response, admin_url)
+        self.assertContains(response, _("Configuration"))
+
     def test_past_session_chart(self):
         charger = Charger.objects.create(charger_id="PAST1", connector_id=1)
         tx = Transaction.objects.create(
