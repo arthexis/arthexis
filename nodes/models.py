@@ -108,8 +108,6 @@ class NodeFeature(Entity):
         if lock:
             base_path = Path(node.base_path or settings.BASE_DIR)
             return (base_path / "locks" / lock).exists()
-        if node.role:
-            return self.roles.filter(pk=node.role.pk).exists()
         return False
 
 
