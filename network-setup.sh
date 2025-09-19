@@ -160,20 +160,32 @@ require_ssh_password() {
 # Ensure VNC is enabled via raspi-config or an active VNC service
 # Assumes VNC service names 'vncserver-x11-serviced' or 'x11vnc' when raspi-config is unavailable
 require_vnc_enabled() {
+    local -a services=(vncserver-x11-serviced x11vnc)
+    local vnc_state=""
+
     if command -v raspi-config >/dev/null 2>&1; then
-        local vnc_state
         vnc_state=$(raspi-config nonint get_vnc 2>/dev/null || true)
-        if [[ "$vnc_state" != "1" ]]; then
-            echo "VNC is disabled in raspi-config. Enable it before running this script." >&2
-            exit 1
-        fi
-    else
-        if ! systemctl is-enabled --quiet vncserver-x11-serviced 2>/dev/null && \
-           ! systemctl is-enabled --quiet x11vnc 2>/dev/null; then
-            echo "No enabled VNC service detected. Enable a VNC server before running this script." >&2
-            exit 1
+        if [[ "$vnc_state" == "1" ]]; then
+            return
         fi
     fi
+
+    for svc in "${services[@]}"; do
+        if systemctl is-enabled --quiet "$svc" 2>/dev/null || \
+           systemctl is-active --quiet "$svc" 2>/dev/null; then
+            if [[ "$vnc_state" != "1" && -n "$vnc_state" ]]; then
+                echo "raspi-config reports VNC disabled but service '$svc' is active; continuing." >&2
+            fi
+            return
+        fi
+    done
+
+    if [[ -n "$vnc_state" ]]; then
+        echo "VNC is disabled in raspi-config or no VNC service is active. Enable it before running this script." >&2
+    else
+        echo "No enabled VNC service detected. Enable a VNC server before running this script." >&2
+    fi
+    exit 1
 }
 
 INITIAL_CONNECTIVITY=true
