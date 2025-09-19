@@ -243,7 +243,11 @@ class AdminBadgesTests(TestCase):
         self.node.role = role
         self.node.save()
         resp = self.client.get(reverse("admin:index"))
+        role_list = reverse("admin:nodes_noderole_changelist")
+        role_change = reverse("admin:nodes_noderole_change", args=[role.pk])
         self.assertContains(resp, "ROLE: Dev")
+        self.assertContains(resp, f'href="{role_list}"')
+        self.assertContains(resp, f'href="{role_change}"')
 
     def test_badges_warn_when_node_missing(self):
         from nodes.models import Node
