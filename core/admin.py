@@ -174,6 +174,9 @@ class ReferenceAdmin(EntityModelAdmin):
         "value",
         "file",
         "method",
+        "roles",
+        "features",
+        "sites",
         "include_in_footer",
         "footer_visibility",
         "transaction_uuid",
@@ -181,6 +184,7 @@ class ReferenceAdmin(EntityModelAdmin):
         "uses",
         "qr_code",
     )
+    filter_horizontal = ("roles", "features", "sites")
 
     def get_readonly_fields(self, request, obj=None):
         ro = list(super().get_readonly_fields(request, obj))

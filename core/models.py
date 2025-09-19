@@ -800,6 +800,21 @@ class Reference(Entity):
         null=True,
         blank=True,
     )
+    sites = models.ManyToManyField(
+        "sites.Site",
+        blank=True,
+        related_name="references",
+    )
+    roles = models.ManyToManyField(
+        "nodes.NodeRole",
+        blank=True,
+        related_name="references",
+    )
+    features = models.ManyToManyField(
+        "nodes.NodeFeature",
+        blank=True,
+        related_name="references",
+    )
 
     objects = ReferenceManager()
 
