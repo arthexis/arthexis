@@ -179,3 +179,21 @@ def report_runtime_issue(
         logger.info("Reported runtime issue '%s' to GitHub", title)
 
     return response
+
+
+@shared_task
+def run_client_report_schedule(schedule_id: int) -> None:
+    """Execute a :class:`core.models.ClientReportSchedule` run."""
+
+    from core.models import ClientReportSchedule
+
+    schedule = ClientReportSchedule.objects.filter(pk=schedule_id).first()
+    if not schedule:
+        logger.warning("ClientReportSchedule %s no longer exists", schedule_id)
+        return
+
+    try:
+        schedule.run()
+    except Exception:
+        logger.exception("ClientReportSchedule %s failed", schedule_id)
+        raise

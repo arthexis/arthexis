@@ -16,6 +16,23 @@
   <div id="month-field">
     {{ form.month.label_tag }} {{ form.month }}
   </div>
+  <fieldset>
+    <legend>Recurrency</legend>
+    <div class="form-row">
+      {{ form.owner.label_tag }} {{ form.owner }}
+    </div>
+    <div class="form-row">
+      {{ form.destinations.label_tag }} {{ form.destinations }}
+      <p class="help">{{ form.destinations.help_text }}</p>
+    </div>
+    <div class="form-row">
+      {{ form.recurrence.label_tag }} {{ form.recurrence }}
+    </div>
+    <div class="form-row">
+      {{ form.disable_emails }} {{ form.disable_emails.label_tag }}
+      <p class="help">{{ form.disable_emails.help_text }}</p>
+    </div>
+  </fieldset>
   <button type="submit">Generate</button>
 </form>
 {% if report %}
@@ -32,6 +49,9 @@
       {% endfor %}
     </tbody>
   </table>
+  {% if schedule %}
+    <p class="success">Next run scheduled ({{ schedule.get_periodicity_display }})</p>
+  {% endif %}
 {% endif %}
 <script>
   const periodRadios = document.querySelectorAll('input[name="period"]');

@@ -1171,6 +1171,272 @@ class EnergyCredit(Entity):
         db_table = "core_credit"
 
 
+class ClientReportSchedule(Entity):
+    """Configuration for recurring :class:`ClientReport` generation."""
+
+    PERIODICITY_NONE = "none"
+    PERIODICITY_DAILY = "daily"
+    PERIODICITY_WEEKLY = "weekly"
+    PERIODICITY_MONTHLY = "monthly"
+    PERIODICITY_CHOICES = [
+        (PERIODICITY_NONE, "One-time"),
+        (PERIODICITY_DAILY, "Daily"),
+        (PERIODICITY_WEEKLY, "Weekly"),
+        (PERIODICITY_MONTHLY, "Monthly"),
+    ]
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="client_report_schedules",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_client_report_schedules",
+    )
+    periodicity = models.CharField(
+        max_length=12, choices=PERIODICITY_CHOICES, default=PERIODICITY_NONE
+    )
+    email_recipients = models.JSONField(default=list, blank=True)
+    disable_emails = models.BooleanField(default=False)
+    periodic_task = models.OneToOneField(
+        "django_celery_beat.PeriodicTask",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="client_report_schedule",
+    )
+    last_generated_on = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Client Report Schedule"
+        verbose_name_plural = "Client Report Schedules"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        owner = self.owner.get_username() if self.owner else "Unassigned"
+        return f"Client Report Schedule ({owner})"
+
+    def save(self, *args, **kwargs):
+        sync = kwargs.pop("sync_task", True)
+        super().save(*args, **kwargs)
+        if sync and self.pk:
+            self.sync_periodic_task()
+
+    def delete(self, using=None, keep_parents=False):
+        task_id = self.periodic_task_id
+        super().delete(using=using, keep_parents=keep_parents)
+        if task_id:
+            from django_celery_beat.models import PeriodicTask
+
+            PeriodicTask.objects.filter(pk=task_id).delete()
+
+    def sync_periodic_task(self):
+        """Ensure the Celery beat schedule matches the configured periodicity."""
+
+        from django_celery_beat.models import CrontabSchedule, PeriodicTask
+        from django.db import transaction
+        import json as _json
+
+        if self.periodicity == self.PERIODICITY_NONE:
+            if self.periodic_task_id:
+                PeriodicTask.objects.filter(pk=self.periodic_task_id).delete()
+                type(self).objects.filter(pk=self.pk).update(periodic_task=None)
+            return
+
+        if self.periodicity == self.PERIODICITY_DAILY:
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute="0", hour="2", day_of_week="*", day_of_month="*", month_of_year="*"
+            )
+        elif self.periodicity == self.PERIODICITY_WEEKLY:
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute="0", hour="3", day_of_week="1", day_of_month="*", month_of_year="*"
+            )
+        else:
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute="0", hour="4", day_of_week="*", day_of_month="1", month_of_year="*"
+            )
+
+        name = f"client_report_schedule_{self.pk}"
+        defaults = {
+            "crontab": schedule,
+            "task": "core.tasks.run_client_report_schedule",
+            "kwargs": _json.dumps({"schedule_id": self.pk}),
+            "enabled": True,
+        }
+        with transaction.atomic():
+            periodic_task, _ = PeriodicTask.objects.update_or_create(
+                name=name, defaults=defaults
+            )
+            if self.periodic_task_id != periodic_task.pk:
+                type(self).objects.filter(pk=self.pk).update(periodic_task=periodic_task)
+
+    def calculate_period(self, reference=None):
+        """Return the date range covered for the next execution."""
+
+        from django.utils import timezone
+        import datetime as _datetime
+
+        ref_date = reference or timezone.localdate()
+
+        if self.periodicity == self.PERIODICITY_DAILY:
+            end = ref_date - _datetime.timedelta(days=1)
+            start = end
+        elif self.periodicity == self.PERIODICITY_WEEKLY:
+            start_of_week = ref_date - _datetime.timedelta(days=ref_date.weekday())
+            end = start_of_week - _datetime.timedelta(days=1)
+            start = end - _datetime.timedelta(days=6)
+        elif self.periodicity == self.PERIODICITY_MONTHLY:
+            first_of_month = ref_date.replace(day=1)
+            end = first_of_month - _datetime.timedelta(days=1)
+            start = end.replace(day=1)
+        else:
+            raise ValueError("calculate_period called for non-recurring schedule")
+
+        return start, end
+
+    def resolve_recipients(self):
+        """Return (to, cc) email lists respecting owner fallbacks."""
+
+        from django.contrib.auth import get_user_model
+
+        to: list[str] = []
+        cc: list[str] = []
+        seen: set[str] = set()
+
+        for email in self.email_recipients:
+            normalized = (email or "").strip()
+            if not normalized:
+                continue
+            if normalized.lower() in seen:
+                continue
+            to.append(normalized)
+            seen.add(normalized.lower())
+
+        owner_email = None
+        if self.owner and self.owner.email:
+            candidate = self.owner.email.strip()
+            if candidate:
+                owner_email = candidate
+
+        if to:
+            if owner_email and owner_email.lower() not in seen:
+                cc.append(owner_email)
+        else:
+            if owner_email:
+                to.append(owner_email)
+                seen.add(owner_email.lower())
+            else:
+                admin_email = (
+                    get_user_model()
+                    .objects.filter(is_superuser=True, is_active=True)
+                    .exclude(email="")
+                    .values_list("email", flat=True)
+                    .first()
+                )
+                if admin_email:
+                    to.append(admin_email)
+                    seen.add(admin_email.lower())
+                elif settings.DEFAULT_FROM_EMAIL:
+                    to.append(settings.DEFAULT_FROM_EMAIL)
+
+        return to, cc
+
+    def get_outbox(self):
+        """Return the preferred :class:`nodes.models.EmailOutbox` instance."""
+
+        from nodes.models import EmailOutbox, Node
+
+        if self.owner:
+            try:
+                outbox = self.owner.get_profile(EmailOutbox)
+            except Exception:  # pragma: no cover - defensive catch
+                outbox = None
+            if outbox:
+                return outbox
+
+        node = Node.get_local()
+        if node:
+            return getattr(node, "email_outbox", None)
+        return None
+
+    def notify_failure(self, message: str):
+        from nodes.models import NetMessage
+
+        NetMessage.broadcast("Client report delivery issue", message)
+
+    def run(self):
+        """Generate the report, persist it and deliver notifications."""
+
+        from core import mailer
+
+        try:
+            start, end = self.calculate_period()
+        except ValueError:
+            return None
+
+        try:
+            report = ClientReport.generate(
+                start,
+                end,
+                owner=self.owner,
+                schedule=self,
+                recipients=self.email_recipients,
+                disable_emails=self.disable_emails,
+            )
+            export, html_content = report.store_local_copy()
+        except Exception as exc:
+            self.notify_failure(str(exc))
+            raise
+
+        if not self.disable_emails:
+            to, cc = self.resolve_recipients()
+            if not to:
+                self.notify_failure("No recipients available for client report")
+                raise RuntimeError("No recipients available for client report")
+            else:
+                try:
+                    attachments = []
+                    html_name = Path(export["html_path"]).name
+                    attachments.append((html_name, html_content, "text/html"))
+                    json_file = Path(settings.BASE_DIR) / export["json_path"]
+                    if json_file.exists():
+                        attachments.append(
+                            (json_file.name, json_file.read_text(encoding="utf-8"), "application/json")
+                        )
+                    subject = f"Client report {report.start_date} to {report.end_date}"
+                    body = (
+                        "Attached is the client report generated for the period "
+                        f"{report.start_date} to {report.end_date}."
+                    )
+                    mailer.send(
+                        subject,
+                        body,
+                        to,
+                        outbox=self.get_outbox(),
+                        cc=cc,
+                        attachments=attachments,
+                    )
+                    delivered = list(dict.fromkeys(to + (cc or [])))
+                    if delivered:
+                        type(report).objects.filter(pk=report.pk).update(
+                            recipients=delivered
+                        )
+                        report.recipients = delivered
+                except Exception as exc:
+                    self.notify_failure(str(exc))
+                    raise
+
+        now = timezone.now()
+        type(self).objects.filter(pk=self.pk).update(last_generated_on=now)
+        self.last_generated_on = now
+        return report
+
+
 class ClientReport(Entity):
     """Snapshot of energy usage over a period."""
 
@@ -1178,6 +1444,22 @@ class ClientReport(Entity):
     end_date = models.DateField()
     created_on = models.DateTimeField(auto_now_add=True)
     data = models.JSONField(default=dict)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="client_reports",
+    )
+    schedule = models.ForeignKey(
+        "ClientReportSchedule",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reports",
+    )
+    recipients = models.JSONField(default=list, blank=True)
+    disable_emails = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "Client Report"
@@ -1186,11 +1468,66 @@ class ClientReport(Entity):
         ordering = ["-created_on"]
 
     @classmethod
-    def generate(cls, start_date, end_date):
+    def generate(
+        cls,
+        start_date,
+        end_date,
+        *,
+        owner=None,
+        schedule=None,
+        recipients: list[str] | None = None,
+        disable_emails: bool = False,
+    ):
         rows = cls.build_rows(start_date, end_date)
         return cls.objects.create(
-            start_date=start_date, end_date=end_date, data={"rows": rows}
+            start_date=start_date,
+            end_date=end_date,
+            data={"rows": rows},
+            owner=owner,
+            schedule=schedule,
+            recipients=list(recipients or []),
+            disable_emails=disable_emails,
         )
+
+    def store_local_copy(self, html: str | None = None):
+        """Persist the report data and optional HTML rendering to disk."""
+
+        import json as _json
+        from django.template.loader import render_to_string
+
+        base_dir = Path(settings.BASE_DIR)
+        report_dir = base_dir / "work" / "reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
+        identifier = f"client_report_{self.pk}_{timestamp}"
+
+        html_content = html or render_to_string(
+            "core/reports/client_report_email.html", {"report": self}
+        )
+        html_path = report_dir / f"{identifier}.html"
+        html_path.write_text(html_content, encoding="utf-8")
+
+        json_path = report_dir / f"{identifier}.json"
+        json_path.write_text(
+            _json.dumps(self.data, indent=2, default=str), encoding="utf-8"
+        )
+
+        def _relative(path: Path) -> str:
+            try:
+                return str(path.relative_to(base_dir))
+            except ValueError:
+                return str(path)
+
+        export = {
+            "html_path": _relative(html_path),
+            "json_path": _relative(json_path),
+        }
+
+        updated = dict(self.data)
+        updated["export"] = export
+        type(self).objects.filter(pk=self.pk).update(data=updated)
+        self.data = updated
+        return export, html_content
 
     @staticmethod
     def build_rows(start_date=None, end_date=None):
