@@ -99,6 +99,15 @@ def pytest_configure(config):
     )
 
 
+def _env_flag(name: str) -> bool:
+    """Return ``True`` when the environment flag ``name`` is enabled."""
+
+    value = os.environ.get(name)
+    if value is None:
+        return False
+    return value.strip().lower() not in {"", "0", "false", "no", "off"}
+
+
 def pytest_collection_modifyitems(config, items):
     role = os.environ.get("NODE_ROLE")
     if not role:

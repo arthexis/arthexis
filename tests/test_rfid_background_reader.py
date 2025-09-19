@@ -4,6 +4,11 @@ from pathlib import Path
 from django.conf import settings
 from unittest.mock import patch
 
+import pytest
+
+
+pytestmark = pytest.mark.role("Control")
+
 
 class RFIDBackgroundReaderTests(TestCase):
     def setUp(self):
