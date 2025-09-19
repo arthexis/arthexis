@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timedelta, timezone as dt_timezone
 from types import SimpleNamespace
 
-from django.http import JsonResponse, HttpResponse, Http404
+from django.http import JsonResponse, Http404
 from django.http.request import split_domain_port
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
@@ -18,8 +18,6 @@ from utils.api import api_login_required
 
 from pages.utils import landing
 from core.liveupdate import live_update
-
-import requests
 
 from . import store
 from .models import Transaction, Charger
@@ -588,9 +586,6 @@ def charger_status(request, cid, connector=None):
         item for item in overview if item["charger"].connector_id is not None
     ]
     search_url = _reverse_connector_url("charger-session-search", cid, connector_slug)
-    console_url = None
-    if charger.console_url:
-        console_url = _reverse_connector_url("charger-console", cid, connector_slug)
     return render(
         request,
         "ocpp/charger_status.html",
@@ -607,7 +602,6 @@ def charger_status(request, cid, connector=None):
             "connector_links": connector_links,
             "connector_overview": connector_overview,
             "search_url": search_url,
-            "console_url": console_url,
             "page_url": _reverse_connector_url("charger-page", cid, connector_slug),
             "show_chart": bool(
                 chart_data["datasets"]
@@ -743,78 +737,3 @@ def dispatch_action(request, cid, connector=None):
     store.add_log(log_key, f"< {msg}", log_type="charger")
     return JsonResponse({"sent": msg})
 
-
-@login_required
-def charger_console(request, cid, connector=None):
-    charger, connector_slug = _get_charger(cid, connector)
-    if not charger.console_url:
-        raise Http404
-    overview = _connector_overview(charger)
-    connector_links = [
-        {
-            "slug": item["slug"],
-            "label": item["label"],
-            "url": _reverse_connector_url("charger-console", cid, item["slug"]),
-            "active": item["slug"] == connector_slug,
-        }
-        for item in overview
-    ]
-    proxy_url = _reverse_connector_url("charger-console-proxy", cid, connector_slug)
-    status_url = _reverse_connector_url("charger-status", cid, connector_slug)
-    return render(
-        request,
-        "ocpp/charger_console.html",
-        {
-            "charger": charger,
-            "connector_slug": connector_slug,
-            "connector_links": connector_links,
-            "proxy_url": proxy_url,
-            "status_url": status_url,
-        },
-    )
-
-
-@login_required
-def charger_console_proxy(request, cid, connector=None, path=""):
-    charger, connector_slug = _get_charger(cid, connector)
-    if not charger.console_url:
-        raise Http404
-    base = charger.console_url.rstrip("/")
-    target = f"{base}/{path}" if path else base
-    headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
-    try:
-        resp = requests.request(
-            request.method,
-            target,
-            params=request.GET,
-            data=request.body if request.method != "GET" else None,
-            headers=headers,
-            cookies=request.COOKIES,
-            allow_redirects=False,
-            timeout=5,
-        )
-    except Exception:
-        return HttpResponse("", status=502)
-
-    content_type = resp.headers.get("Content-Type", "")
-    if content_type.startswith("text/html"):
-        proxy_base = _reverse_connector_url("charger-console-proxy", cid, connector_slug)
-        text = resp.text.replace('href="/', f'href="{proxy_base}/')
-        text = text.replace('src="/', f'src="{proxy_base}/')
-        proxy_resp = HttpResponse(text, status=resp.status_code)
-    else:
-        proxy_resp = HttpResponse(resp.content, status=resp.status_code)
-    proxy_resp["Content-Type"] = content_type
-    for key, value in resp.headers.items():
-        lk = key.lower()
-        if lk in (
-            "content-length",
-            "transfer-encoding",
-            "content-encoding",
-            "connection",
-        ):
-            continue
-        if key == "Content-Type":
-            continue
-        proxy_resp[key] = value
-    return proxy_resp
