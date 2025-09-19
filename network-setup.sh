@@ -14,6 +14,9 @@ LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
+PUBLIC_WIFI_LOCK="$LOCK_DIR/public_wifi_mode.lck"
+PUBLIC_WIFI_ALLOW="$LOCK_DIR/public_wifi_allow.list"
+mkdir -p "$LOCK_DIR"
 
 usage() {
     cat <<USAGE
@@ -342,10 +345,33 @@ if [[ $RUN_AP == true ]]; then
             if [[ $PUBLIC_MODE == true ]]; then
                 iptables -C FORWARD -i wlan0 -j DROP 2>/dev/null || \
                     iptables -I FORWARD 1 -i wlan0 -j DROP
+                touch "$PUBLIC_WIFI_LOCK"
+                if [[ -f "$PUBLIC_WIFI_ALLOW" ]]; then
+                    while IFS= read -r mac; do
+                        [[ -z "$mac" ]] && continue
+                        iptables -C FORWARD -i wlan0 -m mac --mac-source "$mac" -j ACCEPT 2>/dev/null || \
+                            iptables -I FORWARD 1 -i wlan0 -m mac --mac-source "$mac" -j ACCEPT
+                    done < "$PUBLIC_WIFI_ALLOW"
+                fi
             else
                 while iptables -C FORWARD -i wlan0 -j DROP 2>/dev/null; do
                     iptables -D FORWARD -i wlan0 -j DROP
                 done
+                rm -f "$PUBLIC_WIFI_LOCK"
+                if [[ -f "$PUBLIC_WIFI_ALLOW" ]]; then
+                    while IFS= read -r mac; do
+                        [[ -z "$mac" ]] && continue
+                        while iptables -C FORWARD -i wlan0 -m mac --mac-source "$mac" -j ACCEPT 2>/dev/null; do
+                            iptables -D FORWARD -i wlan0 -m mac --mac-source "$mac" -j ACCEPT || break
+                        done
+                    done < "$PUBLIC_WIFI_ALLOW"
+                fi
+            fi
+        else
+            if [[ $PUBLIC_MODE == true ]]; then
+                touch "$PUBLIC_WIFI_LOCK"
+            else
+                rm -f "$PUBLIC_WIFI_LOCK"
             fi
         fi
         if ! nmcli -t -f NAME connection show --active | grep -Fxq "$AP_NAME"; then

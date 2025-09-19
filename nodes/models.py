@@ -162,6 +162,7 @@ class Node(Entity):
         "gui-toast",
         "rpi-camera",
         "ap-router",
+        "ap-public-wifi",
     }
     MANUAL_FEATURE_SLUGS = {"clipboard-poll", "screenshot-poll"}
 
@@ -383,8 +384,12 @@ class Node(Entity):
                 detected_slugs.add(slug)
         if self._has_rpi_camera():
             detected_slugs.add("rpi-camera")
+        public_mode_lock = locks_dir / "public_wifi_mode.lck"
         if self._hosts_gelectriic_ap():
-            detected_slugs.add("ap-router")
+            if public_mode_lock.exists():
+                detected_slugs.add("ap-public-wifi")
+            else:
+                detected_slugs.add("ap-router")
         try:
             from core.notifications import supports_gui_toast
         except Exception:

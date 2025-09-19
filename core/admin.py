@@ -53,6 +53,7 @@ from .models import (
     ReleaseManager,
     SecurityGroup,
     InviteLead,
+    PublicWifiAccess,
     AssistantProfile,
     Todo,
     hash_key,
@@ -438,7 +439,7 @@ class SecurityGroupAdmin(DjangoGroupAdmin):
 
 
 class InviteLeadAdmin(EntityModelAdmin):
-    list_display = ("email", "created_on", "sent_on", "short_error")
+    list_display = ("email", "mac_address", "created_on", "sent_on", "short_error")
     search_fields = ("email", "comment")
     readonly_fields = (
         "created_on",
@@ -447,6 +448,7 @@ class InviteLeadAdmin(EntityModelAdmin):
         "referer",
         "user_agent",
         "ip_address",
+        "mac_address",
         "sent_on",
         "error",
     )
@@ -455,6 +457,14 @@ class InviteLeadAdmin(EntityModelAdmin):
         return (obj.error[:40] + "…") if len(obj.error) > 40 else obj.error
 
     short_error.short_description = "error"
+
+
+@admin.register(PublicWifiAccess)
+class PublicWifiAccessAdmin(EntityModelAdmin):
+    list_display = ("user", "mac_address", "created_on", "revoked_on")
+    search_fields = ("user__username", "mac_address")
+    readonly_fields = ("user", "mac_address", "created_on", "updated_on", "revoked_on")
+    ordering = ("-created_on",)
 
 
 class EnergyAccountRFIDForm(forms.ModelForm):
