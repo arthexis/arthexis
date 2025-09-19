@@ -7,6 +7,7 @@ from html import escape
 
 from django.conf import settings
 from django.contrib import admin
+from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.tokens import default_token_generator
@@ -27,6 +28,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.cache import never_cache
 from django.utils.cache import patch_vary_headers
+from django.utils.text import slugify
 from core.models import InviteLead, ClientReport
 
 try:  # pragma: no cover - optional dependency guard
@@ -203,6 +205,47 @@ def admin_model_graph(request, app_label: str):
     graph_error = ""
     graph_engine = getattr(graph, "engine", "dot")
     engine_path = shutil.which(str(graph_engine))
+    download_format = request.GET.get("format")
+
+    if download_format == "pdf":
+        if engine_path is None:
+            messages.error(
+                request,
+                _(
+                    "Graphviz executables are required to download the diagram as a PDF. Install Graphviz on the server and try again."
+                ),
+            )
+        else:
+            try:
+                pdf_output = graph.pipe(format="pdf")
+            except (ExecutableNotFound, CalledProcessError) as exc:
+                logger.warning(
+                    "Graphviz PDF rendering failed for admin model graph (engine=%s)",
+                    graph_engine,
+                    exc_info=exc,
+                )
+                messages.error(
+                    request,
+                    _(
+                        "An error occurred while generating the PDF diagram. Check the server logs for details."
+                    ),
+                )
+            else:
+                filename = slugify(app_config.verbose_name) or app_label
+                response = HttpResponse(pdf_output, content_type="application/pdf")
+                response[
+                    "Content-Disposition"
+                ] = f'attachment; filename="{filename}-model-graph.pdf"'
+                return response
+
+        params = request.GET.copy()
+        if "format" in params:
+            del params["format"]
+        query_string = params.urlencode()
+        redirect_url = request.path
+        if query_string:
+            redirect_url = f"{request.path}?{query_string}"
+        return redirect(redirect_url)
 
     if engine_path is None:
         graph_error = _(
@@ -247,6 +290,10 @@ def admin_model_graph(request, app_label: str):
             }
         )
 
+    download_params = request.GET.copy()
+    download_params["format"] = "pdf"
+    download_url = f"{request.path}?{download_params.urlencode()}"
+
     context = admin.site.each_context(request)
     context.update(
         {
@@ -257,6 +304,7 @@ def admin_model_graph(request, app_label: str):
             "graph_error": graph_error,
             "models": model_links,
             "title": _("%(app)s model graph") % {"app": app_config.verbose_name},
+            "download_url": download_url,
         }
     )
 
