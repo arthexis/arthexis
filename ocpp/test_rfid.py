@@ -78,6 +78,13 @@ class ReaderNotificationTests(TestCase):
             def MFRC522_Anticoll(self):
                 return (self.MI_OK, [0xAB, 0xCD, 0x12, 0x34, 0x56])
 
+            def MFRC522_SelectTag(self, _uid):
+                self.select_called = True
+                return self.MI_OK
+
+            def MFRC522_StopCrypto1(self):
+                self.stop_called = True
+
         return MockReader()
 
     @patch("ocpp.rfid.reader.notify_async")
@@ -94,12 +101,15 @@ class ReaderNotificationTests(TestCase):
         )
         mock_get.return_value = (tag, False)
 
-        result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
+        reader = self._mock_reader()
+        result = read_rfid(mfrc=reader, cleanup=False)
         self.assertEqual(result["label_id"], 1)
         self.assertEqual(result["kind"], RFID.CLASSIC)
         self.assertEqual(result["reference"], "https://example.com")
         self.assertEqual(mock_notify.call_count, 1)
         mock_notify.assert_has_calls([call("RFID 1 OK", f"{result['rfid']} B")])
+        self.assertTrue(getattr(reader, "select_called", False))
+        self.assertTrue(getattr(reader, "stop_called", False))
 
     @patch("ocpp.rfid.reader.notify_async")
     @patch("core.models.RFID.objects.get_or_create")
@@ -114,10 +124,13 @@ class ReaderNotificationTests(TestCase):
         )
         mock_get.return_value = (tag, False)
 
-        result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
+        reader = self._mock_reader()
+        result = read_rfid(mfrc=reader, cleanup=False)
         self.assertEqual(result["kind"], RFID.CLASSIC)
         self.assertEqual(mock_notify.call_count, 1)
         mock_notify.assert_has_calls([call("RFID 2 BAD", f"{result['rfid']} B")])
+        self.assertTrue(getattr(reader, "select_called", False))
+        self.assertTrue(getattr(reader, "stop_called", False))
 
 
 class CardTypeDetectionTests(TestCase):
@@ -135,6 +148,13 @@ class CardTypeDetectionTests(TestCase):
                     [0x04, 0xD3, 0x2A, 0x1B, 0x5F, 0x23, 0x19],
                 )
 
+            def MFRC522_SelectTag(self, _uid):
+                self.select_called = True
+                return self.MI_OK
+
+            def MFRC522_StopCrypto1(self):
+                self.stop_called = True
+
         return MockReader()
 
     @patch("ocpp.rfid.reader.notify_async")
@@ -150,8 +170,11 @@ class CardTypeDetectionTests(TestCase):
             kind=RFID.NTAG215,
         )
         mock_get.return_value = (tag, True)
-        result = read_rfid(mfrc=self._mock_ntag_reader(), cleanup=False)
+        reader = self._mock_ntag_reader()
+        result = read_rfid(mfrc=reader, cleanup=False)
         self.assertEqual(result["kind"], RFID.NTAG215)
+        self.assertTrue(getattr(reader, "select_called", False))
+        self.assertTrue(getattr(reader, "stop_called", False))
 
 
 class RFIDLastSeenTests(TestCase):
@@ -166,15 +189,25 @@ class RFIDLastSeenTests(TestCase):
             def MFRC522_Anticoll(self):
                 return (self.MI_OK, [0xAB, 0xCD, 0x12, 0x34])
 
+            def MFRC522_SelectTag(self, _uid):
+                self.select_called = True
+                return self.MI_OK
+
+            def MFRC522_StopCrypto1(self):
+                self.stop_called = True
+
         return MockReader()
 
     @patch("ocpp.rfid.reader.notify_async")
     def test_last_seen_updated_on_read(self, _mock_notify):
         tag = RFID.objects.create(rfid="ABCD1234")
-        result = read_rfid(mfrc=self._mock_reader(), cleanup=False)
+        reader = self._mock_reader()
+        result = read_rfid(mfrc=reader, cleanup=False)
         tag.refresh_from_db()
         self.assertIsNotNone(tag.last_seen_on)
         self.assertEqual(result["kind"], RFID.CLASSIC)
+        self.assertTrue(getattr(reader, "select_called", False))
+        self.assertTrue(getattr(reader, "stop_called", False))
 
 
 class RFIDDetectionScriptTests(SimpleTestCase):
