@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Login",
+      "url": "/login/",
+      "request_details": "Verify the login page hides the Request email invitation link when email delivery is unavailable and displays it once email is configured."
+    }
+  }
+]

@@ -15,6 +15,7 @@ from pages.screenshot_specs import (
     registry,
 )
 from django.apps import apps as django_apps
+from core import mailer
 from core.models import AdminHistory, InviteLead, Package, ReleaseManager, Todo
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
@@ -33,7 +34,7 @@ from django.core import mail
 from django.utils import timezone
 from django.utils.text import slugify
 
-from nodes.models import Node, ContentSample, NodeRole
+from nodes.models import EmailOutbox, Node, ContentSample, NodeRole
 
 
 class LoginViewTests(TestCase):
@@ -75,6 +76,19 @@ class LoginViewTests(TestCase):
             {"username": "staff", "password": "pwd"},
         )
         self.assertRedirects(resp, "/nodes/list/")
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.dummy.EmailBackend")
+    def test_login_page_hides_request_link_without_email_backend(self):
+        resp = self.client.get(reverse("pages:login"))
+        self.assertFalse(resp.context["can_request_invite"])
+        self.assertNotContains(resp, reverse("pages:request-invite"))
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.dummy.EmailBackend")
+    def test_login_page_shows_request_link_when_outbox_configured(self):
+        EmailOutbox.objects.create(host="smtp.example.com")
+        resp = self.client.get(reverse("pages:login"))
+        self.assertTrue(resp.context["can_request_invite"])
+        self.assertContains(resp, reverse("pages:request-invite"))
 
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
@@ -165,7 +179,7 @@ class InvitationTests(TestCase):
             patch.object(
                 node, "send_mail", side_effect=Exception("node fail")
             ) as node_send,
-            patch("pages.views.mailer.send", return_value=Mock()) as fallback,
+            patch("pages.views.mailer.send", wraps=mailer.send) as fallback,
         ):
             resp = self.client.post(
                 reverse("pages:request-invite"), {"email": "invite@example.com"}
