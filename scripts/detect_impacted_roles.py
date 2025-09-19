@@ -62,10 +62,39 @@ def main() -> None:
     except subprocess.CalledProcessError:
         changed = []
     manifest = load_manifest(MANIFEST)
-    roles = match_roles(changed, manifest)
-    if not roles:
-        roles = sorted(manifest.keys())
-    json.dump(roles, sys.stdout)
+    all_roles = list(manifest.keys())
+    if not all_roles:
+        json.dump(
+            {
+                "baseline": "",
+                "impacted": [],
+                "additional": [],
+                "matrix": [],
+                "all_roles": [],
+            },
+            sys.stdout,
+        )
+        return
+
+    baseline = all_roles[0]
+    impacted = match_roles(changed, manifest)
+    if not impacted:
+        impacted = sorted(all_roles)
+
+    additional = [role for role in impacted if role != baseline]
+    matrix = [{"role": baseline, "role_only": False}]
+    matrix.extend({"role": role, "role_only": True} for role in additional)
+
+    json.dump(
+        {
+            "baseline": baseline,
+            "impacted": impacted,
+            "additional": additional,
+            "matrix": matrix,
+            "all_roles": all_roles,
+        },
+        sys.stdout,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover - script entry

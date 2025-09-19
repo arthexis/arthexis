@@ -10,7 +10,11 @@ jobs:
   detect-roles:
     runs-on: ubuntu-latest
     outputs:
-      roles: ${{ steps.detect.outputs.roles }}
+      baseline: ${{ steps.detect.outputs.baseline }}
+      additional: ${{ steps.detect.outputs.additional }}
+      impacted: ${{ steps.detect.outputs.impacted }}
+      all_roles: ${{ steps.detect.outputs.all_roles }}
+      matrix: ${{ steps.detect.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,18 +26,75 @@ jobs:
         id: detect
         run: |
           python scripts/detect_impacted_roles.py > roles.json
-          echo "roles=$(cat roles.json)" >> "$GITHUB_OUTPUT"
+          python - <<'PY'
+          import json
+          import os
+
+          with open("roles.json", "r", encoding="utf-8") as fh:
+              data = json.load(fh)
+
+          out = os.environ["GITHUB_OUTPUT"]
+          with open(out, "a", encoding="utf-8") as fh:
+              fh.write(f"baseline={data['baseline']}\n")
+              fh.write(f"additional={json.dumps(data['additional'])}\n")
+              fh.write(f"impacted={json.dumps(data['impacted'])}\n")
+              fh.write(f"all_roles={json.dumps(data['all_roles'])}\n")
+              fh.write(f"matrix={json.dumps(data['matrix'])}\n")
+          PY
       - name: Summarize roles
-        run: echo "Impacted roles: $(cat roles.json)" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+
+          with open("roles.json", "r", encoding="utf-8") as fh:
+              data = json.load(fh)
+
+          baseline = data["baseline"]
+          additional = data["additional"]
+          impacted = data["impacted"]
+          all_roles = data.get("all_roles", [])
+
+          print(f"Baseline role (full suite): {baseline}")
+          if additional:
+              print(f"Additional targeted roles: {', '.join(additional)}")
+          else:
+              print("Additional targeted roles: none")
+
+          if set(impacted) == set(all_roles) and all_roles:
+              print("Full matrix will run for this build.")
+          elif impacted:
+              print(f"Impacted roles: {', '.join(impacted)}")
+          PY
       - name: Comment roles
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v6
         env:
-          ROLES: ${{ steps.detect.outputs.roles }}
+          BASELINE: ${{ steps.detect.outputs.baseline }}
+          IMPACTED: ${{ steps.detect.outputs.impacted }}
+          ADDITIONAL: ${{ steps.detect.outputs.additional }}
+          ALL_ROLES: ${{ steps.detect.outputs.all_roles }}
         with:
           script: |
-            const roles = JSON.parse(process.env.ROLES);
-            const body = `Impacted node roles: ${roles.join(', ')}`;
+            const baseline = process.env.BASELINE;
+            const impacted = JSON.parse(process.env.IMPACTED || '[]');
+            const additional = JSON.parse(process.env.ADDITIONAL || '[]');
+            const allRoles = JSON.parse(process.env.ALL_ROLES || '[]');
+
+            let body = `Baseline role (full suite): ${baseline}\n`;
+            if (additional.length) {
+              body += `Additional targeted roles: ${additional.join(', ')}\n`;
+            } else {
+              body += 'No additional targeted roles detected.\n';
+            }
+
+            const impactedSet = new Set(impacted);
+            const fullMatrix = allRoles.length && allRoles.every(role => impactedSet.has(role));
+
+            if (fullMatrix) {
+              body += 'Full matrix will run for this build.';
+            } else if (impacted.length) {
+              body += `Impacted roles: ${impacted.join(', ')}`;
+            }
             await github.rest.issues.createComment({
               ...context.repo,
               issue_number: context.issue.number,
@@ -99,7 +160,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
     strategy:
       matrix:
-        role: ${{ fromJson(needs.detect-roles.outputs.roles) }}
+        include: ${{ fromJson(needs.detect-roles.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
@@ -112,7 +173,11 @@ jobs:
       - name: Run tests
         env:
           NODE_ROLE: ${{ matrix.role }}
-        run: pytest -q
+        run: |
+          if [ "${{ matrix.role_only }}" = "true" ]; then
+            export NODE_ROLE_ONLY=1
+          fi
+          pytest -q
 
   pre-commit:
     runs-on: ubuntu-latest

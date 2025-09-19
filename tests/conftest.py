@@ -103,8 +103,13 @@ def pytest_collection_modifyitems(config, items):
     role = os.environ.get("NODE_ROLE")
     if not role:
         return
+    role_only = os.environ.get("NODE_ROLE_ONLY")
+    selective = bool(role_only and role_only != "0")
     skip = pytest.mark.skip(reason=f"not run for {role} role")
+    skip_unmarked = pytest.mark.skip(reason="skipped for role-only run")
     for item in items:
         roles = {m.args[0] for m in item.iter_markers("role")}
         if roles and role not in roles:
             item.add_marker(skip)
+        elif selective and not roles:
+            item.add_marker(skip_unmarked)
