@@ -431,6 +431,7 @@ class CustomLoginView(LoginView):
                 "site": current_site,
                 "site_name": getattr(current_site, "name", ""),
                 "next": self.get_success_url(),
+                "can_request_invite": mailer.can_send_email(),
             }
         )
         return context
