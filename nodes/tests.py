@@ -1177,6 +1177,19 @@ class NodeFeatureFixtureTests(TestCase):
         role_names = set(feature.roles.values_list("name", flat=True))
         self.assertIn("Control", role_names)
 
+    def test_ap_router_fixture_limits_roles(self):
+        for name in ("Control", "Satellite"):
+            NodeRole.objects.get_or_create(name=name)
+        fixture_path = (
+            Path(__file__).resolve().parent
+            / "fixtures"
+            / "node_features__nodefeature_ap_router.json"
+        )
+        call_command("loaddata", str(fixture_path), verbosity=0)
+        feature = NodeFeature.objects.get(slug="ap-router")
+        role_names = set(feature.roles.values_list("name", flat=True))
+        self.assertEqual(role_names, {"Control", "Satellite"})
+
 
 class NodeFeatureTests(TestCase):
     def setUp(self):
@@ -1272,6 +1285,49 @@ class NodeFeatureTests(TestCase):
             NodeFeatureAssignment.objects.filter(
                 node=self.node, feature=feature
             ).exists()
+        )
+
+    @patch("nodes.models.Node._hosts_gelectriic_ap", return_value=True)
+    def test_ap_router_detection(self, mock_hosts):
+        control_role, _ = NodeRole.objects.get_or_create(name="Control")
+        feature = NodeFeature.objects.create(slug="ap-router", display="AP Router")
+        feature.roles.add(control_role)
+        mac = "00:11:22:33:44:66"
+        with patch("nodes.models.Node.get_current_mac", return_value=mac):
+            node = Node.objects.create(
+                hostname="control",
+                address="127.0.0.1",
+                port=8000,
+                mac_address=mac,
+                role=control_role,
+            )
+            node.refresh_features()
+        self.assertTrue(
+            NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+        )
+
+    @patch("nodes.models.Node._hosts_gelectriic_ap", side_effect=[True, False])
+    def test_ap_router_removed_when_not_hosting(self, mock_hosts):
+        control_role, _ = NodeRole.objects.get_or_create(name="Control")
+        feature = NodeFeature.objects.create(slug="ap-router", display="AP Router")
+        feature.roles.add(control_role)
+        mac = "00:11:22:33:44:77"
+        with patch("nodes.models.Node.get_current_mac", return_value=mac):
+            node = Node.objects.create(
+                hostname="control",
+                address="127.0.0.1",
+                port=8000,
+                mac_address=mac,
+                role=control_role,
+            )
+            self.assertTrue(
+                NodeFeatureAssignment.objects.filter(
+                    node=node, feature=feature
+                ).exists()
+            )
+            node.refresh_features()
+        self.assertFalse(
+            NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
         )
 
 
