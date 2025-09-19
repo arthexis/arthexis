@@ -14,6 +14,7 @@ CLEAN=0
 NO_RESTART=0
 CANARY=0
 REVERT=0
+NO_WARN=0
 FAILOVER_BRANCH_CREATED=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,6 +36,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --revert)
       REVERT=1
+      shift
+      ;;
+    --no-warn)
+      NO_WARN=1
       shift
       ;;
     *)
@@ -104,6 +109,36 @@ cleanup_failover_branches() {
       echo "Failed to delete failover branch $branch" >&2
     fi
   done
+}
+
+confirm_database_deletion() {
+  local action="$1"
+  local -a targets=()
+
+  if [ -f "$BASE_DIR/db.sqlite3" ]; then
+    targets+=("db.sqlite3")
+  fi
+  while IFS= read -r -d '' path; do
+    targets+=("$(basename "$path")")
+  done < <(find "$BASE_DIR" -maxdepth 1 -type f -name 'db_*.sqlite3' -print0 2>/dev/null)
+
+  if [ ${#targets[@]} -eq 0 ] || [[ $NO_WARN -eq 1 ]]; then
+    return 0
+  fi
+
+  echo "Warning: $action will delete the following database files without creating a backup:"
+  local target
+  for target in "${targets[@]}"; do
+    echo "  - $target"
+  done
+  echo "Use --no-warn to bypass this prompt."
+  local response
+  read -r -p "Continue? [y/N] " response
+  if [[ ! $response =~ ^[Yy]$ ]]; then
+    return 1
+  fi
+
+  return 0
 }
 
 trap 'status=$?; if [[ $status -eq 0 ]]; then cleanup_failover_branches; fi' EXIT
@@ -189,6 +224,10 @@ fi
 
 # Remove existing database if requested
 if [ "$CLEAN" -eq 1 ]; then
+  if ! confirm_database_deletion "Running upgrade with --clean"; then
+    echo "Upgrade aborted by user."
+    exit 1
+  fi
   rm -f db.sqlite3
   rm -f db_*.sqlite3 2>/dev/null || true
 fi

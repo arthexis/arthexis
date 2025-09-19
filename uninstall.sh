@@ -9,10 +9,38 @@ LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 
 SERVICE=""
+NO_WARN=0
 
 usage() {
-    echo "Usage: $0 [--service NAME]" >&2
+    echo "Usage: $0 [--service NAME] [--no-warn]" >&2
     exit 1
+}
+
+confirm_database_deletion() {
+    local action="$1"
+    local -a targets=()
+
+    if [ -f "$BASE_DIR/db.sqlite3" ]; then
+        targets+=("db.sqlite3")
+    fi
+
+    if [ ${#targets[@]} -eq 0 ] || [ "$NO_WARN" -eq 1 ]; then
+        return 0
+    fi
+
+    echo "Warning: $action will delete the following database files without creating a backup:"
+    local target
+    for target in "${targets[@]}"; do
+        echo "  - $target"
+    done
+    echo "Use --no-warn to bypass this prompt."
+    local response
+    read -r -p "Continue? [y/N] " response
+    if [[ ! $response =~ ^[Yy]$ ]]; then
+        return 1
+    fi
+
+    return 0
 }
 
 while [[ $# -gt 0 ]]; do
@@ -21,6 +49,10 @@ while [[ $# -gt 0 ]]; do
             [ -z "$2" ] && usage
             SERVICE="$2"
             shift 2
+            ;;
+        --no-warn)
+            NO_WARN=1
+            shift
             ;;
         *)
             usage
@@ -39,6 +71,11 @@ fi
 read -r -p "This will stop the Arthexis server. Continue? [y/N] " CONFIRM
 if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
     echo "Aborted."
+    exit 0
+fi
+
+if ! confirm_database_deletion "Uninstalling Arthexis"; then
+    echo "Uninstall aborted."
     exit 0
 fi
 
