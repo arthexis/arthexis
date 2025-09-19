@@ -893,6 +893,39 @@ class ChargerAdminTests(TestCase):
         self.assertFalse(Charger.objects.filter(pk=charger.pk).exists())
 
 
+class LocationAdminTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="loc-admin", password="secret", email="loc@example.com"
+        )
+        self.client.force_login(self.admin)
+
+    def test_change_form_lists_related_chargers(self):
+        location = Location.objects.create(name="LocAdmin")
+        base = Charger.objects.create(charger_id="LOCBASE", location=location)
+        connector = Charger.objects.create(
+            charger_id="LOCALTWO",
+            connector_id=1,
+            location=location,
+        )
+
+        url = reverse("admin:ocpp_location_change", args=[location.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+
+        base_change_url = reverse("admin:ocpp_charger_change", args=[base.pk])
+        connector_change_url = reverse(
+            "admin:ocpp_charger_change", args=[connector.pk]
+        )
+
+        self.assertContains(resp, base_change_url)
+        self.assertContains(resp, connector_change_url)
+        self.assertContains(resp, f"Charge Point: {base.charger_id}")
+        self.assertContains(resp, f"Charge Point: {connector.charger_id} #1")
+
+
 class ConsoleProxyTests(TestCase):
     def setUp(self):
         self.client = Client()
