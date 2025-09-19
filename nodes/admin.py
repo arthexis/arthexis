@@ -308,15 +308,22 @@ class NodeRoleAdminForm(forms.ModelForm):
 @admin.register(NodeRole)
 class NodeRoleAdmin(EntityModelAdmin):
     form = NodeRoleAdminForm
-    list_display = ("name", "description", "registered")
+    list_display = ("name", "description", "registered", "default_features")
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.annotate(_registered=Count("node", distinct=True))
+        return qs.annotate(_registered=Count("node", distinct=True)).prefetch_related(
+            "features"
+        )
 
     @admin.display(description="Registered", ordering="_registered")
     def registered(self, obj):
         return getattr(obj, "_registered", obj.node_set.count())
+
+    @admin.display(description="Default Features")
+    def default_features(self, obj):
+        features = [feature.display for feature in obj.features.all()]
+        return ", ".join(features) if features else "—"
 
     def save_model(self, request, obj, form, change):
         obj.node_set.set(form.cleaned_data.get("nodes", []))
@@ -325,9 +332,18 @@ class NodeRoleAdmin(EntityModelAdmin):
 @admin.register(NodeFeature)
 class NodeFeatureAdmin(EntityModelAdmin):
     filter_horizontal = ("roles",)
-    list_display = ("display", "slug", "is_enabled")
+    list_display = ("display", "slug", "default_roles", "is_enabled")
     readonly_fields = ("is_enabled",)
     search_fields = ("display", "slug")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.prefetch_related("roles")
+
+    @admin.display(description="Default Roles")
+    def default_roles(self, obj):
+        roles = [role.name for role in obj.roles.all()]
+        return ", ".join(roles) if roles else "—"
 
 
 @admin.register(ContentSample)
