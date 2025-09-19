@@ -255,6 +255,22 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     fields = obj.get("fields", {})
                     if "user" in fields and isinstance(fields["user"], int):
                         fields["user"] = user_pk_map.get(fields["user"], fields["user"])
+                    if model_label == "core.sigilroot":
+                        content_type = fields.get("content_type")
+                        app_label: str | None = None
+                        if isinstance(content_type, (list, tuple)) and content_type:
+                            app_label = content_type[0]
+                        elif isinstance(content_type, dict):
+                            app_label = content_type.get("app_label")
+                        if app_label:
+                            try:
+                                apps.get_app_config(app_label)
+                            except LookupError:
+                                prefix = fields.get("prefix", "?")
+                                print(
+                                    f"Skipping SigilRoot '{prefix}' (missing app '{app_label}')"
+                                )
+                                continue
                     if model is PackageRelease:
                         version = obj.get("fields", {}).get("version")
                         if (
