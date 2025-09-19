@@ -140,7 +140,7 @@ jobs:
 
   check-migrations:
     needs: node-test-matrix
-    if: needs.node-test-matrix.outputs.database_changed == 'true'
+    if: github.event_name == 'push' || needs.node-test-matrix.outputs.database_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
