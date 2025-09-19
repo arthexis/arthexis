@@ -23,6 +23,28 @@ class AdminModelGraphTests(TestCase):
             response, reverse("admin-model-graph", args=["teams"])
         )
 
+    def test_admin_docs_index_links_to_model_graphs(self):
+        response = self.client.get(reverse("django-admindocs-docroot"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("django-admindocs-model-graphs"))
+        self.assertContains(response, "Model Graphs")
+
+    def test_model_graph_docs_lists_sections(self):
+        response = self.client.get(reverse("django-admindocs-model-graphs"))
+        self.assertEqual(response.status_code, 200)
+
+        sections = response.context["sections"]
+        self.assertGreaterEqual(len(sections), 3)
+        names = [section["verbose_name"] for section in sections]
+        self.assertEqual(names[:3], ["1. Power", "2. Business", "3. Protocol"])
+
+        teams_graph_url = reverse("admin-model-graph", args=["teams"])
+        self.assertContains(response, teams_graph_url)
+
+        model_links = sections[0]["models"]
+        self.assertTrue(model_links)
+        self.assertIn("doc_url", model_links[0])
+
     def test_model_graph_view_renders_context(self):
         url = reverse("admin-model-graph", args=["teams"])
         with mock.patch(
