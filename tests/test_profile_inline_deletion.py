@@ -316,3 +316,4 @@ class ProfileInlineAdminTemplateTests(TestCase):
                 f'[data-inline-prefix="{prefix}"] .fieldBox.field-DELETE' in content,
                 msg=f"Expected CSS to hide field boxes for inline prefix {prefix}",
             )
+

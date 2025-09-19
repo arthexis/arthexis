@@ -41,7 +41,6 @@ from .models import (
     EnergyCredit,
     ClientReport,
     Product,
-    LiveSubscription,
     RFID,
     SigilRoot,
     CustomSigil,
@@ -1439,6 +1438,15 @@ class EnergyAccountAdmin(EntityModelAdmin):
                 )
             },
         ),
+        (
+            "Live Subscription",
+            {
+                "fields": (
+                    "live_subscription_product",
+                    ("live_subscription_start_date", "live_subscription_next_renewal"),
+                )
+            },
+        ),
     )
 
     def authorized(self, obj):
@@ -1590,9 +1598,6 @@ class ProductAdminForm(forms.ModelForm):
 @admin.register(Product)
 class ProductAdmin(EntityModelAdmin):
     form = ProductAdminForm
-
-
-admin.site.register(LiveSubscription)
 
 
 class RFIDResource(resources.ModelResource):
