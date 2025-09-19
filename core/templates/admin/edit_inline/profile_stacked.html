@@ -2,8 +2,54 @@
 <div class="js-inline-admin-formset inline-group"
      id="{{ inline_admin_formset.formset.prefix }}-group"
      data-inline-type="stacked"
+     data-inline-prefix="{{ inline_admin_formset.formset.prefix }}"
      data-inline-formset="{{ inline_admin_formset.inline_formset_data }}">
 <fieldset class="module {{ inline_admin_formset.classes }}" aria-labelledby="{{ inline_admin_formset.formset.prefix }}-heading">
+  <style>
+    [data-inline-prefix="{{ inline_admin_formset.formset.prefix }}"] .inline-deletelink,
+    [data-inline-prefix="{{ inline_admin_formset.formset.prefix }}"] .form-row.field-DELETE,
+    [data-inline-prefix="{{ inline_admin_formset.formset.prefix }}"] .fieldBox.field-DELETE {
+      display: none !important;
+    }
+
+    [data-inline-prefix="{{ inline_admin_formset.formset.prefix }}"] .profile-inline-heading {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    [data-inline-prefix="{{ inline_admin_formset.formset.prefix }}"] .profile-inline-heading__title {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+
+    [data-inline-prefix="{{ inline_admin_formset.formset.prefix }}"] .profile-inline-heading__user-datum {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      color: var(--body-quiet-color);
+      font-weight: 400;
+      text-decoration: none;
+    }
+
+    [data-inline-prefix="{{ inline_admin_formset.formset.prefix }}"] .profile-inline-heading__user-datum span {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    [data-inline-prefix="{{ inline_admin_formset.formset.prefix }}"] .profile-inline-heading__user-datum input {
+      margin: 0;
+    }
+
+    [data-inline-prefix="{{ inline_admin_formset.formset.prefix }}"] .profile-inline-heading__user-datum a {
+      color: inherit;
+    }
+  </style>
   {% if inline_admin_formset.is_collapsible %}<details><summary>{% endif %}
   <h2 id="{{ inline_admin_formset.formset.prefix }}-heading" class="inline-heading">
   {% if inline_admin_formset.formset.max_num == 1 %}
@@ -17,17 +63,17 @@
 {{ inline_admin_formset.formset.non_form_errors }}
 
 {% for inline_admin_form in inline_admin_formset %}<div class="inline-related{% if inline_admin_form.original or inline_admin_form.show_url %} has_original{% endif %}{% if forloop.last and inline_admin_formset.has_add_permission %} empty-form last-related{% endif %}" id="{{ inline_admin_formset.formset.prefix }}-{% if forloop.last and inline_admin_formset.has_add_permission %}empty{% else %}{{ forloop.counter0 }}{% endif %}">
-  <h3 class="inline-related-heading" style="display:flex; justify-content:space-between; align-items:center; gap:1em;">
-    <span>
+  <h3 class="inline-related-heading profile-inline-heading">
+    <span class="profile-inline-heading__title">
       <b>{{ inline_admin_formset.opts.verbose_name|capfirst }}:</b>
       <span class="inline_label">{% if inline_admin_form.original %}{{ inline_admin_form.original }}{% if inline_admin_form.model_admin.show_change_link and inline_admin_form.model_admin.has_registered_model %} <a href="{% url inline_admin_form.model_admin.opts|admin_urlname:'change' inline_admin_form.original.pk|admin_urlquote %}" class="{{ inline_admin_formset.has_change_permission|yesno:'inlinechangelink,inlineviewlink' }}">{% if inline_admin_formset.has_change_permission %}{% translate "Change" %}{% else %}{% translate "View" %}{% endif %}</a>{% endif %}{% else %}#{{ forloop.counter }}{% endif %}</span>
       {% if inline_admin_form.show_url %}<a href="{{ inline_admin_form.absolute_url }}">{% translate "View on site" %}</a>{% endif %}
-      {% if inline_admin_formset.formset.can_delete and inline_admin_formset.has_delete_permission and inline_admin_form.original %}<span class="delete">{{ inline_admin_form.deletion_field.field }} {{ inline_admin_form.deletion_field.label_tag }}</span>{% endif %}
+      {% if inline_admin_formset.formset.can_delete and inline_admin_formset.has_delete_permission %}{{ inline_admin_form.deletion_field.field.as_hidden }}{% endif %}
     </span>
     {% if inline_admin_form.form.fields.user_datum %}
     {% with user_datum_field=inline_admin_form.form.user_datum %}
-    <label style="color: var(--body-quiet-color); margin-left: 1em; display:flex; align-items:center; gap:0.35em;">
-      {{ user_datum_field }}
+    <label for="{{ user_datum_field.id_for_label }}" class="profile-inline-heading__user-datum">
+      {{ user_datum_field.as_widget }}
       <span>{% trans "User Datum" %} [ <a href="{% url 'admin:user_data' %}">{% trans "View" %}</a> ]</span>
     </label>
     {% endwith %}
