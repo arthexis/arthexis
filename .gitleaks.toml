@@ -4,9 +4,11 @@ title = "ArtHexis Gitleaks Configuration"
 useDefault = true
 
 [allowlist]
-  description = "Ignore known placeholder credentials in tests"
+  description = "Ignore known placeholder credentials in tests and documentation"
   regexes = [
-    '''password=\"password\"'''
+    '''password=\"password\"''',
+    '''cafebabe:deadbeef''',
+    '''AKIAIMNOJVGFDXXXE4OA'''
   ]
 
 [[rules]]
