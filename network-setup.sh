@@ -17,7 +17,7 @@ LOCK_DIR="$BASE_DIR/locks"
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--interactive|-i] [--no-watchdog]
+Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--interactive|-i] [--no-watchdog] [--no-vnc]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --no-firewall   Skip firewall port validation.
@@ -25,6 +25,7 @@ Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--inte
   --public        Configure an open access point without internet sharing.
   --interactive, -i  Collect user decisions for each step before executing.
   --no-watchdog   Skip installing the WiFi watchdog service.
+  --no-vnc        Skip validating that a VNC service is enabled.
 USAGE
 }
 
@@ -34,6 +35,7 @@ INTERACTIVE=false
 UNSAFE=false
 PUBLIC_MODE=false
 INSTALL_WATCHDOG=true
+SKIP_VNC=false
 DEFAULT_AP_NAME="gelectriic-ap"
 AP_NAME="$DEFAULT_AP_NAME"
 SKIP_AP=false
@@ -78,6 +80,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-watchdog)
             INSTALL_WATCHDOG=false
+            ;;
+        --no-vnc)
+            SKIP_VNC=true
             ;;
         -h|--help)
             usage
@@ -160,20 +165,32 @@ require_ssh_password() {
 # Ensure VNC is enabled via raspi-config or an active VNC service
 # Assumes VNC service names 'vncserver-x11-serviced' or 'x11vnc' when raspi-config is unavailable
 require_vnc_enabled() {
+    local -a services=(vncserver-x11-serviced x11vnc)
+    local vnc_state=""
+
     if command -v raspi-config >/dev/null 2>&1; then
-        local vnc_state
         vnc_state=$(raspi-config nonint get_vnc 2>/dev/null || true)
-        if [[ "$vnc_state" != "1" ]]; then
-            echo "VNC is disabled in raspi-config. Enable it before running this script." >&2
-            exit 1
-        fi
-    else
-        if ! systemctl is-enabled --quiet vncserver-x11-serviced 2>/dev/null && \
-           ! systemctl is-enabled --quiet x11vnc 2>/dev/null; then
-            echo "No enabled VNC service detected. Enable a VNC server before running this script." >&2
-            exit 1
+        if [[ "$vnc_state" == "1" ]]; then
+            return
         fi
     fi
+
+    for svc in "${services[@]}"; do
+        if systemctl is-enabled --quiet "$svc" 2>/dev/null || \
+           systemctl is-active --quiet "$svc" 2>/dev/null; then
+            if [[ "$vnc_state" != "1" && -n "$vnc_state" ]]; then
+                echo "raspi-config reports VNC disabled but service '$svc' is active; continuing." >&2
+            fi
+            return
+        fi
+    done
+
+    if [[ -n "$vnc_state" ]]; then
+        echo "VNC is disabled in raspi-config or no VNC service is active. Enable it before running this script." >&2
+    else
+        echo "No enabled VNC service detected. Enable a VNC server before running this script." >&2
+    fi
+    exit 1
 }
 
 INITIAL_CONNECTIVITY=true
@@ -190,7 +207,11 @@ command -v nmcli >/dev/null 2>&1 || {
 }
 
 require_ssh_password
-require_vnc_enabled
+if [[ $SKIP_VNC == true ]]; then
+    echo "Skipping VNC requirement as requested."
+else
+    require_vnc_enabled
+fi
 
 # Detect the active internet connection and back it up
 PROTECTED_DEV=""
