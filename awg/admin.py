@@ -12,6 +12,8 @@ class CableSizeAdmin(EntityModelAdmin):
         "material",
         "area_kcmil",
         "amps_60c",
+        "amps_75c",
+        "amps_90c",
         "line_num",
     )
     search_fields = ("awg_size", "material")
