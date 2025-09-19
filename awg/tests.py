@@ -39,6 +39,7 @@ class AWGCalculatorTests(TestCase):
         self.assertNotIn('value="40"', resp.content.decode())
         self.assertNotIn('value="220"', resp.content.decode())
         self.assertIn("Calculate</button>", resp.content.decode())
+        self.assertContains(resp, '<option value="[1]"')
 
         data = {
             "meters": "10",
@@ -117,6 +118,26 @@ class AWGCalculatorTests(TestCase):
         content = resp.content.decode()
         self.assertIn("order-first", content)
         self.assertIn("order-lg-last", content)
+
+    def test_special_ground_value_reported(self):
+        url = reverse("awg:calculator")
+        data = {
+            "meters": "10",
+            "amps": "40",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "[1]",
+        }
+        resp = self.client.post(url, data)
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        self.assertIn('value="[1]" selected', content)
+        self.assertIn("2+1 ([1])", content)
+        self.assertIn("20+10 ([1])", content)
 
     def test_odd_awg_displays_even_preference(self):
         CableSize.objects.create(
