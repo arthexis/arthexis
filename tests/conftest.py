@@ -99,12 +99,32 @@ def pytest_configure(config):
     )
 
 
+def _env_flag(name: str) -> bool:
+    """Return ``True`` when the environment flag ``name`` is enabled."""
+
+    value = os.environ.get(name)
+    if value is None:
+        return False
+    return value.strip().lower() not in {"", "0", "false", "no", "off"}
+
+
 def pytest_collection_modifyitems(config, items):
     role = os.environ.get("NODE_ROLE")
-    if not role:
-        return
-    skip = pytest.mark.skip(reason=f"not run for {role} role")
+    require_markers = _env_flag("NODE_ROLE_ONLY")
+    role_skip = (
+        pytest.mark.skip(reason=f"not run for {role} role") if role else None
+    )
+    missing_skip = (
+        pytest.mark.skip(
+            reason="missing role marker while NODE_ROLE_ONLY is enabled"
+        )
+        if require_markers
+        else None
+    )
+
     for item in items:
-        roles = {m.args[0] for m in item.iter_markers("role")}
-        if roles and role not in roles:
-            item.add_marker(skip)
+        roles = {m.args[0] for m in item.iter_markers("role") if m.args}
+        if role and roles and role not in roles:
+            item.add_marker(role_skip)
+        if require_markers and not roles:
+            item.add_marker(missing_skip)

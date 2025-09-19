@@ -1,4 +1,9 @@
+import pytest
+
 from core import notifications
+
+
+pytestmark = [pytest.mark.role("Terminal"), pytest.mark.role("Control")]
 
 
 def test_gui_display_uses_plyer_when_available(monkeypatch):
