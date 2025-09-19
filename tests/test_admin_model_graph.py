@@ -15,10 +15,11 @@ class AdminModelGraphTests(TestCase):
         )
         self.client.force_login(self.user)
 
-    def test_admin_index_contains_graph_links(self):
+    def test_admin_index_omits_graph_links(self):
         response = self.client.get(reverse("admin:index"))
-        self.assertContains(response, 'data-app-graph="teams"')
-        self.assertContains(
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-app-graph="teams"')
+        self.assertNotContains(
             response, reverse("admin-model-graph", args=["teams"])
         )
 

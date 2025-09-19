@@ -14,6 +14,7 @@ from unittest import mock
 from pathlib import Path
 import subprocess
 from glob import glob
+from datetime import timedelta
 
 from django.utils import timezone
 from django.contrib.auth.models import Permission
@@ -24,7 +25,6 @@ from .models import (
     ElectricVehicle,
     EnergyCredit,
     Product,
-    LiveSubscription,
     Brand,
     EVModel,
     RFID,
@@ -565,7 +565,21 @@ class LiveSubscriptionTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(LiveSubscription.objects.count(), 1)
+        self.account.refresh_from_db()
+        self.assertEqual(
+            self.account.live_subscription_product,
+            self.product,
+        )
+        self.assertIsNotNone(self.account.live_subscription_start_date)
+        self.assertEqual(
+            self.account.live_subscription_start_date,
+            timezone.localdate(),
+        )
+        self.assertEqual(
+            self.account.live_subscription_next_renewal,
+            self.account.live_subscription_start_date
+            + timedelta(days=self.product.renewal_period),
+        )
 
         list_resp = self.client.get(
             reverse("live-subscription-list"), {"account_id": self.account.id}
@@ -574,6 +588,11 @@ class LiveSubscriptionTests(TestCase):
         data = list_resp.json()
         self.assertEqual(len(data["live_subscriptions"]), 1)
         self.assertEqual(data["live_subscriptions"][0]["product__name"], "Gold")
+        self.assertEqual(data["live_subscriptions"][0]["id"], self.account.id)
+        self.assertEqual(
+            data["live_subscriptions"][0]["next_renewal"],
+            str(self.account.live_subscription_next_renewal),
+        )
 
     def test_product_list(self):
         response = self.client.get(reverse("product-list"))

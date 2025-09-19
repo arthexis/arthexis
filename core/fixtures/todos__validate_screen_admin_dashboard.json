@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Admin Dashboard",
+      "url": "/admin/",
+      "request_details": "Confirm the Home dashboard renders without the Model graph link and that the header styling is correct."
+    }
+  }
+]

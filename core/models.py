@@ -981,6 +981,15 @@ class EnergyAccount(Entity):
         default=False,
         help_text="Allow transactions even when the balance is zero or negative",
     )
+    live_subscription_product = models.ForeignKey(
+        "Product",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="live_subscription_accounts",
+    )
+    live_subscription_start_date = models.DateField(null=True, blank=True)
+    live_subscription_next_renewal = models.DateField(null=True, blank=True)
 
     def can_authorize(self) -> bool:
         """Return True if this account should be authorized for charging."""
@@ -1019,6 +1028,16 @@ class EnergyAccount(Entity):
     def save(self, *args, **kwargs):
         if self.name:
             self.name = self.name.upper()
+        if self.live_subscription_product and not self.live_subscription_start_date:
+            self.live_subscription_start_date = timezone.now().date()
+        if (
+            self.live_subscription_product
+            and self.live_subscription_start_date
+            and not self.live_subscription_next_renewal
+        ):
+            self.live_subscription_next_renewal = self.live_subscription_start_date + timedelta(
+                days=self.live_subscription_product.renewal_period
+            )
         super().save(*args, **kwargs)
 
     def __str__(self):  # pragma: no cover - simple representation
@@ -1277,29 +1296,6 @@ class Product(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
-
-
-class LiveSubscription(Entity):
-    """An energy account's live subscription to a product."""
-
-    account = models.ForeignKey(EnergyAccount, on_delete=models.CASCADE)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    start_date = models.DateField(auto_now_add=True)
-    next_renewal = models.DateField(blank=True)
-
-    def save(self, *args, **kwargs):
-        if not self.next_renewal:
-            self.next_renewal = self.start_date + timedelta(
-                days=self.product.renewal_period
-            )
-        super().save(*args, **kwargs)
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.account.user} -> {self.product}"
-
-    class Meta:
-        verbose_name = _("Live Subscription")
-        verbose_name_plural = _("Live Subscriptions")
 
 
 class AdminHistory(Entity):
