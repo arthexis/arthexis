@@ -22,6 +22,8 @@ def send(
     from_email: str | None = None,
     *,
     outbox=None,
+    attachments: Sequence[tuple[str, str, str]] | None = None,
+    content_subtype: str | None = None,
     **kwargs,
 ):
     """Send an email using Django's email utilities.
@@ -41,6 +43,13 @@ def send(
         connection=connection,
         **kwargs,
     )
+    if attachments:
+        for attachment in attachments:
+            if not isinstance(attachment, (list, tuple)) or len(attachment) != 3:
+                raise ValueError("attachments must contain (name, content, mimetype) tuples")
+            email.attach(*attachment)
+    if content_subtype:
+        email.content_subtype = content_subtype
     email.send(fail_silently=fail_silently)
     return email
 

@@ -3,6 +3,7 @@ from pathlib import Path
 import datetime
 import calendar
 import shutil
+import re
 from html import escape
 
 from django.conf import settings
@@ -29,7 +30,8 @@ from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.cache import never_cache
 from django.utils.cache import patch_vary_headers
 from django.utils.text import slugify
-from core.models import InviteLead, ClientReport
+from django.core.validators import EmailValidator
+from core.models import InviteLead, ClientReport, ClientReportSchedule
 
 try:  # pragma: no cover - optional dependency guard
     from graphviz import Digraph
@@ -587,6 +589,7 @@ class ClientReportForm(forms.Form):
         ("week", _("Week")),
         ("month", _("Month")),
     ]
+    RECURRENCE_CHOICES = ClientReportSchedule.PERIODICITY_CHOICES
     period = forms.ChoiceField(
         choices=PERIOD_CHOICES, widget=forms.RadioSelect, initial="range"
     )
@@ -610,6 +613,31 @@ class ClientReportForm(forms.Form):
         required=False,
         widget=forms.DateInput(attrs={"type": "month"}),
     )
+    owner = forms.ModelChoiceField(
+        queryset=get_user_model().objects.all(), required=False
+    )
+    destinations = forms.CharField(
+        label=_("Email destinations"),
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 2}),
+        help_text=_("Separate addresses with commas or new lines."),
+    )
+    recurrence = forms.ChoiceField(
+        label=_("Recurrency"),
+        choices=RECURRENCE_CHOICES,
+        initial=ClientReportSchedule.PERIODICITY_NONE,
+    )
+    disable_emails = forms.BooleanField(
+        label=_("Disable email delivery"),
+        required=False,
+        help_text=_("Generate files without sending emails."),
+    )
+
+    def __init__(self, *args, request=None, **kwargs):
+        self.request = request
+        super().__init__(*args, **kwargs)
+        if request and getattr(request, "user", None) and request.user.is_authenticated:
+            self.fields["owner"].initial = request.user.pk
 
     def clean(self):
         cleaned = super().clean()
@@ -635,16 +663,59 @@ class ClientReportForm(forms.Form):
             cleaned["end"] = month_dt.replace(day=last_day)
         return cleaned
 
+    def clean_destinations(self):
+        raw = self.cleaned_data.get("destinations", "")
+        if not raw:
+            return []
+        validator = EmailValidator()
+        seen: set[str] = set()
+        emails: list[str] = []
+        for part in re.split(r"[\s,]+", raw):
+            candidate = part.strip()
+            if not candidate:
+                continue
+            validator(candidate)
+            key = candidate.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            emails.append(candidate)
+        return emails
+
 
 @live_update()
 def client_report(request):
-    form = ClientReportForm(request.POST or None)
+    form = ClientReportForm(request.POST or None, request=request)
     report = None
+    schedule = None
     if request.method == "POST" and form.is_valid():
+        owner = form.cleaned_data.get("owner")
+        if not owner and request.user.is_authenticated:
+            owner = request.user
         report = ClientReport.generate(
-            form.cleaned_data["start"], form.cleaned_data["end"]
+            form.cleaned_data["start"],
+            form.cleaned_data["end"],
+            owner=owner,
+            recipients=form.cleaned_data.get("destinations"),
+            disable_emails=form.cleaned_data.get("disable_emails", False),
         )
-    context = {"form": form, "report": report}
+        report.store_local_copy()
+        recurrence = form.cleaned_data.get("recurrence")
+        if recurrence and recurrence != ClientReportSchedule.PERIODICITY_NONE:
+            schedule = ClientReportSchedule.objects.create(
+                owner=owner,
+                created_by=request.user if request.user.is_authenticated else None,
+                periodicity=recurrence,
+                email_recipients=form.cleaned_data.get("destinations", []),
+                disable_emails=form.cleaned_data.get("disable_emails", False),
+            )
+            report.schedule = schedule
+            report.save(update_fields=["schedule"])
+            messages.success(
+                request,
+                _("Client report schedule created; future reports will be generated automatically."),
+            )
+    context = {"form": form, "report": report, "schedule": schedule}
     return render(request, "pages/client_report.html", context)
 
 

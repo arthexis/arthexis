@@ -9,12 +9,18 @@ import django
 
 django.setup()
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import RFID, ClientReport, EnergyAccount
+from core.models import (
+    RFID,
+    ClientReport,
+    EnergyAccount,
+    ClientReportSchedule,
+)
 from ocpp.models import Charger, Transaction
 
 
@@ -52,7 +58,15 @@ class AdminClientReportTests(TestCase):
     def test_generate_report_via_admin(self):
         day = timezone.now().date()
         url = reverse("admin:core_clientreport_generate")
-        resp = self.client.post(url, {"period": "range", "start": day, "end": day})
+        resp = self.client.post(
+            url,
+            {
+                "period": "range",
+                "start": day,
+                "end": day,
+                "recurrence": ClientReportSchedule.PERIODICITY_NONE,
+            },
+        )
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, self.account.name)
         self.assertContains(resp, str(self.rfid2.label_id))
@@ -61,6 +75,43 @@ class AdminClientReportTests(TestCase):
         report = ClientReport.objects.get()
         self.assertEqual(report.start_date, day)
         self.assertEqual(report.end_date, day)
+        self.assertEqual(report.owner, self.user)
+        self.assertFalse(ClientReportSchedule.objects.exists())
+        export = report.data.get("export")
+        html_path = Path(settings.BASE_DIR) / export["html_path"]
+        json_path = Path(settings.BASE_DIR) / export["json_path"]
+        self.assertTrue(html_path.exists())
+        self.assertTrue(json_path.exists())
         subjects = {row["subject"] for row in report.data["rows"]}
         self.assertIn(self.account.name, subjects)
         self.assertIn(str(self.rfid2.label_id), subjects)
+        html_path.unlink()
+        json_path.unlink()
+
+    def test_generate_report_with_schedule(self):
+        day = timezone.now().date()
+        url = reverse("admin:core_clientreport_generate")
+        resp = self.client.post(
+            url,
+            {
+                "period": "range",
+                "start": day,
+                "end": day,
+                "recurrence": ClientReportSchedule.PERIODICITY_WEEKLY,
+                "destinations": "dest@example.com",
+                "owner": self.user.pk,
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        schedule = ClientReportSchedule.objects.get()
+        self.assertEqual(schedule.periodicity, ClientReportSchedule.PERIODICITY_WEEKLY)
+        self.assertIn("dest@example.com", schedule.email_recipients)
+        report = ClientReport.objects.get()
+        self.assertEqual(report.schedule, schedule)
+        export = report.data.get("export")
+        html_path = Path(settings.BASE_DIR) / export["html_path"]
+        json_path = Path(settings.BASE_DIR) / export["json_path"]
+        self.assertTrue(html_path.exists())
+        self.assertTrue(json_path.exists())
+        html_path.unlink()
+        json_path.unlink()
