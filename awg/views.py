@@ -45,6 +45,25 @@ def _display_awg(size: Union[str, int]) -> str:
     return str(AWG(n))
 
 
+def _parse_ground(value: Union[str, int, None]) -> tuple[int, str]:
+    """Return the numeric ground count and any special label."""
+
+    if value in (None, "", "None"):
+        return 0, ""
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped == "[1]":
+            return 1, "[1]"
+        value = stripped
+    return int(value), ""
+
+
+def _format_ground_output(amount: int, label: str) -> str:
+    """Return a formatted ground string including any special label."""
+
+    return f"{amount} ({label})" if label else str(amount)
+
+
 def find_conduit(awg: Union[str, int], cables: int, *, conduit: str = "emt"):
     """Return the conduit trade size capable of holding *cables* wires."""
 
@@ -102,7 +121,7 @@ def find_awg(
     max_awg = None if max_awg in (None, "") else AWG(max_awg)
     phases = int(phases)
     temperature = None if temperature in (None, "", "auto") else int(temperature)
-    ground = int(ground)
+    ground, ground_label = _parse_ground(ground)
 
     assert amps >= 10, _(
         "Minimum load for this calculator is 15 Amps.  Yours: amps=%(amps)s."
@@ -177,6 +196,7 @@ def find_awg(
                 vdrop = base_vdrop * base["k"] / n
                 perc = vdrop / volts
                 awg_str = str(AWG(awg_size))
+                ground_total = n * ground
                 result = {
                     "awg": awg_str,
                     "awg_display": _display_awg(awg_size),
@@ -192,8 +212,8 @@ def find_awg(
                     "vdrop": vdrop,
                     "vend": volts - vdrop,
                     "vdperc": perc * 100,
-                    "cables": f"{n * phases}+{n * ground}",
-                    "total_meters": f"{n * phases * meters}+{meters * n * ground}",
+                    "cables": f"{n * phases}+{_format_ground_output(ground_total, ground_label)}",
+                    "total_meters": f"{n * phases * meters}+{_format_ground_output(meters * ground_total, ground_label)}",
                 }
                 if force_awg is None:
                     if allowed and perc <= 0.03:
