@@ -45,7 +45,7 @@ def create_packaging_defaults(apps, schema_editor):
             "author": "Rafael J. Guillén-Osorio",
             "email": "tecnologia@gelectriic.com",
             "python_requires": ">=3.10",
-            "license": "MIT",
+            "license": "GPL-3.0-only",
             "repository_url": "https://github.com/arthexis/arthexis",
             "homepage_url": "https://arthexis.com",
             "release_manager": manager,

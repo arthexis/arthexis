@@ -9,7 +9,7 @@
     "author": "Rafael J. Guillén-Osorio",
     "email": "tecnologia@gelectriic.com",
     "python_requires": ">=3.10",
-    "license": "MIT",
+    "license": "GPL-3.0-only",
     "repository_url": "https://github.com/arthexis/arthexis",
     "homepage_url": "https://arthexis.com",
     "release_manager": ["arthexis", "arthexis"],
