@@ -2,6 +2,7 @@ import io
 import os
 import sys
 import types
+from pathlib import Path
 from unittest.mock import patch, MagicMock, call
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -30,6 +31,38 @@ from ocpp.rfid.constants import (
     SPI_BUS,
     SPI_DEVICE,
 )
+
+
+class BackgroundReaderConfigurationTests(SimpleTestCase):
+    def setUp(self):
+        background_reader._auto_detect_logged = False
+
+    def tearDown(self):
+        background_reader._auto_detect_logged = False
+
+    def test_is_configured_auto_detects_without_lock(self):
+        fake_lock = Path("/tmp/rfid-auto-detect.lock")
+        with (
+            patch("ocpp.rfid.background_reader._lock_path", return_value=fake_lock),
+            patch("ocpp.rfid.background_reader._has_spi_device", return_value=True),
+            patch(
+                "ocpp.rfid.background_reader._dependencies_available",
+                return_value=True,
+            ),
+        ):
+            self.assertTrue(background_reader.is_configured())
+
+    def test_is_configured_requires_dependencies(self):
+        fake_lock = Path("/tmp/rfid-auto-detect.lock")
+        with (
+            patch("ocpp.rfid.background_reader._lock_path", return_value=fake_lock),
+            patch("ocpp.rfid.background_reader._has_spi_device", return_value=True),
+            patch(
+                "ocpp.rfid.background_reader._dependencies_available",
+                return_value=False,
+            ),
+        ):
+            self.assertFalse(background_reader.is_configured())
 
 
 class ScanNextViewTests(TestCase):
