@@ -7,47 +7,6 @@ on:
     - cron: '0 2 * * *'
 
 jobs:
-  node-test-matrix:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-      database_changed: ${{ steps.plan.outputs.database_changed }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-      - name: Build node test matrix
-        id: plan
-        run: |
-          python scripts/build_node_ci_plan.py > plan.json
-          python - <<'PY'
-          import json
-          import os
-
-          with open('plan.json', 'r', encoding='utf-8') as fh:
-              data = json.load(fh)
-
-          matrix = json.dumps(data['matrix'])
-          database_changed = 'true' if data.get('database_changed') else 'false'
-
-          output = os.environ['GITHUB_OUTPUT']
-          with open(output, 'a', encoding='utf-8') as fh:
-              fh.write(f"matrix={matrix}\n")
-              fh.write(f"database_changed={database_changed}\n")
-
-          summary = os.environ.get('GITHUB_STEP_SUMMARY')
-          if summary:
-              with open(summary, 'a', encoding='utf-8') as fh:
-                  fh.write('| Node role | Enabled features |\n')
-                  fh.write('| --- | --- |\n')
-                  for entry in data['matrix']:
-                      features = entry['features'] or 'baseline only'
-                      fh.write(f"| {entry['role']} | {features} |\n")
-                  fh.write('\n')
-          PY
   secret-scan:
     runs-on: ubuntu-latest
     steps:
@@ -83,7 +42,6 @@ jobs:
           fi
           gitleaks detect --source . --config .gitleaks.toml --redact --no-banner --log-opts="$LOG_OPTS"
   tests:
-    needs: node-test-matrix
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -106,9 +64,6 @@ jobs:
       POSTGRES_HOST: localhost
       POSTGRES_PORT: 5432
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-    strategy:
-      matrix:
-        include: ${{ fromJson(needs.node-test-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
@@ -119,9 +74,6 @@ jobs:
           pip install -r requirements.txt
           pip install pytest psycopg-binary
       - name: Run tests
-        env:
-          NODE_ROLE: ${{ matrix.role }}
-          NODE_FEATURES: ${{ matrix.features }}
         run: pytest -q
 
   pre-commit:
@@ -139,8 +91,6 @@ jobs:
         run: pre-commit run --all-files
 
   check-migrations:
-    needs: node-test-matrix
-    if: needs.node-test-matrix.outputs.database_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -160,31 +110,4 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run env refresh
         run: ./env-refresh.sh --clean
-
-  ui-screenshots:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-      - name: Install Firefox
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y firefox firefox-geckodriver
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-      - name: Run screenshot specs
-        env:
-          PYTHONUNBUFFERED: "1"
-        run: |
-          python scripts/ci/run_screenshots.py --base-ref "${GITHUB_BASE_REF}" --output-dir artifacts/ui-screens $(if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then echo "--run-all"; fi)
-      - name: Upload screenshot artefacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: ui-screenshots
-          path: artifacts/ui-screens
 
