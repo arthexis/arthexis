@@ -1,0 +1,9 @@
+[
+  {
+    "model": "sites.site",
+    "fields": {
+      "domain": "arthexis.com",
+      "name": "Arthexis"
+    }
+  }
+]
