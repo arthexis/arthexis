@@ -94,6 +94,39 @@ ALLOWED_HOSTS = [
 ]
 
 
+def _iter_local_hostnames(hostname: str, fqdn: str | None = None) -> list[str]:
+    """Return unique hostname variants for the current machine."""
+
+    hostnames: list[str] = []
+    seen: set[str] = set()
+
+    def _append(candidate: str | None) -> None:
+        if not candidate:
+            return
+        normalized = candidate.strip()
+        if not normalized or normalized in seen:
+            return
+        hostnames.append(normalized)
+        seen.add(normalized)
+
+    _append(hostname)
+    _append(fqdn)
+    if hostname and "." not in hostname:
+        _append(f"{hostname}.local")
+
+    return hostnames
+
+
+_local_hostname = socket.gethostname().strip()
+_local_fqdn = ""
+with contextlib.suppress(Exception):
+    _local_fqdn = socket.getfqdn().strip()
+
+for host in _iter_local_hostnames(_local_hostname, _local_fqdn):
+    if host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(host)
+
+
 # Allow CSRF origin verification for hosts within allowed subnets.
 _original_origin_verified = CsrfViewMiddleware._origin_verified
 
