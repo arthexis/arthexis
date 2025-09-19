@@ -1,37 +1,57 @@
-# Pytest node role markers
+# Pytest node role and feature markers
 
-Some features ship only on specific node roles (Terminal, Constellation, Control, or Satellite). Tests that cover these features must be annotated with `@pytest.mark.role(<role name>)` so they can be included or excluded during targeted smoke runs.
+The CI pipeline now runs the full baseline test suite for every node role
+(Constellation, Control, Satellite, and Terminal). Role-specific and hardware
+feature checks are enabled on top of that baseline by annotating tests with
+pytest markers. This keeps the common smoke coverage consistent while still
+allowing specialised suites to run only where they make sense.
 
-## When to add role markers
+## Role markers
 
-Apply a role marker whenever a test exercises functionality that depends on a role-scoped feature or piece of hardware. Examples include:
+Use `@pytest.mark.role(<role name>)` when a test only applies to a particular
+node role. Tests without a role marker are assumed to be part of the baseline
+and run for every role.
 
-- LCD tooling and other kiosk display utilities (`Terminal` and `Control`).
-- Control-surface helpers such as the background RFID reader (`Control`).
-- Hardware integrations that are bundled with multiple roles (for example the RFID scanner, which ships with all roles).
+Examples of role markers include:
 
-Tests that cover behaviour shared by every role do not need explicit markers.
+- Terminal user-interface helpers.
+- Control-surface tooling that never ships to other roles.
+- Landing page fixtures scoped to a single role.
 
-Multiple markers may be stacked on the same test (or declared via `pytestmark`) when a component is shared across several roles:
+Multiple markers may be stacked on the same test (or declared via `pytestmark`)
+when the behaviour spans several roles.
 
-```python
-import pytest
+## Feature markers
 
-pytestmark = [pytest.mark.role("Terminal"), pytest.mark.role("Control")]
-```
+When a test exercises functionality that depends on a `nodes.NodeFeature`, add
+`@pytest.mark.feature(<feature slug>)`. The slug must match the entry from the
+NodeFeature fixtures (for example `lcd-screen`, `rfid-scanner`, or
+`celery-queue`). Feature-marked tests are only executed for roles that ship that
+feature.
 
-## Filtering by node role
+Use feature markers for suites that verify optional hardware integrations or
+node capabilities. This keeps the per-role jobs focused on the features they
+actually ship.
 
-Pytest already honours the `NODE_ROLE` environment variable by skipping tests whose markers do not include the requested role:
+## Local filtering
+
+Pytest honours the following environment variables:
+
+- `NODE_ROLE` – skips tests whose role markers do not include the requested
+  role. Baseline tests (without role markers) always run.
+- `NODE_ROLE_ONLY` – when truthy, skips any test that lacks a role marker after
+  applying the per-role filtering. This is useful for smoke runs that should
+  cover only the role-specific suites and fail fast when markers are missing.
+- `NODE_FEATURES` – comma-separated list of feature slugs to enable. Tests
+  marked with `@pytest.mark.feature` are skipped if their features are not
+  listed. Leaving this unset (the default) runs all feature tests.
+
+Example invocations:
 
 ```bash
-NODE_ROLE=Terminal pytest tests/test_lcd_smbus2.py
+NODE_ROLE=Control pytest tests
+NODE_ROLE=Terminal NODE_FEATURES="lcd-screen,gui-toast" pytest tests/test_lcd_*.py
 ```
 
-Setting the optional `NODE_ROLE_ONLY` flag tightens this filter by skipping any test that lacks a role marker after the per-role filtering has been applied. This is useful for smoke runs that should cover only the role-specific suites and fail fast if new tests forgot to declare their role affinity.
-
-```bash
-NODE_ROLE=Control NODE_ROLE_ONLY=1 pytest tests
-```
-
-Both environment variables accept common truthy/falsey values (`1`, `true`, `yes`, etc.). Leaving `NODE_ROLE_ONLY` unset (the default) preserves the existing behaviour where unmarked tests always run.
+Leaving `NODE_FEATURES` unset replicates the behaviour of the default CI jobs,
+which automatically populate the variable based on the role's enabled features.

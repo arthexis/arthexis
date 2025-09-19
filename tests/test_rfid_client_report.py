@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 from datetime import timedelta
 
+import pytest
+
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
@@ -16,6 +18,9 @@ from django.utils import timezone
 
 from core.models import RFID, EnergyAccount
 from ocpp.models import Charger, Transaction
+
+
+pytestmark = [pytest.mark.feature("rfid-scanner")]
 
 
 class RFIDClientReportTests(TestCase):

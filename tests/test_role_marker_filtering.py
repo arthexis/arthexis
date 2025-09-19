@@ -4,14 +4,18 @@ import conftest
 
 
 class DummyItem:
-    def __init__(self, roles=None):
+    def __init__(self, roles=None, features=None):
         self._role_markers = list(roles or [])
+        self._feature_markers = list(features or [])
         self.added_markers = []
 
     def iter_markers(self, name):
         if name == "role":
             for role in self._role_markers:
                 yield SimpleNamespace(name="role", args=(role,))
+        elif name == "feature":
+            for feature in self._feature_markers:
+                yield SimpleNamespace(name="feature", args=(feature,))
         else:
             for marker in self.added_markers:
                 if marker.name == name:
@@ -56,3 +60,27 @@ def test_node_role_filter_combines_with_role_only(monkeypatch):
     assert _skip_reasons(unmarked) == [
         "missing role marker while NODE_ROLE_ONLY is enabled"
     ]
+
+
+def test_node_feature_filter_skips_missing_features(monkeypatch):
+    monkeypatch.setenv("NODE_FEATURES", "lcd-screen")
+    monkeypatch.setenv("NODE_ROLE", "Terminal")
+
+    lcd = DummyItem(features=["lcd-screen"])
+    rfid = DummyItem(features=["rfid-scanner"])
+
+    conftest.pytest_collection_modifyitems(SimpleNamespace(), [lcd, rfid])
+
+    assert _skip_reasons(lcd) == []
+    assert _skip_reasons(rfid) == [
+        "rfid-scanner feature(s) not enabled for Terminal role"
+    ]
+
+
+def test_node_feature_filter_allows_unset_env(monkeypatch):
+    monkeypatch.delenv("NODE_FEATURES", raising=False)
+
+    item = DummyItem(features=["lcd-screen"])
+    conftest.pytest_collection_modifyitems(SimpleNamespace(), [item])
+
+    assert _skip_reasons(item) == []

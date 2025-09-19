@@ -7,10 +7,11 @@ on:
     - cron: '0 2 * * *'
 
 jobs:
-  detect-roles:
+  node-test-matrix:
     runs-on: ubuntu-latest
     outputs:
-      roles: ${{ steps.detect.outputs.roles }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      database_changed: ${{ steps.plan.outputs.database_changed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -18,27 +19,35 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.x'
-      - name: Detect roles
-        id: detect
+      - name: Build node test matrix
+        id: plan
         run: |
-          python scripts/detect_impacted_roles.py > roles.json
-          echo "roles=$(cat roles.json)" >> "$GITHUB_OUTPUT"
-      - name: Summarize roles
-        run: echo "Impacted roles: $(cat roles.json)" >> "$GITHUB_STEP_SUMMARY"
-      - name: Comment roles
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v6
-        env:
-          ROLES: ${{ steps.detect.outputs.roles }}
-        with:
-          script: |
-            const roles = JSON.parse(process.env.ROLES);
-            const body = `Impacted node roles: ${roles.join(', ')}`;
-            await github.rest.issues.createComment({
-              ...context.repo,
-              issue_number: context.issue.number,
-              body
-            });
+          python scripts/build_node_ci_plan.py > plan.json
+          python - <<'PY'
+          import json
+          import os
+
+          with open('plan.json', 'r', encoding='utf-8') as fh:
+              data = json.load(fh)
+
+          matrix = json.dumps(data['matrix'])
+          database_changed = 'true' if data.get('database_changed') else 'false'
+
+          output = os.environ['GITHUB_OUTPUT']
+          with open(output, 'a', encoding='utf-8') as fh:
+              fh.write(f"matrix={matrix}\n")
+              fh.write(f"database_changed={database_changed}\n")
+
+          summary = os.environ.get('GITHUB_STEP_SUMMARY')
+          if summary:
+              with open(summary, 'a', encoding='utf-8') as fh:
+                  fh.write('| Node role | Enabled features |\n')
+                  fh.write('| --- | --- |\n')
+                  for entry in data['matrix']:
+                      features = entry['features'] or 'baseline only'
+                      fh.write(f"| {entry['role']} | {features} |\n")
+                  fh.write('\n')
+          PY
   secret-scan:
     runs-on: ubuntu-latest
     steps:
@@ -74,7 +83,7 @@ jobs:
           fi
           gitleaks detect --source . --config .gitleaks.toml --redact --no-banner --log-opts="$LOG_OPTS"
   tests:
-    needs: detect-roles
+    needs: node-test-matrix
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -99,7 +108,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
     strategy:
       matrix:
-        role: ${{ fromJson(needs.detect-roles.outputs.roles) }}
+        include: ${{ fromJson(needs.node-test-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
@@ -112,6 +121,7 @@ jobs:
       - name: Run tests
         env:
           NODE_ROLE: ${{ matrix.role }}
+          NODE_FEATURES: ${{ matrix.features }}
         run: pytest -q
 
   pre-commit:
@@ -129,6 +139,8 @@ jobs:
         run: pre-commit run --all-files
 
   check-migrations:
+    needs: node-test-matrix
+    if: needs.node-test-matrix.outputs.database_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -150,7 +162,6 @@ jobs:
         run: ./env-refresh.sh --clean
 
   ui-screenshots:
-    needs: detect-roles
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

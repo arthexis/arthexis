@@ -11,6 +11,7 @@ pytestmark = [
     pytest.mark.role("Control"),
     pytest.mark.role("Satellite"),
     pytest.mark.role("Constellation"),
+    pytest.mark.feature("rfid-scanner"),
 ]
 
 

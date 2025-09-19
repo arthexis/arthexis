@@ -5,6 +5,8 @@ import types
 from pathlib import Path
 from unittest.mock import patch, MagicMock, call
 
+import pytest
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 import django
@@ -31,6 +33,9 @@ from ocpp.rfid.constants import (
     SPI_BUS,
     SPI_DEVICE,
 )
+
+
+pytestmark = [pytest.mark.feature("rfid-scanner")]
 
 
 class BackgroundReaderConfigurationTests(SimpleTestCase):

@@ -1,45 +1,29 @@
-# Architecture manifest
+# Node test matrix
 
-The CI job that determines which node roles need to be exercised by a change now
-reads `ci/architecture_manifest.yml`. The file groups reusable components by the
-files that define them and links each component either to
-`nodes.NodeFeature` slugs (which already carry the role assignments) or to
-explicit node roles when the component is not feature-driven.
+The architecture manifest has been retired. The CI pipeline now determines its
+node test plan dynamically by reading the `nodes.NodeRole` and
+`nodes.NodeFeature` fixtures. This information is used by
+`scripts/build_node_ci_plan.py` to publish two values:
 
-## File structure
+- The per-role test matrix (which combinations of `NODE_ROLE` and
+  `NODE_FEATURES` the workflow should run).
+- Whether the change touched the database schema. The `check-migrations` job is
+  skipped automatically when neither models nor migrations changed.
 
-`architecture_manifest.yml` is valid JSON (and therefore valid YAML). It has
-three top-level sections:
+Each matrix entry runs the full baseline test suite plus any feature-specific
+checks that were annotated with `@pytest.mark.feature(<feature slug>)`. This
+keeps the per-role jobs concise without sacrificing coverage.
 
-- `shared_globs` – any path that matches one of these globs is considered shared
-  infrastructure. A change touching one of these files forces the script to
-  return **all** node roles so that the test matrix stays conservative. This is
-  where shared settings such as `config/settings.py` live.
-- `components` – each key is a reusable component. A component includes:
-  - `description`: optional human readable context.
-  - `paths`: the globs that identify source files and tests for the component.
-  - `features`: optional list of `nodes.NodeFeature.slug` values. The script
-    expands these into roles by reading the NodeFeature fixtures.
-  - `roles`: optional explicit roles. Use this when the component is not tied to
-    a feature (for example site fixtures that depend directly on a node role).
+## Adding new feature coverage
 
-Any component can use `paths`, `features`, and `roles` together. If a component
-lists both `features` and `roles`, the resolved role set is the union of both.
+1. Ensure the relevant `nodes.NodeFeature` fixture lists every role that ships
+   the feature. The CI plan automatically reads these fixtures.
+2. Annotate the tests that exercise the feature with
+   `@pytest.mark.feature(<slug>)`. Refer to
+   `docs/development/pytest-role-markers.md` for guidance on naming and
+   filtering.
+3. Run the tests locally with `NODE_ROLE` and `NODE_FEATURES` set to the target
+   role to confirm the markers work as expected.
 
-## Adding new coverage
-
-1. Identify the reusable component and list the globs that cover its
-   implementation and tests. Keep the globs specific so unrelated changes do not
-   produce false positives.
-2. If the component is controlled by a `NodeFeature`, add the slug to
-   `features`. Otherwise list the roles explicitly.
-3. Update or add fixtures under `nodes/fixtures/node_features__*.json` if new
-   feature-to-role assignments are needed. The detection script automatically
-   reads these fixtures.
-4. Commit the manifest change with the related code. The CI script will pick up
-   the new component on the next run.
-
-When in doubt, prefer adding a component that matches too many files over
-missing coverage altogether. The fallback behaviour (trigger all roles when a
-change hits `shared_globs` or when no component matches) keeps the deployment
-pipeline safe.
+With this simplified approach most changes automatically exercise all roles,
+and only feature-specific suites need explicit annotation.

@@ -2,6 +2,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
@@ -14,6 +16,9 @@ from django.urls import reverse
 
 from core.models import RFID
 from core.models import Reference
+
+
+pytestmark = [pytest.mark.feature("rfid-scanner")]
 
 
 class RFIDAdminReferenceClearTests(TestCase):
