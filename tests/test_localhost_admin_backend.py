@@ -1,3 +1,5 @@
+import ipaddress
+
 from django.http import HttpRequest
 from django.contrib.auth import get_user_model
 
@@ -54,3 +56,17 @@ def test_blocks_docker_bridge_addresses():
     req.META["REMOTE_ADDR"] = "172.17.0.2"
     user = backend.authenticate(req, username="admin", password="admin")
     assert user is None
+
+
+def test_allows_current_node_hostname():
+    User = get_user_model()
+    ensure_arthexis_user()
+    User.all_objects.filter(username="admin").delete()
+    backend = LocalhostAdminBackend()
+    backend._LOCAL_IPS = tuple(
+        set(backend._LOCAL_IPS) | {ipaddress.ip_address("10.42.0.20")}
+    )
+    req = HttpRequest()
+    req.META["REMOTE_ADDR"] = "10.42.0.20"
+    user = backend.authenticate(req, username="admin", password="admin")
+    assert user is not None
