@@ -989,7 +989,7 @@ class UserAdmin(DjangoUserAdmin):
 
     def get_inline_instances(self, request, obj=None):
         inline_instances = super().get_inline_instances(request, obj)
-        if obj and getattr(obj, "is_system_user", False):
+        if obj and getattr(obj, "is_profile_restricted", False):
             profile_inline_classes = tuple(USER_PROFILE_INLINES)
             inline_instances = [
                 inline

@@ -92,18 +92,31 @@ class Profile(Entity):
             )
         if self.user_id:
             user_model = get_user_model()
-            system_username = getattr(user_model, "SYSTEM_USERNAME", None)
-            if system_username:
+            username_cache = {"value": None}
+
+            def _resolve_username():
+                if username_cache["value"] is not None:
+                    return username_cache["value"]
                 user_obj = getattr(self, "user", None)
                 username = getattr(user_obj, "username", None)
                 if not username:
-                    manager = getattr(user_model, "all_objects", user_model._default_manager)
+                    manager = getattr(
+                        user_model, "all_objects", user_model._default_manager
+                    )
                     username = (
                         manager.filter(pk=self.user_id)
                         .values_list("username", flat=True)
                         .first()
                     )
-                if user_model.is_system_username(username):
+                username_cache["value"] = username
+                return username
+
+            is_restricted = getattr(
+                user_model, "is_profile_restricted_username", None
+            )
+            if callable(is_restricted):
+                username = _resolve_username()
+                if is_restricted(username):
                     raise ValidationError(
                         {
                             "user": _(
@@ -112,6 +125,19 @@ class Profile(Entity):
                             % {"username": username}
                         }
                     )
+            else:
+                system_username = getattr(user_model, "SYSTEM_USERNAME", None)
+                if system_username:
+                    username = _resolve_username()
+                    if user_model.is_system_username(username):
+                        raise ValidationError(
+                            {
+                                "user": _(
+                                    "The %(username)s account cannot have profiles attached."
+                                )
+                                % {"username": username}
+                            }
+                        )
 
     @property
     def owner(self):
@@ -240,6 +266,8 @@ def _cleanup_public_wifi_on_delete(sender, instance, **kwargs):
 
 class User(Entity, AbstractUser):
     SYSTEM_USERNAME = "arthexis"
+    ADMIN_USERNAME = "admin"
+    PROFILE_RESTRICTED_USERNAMES = frozenset({SYSTEM_USERNAME, ADMIN_USERNAME})
 
     objects = EntityUserManager()
     all_objects = DjangoUserManager()
@@ -272,9 +300,17 @@ class User(Entity, AbstractUser):
     def is_system_username(cls, username):
         return bool(username) and username == cls.SYSTEM_USERNAME
 
+    @classmethod
+    def is_profile_restricted_username(cls, username):
+        return bool(username) and username in cls.PROFILE_RESTRICTED_USERNAMES
+
     @property
     def is_system_user(self) -> bool:
         return self.is_system_username(self.username)
+
+    @property
+    def is_profile_restricted(self) -> bool:
+        return self.is_profile_restricted_username(self.username)
 
     def clean(self):
         super().clean()
