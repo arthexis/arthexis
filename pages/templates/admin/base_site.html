@@ -338,7 +338,11 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
       <span style="display:none">NODE: {{ badge_node.hostname }}</span>
     </span>
     {% if badge_node.role %}
-      <span class="badge" style="background-color: {{ badge_node_color }};">ROLE: {{ badge_node.role.name }}</span>
+      <span class="badge" style="background-color: {{ badge_node_color }};">
+        <a href="{% url 'admin:nodes_noderole_changelist' %}">ROLE</a>:
+        <a href="{% url 'admin:nodes_noderole_change' badge_node.role.pk %}">{{ badge_node.role.name }}</a>
+        <span style="display:none">ROLE: {{ badge_node.role.name }}</span>
+      </span>
     {% endif %}
   {% else %}
     <span class="badge badge-unknown">
