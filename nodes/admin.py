@@ -56,7 +56,7 @@ class NodeAdmin(EntityModelAdmin):
     change_list_template = "admin/nodes/node/change_list.html"
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
-    actions = ["run_task", "take_screenshots"]
+    actions = ["register_visitor", "run_task", "take_screenshots"]
     inlines = [NodeFeatureAssignmentInline]
 
     def get_urls(self):
@@ -69,7 +69,7 @@ class NodeAdmin(EntityModelAdmin):
             ),
             path(
                 "register-visitor/",
-                self.admin_site.admin_view(self.register_visitor),
+                self.admin_site.admin_view(self.register_visitor_view),
                 name="nodes_node_register_visitor",
             ),
             path(
@@ -99,7 +99,11 @@ class NodeAdmin(EntityModelAdmin):
         }
         return render(request, "admin/nodes/node/register_remote.html", context)
 
-    def register_visitor(self, request):
+    @admin.action(description="Register Visitor Node")
+    def register_visitor(self, request, queryset=None):
+        return self.register_visitor_view(request)
+
+    def register_visitor_view(self, request):
         """Exchange registration data with the visiting node."""
 
         node, created = Node.register_current()

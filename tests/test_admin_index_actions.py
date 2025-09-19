@@ -27,6 +27,10 @@ class AdminIndexActionLinkTests(TestCase):
         response = self.client.get(reverse("admin:index"))
         self.assertContains(response, "Scan RFIDs")
         self.assertContains(response, f'href="{reverse("admin:core_rfid_scan")}"')
+        self.assertContains(response, "Register Visitor Node")
+        self.assertContains(
+            response, f'href="{reverse("admin:nodes_node_register_visitor")}"'
+        )
         self.assertNotContains(response, "Build selected packages")
         self.assertNotContains(response, "Purge selected logs")
         content = response.content.decode()
