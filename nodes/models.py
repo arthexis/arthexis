@@ -341,7 +341,10 @@ class Node(Entity):
                 conn_type = parts[2]
             elif len(parts) > 1:
                 conn_type = parts[1]
-            if name != cls.AP_ROUTER_SSID or conn_type != "wifi":
+            if name != cls.AP_ROUTER_SSID:
+                continue
+            conn_type_normalized = conn_type.strip().lower()
+            if conn_type_normalized not in {"wifi", "802-11-wireless"}:
                 continue
             try:
                 mode_result = subprocess.run(
