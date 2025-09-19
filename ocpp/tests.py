@@ -204,6 +204,38 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_start_transaction_sends_net_message(self):
+        location = await database_sync_to_async(Location.objects.create)(
+            name="Test Location"
+        )
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id="NETMSG", location=location
+        )
+        communicator = WebsocketCommunicator(application, "/NETMSG/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        with patch("nodes.models.NetMessage.broadcast") as mock_broadcast:
+            await communicator.send_json_to(
+                [
+                    2,
+                    "1",
+                    "StartTransaction",
+                    {"meterStart": 1, "connectorId": 1},
+                ]
+            )
+            await communicator.receive_json_from()
+
+        await communicator.disconnect()
+
+        mock_broadcast.assert_called_once()
+        _, kwargs = mock_broadcast.call_args
+        self.assertEqual(kwargs["subject"], "charging-started")
+        payload = json.loads(kwargs["body"])
+        self.assertEqual(payload["location"], "Test Location")
+        self.assertEqual(payload["sn"], "NETMSG")
+        self.assertEqual(payload["cid"], "1")
+
     async def test_rfid_unbound_instance_created(self):
         await database_sync_to_async(Charger.objects.create)(charger_id="NEWRFID")
         communicator = WebsocketCommunicator(application, "/NEWRFID/")
