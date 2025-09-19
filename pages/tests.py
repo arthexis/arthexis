@@ -856,6 +856,17 @@ class FavoriteTests(TestCase):
         Site.objects.update_or_create(
             id=1, defaults={"name": "test", "domain": "testserver"}
         )
+        from nodes.models import Node, NodeRole
+
+        terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.node, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": "localhost",
+                "address": "127.0.0.1",
+                "role": terminal_role,
+            },
+        )
         ContentType.objects.clear_cache()
 
     def test_add_favorite(self):
@@ -1054,6 +1065,17 @@ class FavoriteTests(TestCase):
             username="norole", password="pwd", email="norole@example.com"
         )
         self.client.force_login(other_user)
+        resp = self.client.get(reverse("admin:index"))
+        self.assertNotContains(resp, "Release manager tasks")
+        self.assertNotContains(resp, todo.request)
+
+    def test_dashboard_hides_todos_for_non_terminal_node(self):
+        todo = Todo.objects.create(request="Terminal Tasks")
+        from nodes.models import NodeRole
+
+        control_role, _ = NodeRole.objects.get_or_create(name="Control")
+        self.node.role = control_role
+        self.node.save(update_fields=["role"])
         resp = self.client.get(reverse("admin:index"))
         self.assertNotContains(resp, "Release manager tasks")
         self.assertNotContains(resp, todo.request)
