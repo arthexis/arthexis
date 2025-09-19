@@ -58,12 +58,20 @@ def read_rfid(
 
     try:
         end = time.time() + timeout
+        selected = False
         while time.time() < end:  # pragma: no cover - hardware loop
             (status, _tag_type) = mfrc.MFRC522_Request(mfrc.PICC_REQIDL)
             if status == mfrc.MI_OK:
                 (status, uid) = mfrc.MFRC522_Anticoll()
                 if status == mfrc.MI_OK:
                     uid_bytes = uid or []
+                    try:
+                        if uid_bytes:
+                            selected = bool(mfrc.MFRC522_SelectTag(uid_bytes))
+                        else:
+                            selected = False
+                    except Exception:
+                        selected = False
                     rfid = "".join(f"{x:02X}" for x in uid_bytes)
                     kind = RFID.NTAG215 if len(uid_bytes) > 5 else RFID.CLASSIC
                     defaults = {"kind": kind}
@@ -98,8 +106,12 @@ def read_rfid(
                                         mfrc.PICC_AUTHENT1B, block, default_key, uid
                                     )
                                 if status == mfrc.MI_OK:
-                                    r, data = mfrc.MFRC522_Read(block)
-                                    if r == mfrc.MI_OK:
+                                    read_status = mfrc.MFRC522_Read(block)
+                                    if isinstance(read_status, tuple):
+                                        r, data = read_status
+                                    else:
+                                        r, data = (mfrc.MI_OK, read_status)
+                                    if r == mfrc.MI_OK and data is not None:
                                         dump.append({"block": block, "data": data})
                             except Exception:
                                 continue
@@ -118,6 +130,11 @@ def read_rfid(
             notify_async(f"RFID {rfid}", "Read failed")
         return {"error": str(exc)}
     finally:  # pragma: no cover - cleanup hardware
+        if 'mfrc' in locals() and mfrc is not None and selected:
+            try:
+                mfrc.MFRC522_StopCrypto1()
+            except Exception:
+                pass
         if cleanup and GPIO:
             try:
                 GPIO.cleanup()
