@@ -31,6 +31,7 @@ from django.contrib.contenttypes.models import ContentType
 from datetime import date, timedelta
 from django.core import mail
 from django.utils import timezone
+from django.utils.text import slugify
 
 from nodes.models import Node, ContentSample, NodeRole
 
@@ -1011,6 +1012,69 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "Release manager tasks")
         self.assertContains(resp, todo.request)
+
+
+class AdminModelGraphViewTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="graph-staff", password="pwd", is_staff=True
+        )
+        Site.objects.update_or_create(id=1, defaults={"name": "Terminal"})
+        self.client.force_login(self.user)
+
+    def _mock_graph(self):
+        fake_graph = Mock()
+        fake_graph.source = "digraph {}"
+        fake_graph.engine = "dot"
+
+        def pipe_side_effect(*args, **kwargs):
+            fmt = kwargs.get("format") or (args[0] if args else None)
+            if fmt == "svg":
+                return "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>"
+            if fmt == "pdf":
+                return b"%PDF-1.4 mock"
+            raise AssertionError(f"Unexpected format: {fmt}")
+
+        fake_graph.pipe.side_effect = pipe_side_effect
+        return fake_graph
+
+    def test_model_graph_renders_controls_and_download_link(self):
+        url = reverse("admin-model-graph", args=["pages"])
+        graph = self._mock_graph()
+        with patch("pages.views._build_model_graph", return_value=graph), patch(
+            "pages.views.shutil.which", return_value="/usr/bin/dot"
+        ):
+            response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-model-graph")
+        self.assertContains(response, 'data-graph-action="zoom-in"')
+        self.assertContains(response, "Download PDF")
+        self.assertIn("?format=pdf", response.context_data["download_url"])
+        args, kwargs = graph.pipe.call_args
+        self.assertEqual(kwargs.get("format"), "svg")
+        self.assertEqual(kwargs.get("encoding"), "utf-8")
+
+    def test_model_graph_pdf_download(self):
+        url = reverse("admin-model-graph", args=["pages"])
+        graph = self._mock_graph()
+        with patch("pages.views._build_model_graph", return_value=graph), patch(
+            "pages.views.shutil.which", return_value="/usr/bin/dot"
+        ):
+            response = self.client.get(url, {"format": "pdf"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        app_config = django_apps.get_app_config("pages")
+        expected_slug = slugify(app_config.verbose_name) or app_config.label
+        self.assertIn(
+            f"{expected_slug}-model-graph.pdf", response["Content-Disposition"]
+        )
+        self.assertEqual(response.content, b"%PDF-1.4 mock")
+        args, kwargs = graph.pipe.call_args
+        self.assertEqual(kwargs.get("format"), "pdf")
 
 
 class DatasetteTests(TestCase):
