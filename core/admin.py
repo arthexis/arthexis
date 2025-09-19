@@ -162,8 +162,8 @@ class ReferenceAdmin(EntityModelAdmin):
     list_display = (
         "alt_text",
         "content_type",
-        "include_in_footer",
-        "footer_visibility",
+        "footer",
+        "visibility",
         "author",
         "transaction_uuid",
     )
@@ -187,6 +187,14 @@ class ReferenceAdmin(EntityModelAdmin):
         if obj:
             ro.append("transaction_uuid")
         return ro
+
+    @admin.display(description="Footer", boolean=True, ordering="include_in_footer")
+    def footer(self, obj):
+        return obj.include_in_footer
+
+    @admin.display(description="Visibility", ordering="footer_visibility")
+    def visibility(self, obj):
+        return obj.get_footer_visibility_display()
 
     def get_urls(self):
         urls = super().get_urls()
