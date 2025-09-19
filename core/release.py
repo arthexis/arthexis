@@ -52,7 +52,7 @@ DEFAULT_PACKAGE = Package(
     author="Rafael J. Guillén-Osorio",
     email="tecnologia@gelectriic.com",
     python_requires=">=3.10",
-    license="MIT",
+    license="GPL-3.0-only",
 )
 
 
