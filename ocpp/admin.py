@@ -130,7 +130,6 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             {
                 "fields": (
                     "require_rfid",
-                    "console_url",
                 )
             },
         ),
@@ -141,7 +140,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             },
         ),
     )
-    readonly_fields = ("last_heartbeat", "last_meter_values", "console_url")
+    readonly_fields = ("last_heartbeat", "last_meter_values")
     list_display = (
         "charger_id",
         "connector_id",
@@ -151,7 +150,6 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "session_kw",
         "total_kw_display",
         "page_link",
-        "console_link",
         "log_link",
         "status_link",
     )
@@ -186,20 +184,6 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         return ""
 
     qr_link.short_description = "QR Code"
-
-    def console_link(self, obj):
-        from django.utils.html import format_html
-        from django.urls import reverse
-
-        if obj.console_url:
-            url = reverse(
-                "charger-console-connector",
-                args=[obj.charger_id, obj.connector_slug],
-            )
-            return format_html('<a href="{}" target="_blank">console</a>', url)
-        return ""
-
-    console_link.short_description = "Console"
 
     def log_link(self, obj):
         from django.utils.html import format_html

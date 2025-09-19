@@ -80,7 +80,6 @@ class Charger(Entity):
         related_name="chargers",
     )
     last_path = models.CharField(max_length=255, blank=True)
-    console_url = models.URLField(blank=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.charger_id

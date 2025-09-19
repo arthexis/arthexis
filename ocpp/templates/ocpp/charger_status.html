@@ -137,11 +137,6 @@
     <span></span>
     {% endif %}
   </div>
-  {% if request.user.is_staff and console_url %}
-  <div class="mt-4 text-end">
-    <a class="btn btn-outline-secondary" href="{{ console_url }}" target="_blank" rel="noopener">{% trans "View Console" %}</a>
-  </div>
-  {% endif %}
  </div>
 {% if show_chart %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
