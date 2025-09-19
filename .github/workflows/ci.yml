@@ -128,6 +128,20 @@ jobs:
       - name: Run pre-commit
         run: pre-commit run --all-files
 
+  check-migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Check for missing migrations
+        run: |
+          python manage.py makemigrations --check --dry-run --noinput
+
   env-refresh:
     runs-on: ubuntu-latest
     steps:
