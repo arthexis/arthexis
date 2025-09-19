@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from django.utils import timezone
 from core.models import EnergyAccount, RFID as CoreRFID
+from nodes.models import NetMessage
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -298,6 +299,41 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 update_fields=["temperature", "temperature_unit"]
             )
 
+    async def _broadcast_charging_started(self) -> None:
+        """Send a network message announcing a charging session."""
+
+        def _message_payload() -> dict[str, str] | None:
+            charger = self.charger
+            aggregate = self.aggregate_charger
+            if not charger:
+                return None
+            location_name = ""
+            if charger.location_id:
+                location_name = charger.location.name
+            elif aggregate and aggregate.location_id:
+                location_name = aggregate.location.name
+            cid_value = charger.connector_slug if charger.connector_id is not None else Charger.AGGREGATE_CONNECTOR_SLUG
+            return {
+                "location": location_name,
+                "sn": charger.charger_id,
+                "cid": str(cid_value),
+            }
+
+        payload = await database_sync_to_async(_message_payload)()
+        if not payload:
+            return
+        try:
+            await database_sync_to_async(NetMessage.broadcast)(
+                subject="charging-started",
+                body=json.dumps(payload, separators=(",", ":")),
+            )
+        except Exception as exc:  # pragma: no cover - logging of unexpected errors
+            store.add_log(
+                self.store_key,
+                f"Failed to broadcast charging start: {exc}",
+                log_type="charger",
+            )
+
     async def disconnect(self, close_code):
         store.connections.pop(self.store_key, None)
         pending_key = store.pending_key(self.charger_id)
@@ -387,6 +423,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     store.start_session_log(self.store_key, tx_obj.pk)
                     store.start_session_lock()
                     store.add_session_message(self.store_key, text_data)
+                    await self._broadcast_charging_started()
                     reply_payload = {
                         "transactionId": tx_obj.pk,
                         "idTagInfo": {"status": "Accepted"},
