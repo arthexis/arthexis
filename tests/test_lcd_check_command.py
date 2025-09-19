@@ -4,6 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
@@ -12,6 +14,9 @@ django.setup()
 
 from django.core.management import call_command  # noqa: E402
 from django.conf import settings  # noqa: E402
+
+
+pytestmark = [pytest.mark.role("Terminal"), pytest.mark.role("Control")]
 
 
 def test_lcd_check_sends_random_string(tmp_path):
