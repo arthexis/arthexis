@@ -121,6 +121,7 @@ class CalculatorTemplateAdmin(EntityModelAdmin):
     calculator_link.short_description = "Calculator"
 
 
+@admin.register(PowerLead)
 class PowerLeadAdmin(EntityModelAdmin):
     list_display = ("created_on", "user", "ip_address")
     search_fields = ("user__username", "ip_address")
