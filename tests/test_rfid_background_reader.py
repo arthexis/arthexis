@@ -7,7 +7,10 @@ from unittest.mock import patch
 import pytest
 
 
-pytestmark = pytest.mark.role("Control")
+pytestmark = [
+    pytest.mark.role("Control"),
+    pytest.mark.feature("rfid-scanner"),
+]
 
 
 class RFIDBackgroundReaderTests(TestCase):

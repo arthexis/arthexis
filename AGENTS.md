@@ -31,3 +31,6 @@
   - Keep the interface and meaning of flags consistent across scripts.
   - Ensure all shell scripts are executable. Verify new or modified scripts retain the `chmod +x` permission.
 
+- Feature-driven tests must use `@pytest.mark.feature("<slug>")` where the slug
+  matches a `nodes.NodeFeature`. CI uses these markers to include the
+  feature-specific suites for each node role.

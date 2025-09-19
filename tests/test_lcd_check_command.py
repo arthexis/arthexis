@@ -16,7 +16,11 @@ from django.core.management import call_command  # noqa: E402
 from django.conf import settings  # noqa: E402
 
 
-pytestmark = [pytest.mark.role("Terminal"), pytest.mark.role("Control")]
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+    pytest.mark.feature("lcd-screen"),
+]
 
 
 def test_lcd_check_sends_random_string(tmp_path):
