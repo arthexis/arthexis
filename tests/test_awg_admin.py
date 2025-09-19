@@ -24,3 +24,5 @@ class CableSizeAdminListDisplayTests(SimpleTestCase):
         admin = CableSizeAdmin(CableSize, AdminSite())
         assert "area_kcmil" in admin.list_display
         assert "amps_60c" in admin.list_display
+        assert "amps_75c" in admin.list_display
+        assert "amps_90c" in admin.list_display
