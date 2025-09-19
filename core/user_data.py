@@ -38,6 +38,10 @@ def _username_for(user) -> str:
     return username
 
 
+def _user_allows_user_data(user) -> bool:
+    return bool(user) and not getattr(user, "is_profile_restricted", False)
+
+
 def _data_dir(user) -> Path:
     username = _username_for(user)
     if not username:
@@ -110,7 +114,7 @@ def dump_user_fixture(instance, user=None) -> None:
     if issubclass(UserModel, Entity) and isinstance(instance, UserModel):
         return
     target_user = user or _resolve_fixture_user(instance)
-    if target_user is None:
+    if target_user is None or not _user_allows_user_data(target_user):
         return
     meta = model._meta
     path = _fixture_path(target_user, instance)
@@ -257,7 +261,9 @@ class UserDatumAdminMixin(admin.ModelAdmin):
     def render_change_form(
         self, request, context, add=False, change=False, form_url="", obj=None
     ):
-        context["show_user_datum"] = issubclass(self.model, Entity)
+        context["show_user_datum"] = issubclass(
+            self.model, Entity
+        ) and _user_allows_user_data(request.user)
         context["show_seed_datum"] = issubclass(self.model, Entity)
         context["show_save_as_copy"] = issubclass(self.model, Entity) or hasattr(
             self.model, "clone"
@@ -299,19 +305,27 @@ class EntityModelAdmin(UserDatumAdminMixin, admin.ModelAdmin):
         if copied:
             return
         target_user = _resolve_fixture_user(obj, request.user)
+        allow_user_data = _user_allows_user_data(target_user)
         if request.POST.get("_user_datum") == "on":
-            if not obj.is_user_data:
-                type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=True)
-                obj.is_user_data = True
-            dump_user_fixture(obj, target_user)
-            handler = getattr(self, "user_datum_saved", None)
-            if callable(handler):
-                handler(request, obj)
-            if target_user is not None:
+            if allow_user_data:
+                if not obj.is_user_data:
+                    type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=True)
+                    obj.is_user_data = True
+                dump_user_fixture(obj, target_user)
+                handler = getattr(self, "user_datum_saved", None)
+                if callable(handler):
+                    handler(request, obj)
                 path = _fixture_path(target_user, obj)
+                self.message_user(request, f"User datum saved to {path}")
             else:
-                path = _fixture_path(request.user, obj)
-            self.message_user(request, f"User datum saved to {path}")
+                if obj.is_user_data:
+                    type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=False)
+                    obj.is_user_data = False
+                    delete_user_fixture(obj, target_user)
+                messages.warning(
+                    request,
+                    _("User data is not available for this account."),
+                )
         elif obj.is_user_data:
             type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=False)
             obj.is_user_data = False
