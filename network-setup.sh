@@ -17,7 +17,7 @@ LOCK_DIR="$BASE_DIR/locks"
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--interactive|-i] [--no-watchdog]
+Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--interactive|-i] [--no-watchdog] [--no-vnc]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --no-firewall   Skip firewall port validation.
@@ -25,6 +25,7 @@ Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--inte
   --public        Configure an open access point without internet sharing.
   --interactive, -i  Collect user decisions for each step before executing.
   --no-watchdog   Skip installing the WiFi watchdog service.
+  --no-vnc        Skip validating that a VNC service is enabled.
 USAGE
 }
 
@@ -34,6 +35,7 @@ INTERACTIVE=false
 UNSAFE=false
 PUBLIC_MODE=false
 INSTALL_WATCHDOG=true
+SKIP_VNC=false
 DEFAULT_AP_NAME="gelectriic-ap"
 AP_NAME="$DEFAULT_AP_NAME"
 SKIP_AP=false
@@ -78,6 +80,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-watchdog)
             INSTALL_WATCHDOG=false
+            ;;
+        --no-vnc)
+            SKIP_VNC=true
             ;;
         -h|--help)
             usage
@@ -202,7 +207,11 @@ command -v nmcli >/dev/null 2>&1 || {
 }
 
 require_ssh_password
-require_vnc_enabled
+if [[ $SKIP_VNC == true ]]; then
+    echo "Skipping VNC requirement as requested."
+else
+    require_vnc_enabled
+fi
 
 # Detect the active internet connection and back it up
 PROTECTED_DEV=""
