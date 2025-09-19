@@ -1236,6 +1236,21 @@ class NodeFeatureTests(TestCase):
             with patch("core.notifications.supports_gui_toast", return_value=False):
                 self.assertFalse(feature.is_enabled)
 
+    def test_role_membership_alone_does_not_enable_feature(self):
+        feature = NodeFeature.objects.create(
+            slug="custom-feature", display="Custom Feature"
+        )
+        feature.roles.add(self.role)
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            self.assertFalse(feature.is_enabled)
+        NodeFeatureAssignment.objects.create(node=self.node, feature=feature)
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            self.assertTrue(feature.is_enabled)
+
     @patch("nodes.models.Node._has_rpi_camera", return_value=True)
     def test_rpi_camera_detection(self, mock_camera):
         feature = NodeFeature.objects.create(
