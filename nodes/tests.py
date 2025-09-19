@@ -1321,6 +1321,37 @@ class NodeFeatureTests(TestCase):
             NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
         )
 
+    @patch("nodes.models.Node._hosts_gelectriic_ap", return_value=True)
+    def test_ap_public_wifi_detection(self, mock_hosts):
+        control_role, _ = NodeRole.objects.get_or_create(name="Control")
+        router = NodeFeature.objects.create(slug="ap-router", display="AP Router")
+        router.roles.add(control_role)
+        public = NodeFeature.objects.create(
+            slug="ap-public-wifi", display="AP Public Wi-Fi"
+        )
+        public.roles.add(control_role)
+        mac = "00:11:22:33:44:88"
+        with TemporaryDirectory() as tmp, override_settings(BASE_DIR=Path(tmp)):
+            locks = Path(tmp) / "locks"
+            locks.mkdir(parents=True, exist_ok=True)
+            (locks / "public_wifi_mode.lck").touch()
+            with patch("nodes.models.Node.get_current_mac", return_value=mac):
+                node = Node.objects.create(
+                    hostname="control",
+                    address="127.0.0.1",
+                    port=8000,
+                    mac_address=mac,
+                    role=control_role,
+                    base_path=str(Path(tmp)),
+                )
+                node.refresh_features()
+        self.assertTrue(
+            NodeFeatureAssignment.objects.filter(node=node, feature=public).exists()
+        )
+        self.assertFalse(
+            NodeFeatureAssignment.objects.filter(node=node, feature=router).exists()
+        )
+
     @patch("nodes.models.Node._hosts_gelectriic_ap", side_effect=[True, False])
     def test_ap_router_removed_when_not_hosting(self, mock_hosts):
         control_role, _ = NodeRole.objects.get_or_create(name="Control")

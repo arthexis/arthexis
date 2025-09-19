@@ -12,7 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
 from django.apps import apps
-from django.db.models.signals import m2m_changed
+from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
 from datetime import timedelta
 from django.contrib.contenttypes.models import ContentType
@@ -190,6 +190,7 @@ class InviteLead(Lead):
     comment = models.TextField(blank=True)
     sent_on = models.DateTimeField(null=True, blank=True)
     error = models.TextField(blank=True)
+    mac_address = models.CharField(max_length=17, blank=True)
 
     class Meta:
         verbose_name = "Invite Lead"
@@ -197,6 +198,44 @@ class InviteLead(Lead):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.email
+
+
+class PublicWifiAccess(Entity):
+    """Allow public Wi-Fi clients onto the wider internet."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="public_wifi_accesses",
+    )
+    mac_address = models.CharField(max_length=17)
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+    revoked_on = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ("user", "mac_address")
+        verbose_name = "Public Wi-Fi Access"
+        verbose_name_plural = "Public Wi-Fi Access"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.user} -> {self.mac_address}"
+
+
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+def _revoke_public_wifi_when_inactive(sender, instance, **kwargs):
+    if instance.is_active:
+        return
+    from core import public_wifi
+
+    public_wifi.revoke_public_access_for_user(instance)
+
+
+@receiver(post_delete, sender=settings.AUTH_USER_MODEL)
+def _cleanup_public_wifi_on_delete(sender, instance, **kwargs):
+    from core import public_wifi
+
+    public_wifi.revoke_public_access_for_user(instance)
 
 
 class User(Entity, AbstractUser):

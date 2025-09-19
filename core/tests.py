@@ -5,16 +5,18 @@ import django
 
 django.setup()
 
-from django.test import Client, TestCase, RequestFactory
+from django.test import Client, TestCase, RequestFactory, override_settings
 from django.urls import reverse
 from django.http import HttpRequest
 import json
 from decimal import Decimal
 from unittest import mock
+from unittest.mock import patch
 from pathlib import Path
 import subprocess
 from glob import glob
 from datetime import timedelta
+import tempfile
 
 from django.utils import timezone
 from django.contrib.auth.models import Permission
@@ -33,6 +35,7 @@ from .models import (
     PackageRelease,
     ReleaseManager,
     Todo,
+    PublicWifiAccess,
 )
 from django.contrib.admin.sites import AdminSite
 from core.admin import (
@@ -48,6 +51,7 @@ from django.core.management import call_command
 from django.db import IntegrityError
 from .backends import LocalhostAdminBackend
 from core.views import _step_check_version, _step_promote_build, _step_publish
+from core import public_wifi
 
 
 class DefaultAdminTests(TestCase):
@@ -548,6 +552,42 @@ class AddressTests(TestCase):
         )
         user = User.objects.create_user(username="addr", password="pwd", address=addr)
         self.assertEqual(user.address, addr)
+
+
+class PublicWifiUtilitiesTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="wifi", password="pwd")
+
+    def test_grant_public_access_records_allowlist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            allow_file = base / "locks" / "public_wifi_allow.list"
+            with override_settings(BASE_DIR=base):
+                with patch("core.public_wifi._iptables_available", return_value=False):
+                    public_wifi.grant_public_access(self.user, "AA:BB:CC:DD:EE:FF")
+            self.assertTrue(allow_file.exists())
+            content = allow_file.read_text()
+            self.assertIn("aa:bb:cc:dd:ee:ff", content)
+            self.assertTrue(
+                PublicWifiAccess.objects.filter(
+                    user=self.user, mac_address="aa:bb:cc:dd:ee:ff"
+                ).exists()
+            )
+
+    def test_revoke_public_access_for_user_updates_allowlist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            allow_file = base / "locks" / "public_wifi_allow.list"
+            with override_settings(BASE_DIR=base):
+                with patch("core.public_wifi._iptables_available", return_value=False):
+                    access = public_wifi.grant_public_access(
+                        self.user, "AA:BB:CC:DD:EE:FF"
+                    )
+                    public_wifi.revoke_public_access_for_user(self.user)
+            access.refresh_from_db()
+            self.assertIsNotNone(access.revoked_on)
+            if allow_file.exists():
+                self.assertNotIn("aa:bb:cc:dd:ee:ff", allow_file.read_text())
 
 
 class LiveSubscriptionTests(TestCase):

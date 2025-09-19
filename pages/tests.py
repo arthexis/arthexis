@@ -34,7 +34,14 @@ from django.core import mail
 from django.utils import timezone
 from django.utils.text import slugify
 
-from nodes.models import EmailOutbox, Node, ContentSample, NodeRole
+from nodes.models import (
+    EmailOutbox,
+    Node,
+    ContentSample,
+    NodeRole,
+    NodeFeature,
+    NodeFeatureAssignment,
+)
 
 
 class LoginViewTests(TestCase):
@@ -168,6 +175,7 @@ class InvitationTests(TestCase):
         self.assertEqual(lead.comment, "Hello")
         self.assertIsNone(lead.sent_on)
         self.assertEqual(lead.error, "")
+        self.assertEqual(lead.mac_address, "")
         self.assertEqual(len(mail.outbox), 0)
 
     def test_request_invite_falls_back_to_send_mail(self):
@@ -192,6 +200,51 @@ class InvitationTests(TestCase):
         self.assertTrue(node_send.called)
         self.assertTrue(fallback.called)
         self.assertEqual(len(mail.outbox), 1)
+
+    @patch(
+        "pages.views.public_wifi.resolve_mac_address",
+        return_value="aa:bb:cc:dd:ee:ff",
+    )
+    def test_request_invite_records_mac_address(self, mock_resolve):
+        resp = self.client.post(
+            reverse("pages:request-invite"), {"email": "invite@example.com"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        lead = InviteLead.objects.get()
+        self.assertEqual(lead.mac_address, "aa:bb:cc:dd:ee:ff")
+
+    @patch("pages.views.public_wifi.grant_public_access")
+    @patch(
+        "pages.views.public_wifi.resolve_mac_address",
+        return_value="aa:bb:cc:dd:ee:ff",
+    )
+    def test_invitation_login_grants_public_wifi_access(
+        self, mock_resolve, mock_grant
+    ):
+        control_role, _ = NodeRole.objects.get_or_create(name="Control")
+        feature = NodeFeature.objects.create(
+            slug="ap-public-wifi", display="AP Public Wi-Fi"
+        )
+        feature.roles.add(control_role)
+        node = Node.objects.create(
+            hostname="control",
+            address="127.0.0.1",
+            mac_address=Node.get_current_mac(),
+            role=control_role,
+        )
+        NodeFeatureAssignment.objects.create(node=node, feature=feature)
+        with patch("pages.views.Node.get_local", return_value=node):
+            resp = self.client.post(
+                reverse("pages:request-invite"), {"email": "invite@example.com"}
+            )
+        self.assertEqual(resp.status_code, 200)
+        link = re.search(r"http://testserver[\S]+", mail.outbox[0].body).group(0)
+        with patch("pages.views.Node.get_local", return_value=node):
+            resp = self.client.post(link)
+        self.assertEqual(resp.status_code, 302)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_active)
+        mock_grant.assert_called_once_with(self.user, "aa:bb:cc:dd:ee:ff")
 
 
 class NavbarBrandTests(TestCase):
