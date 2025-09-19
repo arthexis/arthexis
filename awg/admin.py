@@ -77,7 +77,7 @@ class CalculatorTemplateAdmin(EntityModelAdmin):
     list_display = (
         "name",
         "description",
-        "show_in_pages",
+        "public",
         "meters",
         "amps",
         "volts",
@@ -102,6 +102,10 @@ class CalculatorTemplateAdmin(EntityModelAdmin):
         "ground",
         "calculator_link",
     )
+    
+    @admin.display(boolean=True, description="Public", ordering="show_in_pages")
+    def public(self, obj):
+        return obj.show_in_pages
 
     def run_calculator(self, request, queryset):
         for template in queryset:
