@@ -20,8 +20,10 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 - **[Windows](https://en.wikipedia.org/wiki/Microsoft_Windows)**: open [PowerShell](https://learn.microsoft.com/powershell/) or [Git Bash](https://gitforwindows.org/) and run the same command.
 
 ### 2. Start and stop
-- **[VS Code](https://code.visualstudio.com/)**: open the folder and run  
-  `python [vscode_manage.py](vscode_manage.py) runserver`; press `Ctrl+C` to stop.
+- **[VS Code](https://code.visualstudio.com/)**: open the folder, go to the
+  **Run and Debug** panel (`Ctrl+Shift+D`), select the **Run Server** (or
+  **Debug Server**) configuration, and press the green start button. Stop the
+  server with the red square button (`Shift+F5`).
 - **[Shell](https://en.wikipedia.org/wiki/Shell_(computing))**: on Linux run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh); on Windows run [`start.bat`](start.bat) and stop with `Ctrl+C`.
 
 ### 3. Install and upgrade
