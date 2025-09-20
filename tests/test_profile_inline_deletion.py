@@ -248,15 +248,18 @@ class ProfileInlineAdminTemplateTests(TestCase):
             for fs in response.context_data["inline_admin_formsets"]
             if fs.formset.prefix != "phone_numbers"
         ]
-        self.assertTrue(
-            re.search(r'name="-\d+-0-DELETE"', content),
-            msg="Inline delete input should render as a hidden field on user change view",
-        )
-        self.assertFalse(
-            re.search(r'label[^>]+for="id_-\d+-0-DELETE"', content),
-            msg="Inline delete label should not be rendered on user change view",
-        )
         for prefix in prefixes:
+            with self.subTest(prefix=prefix):
+                self.assertRegex(
+                    content,
+                    rf'name="{re.escape(prefix)}-0-DELETE"',
+                    msg="Inline delete input should render as a hidden field on user change view",
+                )
+                self.assertNotRegex(
+                    content,
+                    rf'label[^>]+for="id_{re.escape(prefix)}-0-DELETE"',
+                    msg="Inline delete label should not be rendered on user change view",
+                )
             selector = f'[data-inline-prefix="{prefix}"] .inline-deletelink'
             self.assertTrue(
                 selector in content,
@@ -280,15 +283,18 @@ class ProfileInlineAdminTemplateTests(TestCase):
         prefixes = [
             fs.formset.prefix for fs in response.context_data["inline_admin_formsets"]
         ]
-        self.assertTrue(
-            re.search(r'name="-\d+-0-DELETE"', content),
-            msg="Inline delete input should render as a hidden field on security group change view",
-        )
-        self.assertFalse(
-            re.search(r'label[^>]+for="id_-\d+-0-DELETE"', content),
-            msg="Inline delete label should not be rendered on security group change view",
-        )
         for prefix in prefixes:
+            with self.subTest(prefix=prefix):
+                self.assertRegex(
+                    content,
+                    rf'name="{re.escape(prefix)}-0-DELETE"',
+                    msg="Inline delete input should render as a hidden field on security group change view",
+                )
+                self.assertNotRegex(
+                    content,
+                    rf'label[^>]+for="id_{re.escape(prefix)}-0-DELETE"',
+                    msg="Inline delete label should not be rendered on security group change view",
+                )
             selector = f'[data-inline-prefix="{prefix}"] .inline-deletelink'
             self.assertTrue(
                 selector in content,
