@@ -2,8 +2,26 @@
 {% load i18n %}
 {% block content %}
 <h1>{% trans "Client Report" %}</h1>
+{% if not request.user.is_authenticated %}
+  <div class="notification warning" role="alert">
+    {% if login_url %}
+      {% blocktrans trimmed with login_url=login_url %}
+        Please <a href="{{ login_url }}">log in</a> to generate client reports.
+      {% endblocktrans %}
+    {% else %}
+      {% trans "Please log in to generate client reports." %}
+    {% endif %}
+  </div>
+{% endif %}
 <form method="post" id="report-form" class="client-report-form">
   {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="form-errors" role="alert">
+      {% for error in form.non_field_errors %}
+        <p class="error">{{ error }}</p>
+      {% endfor %}
+    </div>
+  {% endif %}
   <fieldset class="report-section" aria-describedby="id_period-help">
     <legend class="section-title">{% trans "Reporting period" %}</legend>
     <div class="form-group">
@@ -83,7 +101,7 @@
     </div>
   </fieldset>
   <div class="form-actions">
-    <button type="submit" class="button button-primary" id="generate-report-button">
+    <button type="submit" class="button button-primary" id="generate-report-button"{% if not request.user.is_authenticated %} disabled aria-disabled="true"{% endif %}>
       {% trans "Generate report" %}
     </button>
   </div>
@@ -201,6 +219,36 @@
     list-style: none;
   }
 
+  .notification {
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .notification.warning {
+    background-color: #fef3c7;
+    color: #92400e;
+  }
+
+  .notification.warning a {
+    color: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+  }
+
+  .form-errors {
+    border-left: 4px solid #dc2626;
+    background-color: #fee2e2;
+    color: #7f1d1d;
+    padding: 1rem 1.25rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .form-errors .error {
+    margin: 0;
+  }
+
   .client-report-form .help-text {
     margin: 0;
     font-size: 0.85rem;
@@ -227,6 +275,11 @@
     font-size: 1rem;
     font-weight: 600;
     border-radius: 6px;
+  }
+
+  #generate-report-button[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 
   @media (max-width: 40rem) {

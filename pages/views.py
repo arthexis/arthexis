@@ -32,6 +32,7 @@ from django.utils.cache import patch_vary_headers
 from django.core.exceptions import PermissionDenied
 from django.utils.text import slugify
 from django.core.validators import EmailValidator
+from django.core.cache import cache
 from core.models import InviteLead, ClientReport, ClientReportSchedule
 
 try:  # pragma: no cover - optional dependency guard
@@ -735,36 +736,85 @@ def client_report(request):
     form = ClientReportForm(request.POST or None, request=request)
     report = None
     schedule = None
-    if request.method == "POST" and form.is_valid():
-        owner = form.cleaned_data.get("owner")
-        if not owner and request.user.is_authenticated:
-            owner = request.user
-        report = ClientReport.generate(
-            form.cleaned_data["start"],
-            form.cleaned_data["end"],
-            owner=owner,
-            recipients=form.cleaned_data.get("destinations"),
-            disable_emails=form.cleaned_data.get("disable_emails", False),
-        )
-        report.store_local_copy()
-        recurrence = form.cleaned_data.get("recurrence")
-        if recurrence and recurrence != ClientReportSchedule.PERIODICITY_NONE:
-            schedule = ClientReportSchedule.objects.create(
-                owner=owner,
-                created_by=request.user if request.user.is_authenticated else None,
-                periodicity=recurrence,
-                email_recipients=form.cleaned_data.get("destinations", []),
-                disable_emails=form.cleaned_data.get("disable_emails", False),
+    if request.method == "POST":
+        if not request.user.is_authenticated:
+            form.is_valid()  # Run validation to surface field errors alongside auth error.
+            form.add_error(
+                None, _("You must log in to generate client reports."),
             )
-            report.schedule = schedule
-            report.save(update_fields=["schedule"])
-            messages.success(
-                request,
-                _(
-                    "Client report schedule created; future reports will be generated automatically."
-                ),
-            )
-    context = {"form": form, "report": report, "schedule": schedule}
+        elif form.is_valid():
+            throttle_seconds = getattr(settings, "CLIENT_REPORT_THROTTLE_SECONDS", 60)
+            throttle_keys = []
+            if request.user.is_authenticated:
+                throttle_keys.append(f"client-report:user:{request.user.pk}")
+            remote_addr = request.META.get("HTTP_X_FORWARDED_FOR")
+            if remote_addr:
+                remote_addr = remote_addr.split(",")[0].strip()
+            remote_addr = remote_addr or request.META.get("REMOTE_ADDR")
+            if remote_addr:
+                throttle_keys.append(f"client-report:ip:{remote_addr}")
+
+            added_keys = []
+            blocked = False
+            for key in throttle_keys:
+                if cache.add(key, timezone.now(), throttle_seconds):
+                    added_keys.append(key)
+                else:
+                    blocked = True
+                    break
+
+            if blocked:
+                for key in added_keys:
+                    cache.delete(key)
+                form.add_error(
+                    None,
+                    _(
+                        "Client reports can only be generated periodically. Please wait before trying again."
+                    ),
+                )
+            else:
+                owner = form.cleaned_data.get("owner")
+                if not owner and request.user.is_authenticated:
+                    owner = request.user
+                report = ClientReport.generate(
+                    form.cleaned_data["start"],
+                    form.cleaned_data["end"],
+                    owner=owner,
+                    recipients=form.cleaned_data.get("destinations"),
+                    disable_emails=form.cleaned_data.get("disable_emails", False),
+                )
+                report.store_local_copy()
+                recurrence = form.cleaned_data.get("recurrence")
+                if recurrence and recurrence != ClientReportSchedule.PERIODICITY_NONE:
+                    schedule = ClientReportSchedule.objects.create(
+                        owner=owner,
+                        created_by=request.user if request.user.is_authenticated else None,
+                        periodicity=recurrence,
+                        email_recipients=form.cleaned_data.get("destinations", []),
+                        disable_emails=form.cleaned_data.get("disable_emails", False),
+                    )
+                    report.schedule = schedule
+                    report.save(update_fields=["schedule"])
+                    messages.success(
+                        request,
+                        _(
+                            "Client report schedule created; future reports will be generated automatically."
+                        ),
+                    )
+    try:
+        login_url = reverse("pages:login")
+    except NoReverseMatch:
+        try:
+            login_url = reverse("login")
+        except NoReverseMatch:
+            login_url = getattr(settings, "LOGIN_URL", None)
+
+    context = {
+        "form": form,
+        "report": report,
+        "schedule": schedule,
+        "login_url": login_url,
+    }
     return render(request, "pages/client_report.html", context)
 
 
