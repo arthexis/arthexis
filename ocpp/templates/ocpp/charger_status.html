@@ -113,6 +113,25 @@
       {% elif not past_session %}
       <p>{% trans "No active transaction" %}</p>
       {% endif %}
+      {% if can_remote_start %}
+      <div class="card border-success mt-3">
+        <div class="card-body">
+          <h2 class="h5 mb-2">{% trans "Remote start" %}</h2>
+          <p class="text-muted small mb-3">{% trans "Authorize a remote charging session by entering the driver's RFID or tag value." %}</p>
+          <form id="remote-start-form" class="row gy-2 align-items-end" action="{{ action_url }}" method="post" data-connector-id="{{ charger.connector_id }}">
+            <div class="col-sm-auto">
+              <label class="form-label" for="remote-start-idtag">{% trans "RFID or Tag" %}</label>
+              <input type="text" id="remote-start-idtag" class="form-control" required autocomplete="off" />
+            </div>
+            <div class="col-sm-auto">
+              <button type="submit" class="btn btn-primary">{% trans "Start Charging" %}</button>
+            </div>
+          </form>
+          <div id="remote-start-feedback" class="mt-2 small text-muted" aria-live="polite"></div>
+        </div>
+      </div>
+      {{ remote_start_messages|json_script:"remote-start-i18n" }}
+      {% endif %}
     </div>
     <div class="col-md-8">
       {% if show_chart %}
@@ -352,6 +371,9 @@
           });
           const payload = parseChartPayload(newContent);
           current.innerHTML = newContent.innerHTML;
+          if (typeof window.setupRemoteStartForm === 'function') {
+            window.setupRemoteStartForm(current);
+          }
           if (oldCanvas) {
             const placeholder = current.querySelector('#kw-chart');
             if (placeholder) {
@@ -403,6 +425,9 @@
             }
           });
           current.innerHTML = newContent.innerHTML;
+          if (typeof window.setupRemoteStartForm === 'function') {
+            window.setupRemoteStartForm(current);
+          }
           changedIds.forEach(id => {
             const el = current.querySelector(`#${id}`);
             if (el) {
@@ -415,6 +440,111 @@
 
   document.addEventListener('DOMContentLoaded', reloadStatus);
   setInterval(reloadStatus, 5000);
+</script>
+{% endif %}
+{% if can_remote_start %}
+<script>
+  (function () {
+    function setupRemoteStartForm(root = document) {
+      if (!root || !root.querySelector) {
+        return;
+      }
+      const form = root.querySelector('#remote-start-form');
+      if (!form || form.dataset.remoteStartBound === 'true') {
+        return;
+      }
+
+      const input = form.querySelector('#remote-start-idtag') || root.querySelector('#remote-start-idtag');
+      const feedback = root.querySelector('#remote-start-feedback');
+      const submit = form.querySelector('button[type="submit"]');
+      if (!input || !feedback || !submit) {
+        return;
+      }
+
+      const actionUrl = form.getAttribute('action');
+      const connectorId = form.dataset.connectorId;
+      const messagesEl = root.querySelector('#remote-start-i18n') || document.getElementById('remote-start-i18n');
+      let messages = { required: '', sending: '', success: '', error: '' };
+      if (messagesEl) {
+        try {
+          messages = JSON.parse(messagesEl.textContent);
+        } catch (err) {
+          // Ignore parse errors and fall back to defaults.
+        }
+      }
+
+      form.dataset.remoteStartBound = 'true';
+
+      input.addEventListener('input', () => {
+        if (input.classList.contains('is-invalid') && input.value.trim()) {
+          input.classList.remove('is-invalid');
+          feedback.textContent = '';
+          feedback.className = 'mt-2 small text-muted';
+        }
+      });
+
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const tag = input.value.trim();
+        if (!tag) {
+          input.focus();
+          input.classList.add('is-invalid');
+          feedback.textContent = messages.required || '';
+          feedback.className = 'mt-2 small text-danger';
+          return;
+        }
+
+        submit.disabled = true;
+        feedback.textContent = messages.sending || '';
+        feedback.className = 'mt-2 small text-muted';
+
+        const payload = { action: 'remote_start', idTag: tag };
+        if (connectorId) {
+          const parsed = Number(connectorId);
+          payload.connectorId = Number.isNaN(parsed) ? connectorId : parsed;
+        }
+
+        fetch(actionUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+          .then((response) =>
+            response
+              .json()
+              .catch(() => ({}))
+              .then((data) => ({ ok: response.ok, data }))
+          )
+          .then(({ ok, data }) => {
+            if (ok) {
+              feedback.textContent = messages.success || '';
+              feedback.className = 'mt-2 small text-success';
+              input.value = '';
+              input.classList.remove('is-invalid');
+            } else {
+              const detail = data && typeof data.detail === 'string' ? data.detail : '';
+              feedback.textContent = detail || messages.error || '';
+              feedback.className = 'mt-2 small text-danger';
+            }
+          })
+          .catch(() => {
+            feedback.textContent = messages.error || '';
+            feedback.className = 'mt-2 small text-danger';
+          })
+          .finally(() => {
+            submit.disabled = false;
+          });
+      });
+    }
+
+    window.setupRemoteStartForm = setupRemoteStartForm;
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => setupRemoteStartForm(document));
+    } else {
+      setupRemoteStartForm(document);
+    }
+  })();
 </script>
 {% endif %}
 {% endblock %}

@@ -708,6 +708,25 @@ def charger_status(request, cid, connector=None):
             configuration_url = reverse("admin:ocpp_charger_change", args=[charger.pk])
         except NoReverseMatch:  # pragma: no cover - admin may be disabled
             configuration_url = None
+    is_connected = store.is_connected(cid, charger.connector_id)
+    has_active_session = bool(
+        live_tx if charger.connector_id is not None else sessions
+    )
+    can_remote_start = (
+        charger.connector_id is not None
+        and is_connected
+        and not has_active_session
+        and not past_session
+    )
+    remote_start_messages = None
+    if can_remote_start:
+        remote_start_messages = {
+            "required": str(_("RFID is required to start a session.")),
+            "sending": str(_("Sending remote start request...")),
+            "success": str(_("Remote start command queued.")),
+            "error": str(_("Unable to send remote start request.")),
+        }
+    action_url = _reverse_connector_url("charger-action", cid, connector_slug)
     return render(
         request,
         "ocpp/charger_status.html",
@@ -726,6 +745,11 @@ def charger_status(request, cid, connector=None):
             "search_url": search_url,
             "configuration_url": configuration_url,
             "page_url": _reverse_connector_url("charger-page", cid, connector_slug),
+            "is_connected": is_connected,
+            "is_idle": is_connected and not has_active_session,
+            "can_remote_start": can_remote_start,
+            "remote_start_messages": remote_start_messages,
+            "action_url": action_url,
             "show_chart": bool(
                 chart_data["datasets"]
                 and any(
@@ -846,6 +870,33 @@ def dispatch_action(request, cid, connector=None):
                 str(datetime.utcnow().timestamp()),
                 "RemoteStopTransaction",
                 {"transactionId": tx_obj.pk},
+            ]
+        )
+        asyncio.get_event_loop().create_task(ws.send(msg))
+    elif action == "remote_start":
+        id_tag = data.get("idTag")
+        if not isinstance(id_tag, str) or not id_tag.strip():
+            return JsonResponse({"detail": "idTag required"}, status=400)
+        id_tag = id_tag.strip()
+        payload: dict[str, object] = {"idTag": id_tag}
+        connector_id = data.get("connectorId")
+        if connector_id in ("", None):
+            connector_id = None
+        if connector_id is None and connector_value is not None:
+            connector_id = connector_value
+        if connector_id is not None:
+            try:
+                payload["connectorId"] = int(connector_id)
+            except (TypeError, ValueError):
+                payload["connectorId"] = connector_id
+        if "chargingProfile" in data and data["chargingProfile"] is not None:
+            payload["chargingProfile"] = data["chargingProfile"]
+        msg = json.dumps(
+            [
+                2,
+                str(datetime.utcnow().timestamp()),
+                "RemoteStartTransaction",
+                payload,
             ]
         )
         asyncio.get_event_loop().create_task(ws.send(msg))

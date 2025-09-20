@@ -67,6 +67,16 @@ class ClientWebsocketCommunicator(WebsocketCommunicator):
         self.response_headers = None
 
 
+class DummyWebSocket:
+    """Simple websocket stub that records payloads sent by the view."""
+
+    def __init__(self):
+        self.sent: list[str] = []
+
+    async def send(self, message):
+        self.sent.append(message)
+
+
 class ChargerFixtureTests(TestCase):
     fixtures = [
         p.name
@@ -1844,6 +1854,83 @@ class TransactionKwTests(TestCase):
         charger = Charger.objects.create(charger_id="SUM2")
         tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
         self.assertEqual(tx.kw, 0.0)
+
+
+class DispatchActionViewTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(username="dispatch", password="pw")
+        self.client.force_login(self.user)
+        try:
+            self.previous_loop = asyncio.get_event_loop()
+        except RuntimeError:
+            self.previous_loop = None
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        self.addCleanup(self._close_loop)
+        self.charger = Charger.objects.create(
+            charger_id="DISPATCH", connector_id=1
+        )
+        self.ws = DummyWebSocket()
+        store.set_connection(
+            self.charger.charger_id, self.charger.connector_id, self.ws
+        )
+        self.addCleanup(
+            store.pop_connection,
+            self.charger.charger_id,
+            self.charger.connector_id,
+        )
+        self.log_key = store.identity_key(
+            self.charger.charger_id, self.charger.connector_id
+        )
+        store.clear_log(self.log_key, log_type="charger")
+        self.addCleanup(store.clear_log, self.log_key, "charger")
+        self.url = reverse(
+            "charger-action-connector",
+            args=[self.charger.charger_id, self.charger.connector_slug],
+        )
+
+    def _close_loop(self):
+        try:
+            if not self.loop.is_closed():
+                self.loop.run_until_complete(asyncio.sleep(0))
+        except RuntimeError:
+            pass
+        finally:
+            if not self.loop.is_closed():
+                self.loop.close()
+            asyncio.set_event_loop(self.previous_loop)
+
+    def test_remote_start_requires_id_tag(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "remote_start"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json().get("detail"), "idTag required")
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(self.ws.sent, [])
+
+    def test_remote_start_dispatches_frame(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "remote_start", "idTag": "RF1234"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "RemoteStartTransaction")
+        self.assertEqual(frame[3]["idTag"], "RF1234")
+        self.assertEqual(frame[3]["connectorId"], 1)
+        log_entries = store.logs["charger"].get(self.log_key, [])
+        self.assertTrue(
+            any("RemoteStartTransaction" in entry for entry in log_entries)
+        )
 
 
 class ChargerStatusViewTests(TestCase):
