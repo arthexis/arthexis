@@ -80,7 +80,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ matrix.role }}
-          path: .coverage.${{ matrix.role }}
+          path: .coverage.${{ matrix.role }}*
 
   check-migrations:
     needs: node-test-matrix
