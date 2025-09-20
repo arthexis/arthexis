@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Client Report Generate",
+      "url": "/admin/core/clientreport/generate/",
+      "request_details": "Confirm the improved client report generation layout and help text render correctly."
+    }
+  }
+]
