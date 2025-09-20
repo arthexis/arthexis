@@ -65,6 +65,10 @@ class Charger(Entity):
     )
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_meter_values = models.JSONField(default=dict, blank=True)
+    last_status = models.CharField(max_length=64, blank=True)
+    last_error_code = models.CharField(max_length=64, blank=True)
+    last_status_vendor_info = models.JSONField(null=True, blank=True)
+    last_status_timestamp = models.DateTimeField(null=True, blank=True)
     temperature = models.DecimalField(
         max_digits=5, decimal_places=1, null=True, blank=True
     )

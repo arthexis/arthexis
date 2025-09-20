@@ -353,6 +353,63 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 await database_sync_to_async(
                     Charger.objects.filter(pk=self.charger.pk).update
                 )(last_heartbeat=now)
+            elif action == "StatusNotification":
+                await self._assign_connector(payload.get("connectorId"))
+                status = (payload.get("status") or "").strip()
+                error_code = (payload.get("errorCode") or "").strip()
+                vendor_info = {
+                    key: value
+                    for key, value in (
+                        ("info", payload.get("info")),
+                        ("vendorId", payload.get("vendorId")),
+                    )
+                    if value
+                }
+                vendor_value = vendor_info or None
+                timestamp_raw = payload.get("timestamp")
+                status_timestamp = (
+                    parse_datetime(timestamp_raw) if timestamp_raw else None
+                )
+                if status_timestamp is None:
+                    status_timestamp = timezone.now()
+                elif timezone.is_naive(status_timestamp):
+                    status_timestamp = timezone.make_aware(status_timestamp)
+                update_kwargs = {
+                    "last_status": status,
+                    "last_error_code": error_code,
+                    "last_status_vendor_info": vendor_value,
+                    "last_status_timestamp": status_timestamp,
+                }
+
+                def _update_instance(instance: Charger | None) -> None:
+                    if not instance:
+                        return
+                    instance.last_status = status
+                    instance.last_error_code = error_code
+                    instance.last_status_vendor_info = vendor_value
+                    instance.last_status_timestamp = status_timestamp
+
+                await database_sync_to_async(
+                    Charger.objects.filter(
+                        charger_id=self.charger_id, connector_id=None
+                    ).update
+                )(**update_kwargs)
+                connector_value = self.connector_value
+                if connector_value is not None:
+                    await database_sync_to_async(
+                        Charger.objects.filter(
+                            charger_id=self.charger_id,
+                            connector_id=connector_value,
+                        ).update
+                    )(**update_kwargs)
+                _update_instance(self.aggregate_charger)
+                _update_instance(self.charger)
+                store.add_log(
+                    self.store_key,
+                    f"StatusNotification processed: {json.dumps(payload, sort_keys=True)}",
+                    log_type="charger",
+                )
+                reply_payload = {}
             elif action == "Authorize":
                 account = await self._get_account(payload.get("idTag"))
                 if self.charger.require_rfid:

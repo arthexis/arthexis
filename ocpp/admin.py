@@ -121,6 +121,10 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                     "location",
                     "last_heartbeat",
                     "last_meter_values",
+                    "last_status",
+                    "last_error_code",
+                    "last_status_vendor_info",
+                    "last_status_timestamp",
                     "last_path",
                 )
             },
@@ -140,7 +144,14 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             },
         ),
     )
-    readonly_fields = ("last_heartbeat", "last_meter_values")
+    readonly_fields = (
+        "last_heartbeat",
+        "last_meter_values",
+        "last_status",
+        "last_error_code",
+        "last_status_vendor_info",
+        "last_status_timestamp",
+    )
     list_display = (
         "charger_id",
         "connector_id",
