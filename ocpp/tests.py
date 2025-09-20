@@ -410,6 +410,58 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_diagnostics_status_notification_updates_records(self):
+        communicator = WebsocketCommunicator(application, "/DIAGCP/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        reported_at = timezone.now().replace(microsecond=0)
+        payload = {
+            "status": "Uploaded",
+            "connectorId": 5,
+            "uploadLocation": "https://example.com/diag.tar",
+            "timestamp": reported_at.isoformat(),
+        }
+
+        await communicator.send_json_to(
+            [2, "1", "DiagnosticsStatusNotification", payload]
+        )
+        response = await communicator.receive_json_from()
+        self.assertEqual(response[0], 3)
+        self.assertEqual(response[2], {})
+
+        def _fetch():
+            aggregate = Charger.objects.get(charger_id="DIAGCP", connector_id=None)
+            connector = Charger.objects.get(charger_id="DIAGCP", connector_id=5)
+            return aggregate, connector
+
+        aggregate, connector = await database_sync_to_async(_fetch)()
+        self.assertEqual(aggregate.diagnostics_status, "Uploaded")
+        self.assertEqual(connector.diagnostics_status, "Uploaded")
+        self.assertEqual(
+            aggregate.diagnostics_location, "https://example.com/diag.tar"
+        )
+        self.assertEqual(
+            connector.diagnostics_location, "https://example.com/diag.tar"
+        )
+        self.assertEqual(aggregate.diagnostics_timestamp, reported_at)
+        self.assertEqual(connector.diagnostics_timestamp, reported_at)
+
+        connector_logs = store.get_logs(
+            store.identity_key("DIAGCP", 5), log_type="charger"
+        )
+        aggregate_logs = store.get_logs(
+            store.identity_key("DIAGCP", None), log_type="charger"
+        )
+        self.assertTrue(
+            any("DiagnosticsStatusNotification" in entry for entry in connector_logs)
+        )
+        self.assertTrue(
+            any("DiagnosticsStatusNotification" in entry for entry in aggregate_logs)
+        )
+
+        await communicator.disconnect()
+
     async def test_temperature_recorded(self):
         charger = await database_sync_to_async(Charger.objects.create)(
             charger_id="TEMP1"
@@ -1720,6 +1772,49 @@ class ChargerStatusViewTests(TestCase):
         self.assertAlmostEqual(resp.context["tx"].kw, 0.02)
         store.transactions.pop(key, None)
 
+    def test_diagnostics_status_displayed(self):
+        reported_at = timezone.now().replace(microsecond=0)
+        charger = Charger.objects.create(
+            charger_id="DIAGPAGE",
+            diagnostics_status="Uploaded",
+            diagnostics_location="https://example.com/report.tar",
+            diagnostics_timestamp=reported_at,
+        )
+
+        resp = self.client.get(reverse("charger-status", args=[charger.charger_id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Diagnostics")
+        self.assertContains(resp, "id=\"diagnostics-status\"")
+        self.assertContains(resp, "Uploaded")
+        self.assertContains(resp, "id=\"diagnostics-timestamp\"")
+        self.assertContains(resp, "id=\"diagnostics-location\"")
+        self.assertContains(resp, "https://example.com/report.tar")
+
+    def test_connector_status_prefers_connector_diagnostics(self):
+        aggregate = Charger.objects.create(
+            charger_id="DIAGCONN",
+            diagnostics_status="Uploaded",
+        )
+        connector = Charger.objects.create(
+            charger_id="DIAGCONN",
+            connector_id=1,
+            diagnostics_status="Uploading",
+        )
+
+        aggregate_resp = self.client.get(
+            reverse("charger-status", args=[aggregate.charger_id])
+        )
+        self.assertContains(aggregate_resp, "Uploaded")
+        self.assertNotContains(aggregate_resp, "Uploading")
+
+        connector_resp = self.client.get(
+            reverse(
+                "charger-status-connector",
+                args=[connector.charger_id, connector.connector_slug],
+            )
+        )
+        self.assertContains(connector_resp, "Uploading")
+
     def test_sessions_are_linked(self):
         charger = Charger.objects.create(charger_id="LINK1")
         tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
@@ -1854,6 +1949,56 @@ class ChargerStatusViewTests(TestCase):
         finally:
             store.transactions.pop(key_one, None)
             store.transactions.pop(key_two, None)
+
+
+class ChargerApiDiagnosticsTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(username="diagapi", password="pwd")
+        self.client.force_login(self.user)
+
+    def test_detail_includes_diagnostics_fields(self):
+        reported_at = timezone.now().replace(microsecond=0)
+        charger = Charger.objects.create(
+            charger_id="APIDIAG",
+            diagnostics_status="Uploaded",
+            diagnostics_timestamp=reported_at,
+            diagnostics_location="https://example.com/diag.tar",
+        )
+
+        resp = self.client.get(reverse("charger-detail", args=[charger.charger_id]))
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload["diagnosticsStatus"], "Uploaded")
+        self.assertEqual(
+            payload["diagnosticsTimestamp"], reported_at.isoformat()
+        )
+        self.assertEqual(
+            payload["diagnosticsLocation"], "https://example.com/diag.tar"
+        )
+
+    def test_list_includes_diagnostics_fields(self):
+        reported_at = timezone.now().replace(microsecond=0)
+        Charger.objects.create(
+            charger_id="APILIST",
+            diagnostics_status="Idle",
+            diagnostics_timestamp=reported_at,
+            diagnostics_location="s3://bucket/diag.zip",
+        )
+
+        resp = self.client.get(reverse("charger-list"))
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertIn("chargers", payload)
+        target = next(
+            item
+            for item in payload["chargers"]
+            if item["charger_id"] == "APILIST" and item["connector_id"] is None
+        )
+        self.assertEqual(target["diagnosticsStatus"], "Idle")
+        self.assertEqual(target["diagnosticsLocation"], "s3://bucket/diag.zip")
+        self.assertEqual(target["diagnosticsTimestamp"], reported_at.isoformat())
 
 
 class ChargerSessionPaginationTests(TestCase):

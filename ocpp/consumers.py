@@ -432,6 +432,66 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     Charger.objects.filter(pk=self.charger.pk).update
                 )(last_meter_values=payload)
                 reply_payload = {}
+            elif action == "DiagnosticsStatusNotification":
+                status_value = payload.get("status")
+                location_value = (
+                    payload.get("uploadLocation")
+                    or payload.get("location")
+                    or payload.get("uri")
+                )
+                timestamp_value = payload.get("timestamp")
+                diagnostics_timestamp = None
+                if timestamp_value:
+                    diagnostics_timestamp = parse_datetime(timestamp_value)
+                    if diagnostics_timestamp and timezone.is_naive(
+                        diagnostics_timestamp
+                    ):
+                        diagnostics_timestamp = timezone.make_aware(
+                            diagnostics_timestamp, timezone=timezone.utc
+                        )
+
+                updates = {
+                    "diagnostics_status": status_value or None,
+                    "diagnostics_timestamp": diagnostics_timestamp,
+                    "diagnostics_location": location_value or None,
+                }
+
+                def _persist_diagnostics():
+                    targets: list[Charger] = []
+                    if self.charger:
+                        targets.append(self.charger)
+                    aggregate = self.aggregate_charger
+                    if (
+                        aggregate
+                        and not any(
+                            target.pk == aggregate.pk for target in targets if target.pk
+                        )
+                    ):
+                        targets.append(aggregate)
+                    for target in targets:
+                        for field, value in updates.items():
+                            setattr(target, field, value)
+                        if target.pk:
+                            Charger.objects.filter(pk=target.pk).update(**updates)
+
+                await database_sync_to_async(_persist_diagnostics)()
+
+                status_label = updates["diagnostics_status"] or "unknown"
+                log_message = "DiagnosticsStatusNotification: status=%s" % (
+                    status_label,
+                )
+                if updates["diagnostics_timestamp"]:
+                    log_message += ", timestamp=%s" % (
+                        updates["diagnostics_timestamp"].isoformat()
+                    )
+                if updates["diagnostics_location"]:
+                    log_message += ", location=%s" % updates["diagnostics_location"]
+                store.add_log(self.store_key, log_message, log_type="charger")
+                if self.aggregate_charger and self.aggregate_charger.connector_id is None:
+                    aggregate_key = store.identity_key(self.charger_id, None)
+                    if aggregate_key != self.store_key:
+                        store.add_log(aggregate_key, log_message, log_type="charger")
+                reply_payload = {}
             elif action == "StartTransaction":
                 id_tag = payload.get("idTag")
                 account = await self._get_account(id_tag)
