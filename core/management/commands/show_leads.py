@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 from core.models import InviteLead
 from awg.models import PowerLead
 import json
@@ -45,11 +46,23 @@ class Command(BaseCommand):
                 :limit
             ]
 
+        def _normalize_timestamp(value):
+            if timezone.is_naive(value):  # pragma: no cover - depends on USE_TZ
+                return value
+            return timezone.localtime(value)
+
         for lead in leads:
+            created_on = _normalize_timestamp(lead.created_on)
             if isinstance(lead, InviteLead):
                 detail = lead.email
+                if lead.sent_on:
+                    sent_on = _normalize_timestamp(lead.sent_on)
+                    status = f" [SENT {sent_on:%Y-%m-%d %H:%M:%S}]"
+                else:
+                    status = " [NOT SENT]"
             else:
                 detail = json.dumps(lead.values, sort_keys=True)
+                status = ""
             self.stdout.write(
-                f"{lead.created_on:%Y-%m-%d %H:%M:%S} {lead.__class__.__name__}: {detail}"
+                f"{created_on:%Y-%m-%d %H:%M:%S} {lead.__class__.__name__}: {detail}{status}"
             )

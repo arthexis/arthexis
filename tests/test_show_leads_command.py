@@ -26,11 +26,13 @@ def test_show_leads_lists_recent_leads():
     old_invite.save(update_fields=["created_on"])
     power = PowerLead.objects.create(values={"meters": "1"})
     new_invite = InviteLead.objects.create(email="new@example.com")
+    new_invite.sent_on = now
+    new_invite.save(update_fields=["sent_on"])
 
     out = StringIO()
     call_command("show_leads", 2, stdout=out)
     output = out.getvalue()
-    assert "new@example.com" in output
+    assert "InviteLead: new@example.com [SENT" in output
     assert "PowerLead" in output
     assert "old@example.com" not in output
 
@@ -46,6 +48,7 @@ def test_show_leads_filters_invites():
     call_command("show_leads", "--invites", stdout=out)
     output = out.getvalue()
     assert "only@example.com" in output
+    assert "[NOT SENT]" in output
     assert "PowerLead" not in output
 
 
