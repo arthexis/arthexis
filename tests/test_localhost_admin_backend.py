@@ -1,7 +1,8 @@
 import ipaddress
 
-from django.http import HttpRequest
 from django.contrib.auth import get_user_model
+from django.http import HttpRequest
+from django.test import override_settings
 
 from core.backends import LocalhostAdminBackend
 
@@ -69,5 +70,17 @@ def test_allows_current_node_hostname():
     )
     req = HttpRequest()
     req.META["REMOTE_ADDR"] = "10.42.0.20"
+    user = backend.authenticate(req, username="admin", password="admin")
+    assert user is not None
+
+
+@override_settings(NODE_ROLE="Control")
+def test_control_role_allows_private_network():
+    User = get_user_model()
+    ensure_arthexis_user()
+    User.all_objects.filter(username="admin").delete()
+    backend = LocalhostAdminBackend()
+    req = HttpRequest()
+    req.META["REMOTE_ADDR"] = "10.42.0.15"
     user = backend.authenticate(req, username="admin", password="admin")
     assert user is not None
