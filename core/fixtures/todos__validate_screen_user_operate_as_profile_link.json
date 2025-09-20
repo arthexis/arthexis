@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen User Operate As Profile Link",
+      "url": "/admin/core/user/",
+      "request_details": "Open a user change page, select an Operate As user, and confirm the profile link appears and updates for the chosen user."
+    }
+  }
+]
