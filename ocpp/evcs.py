@@ -172,7 +172,7 @@ for key, val in _load_state_file().items():  # pragma: no cover - simple load
 async def simulate_cp(
     cp_idx: int,
     host: str,
-    ws_port: int,
+    ws_port: Optional[int],
     rfid: str,
     vin: str,
     cp_path: str,
@@ -196,7 +196,10 @@ async def simulate_cp(
     if the server closes the connection.
     """
 
-    uri = f"ws://{host}:{ws_port}/{cp_path}"
+    if ws_port:
+        uri = f"ws://{host}:{ws_port}/{cp_path}"
+    else:
+        uri = f"ws://{host}/{cp_path}"
     headers = {}
     if username and password:
         userpass = f"{username}:{password}"
@@ -582,7 +585,7 @@ async def simulate_cp(
 def simulate(
     *,
     host: str = "127.0.0.1",
-    ws_port: int = 8000,
+    ws_port: Optional[int] = 8000,
     rfid: str = "FFFFFFFF",
     cp_path: str = "CPX",
     vin: str = "",
