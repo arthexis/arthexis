@@ -1,3 +1,4 @@
+import asyncio
 import json
 import base64
 from datetime import datetime
@@ -39,12 +40,16 @@ class SinkConsumer(AsyncWebsocketConsumer):
 class CSMSConsumer(AsyncWebsocketConsumer):
     """Very small subset of OCPP 1.6 CSMS behaviour."""
 
+    consumption_update_interval = 300
+
     @requires_network
     async def connect(self):
         self.charger_id = self.scope["url_route"]["kwargs"].get("cid", "")
         self.connector_value: int | None = None
         self.store_key = store.pending_key(self.charger_id)
         self.aggregate_charger: Charger | None = None
+        self._consumption_task: asyncio.Task | None = None
+        self._consumption_message_uuid: str | None = None
         subprotocol = None
         offered = self.scope.get("subprotocols", [])
         if "ocpp1.6" in offered:
@@ -309,46 +314,109 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             target.firmware_status_info = status_info
             target.firmware_timestamp = timestamp
 
-    async def _broadcast_charging_started(self) -> None:
-        """Send a network message announcing a charging session."""
+    async def _cancel_consumption_message(self) -> None:
+        """Stop any scheduled consumption message updates."""
 
-        def _message_payload() -> dict[str, str] | None:
-            charger = self.charger
-            aggregate = self.aggregate_charger
-            if not charger:
+        task = self._consumption_task
+        self._consumption_task = None
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        self._consumption_message_uuid = None
+
+    async def _update_consumption_message(self, tx_id: int) -> str | None:
+        """Create or update the Net Message for an active transaction."""
+
+        existing_uuid = self._consumption_message_uuid
+
+        def _persist() -> str | None:
+            tx = (
+                Transaction.objects.select_related("charger")
+                .filter(pk=tx_id)
+                .first()
+            )
+            if not tx:
                 return None
-            location_name = ""
-            if charger.location_id:
-                location_name = charger.location.name
-            elif aggregate and aggregate.location_id:
-                location_name = aggregate.location.name
-            cid_value = (
-                charger.connector_slug
-                if charger.connector_id is not None
-                else Charger.AGGREGATE_CONNECTOR_SLUG
-            )
-            return {
-                "location": location_name,
-                "sn": charger.charger_id,
-                "cid": str(cid_value),
-            }
+            charger = tx.charger or self.charger
+            serial = ""
+            if charger and charger.charger_id:
+                serial = charger.charger_id
+            elif self.charger_id:
+                serial = self.charger_id
+            serial = serial[:64]
+            if not serial:
+                return None
+            now_local = timezone.localtime(timezone.now())
+            body_value = f"{tx.kw:.1f} kWh {now_local.strftime('%H:%M')}"[:256]
+            if existing_uuid:
+                msg = NetMessage.objects.filter(uuid=existing_uuid).first()
+                if msg:
+                    msg.subject = serial
+                    msg.body = body_value
+                    msg.save(update_fields=["subject", "body"])
+                    msg.propagate()
+                    return str(msg.uuid)
+            msg = NetMessage.broadcast(subject=serial, body=body_value)
+            return str(msg.uuid)
 
-        payload = await database_sync_to_async(_message_payload)()
-        if not payload:
-            return
         try:
-            await database_sync_to_async(NetMessage.broadcast)(
-                subject="charging-started",
-                body=json.dumps(payload, separators=(",", ":")),
-            )
-        except Exception as exc:  # pragma: no cover - logging of unexpected errors
+            result = await database_sync_to_async(_persist)()
+        except Exception as exc:  # pragma: no cover - unexpected errors
             store.add_log(
                 self.store_key,
-                f"Failed to broadcast charging start: {exc}",
+                f"Failed to broadcast consumption message: {exc}",
+                log_type="charger",
+            )
+            return None
+        if result is None:
+            store.add_log(
+                self.store_key,
+                "Unable to broadcast consumption message: missing data",
+                log_type="charger",
+            )
+            return None
+        self._consumption_message_uuid = result
+        return result
+
+    async def _consumption_message_loop(self, tx_id: int) -> None:
+        """Periodically refresh the consumption Net Message."""
+
+        try:
+            while True:
+                await asyncio.sleep(self.consumption_update_interval)
+                updated = await self._update_consumption_message(tx_id)
+                if not updated:
+                    break
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:  # pragma: no cover - unexpected errors
+            store.add_log(
+                self.store_key,
+                f"Failed to refresh consumption message: {exc}",
                 log_type="charger",
             )
 
+    async def _start_consumption_updates(self, tx_obj: Transaction) -> None:
+        """Send the initial consumption message and schedule updates."""
+
+        await self._cancel_consumption_message()
+        initial = await self._update_consumption_message(tx_obj.pk)
+        if not initial:
+            return
+        task = asyncio.create_task(self._consumption_message_loop(tx_obj.pk))
+        task.add_done_callback(lambda _: setattr(self, "_consumption_task", None))
+        self._consumption_task = task
+
     async def disconnect(self, close_code):
+        tx_obj = None
+        if self.charger_id:
+            tx_obj = store.get_transaction(self.charger_id, self.connector_value)
+        if tx_obj:
+            await self._update_consumption_message(tx_obj.pk)
+        await self._cancel_consumption_message()
         store.connections.pop(self.store_key, None)
         pending_key = store.pending_key(self.charger_id)
         if self.store_key != pending_key:
@@ -552,7 +620,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     store.start_session_log(self.store_key, tx_obj.pk)
                     store.start_session_lock()
                     store.add_session_message(self.store_key, text_data)
-                    await self._broadcast_charging_started()
+                    await self._start_consumption_updates(tx_obj)
                     reply_payload = {
                         "transactionId": tx_obj.pk,
                         "idTagInfo": {"status": "Accepted"},
@@ -579,6 +647,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     tx_obj.meter_stop = payload.get("meterStop")
                     tx_obj.stop_time = timezone.now()
                     await database_sync_to_async(tx_obj.save)()
+                    await self._update_consumption_message(tx_obj.pk)
+                await self._cancel_consumption_message()
                 reply_payload = {"idTagInfo": {"status": "Accepted"}}
                 store.end_session_log(self.store_key)
                 store.stop_session_lock()
