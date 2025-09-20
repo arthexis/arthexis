@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 from http import HTTPStatus
 
@@ -74,6 +75,9 @@ class ViewHistoryMiddleware:
 
         view_name = self._resolve_view_name(request)
         full_path = request.get_full_path()
+        if not error_message and status_code >= HTTPStatus.BAD_REQUEST:
+            error_message = status_text or f"HTTP {status_code}"
+
         try:
             ViewHistory.objects.create(
                 path=full_path,
@@ -87,6 +91,8 @@ class ViewHistoryMiddleware:
             logger.debug(
                 "Failed to record ViewHistory for %s", full_path, exc_info=True
             )
+        else:
+            self._update_user_last_visit_ip(request)
 
     def _resolve_view_name(self, request) -> str:
         match = getattr(request, "resolver_match", None)
@@ -108,3 +114,40 @@ class ViewHistoryMiddleware:
         if module and name:
             return f"{module}.{name}"
         return name or module or ""
+
+    def _extract_client_ip(self, request) -> str:
+        forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        candidates = []
+        if forwarded:
+            candidates.extend(part.strip() for part in forwarded.split(","))
+        remote = request.META.get("REMOTE_ADDR", "").strip()
+        if remote:
+            candidates.append(remote)
+
+        for candidate in candidates:
+            if not candidate:
+                continue
+            try:
+                ipaddress.ip_address(candidate)
+            except ValueError:
+                continue
+            return candidate
+        return ""
+
+    def _update_user_last_visit_ip(self, request) -> None:
+        user = getattr(request, "user", None)
+        if not getattr(user, "is_authenticated", False) or not getattr(user, "pk", None):
+            return
+
+        ip_address = self._extract_client_ip(request)
+        if not ip_address or getattr(user, "last_visit_ip_address", None) == ip_address:
+            return
+
+        try:
+            user.last_visit_ip_address = ip_address
+            user.save(update_fields=["last_visit_ip_address"])
+        except Exception:  # pragma: no cover - best effort logging
+            logger.debug(
+                "Failed to update last_visit_ip_address for user %s", user.pk,
+                exc_info=True,
+            )
