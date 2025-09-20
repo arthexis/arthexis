@@ -114,6 +114,8 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.x'
+      - name: Verify host environment
+        run: python scripts/helpers/assert_host_env.py
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
