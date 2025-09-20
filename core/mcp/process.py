@@ -71,6 +71,32 @@ def _pid_running(pid: int | None) -> bool:
         return True
 
 
+def _pid_matches_server(pid: int | None) -> bool:
+    """Return True when ``pid`` represents the active MCP server."""
+
+    if pid is None or not _pid_running(pid):
+        return False
+
+    if sys.platform.startswith("linux"):
+        cmdline_path = Path("/proc") / str(pid) / "cmdline"
+        try:
+            raw_cmdline = cmdline_path.read_bytes()
+        except FileNotFoundError:
+            return False
+        except PermissionError:
+            return True
+        except OSError:
+            return False
+
+        cmdline = raw_cmdline.decode("utf-8", errors="ignore")
+        parts = [part for part in cmdline.split("\0") if part]
+        expected_manage = str(_BASE_DIR / "manage.py")
+        if "mcp_sigil_server" not in parts or expected_manage not in parts:
+            return False
+
+    return True
+
+
 def _tail_log(limit: int = 20) -> str:
     if not _LOG_FILE.exists():
         return ""
@@ -86,7 +112,7 @@ def get_status() -> Dict[str, Any]:
     """Return the current MCP server status and recent log output."""
 
     pid = _read_pid()
-    running = _pid_running(pid)
+    running = _pid_matches_server(pid)
     last_error = ""
     if pid is not None and not running:
         last_error = "Cleared stale MCP server PID file."
@@ -137,7 +163,7 @@ def stop_server() -> int:
     """Stop the MCP server process."""
 
     pid = _read_pid()
-    if pid is None or not _pid_running(pid):
+    if pid is None or not _pid_matches_server(pid):
         try:
             _PID_FILE.unlink()
         except FileNotFoundError:
