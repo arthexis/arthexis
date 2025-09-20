@@ -9,6 +9,8 @@ LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 cd "$BASE_DIR"
 
+BACKUP_DIR="$BASE_DIR/backups"
+
 FORCE=0
 CLEAN=0
 NO_RESTART=0
@@ -44,6 +46,40 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+backup_database_for_branch() {
+  local branch="$1"
+  local source="$BASE_DIR/db.sqlite3"
+  local backup_path="$BACKUP_DIR/${branch}.sqlite3"
+
+  if [ ! -f "$source" ]; then
+    return
+  fi
+
+  if ! mkdir -p "$BACKUP_DIR"; then
+    echo "Failed to create backup directory at $BACKUP_DIR" >&2
+    return
+  fi
+
+  if cp -p "$source" "$backup_path"; then
+    echo "Saved database backup to backups/${branch}.sqlite3"
+  else
+    echo "Failed to create database backup at $backup_path" >&2
+  fi
+}
+
+remove_backup_for_branch() {
+  local branch="$1"
+  local backup_path="$BACKUP_DIR/${branch}.sqlite3"
+
+  if [ -f "$backup_path" ]; then
+    if rm -f "$backup_path"; then
+      echo "Removed database backup backups/${branch}.sqlite3"
+    else
+      echo "Failed to remove database backup at $backup_path" >&2
+    fi
+  fi
+}
+
 create_failover_branch() {
   local date
   date=$(date +%Y%m%d)
@@ -64,6 +100,7 @@ create_failover_branch() {
     git branch "$branch"
   fi
   echo "Created failover branch $branch"
+  backup_database_for_branch "$branch"
   FAILOVER_BRANCH_CREATED=1
 }
 
@@ -100,6 +137,7 @@ cleanup_failover_branches() {
     fi
     if git branch -D "$branch" >/dev/null 2>&1; then
       echo "Deleted failover branch $branch"
+      remove_backup_for_branch "$branch"
     else
       echo "Failed to delete failover branch $branch" >&2
     fi
@@ -126,6 +164,7 @@ confirm_database_deletion() {
   for target in "${targets[@]}"; do
     echo "  - $target"
   done
+  echo "You can use --revert later to restore from the most recent failover backup."
   echo "Use --no-warn to bypass this prompt."
   local response
   read -r -p "Continue? [y/N] " response
@@ -144,11 +183,24 @@ if [[ $REVERT -eq 1 ]]; then
     echo "No failover branches found." >&2
     exit 1
   fi
-  if git cat-file -e "$latest:db.sqlite3" 2>/dev/null; then
+  backup_file="$BACKUP_DIR/${latest}.sqlite3"
+  revert_source=""
+  revert_temp=""
+  if [ -f "$backup_file" ]; then
+    revert_source="$backup_file"
+  elif git cat-file -e "$latest:db.sqlite3" 2>/dev/null; then
+    revert_temp=$(mktemp)
+    if git show "$latest:db.sqlite3" > "$revert_temp"; then
+      revert_source="$revert_temp"
+    else
+      rm -f "$revert_temp"
+      revert_temp=""
+    fi
+  fi
+  if [ -n "$revert_source" ]; then
     current_kb=0
     [ -f db.sqlite3 ] && current_kb=$(du -k db.sqlite3 | cut -f1)
-    prev_bytes=$(git cat-file -s "$latest:db.sqlite3")
-    prev_kb=$(((prev_bytes + 1023) / 1024))
+    prev_kb=$(du -k "$revert_source" | cut -f1)
     if [ "$current_kb" -ne "$prev_kb" ]; then
       diff=$((current_kb - prev_kb))
       [ $diff -lt 0 ] && diff=$(( -diff ))
@@ -156,17 +208,25 @@ if [[ $REVERT -eq 1 ]]; then
       read -r -p "Proceed? [y/N]: " resp
       if [[ ! $resp =~ ^[Yy]$ ]]; then
         echo "Revert cancelled."
+        [ -n "$revert_temp" ] && rm -f "$revert_temp"
         exit 1
       fi
     fi
+  else
+    echo "No database backup found for $latest. The database will not be modified." >&2
   fi
   echo "Stashing current changes..." >&2
   git stash push -u -m "upgrade-revert $(date -Is)" >/dev/null || true
   echo "Reverting to $latest"
   git reset --hard "$latest"
-  if git cat-file -e "$latest:db.sqlite3" 2>/dev/null; then
-    git show "$latest:db.sqlite3" > db.sqlite3
+  if [ -n "$revert_source" ]; then
+    if cp "$revert_source" db.sqlite3; then
+      echo "Restored database from ${revert_source##*/}"
+    else
+      echo "Failed to restore database from $revert_source" >&2
+    fi
   fi
+  [ -n "$revert_temp" ] && rm -f "$revert_temp"
   exit 0
 fi
 

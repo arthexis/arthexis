@@ -70,6 +70,8 @@ logs/*
 !logs/old/
 logs/old/*
 !logs/old/.gitkeep
+# Database backups
+backups/
 data/
 !config/data/
 !config/data/ACRONYMS.txt
