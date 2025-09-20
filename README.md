@@ -10,7 +10,8 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 - [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/) 1.6
 - Runs on [Windows 11](https://www.microsoft.com/windows/windows-11) and [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Tested for the [Raspberry Pi 4 Model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
-- CONTINUOUS RELEASE
+
+Project under active development.
 
 ## Four Role Architecture
 
