@@ -54,7 +54,9 @@ def git_changed_files(base_ref: str | None) -> list[str]:
                     continue
                 try:
                     merge_base = subprocess.check_output(
-                        ["git", "merge-base", ref, "HEAD"], text=True, stderr=subprocess.DEVNULL
+                        ["git", "merge-base", ref, "HEAD"],
+                        text=True,
+                        stderr=subprocess.DEVNULL,
                     ).strip()
                 except subprocess.CalledProcessError:
                     continue
@@ -64,14 +66,18 @@ def git_changed_files(base_ref: str | None) -> list[str]:
         else:
             diff_range = "HEAD"
         diff = subprocess.check_output(
-            ["git", "diff", "--name-only", diff_range], text=True, stderr=subprocess.DEVNULL
+            ["git", "diff", "--name-only", diff_range],
+            text=True,
+            stderr=subprocess.DEVNULL,
         )
     except subprocess.CalledProcessError:
         return []
     return [line.strip() for line in diff.splitlines() if line.strip()]
 
 
-def select_specs(explicit: list[str], changed: Iterable[str], run_all: bool) -> list[ScreenshotSpec]:
+def select_specs(
+    explicit: list[str], changed: Iterable[str], run_all: bool
+) -> list[ScreenshotSpec]:
     autodiscover()
     if explicit:
         return [registry.get(slug) for slug in explicit]
@@ -86,9 +92,13 @@ def select_specs(explicit: list[str], changed: Iterable[str], run_all: bool) -> 
 
 
 def ensure_todo_fixture(spec: ScreenshotSpec) -> ManualSummary:
-    fixture = REPO_ROOT / "core" / "fixtures" / f"todos__validate_screen_{spec.slug}.json"
+    fixture = (
+        REPO_ROOT / "core" / "fixtures" / f"todos__validate_screen_{spec.slug}.json"
+    )
     if not fixture.exists():
-        return ManualSummary(slug=spec.slug, reason=spec.manual_reason or "", todo_path=None)
+        return ManualSummary(
+            slug=spec.slug, reason=spec.manual_reason or "", todo_path=None
+        )
     try:
         payload = json.loads(fixture.read_text(encoding="utf-8"))
         fields = payload[0]["fields"] if payload else {}
@@ -116,7 +126,9 @@ def write_summary(
         for item in validated:
             summary_lines.append(f"- `{item.spec.slug}` → `{item.image_path}`")
             summary_lines.append("")
-            summary_lines.append(f"![{item.spec.slug}](data:image/png;base64,{item.base64_data})")
+            summary_lines.append(
+                f"![{item.spec.slug}](data:image/png;base64,{item.base64_data})"
+            )
             summary_lines.append("")
     if manual:
         summary_lines.append("### Pending manual validation")
@@ -128,7 +140,9 @@ def write_summary(
             if url:
                 summary_lines.append(f"  - URL: {url}")
             if item.todo_path:
-                summary_lines.append(f"  - Fixture: `{item.todo_path.relative_to(REPO_ROOT)}`")
+                summary_lines.append(
+                    f"  - Fixture: `{item.todo_path.relative_to(REPO_ROOT)}`"
+                )
     if missing:
         summary_lines.append("### Missing TODO fixtures")
         summary_lines.append("")
@@ -150,7 +164,9 @@ def write_summary(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run declarative screenshot specs")
     parser.add_argument("--base-ref", help="Base reference for git diff", default=None)
-    parser.add_argument("--changed-files", nargs="*", help="Explicit list of changed files")
+    parser.add_argument(
+        "--changed-files", nargs="*", help="Explicit list of changed files"
+    )
     parser.add_argument("--spec", action="append", dest="specs", default=[])
     parser.add_argument("--output-dir", default="artifacts/ui-screens")
     parser.add_argument("--run-all", action="store_true")
@@ -163,7 +179,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if not selected:
         print("No screenshot specs selected.")
-        (output_dir / "summary.md").write_text("No screenshot specs selected.\n", encoding="utf-8")
+        (output_dir / "summary.md").write_text(
+            "No screenshot specs selected.\n", encoding="utf-8"
+        )
         return 0
 
     validated: list[ValidationSummary] = []
@@ -234,4 +252,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover - script entry
     raise SystemExit(main())
-

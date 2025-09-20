@@ -83,7 +83,10 @@ class SigilRootCatalog:
         """Return all catalogued roots sorted by prefix."""
 
         with self._lock:
-            return [entry.model_copy(deep=True) for _, entry in sorted(self._entries.items())]
+            return [
+                entry.model_copy(deep=True)
+                for _, entry in sorted(self._entries.items())
+            ]
 
     def _describe_instance(self, root: SigilRoot) -> SigilRootDescription:
         model_label: str | None = None
@@ -146,7 +149,9 @@ class SigilResolverService:
             token = f"[{token}]"
         if not token.endswith("]"):
             raise ValueError("Sigil tokens must end with ']'")
-        result = self.resolve_text(token, session_context=session_context, overrides=overrides)
+        result = self.resolve_text(
+            token, session_context=session_context, overrides=overrides
+        )
         return result.resolved
 
     def describe_root(self, prefix: str) -> SigilRootDescription:
@@ -216,7 +221,9 @@ class SigilResolverService:
         if model is None:
             raise ValueError(f"Unknown model for context assignment: {label}")
         if not issubclass(model, models.Model):  # pragma: no cover - defensive
-            raise ValueError(f"Context assignments must reference Django models: {label}")
+            raise ValueError(
+                f"Context assignments must reference Django models: {label}"
+            )
         return model
 
     def _format_model_label(self, model: type[models.Model]) -> str:

@@ -102,7 +102,7 @@ class CalculatorTemplateAdmin(EntityModelAdmin):
         "ground",
         "calculator_link",
     )
-    
+
     @admin.display(boolean=True, description="Public", ordering="show_in_pages")
     def public(self, obj):
         return obj.show_in_pages

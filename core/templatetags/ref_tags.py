@@ -41,9 +41,8 @@ def ref_img(value, size=200, alt=None):
 @register.inclusion_tag("core/footer.html", takes_context=True)
 def render_footer(context):
     """Render footer links for references marked to appear there."""
-    refs = (
-        Reference.objects.filter(include_in_footer=True)
-        .prefetch_related("roles", "features", "sites")
+    refs = Reference.objects.filter(include_in_footer=True).prefetch_related(
+        "roles", "features", "sites"
     )
     request = context.get("request")
     site = context.get("badge_site")
@@ -70,9 +69,7 @@ def render_footer(context):
         features_manager = getattr(node, "features", None)
         if features_manager is not None:
             try:
-                node_feature_ids = set(
-                    features_manager.values_list("pk", flat=True)
-                )
+                node_feature_ids = set(features_manager.values_list("pk", flat=True))
             except Exception:
                 node_feature_ids = set()
 
@@ -84,11 +81,7 @@ def render_footer(context):
 
         if required_roles or required_features or required_sites:
             allowed = False
-            if (
-                required_roles
-                and node_role_id
-                and node_role_id in required_roles
-            ):
+            if required_roles and node_role_id and node_role_id in required_roles:
                 allowed = True
             elif (
                 required_features

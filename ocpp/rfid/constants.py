@@ -47,4 +47,3 @@ __all__ = [
     "DEFAULT_IRQ_PIN",
     "DEFAULT_RST_PIN",
 ]
-

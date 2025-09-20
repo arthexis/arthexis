@@ -46,7 +46,9 @@ def send(
     if attachments:
         for attachment in attachments:
             if not isinstance(attachment, (list, tuple)) or len(attachment) != 3:
-                raise ValueError("attachments must contain (name, content, mimetype) tuples")
+                raise ValueError(
+                    "attachments must contain (name, content, mimetype) tuples"
+                )
             email.attach(*attachment)
     if content_subtype:
         email.content_subtype = content_subtype

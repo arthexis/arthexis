@@ -27,7 +27,9 @@ class ApiKeyTokenVerifier(TokenVerifier):
             keys[key] = key
         return cls(keys=keys, scopes=tuple(scopes or ("sigils:read",)))
 
-    async def verify_token(self, token: str) -> AccessToken | None:  # pragma: no cover - thin wrapper
+    async def verify_token(
+        self, token: str
+    ) -> AccessToken | None:  # pragma: no cover - thin wrapper
         client_id = self.keys.get(token)
         if client_id is None:
             return None

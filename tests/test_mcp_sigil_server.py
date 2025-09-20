@@ -9,14 +9,21 @@ from django.test import TestCase
 
 from core.mcp.schemas import ResolveOptions
 from core.mcp.server import SigilResolverServer
-from core.mcp.service import ResolutionResult, SigilResolverService, SigilRootCatalog, SigilSessionState
+from core.mcp.service import (
+    ResolutionResult,
+    SigilResolverService,
+    SigilRootCatalog,
+    SigilSessionState,
+)
 from core.models import OdooProfile, SigilRoot
 
 
 class SigilResolverServiceTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.user = get_user_model().objects.create(username="resolver", email="resolver@example.com")
+        cls.user = get_user_model().objects.create(
+            username="resolver", email="resolver@example.com"
+        )
         cls.profile = OdooProfile.objects.create(
             user=cls.user,
             host="h",
@@ -39,7 +46,9 @@ class SigilResolverServiceTests(TestCase):
         service = SigilResolverService(catalog)
         state = SigilSessionState()
         state.context[OdooProfile] = str(self.profile.pk)
-        result = service.resolve_text("user=[ODOO.USERNAME]", session_context=state.context)
+        result = service.resolve_text(
+            "user=[ODOO.USERNAME]", session_context=state.context
+        )
         self.assertIsInstance(result, ResolutionResult)
         self.assertEqual(result.resolved, "user=odoo")
         self.assertEqual(result.unresolved, [])
@@ -56,7 +65,9 @@ class SigilResolverServiceTests(TestCase):
     def test_update_session_context_clears_entries(self) -> None:
         service = SigilResolverService(SigilRootCatalog())
         state = SigilSessionState()
-        stored = service.update_session_context(state, {"core.OdooProfile": self.profile.pk})
+        stored = service.update_session_context(
+            state, {"core.OdooProfile": self.profile.pk}
+        )
         self.assertEqual(stored, ["core.OdooProfile"])
         stored = service.update_session_context(state, {"core.OdooProfile": None})
         self.assertEqual(stored, [])
@@ -64,12 +75,16 @@ class SigilResolverServiceTests(TestCase):
 
 class SigilResolverServerTests(TestCase):
     def setUp(self) -> None:
-        self.server = SigilResolverServer({"api_keys": [], "host": "127.0.0.1", "port": 0})
+        self.server = SigilResolverServer(
+            {"api_keys": [], "host": "127.0.0.1", "port": 0}
+        )
 
     def test_catalog_updates_via_signals(self) -> None:
         ct = ContentType.objects.get_for_model(OdooProfile)
         prefix = "MCPTEST"
-        SigilRoot.objects.create(prefix=prefix, context_type=SigilRoot.Context.ENTITY, content_type=ct)
+        SigilRoot.objects.create(
+            prefix=prefix, context_type=SigilRoot.Context.ENTITY, content_type=ct
+        )
         description = self.server.catalog.describe(prefix)
         self.assertEqual(description.prefix, prefix)
         SigilRoot.objects.filter(prefix=prefix).delete()
@@ -77,23 +92,31 @@ class SigilResolverServerTests(TestCase):
             self.server.catalog.describe(prefix)
 
     def test_build_fastmcp_respects_authentication_toggle(self) -> None:
-        secured = SigilResolverServer({"api_keys": ["secret"], "host": "127.0.0.1", "port": 9000})
+        secured = SigilResolverServer(
+            {"api_keys": ["secret"], "host": "127.0.0.1", "port": 9000}
+        )
         secured_server = secured.build_fastmcp()
         self.assertIsNotNone(secured_server._token_verifier)
         self.assertIsNotNone(secured_server.settings.auth)
 
-        open_server = SigilResolverServer({"api_keys": [], "host": "127.0.0.1", "port": 9000})
+        open_server = SigilResolverServer(
+            {"api_keys": [], "host": "127.0.0.1", "port": 9000}
+        )
         open_fastmcp = open_server.build_fastmcp()
         self.assertIsNone(open_fastmcp._token_verifier)
         self.assertIsNone(open_fastmcp.settings.auth)
 
     def test_resource_lists_roots(self) -> None:
         fastmcp = self.server.build_fastmcp()
-        resource = asyncio.run(fastmcp._resource_manager.get_resource("resource://sigils/roots"))
+        resource = asyncio.run(
+            fastmcp._resource_manager.get_resource("resource://sigils/roots")
+        )
         payload = self.server.service.list_roots()
         rendered = json.loads(asyncio.run(resource.read()))
         expected = sorted(
             (entry.model_dump(by_alias=True) for entry in payload),
             key=lambda item: item["prefix"],
         )
-        self.assertEqual(expected, sorted(rendered["roots"], key=lambda item: item["prefix"]))
+        self.assertEqual(
+            expected, sorted(rendered["roots"], key=lambda item: item["prefix"])
+        )

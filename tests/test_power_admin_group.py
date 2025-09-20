@@ -23,4 +23,3 @@ class PowerAdminGroupTests(TestCase):
         response = self.client.get(reverse("admin:index"))
         self.assertContains(response, "1. Power MODELS")
         self.assertContains(response, "Power Leads")
-

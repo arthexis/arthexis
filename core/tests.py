@@ -243,7 +243,9 @@ class UserPhoneNumberTests(TestCase):
 
     def test_get_phone_numbers_by_priority_alias(self):
         user = User.objects.create_user(username="phone-alias", password="secret")
-        phone = UserPhoneNumber.objects.create(user=user, number="+14445550000", priority=3)
+        phone = UserPhoneNumber.objects.create(
+            user=user, number="+14445550000", priority=3
+        )
 
         self.assertEqual(user.get_phone_numbers_by_priority(), [phone])
 
