@@ -3,6 +3,25 @@
 from django.db import migrations, models
 
 
+def add_emailoutbox_is_user_data(apps, schema_editor):
+    EmailOutbox = apps.get_model("nodes", "EmailOutbox")
+    table = EmailOutbox._meta.db_table
+    column = "is_user_data"
+    with schema_editor.connection.cursor() as cursor:
+        existing_columns = {
+            field.name
+            for field in schema_editor.connection.introspection.get_table_description(
+                cursor, table
+            )
+        }
+    if column in existing_columns:
+        return
+
+    field = models.BooleanField(default=False, editable=False)
+    field.set_attributes_from_name(column)
+    schema_editor.add_field(EmailOutbox, field)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -45,10 +64,19 @@ class Migration(migrations.Migration):
             name="is_user_data",
             field=models.BooleanField(default=False, editable=False),
         ),
-        migrations.AddField(
-            model_name="emailoutbox",
-            name="is_user_data",
-            field=models.BooleanField(default=False, editable=False),
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.AddField(
+                    model_name="emailoutbox",
+                    name="is_user_data",
+                    field=models.BooleanField(default=False, editable=False),
+                )
+            ],
+            database_operations=[
+                migrations.RunPython(
+                    add_emailoutbox_is_user_data, migrations.RunPython.noop
+                )
+            ],
         ),
         migrations.AddField(
             model_name="netmessage",
