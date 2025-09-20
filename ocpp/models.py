@@ -131,9 +131,14 @@ class Charger(Entity):
         constraints = [
             models.UniqueConstraint(
                 fields=("charger_id", "connector_id"),
+                condition=models.Q(connector_id__isnull=False),
                 name="charger_connector_unique",
-                nulls_distinct=False,
-            )
+            ),
+            models.UniqueConstraint(
+                fields=("charger_id",),
+                condition=models.Q(connector_id__isnull=True),
+                name="charger_unique_without_connector",
+            ),
         ]
 
     AGGREGATE_CONNECTOR_SLUG = "all"
