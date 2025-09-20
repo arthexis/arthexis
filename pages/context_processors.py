@@ -20,7 +20,7 @@ def nav_links(request):
     role = node.role if node else None
     if role:
         modules = (
-            Module.objects.filter(node_role=role)
+            Module.objects.filter(node_role=role, is_deleted=False)
             .select_related("application")
             .prefetch_related("landings")
         )
