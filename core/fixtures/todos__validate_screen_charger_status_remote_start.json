@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Charger Status Remote Start",
+      "url": "/ocpp/c/LOCALSIM-0001/status/",
+      "request_details": "Verify the remote start control accepts an RFID tag, displays feedback, and dispatches the transaction request while the connector is idle."
+    }
+  }
+]
