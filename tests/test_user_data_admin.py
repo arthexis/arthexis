@@ -1,4 +1,5 @@
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django import forms
@@ -21,7 +22,7 @@ from core.models import (
     AssistantProfile as CoreAssistantProfile,
     Todo,
 )
-from core.user_data import dump_user_fixture, load_user_fixtures
+from core.user_data import dump_user_fixture, load_user_fixtures, _resolve_fixture_user
 
 
 class UserDataAdminTests(TransactionTestCase):
@@ -226,3 +227,49 @@ class UserDataAdminTests(TransactionTestCase):
 
         self.assertFalse(empty.exists())
         mock_call.assert_not_called()
+
+    def test_admin_fixtures_delegate_to_system_user(self):
+        User = get_user_model()
+        User.all_objects.filter(username=User.ADMIN_USERNAME).delete()
+        system_user, _ = User.all_objects.get_or_create(
+            username=User.SYSTEM_USERNAME,
+            defaults={
+                "email": "arthexis@example.com",
+                "is_staff": True,
+                "is_superuser": True,
+            },
+        )
+        changed = False
+        if not system_user.is_staff:
+            system_user.is_staff = True
+            changed = True
+        if not system_user.is_superuser:
+            system_user.is_superuser = True
+            changed = True
+        if not system_user.has_usable_password():
+            system_user.set_password("pw")
+            changed = True
+        if changed:
+            system_user.save()
+
+        admin_user = User.objects.create_superuser(User.ADMIN_USERNAME, password="pw")
+        admin_user.operate_as = system_user
+        admin_user.save(update_fields=["operate_as"])
+
+        with TemporaryDirectory() as temp_dir:
+            system_user.data_path = temp_dir
+            system_user.save(update_fields=["data_path"])
+            todo = Todo.objects.create(request="Delegate fixture")
+            Todo.all_objects.filter(pk=todo.pk).update(is_user_data=True)
+            todo.refresh_from_db()
+
+            target_user = _resolve_fixture_user(todo, admin_user)
+            self.assertEqual(target_user, system_user)
+
+            dump_user_fixture(todo, target_user)
+            expected_path = (
+                Path(temp_dir)
+                / system_user.username
+                / f"{todo._meta.app_label}_{todo._meta.model_name}_{todo.pk}.json"
+            )
+            self.assertTrue(expected_path.exists())
