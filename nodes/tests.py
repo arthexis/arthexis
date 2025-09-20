@@ -1376,6 +1376,47 @@ class NodeFeatureTests(TestCase):
             NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
         )
 
+    @patch("nodes.models.Node._uses_postgres", return_value=True)
+    def test_postgres_detection(self, mock_postgres):
+        feature = NodeFeature.objects.create(
+            slug="postgres-db", display="PostgreSQL Database"
+        )
+        feature.roles.add(self.role)
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            self.node.refresh_features()
+        self.assertTrue(
+            NodeFeatureAssignment.objects.filter(
+                node=self.node, feature=feature
+            ).exists()
+        )
+
+    @patch("nodes.models.Node._uses_postgres", side_effect=[True, False])
+    def test_postgres_removed_when_not_in_use(self, mock_postgres):
+        feature = NodeFeature.objects.create(
+            slug="postgres-db", display="PostgreSQL Database"
+        )
+        feature.roles.add(self.role)
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            self.node.refresh_features()
+        self.assertTrue(
+            NodeFeatureAssignment.objects.filter(
+                node=self.node, feature=feature
+            ).exists()
+        )
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            self.node.refresh_features()
+        self.assertFalse(
+            NodeFeatureAssignment.objects.filter(
+                node=self.node, feature=feature
+            ).exists()
+        )
+
 
 class NodeRpiCameraDetectionTests(TestCase):
     @patch("nodes.models.subprocess.run")
