@@ -242,20 +242,37 @@ normalize_unit() {
   fi
   echo "$unit"
 }
+find_unit_source() {
+  local unit="$1"
+  local candidate
+  for candidate in \
+    "/etc/systemd/system/$unit" \
+    "/lib/systemd/system/$unit" \
+    "/usr/lib/systemd/system/$unit"; do
+    if [[ -e "$candidate" ]]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
 case "$cmd" in
   enable)
     mkdir -p /etc/systemd/system/multi-user.target.wants
     status=0
     for unit in "$@"; do
       unit="$(normalize_unit "$unit")"
-      src="/etc/systemd/system/$unit"
       dest="/etc/systemd/system/multi-user.target.wants/$unit"
-      if [[ -e "$src" ]]; then
-        ln -sf "../$(basename "$src")" "$dest"
+      if src="$(find_unit_source "$unit")"; then
+        if [[ "$src" == /etc/systemd/system/* ]]; then
+          ln -sf "../$(basename "$src")" "$dest"
+        else
+          ln -sf "$src" "$dest"
+        fi
+        printf 'enable %s %s\n' "$unit" "$(date --iso-8601=seconds 2>/dev/null || date)" >> "$LOG_FILE"
       else
-        status=1
+        printf 'enable-missing %s %s\n' "$unit" "$(date --iso-8601=seconds 2>/dev/null || date)" >> "$LOG_FILE"
       fi
-      printf 'enable %s %s\n' "$unit" "$(date --iso-8601=seconds 2>/dev/null || date)" >> "$LOG_FILE"
     done
     exit $status
     ;;
