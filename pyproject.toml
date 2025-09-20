@@ -24,3 +24,35 @@ Homepage = "https://arthexis.com"
 
 [tool.setuptools]
 packages = [ "core", "config", "nodes", "ocpp", "pages",]
+
+[tool.coverage.run]
+branch = true
+parallel = true
+relative_files = true
+source = [
+    "app",
+    "awg",
+    "config",
+    "core",
+    "gway",
+    "nodes",
+    "ocpp",
+    "pages",
+    "projects",
+    "utils",
+]
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+    "manage.py",
+]
+
+[tool.coverage.report]
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+    "manage.py",
+]
+precision = 2
+show_missing = true
+skip_empty = true

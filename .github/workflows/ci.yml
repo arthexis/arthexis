@@ -48,6 +48,40 @@ jobs:
                       fh.write(f"| {entry['role']} | {features} |\n")
                   fh.write('\n')
           PY
+  node-tests:
+    needs: node-test-matrix
+    if: needs.node-test-matrix.outputs.matrix != ''
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.node-test-matrix.outputs.matrix) }}
+    env:
+      NODE_ROLE: ${{ matrix.role }}
+      NODE_FEATURES: ${{ matrix.features }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Run pytest with coverage
+        run: |
+          if [ -z "${NODE_FEATURES}" ]; then
+            unset NODE_FEATURES
+          fi
+          coverage run --data-file=.coverage.${{ matrix.role }} -m pytest tests
+          coverage report
+      - name: Upload coverage data
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.role }}
+          path: .coverage.${{ matrix.role }}
+
   check-migrations:
     needs: node-test-matrix
     if: needs.node-test-matrix.outputs.database_changed == 'true'
@@ -63,6 +97,89 @@ jobs:
       - name: Check for missing migrations
         run: |
           python manage.py makemigrations --check --dry-run --noinput
+
+  coverage-report:
+    needs:
+      - node-test-matrix
+      - node-tests
+    if: needs.node-test-matrix.outputs.matrix != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+          path: coverage-data
+      - name: Install coverage tooling
+        run: |
+          pip install coverage[toml]==7.10.6
+      - name: Combine coverage data
+        run: |
+          coverage combine coverage-data
+          coverage report
+          coverage xml -o coverage.xml
+          coverage json -o coverage.json
+      - name: Publish coverage summary
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from collections import defaultdict
+          from pathlib import Path
+
+          data = json.loads(Path('coverage.json').read_text(encoding='utf-8'))
+          totals = data.get('totals', {})
+          total_statements = totals.get('num_statements', 0)
+          missing_statements = totals.get('missing_lines', 0)
+          if total_statements:
+              overall = (total_statements - missing_statements) / total_statements * 100
+          else:
+              overall = 100.0
+
+          package_stats: dict[str, dict[str, int]] = defaultdict(lambda: {'stmts': 0, 'miss': 0})
+          for path, info in data.get('files', {}).items():
+              summary = info.get('summary', {})
+              if not summary:
+                  continue
+              package = path.split('/', 1)[0]
+              if package == 'tests':
+                  continue
+              package_stats[package]['stmts'] += int(summary.get('num_statements', 0))
+              package_stats[package]['miss'] += int(summary.get('missing_lines', 0))
+
+          summary_path = Path(os.environ['GITHUB_STEP_SUMMARY'])
+          lines = [
+              '## Test coverage\n',
+              '\n',
+              f"* **Total statements:** {total_statements}\n",
+              f"* **Missing statements:** {missing_statements}\n",
+              f"* **Overall coverage:** {overall:.2f}%\n",
+          ]
+
+          if package_stats:
+              lines.extend(['\n', '| Package | Stmts | Miss | Coverage |\n', '| --- | ---: | ---: | ---: |\n'])
+              for package, stats in sorted(package_stats.items(), key=lambda item: (-item[1]['stmts'], item[0])):
+                  stmts = stats['stmts']
+                  miss = stats['miss']
+                  coverage = 'n/a' if stmts == 0 else f"{((stmts - miss) / stmts) * 100:.2f}%"
+                  lines.append(f"| {package} | {stmts} | {miss} | {coverage} |\n")
+          lines.append('\n')
+
+          with summary_path.open('a', encoding='utf-8') as handle:
+              handle.writelines(lines)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.json
+            coverage.xml
 
   env-refresh:
     runs-on: ubuntu-latest
