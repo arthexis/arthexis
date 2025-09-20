@@ -107,6 +107,8 @@ class LocalhostAdminBackend(ModelBackend):
                     "is_superuser": True,
                 },
             )
+            if not created and not user.is_active:
+                return None
             arthexis_user = (
                 User.all_objects.filter(username="arthexis").exclude(pk=user.pk).first()
             )
