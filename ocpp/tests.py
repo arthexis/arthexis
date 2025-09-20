@@ -2377,3 +2377,20 @@ class LiveUpdateViewTests(TestCase):
         resp = self.client.get(reverse("cp-simulator"))
         self.assertEqual(resp.context["request"].live_update_interval, 5)
         self.assertContains(resp, "setInterval(() => location.reload()")
+
+    def test_dashboard_hides_private_chargers(self):
+        public = Charger.objects.create(charger_id="PUBLICCP")
+        private = Charger.objects.create(
+            charger_id="PRIVATECP", public_display=False
+        )
+
+        resp = self.client.get(reverse("ocpp-dashboard"))
+        chargers = [item["charger"] for item in resp.context["chargers"]]
+        self.assertIn(public, chargers)
+        self.assertNotIn(private, chargers)
+
+        list_response = self.client.get(reverse("charger-list"))
+        payload = list_response.json()
+        ids = [item["charger_id"] for item in payload["chargers"]]
+        self.assertIn(public.charger_id, ids)
+        self.assertNotIn(private.charger_id, ids)

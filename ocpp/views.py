@@ -229,7 +229,7 @@ def _diagnostics_payload(charger: Charger) -> dict[str, str | None]:
 def charger_list(request):
     """Return a JSON list of known chargers and state."""
     data = []
-    for charger in Charger.objects.all():
+    for charger in Charger.objects.filter(public_display=True):
         cid = charger.charger_id
         sessions: list[tuple[Charger, Transaction]] = []
         tx_obj = store.get_transaction(cid, charger.connector_id)
@@ -416,7 +416,7 @@ def charger_detail(request, cid, connector=None):
 def dashboard(request):
     """Landing page listing all known chargers and their status."""
     chargers = []
-    for charger in Charger.objects.all():
+    for charger in Charger.objects.filter(public_display=True):
         tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
         if not tx_obj:
             tx_obj = (

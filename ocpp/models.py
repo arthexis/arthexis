@@ -58,6 +58,11 @@ class Charger(Entity):
         null=True,
         help_text="Optional connector identifier for multi-connector chargers.",
     )
+    public_display = models.BooleanField(
+        _("Show on Public Dashboard"),
+        default=True,
+        help_text="Display this charger on the public status dashboard.",
+    )
     require_rfid = models.BooleanField(
         _("Require RFID Authorization"),
         default=False,
