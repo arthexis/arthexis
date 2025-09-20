@@ -4,7 +4,9 @@ from channels.db import database_sync_to_async
 from asgiref.sync import async_to_sync
 from django.test import Client, TransactionTestCase, TestCase, override_settings
 from unittest import skip
-from unittest.mock import patch
+from contextlib import suppress
+from types import SimpleNamespace
+from unittest.mock import patch, Mock
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
@@ -17,6 +19,7 @@ from nodes.models import Node, NodeRole
 from config.asgi import application
 
 from .models import Transaction, Charger, Simulator, MeterReading, Location
+from .consumers import CSMSConsumer
 from core.models import EnergyAccount, EnergyCredit
 from core.models import RFID
 from . import store
@@ -251,11 +254,48 @@ class CSMSConsumerTests(TransactionTestCase):
 
         mock_broadcast.assert_called_once()
         _, kwargs = mock_broadcast.call_args
-        self.assertEqual(kwargs["subject"], "charging-started")
-        payload = json.loads(kwargs["body"])
-        self.assertEqual(payload["location"], "Test Location")
-        self.assertEqual(payload["sn"], "NETMSG")
-        self.assertEqual(payload["cid"], "1")
+        self.assertEqual(kwargs["subject"], "NETMSG")
+        body = kwargs["body"]
+        self.assertRegex(body, r"^\d+\.\d kWh \d{2}:\d{2}$")
+
+    async def test_consumption_message_updates_existing_entry(self):
+        original_interval = CSMSConsumer.consumption_update_interval
+        CSMSConsumer.consumption_update_interval = 0.01
+        await database_sync_to_async(Charger.objects.create)(charger_id="UPDATEMSG")
+        communicator = WebsocketCommunicator(application, "/UPDATEMSG/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        message_mock = Mock()
+        message_mock.uuid = "mock-uuid"
+        message_mock.save = Mock()
+        message_mock.propagate = Mock()
+
+        filter_mock = Mock()
+        filter_mock.first.return_value = message_mock
+
+        broadcast_result = SimpleNamespace(uuid="mock-uuid")
+
+        try:
+            with patch(
+                "nodes.models.NetMessage.broadcast", return_value=broadcast_result
+            ) as mock_broadcast, patch(
+                "nodes.models.NetMessage.objects.filter", return_value=filter_mock
+            ):
+                await communicator.send_json_to(
+                    [2, "1", "StartTransaction", {"meterStart": 1}]
+                )
+                await communicator.receive_json_from()
+                mock_broadcast.assert_called_once()
+                await asyncio.sleep(0.05)
+                await communicator.disconnect()
+        finally:
+            CSMSConsumer.consumption_update_interval = original_interval
+            with suppress(Exception):
+                await communicator.disconnect()
+
+        self.assertTrue(message_mock.save.called)
+        self.assertTrue(message_mock.propagate.called)
 
     async def test_rfid_unbound_instance_created(self):
         await database_sync_to_async(Charger.objects.create)(charger_id="NEWRFID")
