@@ -3,7 +3,7 @@
     "model": "awg.calculatortemplate",
     "fields": {
       "name": "EV Charger",
-      "description": "Residential charging for a single EV.",
+      "description": "EV Charger - Residential charging for a single Electric Vehicle.",
       "amps": 40,
       "volts": 220,
       "material": "cu",
