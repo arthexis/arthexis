@@ -9,12 +9,15 @@ from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import redirect_to_login
 from django.utils.translation import gettext_lazy as _, gettext, ngettext
 from django.urls import NoReverseMatch, reverse
 from django.conf import settings
 from django.utils import translation
 
 from utils.api import api_login_required
+
+from nodes.models import Node
 
 from pages.utils import landing
 from core.liveupdate import live_update
@@ -410,11 +413,17 @@ def charger_detail(request, cid, connector=None):
     )
 
 
-@login_required
 @landing("Dashboard")
 @live_update()
 def dashboard(request):
     """Landing page listing all known chargers and their status."""
+    node = Node.get_local()
+    role = node.role if node else None
+    is_constellation = bool(role and role.name == "Constellation")
+    if not request.user.is_authenticated and not is_constellation:
+        return redirect_to_login(
+            request.get_full_path(), login_url=reverse("pages:login")
+        )
     chargers = []
     for charger in Charger.objects.filter(public_display=True):
         tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
@@ -426,7 +435,16 @@ def dashboard(request):
             )
         state, color = _charger_state(charger, tx_obj)
         chargers.append({"charger": charger, "state": state, "color": color})
-    return render(request, "ocpp/dashboard.html", {"chargers": chargers})
+    scheme = "wss" if request.is_secure() else "ws"
+    host = request.get_host()
+    ws_url = f"{scheme}://{host}/ocpp/<CHARGE_POINT_ID>/"
+    context = {
+        "chargers": chargers,
+        "show_demo_notice": is_constellation,
+        "demo_ws_url": ws_url,
+        "ws_rate_limit": store.MAX_CONNECTIONS_PER_IP,
+    }
+    return render(request, "ocpp/dashboard.html", context)
 
 
 @login_required

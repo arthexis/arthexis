@@ -989,6 +989,78 @@ class CSMSConsumerTests(TransactionTestCase):
         store.transactions.pop(key2, None)
 
 
+    async def test_rate_limit_blocks_third_connection(self):
+        store.ip_connections.clear()
+        ip = "203.0.113.10"
+        communicator1 = ClientWebsocketCommunicator(
+            application, "/IPLIMIT1/", client=(ip, 1001)
+        )
+        communicator2 = ClientWebsocketCommunicator(
+            application, "/IPLIMIT2/", client=(ip, 1002)
+        )
+        communicator3 = ClientWebsocketCommunicator(
+            application, "/IPLIMIT3/", client=(ip, 1003)
+        )
+        other = ClientWebsocketCommunicator(
+            application, "/OTHERIP/", client=("198.51.100.5", 2001)
+        )
+        connected1 = connected2 = connected_other = False
+        try:
+            connected1, _ = await communicator1.connect()
+            self.assertTrue(connected1)
+            connected2, _ = await communicator2.connect()
+            self.assertTrue(connected2)
+            connected3, code = await communicator3.connect()
+            self.assertFalse(connected3)
+            self.assertEqual(code, 4003)
+            connected_other, _ = await other.connect()
+            self.assertTrue(connected_other)
+        finally:
+            if connected1:
+                await communicator1.disconnect()
+            if connected2:
+                await communicator2.disconnect()
+            if connected_other:
+                await other.disconnect()
+
+    async def test_rate_limit_allows_reconnect_after_disconnect(self):
+        store.ip_connections.clear()
+        ip = "203.0.113.20"
+        communicator1 = ClientWebsocketCommunicator(
+            application, "/LIMITRESET1/", client=(ip, 3001)
+        )
+        communicator2 = ClientWebsocketCommunicator(
+            application, "/LIMITRESET2/", client=(ip, 3002)
+        )
+        communicator3 = ClientWebsocketCommunicator(
+            application, "/LIMITRESET3/", client=(ip, 3003)
+        )
+        communicator3_retry = None
+        connected1 = connected2 = connected3_retry = False
+        try:
+            connected1, _ = await communicator1.connect()
+            self.assertTrue(connected1)
+            connected2, _ = await communicator2.connect()
+            self.assertTrue(connected2)
+            connected3, code = await communicator3.connect()
+            self.assertFalse(connected3)
+            self.assertEqual(code, 4003)
+            await communicator1.disconnect()
+            connected1 = False
+            communicator3_retry = ClientWebsocketCommunicator(
+                application, "/LIMITRESET4/", client=(ip, 3004)
+            )
+            connected3_retry, _ = await communicator3_retry.connect()
+            self.assertTrue(connected3_retry)
+        finally:
+            if connected1:
+                await communicator1.disconnect()
+            if connected2:
+                await communicator2.disconnect()
+            if connected3_retry and communicator3_retry is not None:
+                await communicator3_retry.disconnect()
+
+
 class ChargerLandingTests(TestCase):
     def setUp(self):
         self.client = Client()

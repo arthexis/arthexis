@@ -615,16 +615,9 @@ if [ "$AUTO_UPGRADE" = true ]; then
     fi
     source .venv/bin/activate
     python manage.py shell <<'PYCODE'
-from django_celery_beat.models import IntervalSchedule, PeriodicTask
-from django.utils.text import slugify
+from core.auto_upgrade import ensure_auto_upgrade_periodic_task
 
-schedule, _ = IntervalSchedule.objects.get_or_create(
-    every=10, period=IntervalSchedule.MINUTES
-)
-PeriodicTask.objects.update_or_create(
-    name=slugify("auto upgrade check"),
-    defaults={"interval": schedule, "task": "core.tasks.check_github_updates"},
-)
+ensure_auto_upgrade_periodic_task()
 PYCODE
     deactivate
 elif [ "$UPGRADE" = true ]; then

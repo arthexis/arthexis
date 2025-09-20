@@ -703,6 +703,10 @@ class ConstellationNavTests(TestCase):
             ).exists()
         )
 
+    def test_ocpp_dashboard_visible(self):
+        resp = self.client.get(reverse("pages:index"))
+        self.assertContains(resp, 'href="/ocpp/"')
+
 
 class StaffNavVisibilityTests(TestCase):
     def setUp(self):
