@@ -208,6 +208,23 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
     return _("Offline"), "grey"
 
 
+def _diagnostics_payload(charger: Charger) -> dict[str, str | None]:
+    """Return diagnostics metadata for API responses."""
+
+    timestamp = (
+        charger.diagnostics_timestamp.isoformat()
+        if charger.diagnostics_timestamp
+        else None
+    )
+    status = charger.diagnostics_status or None
+    location = charger.diagnostics_location or None
+    return {
+        "diagnosticsStatus": status,
+        "diagnosticsTimestamp": timestamp,
+        "diagnosticsLocation": location,
+    }
+
+
 @api_login_required
 def charger_list(request):
     """Return a JSON list of known chargers and state."""
@@ -278,6 +295,13 @@ def charger_list(request):
                     else None
                 ),
                 "lastMeterValues": charger.last_meter_values,
+                "firmwareStatus": charger.firmware_status,
+                "firmwareStatusInfo": charger.firmware_status_info,
+                "firmwareTimestamp": (
+                    charger.firmware_timestamp.isoformat()
+                    if charger.firmware_timestamp
+                    else None
+                ),
                 "connected": store.is_connected(cid, charger.connector_id),
                 "lastStatus": charger.last_status or None,
                 "lastErrorCode": charger.last_error_code or None,
@@ -364,6 +388,13 @@ def charger_detail(request, cid, connector=None):
                 charger.last_heartbeat.isoformat() if charger.last_heartbeat else None
             ),
             "lastMeterValues": charger.last_meter_values,
+            "firmwareStatus": charger.firmware_status,
+            "firmwareStatusInfo": charger.firmware_status_info,
+            "firmwareTimestamp": (
+                charger.firmware_timestamp.isoformat()
+                if charger.firmware_timestamp
+                else None
+            ),
             "log": log,
             "lastStatus": charger.last_status or None,
             "lastErrorCode": charger.last_error_code or None,

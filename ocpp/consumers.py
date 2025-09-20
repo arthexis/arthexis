@@ -278,6 +278,37 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 update_fields=["temperature", "temperature_unit"]
             )
 
+    async def _update_firmware_state(
+        self, status: str, status_info: str, timestamp: datetime | None
+    ) -> None:
+        """Persist firmware status fields for the active charger identities."""
+
+        targets: list[Charger] = []
+        seen_ids: set[int] = set()
+        for charger in (self.charger, self.aggregate_charger):
+            if not charger or charger.pk is None:
+                continue
+            if charger.pk in seen_ids:
+                continue
+            targets.append(charger)
+            seen_ids.add(charger.pk)
+
+        if not targets:
+            return
+
+        def _persist(ids: list[int]) -> None:
+            Charger.objects.filter(pk__in=ids).update(
+                firmware_status=status,
+                firmware_status_info=status_info,
+                firmware_timestamp=timestamp,
+            )
+
+        await database_sync_to_async(_persist)([target.pk for target in targets])
+        for target in targets:
+            target.firmware_status = status
+            target.firmware_status_info = status_info
+            target.firmware_timestamp = timestamp
+
     async def _broadcast_charging_started(self) -> None:
         """Send a network message announcing a charging session."""
 
@@ -432,6 +463,66 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     Charger.objects.filter(pk=self.charger.pk).update
                 )(last_meter_values=payload)
                 reply_payload = {}
+            elif action == "DiagnosticsStatusNotification":
+                status_value = payload.get("status")
+                location_value = (
+                    payload.get("uploadLocation")
+                    or payload.get("location")
+                    or payload.get("uri")
+                )
+                timestamp_value = payload.get("timestamp")
+                diagnostics_timestamp = None
+                if timestamp_value:
+                    diagnostics_timestamp = parse_datetime(timestamp_value)
+                    if diagnostics_timestamp and timezone.is_naive(
+                        diagnostics_timestamp
+                    ):
+                        diagnostics_timestamp = timezone.make_aware(
+                            diagnostics_timestamp, timezone=timezone.utc
+                        )
+
+                updates = {
+                    "diagnostics_status": status_value or None,
+                    "diagnostics_timestamp": diagnostics_timestamp,
+                    "diagnostics_location": location_value or None,
+                }
+
+                def _persist_diagnostics():
+                    targets: list[Charger] = []
+                    if self.charger:
+                        targets.append(self.charger)
+                    aggregate = self.aggregate_charger
+                    if (
+                        aggregate
+                        and not any(
+                            target.pk == aggregate.pk for target in targets if target.pk
+                        )
+                    ):
+                        targets.append(aggregate)
+                    for target in targets:
+                        for field, value in updates.items():
+                            setattr(target, field, value)
+                        if target.pk:
+                            Charger.objects.filter(pk=target.pk).update(**updates)
+
+                await database_sync_to_async(_persist_diagnostics)()
+
+                status_label = updates["diagnostics_status"] or "unknown"
+                log_message = "DiagnosticsStatusNotification: status=%s" % (
+                    status_label,
+                )
+                if updates["diagnostics_timestamp"]:
+                    log_message += ", timestamp=%s" % (
+                        updates["diagnostics_timestamp"].isoformat()
+                    )
+                if updates["diagnostics_location"]:
+                    log_message += ", location=%s" % updates["diagnostics_location"]
+                store.add_log(self.store_key, log_message, log_type="charger")
+                if self.aggregate_charger and self.aggregate_charger.connector_id is None:
+                    aggregate_key = store.identity_key(self.charger_id, None)
+                    if aggregate_key != self.store_key:
+                        store.add_log(aggregate_key, log_message, log_type="charger")
+                reply_payload = {}
             elif action == "StartTransaction":
                 id_tag = payload.get("idTag")
                 account = await self._get_account(id_tag)
@@ -491,6 +582,47 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 reply_payload = {"idTagInfo": {"status": "Accepted"}}
                 store.end_session_log(self.store_key)
                 store.stop_session_lock()
+            elif action == "FirmwareStatusNotification":
+                status_raw = payload.get("status")
+                status = str(status_raw or "").strip()
+                info_value = payload.get("statusInfo")
+                if not isinstance(info_value, str):
+                    info_value = payload.get("info")
+                status_info = str(info_value or "").strip()
+                timestamp_raw = payload.get("timestamp")
+                timestamp_value = None
+                if timestamp_raw:
+                    timestamp_value = parse_datetime(str(timestamp_raw))
+                    if timestamp_value and timezone.is_naive(timestamp_value):
+                        timestamp_value = timezone.make_aware(
+                            timestamp_value, timezone.get_current_timezone()
+                        )
+                if timestamp_value is None:
+                    timestamp_value = timezone.now()
+                await self._update_firmware_state(
+                    status, status_info, timestamp_value
+                )
+                store.add_log(
+                    self.store_key,
+                    "FirmwareStatusNotification: "
+                    + json.dumps(payload, separators=(",", ":")),
+                    log_type="charger",
+                )
+                if (
+                    self.aggregate_charger
+                    and self.aggregate_charger.connector_id is None
+                ):
+                    aggregate_key = store.identity_key(
+                        self.charger_id, self.aggregate_charger.connector_id
+                    )
+                    if aggregate_key != self.store_key:
+                        store.add_log(
+                            aggregate_key,
+                            "FirmwareStatusNotification: "
+                            + json.dumps(payload, separators=(",", ":")),
+                            log_type="charger",
+                        )
+                reply_payload = {}
             response = [3, msg_id, reply_payload]
             await self.send(json.dumps(response))
             store.add_log(

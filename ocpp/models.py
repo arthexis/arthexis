@@ -63,6 +63,26 @@ class Charger(Entity):
         default=False,
         help_text="Require a valid RFID before starting a charging session.",
     )
+    firmware_status = models.CharField(
+        _("Firmware Status"),
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="Latest firmware status reported by the charger.",
+    )
+    firmware_status_info = models.CharField(
+        _("Firmware Status Details"),
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Additional information supplied with the firmware status.",
+    )
+    firmware_timestamp = models.DateTimeField(
+        _("Firmware Status Timestamp"),
+        null=True,
+        blank=True,
+        help_text="When the charger reported the current firmware status.",
+    )
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_meter_values = models.JSONField(default=dict, blank=True)
     last_status = models.CharField(max_length=64, blank=True)
@@ -73,6 +93,23 @@ class Charger(Entity):
         max_digits=5, decimal_places=1, null=True, blank=True
     )
     temperature_unit = models.CharField(max_length=16, blank=True)
+    diagnostics_status = models.CharField(
+        max_length=32,
+        null=True,
+        blank=True,
+        help_text="Most recent diagnostics status reported by the charger.",
+    )
+    diagnostics_timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp associated with the latest diagnostics status.",
+    )
+    diagnostics_location = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Location or URI reported for the latest diagnostics upload.",
+    )
     reference = models.OneToOneField(
         Reference, null=True, blank=True, on_delete=models.SET_NULL
     )
