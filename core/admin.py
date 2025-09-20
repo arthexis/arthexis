@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
-from django.urls import path, reverse
+from django.urls import NoReverseMatch, path, reverse
 from django.shortcuts import redirect, render
 from django.http import JsonResponse, HttpResponseBase, HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -980,6 +980,23 @@ class UserAdmin(DjangoUserAdmin):
     inlines = USER_PROFILE_INLINES + [UserPhoneNumberInline]
     change_form_template = "admin/user_profile_change_form.html"
 
+    def _get_operate_as_profile_template(self):
+        opts = self.model._meta
+        try:
+            return reverse(
+                f"{self.admin_site.name}:{opts.app_label}_{opts.model_name}_change",
+                args=["__ID__"],
+            )
+        except NoReverseMatch:
+            user_opts = User._meta
+            try:
+                return reverse(
+                    f"{self.admin_site.name}:{user_opts.app_label}_{user_opts.model_name}_change",
+                    args=["__ID__"],
+                )
+            except NoReverseMatch:
+                return None
+
     def render_change_form(
         self, request, context, add=False, change=False, form_url="", obj=None
     ):
@@ -988,6 +1005,21 @@ class UserAdmin(DjangoUserAdmin):
         )
         context["show_user_datum"] = False
         context["show_seed_datum"] = False
+        operate_as_user = None
+        operate_as_template = self._get_operate_as_profile_template()
+        operate_as_url = None
+        if obj and getattr(obj, "operate_as_id", None):
+            try:
+                operate_as_user = obj.operate_as
+            except User.DoesNotExist:
+                operate_as_user = None
+            if operate_as_user and operate_as_template:
+                operate_as_url = operate_as_template.replace(
+                    "__ID__", str(operate_as_user.pk)
+                )
+        context["operate_as_user"] = operate_as_user
+        context["operate_as_profile_url_template"] = operate_as_template
+        context["operate_as_profile_url"] = operate_as_url
         return context
 
     def get_inline_instances(self, request, obj=None):
