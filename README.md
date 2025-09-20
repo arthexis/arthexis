@@ -12,6 +12,17 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 - Tested for the [Raspberry Pi 4 Model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 - CONTINUOUS RELEASE
 
+## Four Role Architecture
+
+Arthexis Constellation ships in four node roles tailored to different deployment scenarios.
+
+| Role | Description | Common features |
+| --- | --- | --- |
+| Terminal | Single-User Research & Development | • GUI Toast |
+| Control | Single-Device Testing & Special Task Appliances | • AP Public Wi-Fi<br>• Celery Queue<br>• GUI Toast<br>• LCD Screen<br>• NGINX Server<br>• RFID Scanner |
+| Satellite | Multi-Device Edge, Network & Data Acquisition | • AP Router<br>• Celery Queue<br>• NGINX Server<br>• RFID Scanner |
+| Constellation | Multi-User Cloud & Orchestration | • Celery Queue<br>• NGINX Server |
+
 ## Quick Guide
 
 ### 1. Clone

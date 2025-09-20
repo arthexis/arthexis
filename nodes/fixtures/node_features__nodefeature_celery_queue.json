@@ -8,9 +8,6 @@
       "display": "Celery Queue",
       "roles": [
         [
-          "Terminal"
-        ],
-        [
           "Satellite"
         ],
         [

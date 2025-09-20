@@ -8,9 +8,6 @@
       "display": "LCD Screen",
       "roles": [
         [
-          "Terminal"
-        ],
-        [
           "Control"
         ]
       ]

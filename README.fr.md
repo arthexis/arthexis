@@ -11,6 +11,17 @@ Constellation Arthexis est une [suite logicielle](https://fr.wikipedia.org/wiki/
 - Fonctionne sur [Windows 11](https://www.microsoft.com/windows/windows-11) et [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Testé pour le [Raspberry Pi 4 Modèle B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 
+## Architecture à quatre rôles
+
+Constellation Arthexis est déclinée en quatre rôles de nœud pour répondre à différents scénarios de déploiement.
+
+| Rôle | Description | Fonctionnalités courantes |
+| --- | --- | --- |
+| Terminal | Recherche et développement monoposte | • GUI Toast |
+| Control | Tests sur un appareil unique et appliances spécialisées | • AP Public Wi-Fi<br>• Celery Queue<br>• GUI Toast<br>• LCD Screen<br>• NGINX Server<br>• RFID Scanner |
+| Satellite | Périphérie multi-appareils, réseau et acquisition de données | • AP Router<br>• Celery Queue<br>• NGINX Server<br>• RFID Scanner |
+| Constellation | Orchestration et cloud multi-utilisateurs | • Celery Queue<br>• NGINX Server |
+
 ## Quick Guide
 
 ### 1. Cloner
