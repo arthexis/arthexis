@@ -22,9 +22,11 @@ from core.admin import (
     AssistantProfileAdmin,
 )
 from nodes.admin import EmailOutboxAdmin
+from awg.admin import PowerLeadAdmin
 
 from .models import (
     InviteLead,
+    PowerLead,
     User,
     SecurityGroup,
     EmailInbox,
@@ -38,6 +40,11 @@ from .models import (
 
 @admin.register(InviteLead)
 class InviteLeadAdminProxy(InviteLeadAdmin):
+    pass
+
+
+@admin.register(PowerLead)
+class PowerLeadAdminProxy(PowerLeadAdmin):
     pass
 
 

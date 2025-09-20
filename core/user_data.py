@@ -39,7 +39,14 @@ def _username_for(user) -> str:
 
 
 def _user_allows_user_data(user) -> bool:
-    return bool(user) and not getattr(user, "is_profile_restricted", False)
+    if not user:
+        return False
+    UserModel = get_user_model()
+    system_username = getattr(UserModel, "SYSTEM_USERNAME", "")
+    username = _username_for(user)
+    if system_username and username == system_username:
+        return True
+    return not getattr(user, "is_profile_restricted", False)
 
 
 def _data_dir(user) -> Path:

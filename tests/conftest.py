@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT))
 import django
 from django.apps import apps
 from django.core.management import call_command
+from django.db import DatabaseError
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
@@ -68,6 +69,30 @@ def safe_setup():
 
         if test_name:
             connections.databases["default"]["NAME"] = str(test_name)
+
+        connection = connections["default"]
+        try:
+            with connection.cursor() as cursor:
+                if connection.vendor == "postgresql":
+                    cursor.execute(
+                        "ALTER TABLE IF EXISTS nodes_emailoutbox "
+                        "DROP COLUMN IF EXISTS is_user_data"
+                    )
+                else:
+                    tables = connection.introspection.table_names(cursor)
+                    if "nodes_emailoutbox" in tables:
+                        columns = {
+                            column.name
+                            for column in connection.introspection.get_table_description(
+                                cursor, "nodes_emailoutbox"
+                            )
+                        }
+                        if "is_user_data" in columns:
+                            cursor.execute(
+                                "ALTER TABLE nodes_emailoutbox DROP COLUMN is_user_data"
+                            )
+        except DatabaseError:
+            connection.rollback()
 
         # Speed up tests by using a lightweight password hasher and disabling
         # password validation checks. The default PBKDF2 hasher uses one

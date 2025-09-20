@@ -16,6 +16,7 @@ import hashlib
 import time
 
 import django
+import sqlite3
 import importlib.util
 from django.apps import apps
 from django.conf import settings
@@ -26,7 +27,7 @@ from django.db.migrations.exceptions import (
     InconsistentMigrationHistory,
     InvalidBasesError,
 )
-from django.db.utils import OperationalError
+from django.db.utils import OperationalError as DjangoOperationalError
 from django.db.migrations.recorder import MigrationRecorder
 from django.db.migrations.loader import MigrationLoader
 from django.core.serializers.base import DeserializationError
@@ -120,6 +121,9 @@ def _remove_integrator_from_auth_migration() -> None:
     path.write_text(patched + ("\n" if not patched.endswith("\n") else ""))
 
 
+OperationalErrors = (DjangoOperationalError, sqlite3.OperationalError)
+
+
 def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     """Run all database related maintenance steps."""
     default_db = settings.DATABASES["default"]
@@ -156,7 +160,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
             try:
                 recorder = MigrationRecorder(connection)
                 loader = MigrationLoader(connection)
-            except OperationalError:
+            except OperationalErrors:
                 recorder = loader = None
             if recorder and loader:
                 for label in local_apps:
@@ -170,7 +174,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                             parents = list(node.parents) if node else []
                             prev = parents[0][1] if parents else "zero"
                             call_command("migrate", label, prev, interactive=False)
-                    except OperationalError:
+                    except OperationalErrors:
                         continue
 
     if not connection.in_atomic_block:
@@ -181,7 +185,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
             call_command("migrate", interactive=False)
         except InvalidBasesError:
             raise
-        except OperationalError as exc:
+        except OperationalErrors as exc:
             if using_sqlite:
                 _unlink_sqlite_db(Path(default_db["NAME"]))
                 call_command("migrate", interactive=False)
