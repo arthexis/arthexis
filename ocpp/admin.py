@@ -119,9 +119,12 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                     "display_name",
                     "connector_id",
                     "location",
+                    "last_path",
                     "last_heartbeat",
                     "last_meter_values",
-                    "last_path",
+                    "firmware_status",
+                    "firmware_status_info",
+                    "firmware_timestamp",
                 )
             },
         ),
@@ -140,13 +143,21 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             },
         ),
     )
-    readonly_fields = ("last_heartbeat", "last_meter_values")
+    readonly_fields = (
+        "last_heartbeat",
+        "last_meter_values",
+        "firmware_status",
+        "firmware_status_info",
+        "firmware_timestamp",
+    )
     list_display = (
         "charger_id",
         "connector_id",
         "location_name",
         "require_rfid_display",
         "last_heartbeat",
+        "firmware_status",
+        "firmware_timestamp",
         "session_kw",
         "total_kw_display",
         "page_link",

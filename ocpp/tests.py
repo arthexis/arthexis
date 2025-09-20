@@ -26,7 +26,7 @@ import asyncio
 from pathlib import Path
 from .simulator import SimulatorConfig, ChargePointSimulator
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 from .tasks import purge_meter_readings
 from django.db import close_old_connections
 from django.db.utils import OperationalError
@@ -250,6 +250,165 @@ class CSMSConsumerTests(TransactionTestCase):
         tag = await database_sync_to_async(RFID.objects.get)(rfid="TAG456")
         count = await database_sync_to_async(tag.energy_accounts.count)()
         self.assertEqual(count, 0)
+
+        await communicator.disconnect()
+
+    async def test_firmware_status_notification_updates_database_and_views(self):
+        communicator = WebsocketCommunicator(application, "/FWSTAT/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        ts = timezone.now().replace(microsecond=0)
+        payload = {
+            "status": "Installing",
+            "statusInfo": "Applying patch",
+            "timestamp": ts.isoformat(),
+        }
+
+        await communicator.send_json_to(
+            [2, "1", "FirmwareStatusNotification", payload]
+        )
+        response = await communicator.receive_json_from()
+        self.assertEqual(response, [3, "1", {}])
+
+        def _fetch_status():
+            charger = Charger.objects.get(charger_id="FWSTAT", connector_id=None)
+            return (
+                charger.firmware_status,
+                charger.firmware_status_info,
+                charger.firmware_timestamp,
+            )
+
+        status, info, recorded_ts = await database_sync_to_async(_fetch_status)()
+        self.assertEqual(status, "Installing")
+        self.assertEqual(info, "Applying patch")
+        self.assertIsNotNone(recorded_ts)
+        self.assertEqual(recorded_ts.replace(microsecond=0), ts)
+
+        log_entries = store.get_logs(store.identity_key("FWSTAT", None), log_type="charger")
+        self.assertTrue(
+            any("FirmwareStatusNotification" in entry for entry in log_entries)
+        )
+
+        def _fetch_views():
+            User = get_user_model()
+            user = User.objects.create_user(username="fwstatus", password="pw")
+            client = Client()
+            client.force_login(user)
+            detail = client.get(reverse("charger-detail", args=["FWSTAT"]))
+            status_page = client.get(reverse("charger-status", args=["FWSTAT"]))
+            list_response = client.get(reverse("charger-list"))
+            return (
+                detail.status_code,
+                json.loads(detail.content.decode()),
+                status_page.status_code,
+                status_page.content.decode(),
+                list_response.status_code,
+                json.loads(list_response.content.decode()),
+            )
+
+        (
+            detail_code,
+            detail_payload,
+            status_code,
+            html,
+            list_code,
+            list_payload,
+        ) = await database_sync_to_async(_fetch_views)()
+        self.assertEqual(detail_code, 200)
+        self.assertEqual(status_code, 200)
+        self.assertEqual(list_code, 200)
+        self.assertEqual(detail_payload["firmwareStatus"], "Installing")
+        self.assertEqual(detail_payload["firmwareStatusInfo"], "Applying patch")
+        self.assertEqual(detail_payload["firmwareTimestamp"], ts.isoformat())
+        self.assertIn('id="firmware-status">Installing<', html)
+        self.assertIn('id="firmware-status-info">Applying patch<', html)
+        match = re.search(
+            r'id="firmware-timestamp"[^>]*data-iso="([^"]+)"', html
+        )
+        self.assertIsNotNone(match)
+        parsed_iso = datetime.fromisoformat(match.group(1))
+        self.assertAlmostEqual(parsed_iso.timestamp(), ts.timestamp(), places=3)
+
+        matching = [
+            item
+            for item in list_payload.get("chargers", [])
+            if item["charger_id"] == "FWSTAT" and item["connector_id"] is None
+        ]
+        self.assertTrue(matching)
+        self.assertEqual(matching[0]["firmwareStatus"], "Installing")
+        self.assertEqual(matching[0]["firmwareStatusInfo"], "Applying patch")
+        list_ts = datetime.fromisoformat(matching[0]["firmwareTimestamp"])
+        self.assertAlmostEqual(list_ts.timestamp(), ts.timestamp(), places=3)
+
+        store.clear_log(store.identity_key("FWSTAT", None), log_type="charger")
+
+        await communicator.disconnect()
+
+    async def test_firmware_status_notification_updates_connector_and_aggregate(
+        self,
+    ):
+        communicator = WebsocketCommunicator(application, "/FWCONN/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [
+                2,
+                "1",
+                "FirmwareStatusNotification",
+                {"connectorId": 2, "status": "Downloaded"},
+            ]
+        )
+        response = await communicator.receive_json_from()
+        self.assertEqual(response, [3, "1", {}])
+
+        def _fetch_chargers():
+            aggregate = Charger.objects.get(charger_id="FWCONN", connector_id=None)
+            connector = Charger.objects.get(charger_id="FWCONN", connector_id=2)
+            return (
+                aggregate.firmware_status,
+                aggregate.firmware_status_info,
+                aggregate.firmware_timestamp,
+                connector.firmware_status,
+                connector.firmware_status_info,
+                connector.firmware_timestamp,
+            )
+
+        (
+            aggregate_status,
+            aggregate_info,
+            aggregate_ts,
+            connector_status,
+            connector_info,
+            connector_ts,
+        ) = await database_sync_to_async(_fetch_chargers)()
+
+        self.assertEqual(aggregate_status, "Downloaded")
+        self.assertEqual(connector_status, "Downloaded")
+        self.assertEqual(aggregate_info, "")
+        self.assertEqual(connector_info, "")
+        self.assertIsNotNone(aggregate_ts)
+        self.assertIsNotNone(connector_ts)
+        self.assertAlmostEqual(
+            (connector_ts - aggregate_ts).total_seconds(), 0, delta=1.0
+        )
+
+        log_entries = store.get_logs(
+            store.identity_key("FWCONN", 2), log_type="charger"
+        )
+        self.assertTrue(
+            any("FirmwareStatusNotification" in entry for entry in log_entries)
+        )
+        log_entries_agg = store.get_logs(
+            store.identity_key("FWCONN", None), log_type="charger"
+        )
+        self.assertTrue(
+            any("FirmwareStatusNotification" in entry for entry in log_entries_agg)
+        )
+
+        store.clear_log(store.identity_key("FWCONN", 2), log_type="charger")
+        store.clear_log(store.identity_key("FWCONN", None), log_type="charger")
 
         await communicator.disconnect()
 

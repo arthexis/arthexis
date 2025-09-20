@@ -233,6 +233,13 @@ def charger_list(request):
                     else None
                 ),
                 "lastMeterValues": charger.last_meter_values,
+                "firmwareStatus": charger.firmware_status,
+                "firmwareStatusInfo": charger.firmware_status_info,
+                "firmwareTimestamp": (
+                    charger.firmware_timestamp.isoformat()
+                    if charger.firmware_timestamp
+                    else None
+                ),
                 "connected": store.is_connected(cid, charger.connector_id),
             }
         )
@@ -305,6 +312,13 @@ def charger_detail(request, cid, connector=None):
                 charger.last_heartbeat.isoformat() if charger.last_heartbeat else None
             ),
             "lastMeterValues": charger.last_meter_values,
+            "firmwareStatus": charger.firmware_status,
+            "firmwareStatusInfo": charger.firmware_status_info,
+            "firmwareTimestamp": (
+                charger.firmware_timestamp.isoformat()
+                if charger.firmware_timestamp
+                else None
+            ),
             "log": log,
         }
     )
