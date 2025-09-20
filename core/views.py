@@ -6,6 +6,7 @@ import requests
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, login
 from django.http import Http404, JsonResponse
+from django.contrib import messages
 from django.shortcuts import get_object_or_404, render, redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -83,6 +84,26 @@ class PendingTodos(Exception):
 
 class ApprovalRequired(Exception):
     """Raised when release manager approval is required before continuing."""
+
+
+def _format_condition_failure(todo: Todo, result) -> str:
+    """Return a localized error message for a failed TODO condition."""
+
+    if result.error and result.resolved:
+        detail = _("%(condition)s (error: %(error)s)") % {
+            "condition": result.resolved,
+            "error": result.error,
+        }
+    elif result.error:
+        detail = _("Error: %(error)s") % {"error": result.error}
+    elif result.resolved:
+        detail = result.resolved
+    else:
+        detail = _("Condition evaluated to False")
+    return _("Condition failed for %(todo)s: %(detail)s") % {
+        "todo": todo.request,
+        "detail": detail,
+    }
 
 
 def _step_check_todos(release, ctx, log_path: Path) -> None:
@@ -555,11 +576,11 @@ def release_progress(request, pk: int, action: str):
     if credentials_ready and ctx.get("approval_credentials_missing"):
         ctx.pop("approval_credentials_missing", None)
 
+    ack_todos_requested = bool(request.GET.get("ack_todos"))
+
     if request.GET.get("start"):
         ctx["started"] = True
         ctx["paused"] = False
-    if request.GET.get("ack_todos"):
-        ctx["todos_ack"] = True
     if (
         ctx.get("awaiting_approval")
         and not ctx.get("approval_credentials_missing")
@@ -580,9 +601,34 @@ def release_progress(request, pk: int, action: str):
     step_count = ctx.get("step", 0)
     step_param = request.GET.get("step")
 
-    pending = Todo.objects.filter(is_deleted=False, done_on__isnull=True)
-    if pending.exists() and not ctx.get("todos_ack"):
-        ctx["todos"] = list(pending.values("id", "request", "url", "request_details"))
+    pending_qs = Todo.objects.filter(is_deleted=False, done_on__isnull=True)
+    pending_items = list(pending_qs)
+    if ack_todos_requested:
+        if pending_items:
+            failures = []
+            for todo in pending_items:
+                result = todo.check_on_done_condition()
+                if not result.passed:
+                    failures.append((todo, result))
+            if failures:
+                ctx.pop("todos_ack", None)
+                for todo, result in failures:
+                    messages.error(request, _format_condition_failure(todo, result))
+            else:
+                ctx["todos_ack"] = True
+        else:
+            ctx["todos_ack"] = True
+
+    if pending_items and not ctx.get("todos_ack"):
+        ctx["todos"] = [
+            {
+                "id": todo.pk,
+                "request": todo.request,
+                "url": todo.url,
+                "request_details": todo.request_details,
+            }
+            for todo in pending_items
+        ]
     else:
         ctx.pop("todos", None)
 
@@ -784,6 +830,10 @@ def release_progress(request, pk: int, action: str):
 @require_POST
 def todo_done(request, pk: int):
     todo = get_object_or_404(Todo, pk=pk, is_deleted=False, done_on__isnull=True)
+    result = todo.check_on_done_condition()
+    if not result.passed:
+        messages.error(request, _format_condition_failure(todo, result))
+        return redirect("admin:index")
     todo.done_on = timezone.now()
     todo.save(update_fields=["done_on"])
     return redirect("admin:index")

@@ -11,6 +11,7 @@ import django
 
 django.setup()
 
+from django.contrib.messages import get_messages
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
@@ -151,6 +152,40 @@ class ReleaseProgressViewTests(TestCase):
         self.assertFalse(fx.exists())
         self.assertIsNone(response.context.get("todos"))
         self.assertEqual(response.context["next_step"], 2)
+
+    def test_todo_ack_condition_failure_blocks_acknowledgement(self):
+        todo = Todo.objects.create(
+            request="Do something",
+            on_done_condition="1 = 0",
+        )
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        session = self.client.session
+        session_key = f"release_publish_{self.release.pk}"
+        session[session_key] = {
+            "step": 1,
+            "log": f"{self.package.name}-{self.release.version}.log",
+            "started": True,
+        }
+        session.save()
+
+        response = self.client.get(f"{url}?ack_todos=1")
+        messages = [m.message for m in get_messages(response.wsgi_request)]
+        self.assertTrue(messages)
+        self.assertIn("1 = 0", messages[0])
+
+        response = self.client.get(f"{url}?step=1")
+        self.assertIsNone(response.context.get("next_step"))
+        self.assertEqual(
+            response.context["todos"],
+            [
+                {
+                    "id": todo.pk,
+                    "request": "Do something",
+                    "url": "",
+                    "request_details": "",
+                }
+            ],
+        )
 
     def test_release_manager_approval_requires_input(self):
         url = reverse("release-progress", args=[self.release.pk, "publish"])
