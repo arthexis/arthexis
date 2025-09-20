@@ -100,3 +100,23 @@ class UserAdminSidebarTests(TestCase):
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         self.assertNotIn("profile-inline-heading", content)
+
+    def test_change_form_profile_inline_prefixes(self):
+        User = get_user_model()
+        target = User.objects.create_user("profileprefix", password="pwd")
+        self.client.force_login(self.user)
+        url = reverse("admin:teams_user_change", args=[target.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        prefixes = (
+            "odooprofile",
+            "emailinbox",
+            "emailoutbox",
+            "releasemanager",
+            "assistantprofile",
+        )
+        for prefix in prefixes:
+            with self.subTest(prefix=prefix):
+                self.assertIn(f'data-inline-prefix="{prefix}"', content)
+                self.assertIn(f'name="{prefix}-TOTAL_FORMS"', content)

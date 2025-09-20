@@ -617,6 +617,17 @@ class EmailInboxAdminForm(forms.ModelForm):
 class ProfileInlineFormSet(BaseInlineFormSet):
     """Hide deletion controls and allow implicit removal when empty."""
 
+    @classmethod
+    def get_default_prefix(cls):
+        prefix = super().get_default_prefix()
+        if prefix:
+            return prefix
+        model_name = cls.model._meta.model_name
+        remote_field = getattr(cls.fk, "remote_field", None)
+        if remote_field is not None and getattr(remote_field, "one_to_one", False):
+            return model_name
+        return f"{model_name}_set"
+
     def add_fields(self, form, index):
         super().add_fields(form, index)
         if "DELETE" in form.fields:
