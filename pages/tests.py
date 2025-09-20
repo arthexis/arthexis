@@ -615,6 +615,79 @@ class NavAppsTests(TestCase):
         self.assertNotContains(resp, 'href="/core/"')
 
 
+class ConstellationNavTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        role, _ = NodeRole.objects.get_or_create(name="Constellation")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": "localhost",
+                "address": "127.0.0.1",
+                "role": role,
+            },
+        )
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
+        )
+        fixtures = [
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "constellation__application_ocpp.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "constellation__module_ocpp.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "constellation__module_rfid.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "constellation__landing_ocpp_dashboard.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "constellation__landing_ocpp_cp_simulator.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "constellation__landing_ocpp_rfid.json",
+            ),
+        ]
+        call_command("loaddata", *map(str, fixtures))
+
+    def test_rfid_pill_hidden(self):
+        resp = self.client.get(reverse("pages:index"))
+        nav_labels = [module.menu_label.upper() for module in resp.context["nav_modules"]]
+        self.assertNotIn("RFID", nav_labels)
+        self.assertTrue(
+            Module.objects.filter(
+                path="/ocpp/", node_role__name="Constellation"
+            ).exists()
+        )
+        self.assertFalse(
+            Module.objects.filter(
+                path="/ocpp/rfid/",
+                node_role__name="Constellation",
+                is_deleted=False,
+            ).exists()
+        )
+
+
 class StaffNavVisibilityTests(TestCase):
     def setUp(self):
         self.client = Client()
@@ -715,12 +788,24 @@ class LandingFixtureTests(TestCase):
     def test_constellation_fixture_loads_without_duplicates(self):
         from glob import glob
 
+        NodeRole.objects.get_or_create(name="Constellation")
         fixtures = glob(
             str(Path(settings.BASE_DIR, "pages", "fixtures", "constellation__*.json"))
+        )
+        fixtures = sorted(
+            fixtures,
+            key=lambda path: (
+                0
+                if "__application_" in path
+                else 1
+                if "__module_" in path
+                else 2
+            ),
         )
         call_command("loaddata", *fixtures)
         call_command("loaddata", *fixtures)
         module = Module.objects.get(path="/ocpp/", node_role__name="Constellation")
+        module.create_landings()
         self.assertEqual(module.landings.filter(path="/ocpp/rfid/").count(), 1)
 
 
