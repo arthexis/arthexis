@@ -30,6 +30,7 @@ def ensure_arthexis_user():
         delegate.save()
     return delegate
 
+
 def test_sets_operate_as_on_admin_creation():
     User = get_user_model()
     delegate = ensure_arthexis_user()

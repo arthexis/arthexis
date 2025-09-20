@@ -53,9 +53,7 @@ def _get_registered_models(app_label: str):
     """Return admin-registered models for the given app label."""
 
     registered = [
-        model
-        for model in admin.site._registry
-        if model._meta.app_label == app_label
+        model for model in admin.site._registry if model._meta.app_label == app_label
     ]
     return sorted(registered, key=lambda model: str(model._meta.verbose_name))
 
@@ -115,7 +113,7 @@ def _build_model_graph(models):
         node_ids[model] = node_id
 
         rows = [
-            "<tr><td bgcolor=\"#1f2933\" colspan=\"2\"><font color=\"white\"><b>"
+            '<tr><td bgcolor="#1f2933" colspan="2"><font color="white"><b>'
             f"{escape(model._meta.object_name)}"
             "</b></font></td></tr>"
         ]
@@ -123,7 +121,7 @@ def _build_model_graph(models):
         verbose_name = str(model._meta.verbose_name)
         if verbose_name and verbose_name != model._meta.object_name:
             rows.append(
-                "<tr><td colspan=\"2\"><i>" f"{escape(verbose_name)}" "</i></td></tr>"
+                '<tr><td colspan="2"><i>' f"{escape(verbose_name)}" "</i></td></tr>"
             )
 
         for field in model._meta.concrete_fields:
@@ -134,19 +132,25 @@ def _build_model_graph(models):
                 name = f"<u>{name}</u>"
             type_label = escape(_graph_field_type(field, model._meta.app_label))
             rows.append(
-                "<tr><td align=\"left\">" f"{name}" "</td><td align=\"left\">"
-                f"{type_label}" "</td></tr>"
+                '<tr><td align="left">'
+                f"{name}"
+                '</td><td align="left">'
+                f"{type_label}"
+                "</td></tr>"
             )
 
         for field in model._meta.local_many_to_many:
             name = escape(field.name)
             type_label = _graph_field_type(field, model._meta.app_label)
             rows.append(
-                "<tr><td align=\"left\">" f"{name}" "</td><td align=\"left\">"
-                f"{escape(type_label)}" "</td></tr>"
+                '<tr><td align="left">'
+                f"{name}"
+                '</td><td align="left">'
+                f"{escape(type_label)}"
+                "</td></tr>"
             )
 
-        label = "<\n  <table BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">\n    "
+        label = '<\n  <table BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">\n    '
         label += "\n    ".join(rows)
         label += "\n  </table>\n>"
         graph.node(node_id, label=label)
@@ -235,9 +239,9 @@ def admin_model_graph(request, app_label: str):
             else:
                 filename = slugify(app_config.verbose_name) or app_label
                 response = HttpResponse(pdf_output, content_type="application/pdf")
-                response[
-                    "Content-Disposition"
-                ] = f'attachment; filename="{filename}-model-graph.pdf"'
+                response["Content-Disposition"] = (
+                    f'attachment; filename="{filename}-model-graph.pdf"'
+                )
                 return response
 
         params = request.GET.copy()
@@ -274,9 +278,7 @@ def admin_model_graph(request, app_label: str):
                 "<svg", f'<svg role="img" aria-label="{escape(label)}"', 1
             )
             if not graph_svg:
-                graph_error = _(
-                    "Graphviz did not return any diagram output."
-                )
+                graph_error = _("Graphviz did not return any diagram output.")
 
     model_links = []
     for model in models:
@@ -713,7 +715,9 @@ def client_report(request):
             report.save(update_fields=["schedule"])
             messages.success(
                 request,
-                _("Client report schedule created; future reports will be generated automatically."),
+                _(
+                    "Client report schedule created; future reports will be generated automatically."
+                ),
             )
     context = {"form": form, "report": report, "schedule": schedule}
     return render(request, "pages/client_report.html", context)

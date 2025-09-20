@@ -130,7 +130,7 @@ def read_rfid(
             notify_async(f"RFID {rfid}", "Read failed")
         return {"error": str(exc)}
     finally:  # pragma: no cover - cleanup hardware
-        if 'mfrc' in locals() and mfrc is not None and selected:
+        if "mfrc" in locals() and mfrc is not None and selected:
             try:
                 mfrc.MFRC522_StopCrypto1()
             except Exception:

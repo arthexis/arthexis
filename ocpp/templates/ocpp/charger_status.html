@@ -45,6 +45,23 @@
         <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
         <strong id="charger-state">{{ state }}</strong>
       </div>
+      {% if charger.last_status %}
+      <p class="text-muted small mb-1" id="last-status-raw">{% trans "Reported status" %}: {{ charger.last_status }}</p>
+      {% endif %}
+      {% if charger.last_error_code %}
+      <p class="text-muted small mb-1" id="last-status-error">{% trans "Error code" %}: {{ charger.last_error_code }}</p>
+      {% endif %}
+      {% if charger.last_status_timestamp %}
+      <p class="text-muted small mb-1" id="last-status-timestamp">{% trans "Last status update" %}: {{ charger.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</p>
+      {% endif %}
+      {% if charger.last_status_vendor_info %}
+        {% if charger.last_status_vendor_info.vendorId %}
+        <p class="text-muted small mb-1" id="last-status-vendor">{% trans "Vendor" %}: {{ charger.last_status_vendor_info.vendorId }}</p>
+        {% endif %}
+        {% if charger.last_status_vendor_info.info %}
+        <p class="text-muted small mb-1" id="last-status-info">{% trans "Info" %}: {{ charger.last_status_vendor_info.info }}</p>
+        {% endif %}
+      {% endif %}
       <p>{% trans "Total Energy" %}: <span id="total-kw">{{ charger.total_kw|floatformat:2 }}</span> kW</p>
       {% if charger.diagnostics_status or charger.diagnostics_timestamp or charger.diagnostics_location %}
       <div class="mb-3">
@@ -103,6 +120,17 @@
           <span class="fw-semibold">{{ item.label }}</span>
           <span class="badge" style="background-color: {{ item.color }};">{{ item.status }}</span>
         </div>
+        {% if item.last_status or item.last_error_code or item.last_status_timestamp or item.last_status_vendor_info %}
+        <div class="mb-2">
+          {% if item.last_status %}<p class="mb-1 text-muted"><small>{% trans "Reported status" %}: {{ item.last_status }}</small></p>{% endif %}
+          {% if item.last_error_code %}<p class="mb-1 text-muted"><small>{% trans "Error code" %}: {{ item.last_error_code }}</small></p>{% endif %}
+          {% if item.last_status_timestamp %}<p class="mb-1 text-muted"><small>{% trans "Last status update" %}: {{ item.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</small></p>{% endif %}
+          {% if item.last_status_vendor_info %}
+            {% if item.last_status_vendor_info.vendorId %}<p class="mb-1 text-muted"><small>{% trans "Vendor" %}: {{ item.last_status_vendor_info.vendorId }}</small></p>{% endif %}
+            {% if item.last_status_vendor_info.info %}<p class="mb-1 text-muted"><small>{% trans "Info" %}: {{ item.last_status_vendor_info.info }}</small></p>{% endif %}
+          {% endif %}
+        </div>
+        {% endif %}
         {% if item.tx %}
         <p class="mb-1"><small>{% trans "Energy" %}: {{ item.tx.kw|floatformat:2 }} kW</small></p>
         <p class="mb-0 text-muted"><small>{% trans "Started" %}: {{ item.tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</small></p>

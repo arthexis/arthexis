@@ -171,9 +171,9 @@ jobs:
         with:
           python-version: '3.x'
       - name: Install Firefox
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y firefox firefox-geckodriver
+        uses: browser-actions/setup-firefox@v1
+      - name: Install Geckodriver
+        uses: browser-actions/setup-geckodriver@v1
       - name: Install dependencies
         run: |
           pip install -r requirements.txt

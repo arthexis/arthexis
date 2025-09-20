@@ -170,9 +170,7 @@ class NodeTests(TestCase):
             HTTP_ORIGIN="http://example.com",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response["Access-Control-Allow-Origin"], "http://example.com"
-        )
+        self.assertEqual(response["Access-Control-Allow-Origin"], "http://example.com")
         self.assertEqual(response["Access-Control-Allow-Credentials"], "true")
 
     def test_register_node_accepts_text_plain_payload(self):
@@ -188,9 +186,7 @@ class NodeTests(TestCase):
             content_type="text/plain",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(
-            Node.objects.filter(mac_address="aa:bb:cc:dd:ee:ff").exists()
-        )
+        self.assertTrue(Node.objects.filter(mac_address="aa:bb:cc:dd:ee:ff").exists())
 
 
 class NodeRegisterCurrentTests(TestCase):

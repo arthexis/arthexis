@@ -15,7 +15,11 @@ class ResolveOptions(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    skip_unknown: bool = Field(default=False, alias="skipUnknown", description="Drop unresolved sigils from the output")
+    skip_unknown: bool = Field(
+        default=False,
+        alias="skipUnknown",
+        description="Drop unresolved sigils from the output",
+    )
 
 
 class ResolveSigilsPayload(BaseModel):
@@ -61,4 +65,6 @@ class SetContextResponse(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    stored: List[str] = Field(default_factory=list, description="Model labels retained in the session context")
+    stored: List[str] = Field(
+        default_factory=list, description="Model labels retained in the session context"
+    )

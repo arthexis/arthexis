@@ -1,12 +1,14 @@
 from asgiref.testing import ApplicationCommunicator
 from channels.testing import WebsocketCommunicator
 from channels.db import database_sync_to_async
+from asgiref.sync import async_to_sync
 from django.test import Client, TransactionTestCase, TestCase, override_settings
 from unittest import skip
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.utils.translation import override, gettext as _
 from django.contrib.sites.models import Site
 from pages.models import Application, Module
@@ -116,9 +118,7 @@ class ChargerUrlFallbackTests(TestCase):
         charger.refresh_from_db()
 
         self.assertIsNotNone(charger.reference)
-        self.assertTrue(
-            charger.reference.value.startswith("http://fallback.example")
-        )
+        self.assertTrue(charger.reference.value.startswith("http://fallback.example"))
         self.assertTrue(charger.reference.value.endswith("/c/NO_SITE/"))
 
 
@@ -145,6 +145,17 @@ class CSMSConsumerTests(TransactionTestCase):
                 await database_sync_to_async(close_old_connections)()
                 await asyncio.sleep(delay)
         raise
+
+    async def _send_status_notification(self, serial: str, payload: dict):
+        communicator = WebsocketCommunicator(application, f"/{serial}/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to([2, "1", "StatusNotification", payload])
+        response = await communicator.receive_json_from()
+        self.assertEqual(response, [3, "1", {}])
+
+        await communicator.disconnect()
 
     async def test_transaction_saved(self):
         communicator = WebsocketCommunicator(application, "/TEST/")
@@ -488,6 +499,106 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    def test_status_notification_updates_models_and_views(self):
+        serial = "STATUS-CP"
+        payload = {
+            "connectorId": 1,
+            "status": "Faulted",
+            "errorCode": "GroundFailure",
+            "info": "Relay malfunction",
+            "vendorId": "ACME",
+            "timestamp": "2024-01-01T12:34:56Z",
+        }
+
+        async_to_sync(self._send_status_notification)(serial, payload)
+
+        expected_ts = parse_datetime(payload["timestamp"])
+        aggregate = Charger.objects.get(charger_id=serial, connector_id=None)
+        connector = Charger.objects.get(charger_id=serial, connector_id=1)
+
+        vendor_data = {"info": payload["info"], "vendorId": payload["vendorId"]}
+        self.assertEqual(aggregate.last_status, payload["status"])
+        self.assertEqual(aggregate.last_error_code, payload["errorCode"])
+        self.assertEqual(aggregate.last_status_vendor_info, vendor_data)
+        self.assertEqual(aggregate.last_status_timestamp, expected_ts)
+        self.assertEqual(connector.last_status, payload["status"])
+        self.assertEqual(connector.last_error_code, payload["errorCode"])
+        self.assertEqual(connector.last_status_vendor_info, vendor_data)
+        self.assertEqual(connector.last_status_timestamp, expected_ts)
+
+        connector_log = store.get_logs(
+            store.identity_key(serial, 1), log_type="charger"
+        )
+        self.assertTrue(
+            any("StatusNotification processed" in entry for entry in connector_log)
+        )
+
+        user = get_user_model().objects.create_user(
+            username="status", email="status@example.com", password="pwd"
+        )
+        self.client.force_login(user)
+
+        list_response = self.client.get(reverse("charger-list"))
+        self.assertEqual(list_response.status_code, 200)
+        chargers = list_response.json()["chargers"]
+        aggregate_entry = next(
+            item
+            for item in chargers
+            if item["charger_id"] == serial and item["connector_id"] is None
+        )
+        connector_entry = next(
+            item
+            for item in chargers
+            if item["charger_id"] == serial and item["connector_id"] == 1
+        )
+        expected_iso = expected_ts.isoformat()
+        self.assertEqual(aggregate_entry["lastStatus"], payload["status"])
+        self.assertEqual(aggregate_entry["lastErrorCode"], payload["errorCode"])
+        self.assertEqual(aggregate_entry["lastStatusVendorInfo"], vendor_data)
+        self.assertEqual(aggregate_entry["lastStatusTimestamp"], expected_iso)
+        self.assertEqual(aggregate_entry["status"], "Faulted (GroundFailure)")
+        self.assertEqual(aggregate_entry["statusColor"], "#dc3545")
+        self.assertEqual(connector_entry["lastStatus"], payload["status"])
+        self.assertEqual(connector_entry["lastErrorCode"], payload["errorCode"])
+        self.assertEqual(connector_entry["lastStatusVendorInfo"], vendor_data)
+        self.assertEqual(connector_entry["lastStatusTimestamp"], expected_iso)
+        self.assertEqual(connector_entry["status"], "Faulted (GroundFailure)")
+        self.assertEqual(connector_entry["statusColor"], "#dc3545")
+
+        detail_response = self.client.get(
+            reverse("charger-detail-connector", args=[serial, 1])
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        detail_payload = detail_response.json()
+        self.assertEqual(detail_payload["lastStatus"], payload["status"])
+        self.assertEqual(detail_payload["lastErrorCode"], payload["errorCode"])
+        self.assertEqual(detail_payload["lastStatusVendorInfo"], vendor_data)
+        self.assertEqual(detail_payload["lastStatusTimestamp"], expected_iso)
+        self.assertEqual(detail_payload["status"], "Faulted (GroundFailure)")
+        self.assertEqual(detail_payload["statusColor"], "#dc3545")
+
+        status_resp = self.client.get(
+            reverse("charger-status-connector", args=[serial, "1"])
+        )
+        self.assertContains(status_resp, "Faulted (GroundFailure)")
+        self.assertContains(status_resp, "Error code: GroundFailure")
+        self.assertContains(status_resp, "Vendor: ACME")
+        self.assertContains(status_resp, "Info: Relay malfunction")
+        self.assertContains(status_resp, "background-color: #dc3545")
+
+        aggregate_status = self.client.get(reverse("charger-status", args=[serial]))
+        self.assertContains(aggregate_status, "Reported status")
+        self.assertContains(aggregate_status, "Info: Relay malfunction")
+
+        page_resp = self.client.get(reverse("charger-page", args=[serial]))
+        self.assertContains(page_resp, "Faulted (GroundFailure)")
+        self.assertContains(page_resp, "Vendor")
+        self.assertContains(page_resp, "Relay malfunction")
+        self.assertContains(page_resp, "background-color: #dc3545")
+
+        store.clear_log(store.identity_key(serial, 1), log_type="charger")
+        store.clear_log(store.identity_key(serial, None), log_type="charger")
+
     async def test_message_logged_and_session_file_created(self):
         cid = "LOGTEST1"
         log_path = Path("logs") / f"charger.{cid}.log"
@@ -714,9 +825,7 @@ class ChargerLandingTests(TestCase):
     def test_connector_specific_routes_render(self):
         Charger.objects.create(charger_id="ROUTED")
         connector = Charger.objects.create(charger_id="ROUTED", connector_id=1)
-        page = self.client.get(
-            reverse("charger-page-connector", args=["ROUTED", "1"])
-        )
+        page = self.client.get(reverse("charger-page-connector", args=["ROUTED", "1"]))
         self.assertEqual(page.status_code, 200)
         status = self.client.get(
             reverse("charger-status-connector", args=["ROUTED", "1"])
@@ -803,9 +912,7 @@ class ChargerAdminTests(TestCase):
         url = reverse("admin:ocpp_charger_changelist")
         resp = self.client.get(url)
         self.assertContains(resp, charger.get_absolute_url())
-        status_url = reverse(
-            "charger-status-connector", args=["ADMIN1", "all"]
-        )
+        status_url = reverse("charger-status-connector", args=["ADMIN1", "all"])
         self.assertContains(resp, status_url)
 
     def test_admin_does_not_list_qr_link(self):
@@ -876,9 +983,7 @@ class ChargerAdminTests(TestCase):
         )
         self.assertFalse(Transaction.objects.filter(charger=charger).exists())
         self.assertFalse(MeterReading.objects.filter(charger=charger).exists())
-        self.assertNotIn(
-            store.identity_key("PURGE1", None), store.logs["charger"]
-        )
+        self.assertNotIn(store.identity_key("PURGE1", None), store.logs["charger"])
 
     def test_delete_requires_purge(self):
         charger = Charger.objects.create(charger_id="DEL1")
@@ -921,14 +1026,13 @@ class LocationAdminTests(TestCase):
         self.assertEqual(resp.status_code, 200)
 
         base_change_url = reverse("admin:ocpp_charger_change", args=[base.pk])
-        connector_change_url = reverse(
-            "admin:ocpp_charger_change", args=[connector.pk]
-        )
+        connector_change_url = reverse("admin:ocpp_charger_change", args=[connector.pk])
 
         self.assertContains(resp, base_change_url)
         self.assertContains(resp, connector_change_url)
         self.assertContains(resp, f"Charge Point: {base.charger_id}")
         self.assertContains(resp, f"Charge Point: {connector.charger_id} #1")
+
 
 class TransactionAdminTests(TestCase):
     def setUp(self):
@@ -1774,12 +1878,8 @@ class ChargerStatusViewTests(TestCase):
 
     def test_aggregate_chart_includes_multiple_connectors(self):
         aggregate = Charger.objects.create(charger_id="VIEWAGG")
-        connector_one = Charger.objects.create(
-            charger_id="VIEWAGG", connector_id=1
-        )
-        connector_two = Charger.objects.create(
-            charger_id="VIEWAGG", connector_id=2
-        )
+        connector_one = Charger.objects.create(charger_id="VIEWAGG", connector_id=1)
+        connector_two = Charger.objects.create(charger_id="VIEWAGG", connector_id=2)
         base_time = timezone.now()
         tx_one = Transaction.objects.create(
             charger=connector_one, start_time=base_time, meter_start=0

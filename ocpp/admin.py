@@ -121,6 +121,10 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                     "location",
                     "last_heartbeat",
                     "last_meter_values",
+                    "last_status",
+                    "last_error_code",
+                    "last_status_vendor_info",
+                    "last_status_timestamp",
                     "last_path",
                 )
             },
@@ -137,11 +141,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         ),
         (
             "Configuration",
-            {
-                "fields": (
-                    "require_rfid",
-                )
-            },
+            {"fields": ("require_rfid",)},
         ),
         (
             "References",

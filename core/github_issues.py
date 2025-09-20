@@ -26,7 +26,9 @@ def resolve_repository() -> tuple[str, str]:
 
     package = Package.objects.filter(is_active=True).first()
     repository_url = (
-        package.repository_url if package and package.repository_url else DEFAULT_PACKAGE.repository_url
+        package.repository_url
+        if package and package.repository_url
+        else DEFAULT_PACKAGE.repository_url
     )
 
     owner: str
@@ -88,7 +90,9 @@ def _has_recent_marker(lock_path: Path) -> bool:
     if not lock_path.exists():
         return False
 
-    marker_age = datetime.utcnow() - datetime.utcfromtimestamp(lock_path.stat().st_mtime)
+    marker_age = datetime.utcnow() - datetime.utcfromtimestamp(
+        lock_path.stat().st_mtime
+    )
     return marker_age < LOCK_TTL
 
 
@@ -148,7 +152,9 @@ def create_issue(
     }
     url = f"https://api.github.com/repos/{owner}/{repo}/issues"
 
-    response = requests.post(url, json=payload, headers=headers, timeout=REQUEST_TIMEOUT)
+    response = requests.post(
+        url, json=payload, headers=headers, timeout=REQUEST_TIMEOUT
+    )
     if not (200 <= response.status_code < 300):
         logger.error(
             "GitHub issue creation failed with status %s: %s",
@@ -164,4 +170,3 @@ def create_issue(
         response.status_code,
     )
     return response
-

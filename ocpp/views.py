@@ -93,6 +93,10 @@ def _connector_overview(charger: Charger) -> list[dict]:
                 ),
                 "status": state,
                 "color": color,
+                "last_status": sibling.last_status,
+                "last_error_code": sibling.last_error_code,
+                "last_status_timestamp": sibling.last_status_timestamp,
+                "last_status_vendor_info": sibling.last_status_vendor_info,
                 "tx": tx_obj,
                 "connected": store.is_connected(
                     sibling.charger_id, sibling.connector_id
@@ -152,15 +156,52 @@ def _landing_page_translations() -> dict[str, dict[str, str]]:
                     "%(count)s connectors active",
                     2,
                 ),
+                "status_reported_label": gettext("Reported status"),
+                "status_error_label": gettext("Error code"),
+                "status_updated_label": gettext("Last status update"),
+                "status_vendor_label": gettext("Vendor"),
+                "status_info_label": gettext("Info"),
             }
     return catalog
 
 
-def _charger_state(charger: Charger, tx_obj: Transaction | None):
+STATUS_BADGE_MAP: dict[str, tuple[str, str]] = {
+    "available": (_("Available"), "#0d6efd"),
+    "preparing": (_("Preparing"), "#0d6efd"),
+    "charging": (_("Charging"), "#198754"),
+    "suspendedevse": (_("Suspended (EVSE)"), "#fd7e14"),
+    "suspendedev": (_("Suspended (EV)"), "#fd7e14"),
+    "finishing": (_("Finishing"), "#20c997"),
+    "faulted": (_("Faulted"), "#dc3545"),
+    "unavailable": (_("Unavailable"), "#6c757d"),
+    "reserved": (_("Reserved"), "#6f42c1"),
+    "occupied": (_("Occupied"), "#0dcaf0"),
+    "outofservice": (_("Out of Service"), "#6c757d"),
+}
+
+_ERROR_OK_VALUES = {"", "noerror", "no_error"}
+
+
+def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
     """Return human readable state and color for a charger."""
+
+    status_value = (charger.last_status or "").strip()
+    if status_value:
+        key = status_value.lower()
+        label, color = STATUS_BADGE_MAP.get(key, (status_value, "#0d6efd"))
+        error_code = (charger.last_error_code or "").strip()
+        if error_code and error_code.lower() not in _ERROR_OK_VALUES:
+            label = _("%(status)s (%(error)s)") % {
+                "status": label,
+                "error": error_code,
+            }
+            color = "#dc3545"
+        return label, color
+
     cid = charger.charger_id
     connected = store.is_connected(cid, charger.connector_id)
-    if connected and tx_obj:
+    has_session = bool(tx_obj)
+    if connected and has_session:
         return _("Charging"), "green"
     if connected:
         return _("Available"), "blue"
@@ -448,19 +489,24 @@ def charger_page(request, cid, connector=None):
             for _, tx_obj in sessions:
                 if tx_obj.kw:
                     total_kw += tx_obj.kw
-            tx = SimpleNamespace(kw=total_kw, start_time=min(start_times) if start_times else None)
+            tx = SimpleNamespace(
+                kw=total_kw, start_time=min(start_times) if start_times else None
+            )
             active_connector_count = len(sessions)
     else:
-        tx = sessions[0][1] if sessions else store.get_transaction(cid, charger.connector_id)
+        tx = (
+            sessions[0][1]
+            if sessions
+            else store.get_transaction(cid, charger.connector_id)
+        )
         if tx:
             active_connector_count = 1
+    state_source = tx if charger.connector_id is not None else (sessions if sessions else None)
+    state, color = _charger_state(charger, state_source)
     language_cookie = request.COOKIES.get(settings.LANGUAGE_COOKIE_NAME)
     preferred_language = "es"
     supported_languages = {code for code, _ in settings.LANGUAGES}
-    if (
-        preferred_language in supported_languages
-        and not language_cookie
-    ):
+    if preferred_language in supported_languages and not language_cookie:
         translation.activate(preferred_language)
         request.LANGUAGE_CODE = translation.get_language()
     connector_links = [
@@ -488,6 +534,8 @@ def charger_page(request, cid, connector=None):
             "active_connector_count": active_connector_count,
             "status_url": status_url,
             "landing_translations": _landing_page_translations(),
+            "state": state,
+            "color": color,
         },
     )
 
@@ -511,11 +559,20 @@ def charger_status(request, cid, connector=None):
         elif not (live_tx and str(live_tx.pk) == session_id):
             tx_obj = get_object_or_404(Transaction, pk=session_id, charger=charger)
             past_session = True
-    state, color = _charger_state(charger, live_tx if charger.connector_id is not None else (sessions if sessions else None))
+    state, color = _charger_state(
+        charger,
+        (
+            live_tx
+            if charger.connector_id is not None
+            else (sessions if sessions else None)
+        ),
+    )
     if charger.connector_id is None:
-        transactions_qs = Transaction.objects.filter(
-            charger__charger_id=cid
-        ).select_related("charger").order_by("-start_time")
+        transactions_qs = (
+            Transaction.objects.filter(charger__charger_id=cid)
+            .select_related("charger")
+            .order_by("-start_time")
+        )
     else:
         transactions_qs = Transaction.objects.filter(charger=charger).order_by(
             "-start_time"
@@ -760,4 +817,3 @@ def dispatch_action(request, cid, connector=None):
     log_key = store.identity_key(cid, connector_value)
     store.add_log(log_key, f"< {msg}", log_type="charger")
     return JsonResponse({"sent": msg})
-

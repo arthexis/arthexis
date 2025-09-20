@@ -114,8 +114,21 @@ def dump_user_fixture(instance, user=None) -> None:
     if issubclass(UserModel, Entity) and isinstance(instance, UserModel):
         return
     target_user = user or _resolve_fixture_user(instance)
-    if target_user is None or not _user_allows_user_data(target_user):
+    if target_user is None:
         return
+    allow_user_data = _user_allows_user_data(target_user)
+    if not allow_user_data:
+        is_user_data = getattr(instance, "is_user_data", False)
+        if not is_user_data and instance.pk:
+            stored_flag = (
+                type(instance)
+                .all_objects.filter(pk=instance.pk)
+                .values_list("is_user_data", flat=True)
+                .first()
+            )
+            is_user_data = bool(stored_flag)
+        if not is_user_data:
+            return
     meta = model._meta
     path = _fixture_path(target_user, instance)
     call_command(

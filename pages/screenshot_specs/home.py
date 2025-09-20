@@ -1,4 +1,5 @@
 """Home page screenshot specification."""
+
 from __future__ import annotations
 
 from .base import ScreenshotSpec, registry
@@ -13,4 +14,3 @@ registry.register(
         ],
     )
 )
-

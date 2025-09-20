@@ -112,7 +112,18 @@ def allow_mac(mac: str) -> None:
         allowlist.add(mac)
         _save_allowlist(allowlist)
     if _iptables_available():
-        check_args = ["-C", "FORWARD", "-i", "wlan0", "-m", "mac", "--mac-source", mac, "-j", "ACCEPT"]
+        check_args = [
+            "-C",
+            "FORWARD",
+            "-i",
+            "wlan0",
+            "-m",
+            "mac",
+            "--mac-source",
+            mac,
+            "-j",
+            "ACCEPT",
+        ]
         try:
             result = subprocess.run(
                 ["iptables", *check_args],

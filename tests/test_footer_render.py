@@ -103,8 +103,9 @@ class FooterRenderTests(TestCase):
             domain="example.com", defaults={"name": "Example"}
         )
 
-        with patch("nodes.models.Node.refresh_features"), patch(
-            "nodes.models.Node.sync_feature_tasks"
+        with (
+            patch("nodes.models.Node.refresh_features"),
+            patch("nodes.models.Node.sync_feature_tasks"),
         ):
             node = Node.objects.create(
                 hostname="node1",
@@ -113,9 +114,7 @@ class FooterRenderTests(TestCase):
                 public_endpoint="node1",
                 role=terminal,
             )
-            NodeFeatureAssignment.objects.create(
-                node=node, feature=feature_enabled
-            )
+            NodeFeatureAssignment.objects.create(node=node, feature=feature_enabled)
 
         role_ref = Reference.objects.create(
             alt_text="Role Only",
@@ -148,9 +147,7 @@ class FooterRenderTests(TestCase):
         unmatched.sites.add(other_site)
 
         with patch("nodes.models.Node.get_local", return_value=node):
-            response = self.client.get(
-                reverse("pages:index"), HTTP_HOST="arthexis.com"
-            )
+            response = self.client.get(reverse("pages:index"), HTTP_HOST="arthexis.com")
 
         self.assertContains(response, "Role Only")
         self.assertContains(response, "Feature Only")
@@ -158,9 +155,7 @@ class FooterRenderTests(TestCase):
         self.assertNotContains(response, "Unmatched")
 
         with patch("nodes.models.Node.get_local", return_value=node):
-            response = self.client.get(
-                reverse("pages:index"), HTTP_HOST="testserver"
-            )
+            response = self.client.get(reverse("pages:index"), HTTP_HOST="testserver")
 
         self.assertContains(response, "Role Only")
         self.assertContains(response, "Feature Only")

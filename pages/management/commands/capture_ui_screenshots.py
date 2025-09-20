@@ -1,4 +1,5 @@
 """Management command to capture UI screenshots defined by specs."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -58,4 +59,3 @@ class Command(BaseCommand):
                     )
                 )
                 self.stdout.write(f"Base64 artefact stored at {result.base64_path}")
-
