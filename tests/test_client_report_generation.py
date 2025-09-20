@@ -9,11 +9,12 @@ import django
 
 django.setup()
 
+from django.conf import settings
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import RFID, ClientReport, EnergyAccount
+from core.models import RFID, ClientReport, EnergyAccount, ClientReportSchedule
 from ocpp.models import Charger, Transaction
 
 
@@ -47,7 +48,15 @@ class ClientReportGenerationTests(TestCase):
     def test_generate_report(self):
         day = timezone.now().date()
         url = reverse("pages:client-report")
-        resp = self.client.post(url, {"period": "range", "start": day, "end": day})
+        resp = self.client.post(
+            url,
+            {
+                "period": "range",
+                "start": day,
+                "end": day,
+                "recurrence": ClientReportSchedule.PERIODICITY_NONE,
+            },
+        )
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, self.account.name)
         self.assertContains(resp, str(self.rfid2.label_id))
@@ -56,6 +65,15 @@ class ClientReportGenerationTests(TestCase):
         report = ClientReport.objects.get()
         self.assertEqual(report.start_date, day)
         self.assertEqual(report.end_date, day)
+        self.assertIsNone(report.owner)
+        export = report.data.get("export")
+        self.assertIsNotNone(export)
+        html_path = Path(settings.BASE_DIR) / export["html_path"]
+        json_path = Path(settings.BASE_DIR) / export["json_path"]
+        self.assertTrue(html_path.exists())
+        self.assertTrue(json_path.exists())
         subjects = {row["subject"] for row in report.data["rows"]}
         self.assertIn(self.account.name, subjects)
         self.assertIn(str(self.rfid2.label_id), subjects)
+        html_path.unlink()
+        json_path.unlink()

@@ -8,6 +8,7 @@ from django.template.response import TemplateResponse
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
+from django.core.validators import EmailValidator
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import (
@@ -27,6 +28,7 @@ import uuid
 import requests
 import datetime
 import calendar
+import re
 from django_object_actions import DjangoObjectActions
 from ocpp.models import Transaction
 from nodes.models import EmailOutbox
@@ -40,8 +42,8 @@ from .models import (
     WMICode,
     EnergyCredit,
     ClientReport,
+    ClientReportSchedule,
     Product,
-    LiveSubscription,
     RFID,
     SigilRoot,
     CustomSigil,
@@ -54,6 +56,7 @@ from .models import (
     ReleaseManager,
     SecurityGroup,
     InviteLead,
+    PublicWifiAccess,
     AssistantProfile,
     Todo,
     hash_key,
@@ -163,8 +166,8 @@ class ReferenceAdmin(EntityModelAdmin):
     list_display = (
         "alt_text",
         "content_type",
-        "include_in_footer",
-        "footer_visibility",
+        "footer",
+        "visibility",
         "author",
         "transaction_uuid",
     )
@@ -175,6 +178,9 @@ class ReferenceAdmin(EntityModelAdmin):
         "value",
         "file",
         "method",
+        "roles",
+        "features",
+        "sites",
         "include_in_footer",
         "footer_visibility",
         "transaction_uuid",
@@ -182,12 +188,21 @@ class ReferenceAdmin(EntityModelAdmin):
         "uses",
         "qr_code",
     )
+    filter_horizontal = ("roles", "features", "sites")
 
     def get_readonly_fields(self, request, obj=None):
         ro = list(super().get_readonly_fields(request, obj))
         if obj:
             ro.append("transaction_uuid")
         return ro
+
+    @admin.display(description="Footer", boolean=True, ordering="include_in_footer")
+    def footer(self, obj):
+        return obj.include_in_footer
+
+    @admin.display(description="Visibility", ordering="footer_visibility")
+    def visibility(self, obj):
+        return obj.get_footer_visibility_display()
 
     def get_urls(self):
         urls = super().get_urls()
@@ -427,7 +442,7 @@ class SecurityGroupAdmin(DjangoGroupAdmin):
 
 
 class InviteLeadAdmin(EntityModelAdmin):
-    list_display = ("email", "created_on", "sent_on", "short_error")
+    list_display = ("email", "mac_address", "created_on", "sent_on", "short_error")
     search_fields = ("email", "comment")
     readonly_fields = (
         "created_on",
@@ -436,6 +451,7 @@ class InviteLeadAdmin(EntityModelAdmin):
         "referer",
         "user_agent",
         "ip_address",
+        "mac_address",
         "sent_on",
         "error",
     )
@@ -444,6 +460,14 @@ class InviteLeadAdmin(EntityModelAdmin):
         return (obj.error[:40] + "…") if len(obj.error) > 40 else obj.error
 
     short_error.short_description = "error"
+
+
+@admin.register(PublicWifiAccess)
+class PublicWifiAccessAdmin(EntityModelAdmin):
+    list_display = ("user", "mac_address", "created_on", "revoked_on")
+    search_fields = ("user__username", "mac_address")
+    readonly_fields = ("user", "mac_address", "created_on", "updated_on", "revoked_on")
+    ordering = ("-created_on",)
 
 
 class EnergyAccountRFIDForm(forms.ModelForm):
@@ -834,7 +858,6 @@ PROFILE_INLINE_CONFIG = {
                 None,
                 {
                     "fields": (
-                        "user_datum",
                         "host",
                         "database",
                         "username",
@@ -854,7 +877,6 @@ PROFILE_INLINE_CONFIG = {
     EmailInbox: {
         "form": EmailInboxInlineForm,
         "fields": (
-            "user_datum",
             "username",
             "host",
             "port",
@@ -866,7 +888,6 @@ PROFILE_INLINE_CONFIG = {
     EmailOutbox: {
         "form": EmailOutboxInlineForm,
         "fields": (
-            "user_datum",
             "password",
             "host",
             "port",
@@ -879,7 +900,6 @@ PROFILE_INLINE_CONFIG = {
     ReleaseManager: {
         "form": ReleaseManagerInlineForm,
         "fields": (
-            "user_datum",
             "pypi_username",
             "pypi_token",
             "github_token",
@@ -914,6 +934,7 @@ def _build_profile_inline(model, owner_field):
         "can_delete": True,
         "verbose_name": verbose_name,
         "verbose_name_plural": verbose_name_plural,
+        "template": "admin/edit_inline/profile_stacked.html",
     }
     if "fieldsets" in config:
         attrs["fieldsets"] = config["fieldsets"]
@@ -971,7 +992,7 @@ class UserAdmin(DjangoUserAdmin):
 
     def get_inline_instances(self, request, obj=None):
         inline_instances = super().get_inline_instances(request, obj)
-        if obj and getattr(obj, "is_system_user", False):
+        if obj and getattr(obj, "is_profile_restricted", False):
             profile_inline_classes = tuple(USER_PROFILE_INLINES)
             inline_instances = [
                 inline
@@ -1289,15 +1310,9 @@ class AssistantProfileAdmin(EntityModelAdmin):
             {
                 "mcp_status": status,
                 "mcp_server_actions": {
-                    "start": reverse(
-                        f"admin:{app_label}_{model_name}_start_server"
-                    ),
-                    "stop": reverse(
-                        f"admin:{app_label}_{model_name}_stop_server"
-                    ),
-                    "status": reverse(
-                        f"admin:{app_label}_{model_name}_status"
-                    ),
+                    "start": reverse(f"admin:{app_label}_{model_name}_start_server"),
+                    "stop": reverse(f"admin:{app_label}_{model_name}_stop_server"),
+                    "status": reverse(f"admin:{app_label}_{model_name}_status"),
                 },
             }
         )
@@ -1439,6 +1454,15 @@ class EnergyAccountAdmin(EntityModelAdmin):
                     "user",
                     ("service_account", "authorized"),
                     ("credits_kw", "total_kw_spent", "balance_kw"),
+                )
+            },
+        ),
+        (
+            "Live Subscription",
+            {
+                "fields": (
+                    "live_subscription_product",
+                    ("live_subscription_start_date", "live_subscription_next_renewal"),
                 )
             },
         ),
@@ -1595,9 +1619,6 @@ class ProductAdmin(EntityModelAdmin):
     form = ProductAdminForm
 
 
-admin.site.register(LiveSubscription)
-
-
 class RFIDResource(resources.ModelResource):
     reference = fields.Field(
         column_name="reference",
@@ -1733,6 +1754,7 @@ class ClientReportAdmin(EntityModelAdmin):
             ("week", "Week"),
             ("month", "Month"),
         ]
+        RECURRENCE_CHOICES = ClientReportSchedule.PERIODICITY_CHOICES
         period = forms.ChoiceField(
             choices=PERIOD_CHOICES, widget=forms.RadioSelect, initial="range"
         )
@@ -1756,6 +1778,35 @@ class ClientReportAdmin(EntityModelAdmin):
             required=False,
             widget=forms.DateInput(attrs={"type": "month"}),
         )
+        owner = forms.ModelChoiceField(
+            queryset=get_user_model().objects.all(), required=False
+        )
+        destinations = forms.CharField(
+            label="Email destinations",
+            required=False,
+            widget=forms.Textarea(attrs={"rows": 2}),
+            help_text="Separate addresses with commas or new lines.",
+        )
+        recurrence = forms.ChoiceField(
+            label="Recurrency",
+            choices=RECURRENCE_CHOICES,
+            initial=ClientReportSchedule.PERIODICITY_NONE,
+        )
+        disable_emails = forms.BooleanField(
+            label="Disable email delivery",
+            required=False,
+            help_text="Generate files without sending emails.",
+        )
+
+        def __init__(self, *args, request=None, **kwargs):
+            self.request = request
+            super().__init__(*args, **kwargs)
+            if (
+                request
+                and getattr(request, "user", None)
+                and request.user.is_authenticated
+            ):
+                self.fields["owner"].initial = request.user.pk
 
         def clean(self):
             cleaned = super().clean()
@@ -1781,6 +1832,25 @@ class ClientReportAdmin(EntityModelAdmin):
                 cleaned["end"] = month_dt.replace(day=last_day)
             return cleaned
 
+        def clean_destinations(self):
+            raw = self.cleaned_data.get("destinations", "")
+            if not raw:
+                return []
+            validator = EmailValidator()
+            seen: set[str] = set()
+            emails: list[str] = []
+            for part in re.split(r"[\s,]+", raw):
+                candidate = part.strip()
+                if not candidate:
+                    continue
+                validator(candidate)
+                key = candidate.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                emails.append(candidate)
+            return emails
+
     def get_urls(self):
         urls = super().get_urls()
         custom = [
@@ -1793,14 +1863,39 @@ class ClientReportAdmin(EntityModelAdmin):
         return custom + urls
 
     def generate_view(self, request):
-        form = self.ClientReportForm(request.POST or None)
+        form = self.ClientReportForm(request.POST or None, request=request)
         report = None
+        schedule = None
         if request.method == "POST" and form.is_valid():
+            owner = form.cleaned_data.get("owner")
+            if not owner and request.user.is_authenticated:
+                owner = request.user
             report = ClientReport.generate(
-                form.cleaned_data["start"], form.cleaned_data["end"]
+                form.cleaned_data["start"],
+                form.cleaned_data["end"],
+                owner=owner,
+                recipients=form.cleaned_data.get("destinations"),
+                disable_emails=form.cleaned_data.get("disable_emails", False),
             )
+            report.store_local_copy()
+            recurrence = form.cleaned_data.get("recurrence")
+            if recurrence and recurrence != ClientReportSchedule.PERIODICITY_NONE:
+                schedule = ClientReportSchedule.objects.create(
+                    owner=owner,
+                    created_by=request.user if request.user.is_authenticated else None,
+                    periodicity=recurrence,
+                    email_recipients=form.cleaned_data.get("destinations", []),
+                    disable_emails=form.cleaned_data.get("disable_emails", False),
+                )
+                report.schedule = schedule
+                report.save(update_fields=["schedule"])
+                self.message_user(
+                    request,
+                    "Client report schedule created; future reports will be generated automatically.",
+                    messages.SUCCESS,
+                )
         context = self.admin_site.each_context(request)
-        context.update({"form": form, "report": report})
+        context.update({"form": form, "report": report, "schedule": schedule})
         return TemplateResponse(
             request, "admin/core/clientreport/generate.html", context
         )

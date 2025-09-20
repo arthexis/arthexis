@@ -3,7 +3,7 @@
     "model": "pages.module",
     "fields": {
       "is_seed_data": true,
-      "is_deleted": false,
+      "is_deleted": true,
       "node_role": ["Constellation"],
       "application": ["ocpp"],
       "path": "/ocpp/rfid/",

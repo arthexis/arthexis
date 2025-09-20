@@ -14,7 +14,6 @@ from collections import defaultdict
 import tempfile
 import hashlib
 import time
-import re
 
 import django
 import importlib.util
@@ -45,29 +44,7 @@ from django.contrib.auth import get_user_model
 from core.models import PackageRelease
 from core.sigil_builder import generate_model_sigils
 from core.user_data import load_shared_user_fixtures, load_user_fixtures
-
-
-def _unlink_sqlite_db(path: Path) -> None:
-    """Close database connections and remove only the SQLite DB file."""
-    connections.close_all()
-    try:
-        base_dir = Path(settings.BASE_DIR).resolve()
-    except Exception:
-        base_dir = path.parent.resolve()
-    path = path.resolve()
-    try:
-        path.relative_to(base_dir)
-    except ValueError:
-        raise RuntimeError(f"Refusing to delete database outside {base_dir}: {path}")
-    if not re.fullmatch(r"(?:test_)?db(?:_[0-9a-f]{6})?\.sqlite3", path.name):
-        raise RuntimeError(f"Refusing to delete unexpected database file: {path.name}")
-    for _ in range(5):
-        try:
-            path.unlink(missing_ok=True)
-            break
-        except PermissionError:
-            time.sleep(0.1)
-            connections.close_all()
+from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
 
 
 def _local_app_labels() -> list[str]:
@@ -110,7 +87,7 @@ def _fixture_sort_key(name: str) -> tuple[int, str]:
 
 def _migration_hash(app_labels: list[str]) -> str:
     """Return an md5 hash of all migration files for the given apps."""
-    md5 = hashlib.md5()
+    md5 = hashlib.md5(usedforsecurity=False)
     for label in app_labels:
         try:
             app_config = apps.get_app_config(label)
@@ -279,6 +256,22 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     fields = obj.get("fields", {})
                     if "user" in fields and isinstance(fields["user"], int):
                         fields["user"] = user_pk_map.get(fields["user"], fields["user"])
+                    if model_label == "core.sigilroot":
+                        content_type = fields.get("content_type")
+                        app_label: str | None = None
+                        if isinstance(content_type, (list, tuple)) and content_type:
+                            app_label = content_type[0]
+                        elif isinstance(content_type, dict):
+                            app_label = content_type.get("app_label")
+                        if app_label:
+                            try:
+                                apps.get_app_config(app_label)
+                            except LookupError:
+                                prefix = fields.get("prefix", "?")
+                                print(
+                                    f"Skipping SigilRoot '{prefix}' (missing app '{app_label}')"
+                                )
+                                continue
                     if model is PackageRelease:
                         version = obj.get("fields", {}).get("version")
                         if (

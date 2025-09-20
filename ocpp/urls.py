@@ -46,31 +46,5 @@ urlpatterns = [
         views.charger_status,
         name="charger-status-connector",
     ),
-    path("console/<str:cid>/", views.charger_console, name="charger-console"),
-    path(
-        "console/<str:cid>/connector/<slug:connector>/",
-        views.charger_console,
-        name="charger-console-connector",
-    ),
-    path(
-        "console/<str:cid>/proxy/",
-        views.charger_console_proxy,
-        name="charger-console-proxy",
-    ),
-    path(
-        "console/<str:cid>/proxy/<path:path>",
-        views.charger_console_proxy,
-        name="charger-console-proxy",
-    ),
-    path(
-        "console/<str:cid>/connector/<slug:connector>/proxy/",
-        views.charger_console_proxy,
-        name="charger-console-proxy-connector",
-    ),
-    path(
-        "console/<str:cid>/connector/<slug:connector>/proxy/<path:path>",
-        views.charger_console_proxy,
-        name="charger-console-proxy-connector",
-    ),
     path("rfid/", include("ocpp.rfid.urls")),
 ]

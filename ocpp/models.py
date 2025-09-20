@@ -63,12 +63,53 @@ class Charger(Entity):
         default=False,
         help_text="Require a valid RFID before starting a charging session.",
     )
+    firmware_status = models.CharField(
+        _("Firmware Status"),
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="Latest firmware status reported by the charger.",
+    )
+    firmware_status_info = models.CharField(
+        _("Firmware Status Details"),
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Additional information supplied with the firmware status.",
+    )
+    firmware_timestamp = models.DateTimeField(
+        _("Firmware Status Timestamp"),
+        null=True,
+        blank=True,
+        help_text="When the charger reported the current firmware status.",
+    )
     last_heartbeat = models.DateTimeField(null=True, blank=True)
     last_meter_values = models.JSONField(default=dict, blank=True)
+    last_status = models.CharField(max_length=64, blank=True)
+    last_error_code = models.CharField(max_length=64, blank=True)
+    last_status_vendor_info = models.JSONField(null=True, blank=True)
+    last_status_timestamp = models.DateTimeField(null=True, blank=True)
     temperature = models.DecimalField(
         max_digits=5, decimal_places=1, null=True, blank=True
     )
     temperature_unit = models.CharField(max_length=16, blank=True)
+    diagnostics_status = models.CharField(
+        max_length=32,
+        null=True,
+        blank=True,
+        help_text="Most recent diagnostics status reported by the charger.",
+    )
+    diagnostics_timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp associated with the latest diagnostics status.",
+    )
+    diagnostics_location = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Location or URI reported for the latest diagnostics upload.",
+    )
     reference = models.OneToOneField(
         Reference, null=True, blank=True, on_delete=models.SET_NULL
     )
@@ -80,7 +121,6 @@ class Charger(Entity):
         related_name="chargers",
     )
     last_path = models.CharField(max_length=255, blank=True)
-    console_url = models.URLField(blank=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.charger_id
@@ -91,9 +131,14 @@ class Charger(Entity):
         constraints = [
             models.UniqueConstraint(
                 fields=("charger_id", "connector_id"),
+                condition=models.Q(connector_id__isnull=False),
                 name="charger_connector_unique",
-                nulls_distinct=False,
-            )
+            ),
+            models.UniqueConstraint(
+                fields=("charger_id",),
+                condition=models.Q(connector_id__isnull=True),
+                name="charger_unique_without_connector",
+            ),
         ]
 
     AGGREGATE_CONNECTOR_SLUG = "all"
@@ -281,9 +326,7 @@ class Charger(Entity):
 
         tx_active = None
         if self.connector_id is not None:
-            tx_active = store_module.get_transaction(
-                self.charger_id, self.connector_id
-            )
+            tx_active = store_module.get_transaction(self.charger_id, self.connector_id)
         qs = self.transactions.all()
         if tx_active and tx_active.pk is not None:
             qs = qs.exclude(pk=tx_active.pk)
@@ -317,7 +360,10 @@ class Charger(Entity):
             has_data = (
                 charger.transactions.exists()
                 or charger.meter_values.exists()
-                or any(store.get_logs(key, log_type="charger") for key in charger._store_keys())
+                or any(
+                    store.get_logs(key, log_type="charger")
+                    for key in charger._store_keys()
+                )
                 or any(store.transactions.get(key) for key in charger._store_keys())
                 or any(store.history.get(key) for key in charger._store_keys())
             )
@@ -486,7 +532,9 @@ class MeterReadingManager(EntityManager):
     def get_or_create(self, defaults=None, **kwargs):
         if defaults:
             defaults = self._normalize_kwargs(defaults)
-        return super().get_or_create(defaults=defaults, **self._normalize_kwargs(kwargs))
+        return super().get_or_create(
+            defaults=defaults, **self._normalize_kwargs(kwargs)
+        )
 
 
 class MeterReading(MeterValue):

@@ -12,6 +12,8 @@ class CableSizeAdmin(EntityModelAdmin):
         "material",
         "area_kcmil",
         "amps_60c",
+        "amps_75c",
+        "amps_90c",
         "line_num",
     )
     search_fields = ("awg_size", "material")
@@ -75,7 +77,7 @@ class CalculatorTemplateAdmin(EntityModelAdmin):
     list_display = (
         "name",
         "description",
-        "show_in_pages",
+        "public",
         "meters",
         "amps",
         "volts",
@@ -101,6 +103,10 @@ class CalculatorTemplateAdmin(EntityModelAdmin):
         "calculator_link",
     )
 
+    @admin.display(boolean=True, description="Public", ordering="show_in_pages")
+    def public(self, obj):
+        return obj.show_in_pages
+
     def run_calculator(self, request, queryset):
         for template in queryset:
             result = template.run()
@@ -119,6 +125,7 @@ class CalculatorTemplateAdmin(EntityModelAdmin):
     calculator_link.short_description = "Calculator"
 
 
+@admin.register(PowerLead)
 class PowerLeadAdmin(EntityModelAdmin):
     list_display = ("created_on", "user", "ip_address")
     search_fields = ("user__username", "ip_address")

@@ -25,6 +25,7 @@ cron-descriptor==1.4.5
 cryptography==45.0.5
 daphne==4.2.1
 diff-match-patch==20241021
+defusedxml==0.7.1
 Django==5.2.4
 django-celery-beat==2.8.1
 django-debug-toolbar==6.0.0

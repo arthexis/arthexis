@@ -26,6 +26,9 @@
               &middot;
               <span data-i18n="connector_label">{% trans "Connector" %}</span>: {{ charger.connector_label }}
             </p>
+            <div class="mt-2">
+              <span class="badge" style="background-color: {{ color }};">{{ state }}</span>
+            </div>
           </div>
           {% if request.user.is_authenticated %}
           <a class="btn btn-outline-primary" href="{{ status_url }}" data-i18n="advanced_view_label">
@@ -34,6 +37,27 @@
           {% endif %}
         </div>
         <div class="card-body">
+          {% if charger.last_status or charger.last_error_code or charger.last_status_timestamp or charger.last_status_vendor_info %}
+          <div class="mb-3 text-muted small">
+            {% if charger.last_status %}
+            <p class="mb-1"><span data-i18n="status_reported_label">{% trans "Reported status" %}</span>: {{ charger.last_status }}</p>
+            {% endif %}
+            {% if charger.last_error_code %}
+            <p class="mb-1"><span data-i18n="status_error_label">{% trans "Error code" %}</span>: {{ charger.last_error_code }}</p>
+            {% endif %}
+            {% if charger.last_status_timestamp %}
+            <p class="mb-1"><span data-i18n="status_updated_label">{% trans "Last status update" %}</span>: {{ charger.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</p>
+            {% endif %}
+            {% if charger.last_status_vendor_info %}
+              {% if charger.last_status_vendor_info.vendorId %}
+              <p class="mb-1"><span data-i18n="status_vendor_label">{% trans "Vendor" %}</span>: {{ charger.last_status_vendor_info.vendorId }}</p>
+              {% endif %}
+              {% if charger.last_status_vendor_info.info %}
+              <p class="mb-1"><span data-i18n="status_info_label">{% trans "Info" %}</span>: {{ charger.last_status_vendor_info.info }}</p>
+              {% endif %}
+            {% endif %}
+          </div>
+          {% endif %}
           {% if charger.require_rfid %}
           <div class="alert alert-warning" role="alert" data-i18n="require_rfid_label">
             {% trans "Require RFID Authorization" %}
@@ -82,6 +106,27 @@
               <span class="fw-semibold">{{ item.label }}</span>
               <span class="badge" style="background-color: {{ item.color }};">{{ item.status }}</span>
             </div>
+            {% if item.last_status or item.last_error_code or item.last_status_timestamp or item.last_status_vendor_info %}
+            <div class="mb-2 text-muted small">
+              {% if item.last_status %}
+              <p class="mb-1"><span data-i18n="status_reported_label">{% trans "Reported status" %}</span>: {{ item.last_status }}</p>
+              {% endif %}
+              {% if item.last_error_code %}
+              <p class="mb-1"><span data-i18n="status_error_label">{% trans "Error code" %}</span>: {{ item.last_error_code }}</p>
+              {% endif %}
+              {% if item.last_status_timestamp %}
+              <p class="mb-1"><span data-i18n="status_updated_label">{% trans "Last status update" %}</span>: {{ item.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</p>
+              {% endif %}
+              {% if item.last_status_vendor_info %}
+                {% if item.last_status_vendor_info.vendorId %}
+                <p class="mb-1"><span data-i18n="status_vendor_label">{% trans "Vendor" %}</span>: {{ item.last_status_vendor_info.vendorId }}</p>
+                {% endif %}
+                {% if item.last_status_vendor_info.info %}
+                <p class="mb-1"><span data-i18n="status_info_label">{% trans "Info" %}</span>: {{ item.last_status_vendor_info.info }}</p>
+                {% endif %}
+              {% endif %}
+            </div>
+            {% endif %}
             {% if item.tx %}
             <p class="mb-1"><small><span data-i18n="energy_label">{% trans "Energy" %}</span>: {{ item.tx.kw|floatformat:2 }} kW</small></p>
             <p class="mb-0 text-muted"><small><span data-i18n="started_label">{% trans "Started" %}</span>: {{ item.tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</small></p>

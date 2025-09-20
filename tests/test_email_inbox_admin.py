@@ -118,7 +118,7 @@ class EmailInboxAdminActionTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_superuser(
-            username="admin", email="a@example.com", password="pwd"
+            username="manager", email="a@example.com", password="pwd"
         )
         self.inbox = EmailInbox.objects.create(
             user=self.user,
@@ -184,7 +184,7 @@ class EmailCollectorInlineTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_superuser(
-            username="admin", email="a@example.com", password="pwd"
+            username="manager", email="a@example.com", password="pwd"
         )
         self.factory = RequestFactory()
         self.admin = EmailInboxAdmin(EmailInbox, AdminSite())
@@ -233,7 +233,7 @@ class EmailCollectorAdminTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_superuser(
-            username="admin", email="a@example.com", password="pwd"
+            username="manager", email="a@example.com", password="pwd"
         )
         self.factory = RequestFactory()
         self.inbox = EmailInbox.objects.create(

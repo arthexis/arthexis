@@ -2,10 +2,13 @@ import logging
 from pathlib import Path
 import datetime
 import calendar
+import shutil
+import re
 from html import escape
 
 from django.conf import settings
 from django.contrib import admin
+from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.tokens import default_token_generator
@@ -21,18 +24,22 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from core import mailer
+from core import mailer, public_wifi
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.cache import never_cache
 from django.utils.cache import patch_vary_headers
-from core.models import InviteLead, ClientReport
 from django.core.exceptions import PermissionDenied
+from django.utils.text import slugify
+from django.core.validators import EmailValidator
+from core.models import InviteLead, ClientReport, ClientReportSchedule
 
 try:  # pragma: no cover - optional dependency guard
     from graphviz import Digraph
+    from graphviz.backend import CalledProcessError, ExecutableNotFound
 except ImportError:  # pragma: no cover - handled gracefully in views
     Digraph = None
+    CalledProcessError = ExecutableNotFound = None
 
 import markdown
 from pages.utils import landing
@@ -47,9 +54,7 @@ def _get_registered_models(app_label: str):
     """Return admin-registered models for the given app label."""
 
     registered = [
-        model
-        for model in admin.site._registry
-        if model._meta.app_label == app_label
+        model for model in admin.site._registry if model._meta.app_label == app_label
     ]
     return sorted(registered, key=lambda model: str(model._meta.verbose_name))
 
@@ -134,7 +139,7 @@ def _build_model_graph(models):
         node_ids[model] = node_id
 
         rows = [
-            "<tr><td bgcolor=\"#1f2933\" colspan=\"2\"><font color=\"white\"><b>"
+            '<tr><td bgcolor="#1f2933" colspan="2"><font color="white"><b>'
             f"{escape(model._meta.object_name)}"
             "</b></font></td></tr>"
         ]
@@ -142,7 +147,7 @@ def _build_model_graph(models):
         verbose_name = str(model._meta.verbose_name)
         if verbose_name and verbose_name != model._meta.object_name:
             rows.append(
-                "<tr><td colspan=\"2\"><i>" f"{escape(verbose_name)}" "</i></td></tr>"
+                '<tr><td colspan="2"><i>' f"{escape(verbose_name)}" "</i></td></tr>"
             )
 
         for field in model._meta.concrete_fields:
@@ -153,19 +158,25 @@ def _build_model_graph(models):
                 name = f"<u>{name}</u>"
             type_label = escape(_graph_field_type(field, model._meta.app_label))
             rows.append(
-                "<tr><td align=\"left\">" f"{name}" "</td><td align=\"left\">"
-                f"{type_label}" "</td></tr>"
+                '<tr><td align="left">'
+                f"{name}"
+                '</td><td align="left">'
+                f"{type_label}"
+                "</td></tr>"
             )
 
         for field in model._meta.local_many_to_many:
             name = escape(field.name)
             type_label = _graph_field_type(field, model._meta.app_label)
             rows.append(
-                "<tr><td align=\"left\">" f"{name}" "</td><td align=\"left\">"
-                f"{escape(type_label)}" "</td></tr>"
+                '<tr><td align="left">'
+                f"{name}"
+                '</td><td align="left">'
+                f"{escape(type_label)}"
+                "</td></tr>"
             )
 
-        label = "<\n  <table BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">\n    "
+        label = '<\n  <table BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">\n    '
         label += "\n    ".join(rows)
         label += "\n  </table>\n>"
         graph.node(node_id, label=label)
@@ -229,6 +240,79 @@ def admin_model_graph(request, app_label: str):
     graph = _build_model_graph(models)
     graph_source = graph.source
 
+    graph_svg = ""
+    graph_error = ""
+    graph_engine = getattr(graph, "engine", "dot")
+    engine_path = shutil.which(str(graph_engine))
+    download_format = request.GET.get("format")
+
+    if download_format == "pdf":
+        if engine_path is None:
+            messages.error(
+                request,
+                _(
+                    "Graphviz executables are required to download the diagram as a PDF. Install Graphviz on the server and try again."
+                ),
+            )
+        else:
+            try:
+                pdf_output = graph.pipe(format="pdf")
+            except (ExecutableNotFound, CalledProcessError) as exc:
+                logger.warning(
+                    "Graphviz PDF rendering failed for admin model graph (engine=%s)",
+                    graph_engine,
+                    exc_info=exc,
+                )
+                messages.error(
+                    request,
+                    _(
+                        "An error occurred while generating the PDF diagram. Check the server logs for details."
+                    ),
+                )
+            else:
+                filename = slugify(app_config.verbose_name) or app_label
+                response = HttpResponse(pdf_output, content_type="application/pdf")
+                response["Content-Disposition"] = (
+                    f'attachment; filename="{filename}-model-graph.pdf"'
+                )
+                return response
+
+        params = request.GET.copy()
+        if "format" in params:
+            del params["format"]
+        query_string = params.urlencode()
+        redirect_url = request.path
+        if query_string:
+            redirect_url = f"{request.path}?{query_string}"
+        return redirect(redirect_url)
+
+    if engine_path is None:
+        graph_error = _(
+            "Graphviz executables are required to render this diagram. Install Graphviz on the server and try again."
+        )
+    else:
+        try:
+            svg_output = graph.pipe(format="svg", encoding="utf-8")
+        except (ExecutableNotFound, CalledProcessError) as exc:
+            logger.warning(
+                "Graphviz rendering failed for admin model graph (engine=%s)",
+                graph_engine,
+                exc_info=exc,
+            )
+            graph_error = _(
+                "An error occurred while rendering the diagram. Check the server logs for details."
+            )
+        else:
+            svg_start = svg_output.find("<svg")
+            if svg_start != -1:
+                svg_output = svg_output[svg_start:]
+            label = _("%(app)s model diagram") % {"app": app_config.verbose_name}
+            graph_svg = svg_output.replace(
+                "<svg", f'<svg role="img" aria-label="{escape(label)}"', 1
+            )
+            if not graph_svg:
+                graph_error = _("Graphviz did not return any diagram output.")
+
     model_links = []
     for model in models:
         opts = model._meta
@@ -243,14 +327,21 @@ def admin_model_graph(request, app_label: str):
             }
         )
 
+    download_params = request.GET.copy()
+    download_params["format"] = "pdf"
+    download_url = f"{request.path}?{download_params.urlencode()}"
+
     context = admin.site.each_context(request)
     context.update(
         {
             "app_label": app_label,
             "app_verbose_name": app_config.verbose_name,
             "graph_source": graph_source,
+            "graph_svg": graph_svg,
+            "graph_error": graph_error,
             "models": model_links,
             "title": _("%(app)s model graph") % {"app": app_config.verbose_name},
+            "download_url": download_url,
         }
     )
 
@@ -377,6 +468,7 @@ class CustomLoginView(LoginView):
                 "site": current_site,
                 "site_name": getattr(current_site, "name", ""),
                 "next": self.get_success_url(),
+                "can_request_invite": mailer.can_send_email(),
             }
         )
         return context
@@ -406,6 +498,8 @@ def request_invite(request):
     if request.method == "POST" and form.is_valid():
         email = form.cleaned_data["email"]
         comment = form.cleaned_data.get("comment", "")
+        ip_address = request.META.get("REMOTE_ADDR")
+        mac_address = public_wifi.resolve_mac_address(ip_address)
         lead = InviteLead.objects.create(
             email=email,
             comment=comment,
@@ -413,7 +507,8 @@ def request_invite(request):
             path=request.path,
             referer=request.META.get("HTTP_REFERER", ""),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
-            ip_address=request.META.get("REMOTE_ADDR"),
+            ip_address=ip_address,
+            mac_address=mac_address or "",
         )
         logger.info("Invitation requested for %s", email)
         User = get_user_model()
@@ -503,6 +598,21 @@ def invitation_login(request, uidb64, token):
             user.set_password(password)
         user.is_active = True
         user.save()
+        node = Node.get_local()
+        if node and node.has_feature("ap-public-wifi"):
+            mac_address = public_wifi.resolve_mac_address(
+                request.META.get("REMOTE_ADDR")
+            )
+            if not mac_address:
+                mac_address = (
+                    InviteLead.objects.filter(email__iexact=user.email)
+                    .exclude(mac_address="")
+                    .order_by("-created_on")
+                    .values_list("mac_address", flat=True)
+                    .first()
+                )
+            if mac_address:
+                public_wifi.grant_public_access(user, mac_address)
         login(request, user, backend="core.backends.LocalhostAdminBackend")
         return redirect(reverse("admin:index") if user.is_staff else "/")
     return render(request, "pages/invitation_login.html", {"form": form})
@@ -514,6 +624,7 @@ class ClientReportForm(forms.Form):
         ("week", _("Week")),
         ("month", _("Month")),
     ]
+    RECURRENCE_CHOICES = ClientReportSchedule.PERIODICITY_CHOICES
     period = forms.ChoiceField(
         choices=PERIOD_CHOICES, widget=forms.RadioSelect, initial="range"
     )
@@ -537,6 +648,31 @@ class ClientReportForm(forms.Form):
         required=False,
         widget=forms.DateInput(attrs={"type": "month"}),
     )
+    owner = forms.ModelChoiceField(
+        queryset=get_user_model().objects.all(), required=False
+    )
+    destinations = forms.CharField(
+        label=_("Email destinations"),
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 2}),
+        help_text=_("Separate addresses with commas or new lines."),
+    )
+    recurrence = forms.ChoiceField(
+        label=_("Recurrency"),
+        choices=RECURRENCE_CHOICES,
+        initial=ClientReportSchedule.PERIODICITY_NONE,
+    )
+    disable_emails = forms.BooleanField(
+        label=_("Disable email delivery"),
+        required=False,
+        help_text=_("Generate files without sending emails."),
+    )
+
+    def __init__(self, *args, request=None, **kwargs):
+        self.request = request
+        super().__init__(*args, **kwargs)
+        if request and getattr(request, "user", None) and request.user.is_authenticated:
+            self.fields["owner"].initial = request.user.pk
 
     def clean(self):
         cleaned = super().clean()
@@ -562,16 +698,61 @@ class ClientReportForm(forms.Form):
             cleaned["end"] = month_dt.replace(day=last_day)
         return cleaned
 
+    def clean_destinations(self):
+        raw = self.cleaned_data.get("destinations", "")
+        if not raw:
+            return []
+        validator = EmailValidator()
+        seen: set[str] = set()
+        emails: list[str] = []
+        for part in re.split(r"[\s,]+", raw):
+            candidate = part.strip()
+            if not candidate:
+                continue
+            validator(candidate)
+            key = candidate.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            emails.append(candidate)
+        return emails
+
 
 @live_update()
 def client_report(request):
-    form = ClientReportForm(request.POST or None)
+    form = ClientReportForm(request.POST or None, request=request)
     report = None
+    schedule = None
     if request.method == "POST" and form.is_valid():
+        owner = form.cleaned_data.get("owner")
+        if not owner and request.user.is_authenticated:
+            owner = request.user
         report = ClientReport.generate(
-            form.cleaned_data["start"], form.cleaned_data["end"]
+            form.cleaned_data["start"],
+            form.cleaned_data["end"],
+            owner=owner,
+            recipients=form.cleaned_data.get("destinations"),
+            disable_emails=form.cleaned_data.get("disable_emails", False),
         )
-    context = {"form": form, "report": report}
+        report.store_local_copy()
+        recurrence = form.cleaned_data.get("recurrence")
+        if recurrence and recurrence != ClientReportSchedule.PERIODICITY_NONE:
+            schedule = ClientReportSchedule.objects.create(
+                owner=owner,
+                created_by=request.user if request.user.is_authenticated else None,
+                periodicity=recurrence,
+                email_recipients=form.cleaned_data.get("destinations", []),
+                disable_emails=form.cleaned_data.get("disable_emails", False),
+            )
+            report.schedule = schedule
+            report.save(update_fields=["schedule"])
+            messages.success(
+                request,
+                _(
+                    "Client report schedule created; future reports will be generated automatically."
+                ),
+            )
+    context = {"form": form, "report": report, "schedule": schedule}
     return render(request, "pages/client_report.html", context)
 
 

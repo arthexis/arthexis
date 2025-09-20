@@ -47,7 +47,9 @@ class Command(BaseCommand):
         server = SigilResolverServer(config)
         fastmcp = server.build_fastmcp()
 
-        self.stdout.write(self.style.SUCCESS(f"Starting MCP sigil resolver on {host}:{port}"))
+        self.stdout.write(
+            self.style.SUCCESS(f"Starting MCP sigil resolver on {host}:{port}")
+        )
         try:
             asyncio.run(fastmcp.run_sse_async())
         except KeyboardInterrupt:  # pragma: no cover - manual interrupt

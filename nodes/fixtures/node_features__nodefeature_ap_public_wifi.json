@@ -1,0 +1,16 @@
+[
+  {
+    "model": "nodes.nodefeature",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "ap-public-wifi",
+      "display": "AP Public Wi-Fi",
+      "roles": [
+        [
+          "Control"
+        ]
+      ]
+    }
+  }
+]

@@ -1,4 +1,5 @@
 """Screenshot specification registry and discovery utilities."""
+
 from __future__ import annotations
 
 import importlib
@@ -38,4 +39,3 @@ def autodiscover() -> None:
             continue
         importlib.import_module(f"{package_name}.{module.name}")
     _DISCOVERED = True
-

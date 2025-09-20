@@ -11,6 +11,17 @@
 - Работает на [Windows 11](https://www.microsoft.com/windows/windows-11) и [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Протестирован на [Raspberry Pi 4 Model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 
+## Архитектура из четырёх ролей
+
+Созвездие Arthexis поставляется в четырёх ролях узлов, чтобы адаптировать платформу к различным сценариям развёртывания.
+
+| Роль | Описание | Типичные функции |
+| --- | --- | --- |
+| Terminal | Исследования и разработка для одного пользователя | • GUI Toast |
+| Control | Тестирование отдельных устройств и специализированные аппаратные комплексы | • AP Public Wi-Fi<br>• Celery Queue<br>• GUI Toast<br>• LCD Screen<br>• NGINX Server<br>• RFID Scanner |
+| Satellite | Периферийная многоприборная инфраструктура, сеть и сбор данных | • AP Router<br>• Celery Queue<br>• NGINX Server<br>• RFID Scanner |
+| Constellation | Многопользовательское облако и оркестрация | • Celery Queue<br>• NGINX Server |
+
 ## Quick Guide
 
 ### 1. Клонирование

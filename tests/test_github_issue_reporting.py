@@ -54,7 +54,9 @@ def test_exception_triggers_github_issue(monkeypatch, issue_reporting_env):
     request = _build_request()
     request.user = user
 
-    got_request_exception.send(sender=None, request=request, exception=_make_exception())
+    got_request_exception.send(
+        sender=None, request=request, exception=_make_exception()
+    )
 
     assert len(calls) == 1
     payload = calls[0]
@@ -66,7 +68,9 @@ def test_exception_triggers_github_issue(monkeypatch, issue_reporting_env):
     assert payload["exception_class"].endswith("ValueError")
     assert "boom" in payload["traceback"]
 
-    got_request_exception.send(sender=None, request=request, exception=_make_exception())
+    got_request_exception.send(
+        sender=None, request=request, exception=_make_exception()
+    )
 
     assert len(calls) == 1
 
@@ -83,6 +87,8 @@ def test_issue_reporting_can_be_disabled(monkeypatch, issue_reporting_env):
     request = _build_request()
     request.user = object()  # no authenticated user
 
-    got_request_exception.send(sender=None, request=request, exception=_make_exception())
+    got_request_exception.send(
+        sender=None, request=request, exception=_make_exception()
+    )
 
     assert calls == []

@@ -1,6 +1,7 @@
 from django.contrib.sites.models import Site
 from django.contrib.sites.requests import RequestSite
 from django.contrib.sites.shortcuts import get_current_site
+from django.db import DatabaseError
 from django.http.request import split_domain_port
 
 
@@ -17,7 +18,11 @@ def get_site(request):
     try:
         return Site.objects.get(domain=host)
     except Site.DoesNotExist:
-        try:
-            return get_current_site(request)
-        except Site.DoesNotExist:
-            return RequestSite(request)
+        pass
+    except DatabaseError:
+        return RequestSite(request)
+
+    try:
+        return get_current_site(request)
+    except (Site.DoesNotExist, DatabaseError):
+        return RequestSite(request)

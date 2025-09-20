@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import sys
 from pathlib import Path
@@ -97,14 +99,54 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "role(name): mark test as associated with a node role"
     )
+    config.addinivalue_line(
+        "markers", "feature(slug): mark test as requiring a node feature"
+    )
+
+
+def _env_flag(name: str) -> bool:
+    """Return ``True`` when the environment flag ``name`` is enabled."""
+
+    value = os.environ.get(name)
+    if value is None:
+        return False
+    return value.strip().lower() not in {"", "0", "false", "no", "off"}
+
+
+def _feature_filter() -> set[str] | None:
+    value = os.environ.get("NODE_FEATURES")
+    if value is None:
+        return None
+    features = {item.strip() for item in value.split(",") if item.strip()}
+    return features
+
+
+def _feature_skip_reason(required: set[str], role: str | None) -> str:
+    formatted = ", ".join(sorted(required))
+    if role:
+        return f"{formatted} feature(s) not enabled for {role} role"
+    return f"{formatted} feature(s) not enabled for this test run"
 
 
 def pytest_collection_modifyitems(config, items):
     role = os.environ.get("NODE_ROLE")
-    if not role:
-        return
-    skip = pytest.mark.skip(reason=f"not run for {role} role")
+    require_markers = _env_flag("NODE_ROLE_ONLY")
+    role_skip = pytest.mark.skip(reason=f"not run for {role} role") if role else None
+    missing_skip = (
+        pytest.mark.skip(reason="missing role marker while NODE_ROLE_ONLY is enabled")
+        if require_markers
+        else None
+    )
+    features = _feature_filter()
+
     for item in items:
-        roles = {m.args[0] for m in item.iter_markers("role")}
-        if roles and role not in roles:
-            item.add_marker(skip)
+        roles = {m.args[0] for m in item.iter_markers("role") if m.args}
+        if role and roles and role not in roles:
+            item.add_marker(role_skip)
+        if require_markers and not roles:
+            item.add_marker(missing_skip)
+        required = {m.args[0] for m in item.iter_markers("feature") if m.args}
+        if features is not None and required and required.isdisjoint(features):
+            item.add_marker(
+                pytest.mark.skip(reason=_feature_skip_reason(required, role))
+            )

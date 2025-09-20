@@ -108,8 +108,6 @@ class NodeFeature(Entity):
         if lock:
             base_path = Path(node.base_path or settings.BASE_DIR)
             return (base_path / "locks" / lock).exists()
-        if node.role:
-            return self.roles.filter(pk=node.role.pk).exists()
         return False
 
 
@@ -158,7 +156,15 @@ class Node(Entity):
     }
     RPI_CAMERA_DEVICE = Path("/dev/video0")
     RPI_CAMERA_BINARIES = ("rpicam-hello", "rpicam-still", "rpicam-vid")
-    AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {"gui-toast", "rpi-camera"}
+    AP_ROUTER_SSID = "gelectriic-ap"
+    NMCLI_TIMEOUT = 5
+    AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {
+        "gui-toast",
+        "rpi-camera",
+        "ap-router",
+        "ap-public-wifi",
+        "postgres-db",
+    }
     MANUAL_FEATURE_SLUGS = {"clipboard-poll", "screenshot-poll"}
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
@@ -306,6 +312,80 @@ class Node(Entity):
                 return False
         return True
 
+    @classmethod
+    def _hosts_gelectriic_ap(cls) -> bool:
+        """Return ``True`` when the node is hosting the gelectriic access point."""
+
+        nmcli_path = shutil.which("nmcli")
+        if not nmcli_path:
+            return False
+        try:
+            result = subprocess.run(
+                [
+                    nmcli_path,
+                    "-t",
+                    "-f",
+                    "NAME,DEVICE,TYPE",
+                    "connection",
+                    "show",
+                    "--active",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=cls.NMCLI_TIMEOUT,
+            )
+        except Exception:
+            return False
+        if result.returncode != 0:
+            return False
+        for line in result.stdout.splitlines():
+            if not line:
+                continue
+            parts = line.split(":", 2)
+            if not parts:
+                continue
+            name = parts[0]
+            conn_type = ""
+            if len(parts) == 3:
+                conn_type = parts[2]
+            elif len(parts) > 1:
+                conn_type = parts[1]
+            if name != cls.AP_ROUTER_SSID:
+                continue
+            conn_type_normalized = conn_type.strip().lower()
+            if conn_type_normalized not in {"wifi", "802-11-wireless"}:
+                continue
+            try:
+                mode_result = subprocess.run(
+                    [
+                        nmcli_path,
+                        "-g",
+                        "802-11-wireless.mode",
+                        "connection",
+                        "show",
+                        name,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=cls.NMCLI_TIMEOUT,
+                )
+            except Exception:
+                continue
+            if mode_result.returncode != 0:
+                continue
+            if mode_result.stdout.strip() == "ap":
+                return True
+        return False
+
+    @staticmethod
+    def _uses_postgres() -> bool:
+        """Return ``True`` when the default database uses PostgreSQL."""
+
+        engine = settings.DATABASES.get("default", {}).get("ENGINE", "")
+        return "postgresql" in engine.lower()
+
     def refresh_features(self):
         if not self.pk:
             return
@@ -320,6 +400,14 @@ class Node(Entity):
                 detected_slugs.add(slug)
         if self._has_rpi_camera():
             detected_slugs.add("rpi-camera")
+        public_mode_lock = locks_dir / "public_wifi_mode.lck"
+        if self._hosts_gelectriic_ap():
+            if public_mode_lock.exists():
+                detected_slugs.add("ap-public-wifi")
+            else:
+                detected_slugs.add("ap-router")
+        if self._uses_postgres():
+            detected_slugs.add("postgres-db")
         try:
             from core.notifications import supports_gui_toast
         except Exception:

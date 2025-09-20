@@ -5,15 +5,18 @@ import django
 
 django.setup()
 
-from django.test import Client, TestCase, RequestFactory
+from django.test import Client, TestCase, RequestFactory, override_settings
 from django.urls import reverse
 from django.http import HttpRequest
 import json
 from decimal import Decimal
 from unittest import mock
+from unittest.mock import patch
 from pathlib import Path
 import subprocess
 from glob import glob
+from datetime import timedelta
+import tempfile
 
 from django.utils import timezone
 from django.contrib.auth.models import Permission
@@ -24,7 +27,6 @@ from .models import (
     ElectricVehicle,
     EnergyCredit,
     Product,
-    LiveSubscription,
     Brand,
     EVModel,
     RFID,
@@ -33,6 +35,7 @@ from .models import (
     PackageRelease,
     ReleaseManager,
     Todo,
+    PublicWifiAccess,
 )
 from django.contrib.admin.sites import AdminSite
 from core.admin import (
@@ -48,6 +51,7 @@ from django.core.management import call_command
 from django.db import IntegrityError
 from .backends import LocalhostAdminBackend
 from core.views import _step_check_version, _step_promote_build, _step_publish
+from core import public_wifi
 
 
 class DefaultAdminTests(TestCase):
@@ -239,7 +243,9 @@ class UserPhoneNumberTests(TestCase):
 
     def test_get_phone_numbers_by_priority_alias(self):
         user = User.objects.create_user(username="phone-alias", password="secret")
-        phone = UserPhoneNumber.objects.create(user=user, number="+14445550000", priority=3)
+        phone = UserPhoneNumber.objects.create(
+            user=user, number="+14445550000", priority=3
+        )
 
         self.assertEqual(user.get_phone_numbers_by_priority(), [phone])
 
@@ -550,6 +556,42 @@ class AddressTests(TestCase):
         self.assertEqual(user.address, addr)
 
 
+class PublicWifiUtilitiesTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="wifi", password="pwd")
+
+    def test_grant_public_access_records_allowlist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            allow_file = base / "locks" / "public_wifi_allow.list"
+            with override_settings(BASE_DIR=base):
+                with patch("core.public_wifi._iptables_available", return_value=False):
+                    public_wifi.grant_public_access(self.user, "AA:BB:CC:DD:EE:FF")
+            self.assertTrue(allow_file.exists())
+            content = allow_file.read_text()
+            self.assertIn("aa:bb:cc:dd:ee:ff", content)
+            self.assertTrue(
+                PublicWifiAccess.objects.filter(
+                    user=self.user, mac_address="aa:bb:cc:dd:ee:ff"
+                ).exists()
+            )
+
+    def test_revoke_public_access_for_user_updates_allowlist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            allow_file = base / "locks" / "public_wifi_allow.list"
+            with override_settings(BASE_DIR=base):
+                with patch("core.public_wifi._iptables_available", return_value=False):
+                    access = public_wifi.grant_public_access(
+                        self.user, "AA:BB:CC:DD:EE:FF"
+                    )
+                    public_wifi.revoke_public_access_for_user(self.user)
+            access.refresh_from_db()
+            self.assertIsNotNone(access.revoked_on)
+            if allow_file.exists():
+                self.assertNotIn("aa:bb:cc:dd:ee:ff", allow_file.read_text())
+
+
 class LiveSubscriptionTests(TestCase):
     def setUp(self):
         self.client = Client()
@@ -565,7 +607,21 @@ class LiveSubscriptionTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(LiveSubscription.objects.count(), 1)
+        self.account.refresh_from_db()
+        self.assertEqual(
+            self.account.live_subscription_product,
+            self.product,
+        )
+        self.assertIsNotNone(self.account.live_subscription_start_date)
+        self.assertEqual(
+            self.account.live_subscription_start_date,
+            timezone.localdate(),
+        )
+        self.assertEqual(
+            self.account.live_subscription_next_renewal,
+            self.account.live_subscription_start_date
+            + timedelta(days=self.product.renewal_period),
+        )
 
         list_resp = self.client.get(
             reverse("live-subscription-list"), {"account_id": self.account.id}
@@ -574,6 +630,11 @@ class LiveSubscriptionTests(TestCase):
         data = list_resp.json()
         self.assertEqual(len(data["live_subscriptions"]), 1)
         self.assertEqual(data["live_subscriptions"][0]["product__name"], "Gold")
+        self.assertEqual(data["live_subscriptions"][0]["id"], self.account.id)
+        self.assertEqual(
+            data["live_subscriptions"][0]["next_renewal"],
+            str(self.account.live_subscription_next_renewal),
+        )
 
     def test_product_list(self):
         response = self.client.get(reverse("product-list"))

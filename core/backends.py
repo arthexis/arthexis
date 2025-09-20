@@ -1,8 +1,11 @@
 """Custom authentication backends for the core app."""
 
+import contextlib
+import ipaddress
+import socket
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
-import ipaddress
 
 from .models import EnergyAccount
 
@@ -32,6 +35,37 @@ class RFIDBackend:
             return None
 
 
+def _collect_local_ip_addresses():
+    """Return IP addresses assigned to the current machine."""
+
+    hosts = {socket.gethostname().strip()}
+    with contextlib.suppress(Exception):
+        hosts.add(socket.getfqdn().strip())
+
+    addresses = set()
+    for host in filter(None, hosts):
+        with contextlib.suppress(OSError):
+            _, _, ip_list = socket.gethostbyname_ex(host)
+            for candidate in ip_list:
+                with contextlib.suppress(ValueError):
+                    addresses.add(ipaddress.ip_address(candidate))
+        with contextlib.suppress(OSError):
+            for info in socket.getaddrinfo(host, None, family=socket.AF_UNSPEC):
+                sockaddr = info[-1]
+                if not sockaddr:
+                    continue
+                raw_address = sockaddr[0]
+                if isinstance(raw_address, bytes):
+                    with contextlib.suppress(UnicodeDecodeError):
+                        raw_address = raw_address.decode()
+                if isinstance(raw_address, str):
+                    if "%" in raw_address:
+                        raw_address = raw_address.split("%", 1)[0]
+                    with contextlib.suppress(ValueError):
+                        addresses.add(ipaddress.ip_address(raw_address))
+    return tuple(sorted(addresses, key=str))
+
+
 class LocalhostAdminBackend(ModelBackend):
     """Allow default admin credentials only from local networks."""
 
@@ -39,9 +73,8 @@ class LocalhostAdminBackend(ModelBackend):
         ipaddress.ip_network("::1/128"),
         ipaddress.ip_network("127.0.0.0/8"),
         ipaddress.ip_network("192.168.0.0/16"),
-        ipaddress.ip_network("172.16.0.0/12"),
-        ipaddress.ip_network("10.42.0.0/16"),
     ]
+    _LOCAL_IPS = _collect_local_ip_addresses()
 
     def authenticate(self, request, username=None, password=None, **kwargs):
         if username == "admin" and password == "admin" and request is not None:
@@ -55,6 +88,8 @@ class LocalhostAdminBackend(ModelBackend):
             except ValueError:
                 return None
             allowed = any(ip in net for net in self._ALLOWED_NETWORKS)
+            if not allowed and ip in self._LOCAL_IPS:
+                allowed = True
             if not allowed:
                 return None
             User = get_user_model()

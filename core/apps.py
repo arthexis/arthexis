@@ -60,14 +60,18 @@ class CoreConfig(AppConfig):
 
         from django.core.serializers import base as serializer_base
 
-        if not hasattr(serializer_base.DeserializedObject.save, "_entity_fixture_patch"):
+        if not hasattr(
+            serializer_base.DeserializedObject.save, "_entity_fixture_patch"
+        ):
             original_save = serializer_base.DeserializedObject.save
 
             @wraps(original_save)
             def patched_save(self, save_m2m=True, using=None, **kwargs):
                 obj = self.object
                 if isinstance(obj, Entity):
-                    manager = getattr(type(obj), "all_objects", type(obj)._default_manager)
+                    manager = getattr(
+                        type(obj), "all_objects", type(obj)._default_manager
+                    )
                     if using:
                         manager = manager.db_manager(using)
                     for fields in obj._unique_field_groups():
@@ -170,9 +174,7 @@ class CoreConfig(AppConfig):
                     "|".join(fingerprint_parts).encode("utf-8")
                 ).hexdigest()
 
-                cooldown = getattr(
-                    settings, "GITHUB_ISSUE_REPORTING_COOLDOWN", 3600
-                )
+                cooldown = getattr(settings, "GITHUB_ISSUE_REPORTING_COOLDOWN", 3600)
                 lock_dir = Path(settings.BASE_DIR) / "locks" / "github-issues"
                 fingerprint_path = None
                 now = time.time()
@@ -212,9 +214,7 @@ class CoreConfig(AppConfig):
 
                 report_exception_to_github.delay(payload)
             except Exception:  # pragma: no cover - defensive
-                logger.exception(
-                    "Failed to queue GitHub issue from request exception"
-                )
+                logger.exception("Failed to queue GitHub issue from request exception")
 
         got_request_exception.connect(
             queue_github_issue,

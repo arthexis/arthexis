@@ -10,7 +10,19 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 - [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/) 1.6
 - Runs on [Windows 11](https://www.microsoft.com/windows/windows-11) and [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Tested for the [Raspberry Pi 4 Model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
-- CONTINUOUS RELEASE
+
+Project under active development.
+
+## Four Role Architecture
+
+Arthexis Constellation ships in four node roles tailored to different deployment scenarios.
+
+| Role | Description & Common Features |
+| --- | --- |
+| Terminal | Single-User Research & Development<br>Features: GUI Toast |
+| Control | Single-Device Testing & Special Task Appliances<br>Features: AP Public Wi-Fi, Celery Queue, GUI Toast, LCD Screen, NGINX Server, RFID Scanner |
+| Satellite | Multi-Device Edge, Network & Data Acquisition<br>Features: AP Router, Celery Queue, NGINX Server, RFID Scanner |
+| Constellation | Multi-User Cloud & Orchestration<br>Features: Celery Queue, NGINX Server |
 
 ## Quick Guide
 
@@ -20,8 +32,10 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 - **[Windows](https://en.wikipedia.org/wiki/Microsoft_Windows)**: open [PowerShell](https://learn.microsoft.com/powershell/) or [Git Bash](https://gitforwindows.org/) and run the same command.
 
 ### 2. Start and stop
-- **[VS Code](https://code.visualstudio.com/)**: open the folder and run  
-  `python [vscode_manage.py](vscode_manage.py) runserver`; press `Ctrl+C` to stop.
+- **[VS Code](https://code.visualstudio.com/)**: open the folder, go to the
+  **Run and Debug** panel (`Ctrl+Shift+D`), select the **Run Server** (or
+  **Debug Server**) configuration, and press the green start button. Stop the
+  server with the red square button (`Shift+F5`).
 - **[Shell](https://en.wikipedia.org/wiki/Shell_(computing))**: on Linux run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh); on Windows run [`start.bat`](start.bat) and stop with `Ctrl+C`.
 
 ### 3. Install and upgrade

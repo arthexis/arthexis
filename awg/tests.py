@@ -1,6 +1,7 @@
 from django.test import TestCase
 from django.urls import reverse
 from pathlib import Path
+from unittest.mock import patch
 
 from .models import CableSize, ConduitFill, CalculatorTemplate, PowerLead
 
@@ -39,6 +40,7 @@ class AWGCalculatorTests(TestCase):
         self.assertNotIn('value="40"', resp.content.decode())
         self.assertNotIn('value="220"', resp.content.decode())
         self.assertIn("Calculate</button>", resp.content.decode())
+        self.assertContains(resp, '<option value="[1]"')
 
         data = {
             "meters": "10",
@@ -117,6 +119,51 @@ class AWGCalculatorTests(TestCase):
         content = resp.content.decode()
         self.assertIn("order-first", content)
         self.assertIn("order-lg-last", content)
+
+    def test_special_ground_value_reported(self):
+        url = reverse("awg:calculator")
+        data = {
+            "meters": "10",
+            "amps": "40",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "[1]",
+        }
+        resp = self.client.post(url, data)
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        self.assertIn('value="[1]" selected', content)
+        self.assertRegex(content, r"2\+[01] \(\[1\]\)")
+        self.assertRegex(content, r"20\+(?:0|10) \(\[1\]\)")
+
+    def test_optional_ground_runs_both_scenarios(self):
+        url = reverse("awg:calculator")
+        data = {
+            "meters": "10",
+            "amps": "40",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "[1]",
+        }
+        seen = set()
+
+        def fake_conduit(awg, cables, *, conduit="emt"):
+            seen.add(cables)
+            return {"size_inch": "1"}
+
+        with patch("awg.views.find_conduit", side_effect=fake_conduit):
+            resp = self.client.post(url, data)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(seen, {2, 3})
 
     def test_odd_awg_displays_even_preference(self):
         CableSize.objects.create(

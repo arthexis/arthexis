@@ -2,6 +2,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
@@ -11,6 +13,9 @@ django.setup()
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+
+
+pytestmark = [pytest.mark.feature("rfid-scanner")]
 
 
 class AdminRfidScanCsrfTests(TestCase):

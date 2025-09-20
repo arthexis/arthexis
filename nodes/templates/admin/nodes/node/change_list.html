@@ -7,5 +7,10 @@
             {% trans 'Register current host' %}
         </a>
     </li>
+    <li>
+        <a href="{% url 'admin:nodes_node_register_visitor' %}" class="addlink">
+            {% trans 'Register visitor node' %}
+        </a>
+    </li>
     {{ block.super }}
 {% endblock %}

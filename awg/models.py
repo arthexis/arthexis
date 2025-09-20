@@ -100,7 +100,9 @@ class CalculatorTemplate(Entity):
     temperature = models.PositiveIntegerField(null=True, blank=True)
     conduit = models.CharField(max_length=10, blank=True)
     ground = models.PositiveIntegerField(default=1, null=True, blank=True)
-    show_in_pages = models.BooleanField(default=False, blank=True)
+    show_in_pages = models.BooleanField(
+        _("Show in public site"), default=False, blank=True
+    )
 
     def __str__(self):  # pragma: no cover - simple representation
         return self.name

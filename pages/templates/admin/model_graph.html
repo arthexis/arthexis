@@ -8,10 +8,65 @@
       background: var(--darkened-bg);
       border: 1px solid var(--hairline-color);
       padding: 1rem;
-      overflow: auto;
+      overflow: visible;
       margin-bottom: 1.5rem;
     }
-    .model-graph svg {
+    .model-graph__toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.75rem;
+    }
+    .model-graph__controls {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+    }
+    .model-graph__controls button {
+      appearance: none;
+      background: var(--body-bg);
+      border: 1px solid var(--hairline-color);
+      border-radius: 4px;
+      color: var(--body-fg);
+      cursor: pointer;
+      font: inherit;
+      line-height: 1.4;
+      padding: 0.25rem 0.75rem;
+      transition: border-color 0.2s ease, color 0.2s ease;
+    }
+    .model-graph__controls button:hover {
+      border-color: var(--link-hover-color);
+      color: var(--link-hover-color);
+    }
+    .model-graph__controls button:focus {
+      outline: 2px solid var(--link-hover-color);
+      outline-offset: 2px;
+    }
+    .model-graph__download {
+      font-weight: 500;
+    }
+    .model-graph__viewport {
+      border: 1px solid var(--hairline-color);
+      border-radius: 4px;
+      overflow: hidden;
+      background: var(--body-bg);
+      min-height: 320px;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+    }
+    .model-graph__viewport.is-dragging {
+      cursor: grabbing;
+    }
+    .model-graph__canvas {
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+    .model-graph__canvas svg {
+      display: block;
       max-width: none;
     }
     .model-graph__status {
@@ -46,13 +101,30 @@
   <p class="help">{% blocktranslate %}This diagram is rendered with Graphviz and reflects the models registered in the {{ app_verbose_name }} admin group, including their relationships.{% endblocktranslate %}</p>
 
   <div class="model-graph-wrapper">
-    <div id="model-graph" class="model-graph" aria-live="polite">
-      <p class="model-graph__status">{% translate 'Rendering diagram…' %}</p>
+    {% if graph_svg %}
+      <div class="model-graph__toolbar">
+        <div class="model-graph__controls" role="group" aria-label="{% translate 'Diagram controls' %}">
+          <button type="button" data-graph-action="zoom-in">{% translate 'Zoom in' %}</button>
+          <button type="button" data-graph-action="zoom-out">{% translate 'Zoom out' %}</button>
+          <button type="button" data-graph-action="reset">{% translate 'Reset view' %}</button>
+        </div>
+        <a class="model-graph__download" href="{{ download_url }}">{% translate 'Download PDF' %}</a>
+      </div>
+    {% endif %}
+    <div id="model-graph" class="model-graph" data-model-graph>
+      {% if graph_svg %}
+        <div class="model-graph__viewport" data-graph-viewport>
+          <div class="model-graph__canvas" data-graph-canvas>
+            {{ graph_svg|safe }}
+          </div>
+        </div>
+      {% else %}
+        <p class="model-graph__status error">
+          {{ graph_error|default:_('Unable to render the diagram. Check the server logs for details.') }}
+        </p>
+      {% endif %}
     </div>
   </div>
-  <noscript>
-    <p class="model-graph__status error">{% translate 'Enable JavaScript to see the database model graph.' %}</p>
-  </noscript>
 
   {% if models %}
     <h2>{% translate 'Included models' %}</h2>
@@ -69,42 +141,136 @@
     </ul>
   {% endif %}
 
+  {# Retain the DOT source for debugging or external tooling if needed. #}
   {{ graph_source|json_script:"model-graph-data" }}
-  <script src="https://cdn.jsdelivr.net/npm/@viz-js/viz@3.4.0/lib/viz-standalone.js" crossorigin="anonymous"></script>
-  <script>
-    (function() {
-      const dataElement = document.getElementById('model-graph-data');
-      const container = document.getElementById('model-graph');
-      if (!dataElement || !container) {
-        return;
-      }
-      const dot = JSON.parse(dataElement.textContent);
 
-      function showStatus(text, isError) {
-        container.innerHTML = '';
-        const message = document.createElement('p');
-        message.className = 'model-graph__status' + (isError ? ' error' : '');
-        message.textContent = text;
-        container.appendChild(message);
-      }
+  {% if graph_svg %}
+    <script>
+      (function () {
+        function initModelGraph() {
+          const root = document.querySelector('[data-model-graph]');
+          if (!root) {
+            return;
+          }
+          const viewport = root.querySelector('[data-graph-viewport]');
+          const canvas = root.querySelector('[data-graph-canvas]');
+          if (!viewport || !canvas) {
+            return;
+          }
 
-      if (typeof window.Viz !== 'function') {
-        showStatus('{% translate "The Graphviz renderer could not be loaded." %}', true);
-        return;
-      }
+          let scale = 1;
+          let panX = 0;
+          let panY = 0;
+          const minScale = 0.25;
+          const maxScale = 3;
+          let isDragging = false;
+          let pointerId = null;
+          let lastX = 0;
+          let lastY = 0;
 
-      const viz = new window.Viz();
-      viz.renderSVGElement(dot)
-        .then(function(element) {
-          container.innerHTML = '';
-          element.setAttribute('role', 'img');
-          element.setAttribute('aria-label', '{{ app_verbose_name|escapejs }} {% translate "model diagram" %}');
-          container.appendChild(element);
-        })
-        .catch(function(error) {
-          console.error('Graph rendering failed', error);
-          showStatus('{% translate "Unable to render the diagram. Check the browser console for details." %}', true);
-        });
-    })();
-  </script>
+          function applyTransform() {
+            canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+          }
+
+          function setScale(nextScale, clientX, clientY) {
+            const clamped = Math.min(maxScale, Math.max(minScale, nextScale));
+            const previous = scale;
+            if (clamped === previous) {
+              applyTransform();
+              return;
+            }
+            const rect = viewport.getBoundingClientRect();
+            const originX = typeof clientX === 'number' ? clientX - rect.left : rect.width / 2;
+            const originY = typeof clientY === 'number' ? clientY - rect.top : rect.height / 2;
+            const ratio = clamped / previous;
+            panX = originX - ratio * (originX - panX);
+            panY = originY - ratio * (originY - panY);
+            scale = clamped;
+            applyTransform();
+          }
+
+          viewport.addEventListener('wheel', function (event) {
+            if (event.ctrlKey) {
+              return;
+            }
+            event.preventDefault();
+            const zoomFactor = event.deltaY > 0 ? 1 / 1.15 : 1.15;
+            setScale(scale * zoomFactor, event.clientX, event.clientY);
+          }, { passive: false });
+
+          viewport.addEventListener('pointerdown', function (event) {
+            if (event.button !== 0) {
+              return;
+            }
+            if (event.target && event.target.closest('a')) {
+              return;
+            }
+            isDragging = true;
+            pointerId = event.pointerId;
+            lastX = event.clientX;
+            lastY = event.clientY;
+            if (typeof viewport.setPointerCapture === 'function') {
+              viewport.setPointerCapture(pointerId);
+            }
+            viewport.classList.add('is-dragging');
+            event.preventDefault();
+          });
+
+          viewport.addEventListener('pointermove', function (event) {
+            if (!isDragging || event.pointerId !== pointerId) {
+              return;
+            }
+            panX += event.clientX - lastX;
+            panY += event.clientY - lastY;
+            lastX = event.clientX;
+            lastY = event.clientY;
+            applyTransform();
+          });
+
+          function endDrag(event) {
+            if (!isDragging || (event && event.pointerId !== pointerId)) {
+              return;
+            }
+            isDragging = false;
+            viewport.classList.remove('is-dragging');
+            if (pointerId !== null && typeof viewport.releasePointerCapture === 'function') {
+              if (typeof viewport.hasPointerCapture !== 'function' || viewport.hasPointerCapture(pointerId)) {
+                viewport.releasePointerCapture(pointerId);
+              }
+            }
+            pointerId = null;
+          }
+
+          viewport.addEventListener('pointerup', endDrag);
+          viewport.addEventListener('pointercancel', endDrag);
+
+          const controls = root.querySelectorAll('[data-graph-action]');
+          for (let i = 0; i < controls.length; i += 1) {
+            const control = controls[i];
+            control.addEventListener('click', function () {
+              const action = control.getAttribute('data-graph-action');
+              if (action === 'zoom-in') {
+                setScale(scale * 1.25);
+              } else if (action === 'zoom-out') {
+                setScale(scale / 1.25);
+              } else if (action === 'reset') {
+                scale = 1;
+                panX = 0;
+                panY = 0;
+                applyTransform();
+              }
+            });
+          }
+
+          applyTransform();
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', initModelGraph);
+        } else {
+          initModelGraph();
+        }
+      })();
+    </script>
+  {% endif %}
 {% endblock %}

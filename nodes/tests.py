@@ -156,6 +156,38 @@ class NodeTests(TestCase):
         node.refresh_from_db()
         self.assertFalse(node.has_feature("clipboard-poll"))
 
+    def test_register_node_sets_cors_headers(self):
+        payload = {
+            "hostname": "cors",
+            "address": "127.0.0.1",
+            "port": 8000,
+            "mac_address": "10:20:30:40:50:60",
+        }
+        response = self.client.post(
+            reverse("register-node"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_ORIGIN="http://example.com",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Access-Control-Allow-Origin"], "http://example.com")
+        self.assertEqual(response["Access-Control-Allow-Credentials"], "true")
+
+    def test_register_node_accepts_text_plain_payload(self):
+        payload = {
+            "hostname": "plain",
+            "address": "127.0.0.1",
+            "port": 8001,
+            "mac_address": "aa:bb:cc:dd:ee:ff",
+        }
+        response = self.client.post(
+            reverse("register-node"),
+            data=json.dumps(payload),
+            content_type="text/plain",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Node.objects.filter(mac_address="aa:bb:cc:dd:ee:ff").exists())
+
 
 class NodeRegisterCurrentTests(TestCase):
     def setUp(self):
@@ -1141,6 +1173,19 @@ class NodeFeatureFixtureTests(TestCase):
         role_names = set(feature.roles.values_list("name", flat=True))
         self.assertIn("Control", role_names)
 
+    def test_ap_router_fixture_limits_roles(self):
+        for name in ("Control", "Satellite"):
+            NodeRole.objects.get_or_create(name=name)
+        fixture_path = (
+            Path(__file__).resolve().parent
+            / "fixtures"
+            / "node_features__nodefeature_ap_router.json"
+        )
+        call_command("loaddata", str(fixture_path), verbosity=0)
+        feature = NodeFeature.objects.get(slug="ap-router")
+        role_names = set(feature.roles.values_list("name", flat=True))
+        self.assertEqual(role_names, {"Satellite"})
+
 
 class NodeFeatureTests(TestCase):
     def setUp(self):
@@ -1200,6 +1245,21 @@ class NodeFeatureTests(TestCase):
             with patch("core.notifications.supports_gui_toast", return_value=False):
                 self.assertFalse(feature.is_enabled)
 
+    def test_role_membership_alone_does_not_enable_feature(self):
+        feature = NodeFeature.objects.create(
+            slug="custom-feature", display="Custom Feature"
+        )
+        feature.roles.add(self.role)
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            self.assertFalse(feature.is_enabled)
+        NodeFeatureAssignment.objects.create(node=self.node, feature=feature)
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            self.assertTrue(feature.is_enabled)
+
     @patch("nodes.models.Node._has_rpi_camera", return_value=True)
     def test_rpi_camera_detection(self, mock_camera):
         feature = NodeFeature.objects.create(
@@ -1231,6 +1291,121 @@ class NodeFeatureTests(TestCase):
                     node=self.node, feature=feature
                 ).exists()
             )
+            self.node.refresh_features()
+        self.assertFalse(
+            NodeFeatureAssignment.objects.filter(
+                node=self.node, feature=feature
+            ).exists()
+        )
+
+    @patch("nodes.models.Node._hosts_gelectriic_ap", return_value=True)
+    def test_ap_router_detection(self, mock_hosts):
+        control_role, _ = NodeRole.objects.get_or_create(name="Control")
+        feature = NodeFeature.objects.create(slug="ap-router", display="AP Router")
+        feature.roles.add(control_role)
+        mac = "00:11:22:33:44:66"
+        with patch("nodes.models.Node.get_current_mac", return_value=mac):
+            node = Node.objects.create(
+                hostname="control",
+                address="127.0.0.1",
+                port=8000,
+                mac_address=mac,
+                role=control_role,
+            )
+            node.refresh_features()
+        self.assertTrue(
+            NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+        )
+
+    @patch("nodes.models.Node._hosts_gelectriic_ap", return_value=True)
+    def test_ap_public_wifi_detection(self, mock_hosts):
+        control_role, _ = NodeRole.objects.get_or_create(name="Control")
+        router = NodeFeature.objects.create(slug="ap-router", display="AP Router")
+        router.roles.add(control_role)
+        public = NodeFeature.objects.create(
+            slug="ap-public-wifi", display="AP Public Wi-Fi"
+        )
+        public.roles.add(control_role)
+        mac = "00:11:22:33:44:88"
+        with TemporaryDirectory() as tmp, override_settings(BASE_DIR=Path(tmp)):
+            locks = Path(tmp) / "locks"
+            locks.mkdir(parents=True, exist_ok=True)
+            (locks / "public_wifi_mode.lck").touch()
+            with patch("nodes.models.Node.get_current_mac", return_value=mac):
+                node = Node.objects.create(
+                    hostname="control",
+                    address="127.0.0.1",
+                    port=8000,
+                    mac_address=mac,
+                    role=control_role,
+                    base_path=str(Path(tmp)),
+                )
+                node.refresh_features()
+        self.assertTrue(
+            NodeFeatureAssignment.objects.filter(node=node, feature=public).exists()
+        )
+        self.assertFalse(
+            NodeFeatureAssignment.objects.filter(node=node, feature=router).exists()
+        )
+
+    @patch("nodes.models.Node._hosts_gelectriic_ap", side_effect=[True, False])
+    def test_ap_router_removed_when_not_hosting(self, mock_hosts):
+        control_role, _ = NodeRole.objects.get_or_create(name="Control")
+        feature = NodeFeature.objects.create(slug="ap-router", display="AP Router")
+        feature.roles.add(control_role)
+        mac = "00:11:22:33:44:77"
+        with patch("nodes.models.Node.get_current_mac", return_value=mac):
+            node = Node.objects.create(
+                hostname="control",
+                address="127.0.0.1",
+                port=8000,
+                mac_address=mac,
+                role=control_role,
+            )
+            self.assertTrue(
+                NodeFeatureAssignment.objects.filter(
+                    node=node, feature=feature
+                ).exists()
+            )
+            node.refresh_features()
+        self.assertFalse(
+            NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+        )
+
+    @patch("nodes.models.Node._uses_postgres", return_value=True)
+    def test_postgres_detection(self, mock_postgres):
+        feature = NodeFeature.objects.create(
+            slug="postgres-db", display="PostgreSQL Database"
+        )
+        feature.roles.add(self.role)
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            self.node.refresh_features()
+        self.assertTrue(
+            NodeFeatureAssignment.objects.filter(
+                node=self.node, feature=feature
+            ).exists()
+        )
+
+    @patch("nodes.models.Node._uses_postgres", side_effect=[True, False])
+    def test_postgres_removed_when_not_in_use(self, mock_postgres):
+        feature = NodeFeature.objects.create(
+            slug="postgres-db", display="PostgreSQL Database"
+        )
+        feature.roles.add(self.role)
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
+            self.node.refresh_features()
+        self.assertTrue(
+            NodeFeatureAssignment.objects.filter(
+                node=self.node, feature=feature
+            ).exists()
+        )
+        with patch(
+            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+        ):
             self.node.refresh_features()
         self.assertFalse(
             NodeFeatureAssignment.objects.filter(

@@ -12,7 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
 from django.apps import apps
-from django.db.models.signals import m2m_changed
+from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
 from datetime import timedelta
 from django.contrib.contenttypes.models import ContentType
@@ -24,7 +24,6 @@ import re
 from io import BytesIO
 from django.core.files.base import ContentFile
 import qrcode
-import xmlrpc.client
 from django.utils import timezone
 import uuid
 from pathlib import Path
@@ -32,6 +31,10 @@ from django.core import serializers
 from urllib.parse import urlparse
 from utils import revision as revision_utils
 from typing import Type
+from defusedxml import xmlrpc as defused_xmlrpc
+
+defused_xmlrpc.monkey_patch()
+xmlrpc_client = defused_xmlrpc.xmlrpc_client
 
 from .entity import Entity, EntityUserManager, EntityManager
 from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
@@ -89,18 +92,29 @@ class Profile(Entity):
             )
         if self.user_id:
             user_model = get_user_model()
-            system_username = getattr(user_model, "SYSTEM_USERNAME", None)
-            if system_username:
+            username_cache = {"value": None}
+
+            def _resolve_username():
+                if username_cache["value"] is not None:
+                    return username_cache["value"]
                 user_obj = getattr(self, "user", None)
                 username = getattr(user_obj, "username", None)
                 if not username:
-                    manager = getattr(user_model, "all_objects", user_model._default_manager)
+                    manager = getattr(
+                        user_model, "all_objects", user_model._default_manager
+                    )
                     username = (
                         manager.filter(pk=self.user_id)
                         .values_list("username", flat=True)
                         .first()
                     )
-                if user_model.is_system_username(username):
+                username_cache["value"] = username
+                return username
+
+            is_restricted = getattr(user_model, "is_profile_restricted_username", None)
+            if callable(is_restricted):
+                username = _resolve_username()
+                if is_restricted(username):
                     raise ValidationError(
                         {
                             "user": _(
@@ -109,6 +123,19 @@ class Profile(Entity):
                             % {"username": username}
                         }
                     )
+            else:
+                system_username = getattr(user_model, "SYSTEM_USERNAME", None)
+                if system_username:
+                    username = _resolve_username()
+                    if user_model.is_system_username(username):
+                        raise ValidationError(
+                            {
+                                "user": _(
+                                    "The %(username)s account cannot have profiles attached."
+                                )
+                                % {"username": username}
+                            }
+                        )
 
     @property
     def owner(self):
@@ -187,6 +214,7 @@ class InviteLead(Lead):
     comment = models.TextField(blank=True)
     sent_on = models.DateTimeField(null=True, blank=True)
     error = models.TextField(blank=True)
+    mac_address = models.CharField(max_length=17, blank=True)
 
     class Meta:
         verbose_name = "Invite Lead"
@@ -196,14 +224,55 @@ class InviteLead(Lead):
         return self.email
 
 
+class PublicWifiAccess(Entity):
+    """Allow public Wi-Fi clients onto the wider internet."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="public_wifi_accesses",
+    )
+    mac_address = models.CharField(max_length=17)
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+    revoked_on = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ("user", "mac_address")
+        verbose_name = "Public Wi-Fi Access"
+        verbose_name_plural = "Public Wi-Fi Access"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.user} -> {self.mac_address}"
+
+
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+def _revoke_public_wifi_when_inactive(sender, instance, **kwargs):
+    if instance.is_active:
+        return
+    from core import public_wifi
+
+    public_wifi.revoke_public_access_for_user(instance)
+
+
+@receiver(post_delete, sender=settings.AUTH_USER_MODEL)
+def _cleanup_public_wifi_on_delete(sender, instance, **kwargs):
+    from core import public_wifi
+
+    public_wifi.revoke_public_access_for_user(instance)
+
+
 class User(Entity, AbstractUser):
     SYSTEM_USERNAME = "arthexis"
+    ADMIN_USERNAME = "admin"
+    PROFILE_RESTRICTED_USERNAMES = frozenset({SYSTEM_USERNAME, ADMIN_USERNAME})
 
     objects = EntityUserManager()
     all_objects = DjangoUserManager()
     """Custom user model."""
     birthday = models.DateField(null=True, blank=True)
     data_path = models.CharField(max_length=255, blank=True)
+    last_visit_ip_address = models.GenericIPAddressField(null=True, blank=True)
     operate_as = models.ForeignKey(
         "self",
         null=True,
@@ -230,9 +299,17 @@ class User(Entity, AbstractUser):
     def is_system_username(cls, username):
         return bool(username) and username == cls.SYSTEM_USERNAME
 
+    @classmethod
+    def is_profile_restricted_username(cls, username):
+        return bool(username) and username in cls.PROFILE_RESTRICTED_USERNAMES
+
     @property
     def is_system_user(self) -> bool:
         return self.is_system_username(self.username)
+
+    @property
+    def is_profile_restricted(self) -> bool:
+        return self.is_profile_restricted_username(self.username)
 
     def clean(self):
         super().clean()
@@ -418,12 +495,12 @@ class OdooProfile(Profile):
 
     def verify(self):
         """Check credentials against Odoo and pull user info."""
-        common = xmlrpc.client.ServerProxy(f"{self.host}/xmlrpc/2/common")
+        common = xmlrpc_client.ServerProxy(f"{self.host}/xmlrpc/2/common")
         uid = common.authenticate(self.database, self.username, self.password, {})
         if not uid:
             self._clear_verification()
             raise ValidationError(_("Invalid Odoo credentials"))
-        models_proxy = xmlrpc.client.ServerProxy(f"{self.host}/xmlrpc/2/object")
+        models_proxy = xmlrpc_client.ServerProxy(f"{self.host}/xmlrpc/2/object")
         info = models_proxy.execute_kw(
             self.database,
             uid,
@@ -443,7 +520,7 @@ class OdooProfile(Profile):
     def execute(self, model, method, *args, **kwargs):
         """Execute an Odoo RPC call, invalidating credentials on failure."""
         try:
-            client = xmlrpc.client.ServerProxy(f"{self.host}/xmlrpc/2/object")
+            client = xmlrpc_client.ServerProxy(f"{self.host}/xmlrpc/2/object")
             return client.execute_kw(
                 self.database,
                 self.odoo_uid,
@@ -730,7 +807,8 @@ class EmailArtifact(Entity):
         import hashlib
 
         data = (subject or "") + (sender or "") + (body or "")
-        return hashlib.md5(data.encode("utf-8")).hexdigest()
+        hasher = hashlib.md5(data.encode("utf-8"), usedforsecurity=False)
+        return hasher.hexdigest()
 
     class Meta:
         unique_together = ("collector", "fingerprint")
@@ -793,6 +871,21 @@ class Reference(Entity):
         related_name="references",
         null=True,
         blank=True,
+    )
+    sites = models.ManyToManyField(
+        "sites.Site",
+        blank=True,
+        related_name="references",
+    )
+    roles = models.ManyToManyField(
+        "nodes.NodeRole",
+        blank=True,
+        related_name="references",
+    )
+    features = models.ManyToManyField(
+        "nodes.NodeFeature",
+        blank=True,
+        related_name="references",
     )
 
     objects = ReferenceManager()
@@ -975,6 +1068,15 @@ class EnergyAccount(Entity):
         default=False,
         help_text="Allow transactions even when the balance is zero or negative",
     )
+    live_subscription_product = models.ForeignKey(
+        "Product",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="live_subscription_accounts",
+    )
+    live_subscription_start_date = models.DateField(null=True, blank=True)
+    live_subscription_next_renewal = models.DateField(null=True, blank=True)
 
     def can_authorize(self) -> bool:
         """Return True if this account should be authorized for charging."""
@@ -1013,6 +1115,17 @@ class EnergyAccount(Entity):
     def save(self, *args, **kwargs):
         if self.name:
             self.name = self.name.upper()
+        if self.live_subscription_product and not self.live_subscription_start_date:
+            self.live_subscription_start_date = timezone.now().date()
+        if (
+            self.live_subscription_product
+            and self.live_subscription_start_date
+            and not self.live_subscription_next_renewal
+        ):
+            self.live_subscription_next_renewal = (
+                self.live_subscription_start_date
+                + timedelta(days=self.live_subscription_product.renewal_period)
+            )
         super().save(*args, **kwargs)
 
     def __str__(self):  # pragma: no cover - simple representation
@@ -1056,6 +1169,290 @@ class EnergyCredit(Entity):
         db_table = "core_credit"
 
 
+class ClientReportSchedule(Entity):
+    """Configuration for recurring :class:`ClientReport` generation."""
+
+    PERIODICITY_NONE = "none"
+    PERIODICITY_DAILY = "daily"
+    PERIODICITY_WEEKLY = "weekly"
+    PERIODICITY_MONTHLY = "monthly"
+    PERIODICITY_CHOICES = [
+        (PERIODICITY_NONE, "One-time"),
+        (PERIODICITY_DAILY, "Daily"),
+        (PERIODICITY_WEEKLY, "Weekly"),
+        (PERIODICITY_MONTHLY, "Monthly"),
+    ]
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="client_report_schedules",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_client_report_schedules",
+    )
+    periodicity = models.CharField(
+        max_length=12, choices=PERIODICITY_CHOICES, default=PERIODICITY_NONE
+    )
+    email_recipients = models.JSONField(default=list, blank=True)
+    disable_emails = models.BooleanField(default=False)
+    periodic_task = models.OneToOneField(
+        "django_celery_beat.PeriodicTask",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="client_report_schedule",
+    )
+    last_generated_on = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Client Report Schedule"
+        verbose_name_plural = "Client Report Schedules"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        owner = self.owner.get_username() if self.owner else "Unassigned"
+        return f"Client Report Schedule ({owner})"
+
+    def save(self, *args, **kwargs):
+        sync = kwargs.pop("sync_task", True)
+        super().save(*args, **kwargs)
+        if sync and self.pk:
+            self.sync_periodic_task()
+
+    def delete(self, using=None, keep_parents=False):
+        task_id = self.periodic_task_id
+        super().delete(using=using, keep_parents=keep_parents)
+        if task_id:
+            from django_celery_beat.models import PeriodicTask
+
+            PeriodicTask.objects.filter(pk=task_id).delete()
+
+    def sync_periodic_task(self):
+        """Ensure the Celery beat schedule matches the configured periodicity."""
+
+        from django_celery_beat.models import CrontabSchedule, PeriodicTask
+        from django.db import transaction
+        import json as _json
+
+        if self.periodicity == self.PERIODICITY_NONE:
+            if self.periodic_task_id:
+                PeriodicTask.objects.filter(pk=self.periodic_task_id).delete()
+                type(self).objects.filter(pk=self.pk).update(periodic_task=None)
+            return
+
+        if self.periodicity == self.PERIODICITY_DAILY:
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute="0",
+                hour="2",
+                day_of_week="*",
+                day_of_month="*",
+                month_of_year="*",
+            )
+        elif self.periodicity == self.PERIODICITY_WEEKLY:
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute="0",
+                hour="3",
+                day_of_week="1",
+                day_of_month="*",
+                month_of_year="*",
+            )
+        else:
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute="0",
+                hour="4",
+                day_of_week="*",
+                day_of_month="1",
+                month_of_year="*",
+            )
+
+        name = f"client_report_schedule_{self.pk}"
+        defaults = {
+            "crontab": schedule,
+            "task": "core.tasks.run_client_report_schedule",
+            "kwargs": _json.dumps({"schedule_id": self.pk}),
+            "enabled": True,
+        }
+        with transaction.atomic():
+            periodic_task, _ = PeriodicTask.objects.update_or_create(
+                name=name, defaults=defaults
+            )
+            if self.periodic_task_id != periodic_task.pk:
+                type(self).objects.filter(pk=self.pk).update(
+                    periodic_task=periodic_task
+                )
+
+    def calculate_period(self, reference=None):
+        """Return the date range covered for the next execution."""
+
+        from django.utils import timezone
+        import datetime as _datetime
+
+        ref_date = reference or timezone.localdate()
+
+        if self.periodicity == self.PERIODICITY_DAILY:
+            end = ref_date - _datetime.timedelta(days=1)
+            start = end
+        elif self.periodicity == self.PERIODICITY_WEEKLY:
+            start_of_week = ref_date - _datetime.timedelta(days=ref_date.weekday())
+            end = start_of_week - _datetime.timedelta(days=1)
+            start = end - _datetime.timedelta(days=6)
+        elif self.periodicity == self.PERIODICITY_MONTHLY:
+            first_of_month = ref_date.replace(day=1)
+            end = first_of_month - _datetime.timedelta(days=1)
+            start = end.replace(day=1)
+        else:
+            raise ValueError("calculate_period called for non-recurring schedule")
+
+        return start, end
+
+    def resolve_recipients(self):
+        """Return (to, cc) email lists respecting owner fallbacks."""
+
+        from django.contrib.auth import get_user_model
+
+        to: list[str] = []
+        cc: list[str] = []
+        seen: set[str] = set()
+
+        for email in self.email_recipients:
+            normalized = (email or "").strip()
+            if not normalized:
+                continue
+            if normalized.lower() in seen:
+                continue
+            to.append(normalized)
+            seen.add(normalized.lower())
+
+        owner_email = None
+        if self.owner and self.owner.email:
+            candidate = self.owner.email.strip()
+            if candidate:
+                owner_email = candidate
+
+        if to:
+            if owner_email and owner_email.lower() not in seen:
+                cc.append(owner_email)
+        else:
+            if owner_email:
+                to.append(owner_email)
+                seen.add(owner_email.lower())
+            else:
+                admin_email = (
+                    get_user_model()
+                    .objects.filter(is_superuser=True, is_active=True)
+                    .exclude(email="")
+                    .values_list("email", flat=True)
+                    .first()
+                )
+                if admin_email:
+                    to.append(admin_email)
+                    seen.add(admin_email.lower())
+                elif settings.DEFAULT_FROM_EMAIL:
+                    to.append(settings.DEFAULT_FROM_EMAIL)
+
+        return to, cc
+
+    def get_outbox(self):
+        """Return the preferred :class:`nodes.models.EmailOutbox` instance."""
+
+        from nodes.models import EmailOutbox, Node
+
+        if self.owner:
+            try:
+                outbox = self.owner.get_profile(EmailOutbox)
+            except Exception:  # pragma: no cover - defensive catch
+                outbox = None
+            if outbox:
+                return outbox
+
+        node = Node.get_local()
+        if node:
+            return getattr(node, "email_outbox", None)
+        return None
+
+    def notify_failure(self, message: str):
+        from nodes.models import NetMessage
+
+        NetMessage.broadcast("Client report delivery issue", message)
+
+    def run(self):
+        """Generate the report, persist it and deliver notifications."""
+
+        from core import mailer
+
+        try:
+            start, end = self.calculate_period()
+        except ValueError:
+            return None
+
+        try:
+            report = ClientReport.generate(
+                start,
+                end,
+                owner=self.owner,
+                schedule=self,
+                recipients=self.email_recipients,
+                disable_emails=self.disable_emails,
+            )
+            export, html_content = report.store_local_copy()
+        except Exception as exc:
+            self.notify_failure(str(exc))
+            raise
+
+        if not self.disable_emails:
+            to, cc = self.resolve_recipients()
+            if not to:
+                self.notify_failure("No recipients available for client report")
+                raise RuntimeError("No recipients available for client report")
+            else:
+                try:
+                    attachments = []
+                    html_name = Path(export["html_path"]).name
+                    attachments.append((html_name, html_content, "text/html"))
+                    json_file = Path(settings.BASE_DIR) / export["json_path"]
+                    if json_file.exists():
+                        attachments.append(
+                            (
+                                json_file.name,
+                                json_file.read_text(encoding="utf-8"),
+                                "application/json",
+                            )
+                        )
+                    subject = f"Client report {report.start_date} to {report.end_date}"
+                    body = (
+                        "Attached is the client report generated for the period "
+                        f"{report.start_date} to {report.end_date}."
+                    )
+                    mailer.send(
+                        subject,
+                        body,
+                        to,
+                        outbox=self.get_outbox(),
+                        cc=cc,
+                        attachments=attachments,
+                    )
+                    delivered = list(dict.fromkeys(to + (cc or [])))
+                    if delivered:
+                        type(report).objects.filter(pk=report.pk).update(
+                            recipients=delivered
+                        )
+                        report.recipients = delivered
+                except Exception as exc:
+                    self.notify_failure(str(exc))
+                    raise
+
+        now = timezone.now()
+        type(self).objects.filter(pk=self.pk).update(last_generated_on=now)
+        self.last_generated_on = now
+        return report
+
+
 class ClientReport(Entity):
     """Snapshot of energy usage over a period."""
 
@@ -1063,6 +1460,22 @@ class ClientReport(Entity):
     end_date = models.DateField()
     created_on = models.DateTimeField(auto_now_add=True)
     data = models.JSONField(default=dict)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="client_reports",
+    )
+    schedule = models.ForeignKey(
+        "ClientReportSchedule",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reports",
+    )
+    recipients = models.JSONField(default=list, blank=True)
+    disable_emails = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "Client Report"
@@ -1071,11 +1484,66 @@ class ClientReport(Entity):
         ordering = ["-created_on"]
 
     @classmethod
-    def generate(cls, start_date, end_date):
+    def generate(
+        cls,
+        start_date,
+        end_date,
+        *,
+        owner=None,
+        schedule=None,
+        recipients: list[str] | None = None,
+        disable_emails: bool = False,
+    ):
         rows = cls.build_rows(start_date, end_date)
         return cls.objects.create(
-            start_date=start_date, end_date=end_date, data={"rows": rows}
+            start_date=start_date,
+            end_date=end_date,
+            data={"rows": rows},
+            owner=owner,
+            schedule=schedule,
+            recipients=list(recipients or []),
+            disable_emails=disable_emails,
         )
+
+    def store_local_copy(self, html: str | None = None):
+        """Persist the report data and optional HTML rendering to disk."""
+
+        import json as _json
+        from django.template.loader import render_to_string
+
+        base_dir = Path(settings.BASE_DIR)
+        report_dir = base_dir / "work" / "reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
+        identifier = f"client_report_{self.pk}_{timestamp}"
+
+        html_content = html or render_to_string(
+            "core/reports/client_report_email.html", {"report": self}
+        )
+        html_path = report_dir / f"{identifier}.html"
+        html_path.write_text(html_content, encoding="utf-8")
+
+        json_path = report_dir / f"{identifier}.json"
+        json_path.write_text(
+            _json.dumps(self.data, indent=2, default=str), encoding="utf-8"
+        )
+
+        def _relative(path: Path) -> str:
+            try:
+                return str(path.relative_to(base_dir))
+            except ValueError:
+                return str(path)
+
+        export = {
+            "html_path": _relative(html_path),
+            "json_path": _relative(json_path),
+        }
+
+        updated = dict(self.data)
+        updated["export"] = export
+        type(self).objects.filter(pk=self.pk).update(data=updated)
+        self.data = updated
+        return export, html_content
 
     @staticmethod
     def build_rows(start_date=None, end_date=None):
@@ -1271,29 +1739,6 @@ class Product(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
-
-
-class LiveSubscription(Entity):
-    """An energy account's live subscription to a product."""
-
-    account = models.ForeignKey(EnergyAccount, on_delete=models.CASCADE)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    start_date = models.DateField(auto_now_add=True)
-    next_renewal = models.DateField(blank=True)
-
-    def save(self, *args, **kwargs):
-        if not self.next_renewal:
-            self.next_renewal = self.start_date + timedelta(
-                days=self.product.renewal_period
-            )
-        super().save(*args, **kwargs)
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.account.user} -> {self.product}"
-
-    class Meta:
-        verbose_name = _("Live Subscription")
-        verbose_name_plural = _("Live Subscriptions")
 
 
 class AdminHistory(Entity):

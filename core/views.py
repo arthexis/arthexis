@@ -1,6 +1,6 @@
 import json
 import shutil
-from datetime import date, timedelta
+from datetime import timedelta
 
 import requests
 from django.contrib.admin.views.decorators import staff_member_required
@@ -18,7 +18,7 @@ import json
 
 from utils.api import api_login_required
 
-from .models import Product, LiveSubscription, EnergyAccount, PackageRelease, Todo
+from .models import Product, EnergyAccount, PackageRelease, Todo
 from .models import RFID
 
 
@@ -385,12 +385,20 @@ def add_live_subscription(request):
     except Product.DoesNotExist:
         return JsonResponse({"detail": "invalid product"}, status=404)
 
-    sub = LiveSubscription.objects.create(
-        account_id=account_id,
-        product=product,
-        next_renewal=date.today() + timedelta(days=product.renewal_period),
+    try:
+        account = EnergyAccount.objects.get(id=account_id)
+    except EnergyAccount.DoesNotExist:
+        return JsonResponse({"detail": "invalid account"}, status=404)
+
+    start_date = timezone.now().date()
+    account.live_subscription_product = product
+    account.live_subscription_start_date = start_date
+    account.live_subscription_next_renewal = start_date + timedelta(
+        days=product.renewal_period
     )
-    return JsonResponse({"id": sub.id})
+    account.save()
+
+    return JsonResponse({"id": account.id})
 
 
 @api_login_required
@@ -401,15 +409,30 @@ def live_subscription_list(request):
     if not account_id:
         return JsonResponse({"detail": "account_id required"}, status=400)
 
-    subs = list(
-        LiveSubscription.objects.filter(account_id=account_id)
-        .select_related("product")
-        .values(
-            "id",
-            "product__name",
-            "next_renewal",
+    try:
+        account = EnergyAccount.objects.select_related("live_subscription_product").get(
+            id=account_id
         )
-    )
+    except EnergyAccount.DoesNotExist:
+        return JsonResponse({"detail": "invalid account"}, status=404)
+
+    subs = []
+    product = account.live_subscription_product
+    if product:
+        next_renewal = account.live_subscription_next_renewal
+        if not next_renewal and account.live_subscription_start_date:
+            next_renewal = account.live_subscription_start_date + timedelta(
+                days=product.renewal_period
+            )
+
+        subs.append(
+            {
+                "id": account.id,
+                "product__name": product.name,
+                "next_renewal": next_renewal,
+            }
+        )
+
     return JsonResponse({"live_subscriptions": subs})
 
 

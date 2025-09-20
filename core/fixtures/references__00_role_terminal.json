@@ -1,0 +1,9 @@
+[
+  {
+    "model": "nodes.noderole",
+    "fields": {
+      "name": "Terminal",
+      "description": ""
+    }
+  }
+]

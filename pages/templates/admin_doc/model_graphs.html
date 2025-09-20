@@ -1,0 +1,46 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'django-admindocs-docroot' %}">{% translate 'Documentation' %}</a>
+  &rsaquo; {% translate 'Model Graphs' %}
+</div>
+{% endblock %}
+{% block title %}{% translate 'Model Graphs' %}{% endblock %}
+
+{% block content %}
+<h1>{% translate 'Model Graphs' %}</h1>
+<div id="content-main">
+  {% if sections %}
+    {% for section in sections %}
+      <div class="module">
+        <h2 id="app-{{ section.app_label }}">{{ section.verbose_name }} ({{ section.model_count }})</h2>
+        <p>
+          {% blocktranslate count model_count=section.model_count %}This admin group contains {{ model_count }} model registered in the interface.{% plural %}This admin group contains {{ model_count }} models registered in the interface.{% endblocktranslate %}
+        </p>
+        <p>
+          <a href="{{ section.graph_url }}">{% translate 'View model graph' %}</a>
+          {% if section.app_list_url %}
+            · <a href="{{ section.app_list_url }}">{% translate 'Open admin group' %}</a>
+          {% endif %}
+        </p>
+        {% if section.models %}
+          <h3>{% translate 'Models' %}</h3>
+          <ul>
+            {% for model in section.models %}
+              <li>
+                <a href="{{ model.doc_url }}">{{ model.verbose_name }}</a>
+                <span class="quiet">({{ model.object_name }})</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% else %}
+    <p>{% translate 'No admin model graphs are available.' %}</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,7 +1,18 @@
 import io
 from unittest.mock import MagicMock
 
+import pytest
+
 from projects import rfid
+
+
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+    pytest.mark.role("Satellite"),
+    pytest.mark.role("Constellation"),
+    pytest.mark.feature("rfid-scanner"),
+]
 
 
 class TestPinout:

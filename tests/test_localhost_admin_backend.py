@@ -31,22 +31,6 @@ def ensure_arthexis_user():
     return delegate
 
 
-def test_docker_network_allowed(tmp_path):
-    User = get_user_model()
-    delegate = ensure_arthexis_user()
-    User.all_objects.filter(username="admin").delete()
-    User.objects.create_user(
-        username="admin", password="admin", is_staff=True, is_superuser=True
-    )
-    backend = LocalhostAdminBackend()
-    req = HttpRequest()
-    req.META["REMOTE_ADDR"] = "172.16.5.4"
-    user = backend.authenticate(req, username="admin", password="admin")
-    assert user is not None
-    user.refresh_from_db()
-    assert user.operate_as_id == delegate.id
-
-
 def test_sets_operate_as_on_admin_creation():
     User = get_user_model()
     delegate = ensure_arthexis_user()
@@ -59,3 +43,31 @@ def test_sets_operate_as_on_admin_creation():
     user.refresh_from_db()
     assert user.username == "admin"
     assert user.operate_as_id == delegate.id
+
+
+def test_blocks_docker_bridge_addresses():
+    User = get_user_model()
+    ensure_arthexis_user()
+    User.all_objects.filter(username="admin").delete()
+    User.objects.create_user(
+        username="admin", password="admin", is_staff=True, is_superuser=True
+    )
+    backend = LocalhostAdminBackend()
+    req = HttpRequest()
+    req.META["REMOTE_ADDR"] = "172.17.0.2"
+    user = backend.authenticate(req, username="admin", password="admin")
+    assert user is None
+
+
+def test_allows_current_node_hostname():
+    User = get_user_model()
+    ensure_arthexis_user()
+    User.all_objects.filter(username="admin").delete()
+    backend = LocalhostAdminBackend()
+    backend._LOCAL_IPS = tuple(
+        set(backend._LOCAL_IPS) | {ipaddress.ip_address("10.42.0.20")}
+    )
+    req = HttpRequest()
+    req.META["REMOTE_ADDR"] = "10.42.0.20"
+    user = backend.authenticate(req, username="admin", password="admin")
+    assert user is not None

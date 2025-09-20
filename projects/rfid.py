@@ -107,7 +107,9 @@ def scan(
     poll_interval: float = 0.1,
     stdin: Optional[TextIO] = None,
     stdout: Optional[TextIO] = None,
-    select_fn: Callable[[Sequence[TextIO], Sequence[TextIO], Sequence[TextIO], float], tuple] = select.select,
+    select_fn: Callable[
+        [Sequence[TextIO], Sequence[TextIO], Sequence[TextIO], float], tuple
+    ] = select.select,
     sleep: Callable[[float], None] = time.sleep,
 ) -> int:
     """Interactively read RFID tags until the user presses Enter."""

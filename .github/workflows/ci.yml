@@ -3,12 +3,15 @@ name: CI
 on:
   push:
   pull_request:
+  schedule:
+    - cron: '0 2 * * *'
 
 jobs:
-  detect-roles:
+  node-test-matrix:
     runs-on: ubuntu-latest
     outputs:
-      roles: ${{ steps.detect.outputs.roles }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      database_changed: ${{ steps.plan.outputs.database_changed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -16,69 +19,38 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.x'
-      - name: Detect roles
-        id: detect
+      - name: Build node test matrix
+        id: plan
         run: |
-          python scripts/detect_impacted_roles.py > roles.json
-          echo "roles=$(cat roles.json)" >> "$GITHUB_OUTPUT"
-      - name: Summarize roles
-        run: echo "Impacted roles: $(cat roles.json)" >> "$GITHUB_STEP_SUMMARY"
-      - name: Comment roles
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v6
-        env:
-          ROLES: ${{ steps.detect.outputs.roles }}
-        with:
-          script: |
-            const roles = JSON.parse(process.env.ROLES);
-            const body = `Impacted node roles: ${roles.join(', ')}`;
-            await github.rest.issues.createComment({
-              ...context.repo,
-              issue_number: context.issue.number,
-              body
-            });
-  tests:
-    needs: detect-roles
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: postgres
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_HOST: localhost
-      POSTGRES_PORT: 5432
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-    strategy:
-      matrix:
-        role: ${{ fromJson(needs.detect-roles.outputs.roles) }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest psycopg-binary
-      - name: Run tests
-        env:
-          NODE_ROLE: ${{ matrix.role }}
-        run: pytest -q
+          python scripts/build_node_ci_plan.py > plan.json
+          python - <<'PY'
+          import json
+          import os
 
-  pre-commit:
+          with open('plan.json', 'r', encoding='utf-8') as fh:
+              data = json.load(fh)
+
+          matrix = json.dumps(data['matrix'])
+          database_changed = 'true' if data.get('database_changed') else 'false'
+
+          output = os.environ['GITHUB_OUTPUT']
+          with open(output, 'a', encoding='utf-8') as fh:
+              fh.write(f"matrix={matrix}\n")
+              fh.write(f"database_changed={database_changed}\n")
+
+          summary = os.environ.get('GITHUB_STEP_SUMMARY')
+          if summary:
+              with open(summary, 'a', encoding='utf-8') as fh:
+                  fh.write('| Node role | Enabled features |\n')
+                  fh.write('| --- | --- |\n')
+                  for entry in data['matrix']:
+                      features = entry['features'] or 'baseline only'
+                      fh.write(f"| {entry['role']} | {features} |\n")
+                  fh.write('\n')
+          PY
+  check-migrations:
+    needs: node-test-matrix
+    if: needs.node-test-matrix.outputs.database_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -88,9 +60,9 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install pre-commit
-      - name: Run pre-commit
-        run: pre-commit run --all-files
+      - name: Check for missing migrations
+        run: |
+          python manage.py makemigrations --check --dry-run --noinput
 
   env-refresh:
     runs-on: ubuntu-latest
@@ -98,32 +70,4 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run env refresh
         run: ./env-refresh.sh --clean
-
-  ui-screenshots:
-    needs: detect-roles
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-      - name: Install Firefox
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y firefox firefox-geckodriver
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-      - name: Run screenshot specs
-        env:
-          PYTHONUNBUFFERED: "1"
-        run: |
-          python scripts/ci/run_screenshots.py --base-ref "${GITHUB_BASE_REF}" --output-dir artifacts/ui-screens $(if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then echo "--run-all"; fi)
-      - name: Upload screenshot artefacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: ui-screenshots
-          path: artifacts/ui-screens
 

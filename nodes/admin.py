@@ -56,7 +56,7 @@ class NodeAdmin(EntityModelAdmin):
     change_list_template = "admin/nodes/node/change_list.html"
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
-    actions = ["run_task", "take_screenshots"]
+    actions = ["register_visitor", "run_task", "take_screenshots"]
     inlines = [NodeFeatureAssignmentInline]
 
     def get_urls(self):
@@ -66,6 +66,11 @@ class NodeAdmin(EntityModelAdmin):
                 "register-current/",
                 self.admin_site.admin_view(self.register_current),
                 name="nodes_node_register_current",
+            ),
+            path(
+                "register-visitor/",
+                self.admin_site.admin_view(self.register_visitor_view),
+                name="nodes_node_register_visitor",
             ),
             path(
                 "<int:node_id>/action/<str:action>/",
@@ -94,6 +99,29 @@ class NodeAdmin(EntityModelAdmin):
         }
         return render(request, "admin/nodes/node/register_remote.html", context)
 
+    @admin.action(description="Register Visitor Node")
+    def register_visitor(self, request, queryset=None):
+        return self.register_visitor_view(request)
+
+    def register_visitor_view(self, request):
+        """Exchange registration data with the visiting node."""
+
+        node, created = Node.register_current()
+        if created:
+            self.message_user(
+                request, f"Current host registered as {node}", messages.SUCCESS
+            )
+
+        token = uuid.uuid4().hex
+        context = {
+            "token": token,
+            "info_url": reverse("node-info"),
+            "register_url": reverse("register-node"),
+            "visitor_info_url": "http://localhost:8000/nodes/info/",
+            "visitor_register_url": "http://localhost:8000/nodes/register/",
+        }
+        return render(request, "admin/nodes/node/register_visitor.html", context)
+
     def public_key(self, request, node_id):
         node = self.get_object(request, node_id)
         if not node:
@@ -118,8 +146,12 @@ class NodeAdmin(EntityModelAdmin):
                         raise NotImplementedError(
                             "Remote node execution is not implemented"
                         )
+                    command = ["/bin/sh", "-c", recipe_text]
                     result = subprocess.run(
-                        recipe_text, shell=True, capture_output=True, text=True
+                        command,
+                        check=False,
+                        capture_output=True,
+                        text=True,
                     )
                     output = result.stdout + result.stderr
                 except Exception as exc:
@@ -280,15 +312,22 @@ class NodeRoleAdminForm(forms.ModelForm):
 @admin.register(NodeRole)
 class NodeRoleAdmin(EntityModelAdmin):
     form = NodeRoleAdminForm
-    list_display = ("name", "description", "registered")
+    list_display = ("name", "description", "registered", "default_features")
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.annotate(_registered=Count("node", distinct=True))
+        return qs.annotate(_registered=Count("node", distinct=True)).prefetch_related(
+            "features"
+        )
 
     @admin.display(description="Registered", ordering="_registered")
     def registered(self, obj):
         return getattr(obj, "_registered", obj.node_set.count())
+
+    @admin.display(description="Default Features")
+    def default_features(self, obj):
+        features = [feature.display for feature in obj.features.all()]
+        return ", ".join(features) if features else "—"
 
     def save_model(self, request, obj, form, change):
         obj.node_set.set(form.cleaned_data.get("nodes", []))
@@ -297,9 +336,18 @@ class NodeRoleAdmin(EntityModelAdmin):
 @admin.register(NodeFeature)
 class NodeFeatureAdmin(EntityModelAdmin):
     filter_horizontal = ("roles",)
-    list_display = ("display", "slug", "is_enabled")
+    list_display = ("display", "slug", "default_roles", "is_enabled")
     readonly_fields = ("is_enabled",)
     search_fields = ("display", "slug")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.prefetch_related("roles")
+
+    @admin.display(description="Default Roles")
+    def default_roles(self, obj):
+        roles = [role.name for role in obj.roles.all()]
+        return ", ".join(roles) if roles else "—"
 
 
 @admin.register(ContentSample)

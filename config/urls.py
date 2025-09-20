@@ -20,7 +20,11 @@ from django.views.generic import RedirectView
 from django.views.i18n import set_language
 from django.utils.translation import gettext_lazy as _
 from core import views as core_views
-from core.admindocs import CommandsView, OrderedModelIndexView
+from core.admindocs import (
+    CommandsView,
+    ModelGraphIndexView,
+    OrderedModelIndexView,
+)
 from man import views as man_views
 from pages import views as pages_views
 
@@ -91,13 +95,22 @@ urlpatterns = [
         RedirectView.as_view(pattern_name="django-admindocs-commands"),
     ),
     path(
+        "admin/doc/model-graphs/",
+        ModelGraphIndexView.as_view(),
+        name="django-admindocs-model-graphs",
+    ),
+    path(
+        "admindocs/model-graphs/",
+        RedirectView.as_view(pattern_name="django-admindocs-model-graphs"),
+    ),
+    path(
         "admindocs/models/",
         OrderedModelIndexView.as_view(),
         name="django-admindocs-models-index",
     ),
     path("admindocs/", include("django.contrib.admindocs.urls")),
     path(
-        "admin/doc/", 
+        "admin/doc/",
         RedirectView.as_view(pattern_name="django-admindocs-docroot"),
     ),
     path(

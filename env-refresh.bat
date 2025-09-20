@@ -1,6 +1,7 @@
 @echo off
 setlocal EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
+set "BACKUP_DIR=%SCRIPT_DIR%backups"
 if /I "%SCRIPT_DIR%"=="%SYSTEMDRIVE%\\" (
     echo Refusing to run from drive root.
     exit /b 1
@@ -19,6 +20,15 @@ if not defined FAILOVER_CREATED (
         git branch !BRANCH! >nul 2>&1
     )
     echo Created failover branch !BRANCH!
+    if exist db.sqlite3 (
+        if not exist "%BACKUP_DIR%" mkdir "%BACKUP_DIR%" >nul 2>&1
+        copy /Y db.sqlite3 "%BACKUP_DIR%\!BRANCH!.sqlite3" >nul 2>&1
+        if errorlevel 1 (
+            echo Failed to create database backup for !BRANCH!.>&2
+        ) else (
+            echo Saved database backup to backups\!BRANCH!.sqlite3
+        )
+    )
 )
 :parse
 if "%1"=="" goto after_parse

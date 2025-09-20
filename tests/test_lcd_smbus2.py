@@ -5,6 +5,13 @@ import builtins
 import pytest
 
 
+pytestmark = [
+    pytest.mark.role("Terminal"),
+    pytest.mark.role("Control"),
+    pytest.mark.feature("lcd-screen"),
+]
+
+
 def test_charlcd1602_falls_back_to_smbus2(monkeypatch):
     """CharLCD1602 uses smbus2 when smbus is unavailable."""
     # make importing smbus raise ImportError

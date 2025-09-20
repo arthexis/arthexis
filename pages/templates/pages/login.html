@@ -21,9 +21,11 @@
       {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
       <button type="submit" class="btn btn-primary w-100">{% trans "Log in" %}</button>
     </form>
+    {% if can_request_invite %}
     <div class="mt-3 text-center">
       <a href="{% url 'pages:request-invite' %}">{% trans "Request email invitation" %}</a>
     </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

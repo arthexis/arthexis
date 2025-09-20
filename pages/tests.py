@@ -15,6 +15,7 @@ from pages.screenshot_specs import (
     registry,
 )
 from django.apps import apps as django_apps
+from core import mailer
 from core.models import AdminHistory, InviteLead, Package, ReleaseManager, Todo
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
@@ -31,8 +32,16 @@ from django.contrib.contenttypes.models import ContentType
 from datetime import date, timedelta
 from django.core import mail
 from django.utils import timezone
+from django.utils.text import slugify
 
-from nodes.models import Node, ContentSample, NodeRole
+from nodes.models import (
+    EmailOutbox,
+    Node,
+    ContentSample,
+    NodeRole,
+    NodeFeature,
+    NodeFeatureAssignment,
+)
 
 
 class LoginViewTests(TestCase):
@@ -74,6 +83,19 @@ class LoginViewTests(TestCase):
             {"username": "staff", "password": "pwd"},
         )
         self.assertRedirects(resp, "/nodes/list/")
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.dummy.EmailBackend")
+    def test_login_page_hides_request_link_without_email_backend(self):
+        resp = self.client.get(reverse("pages:login"))
+        self.assertFalse(resp.context["can_request_invite"])
+        self.assertNotContains(resp, reverse("pages:request-invite"))
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.dummy.EmailBackend")
+    def test_login_page_shows_request_link_when_outbox_configured(self):
+        EmailOutbox.objects.create(host="smtp.example.com")
+        resp = self.client.get(reverse("pages:login"))
+        self.assertTrue(resp.context["can_request_invite"])
+        self.assertContains(resp, reverse("pages:request-invite"))
 
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
@@ -153,6 +175,7 @@ class InvitationTests(TestCase):
         self.assertEqual(lead.comment, "Hello")
         self.assertIsNone(lead.sent_on)
         self.assertEqual(lead.error, "")
+        self.assertEqual(lead.mac_address, "")
         self.assertEqual(len(mail.outbox), 0)
 
     def test_request_invite_falls_back_to_send_mail(self):
@@ -164,7 +187,7 @@ class InvitationTests(TestCase):
             patch.object(
                 node, "send_mail", side_effect=Exception("node fail")
             ) as node_send,
-            patch("pages.views.mailer.send", return_value=Mock()) as fallback,
+            patch("pages.views.mailer.send", wraps=mailer.send) as fallback,
         ):
             resp = self.client.post(
                 reverse("pages:request-invite"), {"email": "invite@example.com"}
@@ -177,6 +200,49 @@ class InvitationTests(TestCase):
         self.assertTrue(node_send.called)
         self.assertTrue(fallback.called)
         self.assertEqual(len(mail.outbox), 1)
+
+    @patch(
+        "pages.views.public_wifi.resolve_mac_address",
+        return_value="aa:bb:cc:dd:ee:ff",
+    )
+    def test_request_invite_records_mac_address(self, mock_resolve):
+        resp = self.client.post(
+            reverse("pages:request-invite"), {"email": "invite@example.com"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        lead = InviteLead.objects.get()
+        self.assertEqual(lead.mac_address, "aa:bb:cc:dd:ee:ff")
+
+    @patch("pages.views.public_wifi.grant_public_access")
+    @patch(
+        "pages.views.public_wifi.resolve_mac_address",
+        return_value="aa:bb:cc:dd:ee:ff",
+    )
+    def test_invitation_login_grants_public_wifi_access(self, mock_resolve, mock_grant):
+        control_role, _ = NodeRole.objects.get_or_create(name="Control")
+        feature = NodeFeature.objects.create(
+            slug="ap-public-wifi", display="AP Public Wi-Fi"
+        )
+        feature.roles.add(control_role)
+        node = Node.objects.create(
+            hostname="control",
+            address="127.0.0.1",
+            mac_address=Node.get_current_mac(),
+            role=control_role,
+        )
+        NodeFeatureAssignment.objects.create(node=node, feature=feature)
+        with patch("pages.views.Node.get_local", return_value=node):
+            resp = self.client.post(
+                reverse("pages:request-invite"), {"email": "invite@example.com"}
+            )
+        self.assertEqual(resp.status_code, 200)
+        link = re.search(r"http://testserver[\S]+", mail.outbox[0].body).group(0)
+        with patch("pages.views.Node.get_local", return_value=node):
+            resp = self.client.post(link)
+        self.assertEqual(resp.status_code, 302)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_active)
+        mock_grant.assert_called_once_with(self.user, "aa:bb:cc:dd:ee:ff")
 
 
 class NavbarBrandTests(TestCase):
@@ -243,7 +309,11 @@ class AdminBadgesTests(TestCase):
         self.node.role = role
         self.node.save()
         resp = self.client.get(reverse("admin:index"))
+        role_list = reverse("admin:nodes_noderole_changelist")
+        role_change = reverse("admin:nodes_noderole_change", args=[role.pk])
         self.assertContains(resp, "ROLE: Dev")
+        self.assertContains(resp, f'href="{role_list}"')
+        self.assertContains(resp, f'href="{role_change}"')
 
     def test_badges_warn_when_node_missing(self):
         from nodes.models import Node
@@ -317,6 +387,22 @@ class ViewHistoryLoggingTests(TestCase):
         resp = self.client.get(reverse("pages:index"), {"djdt": "toolbar"})
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(ViewHistory.objects.exists())
+
+    def test_authenticated_user_last_visit_ip_updated(self):
+        User = get_user_model()
+        user = User.objects.create_user(
+            username="history_user", password="pwd", email="history@example.com"
+        )
+        self.assertTrue(self.client.login(username="history_user", password="pwd"))
+
+        resp = self.client.get(
+            reverse("pages:index"),
+            HTTP_X_FORWARDED_FOR="203.0.113.5",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.last_visit_ip_address, "203.0.113.5")
 
 
 class ViewHistoryAdminTests(TestCase):
@@ -543,6 +629,81 @@ class NavAppsTests(TestCase):
         self.assertNotContains(resp, 'href="/core/"')
 
 
+class ConstellationNavTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        role, _ = NodeRole.objects.get_or_create(name="Constellation")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": "localhost",
+                "address": "127.0.0.1",
+                "role": role,
+            },
+        )
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
+        )
+        fixtures = [
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "constellation__application_ocpp.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "constellation__module_ocpp.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "constellation__module_rfid.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "constellation__landing_ocpp_dashboard.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "constellation__landing_ocpp_cp_simulator.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "constellation__landing_ocpp_rfid.json",
+            ),
+        ]
+        call_command("loaddata", *map(str, fixtures))
+
+    def test_rfid_pill_hidden(self):
+        resp = self.client.get(reverse("pages:index"))
+        nav_labels = [
+            module.menu_label.upper() for module in resp.context["nav_modules"]
+        ]
+        self.assertNotIn("RFID", nav_labels)
+        self.assertTrue(
+            Module.objects.filter(
+                path="/ocpp/", node_role__name="Constellation"
+            ).exists()
+        )
+        self.assertFalse(
+            Module.objects.filter(
+                path="/ocpp/rfid/",
+                node_role__name="Constellation",
+                is_deleted=False,
+            ).exists()
+        )
+
+
 class StaffNavVisibilityTests(TestCase):
     def setUp(self):
         self.client = Client()
@@ -643,12 +804,20 @@ class LandingFixtureTests(TestCase):
     def test_constellation_fixture_loads_without_duplicates(self):
         from glob import glob
 
+        NodeRole.objects.get_or_create(name="Constellation")
         fixtures = glob(
             str(Path(settings.BASE_DIR, "pages", "fixtures", "constellation__*.json"))
+        )
+        fixtures = sorted(
+            fixtures,
+            key=lambda path: (
+                0 if "__application_" in path else 1 if "__module_" in path else 2
+            ),
         )
         call_command("loaddata", *fixtures)
         call_command("loaddata", *fixtures)
         module = Module.objects.get(path="/ocpp/", node_role__name="Constellation")
+        module.create_landings()
         self.assertEqual(module.landings.filter(path="/ocpp/rfid/").count(), 1)
 
 
@@ -783,6 +952,17 @@ class FavoriteTests(TestCase):
         self.client.force_login(self.user)
         Site.objects.update_or_create(
             id=1, defaults={"name": "test", "domain": "testserver"}
+        )
+        from nodes.models import Node, NodeRole
+
+        terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.node, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": "localhost",
+                "address": "127.0.0.1",
+                "role": terminal_role,
+            },
         )
         ContentType.objects.clear_cache()
 
@@ -986,6 +1166,17 @@ class FavoriteTests(TestCase):
         self.assertNotContains(resp, "Release manager tasks")
         self.assertNotContains(resp, todo.request)
 
+    def test_dashboard_hides_todos_for_non_terminal_node(self):
+        todo = Todo.objects.create(request="Terminal Tasks")
+        from nodes.models import NodeRole
+
+        control_role, _ = NodeRole.objects.get_or_create(name="Control")
+        self.node.role = control_role
+        self.node.save(update_fields=["role"])
+        resp = self.client.get(reverse("admin:index"))
+        self.assertNotContains(resp, "Release manager tasks")
+        self.assertNotContains(resp, todo.request)
+
     def test_dashboard_shows_todos_for_delegate_release_manager(self):
         todo = Todo.objects.create(request="Delegate Task")
         User = get_user_model()
@@ -1007,6 +1198,71 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "Release manager tasks")
         self.assertContains(resp, todo.request)
+
+
+class AdminModelGraphViewTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="graph-staff", password="pwd", is_staff=True
+        )
+        Site.objects.update_or_create(id=1, defaults={"name": "Terminal"})
+        self.client.force_login(self.user)
+
+    def _mock_graph(self):
+        fake_graph = Mock()
+        fake_graph.source = "digraph {}"
+        fake_graph.engine = "dot"
+
+        def pipe_side_effect(*args, **kwargs):
+            fmt = kwargs.get("format") or (args[0] if args else None)
+            if fmt == "svg":
+                return '<svg xmlns="http://www.w3.org/2000/svg"></svg>'
+            if fmt == "pdf":
+                return b"%PDF-1.4 mock"
+            raise AssertionError(f"Unexpected format: {fmt}")
+
+        fake_graph.pipe.side_effect = pipe_side_effect
+        return fake_graph
+
+    def test_model_graph_renders_controls_and_download_link(self):
+        url = reverse("admin-model-graph", args=["pages"])
+        graph = self._mock_graph()
+        with (
+            patch("pages.views._build_model_graph", return_value=graph),
+            patch("pages.views.shutil.which", return_value="/usr/bin/dot"),
+        ):
+            response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-model-graph")
+        self.assertContains(response, 'data-graph-action="zoom-in"')
+        self.assertContains(response, "Download PDF")
+        self.assertIn("?format=pdf", response.context_data["download_url"])
+        args, kwargs = graph.pipe.call_args
+        self.assertEqual(kwargs.get("format"), "svg")
+        self.assertEqual(kwargs.get("encoding"), "utf-8")
+
+    def test_model_graph_pdf_download(self):
+        url = reverse("admin-model-graph", args=["pages"])
+        graph = self._mock_graph()
+        with (
+            patch("pages.views._build_model_graph", return_value=graph),
+            patch("pages.views.shutil.which", return_value="/usr/bin/dot"),
+        ):
+            response = self.client.get(url, {"format": "pdf"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        app_config = django_apps.get_app_config("pages")
+        expected_slug = slugify(app_config.verbose_name) or app_config.label
+        self.assertIn(
+            f"{expected_slug}-model-graph.pdf", response["Content-Disposition"]
+        )
+        self.assertEqual(response.content, b"%PDF-1.4 mock")
+        args, kwargs = graph.pipe.call_args
+        self.assertEqual(kwargs.get("format"), "pdf")
 
 
 class DatasetteTests(TestCase):
@@ -1061,18 +1317,20 @@ class ScreenshotSpecInfrastructureTests(TestCase):
             ContentSample.objects.filter(hash="old-hash").update(
                 created_at=timezone.now() - timedelta(days=8)
             )
-            with patch(
-                "pages.screenshot_specs.base.capture_screenshot", return_value=screenshot_path
-            ) as capture_mock, patch(
-                "pages.screenshot_specs.base.save_screenshot", return_value=None
-            ) as save_mock:
+            with (
+                patch(
+                    "pages.screenshot_specs.base.capture_screenshot",
+                    return_value=screenshot_path,
+                ) as capture_mock,
+                patch(
+                    "pages.screenshot_specs.base.save_screenshot", return_value=None
+                ) as save_mock,
+            ):
                 with ScreenshotSpecRunner(temp_dir) as runner:
                     result = runner.run(spec)
             self.assertTrue(result.image_path.exists())
             self.assertTrue(result.base64_path.exists())
-            self.assertEqual(
-                ContentSample.objects.filter(hash="old-hash").count(), 0
-            )
+            self.assertEqual(ContentSample.objects.filter(hash="old-hash").count(), 0)
             capture_mock.assert_called_once()
             save_mock.assert_called_once_with(screenshot_path, method="spec:spec-test")
 
