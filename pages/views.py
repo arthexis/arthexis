@@ -29,6 +29,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.cache import never_cache
 from django.utils.cache import patch_vary_headers
+from django.core.exceptions import PermissionDenied
 from django.utils.text import slugify
 from django.core.validators import EmailValidator
 from core.models import InviteLead, ClientReport, ClientReportSchedule
@@ -56,6 +57,31 @@ def _get_registered_models(app_label: str):
         model for model in admin.site._registry if model._meta.app_label == app_label
     ]
     return sorted(registered, key=lambda model: str(model._meta.verbose_name))
+
+
+def _filter_models_for_request(models, request):
+    """Filter ``models`` to only those viewable by ``request.user``."""
+
+    allowed = []
+    for model in models:
+        model_admin = admin.site._registry.get(model)
+        if model_admin is None:
+            continue
+        if not model_admin.has_module_permission(request):
+            continue
+        if not model_admin.has_view_permission(request, obj=None):
+            continue
+        allowed.append(model)
+    return allowed
+
+
+def _admin_has_app_permission(request, app_label: str) -> bool:
+    """Return whether the admin user can access the given app."""
+
+    has_app_permission = getattr(admin.site, "has_app_permission", None)
+    if callable(has_app_permission):
+        return has_app_permission(request, app_label)
+    return bool(admin.site.get_app_list(request, app_label))
 
 
 def _resolve_related_model(field, default_app_label: str):
@@ -200,6 +226,13 @@ def admin_model_graph(request, app_label: str):
     models = _get_registered_models(app_label)
     if not models:
         raise Http404("No admin models registered for this application")
+
+    if not _admin_has_app_permission(request, app_label):
+        raise PermissionDenied
+
+    models = _filter_models_for_request(models, request)
+    if not models:
+        raise PermissionDenied
 
     if Digraph is None:  # pragma: no cover - dependency missing is unexpected
         raise Http404("Graph visualization support is unavailable")
