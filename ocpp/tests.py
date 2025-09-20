@@ -297,6 +297,41 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertTrue(message_mock.save.called)
         self.assertTrue(message_mock.propagate.called)
 
+    async def test_consumption_message_final_update_on_disconnect(self):
+        await database_sync_to_async(Charger.objects.create)(charger_id="FINALMSG")
+        communicator = WebsocketCommunicator(application, "/FINALMSG/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        message_mock = Mock()
+        message_mock.uuid = "mock-uuid"
+        message_mock.save = Mock()
+        message_mock.propagate = Mock()
+
+        filter_mock = Mock()
+        filter_mock.first.return_value = message_mock
+
+        broadcast_result = SimpleNamespace(uuid="mock-uuid")
+
+        try:
+            with patch(
+                "nodes.models.NetMessage.broadcast", return_value=broadcast_result
+            ) as mock_broadcast, patch(
+                "nodes.models.NetMessage.objects.filter", return_value=filter_mock
+            ):
+                await communicator.send_json_to(
+                    [2, "1", "StartTransaction", {"meterStart": 1}]
+                )
+                await communicator.receive_json_from()
+                mock_broadcast.assert_called_once()
+                await communicator.disconnect()
+        finally:
+            with suppress(Exception):
+                await communicator.disconnect()
+
+        self.assertTrue(message_mock.save.called)
+        self.assertTrue(message_mock.propagate.called)
+
     async def test_rfid_unbound_instance_created(self):
         await database_sync_to_async(Charger.objects.create)(charger_id="NEWRFID")
         communicator = WebsocketCommunicator(application, "/NEWRFID/")

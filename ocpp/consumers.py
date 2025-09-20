@@ -40,7 +40,7 @@ class SinkConsumer(AsyncWebsocketConsumer):
 class CSMSConsumer(AsyncWebsocketConsumer):
     """Very small subset of OCPP 1.6 CSMS behaviour."""
 
-    consumption_update_interval = 60
+    consumption_update_interval = 300
 
     @requires_network
     async def connect(self):
@@ -411,6 +411,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         self._consumption_task = task
 
     async def disconnect(self, close_code):
+        tx_obj = None
+        if self.charger_id:
+            tx_obj = store.get_transaction(self.charger_id, self.connector_value)
+        if tx_obj:
+            await self._update_consumption_message(tx_obj.pk)
         await self._cancel_consumption_message()
         store.connections.pop(self.store_key, None)
         pending_key = store.pending_key(self.charger_id)
