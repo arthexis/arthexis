@@ -13,7 +13,7 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 
 Project under active development.
 
-## Four Role Architecture
+## Role Architecture
 
 Arthexis Constellation ships in four node roles tailored to different deployment scenarios.
 
