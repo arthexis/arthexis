@@ -91,17 +91,34 @@ if [ "$CLEAN" -eq 1 ]; then
 fi
 
 REQ_FILE="$SCRIPT_DIR/requirements.txt"
-if [ "$USE_SYSTEM_PYTHON" -eq 0 ] && [ -f "$REQ_FILE" ]; then
-  # ensure pip is available in the virtual environment
-  if ! "$PYTHON" -m pip --version >/dev/null 2>&1; then
-    "$PYTHON" -m ensurepip --upgrade
-  fi
+if [ -f "$REQ_FILE" ]; then
   MD5_FILE="$SCRIPT_DIR/requirements.md5"
   NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
   STORED_HASH=""
   [ -f "$MD5_FILE" ] && STORED_HASH=$(cat "$MD5_FILE")
+  NEED_INSTALL=0
   if [ "$NEW_HASH" != "$STORED_HASH" ]; then
-    "$PYTHON" -m pip install -r "$REQ_FILE"
+    NEED_INSTALL=1
+  elif [ "$USE_SYSTEM_PYTHON" -eq 1 ]; then
+    if ! "$PYTHON" - <<'PY' >/dev/null 2>&1
+import importlib
+import sys
+
+try:
+    importlib.import_module("django")
+except ModuleNotFoundError:
+    sys.exit(1)
+PY
+    then
+      NEED_INSTALL=1
+    fi
+  fi
+  if [ "$NEED_INSTALL" -eq 1 ]; then
+    pip_args=()
+    if [ "$USE_SYSTEM_PYTHON" -eq 1 ]; then
+      pip_args+=(--user)
+    fi
+    "$PYTHON" -m pip install "${pip_args[@]}" -r "$REQ_FILE"
     echo "$NEW_HASH" > "$MD5_FILE"
   fi
 fi
