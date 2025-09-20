@@ -225,7 +225,7 @@ class InviteLead(Lead):
 
 
 class PublicWifiAccess(Entity):
-    """Allow public Wi-Fi clients onto the wider internet."""
+    """Represent a Wi-Fi lease granted to a client for internet access."""
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -239,8 +239,8 @@ class PublicWifiAccess(Entity):
 
     class Meta:
         unique_together = ("user", "mac_address")
-        verbose_name = "Public Wi-Fi Access"
-        verbose_name_plural = "Public Wi-Fi Access"
+        verbose_name = "Wi-Fi Lease"
+        verbose_name_plural = "Wi-Fi Leases"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.user} -> {self.mac_address}"
