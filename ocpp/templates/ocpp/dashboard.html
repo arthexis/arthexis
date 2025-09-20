@@ -5,6 +5,15 @@
 
 {% block content %}
 <h1>{% trans "Charge Points" %}</h1>
+{% if show_demo_notice %}
+<div class="alert alert-info" role="alert">
+  <h2 class="h5 mb-2">{% trans "Demo OCPP 1.6 CSMS" %}</h2>
+  <p class="mb-1">{% trans "Everyone is welcome to use this demo to test their charge points." %}</p>
+  <p class="mb-1">{% blocktrans with limit=ws_rate_limit %}Rate limiting applies (maximum {{ limit }} simultaneous connections per IP).{% endblocktrans %}</p>
+  <p class="mb-0">{% blocktrans %}Use the following WebSocket URL format, replacing &lt;CHARGE_POINT_ID&gt; with your charge point identifier:{% endblocktrans %}</p>
+  <pre class="mb-0"><code>{{ demo_ws_url }}</code></pre>
+</div>
+{% endif %}
 <table class="table">
   <thead>
     <tr>
