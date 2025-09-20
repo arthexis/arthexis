@@ -105,6 +105,7 @@ class CoreConfig(AppConfig):
         lock = Path(settings.BASE_DIR) / "locks" / "celery.lck"
 
         if lock.exists():
+            from .auto_upgrade import ensure_auto_upgrade_periodic_task
 
             def ensure_email_collector_task(**kwargs):
                 try:  # pragma: no cover - optional dependency
@@ -131,6 +132,8 @@ class CoreConfig(AppConfig):
                     pass
 
             post_migrate.connect(ensure_email_collector_task, sender=self)
+            post_migrate.connect(ensure_auto_upgrade_periodic_task, sender=self)
+            ensure_auto_upgrade_periodic_task()
 
         from django.db.backends.signals import connection_created
 
