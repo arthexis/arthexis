@@ -20,6 +20,7 @@ import tempfile
 
 from django.utils import timezone
 from django.contrib.auth.models import Permission
+from django.contrib.messages import get_messages
 from .models import (
     User,
     UserPhoneNumber,
@@ -1033,6 +1034,44 @@ class TodoDoneTests(TestCase):
         todo.refresh_from_db()
         self.assertIsNotNone(todo.done_on)
         self.assertFalse(todo.is_deleted)
+
+    def test_mark_done_condition_failure_shows_message(self):
+        todo = Todo.objects.create(
+            request="Task",
+            on_done_condition="1 = 0",
+        )
+        resp = self.client.post(reverse("todo-done", args=[todo.pk]))
+        self.assertRedirects(resp, reverse("admin:index"))
+        messages = [m.message for m in get_messages(resp.wsgi_request)]
+        self.assertTrue(messages)
+        self.assertIn("1 = 0", messages[0])
+        todo.refresh_from_db()
+        self.assertIsNone(todo.done_on)
+
+    def test_mark_done_condition_invalid_expression(self):
+        todo = Todo.objects.create(
+            request="Task",
+            on_done_condition="1; SELECT 1",
+        )
+        resp = self.client.post(reverse("todo-done", args=[todo.pk]))
+        self.assertRedirects(resp, reverse("admin:index"))
+        messages = [m.message for m in get_messages(resp.wsgi_request)]
+        self.assertTrue(messages)
+        self.assertIn("Semicolons", messages[0])
+        todo.refresh_from_db()
+        self.assertIsNone(todo.done_on)
+
+    def test_mark_done_condition_resolves_sigils(self):
+        todo = Todo.objects.create(
+            request="Task",
+            on_done_condition="[TEST]",
+        )
+        with mock.patch.object(Todo, "resolve_sigils", return_value="1 = 1") as resolver:
+            resp = self.client.post(reverse("todo-done", args=[todo.pk]))
+        self.assertRedirects(resp, reverse("admin:index"))
+        resolver.assert_called_once_with("on_done_condition")
+        todo.refresh_from_db()
+        self.assertIsNotNone(todo.done_on)
 
 
 class TodoUrlValidationTests(TestCase):

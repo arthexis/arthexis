@@ -40,7 +40,11 @@ xmlrpc_client = defused_xmlrpc.xmlrpc_client
 from .entity import Entity, EntityUserManager, EntityManager
 from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
 from . import user_data  # noqa: F401 - ensure signal registration
-from .fields import SigilShortAutoField
+from .fields import (
+    SigilShortAutoField,
+    ConditionTextField,
+    ConditionCheckResult,
+)
 
 
 class SecurityGroup(Group):
@@ -2323,6 +2327,7 @@ class Todo(Entity):
     )
     request_details = models.TextField(blank=True, default="")
     done_on = models.DateTimeField(null=True, blank=True)
+    on_done_condition = ConditionTextField(blank=True, default="")
 
     objects = TodoManager()
 
@@ -2354,3 +2359,11 @@ class Todo(Entity):
         return (self.request,)
 
     natural_key.dependencies = []
+
+    def check_on_done_condition(self) -> ConditionCheckResult:
+        """Evaluate the ``on_done_condition`` field for this TODO."""
+
+        field = self._meta.get_field("on_done_condition")
+        if isinstance(field, ConditionTextField):
+            return field.evaluate(self)
+        return ConditionCheckResult(True, "")
