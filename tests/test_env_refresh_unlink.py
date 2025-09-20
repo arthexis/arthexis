@@ -25,7 +25,9 @@ def test_unlink_sqlite_db_retries(monkeypatch, tmp_path):
     monkeypatch.setattr(
         env_refresh_utils, "time", SimpleNamespace(sleep=lambda s: None)
     )
-    monkeypatch.setattr(env_refresh_utils, "settings", SimpleNamespace(BASE_DIR=tmp_path))
+    monkeypatch.setattr(
+        env_refresh_utils, "settings", SimpleNamespace(BASE_DIR=tmp_path)
+    )
     unlink_func(path)
 
     assert calls["count"] == 1

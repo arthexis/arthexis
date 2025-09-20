@@ -111,9 +111,7 @@ class Profile(Entity):
                 username_cache["value"] = username
                 return username
 
-            is_restricted = getattr(
-                user_model, "is_profile_restricted_username", None
-            )
+            is_restricted = getattr(user_model, "is_profile_restricted_username", None)
             if callable(is_restricted):
                 username = _resolve_username()
                 if is_restricted(username):
@@ -808,9 +806,7 @@ class EmailArtifact(Entity):
         import hashlib
 
         data = (subject or "") + (sender or "") + (body or "")
-        hasher = hashlib.md5(
-            data.encode("utf-8"), usedforsecurity=False
-        )
+        hasher = hashlib.md5(data.encode("utf-8"), usedforsecurity=False)
         return hasher.hexdigest()
 
     class Meta:
@@ -1125,8 +1121,9 @@ class EnergyAccount(Entity):
             and self.live_subscription_start_date
             and not self.live_subscription_next_renewal
         ):
-            self.live_subscription_next_renewal = self.live_subscription_start_date + timedelta(
-                days=self.live_subscription_product.renewal_period
+            self.live_subscription_next_renewal = (
+                self.live_subscription_start_date
+                + timedelta(days=self.live_subscription_product.renewal_period)
             )
         super().save(*args, **kwargs)
 
@@ -1250,15 +1247,27 @@ class ClientReportSchedule(Entity):
 
         if self.periodicity == self.PERIODICITY_DAILY:
             schedule, _ = CrontabSchedule.objects.get_or_create(
-                minute="0", hour="2", day_of_week="*", day_of_month="*", month_of_year="*"
+                minute="0",
+                hour="2",
+                day_of_week="*",
+                day_of_month="*",
+                month_of_year="*",
             )
         elif self.periodicity == self.PERIODICITY_WEEKLY:
             schedule, _ = CrontabSchedule.objects.get_or_create(
-                minute="0", hour="3", day_of_week="1", day_of_month="*", month_of_year="*"
+                minute="0",
+                hour="3",
+                day_of_week="1",
+                day_of_month="*",
+                month_of_year="*",
             )
         else:
             schedule, _ = CrontabSchedule.objects.get_or_create(
-                minute="0", hour="4", day_of_week="*", day_of_month="1", month_of_year="*"
+                minute="0",
+                hour="4",
+                day_of_week="*",
+                day_of_month="1",
+                month_of_year="*",
             )
 
         name = f"client_report_schedule_{self.pk}"
@@ -1273,7 +1282,9 @@ class ClientReportSchedule(Entity):
                 name=name, defaults=defaults
             )
             if self.periodic_task_id != periodic_task.pk:
-                type(self).objects.filter(pk=self.pk).update(periodic_task=periodic_task)
+                type(self).objects.filter(pk=self.pk).update(
+                    periodic_task=periodic_task
+                )
 
     def calculate_period(self, reference=None):
         """Return the date range covered for the next execution."""
@@ -1406,7 +1417,11 @@ class ClientReportSchedule(Entity):
                     json_file = Path(settings.BASE_DIR) / export["json_path"]
                     if json_file.exists():
                         attachments.append(
-                            (json_file.name, json_file.read_text(encoding="utf-8"), "application/json")
+                            (
+                                json_file.name,
+                                json_file.read_text(encoding="utf-8"),
+                                "application/json",
+                            )
                         )
                     subject = f"Client report {report.start_date} to {report.end_date}"
                     body = (

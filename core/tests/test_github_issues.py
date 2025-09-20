@@ -43,7 +43,9 @@ class TokenLookupTests(TestCase):
         release = mock.Mock()
         release.get_github_token.return_value = "release-token"
 
-        with mock.patch("core.github_issues.PackageRelease.latest", return_value=release):
+        with mock.patch(
+            "core.github_issues.PackageRelease.latest", return_value=release
+        ):
             with mock.patch.dict(os.environ, {}, clear=True):
                 token = github_issues.get_github_token()
 
@@ -69,7 +71,9 @@ class FingerprintTests(TestCase):
         super().setUp()
         self.tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(self.tempdir.cleanup)
-        self.lock_patch = mock.patch("core.github_issues.LOCK_DIR", Path(self.tempdir.name))
+        self.lock_patch = mock.patch(
+            "core.github_issues.LOCK_DIR", Path(self.tempdir.name)
+        )
         self.lock_patch.start()
         self.addCleanup(self.lock_patch.stop)
 
@@ -106,8 +110,12 @@ class CreateIssueTests(TestCase):
         response.text = "boom"
         response.raise_for_status.side_effect = requests.HTTPError("boom")
 
-        with mock.patch("core.github_issues.resolve_repository", return_value=("owner", "repo")):
-            with mock.patch("core.github_issues.get_github_token", return_value="token"):
+        with mock.patch(
+            "core.github_issues.resolve_repository", return_value=("owner", "repo")
+        ):
+            with mock.patch(
+                "core.github_issues.get_github_token", return_value="token"
+            ):
                 with mock.patch("requests.post", return_value=response) as post:
                     with self.assertLogs("core.github_issues", level="ERROR") as logs:
                         with self.assertRaises(requests.HTTPError):
@@ -122,8 +130,12 @@ class ReportRuntimeIssueTaskTests(TestCase):
         response = mock.Mock()
         response.status_code = 201
 
-        with mock.patch("core.github_issues.resolve_repository", return_value=("owner", "repo")):
-            with mock.patch("core.github_issues.get_github_token", return_value="token"):
+        with mock.patch(
+            "core.github_issues.resolve_repository", return_value=("owner", "repo")
+        ):
+            with mock.patch(
+                "core.github_issues.get_github_token", return_value="token"
+            ):
                 with mock.patch("requests.post", return_value=response) as post:
                     with self.assertLogs("core.tasks", level="INFO") as logs:
                         result = report_runtime_issue("Title", "Body", labels=["bug"])
@@ -132,7 +144,9 @@ class ReportRuntimeIssueTaskTests(TestCase):
         args, kwargs = post.call_args
         self.assertEqual(args[0], "https://api.github.com/repos/owner/repo/issues")
         self.assertEqual(kwargs["timeout"], github_issues.REQUEST_TIMEOUT)
-        self.assertTrue(any("Reported runtime issue" in message for message in logs.output))
+        self.assertTrue(
+            any("Reported runtime issue" in message for message in logs.output)
+        )
 
     def test_task_logs_and_raises_on_failure(self) -> None:
         response = mock.Mock()
@@ -140,11 +154,17 @@ class ReportRuntimeIssueTaskTests(TestCase):
         response.text = "failure"
         response.raise_for_status.side_effect = requests.HTTPError("failure")
 
-        with mock.patch("core.github_issues.resolve_repository", return_value=("owner", "repo")):
-            with mock.patch("core.github_issues.get_github_token", return_value="token"):
+        with mock.patch(
+            "core.github_issues.resolve_repository", return_value=("owner", "repo")
+        ):
+            with mock.patch(
+                "core.github_issues.get_github_token", return_value="token"
+            ):
                 with mock.patch("requests.post", return_value=response):
                     with self.assertLogs("core.tasks", level="ERROR") as logs:
                         with self.assertRaises(requests.HTTPError):
                             report_runtime_issue("Title", "Body")
 
-        self.assertTrue(any("Failed to report runtime issue" in message for message in logs.output))
+        self.assertTrue(
+            any("Failed to report runtime issue" in message for message in logs.output)
+        )

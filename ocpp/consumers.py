@@ -76,9 +76,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         )()
         friendly_name = location_name or self.charger_id
         store.register_log_name(self.store_key, friendly_name, log_type="charger")
-        store.register_log_name(
-            self.charger_id, friendly_name, log_type="charger"
-        )
+        store.register_log_name(self.charger_id, friendly_name, log_type="charger")
         store.register_log_name(
             store.identity_key(self.charger_id, None),
             friendly_name,
@@ -108,14 +106,19 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             and self.charger.connector_id == connector_value
         ):
             return
-        if not self.aggregate_charger or self.aggregate_charger.connector_id is not None:
+        if (
+            not self.aggregate_charger
+            or self.aggregate_charger.connector_id is not None
+        ):
             self.aggregate_charger = await database_sync_to_async(
                 Charger.objects.get_or_create
             )(
                 charger_id=self.charger_id,
                 connector_id=None,
                 defaults={"last_path": self.scope.get("path", "")},
-            )[0]
+            )[
+                0
+            ]
         existing = await database_sync_to_async(
             Charger.objects.filter(
                 charger_id=self.charger_id, connector_id=connector_value
@@ -124,13 +127,16 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         if existing:
             self.charger = existing
         else:
+
             def _create_connector():
                 charger, _ = Charger.objects.get_or_create(
                     charger_id=self.charger_id,
                     connector_id=connector_value,
                     defaults={"last_path": self.scope.get("path", "")},
                 )
-                if self.scope.get("path") and charger.last_path != self.scope.get("path"):
+                if self.scope.get("path") and charger.last_path != self.scope.get(
+                    "path"
+                ):
                     charger.last_path = self.scope.get("path")
                     charger.save(update_fields=["last_path"])
                 return charger
@@ -152,8 +158,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         aggregate_name = ""
         if self.aggregate_charger:
             aggregate_name = await sync_to_async(
-                lambda: self.aggregate_charger.name
-                or self.aggregate_charger.charger_id
+                lambda: self.aggregate_charger.name or self.aggregate_charger.charger_id
             )()
         store.register_log_name(
             store.identity_key(self.charger_id, None),
@@ -236,11 +241,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                             updated_fields.add(f"{field}_{suffix}")
                     else:
                         values[field] = val
-                        if (
-                            tx_obj
-                            and field == "energy"
-                            and tx_obj.meter_start is None
-                        ):
+                        if tx_obj and field == "energy" and tx_obj.meter_start is None:
                             mult = 1000 if unit in ("kW", "kWh") else 1
                             try:
                                 tx_obj.meter_start = int(val * mult)
@@ -290,7 +291,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 location_name = charger.location.name
             elif aggregate and aggregate.location_id:
                 location_name = aggregate.location.name
-            cid_value = charger.connector_slug if charger.connector_id is not None else Charger.AGGREGATE_CONNECTOR_SLUG
+            cid_value = (
+                charger.connector_slug
+                if charger.connector_id is not None
+                else Charger.AGGREGATE_CONNECTOR_SLUG
+            )
             return {
                 "location": location_name,
                 "sn": charger.charger_id,
@@ -319,9 +324,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             store.connections.pop(pending_key, None)
         store.end_session_log(self.store_key)
         store.stop_session_lock()
-        store.add_log(
-            self.store_key, f"Closed (code={close_code})", log_type="charger"
-        )
+        store.add_log(self.store_key, f"Closed (code={close_code})", log_type="charger")
 
     async def receive(self, text_data=None, bytes_data=None):
         raw = text_data

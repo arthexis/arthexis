@@ -131,13 +131,9 @@ def _feature_skip_reason(required: set[str], role: str | None) -> str:
 def pytest_collection_modifyitems(config, items):
     role = os.environ.get("NODE_ROLE")
     require_markers = _env_flag("NODE_ROLE_ONLY")
-    role_skip = (
-        pytest.mark.skip(reason=f"not run for {role} role") if role else None
-    )
+    role_skip = pytest.mark.skip(reason=f"not run for {role} role") if role else None
     missing_skip = (
-        pytest.mark.skip(
-            reason="missing role marker while NODE_ROLE_ONLY is enabled"
-        )
+        pytest.mark.skip(reason="missing role marker while NODE_ROLE_ONLY is enabled")
         if require_markers
         else None
     )

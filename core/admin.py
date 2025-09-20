@@ -1310,15 +1310,9 @@ class AssistantProfileAdmin(EntityModelAdmin):
             {
                 "mcp_status": status,
                 "mcp_server_actions": {
-                    "start": reverse(
-                        f"admin:{app_label}_{model_name}_start_server"
-                    ),
-                    "stop": reverse(
-                        f"admin:{app_label}_{model_name}_stop_server"
-                    ),
-                    "status": reverse(
-                        f"admin:{app_label}_{model_name}_status"
-                    ),
+                    "start": reverse(f"admin:{app_label}_{model_name}_start_server"),
+                    "stop": reverse(f"admin:{app_label}_{model_name}_stop_server"),
+                    "status": reverse(f"admin:{app_label}_{model_name}_status"),
                 },
             }
         )
@@ -1807,7 +1801,11 @@ class ClientReportAdmin(EntityModelAdmin):
         def __init__(self, *args, request=None, **kwargs):
             self.request = request
             super().__init__(*args, **kwargs)
-            if request and getattr(request, "user", None) and request.user.is_authenticated:
+            if (
+                request
+                and getattr(request, "user", None)
+                and request.user.is_authenticated
+            ):
                 self.fields["owner"].initial = request.user.pk
 
         def clean(self):

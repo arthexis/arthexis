@@ -116,9 +116,7 @@ class ChargerUrlFallbackTests(TestCase):
         charger.refresh_from_db()
 
         self.assertIsNotNone(charger.reference)
-        self.assertTrue(
-            charger.reference.value.startswith("http://fallback.example")
-        )
+        self.assertTrue(charger.reference.value.startswith("http://fallback.example"))
         self.assertTrue(charger.reference.value.endswith("/c/NO_SITE/"))
 
 
@@ -662,9 +660,7 @@ class ChargerLandingTests(TestCase):
     def test_connector_specific_routes_render(self):
         Charger.objects.create(charger_id="ROUTED")
         connector = Charger.objects.create(charger_id="ROUTED", connector_id=1)
-        page = self.client.get(
-            reverse("charger-page-connector", args=["ROUTED", "1"])
-        )
+        page = self.client.get(reverse("charger-page-connector", args=["ROUTED", "1"]))
         self.assertEqual(page.status_code, 200)
         status = self.client.get(
             reverse("charger-status-connector", args=["ROUTED", "1"])
@@ -751,9 +747,7 @@ class ChargerAdminTests(TestCase):
         url = reverse("admin:ocpp_charger_changelist")
         resp = self.client.get(url)
         self.assertContains(resp, charger.get_absolute_url())
-        status_url = reverse(
-            "charger-status-connector", args=["ADMIN1", "all"]
-        )
+        status_url = reverse("charger-status-connector", args=["ADMIN1", "all"])
         self.assertContains(resp, status_url)
 
     def test_admin_does_not_list_qr_link(self):
@@ -824,9 +818,7 @@ class ChargerAdminTests(TestCase):
         )
         self.assertFalse(Transaction.objects.filter(charger=charger).exists())
         self.assertFalse(MeterReading.objects.filter(charger=charger).exists())
-        self.assertNotIn(
-            store.identity_key("PURGE1", None), store.logs["charger"]
-        )
+        self.assertNotIn(store.identity_key("PURGE1", None), store.logs["charger"])
 
     def test_delete_requires_purge(self):
         charger = Charger.objects.create(charger_id="DEL1")
@@ -869,14 +861,13 @@ class LocationAdminTests(TestCase):
         self.assertEqual(resp.status_code, 200)
 
         base_change_url = reverse("admin:ocpp_charger_change", args=[base.pk])
-        connector_change_url = reverse(
-            "admin:ocpp_charger_change", args=[connector.pk]
-        )
+        connector_change_url = reverse("admin:ocpp_charger_change", args=[connector.pk])
 
         self.assertContains(resp, base_change_url)
         self.assertContains(resp, connector_change_url)
         self.assertContains(resp, f"Charge Point: {base.charger_id}")
         self.assertContains(resp, f"Charge Point: {connector.charger_id} #1")
+
 
 class TransactionAdminTests(TestCase):
     def setUp(self):
@@ -1679,12 +1670,8 @@ class ChargerStatusViewTests(TestCase):
 
     def test_aggregate_chart_includes_multiple_connectors(self):
         aggregate = Charger.objects.create(charger_id="VIEWAGG")
-        connector_one = Charger.objects.create(
-            charger_id="VIEWAGG", connector_id=1
-        )
-        connector_two = Charger.objects.create(
-            charger_id="VIEWAGG", connector_id=2
-        )
+        connector_one = Charger.objects.create(charger_id="VIEWAGG", connector_id=1)
+        connector_two = Charger.objects.create(charger_id="VIEWAGG", connector_id=2)
         base_time = timezone.now()
         tx_one = Transaction.objects.create(
             charger=connector_one, start_time=base_time, meter_start=0

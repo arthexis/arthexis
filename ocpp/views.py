@@ -431,19 +431,22 @@ def charger_page(request, cid, connector=None):
             for _, tx_obj in sessions:
                 if tx_obj.kw:
                     total_kw += tx_obj.kw
-            tx = SimpleNamespace(kw=total_kw, start_time=min(start_times) if start_times else None)
+            tx = SimpleNamespace(
+                kw=total_kw, start_time=min(start_times) if start_times else None
+            )
             active_connector_count = len(sessions)
     else:
-        tx = sessions[0][1] if sessions else store.get_transaction(cid, charger.connector_id)
+        tx = (
+            sessions[0][1]
+            if sessions
+            else store.get_transaction(cid, charger.connector_id)
+        )
         if tx:
             active_connector_count = 1
     language_cookie = request.COOKIES.get(settings.LANGUAGE_COOKIE_NAME)
     preferred_language = "es"
     supported_languages = {code for code, _ in settings.LANGUAGES}
-    if (
-        preferred_language in supported_languages
-        and not language_cookie
-    ):
+    if preferred_language in supported_languages and not language_cookie:
         translation.activate(preferred_language)
         request.LANGUAGE_CODE = translation.get_language()
     connector_links = [
@@ -494,11 +497,20 @@ def charger_status(request, cid, connector=None):
         elif not (live_tx and str(live_tx.pk) == session_id):
             tx_obj = get_object_or_404(Transaction, pk=session_id, charger=charger)
             past_session = True
-    state, color = _charger_state(charger, live_tx if charger.connector_id is not None else (sessions if sessions else None))
+    state, color = _charger_state(
+        charger,
+        (
+            live_tx
+            if charger.connector_id is not None
+            else (sessions if sessions else None)
+        ),
+    )
     if charger.connector_id is None:
-        transactions_qs = Transaction.objects.filter(
-            charger__charger_id=cid
-        ).select_related("charger").order_by("-start_time")
+        transactions_qs = (
+            Transaction.objects.filter(charger__charger_id=cid)
+            .select_related("charger")
+            .order_by("-start_time")
+        )
     else:
         transactions_qs = Transaction.objects.filter(charger=charger).order_by(
             "-start_time"
@@ -743,4 +755,3 @@ def dispatch_action(request, cid, connector=None):
     log_key = store.identity_key(cid, connector_value)
     store.add_log(log_key, f"< {msg}", log_type="charger")
     return JsonResponse({"sent": msg})
-
