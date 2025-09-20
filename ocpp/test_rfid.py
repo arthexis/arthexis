@@ -300,6 +300,7 @@ class RFIDDetectionScriptTests(SimpleTestCase):
         self.assertIn("missing hardware", buffer.getvalue())
         mock_detect.assert_called_once()
 
+
 class RestartViewTests(SimpleTestCase):
     @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")

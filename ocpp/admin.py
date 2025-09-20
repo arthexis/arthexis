@@ -130,11 +130,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         ),
         (
             "Configuration",
-            {
-                "fields": (
-                    "require_rfid",
-                )
-            },
+            {"fields": ("require_rfid",)},
         ),
         (
             "References",

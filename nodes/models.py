@@ -321,7 +321,15 @@ class Node(Entity):
             return False
         try:
             result = subprocess.run(
-                [nmcli_path, "-t", "-f", "NAME,DEVICE,TYPE", "connection", "show", "--active"],
+                [
+                    nmcli_path,
+                    "-t",
+                    "-f",
+                    "NAME,DEVICE,TYPE",
+                    "connection",
+                    "show",
+                    "--active",
+                ],
                 capture_output=True,
                 text=True,
                 check=False,

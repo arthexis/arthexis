@@ -95,7 +95,9 @@ def is_connected(serial: str, connector: int | str | None = None) -> bool:
 
     if connector in (None, "", AGGREGATE_SLUG):
         prefix = f"{serial}{IDENTITY_SEPARATOR}"
-        return any(key.startswith(prefix) for key in connections) or serial in connections
+        return (
+            any(key.startswith(prefix) for key in connections) or serial in connections
+        )
     return any(key in connections for key in _candidate_keys(serial, connector))
 
 

@@ -24,6 +24,7 @@ from django.middleware.csrf import CsrfViewMiddleware
 from django.core.exceptions import DisallowedHost
 from django.contrib.sites import shortcuts as sites_shortcuts
 from django.contrib.sites.requests import RequestSite
+from django.core.management.utils import get_random_secret_key
 from urllib.parse import urlsplit
 import django.utils.encoding as encoding
 
@@ -71,7 +72,29 @@ with contextlib.suppress(FileNotFoundError):
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-16%ed9hv^gg!jj5ff6d4w=t$50k^abkq75+vwl44%^+qyq!m#w"
+
+
+def _load_secret_key() -> str:
+    for env_var in ("DJANGO_SECRET_KEY", "SECRET_KEY"):
+        value = os.environ.get(env_var)
+        if value:
+            return value
+
+    secret_file = BASE_DIR / "locks" / "django-secret.key"
+    with contextlib.suppress(OSError):
+        stored_key = secret_file.read_text(encoding="utf-8").strip()
+        if stored_key:
+            return stored_key
+
+    generated_key = get_random_secret_key()
+    with contextlib.suppress(OSError):
+        secret_file.parent.mkdir(parents=True, exist_ok=True)
+        secret_file.write_text(generated_key, encoding="utf-8")
+
+    return generated_key
+
+
+SECRET_KEY = _load_secret_key()
 
 # SECURITY WARNING: don't run with debug turned on in production!
 

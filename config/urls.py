@@ -110,7 +110,7 @@ urlpatterns = [
     ),
     path("admindocs/", include("django.contrib.admindocs.urls")),
     path(
-        "admin/doc/", 
+        "admin/doc/",
         RedirectView.as_view(pattern_name="django-admindocs-docroot"),
     ),
     path(

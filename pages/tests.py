@@ -218,9 +218,7 @@ class InvitationTests(TestCase):
         "pages.views.public_wifi.resolve_mac_address",
         return_value="aa:bb:cc:dd:ee:ff",
     )
-    def test_invitation_login_grants_public_wifi_access(
-        self, mock_resolve, mock_grant
-    ):
+    def test_invitation_login_grants_public_wifi_access(self, mock_resolve, mock_grant):
         control_role, _ = NodeRole.objects.get_or_create(name="Control")
         feature = NodeFeature.objects.create(
             slug="ap-public-wifi", display="AP Public Wi-Fi"
@@ -672,7 +670,9 @@ class ConstellationNavTests(TestCase):
 
     def test_rfid_pill_hidden(self):
         resp = self.client.get(reverse("pages:index"))
-        nav_labels = [module.menu_label.upper() for module in resp.context["nav_modules"]]
+        nav_labels = [
+            module.menu_label.upper() for module in resp.context["nav_modules"]
+        ]
         self.assertNotIn("RFID", nav_labels)
         self.assertTrue(
             Module.objects.filter(
@@ -795,11 +795,7 @@ class LandingFixtureTests(TestCase):
         fixtures = sorted(
             fixtures,
             key=lambda path: (
-                0
-                if "__application_" in path
-                else 1
-                if "__module_" in path
-                else 2
+                0 if "__application_" in path else 1 if "__module_" in path else 2
             ),
         )
         call_command("loaddata", *fixtures)
@@ -1206,7 +1202,7 @@ class AdminModelGraphViewTests(TestCase):
         def pipe_side_effect(*args, **kwargs):
             fmt = kwargs.get("format") or (args[0] if args else None)
             if fmt == "svg":
-                return "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>"
+                return '<svg xmlns="http://www.w3.org/2000/svg"></svg>'
             if fmt == "pdf":
                 return b"%PDF-1.4 mock"
             raise AssertionError(f"Unexpected format: {fmt}")
@@ -1217,8 +1213,9 @@ class AdminModelGraphViewTests(TestCase):
     def test_model_graph_renders_controls_and_download_link(self):
         url = reverse("admin-model-graph", args=["pages"])
         graph = self._mock_graph()
-        with patch("pages.views._build_model_graph", return_value=graph), patch(
-            "pages.views.shutil.which", return_value="/usr/bin/dot"
+        with (
+            patch("pages.views._build_model_graph", return_value=graph),
+            patch("pages.views.shutil.which", return_value="/usr/bin/dot"),
         ):
             response = self.client.get(url)
 
@@ -1234,8 +1231,9 @@ class AdminModelGraphViewTests(TestCase):
     def test_model_graph_pdf_download(self):
         url = reverse("admin-model-graph", args=["pages"])
         graph = self._mock_graph()
-        with patch("pages.views._build_model_graph", return_value=graph), patch(
-            "pages.views.shutil.which", return_value="/usr/bin/dot"
+        with (
+            patch("pages.views._build_model_graph", return_value=graph),
+            patch("pages.views.shutil.which", return_value="/usr/bin/dot"),
         ):
             response = self.client.get(url, {"format": "pdf"})
 
@@ -1303,18 +1301,20 @@ class ScreenshotSpecInfrastructureTests(TestCase):
             ContentSample.objects.filter(hash="old-hash").update(
                 created_at=timezone.now() - timedelta(days=8)
             )
-            with patch(
-                "pages.screenshot_specs.base.capture_screenshot", return_value=screenshot_path
-            ) as capture_mock, patch(
-                "pages.screenshot_specs.base.save_screenshot", return_value=None
-            ) as save_mock:
+            with (
+                patch(
+                    "pages.screenshot_specs.base.capture_screenshot",
+                    return_value=screenshot_path,
+                ) as capture_mock,
+                patch(
+                    "pages.screenshot_specs.base.save_screenshot", return_value=None
+                ) as save_mock,
+            ):
                 with ScreenshotSpecRunner(temp_dir) as runner:
                     result = runner.run(spec)
             self.assertTrue(result.image_path.exists())
             self.assertTrue(result.base64_path.exists())
-            self.assertEqual(
-                ContentSample.objects.filter(hash="old-hash").count(), 0
-            )
+            self.assertEqual(ContentSample.objects.filter(hash="old-hash").count(), 0)
             capture_mock.assert_called_once()
             save_mock.assert_called_once_with(screenshot_path, method="spec:spec-test")
 

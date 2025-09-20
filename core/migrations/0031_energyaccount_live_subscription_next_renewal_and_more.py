@@ -16,9 +16,7 @@ def copy_live_subscriptions(apps, schema_editor):
             "live_subscription_start_date": subscription.start_date,
             "live_subscription_next_renewal": subscription.next_renewal,
         }
-        EnergyAccount.objects.filter(pk=subscription.account_id).update(
-            **update_kwargs
-        )
+        EnergyAccount.objects.filter(pk=subscription.account_id).update(**update_kwargs)
 
 
 class Migration(migrations.Migration):

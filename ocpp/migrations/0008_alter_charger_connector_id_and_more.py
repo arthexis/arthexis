@@ -33,9 +33,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(
-            normalize_connector_id_strings, migrations.RunPython.noop
-        ),
+        migrations.RunPython(normalize_connector_id_strings, migrations.RunPython.noop),
         migrations.AlterField(
             model_name="charger",
             name="connector_id",

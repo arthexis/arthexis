@@ -170,7 +170,9 @@ class ProfileInlineDeletionTests(TestCase):
                     max_num=1,
                 )
                 prefix = f"{model._meta.model_name}_set"
-                data = self._build_post_data(prefix, profile.pk, self._blank_form_values(model))
+                data = self._build_post_data(
+                    prefix, profile.pk, self._blank_form_values(model)
+                )
                 formset = formset_cls(data, instance=user, prefix=prefix)
                 self.assertTrue(
                     formset.is_valid(),
@@ -207,7 +209,9 @@ class ProfileInlineDeletionTests(TestCase):
                     max_num=1,
                 )
                 prefix = f"{model._meta.model_name}_set"
-                data = self._build_post_data(prefix, profile.pk, self._blank_form_values(model))
+                data = self._build_post_data(
+                    prefix, profile.pk, self._blank_form_values(model)
+                )
                 formset = formset_cls(data, instance=group, prefix=prefix)
                 self.assertTrue(
                     formset.is_valid(),
@@ -273,7 +277,9 @@ class ProfileInlineAdminTemplateTests(TestCase):
         url = reverse("admin:teams_securitygroup_change", args=[group.pk])
         response = self.client.get(url)
         content = response.content.decode()
-        prefixes = [fs.formset.prefix for fs in response.context_data["inline_admin_formsets"]]
+        prefixes = [
+            fs.formset.prefix for fs in response.context_data["inline_admin_formsets"]
+        ]
         self.assertTrue(
             re.search(r'name="-\d+-0-DELETE"', content),
             msg="Inline delete input should render as a hidden field on security group change view",
@@ -301,7 +307,9 @@ class ProfileInlineAdminTemplateTests(TestCase):
         url = reverse("admin:teams_securitygroup_add")
         response = self.client.get(url)
         content = response.content.decode()
-        prefixes = [fs.formset.prefix for fs in response.context_data["inline_admin_formsets"]]
+        prefixes = [
+            fs.formset.prefix for fs in response.context_data["inline_admin_formsets"]
+        ]
         for prefix in prefixes:
             selector = f'[data-inline-prefix="{prefix}"] .inline-deletelink'
             self.assertTrue(
@@ -316,4 +324,3 @@ class ProfileInlineAdminTemplateTests(TestCase):
                 f'[data-inline-prefix="{prefix}"] .fieldBox.field-DELETE' in content,
                 msg=f"Expected CSS to hide field boxes for inline prefix {prefix}",
             )
-

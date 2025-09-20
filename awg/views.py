@@ -178,9 +178,7 @@ def find_awg(
             elif limit_awg is None:
                 sizes = sorted(awg_data.keys(), reverse=True)
             else:
-                sizes = sorted(
-                    [s for s in awg_data.keys() if s >= int(AWG(limit_awg))]
-                )
+                sizes = sorted([s for s in awg_data.keys() if s >= int(AWG(limit_awg))])
 
             for awg_size in sizes:
                 base = awg_data[awg_size][1]
@@ -226,7 +224,9 @@ def find_awg(
                             if conduit:
                                 c = "emt" if conduit is True else conduit
                                 fill = find_conduit(
-                                    AWG(awg_size), n * (phases + ground_count), conduit=c
+                                    AWG(awg_size),
+                                    n * (phases + ground_count),
+                                    conduit=c,
                                 )
                                 result["conduit"] = c
                                 result["pipe_inch"] = fill["size_inch"]
@@ -239,7 +239,9 @@ def find_awg(
                             if conduit:
                                 c = "emt" if conduit is True else conduit
                                 fill = find_conduit(
-                                    AWG(awg_size), n * (phases + ground_count), conduit=c
+                                    AWG(awg_size),
+                                    n * (phases + ground_count),
+                                    conduit=c,
                                 )
                                 result["conduit"] = c
                                 result["pipe_inch"] = fill["size_inch"]
@@ -254,13 +256,13 @@ def find_awg(
                         "Voltage drop may exceed 3% with chosen parameters"
                     )
                 else:
-                    best["warning"] = _(
-                        "Voltage drop exceeds 3% with given max_awg"
-                    )
+                    best["warning"] = _("Voltage drop exceeds 3% with given max_awg")
                 if conduit:
                     c = "emt" if conduit is True else conduit
                     fill = find_conduit(
-                        AWG(best["awg"]), best["lines"] * (phases + ground_count), conduit=c
+                        AWG(best["awg"]),
+                        best["lines"] * (phases + ground_count),
+                        conduit=c,
                     )
                     best["conduit"] = c
                     best["pipe_inch"] = fill["size_inch"]

@@ -177,7 +177,9 @@ class OdooProfileInlineFormTests(TestCase):
             instance=OdooProfile(user=self.user),
         )
         self.assertFalse(form.is_valid())
-        self.assertIn("Provide host, database, username, and password", form.non_field_errors()[0])
+        self.assertIn(
+            "Provide host, database, username, and password", form.non_field_errors()[0]
+        )
 
     def test_clearing_existing_profile_marks_delete(self):
         profile = OdooProfile.objects.create(
