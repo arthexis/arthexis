@@ -46,6 +46,26 @@
         <strong id="charger-state">{{ state }}</strong>
       </div>
       <p>{% trans "Total Energy" %}: <span id="total-kw">{{ charger.total_kw|floatformat:2 }}</span> kW</p>
+      {% if charger.diagnostics_status or charger.diagnostics_timestamp or charger.diagnostics_location %}
+      <div class="mb-3">
+        <h2 class="h6 mb-1">{% trans "Diagnostics" %}</h2>
+        {% if charger.diagnostics_status %}
+        <p class="mb-1">
+          {% trans "Status" %}: <span id="diagnostics-status">{{ charger.diagnostics_status }}</span>
+        </p>
+        {% endif %}
+        {% if charger.diagnostics_timestamp %}
+        <p class="mb-1 text-muted">
+          <small>{% trans "Reported" %}: <span id="diagnostics-timestamp">{{ charger.diagnostics_timestamp|date:"SHORT_DATETIME_FORMAT" }}</span></small>
+        </p>
+        {% endif %}
+        {% if charger.diagnostics_location %}
+        <p class="mb-0 text-break">
+          <small>{% trans "Location" %}: <span id="diagnostics-location">{{ charger.diagnostics_location }}</span></small>
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
       {% if charger.temperature is not None %}
       <p>{% trans "Temperature" %}: <span id="temperature">{{ charger.temperature }}</span> {{ charger.temperature_unit }}</p>
       {% endif %}

@@ -167,6 +167,23 @@ def _charger_state(charger: Charger, tx_obj: Transaction | None):
     return _("Offline"), "grey"
 
 
+def _diagnostics_payload(charger: Charger) -> dict[str, str | None]:
+    """Return diagnostics metadata for API responses."""
+
+    timestamp = (
+        charger.diagnostics_timestamp.isoformat()
+        if charger.diagnostics_timestamp
+        else None
+    )
+    status = charger.diagnostics_status or None
+    location = charger.diagnostics_location or None
+    return {
+        "diagnosticsStatus": status,
+        "diagnosticsTimestamp": timestamp,
+        "diagnosticsLocation": location,
+    }
+
+
 @api_login_required
 def charger_list(request):
     """Return a JSON list of known chargers and state."""
@@ -217,25 +234,25 @@ def charger_list(request):
             if session_tx.stop_time is not None:
                 active_payload["stopTime"] = session_tx.stop_time.isoformat()
             active_transactions.append(active_payload)
-        data.append(
-            {
-                "charger_id": cid,
-                "name": charger.name,
-                "connector_id": charger.connector_id,
-                "connector_slug": charger.connector_slug,
-                "connector_label": charger.connector_label,
-                "require_rfid": charger.require_rfid,
-                "transaction": tx_data,
-                "activeTransactions": active_transactions,
-                "lastHeartbeat": (
-                    charger.last_heartbeat.isoformat()
-                    if charger.last_heartbeat
-                    else None
-                ),
-                "lastMeterValues": charger.last_meter_values,
-                "connected": store.is_connected(cid, charger.connector_id),
-            }
-        )
+        payload = {
+            "charger_id": cid,
+            "name": charger.name,
+            "connector_id": charger.connector_id,
+            "connector_slug": charger.connector_slug,
+            "connector_label": charger.connector_label,
+            "require_rfid": charger.require_rfid,
+            "transaction": tx_data,
+            "activeTransactions": active_transactions,
+            "lastHeartbeat": (
+                charger.last_heartbeat.isoformat()
+                if charger.last_heartbeat
+                else None
+            ),
+            "lastMeterValues": charger.last_meter_values,
+            "connected": store.is_connected(cid, charger.connector_id),
+        }
+        payload.update(_diagnostics_payload(charger))
+        data.append(payload)
     return JsonResponse({"chargers": data})
 
 
@@ -292,22 +309,22 @@ def charger_detail(request, cid, connector=None):
 
     log_key = store.identity_key(cid, charger.connector_id)
     log = store.get_logs(log_key, log_type="charger")
-    return JsonResponse(
-        {
-            "charger_id": cid,
-            "connector_id": charger.connector_id,
-            "connector_slug": connector_slug,
-            "name": charger.name,
-            "require_rfid": charger.require_rfid,
-            "transaction": tx_data,
-            "activeTransactions": active_transactions,
-            "lastHeartbeat": (
-                charger.last_heartbeat.isoformat() if charger.last_heartbeat else None
-            ),
-            "lastMeterValues": charger.last_meter_values,
-            "log": log,
-        }
-    )
+    payload = {
+        "charger_id": cid,
+        "connector_id": charger.connector_id,
+        "connector_slug": connector_slug,
+        "name": charger.name,
+        "require_rfid": charger.require_rfid,
+        "transaction": tx_data,
+        "activeTransactions": active_transactions,
+        "lastHeartbeat": (
+            charger.last_heartbeat.isoformat() if charger.last_heartbeat else None
+        ),
+        "lastMeterValues": charger.last_meter_values,
+        "log": log,
+    }
+    payload.update(_diagnostics_payload(charger))
+    return JsonResponse(payload)
 
 
 @login_required
