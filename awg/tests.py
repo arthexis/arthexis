@@ -236,7 +236,10 @@ class AWGCalculatorTests(TestCase):
 
     def test_ev_charger_template_values(self):
         tmpl = CalculatorTemplate.objects.get(name="EV Charger")
-        self.assertEqual(tmpl.description, "Residential charging for a single EV.")
+        self.assertEqual(
+            tmpl.description,
+            "EV Charger - Residential charging for a single Electric Vehicle.",
+        )
         self.assertEqual(tmpl.amps, 40)
         self.assertEqual(tmpl.volts, 220)
         self.assertEqual(tmpl.max_lines, 1)
