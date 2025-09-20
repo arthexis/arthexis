@@ -11,7 +11,7 @@
 - Работает на [Windows 11](https://www.microsoft.com/windows/windows-11) и [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Протестирован на [Raspberry Pi 4 Model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 
-## Архитектура из четырёх ролей
+## Архитектура из ролей
 
 Созвездие Arthexis поставляется в четырёх ролях узлов, чтобы адаптировать платформу к различным сценариям развёртывания.
 

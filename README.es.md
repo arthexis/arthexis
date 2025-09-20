@@ -11,7 +11,7 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
 - Funciona en [Windows 11](https://www.microsoft.com/es-es/windows/windows-11) y [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Probado para la [Raspberry Pi 4 Modelo B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 
-## Arquitectura de cuatro roles
+## Arquitectura de roles
 
 Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plataforma a distintos escenarios de despliegue.
 
