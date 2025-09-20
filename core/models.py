@@ -9,15 +9,16 @@ from django.db.models.functions import Lower
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
-from django.core.validators import RegexValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.core.exceptions import ValidationError
 from django.apps import apps
 from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
-from datetime import timedelta
+from datetime import time as datetime_time, timedelta
 from django.contrib.contenttypes.models import ContentType
 import hashlib
 import os
+import calendar
 import subprocess
 import secrets
 import re
@@ -1045,6 +1046,166 @@ class RFID(Entity):
         verbose_name_plural = "RFIDs"
         db_table = "core_rfid"
 
+
+class EnergyTariffManager(EntityManager):
+    def get_by_natural_key(
+        self,
+        year: int,
+        month: int,
+        zone: str,
+        contract_type: str,
+        time_of_day: str,
+        start_time,
+        end_time,
+    ):
+        if isinstance(start_time, str):
+            start_time = datetime_time.fromisoformat(start_time)
+        if isinstance(end_time, str):
+            end_time = datetime_time.fromisoformat(end_time)
+        return self.get(
+            year=year,
+            month=month,
+            zone=zone,
+            contract_type=contract_type,
+            time_of_day=time_of_day,
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+
+class EnergyTariff(Entity):
+    class Zone(models.TextChoices):
+        ONE = "1", _("Zone 1")
+        ONE_A = "1A", _("Zone 1A")
+        ONE_B = "1B", _("Zone 1B")
+        ONE_C = "1C", _("Zone 1C")
+        ONE_D = "1D", _("Zone 1D")
+        ONE_E = "1E", _("Zone 1E")
+        ONE_F = "1F", _("Zone 1F")
+
+    class TimeOfDay(models.TextChoices):
+        FLAT = "flat", _("All day")
+        BASE = "base", _("Base")
+        INTERMEDIATE = "intermediate", _("Intermediate")
+        PEAK = "peak", _("Peak")
+        CRITICAL_PEAK = "critical_peak", _("Critical peak")
+
+    class ContractType(models.TextChoices):
+        DOMESTIC = "domestic", _("Domestic service (Tarifa 1)")
+        DAC = "dac", _("High consumption domestic (DAC)")
+        PDBT = "pdbt", _("General service low demand (PDBT)")
+        GDMTO = "gdmto", _("General distribution medium tension (GDMTO)")
+        GDMTH = "gdmth", _("General distribution medium tension hourly (GDMTH)")
+
+    MONTH_CHOICES = tuple(
+        (month_index, _(calendar.month_name[month_index]))
+        for month_index in range(1, 13)
+    )
+
+    year = models.PositiveIntegerField(
+        validators=[MinValueValidator(2000)],
+        help_text=_("Calendar year when the tariff applies."),
+    )
+    month = models.PositiveSmallIntegerField(
+        choices=MONTH_CHOICES,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        help_text=_("Calendar month when the tariff applies."),
+    )
+    zone = models.CharField(
+        max_length=3,
+        choices=Zone.choices,
+        help_text=_("CFE climate zone associated with the tariff."),
+    )
+    contract_type = models.CharField(
+        max_length=16,
+        choices=ContractType.choices,
+        help_text=_("Type of service contract regulated by CFE."),
+    )
+    time_of_day = models.CharField(
+        max_length=32,
+        choices=TimeOfDay.choices,
+        help_text=_("Day-part or consumption block where the tariff applies."),
+    )
+    start_time = models.TimeField(
+        help_text=_("Start time for the tariff's applicability window."),
+    )
+    end_time = models.TimeField(
+        help_text=_("End time for the tariff's applicability window."),
+    )
+    price_mxn = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        help_text=_("Customer price per kWh in MXN."),
+    )
+    cost_mxn = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        help_text=_("Provider cost per kWh in MXN."),
+    )
+
+    objects = EnergyTariffManager()
+
+    class Meta:
+        verbose_name = _("Energy Tariff")
+        verbose_name_plural = _("Energy Tariffs")
+        ordering = (
+            "-year",
+            "-month",
+            "zone",
+            "contract_type",
+            "time_of_day",
+            "start_time",
+        )
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "year",
+                    "month",
+                    "zone",
+                    "contract_type",
+                    "time_of_day",
+                    "start_time",
+                    "end_time",
+                ],
+                name="uniq_energy_tariff_schedule",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["year", "month", "zone", "contract_type"],
+                name="energy_tariff_schedule_idx",
+            )
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.start_time >= self.end_time:
+            raise ValidationError(
+                {"end_time": _("End time must be after the start time.")}
+            )
+
+    def __str__(self):  # pragma: no cover - simple representation
+        month_label = dict(self.MONTH_CHOICES).get(self.month, str(self.month))
+        return _("%(contract)s %(zone)s %(month)s %(year)s (%(period)s)") % {
+            "contract": self.get_contract_type_display(),
+            "zone": self.zone,
+            "month": month_label,
+            "year": self.year,
+            "period": self.get_time_of_day_display(),
+        }
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        return (
+            self.year,
+            self.month,
+            self.zone,
+            self.contract_type,
+            self.time_of_day,
+            self.start_time.isoformat(),
+            self.end_time.isoformat(),
+        )
+
+    natural_key.dependencies = []  # type: ignore[attr-defined]
 
 class EnergyAccount(Entity):
     """Track kW energy credits for a user."""

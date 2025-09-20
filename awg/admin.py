@@ -1,7 +1,8 @@
 from django.contrib import admin
 from django import forms
+from django.utils.translation import gettext_lazy as _
 
-from .models import CableSize, ConduitFill, CalculatorTemplate, PowerLead
+from .models import CableSize, ConduitFill, CalculatorTemplate, EnergyTariff, PowerLead
 from core.user_data import EntityModelAdmin
 
 
@@ -138,3 +139,55 @@ class PowerLeadAdmin(EntityModelAdmin):
         "ip_address",
         "values",
     )
+
+
+@admin.register(EnergyTariff)
+class EnergyTariffAdmin(EntityModelAdmin):
+    list_display = (
+        "year",
+        "month_name",
+        "zone",
+        "contract_type_label",
+        "time_of_day_label",
+        "start_time",
+        "end_time",
+        "price_mxn",
+        "cost_mxn",
+    )
+    list_filter = (
+        "year",
+        "month",
+        "zone",
+        "contract_type",
+        "time_of_day",
+    )
+    search_fields = ("zone", "contract_type")
+    ordering = ("-year", "-month", "zone", "contract_type", "time_of_day", "start_time")
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "year",
+                    "month",
+                    "zone",
+                    "contract_type",
+                    "time_of_day",
+                    ("start_time", "end_time"),
+                    ("price_mxn", "cost_mxn"),
+                )
+            },
+        ),
+    )
+
+    @admin.display(description=_("Month"), ordering="month")
+    def month_name(self, obj):
+        return obj.get_month_display()
+
+    @admin.display(description=_("Contract type"), ordering="contract_type")
+    def contract_type_label(self, obj):
+        return obj.get_contract_type_display()
+
+    @admin.display(description=_("Time of day"), ordering="time_of_day")
+    def time_of_day_label(self, obj):
+        return obj.get_time_of_day_display()

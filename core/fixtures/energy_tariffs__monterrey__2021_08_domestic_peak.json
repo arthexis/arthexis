@@ -1,0 +1,16 @@
+[
+  {
+    "model": "core.energytariff",
+    "fields": {
+      "year": 2021,
+      "month": 8,
+      "zone": "1C",
+      "contract_type": "domestic",
+      "time_of_day": "peak",
+      "start_time": "00:00:00",
+      "end_time": "23:59:59",
+      "price_mxn": "1.1580",
+      "cost_mxn": "1.1580"
+    }
+  }
+]
