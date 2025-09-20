@@ -626,30 +626,41 @@ class ClientReportForm(forms.Form):
     ]
     RECURRENCE_CHOICES = ClientReportSchedule.PERIODICITY_CHOICES
     period = forms.ChoiceField(
-        choices=PERIOD_CHOICES, widget=forms.RadioSelect, initial="range"
+        choices=PERIOD_CHOICES,
+        widget=forms.RadioSelect,
+        initial="range",
+        help_text=_("Choose how the reporting window will be calculated."),
     )
     start = forms.DateField(
         label=_("Start date"),
         required=False,
         widget=forms.DateInput(attrs={"type": "date"}),
+        help_text=_("First day included when using a custom date range."),
     )
     end = forms.DateField(
         label=_("End date"),
         required=False,
         widget=forms.DateInput(attrs={"type": "date"}),
+        help_text=_("Last day included when using a custom date range."),
     )
     week = forms.CharField(
         label=_("Week"),
         required=False,
         widget=forms.TextInput(attrs={"type": "week"}),
+        help_text=_("Generates the report for the ISO week that you select."),
     )
     month = forms.DateField(
         label=_("Month"),
         required=False,
         widget=forms.DateInput(attrs={"type": "month"}),
+        help_text=_("Generates the report for the calendar month that you select."),
     )
     owner = forms.ModelChoiceField(
-        queryset=get_user_model().objects.all(), required=False
+        queryset=get_user_model().objects.all(),
+        required=False,
+        help_text=_(
+            "Sets who owns the report schedule and is listed as the requestor."
+        ),
     )
     destinations = forms.CharField(
         label=_("Email destinations"),
@@ -661,6 +672,7 @@ class ClientReportForm(forms.Form):
         label=_("Recurrency"),
         choices=RECURRENCE_CHOICES,
         initial=ClientReportSchedule.PERIODICITY_NONE,
+        help_text=_("Defines how often the report should be generated automatically."),
     )
     disable_emails = forms.BooleanField(
         label=_("Disable email delivery"),
