@@ -152,8 +152,21 @@ chmod 700 "$RUN_DIR"
 printf '%s\n' "$PASSWORD" > "$PASSWORD_FILE"
 chmod 600 "$PASSWORD_FILE"
 
-AP_UUID="$(uuidgen)"
-ETH_UUID="$(uuidgen)"
+generate_uuid() {
+  if command -v uuidgen >/dev/null 2>&1; then
+    uuidgen
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - <<'PY'
+import uuid
+print(uuid.uuid4())
+PY
+  else
+    error "Neither uuidgen nor python3 is available to generate UUIDs. Install uuid-runtime or Python 3."
+  fi
+}
+
+AP_UUID="$(generate_uuid)"
+ETH_UUID="$(generate_uuid)"
 
 IMAGE_NAME="arthexis-${ROLE}-${HOSTNAME}"
 CONFIG_FILE="$CONFIG_DIR/${IMAGE_NAME}.yaml"
