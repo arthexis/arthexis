@@ -390,6 +390,22 @@ class ViewHistoryLoggingTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(ViewHistory.objects.exists())
 
+    def test_authenticated_user_last_visit_ip_updated(self):
+        User = get_user_model()
+        user = User.objects.create_user(
+            username="history_user", password="pwd", email="history@example.com"
+        )
+        self.assertTrue(self.client.login(username="history_user", password="pwd"))
+
+        resp = self.client.get(
+            reverse("pages:index"),
+            HTTP_X_FORWARDED_FOR="203.0.113.5",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.last_visit_ip_address, "203.0.113.5")
+
 
 class ViewHistoryAdminTests(TestCase):
     def setUp(self):
