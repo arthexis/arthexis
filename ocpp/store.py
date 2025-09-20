@@ -14,12 +14,15 @@ IDENTITY_SEPARATOR = "#"
 AGGREGATE_SLUG = "all"
 PENDING_SLUG = "pending"
 
+MAX_CONNECTIONS_PER_IP = 2
+
 connections: dict[str, object] = {}
 transactions: dict[str, object] = {}
 logs: dict[str, dict[str, list[str]]] = {"charger": {}, "simulator": {}}
 # store per charger session logs before they are flushed to disk
 history: dict[str, dict[str, object]] = {}
 simulators = {}
+ip_connections: dict[str, set[object]] = {}
 
 # mapping of charger id / cp_path to friendly names used for log files
 log_names: dict[str, dict[str, str]] = {"charger": {}, "simulator": {}}
@@ -49,6 +52,33 @@ def identity_key(serial: str, connector: int | str | None) -> str:
     """Return the identity key used for in-memory store lookups."""
 
     return f"{serial}{IDENTITY_SEPARATOR}{connector_slug(connector)}"
+
+
+def register_ip_connection(ip: str | None, consumer: object) -> bool:
+    """Track a websocket connection for the provided client IP."""
+
+    if not ip:
+        return True
+    conns = ip_connections.setdefault(ip, set())
+    if consumer in conns:
+        return True
+    if len(conns) >= MAX_CONNECTIONS_PER_IP:
+        return False
+    conns.add(consumer)
+    return True
+
+
+def release_ip_connection(ip: str | None, consumer: object) -> None:
+    """Remove a websocket connection from the active client registry."""
+
+    if not ip:
+        return
+    conns = ip_connections.get(ip)
+    if not conns:
+        return
+    conns.discard(consumer)
+    if not conns:
+        ip_connections.pop(ip, None)
 
 
 def pending_key(serial: str) -> str:

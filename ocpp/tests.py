@@ -989,6 +989,78 @@ class CSMSConsumerTests(TransactionTestCase):
         store.transactions.pop(key2, None)
 
 
+    async def test_rate_limit_blocks_third_connection(self):
+        store.ip_connections.clear()
+        ip = "203.0.113.10"
+        communicator1 = ClientWebsocketCommunicator(
+            application, "/IPLIMIT1/", client=(ip, 1001)
+        )
+        communicator2 = ClientWebsocketCommunicator(
+            application, "/IPLIMIT2/", client=(ip, 1002)
+        )
+        communicator3 = ClientWebsocketCommunicator(
+            application, "/IPLIMIT3/", client=(ip, 1003)
+        )
+        other = ClientWebsocketCommunicator(
+            application, "/OTHERIP/", client=("198.51.100.5", 2001)
+        )
+        connected1 = connected2 = connected_other = False
+        try:
+            connected1, _ = await communicator1.connect()
+            self.assertTrue(connected1)
+            connected2, _ = await communicator2.connect()
+            self.assertTrue(connected2)
+            connected3, code = await communicator3.connect()
+            self.assertFalse(connected3)
+            self.assertEqual(code, 4003)
+            connected_other, _ = await other.connect()
+            self.assertTrue(connected_other)
+        finally:
+            if connected1:
+                await communicator1.disconnect()
+            if connected2:
+                await communicator2.disconnect()
+            if connected_other:
+                await other.disconnect()
+
+    async def test_rate_limit_allows_reconnect_after_disconnect(self):
+        store.ip_connections.clear()
+        ip = "203.0.113.20"
+        communicator1 = ClientWebsocketCommunicator(
+            application, "/LIMITRESET1/", client=(ip, 3001)
+        )
+        communicator2 = ClientWebsocketCommunicator(
+            application, "/LIMITRESET2/", client=(ip, 3002)
+        )
+        communicator3 = ClientWebsocketCommunicator(
+            application, "/LIMITRESET3/", client=(ip, 3003)
+        )
+        communicator3_retry = None
+        connected1 = connected2 = connected3_retry = False
+        try:
+            connected1, _ = await communicator1.connect()
+            self.assertTrue(connected1)
+            connected2, _ = await communicator2.connect()
+            self.assertTrue(connected2)
+            connected3, code = await communicator3.connect()
+            self.assertFalse(connected3)
+            self.assertEqual(code, 4003)
+            await communicator1.disconnect()
+            connected1 = False
+            communicator3_retry = ClientWebsocketCommunicator(
+                application, "/LIMITRESET4/", client=(ip, 3004)
+            )
+            connected3_retry, _ = await communicator3_retry.connect()
+            self.assertTrue(connected3_retry)
+        finally:
+            if connected1:
+                await communicator1.disconnect()
+            if connected2:
+                await communicator2.disconnect()
+            if connected3_retry and communicator3_retry is not None:
+                await communicator3_retry.disconnect()
+
+
 class ChargerLandingTests(TestCase):
     def setUp(self):
         self.client = Client()
@@ -2377,3 +2449,52 @@ class LiveUpdateViewTests(TestCase):
         resp = self.client.get(reverse("cp-simulator"))
         self.assertEqual(resp.context["request"].live_update_interval, 5)
         self.assertContains(resp, "setInterval(() => location.reload()")
+
+
+class DashboardAccessTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.constellation_role, _ = NodeRole.objects.get_or_create(
+            name="Constellation"
+        )
+        self.terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
+        )
+        self.app, _ = Application.objects.get_or_create(name="ocpp")
+        Module.objects.update_or_create(
+            node_role=self.constellation_role,
+            path="/ocpp/",
+            defaults={"application": self.app},
+        )
+        Module.objects.update_or_create(
+            node_role=self.terminal_role,
+            path="/ocpp/",
+            defaults={"application": self.app},
+        )
+
+    def _set_role(self, role):
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": "localhost",
+                "address": "127.0.0.1",
+                "role": role,
+            },
+        )
+
+    def test_non_constellation_requires_login(self):
+        self._set_role(self.terminal_role)
+        resp = self.client.get(reverse("ocpp-dashboard"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(reverse("pages:login"), resp["Location"])
+
+    def test_constellation_dashboard_public(self):
+        self._set_role(self.constellation_role)
+        resp = self.client.get(reverse("ocpp-dashboard"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Demo OCPP 1.6 CSMS")
+        self.assertIn("demo_ws_url", resp.context)
+        self.assertIn("ws_rate_limit", resp.context)
+        self.assertEqual(resp.context["ws_rate_limit"], store.MAX_CONNECTIONS_PER_IP)
+        self.assertTrue(resp.context["demo_ws_url"].startswith("ws"))

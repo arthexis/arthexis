@@ -22,7 +22,15 @@ class SinkConsumer(AsyncWebsocketConsumer):
 
     @requires_network
     async def connect(self) -> None:
+        client = self.scope.get("client")
+        self.client_ip = client[0] if client else None
+        if not store.register_ip_connection(self.client_ip, self):
+            await self.close(code=4003)
+            return
         await self.accept()
+
+    async def disconnect(self, close_code):
+        store.release_ip_connection(getattr(self, "client_ip", None), self)
 
     async def receive(
         self, text_data: str | None = None, bytes_data: bytes | None = None
@@ -54,12 +62,23 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         offered = self.scope.get("subprotocols", [])
         if "ocpp1.6" in offered:
             subprotocol = "ocpp1.6"
+        client = self.scope.get("client")
+        self.client_ip = client[0] if client else None
         # Close any pending connection for this charger so reconnections do
         # not leak stale consumers when the connector id has not been
         # negotiated yet.
         existing = store.connections.get(self.store_key)
         if existing is not None:
+            store.release_ip_connection(getattr(existing, "client_ip", None), existing)
             await existing.close()
+        if not store.register_ip_connection(self.client_ip, self):
+            store.add_log(
+                self.store_key,
+                f"Rejected connection from {self.client_ip or 'unknown'}: rate limit exceeded",
+                log_type="charger",
+            )
+            await self.close(code=4003)
+            return
         await self.accept(subprotocol=subprotocol)
         store.add_log(
             self.store_key,
@@ -411,6 +430,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         self._consumption_task = task
 
     async def disconnect(self, close_code):
+        store.release_ip_connection(getattr(self, "client_ip", None), self)
         tx_obj = None
         if self.charger_id:
             tx_obj = store.get_transaction(self.charger_id, self.connector_value)
