@@ -85,7 +85,12 @@ class AssistantProfileAdminTests(TestCase):
 
     @mock.patch.object(mcp_process, "get_status")
     def test_status_action_reports_running_state(self, get_status):
-        get_status.return_value = {"running": True, "pid": 42, "log_excerpt": "", "last_error": ""}
+        get_status.return_value = {
+            "running": True,
+            "pid": 42,
+            "log_excerpt": "",
+            "last_error": "",
+        }
         url = reverse("admin:teams_assistantprofile_status")
         response = self.client.get(url)
         self.assertRedirects(

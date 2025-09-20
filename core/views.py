@@ -410,9 +410,9 @@ def live_subscription_list(request):
         return JsonResponse({"detail": "account_id required"}, status=400)
 
     try:
-        account = EnergyAccount.objects.select_related(
-            "live_subscription_product"
-        ).get(id=account_id)
+        account = EnergyAccount.objects.select_related("live_subscription_product").get(
+            id=account_id
+        )
     except EnergyAccount.DoesNotExist:
         return JsonResponse({"detail": "invalid account"}, status=404)
 
@@ -420,10 +420,7 @@ def live_subscription_list(request):
     product = account.live_subscription_product
     if product:
         next_renewal = account.live_subscription_next_renewal
-        if (
-            not next_renewal
-            and account.live_subscription_start_date
-        ):
+        if not next_renewal and account.live_subscription_start_date:
             next_renewal = account.live_subscription_start_date + timedelta(
                 days=product.renewal_period
             )

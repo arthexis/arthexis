@@ -12,9 +12,7 @@ def test_current_hostname_is_allowed():
 
 
 def test_mdns_variant_is_generated():
-    variants = settings_module._iter_local_hostnames(
-        "gway-001", "gway-001.arthexis"
-    )
+    variants = settings_module._iter_local_hostnames("gway-001", "gway-001.arthexis")
     assert "gway-001" in variants
     assert "gway-001.arthexis" in variants
     assert "gway-001.local" in variants

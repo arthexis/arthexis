@@ -42,6 +42,7 @@ fi
 VENV_DIR="$SCRIPT_DIR/.venv"
 PYTHON="$VENV_DIR/bin/python"
 USE_SYSTEM_PYTHON=0
+FORCE_REQUIREMENTS_INSTALL=0
 
 LATEST=0
 CLEAN=0
@@ -63,9 +64,16 @@ done
 
 if [ ! -f "$PYTHON" ]; then
   if command -v python3 >/dev/null 2>&1; then
-    PYTHON="$(command -v python3)"
-    USE_SYSTEM_PYTHON=1
-    echo "Virtual environment not found. Using system Python." >&2
+    if python3 -m venv "$VENV_DIR" >/dev/null 2>&1; then
+      PYTHON="$VENV_DIR/bin/python"
+      USE_SYSTEM_PYTHON=0
+      FORCE_REQUIREMENTS_INSTALL=1
+      echo "Virtual environment not found. Bootstrapping new virtual environment." >&2
+    else
+      PYTHON="$(command -v python3)"
+      USE_SYSTEM_PYTHON=1
+      echo "Virtual environment not found and automatic creation failed. Using system Python." >&2
+    fi
   else
     echo "Python interpreter not found. Run ./install.sh first. Skipping." >&2
     exit 0
@@ -120,6 +128,19 @@ PY
     fi
     "$PYTHON" -m pip install "${pip_args[@]}" -r "$REQ_FILE"
     echo "$NEW_HASH" > "$MD5_FILE"
+  fi
+elif [ -f "$REQ_FILE" ]; then
+  MD5_FILE="$SCRIPT_DIR/requirements.system.md5"
+  NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
+  STORED_HASH=""
+  [ -f "$MD5_FILE" ] && STORED_HASH=$(cat "$MD5_FILE")
+  if [ "$NEW_HASH" != "$STORED_HASH" ]; then
+    if "$PYTHON" -m pip install -r "$REQ_FILE"; then
+      echo "$NEW_HASH" > "$MD5_FILE"
+    else
+      echo "Failed to install project requirements with system Python. Run ./install.sh." >&2
+      exit 1
+    fi
   fi
 fi
 

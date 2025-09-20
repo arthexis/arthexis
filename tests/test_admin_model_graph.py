@@ -19,9 +19,7 @@ class AdminModelGraphTests(TestCase):
         response = self.client.get(reverse("admin:index"))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-app-graph="teams"')
-        self.assertNotContains(
-            response, reverse("admin-model-graph", args=["teams"])
-        )
+        self.assertNotContains(response, reverse("admin-model-graph", args=["teams"]))
 
     def test_admin_docs_index_links_to_model_graphs(self):
         response = self.client.get(reverse("django-admindocs-docroot"))
@@ -47,11 +45,12 @@ class AdminModelGraphTests(TestCase):
 
     def test_model_graph_view_renders_context(self):
         url = reverse("admin-model-graph", args=["teams"])
-        with mock.patch(
-            "pages.views.shutil.which", return_value="/usr/bin/dot"
-        ), mock.patch(
-            "graphviz.graphs.Digraph.pipe",
-            return_value="<svg class='mock-diagram'></svg>",
+        with (
+            mock.patch("pages.views.shutil.which", return_value="/usr/bin/dot"),
+            mock.patch(
+                "graphviz.graphs.Digraph.pipe",
+                return_value="<svg class='mock-diagram'></svg>",
+            ),
         ):
             response = self.client.get(url)
 
@@ -62,7 +61,7 @@ class AdminModelGraphTests(TestCase):
         self.assertIn("<svg", response.context["graph_svg"])
         self.assertEqual(response.context["graph_error"], "")
         self.assertContains(response, "Included models")
-        self.assertContains(response, "role=\"img\"")
+        self.assertContains(response, 'role="img"')
 
     def test_model_graph_view_handles_missing_graphviz(self):
         url = reverse("admin-model-graph", args=["teams"])

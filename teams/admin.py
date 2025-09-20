@@ -10,6 +10,7 @@ from core.models import (
     OdooProfile as CoreOdooProfile,
     AssistantProfile as CoreAssistantProfile,
 )
+from awg.admin import PowerLeadAdmin as CorePowerLeadAdmin
 from nodes.models import EmailOutbox as CoreEmailOutbox
 from core.admin import (
     InviteLeadAdmin,
@@ -31,6 +32,7 @@ from .models import (
     EmailCollector,
     ReleaseManager,
     EmailOutbox,
+    PowerLead,
     OdooProfile,
     AssistantProfile,
 )
@@ -68,6 +70,11 @@ class ReleaseManagerAdminProxy(ReleaseManagerAdmin):
 
 @admin.register(EmailOutbox)
 class EmailOutboxAdminProxy(EmailOutboxAdmin):
+    pass
+
+
+@admin.register(PowerLead)
+class PowerLeadAdminProxy(CorePowerLeadAdmin):
     pass
 
 

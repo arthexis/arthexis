@@ -1,4 +1,5 @@
 """Utilities for declarative screenshot specifications."""
+
 from __future__ import annotations
 
 import base64
@@ -130,7 +131,9 @@ class _LiveServerHarness(StaticLiveServerTestCase):
 class ScreenshotSpecRunner:
     """Context manager that executes screenshot specs."""
 
-    def __init__(self, output_dir: Path | str, *, retention: timedelta | None = timedelta(days=7)) -> None:
+    def __init__(
+        self, output_dir: Path | str, *, retention: timedelta | None = timedelta(days=7)
+    ) -> None:
         self.output_dir = Path(output_dir)
         self.retention = retention
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -153,14 +156,18 @@ class ScreenshotSpecRunner:
         context.add_client_cookies()
         url = context.build_url(spec.url)
         screenshot_path = capture_screenshot(url, cookies=context.cookies or None)
-        sample = save_screenshot(screenshot_path, method=f"{SPEC_METHOD_PREFIX}{spec.slug}")
+        sample = save_screenshot(
+            screenshot_path, method=f"{SPEC_METHOD_PREFIX}{spec.slug}"
+        )
         self._cleanup_content_samples()
         image_path = self.output_dir / f"{spec.slug}.png"
         shutil.copyfile(screenshot_path, image_path)
         base64_path = self.output_dir / f"{spec.slug}.base64"
         encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
         base64_path.write_text(encoded, encoding="utf-8")
-        return ScreenshotResult(spec=spec, image_path=image_path, base64_path=base64_path, sample=sample)
+        return ScreenshotResult(
+            spec=spec, image_path=image_path, base64_path=base64_path, sample=sample
+        )
 
     def _cleanup_content_samples(self) -> None:
         if not self.retention:

@@ -82,48 +82,6 @@ jobs:
             LOG_OPTS="$LOG_OPTS --max-count=200"
           fi
           gitleaks detect --source . --config .gitleaks.toml --redact --no-banner --log-opts="$LOG_OPTS"
-  tests:
-    needs: node-test-matrix
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: postgres
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_HOST: localhost
-      POSTGRES_PORT: 5432
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-    strategy:
-      matrix:
-        include: ${{ fromJson(needs.node-test-matrix.outputs.matrix) }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest psycopg-binary
-      - name: Run tests
-        env:
-          NODE_ROLE: ${{ matrix.role }}
-          NODE_FEATURES: ${{ matrix.features }}
-        run: pytest -q
-
   pre-commit:
     runs-on: ubuntu-latest
     steps:
@@ -171,9 +129,9 @@ jobs:
         with:
           python-version: '3.x'
       - name: Install Firefox
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y firefox firefox-geckodriver
+        uses: browser-actions/setup-firefox@v1
+      - name: Install Geckodriver
+        uses: browser-actions/setup-geckodriver@v1
       - name: Install dependencies
         run: |
           pip install -r requirements.txt

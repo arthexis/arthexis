@@ -28,7 +28,9 @@ class AdminDocsModelGroupsTests(TestCase):
             re.S,
         )
         match = pattern.search(content)
-        self.assertIsNotNone(match, f"{group_name} group should be present in admin docs")
+        self.assertIsNotNone(
+            match, f"{group_name} group should be present in admin docs"
+        )
         return match.group("body")
 
     def test_model_groups_ordered(self):
