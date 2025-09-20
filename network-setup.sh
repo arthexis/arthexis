@@ -41,6 +41,8 @@ INSTALL_WATCHDOG=true
 SKIP_VNC=false
 DEFAULT_AP_NAME="gelectriic-ap"
 AP_NAME="$DEFAULT_AP_NAME"
+AP_SPECIFIED=false
+AP_NAME_LOWER=""
 SKIP_AP=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -57,6 +59,7 @@ while [[ $# -gt 0 ]]; do
                 echo "Error: --ap requires a non-empty name." >&2
                 exit 1
             fi
+            AP_SPECIFIED=true
             shift
             ;;
         --ap=*)
@@ -65,6 +68,7 @@ while [[ $# -gt 0 ]]; do
                 echo "Error: --ap requires a non-empty name." >&2
                 exit 1
             fi
+            AP_SPECIFIED=true
             ;;
         --no-firewall)
             SKIP_FIREWALL=true
@@ -238,6 +242,11 @@ fi
 
 # Determine access point name and password before running steps
 HYPERLINE_NAME="hyperline"
+AP_NAME_LOWER="$(printf '%s' "$AP_NAME" | tr '[:upper:]' '[:lower:]')"
+AP_HYPERLINE_BY_USER=false
+if [[ $AP_SPECIFIED == true && "$AP_NAME_LOWER" == "$HYPERLINE_NAME" ]]; then
+    AP_HYPERLINE_BY_USER=true
+fi
 EXISTING_PASS=""
 WIFI_PASS=""
 if [[ $SKIP_AP == false ]]; then
@@ -567,20 +576,24 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
             nmcli connection delete "$con"
         done
 
-        nmcli connection delete "$HYPERLINE_NAME" 2>/dev/null || true
-        nmcli connection add type wifi ifname wlan0 con-name "$HYPERLINE_NAME" \
-            connection.interface-name wlan0 \
-            ssid "Hyperline" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "arthexis" \
-            autoconnect yes connection.autoconnect-priority 20 \
-            ipv4.method auto ipv6.method ignore ipv4.route-metric 50
+        if [[ $AP_HYPERLINE_BY_USER == true ]]; then
+            echo "Skipping Hyperline client connection setup because access point name is '$AP_NAME'."
+        else
+            nmcli connection delete "$HYPERLINE_NAME" 2>/dev/null || true
+            nmcli connection add type wifi ifname wlan0 con-name "$HYPERLINE_NAME" \
+                connection.interface-name wlan0 \
+                ssid "Hyperline" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "arthexis" \
+                autoconnect yes connection.autoconnect-priority 20 \
+                ipv4.method auto ipv6.method ignore ipv4.route-metric 50
 
-        if ! nmcli connection up "$HYPERLINE_NAME"; then
-            echo "Failed to activate Hyperline connection; trying existing wlan0 connections." >&2
-            while read -r con; do
-                if nmcli connection up "$con"; then
-                    break
-                fi
-            done < <(nmcli -t -f NAME connection show | grep '^gate-')
+            if ! nmcli connection up "$HYPERLINE_NAME"; then
+                echo "Failed to activate Hyperline connection; trying existing wlan0 connections." >&2
+                while read -r con; do
+                    if nmcli connection up "$con"; then
+                        break
+                    fi
+                done < <(nmcli -t -f NAME connection show | grep '^gate-')
+            fi
         fi
     fi
 fi
