@@ -16,6 +16,7 @@ from django.dispatch import receiver
 from django.http import HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from django.utils.functional import LazyObject
 from django.utils.translation import gettext as _
 
 from .entity import Entity
@@ -39,7 +40,17 @@ def _username_for(user) -> str:
 
 
 def _user_allows_user_data(user) -> bool:
-    return bool(user) and not getattr(user, "is_profile_restricted", False)
+    if not user:
+        return False
+    username = _username_for(user)
+    UserModel = get_user_model()
+    admin_username = getattr(UserModel, "ADMIN_USERNAME", "")
+    if admin_username and username == admin_username:
+        return False
+    system_username = getattr(UserModel, "SYSTEM_USERNAME", "")
+    if system_username and username == system_username:
+        return True
+    return not getattr(user, "is_profile_restricted", False)
 
 
 def _data_dir(user) -> Path:
@@ -93,18 +104,56 @@ def _seed_fixture_path(instance) -> Path | None:
     return None
 
 
+def _coerce_user(candidate, user_model):
+    if candidate is None:
+        return None
+    if isinstance(candidate, user_model):
+        return candidate
+    if isinstance(candidate, LazyObject):
+        try:
+            candidate._setup()
+        except Exception:
+            return None
+        return _coerce_user(candidate._wrapped, user_model)
+    return None
+
+
+def _select_fixture_user(candidate, user_model):
+    user = _coerce_user(candidate, user_model)
+    visited: set[int] = set()
+    while user is not None:
+        identifier = user.pk or id(user)
+        if identifier in visited:
+            break
+        visited.add(identifier)
+        if _user_allows_user_data(user):
+            return user
+        try:
+            delegate = getattr(user, "operate_as", None)
+        except user_model.DoesNotExist:
+            delegate = None
+        user = _coerce_user(delegate, user_model)
+    return None
+
+
 def _resolve_fixture_user(instance, fallback=None):
     UserModel = get_user_model()
     owner = getattr(instance, "user", None)
-    if isinstance(owner, UserModel):
-        return owner
+    selected = _select_fixture_user(owner, UserModel)
+    if selected is not None:
+        return selected
     if hasattr(instance, "owner"):
         try:
             owner_value = instance.owner
         except Exception:
             owner_value = None
-        if isinstance(owner_value, UserModel):
-            return owner_value
+        else:
+            selected = _select_fixture_user(owner_value, UserModel)
+            if selected is not None:
+                return selected
+    selected = _select_fixture_user(fallback, UserModel)
+    if selected is not None:
+        return selected
     return fallback
 
 
