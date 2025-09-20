@@ -140,7 +140,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         ),
         (
             "Configuration",
-            {"fields": ("require_rfid",)},
+            {"fields": ("public_display", "require_rfid")},
         ),
         (
             "References",
@@ -161,6 +161,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "connector_id",
         "location_name",
         "require_rfid_display",
+        "public_display",
         "last_heartbeat",
         "firmware_status",
         "firmware_timestamp",

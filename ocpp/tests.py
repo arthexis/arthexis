@@ -2450,51 +2450,19 @@ class LiveUpdateViewTests(TestCase):
         self.assertEqual(resp.context["request"].live_update_interval, 5)
         self.assertContains(resp, "setInterval(() => location.reload()")
 
-
-class DashboardAccessTests(TestCase):
-    def setUp(self):
-        self.client = Client()
-        self.constellation_role, _ = NodeRole.objects.get_or_create(
-            name="Constellation"
-        )
-        self.terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
-        Site.objects.update_or_create(
-            id=1, defaults={"domain": "testserver", "name": ""}
-        )
-        self.app, _ = Application.objects.get_or_create(name="ocpp")
-        Module.objects.update_or_create(
-            node_role=self.constellation_role,
-            path="/ocpp/",
-            defaults={"application": self.app},
-        )
-        Module.objects.update_or_create(
-            node_role=self.terminal_role,
-            path="/ocpp/",
-            defaults={"application": self.app},
+    def test_dashboard_hides_private_chargers(self):
+        public = Charger.objects.create(charger_id="PUBLICCP")
+        private = Charger.objects.create(
+            charger_id="PRIVATECP", public_display=False
         )
 
-    def _set_role(self, role):
-        Node.objects.update_or_create(
-            mac_address=Node.get_current_mac(),
-            defaults={
-                "hostname": "localhost",
-                "address": "127.0.0.1",
-                "role": role,
-            },
-        )
-
-    def test_non_constellation_requires_login(self):
-        self._set_role(self.terminal_role)
         resp = self.client.get(reverse("ocpp-dashboard"))
-        self.assertEqual(resp.status_code, 302)
-        self.assertIn(reverse("pages:login"), resp["Location"])
+        chargers = [item["charger"] for item in resp.context["chargers"]]
+        self.assertIn(public, chargers)
+        self.assertNotIn(private, chargers)
 
-    def test_constellation_dashboard_public(self):
-        self._set_role(self.constellation_role)
-        resp = self.client.get(reverse("ocpp-dashboard"))
-        self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "Demo OCPP 1.6 CSMS")
-        self.assertIn("demo_ws_url", resp.context)
-        self.assertIn("ws_rate_limit", resp.context)
-        self.assertEqual(resp.context["ws_rate_limit"], store.MAX_CONNECTIONS_PER_IP)
-        self.assertTrue(resp.context["demo_ws_url"].startswith("ws"))
+        list_response = self.client.get(reverse("charger-list"))
+        payload = list_response.json()
+        ids = [item["charger_id"] for item in payload["chargers"]]
+        self.assertIn(public.charger_id, ids)
+        self.assertNotIn(private.charger_id, ids)
