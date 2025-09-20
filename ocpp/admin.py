@@ -129,6 +129,16 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             },
         ),
         (
+            "Diagnostics",
+            {
+                "fields": (
+                    "diagnostics_status",
+                    "diagnostics_timestamp",
+                    "diagnostics_location",
+                )
+            },
+        ),
+        (
             "Configuration",
             {"fields": ("require_rfid",)},
         ),

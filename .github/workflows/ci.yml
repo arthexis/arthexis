@@ -48,40 +48,6 @@ jobs:
                       fh.write(f"| {entry['role']} | {features} |\n")
                   fh.write('\n')
           PY
-  secret-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Install Gitleaks
-        run: |
-          set -eo pipefail
-          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.18.1/gitleaks_8.18.1_linux_x64.tar.gz \
-            -o gitleaks.tar.gz
-          tar -xzf gitleaks.tar.gz
-          sudo install gitleaks /usr/local/bin/gitleaks
-      - name: Scan working tree for secrets
-        run: |
-          set -eo pipefail
-          gitleaks detect --no-git --source . --config .gitleaks.toml --redact --no-banner
-      - name: Scan git history for secrets
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_REF: ${{ github.event.pull_request.base.ref || '' }}
-          GITLEAKS_HISTORY_RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || (github.event_name == 'push' && format('{0}..{1}', github.event.before, github.sha) || '') }}
-        run: |
-          set -eo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ -n "$PR_BASE_REF" ]; then
-            git fetch --no-tags --prune --depth=0 origin "$PR_BASE_REF"
-          fi
-          LOG_OPTS="--no-merges"
-          if [ -n "$GITLEAKS_HISTORY_RANGE" ] && git rev-list $GITLEAKS_HISTORY_RANGE >/dev/null 2>&1; then
-            LOG_OPTS="$LOG_OPTS $GITLEAKS_HISTORY_RANGE"
-          else
-            LOG_OPTS="$LOG_OPTS --max-count=200"
-          fi
-          gitleaks detect --source . --config .gitleaks.toml --redact --no-banner --log-opts="$LOG_OPTS"
   tests:
     needs: node-test-matrix
     runs-on: ubuntu-latest

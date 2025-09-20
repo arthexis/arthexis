@@ -208,6 +208,23 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
     return _("Offline"), "grey"
 
 
+def _diagnostics_payload(charger: Charger) -> dict[str, str | None]:
+    """Return diagnostics metadata for API responses."""
+
+    timestamp = (
+        charger.diagnostics_timestamp.isoformat()
+        if charger.diagnostics_timestamp
+        else None
+    )
+    status = charger.diagnostics_status or None
+    location = charger.diagnostics_location or None
+    return {
+        "diagnosticsStatus": status,
+        "diagnosticsTimestamp": timestamp,
+        "diagnosticsLocation": location,
+    }
+
+
 @api_login_required
 def charger_list(request):
     """Return a JSON list of known chargers and state."""

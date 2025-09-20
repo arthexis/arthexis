@@ -93,6 +93,23 @@ class Charger(Entity):
         max_digits=5, decimal_places=1, null=True, blank=True
     )
     temperature_unit = models.CharField(max_length=16, blank=True)
+    diagnostics_status = models.CharField(
+        max_length=32,
+        null=True,
+        blank=True,
+        help_text="Most recent diagnostics status reported by the charger.",
+    )
+    diagnostics_timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp associated with the latest diagnostics status.",
+    )
+    diagnostics_location = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Location or URI reported for the latest diagnostics upload.",
+    )
     reference = models.OneToOneField(
         Reference, null=True, blank=True, on_delete=models.SET_NULL
     )
