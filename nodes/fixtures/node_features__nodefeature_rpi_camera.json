@@ -6,11 +6,7 @@
       "is_deleted": false,
       "slug": "rpi-camera",
       "display": "Raspberry Pi Camera",
-      "roles": [
-        [
-          "Terminal"
-        ]
-      ]
+      "roles": []
     }
   }
 ]

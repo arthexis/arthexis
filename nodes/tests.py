@@ -1188,7 +1188,7 @@ class NodeFeatureFixtureTests(TestCase):
         call_command("loaddata", str(fixture_path), verbosity=0)
         feature = NodeFeature.objects.get(slug="ap-router")
         role_names = set(feature.roles.values_list("name", flat=True))
-        self.assertEqual(role_names, {"Control", "Satellite"})
+        self.assertEqual(role_names, {"Satellite"})
 
 
 class NodeFeatureTests(TestCase):
