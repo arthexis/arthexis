@@ -276,9 +276,7 @@ class CSMSConsumerTests(TransactionTestCase):
             "timestamp": ts.isoformat(),
         }
 
-        await communicator.send_json_to(
-            [2, "1", "FirmwareStatusNotification", payload]
-        )
+        await communicator.send_json_to([2, "1", "FirmwareStatusNotification", payload])
         response = await communicator.receive_json_from()
         self.assertEqual(response, [3, "1", {}])
 
@@ -296,7 +294,9 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertIsNotNone(recorded_ts)
         self.assertEqual(recorded_ts.replace(microsecond=0), ts)
 
-        log_entries = store.get_logs(store.identity_key("FWSTAT", None), log_type="charger")
+        log_entries = store.get_logs(
+            store.identity_key("FWSTAT", None), log_type="charger"
+        )
         self.assertTrue(
             any("FirmwareStatusNotification" in entry for entry in log_entries)
         )
@@ -334,9 +334,7 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertEqual(detail_payload["firmwareTimestamp"], ts.isoformat())
         self.assertIn('id="firmware-status">Installing<', html)
         self.assertIn('id="firmware-status-info">Applying patch<', html)
-        match = re.search(
-            r'id="firmware-timestamp"[^>]*data-iso="([^"]+)"', html
-        )
+        match = re.search(r'id="firmware-timestamp"[^>]*data-iso="([^"]+)"', html)
         self.assertIsNotNone(match)
         parsed_iso = datetime.fromisoformat(match.group(1))
         self.assertAlmostEqual(parsed_iso.timestamp(), ts.timestamp(), places=3)
@@ -597,12 +595,8 @@ class CSMSConsumerTests(TransactionTestCase):
         aggregate, connector = await database_sync_to_async(_fetch)()
         self.assertEqual(aggregate.diagnostics_status, "Uploaded")
         self.assertEqual(connector.diagnostics_status, "Uploaded")
-        self.assertEqual(
-            aggregate.diagnostics_location, "https://example.com/diag.tar"
-        )
-        self.assertEqual(
-            connector.diagnostics_location, "https://example.com/diag.tar"
-        )
+        self.assertEqual(aggregate.diagnostics_location, "https://example.com/diag.tar")
+        self.assertEqual(connector.diagnostics_location, "https://example.com/diag.tar")
         self.assertEqual(aggregate.diagnostics_timestamp, reported_at)
         self.assertEqual(connector.diagnostics_timestamp, reported_at)
 
@@ -1943,10 +1937,10 @@ class ChargerStatusViewTests(TestCase):
         resp = self.client.get(reverse("charger-status", args=[charger.charger_id]))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Diagnostics")
-        self.assertContains(resp, "id=\"diagnostics-status\"")
+        self.assertContains(resp, 'id="diagnostics-status"')
         self.assertContains(resp, "Uploaded")
-        self.assertContains(resp, "id=\"diagnostics-timestamp\"")
-        self.assertContains(resp, "id=\"diagnostics-location\"")
+        self.assertContains(resp, 'id="diagnostics-timestamp"')
+        self.assertContains(resp, 'id="diagnostics-location"')
         self.assertContains(resp, "https://example.com/report.tar")
 
     def test_connector_status_prefers_connector_diagnostics(self):
@@ -2130,12 +2124,8 @@ class ChargerApiDiagnosticsTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
         self.assertEqual(payload["diagnosticsStatus"], "Uploaded")
-        self.assertEqual(
-            payload["diagnosticsTimestamp"], reported_at.isoformat()
-        )
-        self.assertEqual(
-            payload["diagnosticsLocation"], "https://example.com/diag.tar"
-        )
+        self.assertEqual(payload["diagnosticsTimestamp"], reported_at.isoformat())
+        self.assertEqual(payload["diagnosticsLocation"], "https://example.com/diag.tar")
 
     def test_list_includes_diagnostics_fields(self):
         reported_at = timezone.now().replace(microsecond=0)

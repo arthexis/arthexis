@@ -277,7 +277,11 @@ def charger_list(request):
             active_transactions.append(active_payload)
         state, color = _charger_state(
             charger,
-            tx_obj if charger.connector_id is not None else (sessions if sessions else None),
+            (
+                tx_obj
+                if charger.connector_id is not None
+                else (sessions if sessions else None)
+            ),
         )
         data.append(
             {
@@ -373,7 +377,11 @@ def charger_detail(request, cid, connector=None):
     log = store.get_logs(log_key, log_type="charger")
     state, color = _charger_state(
         charger,
-        tx_obj if charger.connector_id is not None else (sessions if sessions else None),
+        (
+            tx_obj
+            if charger.connector_id is not None
+            else (sessions if sessions else None)
+        ),
     )
     return JsonResponse(
         {
@@ -543,7 +551,9 @@ def charger_page(request, cid, connector=None):
         )
         if tx:
             active_connector_count = 1
-    state_source = tx if charger.connector_id is not None else (sessions if sessions else None)
+    state_source = (
+        tx if charger.connector_id is not None else (sessions if sessions else None)
+    )
     state, color = _charger_state(charger, state_source)
     language_cookie = request.COOKIES.get(settings.LANGUAGE_COOKIE_NAME)
     preferred_language = "es"

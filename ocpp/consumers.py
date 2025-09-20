@@ -492,11 +492,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     if self.charger:
                         targets.append(self.charger)
                     aggregate = self.aggregate_charger
-                    if (
-                        aggregate
-                        and not any(
-                            target.pk == aggregate.pk for target in targets if target.pk
-                        )
+                    if aggregate and not any(
+                        target.pk == aggregate.pk for target in targets if target.pk
                     ):
                         targets.append(aggregate)
                     for target in targets:
@@ -518,7 +515,10 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 if updates["diagnostics_location"]:
                     log_message += ", location=%s" % updates["diagnostics_location"]
                 store.add_log(self.store_key, log_message, log_type="charger")
-                if self.aggregate_charger and self.aggregate_charger.connector_id is None:
+                if (
+                    self.aggregate_charger
+                    and self.aggregate_charger.connector_id is None
+                ):
                     aggregate_key = store.identity_key(self.charger_id, None)
                     if aggregate_key != self.store_key:
                         store.add_log(aggregate_key, log_message, log_type="charger")
@@ -599,9 +599,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         )
                 if timestamp_value is None:
                     timestamp_value = timezone.now()
-                await self._update_firmware_state(
-                    status, status_info, timestamp_value
-                )
+                await self._update_firmware_state(status, status_info, timestamp_value)
                 store.add_log(
                     self.store_key,
                     "FirmwareStatusNotification: "
