@@ -16,12 +16,12 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 
 Arthexis Constellation ships in four node roles tailored to different deployment scenarios.
 
-| Role | Description | Common features |
-| --- | --- | --- |
-| Terminal | Single-User Research & Development | • GUI Toast |
-| Control | Single-Device Testing & Special Task Appliances | • AP Public Wi-Fi<br>• Celery Queue<br>• GUI Toast<br>• LCD Screen<br>• NGINX Server<br>• RFID Scanner |
-| Satellite | Multi-Device Edge, Network & Data Acquisition | • AP Router<br>• Celery Queue<br>• NGINX Server<br>• RFID Scanner |
-| Constellation | Multi-User Cloud & Orchestration | • Celery Queue<br>• NGINX Server |
+| Role | Description & Common Features |
+| --- | --- |
+| Terminal | Single-User Research & Development<br>Features: GUI Toast |
+| Control | Single-Device Testing & Special Task Appliances<br>Features: AP Public Wi-Fi, Celery Queue, GUI Toast, LCD Screen, NGINX Server, RFID Scanner |
+| Satellite | Multi-Device Edge, Network & Data Acquisition<br>Features: AP Router, Celery Queue, NGINX Server, RFID Scanner |
+| Constellation | Multi-User Cloud & Orchestration<br>Features: Celery Queue, NGINX Server |
 
 ## Quick Guide
 
