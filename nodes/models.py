@@ -163,6 +163,7 @@ class Node(Entity):
         "rpi-camera",
         "ap-router",
         "ap-public-wifi",
+        "postgres-db",
     }
     MANUAL_FEATURE_SLUGS = {"clipboard-poll", "screenshot-poll"}
 
@@ -370,6 +371,13 @@ class Node(Entity):
                 return True
         return False
 
+    @staticmethod
+    def _uses_postgres() -> bool:
+        """Return ``True`` when the default database uses PostgreSQL."""
+
+        engine = settings.DATABASES.get("default", {}).get("ENGINE", "")
+        return "postgresql" in engine.lower()
+
     def refresh_features(self):
         if not self.pk:
             return
@@ -390,6 +398,8 @@ class Node(Entity):
                 detected_slugs.add("ap-public-wifi")
             else:
                 detected_slugs.add("ap-router")
+        if self._uses_postgres():
+            detected_slugs.add("postgres-db")
         try:
             from core.notifications import supports_gui_toast
         except Exception:
