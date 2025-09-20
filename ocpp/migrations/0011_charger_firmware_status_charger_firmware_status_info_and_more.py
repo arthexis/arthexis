@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("ocpp", "0009_remove_charger_console_url"),
+        ("ocpp", "0010_charger_diagnostics_location_and_more"),
     ]
 
     operations = [

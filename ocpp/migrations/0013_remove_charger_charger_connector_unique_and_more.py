@@ -7,7 +7,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("core", "0035_clientreport_disable_emails_clientreport_owner_and_more"),
-        ("ocpp", "0011_merge_20250919_1908"),
+        ("ocpp", "0012_charger_last_error_code_charger_last_status_and_more"),
     ]
 
     operations = [
