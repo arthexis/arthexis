@@ -13,6 +13,29 @@ arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 
+BACKUP_DIR="$SCRIPT_DIR/backups"
+
+backup_database_for_branch() {
+  local branch="$1"
+  local source="$SCRIPT_DIR/db.sqlite3"
+  local backup_path="$BACKUP_DIR/${branch}.sqlite3"
+
+  if [ ! -f "$source" ]; then
+    return
+  fi
+
+  if ! mkdir -p "$BACKUP_DIR"; then
+    echo "Failed to create backup directory at $BACKUP_DIR" >&2
+    return
+  fi
+
+  if cp -p "$source" "$backup_path"; then
+    echo "Saved database backup to backups/${branch}.sqlite3"
+  else
+    echo "Failed to create database backup at $backup_path" >&2
+  fi
+}
+
 create_failover_branch() {
   local date
   date=$(date +%Y%m%d)
@@ -33,6 +56,7 @@ create_failover_branch() {
     git branch "$branch"
   fi
   echo "Created failover branch $branch"
+  backup_database_for_branch "$branch"
 }
 
 if [ -z "$FAILOVER_CREATED" ]; then
