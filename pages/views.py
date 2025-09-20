@@ -32,6 +32,7 @@ from django.utils.cache import patch_vary_headers
 from django.core.exceptions import PermissionDenied
 from django.utils.text import slugify
 from django.core.validators import EmailValidator
+from django.db.models import Q
 from core.models import InviteLead, ClientReport, ClientReportSchedule
 
 try:  # pragma: no cover - optional dependency guard
@@ -485,9 +486,60 @@ class CustomLoginView(LoginView):
 login_view = CustomLoginView.as_view()
 
 
+INVITATION_REQUEST_MIN_SUBMISSION_INTERVAL = datetime.timedelta(seconds=3)
+INVITATION_REQUEST_THROTTLE_LIMIT = 3
+INVITATION_REQUEST_THROTTLE_WINDOW = datetime.timedelta(hours=1)
+INVITATION_REQUEST_HONEYPOT_MESSAGE = _(
+    "We could not process your request. Please try again."
+)
+INVITATION_REQUEST_TOO_FAST_MESSAGE = _(
+    "That was a little too fast. Please wait a moment and try again."
+)
+INVITATION_REQUEST_TIMESTAMP_ERROR = _(
+    "We could not verify your submission. Please reload the page and try again."
+)
+INVITATION_REQUEST_THROTTLE_MESSAGE = _(
+    "We've already received a few requests. Please try again later."
+)
+
+
 class InvitationRequestForm(forms.Form):
     email = forms.EmailField()
-    comment = forms.CharField(required=False, widget=forms.Textarea, label=_("Comment"))
+    comment = forms.CharField(
+        required=False, widget=forms.Textarea, label=_("Comment")
+    )
+    honeypot = forms.CharField(
+        required=False,
+        label=_("Leave blank"),
+        widget=forms.TextInput(attrs={"autocomplete": "off"}),
+    )
+    timestamp = forms.DateTimeField(required=False, widget=forms.HiddenInput())
+
+    min_submission_interval = INVITATION_REQUEST_MIN_SUBMISSION_INTERVAL
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.is_bound:
+            self.fields["timestamp"].initial = timezone.now()
+        self.fields["honeypot"].widget.attrs.setdefault("aria-hidden", "true")
+        self.fields["honeypot"].widget.attrs.setdefault("tabindex", "-1")
+
+    def clean(self):
+        cleaned = super().clean()
+
+        honeypot_value = cleaned.get("honeypot", "")
+        if honeypot_value:
+            raise forms.ValidationError(INVITATION_REQUEST_HONEYPOT_MESSAGE)
+
+        timestamp = cleaned.get("timestamp")
+        if timestamp is None:
+            raise forms.ValidationError(INVITATION_REQUEST_TIMESTAMP_ERROR)
+
+        now = timezone.now()
+        if timestamp > now or (now - timestamp) < self.min_submission_interval:
+            raise forms.ValidationError(INVITATION_REQUEST_TOO_FAST_MESSAGE)
+
+        return cleaned
 
 
 @csrf_exempt
@@ -499,68 +551,78 @@ def request_invite(request):
         email = form.cleaned_data["email"]
         comment = form.cleaned_data.get("comment", "")
         ip_address = request.META.get("REMOTE_ADDR")
-        mac_address = public_wifi.resolve_mac_address(ip_address)
-        lead = InviteLead.objects.create(
-            email=email,
-            comment=comment,
-            user=request.user if request.user.is_authenticated else None,
-            path=request.path,
-            referer=request.META.get("HTTP_REFERER", ""),
-            user_agent=request.META.get("HTTP_USER_AGENT", ""),
-            ip_address=ip_address,
-            mac_address=mac_address or "",
+        throttle_filters = Q(email__iexact=email)
+        if ip_address:
+            throttle_filters |= Q(ip_address=ip_address)
+        window_start = timezone.now() - INVITATION_REQUEST_THROTTLE_WINDOW
+        recent_requests = InviteLead.objects.filter(
+            throttle_filters, created_on__gte=window_start
         )
-        logger.info("Invitation requested for %s", email)
-        User = get_user_model()
-        users = list(User.objects.filter(email__iexact=email))
-        if not users:
-            logger.warning("Invitation requested for unknown email %s", email)
-        for user in users:
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            token = default_token_generator.make_token(user)
-            link = request.build_absolute_uri(
-                reverse("pages:invitation-login", args=[uid, token])
+        if recent_requests.count() >= INVITATION_REQUEST_THROTTLE_LIMIT:
+            form.add_error(None, INVITATION_REQUEST_THROTTLE_MESSAGE)
+        else:
+            mac_address = public_wifi.resolve_mac_address(ip_address)
+            lead = InviteLead.objects.create(
+                email=email,
+                comment=comment,
+                user=request.user if request.user.is_authenticated else None,
+                path=request.path,
+                referer=request.META.get("HTTP_REFERER", ""),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+                ip_address=ip_address,
+                mac_address=mac_address or "",
             )
-            subject = _("Your invitation link")
-            body = _("Use the following link to access your account: %(link)s") % {
-                "link": link
-            }
-            try:
-                node_error = None
-                node = Node.get_local()
-                if node:
-                    try:
-                        result = node.send_mail(subject, body, [email])
-                    except Exception as exc:
-                        node_error = exc
-                        logger.exception(
-                            "Node send_mail failed, falling back to default backend"
-                        )
+            logger.info("Invitation requested for %s", email)
+            User = get_user_model()
+            users = list(User.objects.filter(email__iexact=email))
+            if not users:
+                logger.warning("Invitation requested for unknown email %s", email)
+            for user in users:
+                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                token = default_token_generator.make_token(user)
+                link = request.build_absolute_uri(
+                    reverse("pages:invitation-login", args=[uid, token])
+                )
+                subject = _("Your invitation link")
+                body = _("Use the following link to access your account: %(link)s") % {
+                    "link": link
+                }
+                try:
+                    node_error = None
+                    node = Node.get_local()
+                    if node:
+                        try:
+                            result = node.send_mail(subject, body, [email])
+                        except Exception as exc:
+                            node_error = exc
+                            logger.exception(
+                                "Node send_mail failed, falling back to default backend"
+                            )
+                            result = mailer.send(
+                                subject, body, [email], settings.DEFAULT_FROM_EMAIL
+                            )
+                    else:
                         result = mailer.send(
                             subject, body, [email], settings.DEFAULT_FROM_EMAIL
                         )
-                else:
-                    result = mailer.send(
-                        subject, body, [email], settings.DEFAULT_FROM_EMAIL
+                    lead.sent_on = timezone.now()
+                    if node_error:
+                        lead.error = (
+                            f"Node email send failed: {node_error}. "
+                            "Invite was sent using default mail backend; ensure the "
+                            "node's email service is running or check its configuration."
+                        )
+                    else:
+                        lead.error = ""
+                    logger.info(
+                        "Invitation email sent to %s (user %s): %s", email, user.pk, result
                     )
-                lead.sent_on = timezone.now()
-                if node_error:
-                    lead.error = (
-                        f"Node email send failed: {node_error}. "
-                        "Invite was sent using default mail backend; ensure the "
-                        "node's email service is running or check its configuration."
-                    )
-                else:
-                    lead.error = ""
-                logger.info(
-                    "Invitation email sent to %s (user %s): %s", email, user.pk, result
-                )
-            except Exception as exc:
-                lead.error = f"{exc}. Ensure the email service is reachable and settings are correct."
-                logger.exception("Failed to send invitation email to %s", email)
-        if lead.sent_on or lead.error:
-            lead.save(update_fields=["sent_on", "error"])
-        sent = True
+                except Exception as exc:
+                    lead.error = f"{exc}. Ensure the email service is reachable and settings are correct."
+                    logger.exception("Failed to send invitation email to %s", email)
+            if lead.sent_on or lead.error:
+                lead.save(update_fields=["sent_on", "error"])
+            sent = True
     return render(request, "pages/request_invite.html", {"form": form, "sent": sent})
 
 
