@@ -1,7 +1,7 @@
 from django.db import models
 from core.entity import Entity, EntityManager
 from django.utils.translation import gettext_lazy as _
-from core.models import Lead
+from core.models import EnergyTariff as CoreEnergyTariff, Lead
 
 
 class CableSizeManager(EntityManager):
@@ -167,3 +167,11 @@ class PowerLead(Lead):
 
     def __str__(self):  # pragma: no cover - simple representation
         return f"{self.user or 'anonymous'} @ {self.created_on}"
+
+
+class EnergyTariff(CoreEnergyTariff):
+    class Meta:
+        proxy = True
+        app_label = "awg"
+        verbose_name = CoreEnergyTariff._meta.verbose_name
+        verbose_name_plural = CoreEnergyTariff._meta.verbose_name_plural
