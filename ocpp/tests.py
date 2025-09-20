@@ -1356,6 +1356,14 @@ class SimulatorAdminTests(TransactionTestCase):
         resp = self.client.get(url)
         self.assertContains(resp, "ws://h:1111/SIMY/")
 
+    def test_admin_ws_url_without_port(self):
+        sim = Simulator.objects.create(
+            name="SIMNP", cp_path="SIMNP", host="h", ws_port=None
+        )
+        url = reverse("admin:ocpp_simulator_changelist")
+        resp = self.client.get(url)
+        self.assertContains(resp, "ws://h/SIMNP/")
+
     def test_as_config_includes_custom_fields(self):
         sim = Simulator.objects.create(
             name="SIM3",

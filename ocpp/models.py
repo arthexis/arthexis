@@ -556,7 +556,9 @@ class Simulator(Entity):
         _("Serial Number"), max_length=100, help_text=_("Charge Point WS path")
     )
     host = models.CharField(max_length=100, default="127.0.0.1")
-    ws_port = models.IntegerField(_("WS Port"), default=8000)
+    ws_port = models.IntegerField(
+        _("WS Port"), default=8000, null=True, blank=True
+    )
     rfid = models.CharField(
         max_length=255,
         default="FFFFFFFF",
@@ -605,7 +607,9 @@ class Simulator(Entity):
         path = self.cp_path
         if not path.endswith("/"):
             path += "/"
-        return f"ws://{self.host}:{self.ws_port}/{path}"
+        if self.ws_port:
+            return f"ws://{self.host}:{self.ws_port}/{path}"
+        return f"ws://{self.host}/{path}"
 
 
 class RFID(CoreRFID):

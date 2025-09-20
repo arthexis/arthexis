@@ -450,9 +450,16 @@ def cp_simulator(request):
         cp_idx = int(request.POST.get("cp") or 1)
         action = request.POST.get("action")
         if action == "start":
+            ws_port_value = request.POST.get("ws_port")
+            if ws_port_value is None:
+                ws_port = int(default_ws_port) if default_ws_port else None
+            elif ws_port_value.strip():
+                ws_port = int(ws_port_value)
+            else:
+                ws_port = None
             sim_params = dict(
                 host=request.POST.get("host") or default_host,
-                ws_port=int(request.POST.get("ws_port") or default_ws_port),
+                ws_port=ws_port,
                 cp_path=request.POST.get("cp_path") or default_cp_paths[cp_idx - 1],
                 serial_number=request.POST.get("serial_number")
                 or default_serial_numbers[cp_idx - 1],
