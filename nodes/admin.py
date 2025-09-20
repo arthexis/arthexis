@@ -9,6 +9,7 @@ from django.db.models import Count
 from django.conf import settings
 from pathlib import Path
 from django.http import HttpResponse
+from django.utils.translation import gettext_lazy as _
 import base64
 import pyperclip
 from pyperclip import PyperclipException
@@ -114,6 +115,9 @@ class NodeAdmin(EntityModelAdmin):
 
         token = uuid.uuid4().hex
         context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Register Visitor Node"),
             "token": token,
             "info_url": reverse("node-info"),
             "register_url": reverse("register-node"),

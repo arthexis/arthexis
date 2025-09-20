@@ -312,6 +312,23 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
 .submit-row a.deletelink {
     margin-left: 0;
 }
+
+/* Keep dual-selector widgets oriented left-to-right */
+.selector {
+    flex-direction: row;
+}
+
+.selector-available {
+    order: 0;
+}
+
+.selector ul.selector-chooser {
+    order: 1;
+}
+
+.selector-chosen {
+    order: 2;
+}
 </style>
 {% endblock %}
 {% block branding %}

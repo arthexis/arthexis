@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Security Group add",
+      "url": "/admin/core/securitygroup/add/",
+      "request_details": "Confirm the Security Group add form renders the users selector with the available list on the left and chosen list on the right."
+    }
+  }
+]

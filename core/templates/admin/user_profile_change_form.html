@@ -1,7 +1,85 @@
 {% extends "admin/change_form.html" %}
+{% load i18n %}
 {% block content_title %}
 <div style="display:flex; justify-content:space-between; align-items:center;">
     <h1>{{ title }}</h1>
+    {% if operate_as_profile_url_template %}
+    <div
+        id="operate-as-profile-link"
+        data-url-template="{{ operate_as_profile_url_template }}"
+        data-link-text-template="{% blocktrans %}View __USER__'s profile{% endblocktrans %}"
+        data-link-text-empty="{% trans "View selected user's profile" %}"
+        {% if not operate_as_profile_url %}style="display:none;"{% endif %}
+    >
+        <a
+            id="operate-as-profile-anchor"
+            href="{% if operate_as_profile_url %}{{ operate_as_profile_url }}{% else %}#{% endif %}"
+            target="_blank"
+            rel="noopener"
+        >
+            {% if operate_as_user %}
+                {% blocktrans with username=operate_as_user %}View {{ username }}'s profile{% endblocktrans %}
+            {% else %}
+                {% trans "View selected user's profile" %}
+            {% endif %}
+        </a>
+    </div>
+    {% endif %}
 </div>
+{% endblock %}
+
+{% block extrajs %}
+{{ block.super }}
+{% if operate_as_profile_url_template %}
+<script>
+(function() {
+    const container = document.getElementById("operate-as-profile-link");
+    if (!container) {
+        return;
+    }
+    const select = document.getElementById("id_operate_as");
+    if (!select) {
+        container.style.display = "none";
+        return;
+    }
+    const urlTemplate = container.dataset.urlTemplate || "";
+    const link = container.querySelector("a");
+    const textTemplate = container.dataset.linkTextTemplate || "";
+    const emptyText = container.dataset.linkTextEmpty || "";
+    const update = () => {
+        const value = select.value;
+        if (!value) {
+            container.style.display = "none";
+            if (link) {
+                link.removeAttribute("href");
+                if (emptyText) {
+                    link.textContent = emptyText;
+                }
+            }
+            return;
+        }
+        const selectedOption = select.options[select.selectedIndex];
+        const label = selectedOption ? selectedOption.text.trim() : "";
+        if (link) {
+            if (urlTemplate) {
+                link.href = urlTemplate.replace("__ID__", value);
+            }
+            if (label) {
+                if (textTemplate) {
+                    link.textContent = textTemplate.replace("__USER__", label);
+                } else if (emptyText) {
+                    link.textContent = emptyText;
+                }
+            } else if (emptyText) {
+                link.textContent = emptyText;
+            }
+        }
+        container.style.display = "";
+    };
+    select.addEventListener("change", update);
+    update();
+})();
+</script>
+{% endif %}
 {% endblock %}
 

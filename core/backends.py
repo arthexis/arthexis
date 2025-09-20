@@ -4,6 +4,7 @@ import contextlib
 import ipaddress
 import socket
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
 
@@ -69,12 +70,18 @@ def _collect_local_ip_addresses():
 class LocalhostAdminBackend(ModelBackend):
     """Allow default admin credentials only from local networks."""
 
-    _ALLOWED_NETWORKS = [
+    _ALLOWED_NETWORKS = (
         ipaddress.ip_network("::1/128"),
         ipaddress.ip_network("127.0.0.0/8"),
         ipaddress.ip_network("192.168.0.0/16"),
-    ]
+    )
+    _CONTROL_ALLOWED_NETWORKS = (ipaddress.ip_network("10.0.0.0/8"),)
     _LOCAL_IPS = _collect_local_ip_addresses()
+
+    def _iter_allowed_networks(self):
+        yield from self._ALLOWED_NETWORKS
+        if getattr(settings, "NODE_ROLE", "") == "Control":
+            yield from self._CONTROL_ALLOWED_NETWORKS
 
     def authenticate(self, request, username=None, password=None, **kwargs):
         if username == "admin" and password == "admin" and request is not None:
@@ -87,7 +94,7 @@ class LocalhostAdminBackend(ModelBackend):
                 ip = ipaddress.ip_address(remote)
             except ValueError:
                 return None
-            allowed = any(ip in net for net in self._ALLOWED_NETWORKS)
+            allowed = any(ip in net for net in self._iter_allowed_networks())
             if not allowed and ip in self._LOCAL_IPS:
                 allowed = True
             if not allowed:
@@ -100,6 +107,8 @@ class LocalhostAdminBackend(ModelBackend):
                     "is_superuser": True,
                 },
             )
+            if not created and not user.is_active:
+                return None
             arthexis_user = (
                 User.all_objects.filter(username="arthexis").exclude(pk=user.pk).first()
             )
