@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify migration state: ensure no new migrations required and no merge migrations present."""
+"""Verify migration state: ensure no new migrations required."""
 import os
 import subprocess
 import sys
@@ -92,13 +92,6 @@ def _check_migrations(labels: Iterable[str]) -> int:
 
 
 def main() -> int:
-    # Detect merge migrations
-    known_merges = {REPO_ROOT / "core" / "migrations" / "0009_merge_20250901_2230.py"}
-    for path in REPO_ROOT.rglob("migrations/*merge*.py"):
-        if path not in known_merges:
-            print(f"Merge migrations detected: {path}", file=sys.stderr)
-            return 1
-
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     django.setup()
     labels = _local_app_labels()

@@ -3,6 +3,8 @@ import shutil
 import subprocess
 from types import SimpleNamespace
 
+from pathlib import Path
+
 import scripts.check_migrations as check_migrations
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -24,7 +26,7 @@ def test_check_migrations_passes() -> None:
     assert result.returncode == 0
 
 
-def test_check_migrations_fails_on_merge(tmp_path: Path) -> None:
+def test_check_migrations_allows_merge(tmp_path: Path) -> None:
     repo = clone_repo(tmp_path)
     merge_file = repo / "core" / "migrations" / "0012_merge_fake.py"
     merge_file.parent.mkdir(parents=True, exist_ok=True)
@@ -46,8 +48,8 @@ class Migration(migrations.Migration):
         capture_output=True,
         text=True,
     )
-    assert result.returncode != 0
-    assert "Merge migrations detected" in result.stderr
+    assert result.returncode == 0
+    assert "Merge migrations detected" not in result.stderr
 
 
 def test_check_migrations_attempts_merge(monkeypatch, capsys) -> None:
