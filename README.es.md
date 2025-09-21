@@ -41,7 +41,7 @@ Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plat
 - **[Windows](https://es.wikipedia.org/wiki/Microsoft_Windows)**: abre [PowerShell](https://learn.microsoft.com/es-es/powershell/) o [Git Bash](https://gitforwindows.org/) y ejecuta el mismo comando.
 
 ### 2. Iniciar y detener
-Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Constelación deben instalarse primero. Ambos métodos escuchan en [`http://localhost:8000/`](http://localhost:8000/) de forma predeterminada; usa `--port` para elegir otro valor.
+Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Constelación deben instalarse primero. Ambos métodos escuchan en [`http://localhost:8888/`](http://localhost:8888/) de forma predeterminada; usa `--port` para elegir otro valor, o añade `--public` para cambiar a [`http://localhost:8000/`](http://localhost:8000/) (las instalaciones de Constellation usan este modo automáticamente).
 - **[VS Code](https://code.visualstudio.com/)**: abre la carpeta, ve al panel **Run and Debug** (`Ctrl+Shift+D`), selecciona la configuración **Run Server** (o **Debug Server**) y presiona el botón verde de inicio. Detén el servidor con el cuadrado rojo (`Shift+F5`).
 - **[Shell](https://es.wikipedia.org/wiki/Shell_de_unidad_de_comandos)**: en Linux ejecuta [`./start.sh`](start.sh) y detén con [`./stop.sh`](stop.sh); en Windows ejecuta [`start.bat`](start.bat) y detén con `Ctrl+C`.
 
@@ -52,10 +52,11 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
   - `--satellite`: configura el nodo perimetral de adquisición de datos.
   - `--constellation`: habilita la pila de orquestación multiusuario.
   Usa `./install.sh --help` para ver la lista completa de flags si necesitas personalizar el nodo más allá del rol. Actualiza con [`./upgrade.sh`](upgrade.sh).
+  Las instalaciones de Constellation se ejecutan en modo público (`http://localhost:8000/`); Terminal, Control y Satélite usan el modo interno (`http://localhost:8888/`) salvo que pases `--public`.
 - **Windows**: ejecuta [`install.bat`](install.bat) para instalar (rol Terminal) y [`upgrade.bat`](upgrade.bat) para actualizar.
 
 ### 4. Administración
-Visita [`http://localhost:8000/admin/`](http://localhost:8000/admin/) para el [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) y [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) para la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
+Visita [`http://localhost:8888/admin/`](http://localhost:8888/admin/) para el [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) y [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) para la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Si activaste el modo público (ya sea manualmente con `--public` o instalando el rol Constellation), usa [`http://localhost:8000/`](http://localhost:8000/) en su lugar. Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
 
 ## Soporte
 
