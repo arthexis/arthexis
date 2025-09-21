@@ -226,7 +226,7 @@ class ProfileAdminMixin:
         return HttpResponseRedirect(changelist_url)
 
     @admin.action(description=_("My Profile"))
-    def my_profile(self, request, queryset):
+    def my_profile(self, request, queryset=None):
         return self._redirect_to_my_profile(request)
 
     def my_profile_action(self, request, obj=None):
@@ -234,6 +234,18 @@ class ProfileAdminMixin:
 
     my_profile_action.label = _("My Profile")
     my_profile_action.short_description = _("My Profile")
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if "my_profile" not in actions:
+            action = getattr(self, "my_profile", None)
+            if action is not None:
+                actions["my_profile"] = (
+                    action,
+                    "my_profile",
+                    getattr(action, "short_description", _("My Profile")),
+                )
+        return actions
 
 
 @admin.register(ExperienceReference)
