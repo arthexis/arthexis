@@ -77,6 +77,13 @@ class ReleaseManagerAdminActionTests(TestCase):
         expected = reverse("admin:core_releasemanager_change", args=[self.manager.pk])
         self.assertEqual(response.url, expected)
 
+    def test_my_profile_direct_link_redirects(self):
+        self.client.force_login(self.user)
+        url = reverse("admin:core_releasemanager_my_profile")
+        response = self.client.get(url)
+        expected = reverse("admin:core_releasemanager_change", args=[self.manager.pk])
+        self.assertRedirects(response, expected, fetch_redirect_response=False)
+
     @pytest.mark.skip("Release manager credentials action not exercised in environment")
     @patch("core.admin.requests.get")
     def test_test_credentials_action(self, mock_get):

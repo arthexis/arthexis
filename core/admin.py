@@ -247,6 +247,21 @@ class ProfileAdminMixin:
                 )
         return actions
 
+    def get_urls(self):
+        urls = super().get_urls()
+        opts = self.model._meta
+        custom = [
+            path(
+                "my-profile/",
+                self.admin_site.admin_view(self._my_profile_view),
+                name=f"{opts.app_label}_{opts.model_name}_my_profile",
+            )
+        ]
+        return custom + urls
+
+    def _my_profile_view(self, request):
+        return self._redirect_to_my_profile(request)
+
 
 @admin.register(ExperienceReference)
 class ReferenceAdmin(EntityModelAdmin):

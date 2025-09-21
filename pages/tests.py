@@ -386,6 +386,16 @@ class AdminDashboardAppListTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "5. Horologia MODELS")
 
+    def test_my_profile_action_links_to_direct_view(self):
+        ReleaseManager.objects.create(user=self.admin)
+        profile_url = reverse("admin:core_releasemanager_my_profile")
+
+        dashboard = self.client.get(reverse("admin:index"))
+        self.assertContains(dashboard, f'href="{profile_url}"')
+
+        app_list = self.client.get(reverse("admin:app_list", args=["core"]))
+        self.assertContains(app_list, f'href="{profile_url}"')
+
 
 class AdminSidebarTests(TestCase):
     def setUp(self):
@@ -1321,6 +1331,16 @@ class AdminActionListTests(TestCase):
                 actions = model_admin_actions(context, app_label, object_name)
                 labels = {action["label"] for action in actions}
                 self.assertIn("My Profile", labels)
+
+                target = next(
+                    (action for action in actions if action["label"] == "My Profile"),
+                    None,
+                )
+                self.assertIsNotNone(target)
+                expected_url = reverse(
+                    f"admin:{app_label}_{object_name.lower()}_my_profile"
+                )
+                self.assertEqual(target["url"], expected_url)
 
 
 class AdminModelGraphViewTests(TestCase):
