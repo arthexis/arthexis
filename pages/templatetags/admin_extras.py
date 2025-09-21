@@ -7,7 +7,9 @@ from django.apps import apps
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
+from django.db.models import Model
 from django.urls import NoReverseMatch, reverse
+from django.utils.text import capfirst
 
 from core.models import ReleaseManager, Todo
 from core.entity import Entity
@@ -94,6 +96,77 @@ def admin_changelist_url(ct: ContentType) -> str:
         return reverse(f"admin:{ct.app_label}_{ct.model}_changelist")
     except NoReverseMatch:
         return ""
+
+
+@register.simple_tag
+def related_admin_models(opts):
+    """Return changelist links for models related to the current model."""
+
+    if not opts:
+        return []
+
+    model = getattr(opts, "model", None)
+    if model is None:
+        return []
+
+    registry = admin.site._registry
+    seen = set()
+    related = []
+
+    current_labels = {opts.label_lower, model._meta.label_lower}
+    concrete = getattr(model._meta, "concrete_model", None)
+    if concrete is not None:
+        current_labels.add(concrete._meta.label_lower)
+
+    def get_registered(model_cls):
+        if not isinstance(model_cls, type) or not issubclass(model_cls, Model):
+            return None
+        if model_cls in registry:
+            return model_cls
+        concrete_model = getattr(model_cls, "_meta", None)
+        if concrete_model is None:
+            return None
+        concrete_model = concrete_model.concrete_model
+        if concrete_model in registry:
+            return concrete_model
+        return None
+
+    def add_model(model_cls):
+        registered_model = get_registered(model_cls)
+        if registered_model is None:
+            return
+        model_opts = registered_model._meta
+        label_lower = model_opts.label_lower
+        if label_lower in current_labels or label_lower in seen:
+            return
+        concrete_label = model_opts.concrete_model._meta.label_lower
+        if concrete_label in current_labels:
+            return
+        try:
+            url = reverse(
+                f"admin:{model_opts.app_label}_{model_opts.model_name}_changelist"
+            )
+        except NoReverseMatch:
+            return
+        related.append({
+            "label": capfirst(model_opts.verbose_name_plural),
+            "url": url,
+        })
+        seen.add(label_lower)
+
+    for parent in opts.get_parent_list():
+        add_model(parent)
+
+    for field in opts.get_fields(include_parents=True, include_hidden=True):
+        if not getattr(field, "is_relation", False):
+            continue
+        related_model = getattr(field, "related_model", None)
+        if related_model is None:
+            continue
+        add_model(related_model)
+
+    related.sort(key=lambda item: item["label"])
+    return related
 
 
 @register.simple_tag(takes_context=True)
