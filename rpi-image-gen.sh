@@ -11,7 +11,7 @@ exec > >(tee "$LOG_FILE") 2>&1
 ROLE=""
 USERNAME="arthe"
 PASSWORD=""
-DEVICE_LAYER="pi5"
+DEVICE_LAYER="pi4"
 PASSWORD_PROVIDED=false
 HOSTNAME=""
 
@@ -25,7 +25,7 @@ Options:
   --hostname NAME     Assign NAME as the system hostname (required).
   --user NAME         Provision the named Linux account (default: arthe).
   --password PASS     Use PASS as the account password (otherwise prompt).
-  --device LAYER      Target rpi-image-gen device layer (default: pi5).
+  --device LAYER      Target rpi-image-gen device layer (default: pi4).
   -h, --help          Show this help message.
 USAGE
 }
@@ -97,6 +97,12 @@ done
 [[ -n "$HOSTNAME" ]] || error "Hostname is required (--hostname)"
 validate_hostname "$HOSTNAME"
 validate_username "$USERNAME"
+
+case "$DEVICE_LAYER" in
+  pi5|cm5)
+    error "Device layer '$DEVICE_LAYER' targets hardware newer than the Raspberry Pi 4B, which is not supported. Use --device pi4 or an earlier model."
+    ;;
+esac
 
 if [[ "$PASSWORD_PROVIDED" = false ]]; then
   while true; do
