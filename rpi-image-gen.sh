@@ -355,8 +355,6 @@ if [[ "$DEVICE_LAYER_CANONICAL" != "rpi4" ]]; then
   fi
 fi
 
-ensure_mmdebstrap_mode_unshare
-
 ensure_dependencies() {
   local dependencies_sh="$RPI_DIR/lib/dependencies.sh"
   local install_script="$RPI_DIR/install_deps.sh"
@@ -439,6 +437,8 @@ ensure_dependencies() {
 }
 
 ensure_dependencies
+
+ensure_mmdebstrap_mode_unshare
 
 PASSWORD_FILE="$RUN_DIR/.user-password"
 chmod 700 "$RUN_DIR"
