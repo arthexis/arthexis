@@ -31,6 +31,7 @@ def _skip_reasons(item: DummyItem):
 
 def test_node_role_only_skips_unmarked_tests(monkeypatch):
     monkeypatch.setenv("NODE_ROLE_ONLY", "1")
+    monkeypatch.delenv("NODE_ROLE", raising=False)
     marked = DummyItem(["Terminal"])
     unmarked = DummyItem()
 

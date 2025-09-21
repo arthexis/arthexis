@@ -15,6 +15,24 @@ exec > >(tee "$LOG_FILE") 2>&1
 
 BACKUP_DIR="$SCRIPT_DIR/backups"
 
+ensure_git_identity() {
+  local current_name current_email
+
+  if ! current_name=$(git config --get user.name 2>/dev/null); then
+    current_name=""
+  fi
+  if ! current_email=$(git config --get user.email 2>/dev/null); then
+    current_email=""
+  fi
+
+  if [ -z "$current_name" ]; then
+    git config --local user.name "Arthexis Env Refresh"
+  fi
+  if [ -z "$current_email" ]; then
+    git config --local user.email "env-refresh@arthexis.local"
+  fi
+}
+
 backup_database_for_branch() {
   local branch="$1"
   local source="$SCRIPT_DIR/db.sqlite3"
@@ -60,6 +78,7 @@ create_failover_branch() {
 }
 
 if [ -z "$FAILOVER_CREATED" ]; then
+  ensure_git_identity
   create_failover_branch
 fi
 

@@ -12,11 +12,13 @@ sys.path.insert(0, str(ROOT))
 import django
 from django.apps import apps
 from django.core.management import call_command
+from django.test.utils import setup_test_environment
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 # Keep a reference to the original setup function so we can call it lazily
 _original_setup = django.setup
+_test_env_ready = False
 
 
 def safe_setup():
@@ -30,6 +32,7 @@ def safe_setup():
     """
 
     if not apps.ready:
+        global _test_env_ready
         from django.conf import settings
 
         # Switch to the test database defined in settings to avoid touching
@@ -63,6 +66,10 @@ def safe_setup():
 
         # Perform the regular Django setup after configuring the test database
         _original_setup()
+
+        if not _test_env_ready:
+            setup_test_environment()
+            _test_env_ready = True
 
         from django.db import connections
 

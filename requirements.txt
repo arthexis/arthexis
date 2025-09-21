@@ -21,6 +21,7 @@ click-plugins==1.1.1.2
 click-repl==0.3.0
 colorama==0.4.6
 constantly==23.10.4
+coverage[toml]==7.10.6
 cron-descriptor==1.4.5
 cryptography==45.0.5
 daphne==4.2.1
@@ -60,6 +61,7 @@ pydantic==2.11.7
 pydantic_core==2.33.2
 pyOpenSSL==25.1.0
 pyperclip==1.9.0
+pytest==8.4.2
 PySocks==1.7.1
 python-crontab==3.3.0
 python-dateutil==2.9.0.post0
