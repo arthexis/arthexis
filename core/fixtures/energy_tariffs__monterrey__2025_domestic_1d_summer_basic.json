@@ -1,0 +1,18 @@
+[
+  {
+    "model": "core.energytariff",
+    "fields": {
+      "year": 2025,
+      "season": "summer",
+      "zone": "1D",
+      "contract_type": "domestic",
+      "period": "basic",
+      "unit": "kwh",
+      "start_time": "00:00:00",
+      "end_time": "23:59:59",
+      "price_mxn": "0.8062",
+      "cost_mxn": "0.8062",
+      "notes": "Bloque básico veraniego para zona 1D en Nuevo León con límite extendido hacia los 1,000 kWh mensuales."
+    }
+  }
+]

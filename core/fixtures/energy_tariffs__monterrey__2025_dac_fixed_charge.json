@@ -1,0 +1,18 @@
+[
+  {
+    "model": "core.energytariff",
+    "fields": {
+      "year": 2025,
+      "season": "annual",
+      "zone": "1C",
+      "contract_type": "dac",
+      "period": "fixed",
+      "unit": "month",
+      "start_time": "00:00:00",
+      "end_time": "23:59:59",
+      "price_mxn": "132.4610",
+      "cost_mxn": "132.4610",
+      "notes": "Cargo fijo mensual de referencia para usuarios DAC, significativamente mayor que en tarifa 1."
+    }
+  }
+]

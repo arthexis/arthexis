@@ -164,14 +164,33 @@
   .client-report-form .section-title {
     font-size: 1.1rem;
     font-weight: 600;
-    margin: 0 0 1.25rem;
-    padding-bottom: 0.5rem;
+  }
+
+  .client-report-form legend.section-title {
+    display: block;
+    box-sizing: border-box;
+    width: calc(100% + 3rem);
+    margin: -1.5rem -1.5rem 1.25rem;
+    padding: 1.25rem 1.5rem 1rem;
+    background-color: inherit;
     border-bottom: 1px solid var(--hairline-color, rgba(255, 255, 255, 0.15));
+    border-radius: 8px 8px 0 0;
   }
 
   .client-report-form .section-description {
     margin: 0 0 1.25rem;
     color: var(--body-quiet-color, #6b7280);
+  }
+
+  .client-report-form .report-section > *:not(legend):not(.section-description) {
+    padding: 0.75rem 0;
+  }
+
+  .client-report-form
+    .report-section
+    > *:not(legend):not(.section-description)
+    + *:not(legend):not(.section-description) {
+    border-top: 1px solid rgba(148, 163, 184, 0.25);
   }
 
   .client-report-form .form-group {
