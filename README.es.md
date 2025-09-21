@@ -6,8 +6,19 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
 
 ## Características
 
-- Compatible con el [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/)
-- Integración de [API](https://es.wikipedia.org/wiki/Interfaz_de_programaci%C3%B3n_de_aplicaciones) con [Odoo](https://www.odoo.com/) 1.6
+- Compatible con el [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) como sistema central, gestionando:
+  - BootNotification
+  - Heartbeat
+  - StatusNotification
+  - Authorize
+  - MeterValues
+  - DiagnosticsStatusNotification
+  - StartTransaction
+  - StopTransaction
+  - FirmwareStatusNotification
+- Integración de [API](https://es.wikipedia.org/wiki/Interfaz_de_programaci%C3%B3n_de_aplicaciones) con [Odoo](https://www.odoo.com/) para:
+  - Sincronizar credenciales de empleados mediante `res.users`
+  - Consultar el catálogo de productos mediante `product.product`
 - Funciona en [Windows 11](https://www.microsoft.com/es-es/windows/windows-11) y [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Probado para la [Raspberry Pi 4 Modelo B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 
@@ -30,16 +41,21 @@ Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plat
 - **[Windows](https://es.wikipedia.org/wiki/Microsoft_Windows)**: abre [PowerShell](https://learn.microsoft.com/es-es/powershell/) o [Git Bash](https://gitforwindows.org/) y ejecuta el mismo comando.
 
 ### 2. Iniciar y detener
-- **[VS Code](https://code.visualstudio.com/)**: abre la carpeta y ejecuta  
-  `python [vscode_manage.py](vscode_manage.py) runserver`; presiona `Ctrl+C` para detener.
+Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Constelación deben instalarse primero. Ambos métodos escuchan en [`http://localhost:8000/`](http://localhost:8000/) de forma predeterminada; usa `--port` para elegir otro valor.
+- **[VS Code](https://code.visualstudio.com/)**: abre la carpeta, ve al panel **Run and Debug** (`Ctrl+Shift+D`), selecciona la configuración **Run Server** (o **Debug Server**) y presiona el botón verde de inicio. Detén el servidor con el cuadrado rojo (`Shift+F5`).
 - **[Shell](https://es.wikipedia.org/wiki/Shell_de_unidad_de_comandos)**: en Linux ejecuta [`./start.sh`](start.sh) y detén con [`./stop.sh`](stop.sh); en Windows ejecuta [`start.bat`](start.bat) y detén con `Ctrl+C`.
 
 ### 3. Instalar y actualizar
-- **Linux**: usa [`./install.sh`](install.sh) con opciones como `--service NOMBRE`, `--public` o `--internal`, `--port PUERTO`, `--upgrade`, `--auto-upgrade`, `--latest`, `--celery`, `--lcd-screen`, `--no-lcd-screen`, `--clean`, `--datasette`. Actualiza con [`./upgrade.sh`](upgrade.sh) usando opciones como `--latest`, `--clean` o `--no-restart`.
-- **Windows**: ejecuta [`install.bat`](install.bat) para instalar y [`upgrade.bat`](upgrade.bat) para actualizar.
+- **Linux**: ejecuta [`./install.sh`](install.sh) con un flag de rol de nodo:
+  - `--terminal`: rol predeterminado si no se especifica y recomendado si no sabes cuál elegir. Los nodos Terminal también pueden usar los scripts anteriores para iniciar/detener sin instalar.
+  - `--control`: prepara el equipo de control para pruebas de un solo dispositivo.
+  - `--satellite`: configura el nodo perimetral de adquisición de datos.
+  - `--constellation`: habilita la pila de orquestación multiusuario.
+  Usa `./install.sh --help` para ver la lista completa de flags si necesitas personalizar el nodo más allá del rol. Actualiza con [`./upgrade.sh`](upgrade.sh).
+- **Windows**: ejecuta [`install.bat`](install.bat) para instalar (rol Terminal) y [`upgrade.bat`](upgrade.bat) para actualizar.
 
 ### 4. Administración
-Visita [`http://localhost:8888/admin/`](http://localhost:8888/admin/) para el [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) y [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) para la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa el puerto `8000` si iniciaste con [`start.bat`](start.bat) o la opción `--public`.
+Visita [`http://localhost:8000/admin/`](http://localhost:8000/admin/) para el [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) y [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) para la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
 
 ## Soporte
 
