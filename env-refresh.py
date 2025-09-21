@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
 import sys
 from pathlib import Path
 import json
@@ -104,76 +103,6 @@ def _migration_hash(app_labels: list[str]) -> str:
     return md5.hexdigest()
 
 
-def _merge_migration_paths(base_dir: Path) -> list[str]:
-    try:
-        result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=base_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return []
-
-    merge_paths: list[str] = []
-    for raw_line in result.stdout.splitlines():
-        line = raw_line.rstrip()
-        if not line:
-            continue
-        status = line[:2]
-        if status.startswith("R"):
-            arrow = line.find("->")
-            if arrow == -1:
-                continue
-            path = line[arrow + 2 :].strip()
-        else:
-            path = line[3:]
-        if not path:
-            continue
-        rel_path = Path(path)
-        if "migrations" not in rel_path.parts:
-            continue
-        if "merge" not in rel_path.name:
-            continue
-        if rel_path.suffix != ".py":
-            continue
-        merge_paths.append(path)
-    return merge_paths
-
-
-def _stash_merge_migrations(base_dir: Path, *, reason: str | None = None) -> None:
-    merge_paths = _merge_migration_paths(base_dir)
-    if not merge_paths:
-        return
-
-    try:
-        subprocess.run(
-            [
-                "git",
-                "stash",
-                "push",
-                "--include-untracked",
-                "-m",
-                "env-refresh merge migrations",
-                "--",
-                *merge_paths,
-            ],
-            cwd=base_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True,
-        )
-    except (OSError, subprocess.CalledProcessError) as exc:
-        print(f"Failed to stash merge migrations: {exc}", file=sys.stderr)
-        return
-
-    suffix = " due to conflicting migrations" if reason and "Conflicting migrations detected" in reason else ""
-    print(f"Stashed merge migration(s){suffix}: {', '.join(merge_paths)}")
-
-
 def _remove_integrator_from_auth_migration() -> None:
     """Strip lingering integrator imports from Django's auth migration."""
     spec = importlib.util.find_spec("django.contrib.auth.migrations.0013_userproxy")
@@ -202,13 +131,9 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
 
     _remove_integrator_from_auth_migration()
 
-    merge_invoked = False
-    merge_reason: str | None = None
     try:
         call_command("makemigrations", *local_apps, interactive=False)
     except CommandError as exc:
-        merge_invoked = True
-        merge_reason = str(exc)
         call_command("makemigrations", *local_apps, merge=True, interactive=False)
     except InconsistentMigrationHistory:
         if using_sqlite:
@@ -284,9 +209,6 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     call_command("migrate", interactive=False)
                 except Exception:
                     raise exc
-
-    if merge_invoked:
-        _stash_merge_migrations(base_dir, reason=merge_reason)
 
     # Remove auto-generated SigilRoot entries so fixtures define prefixes
     SigilRoot = apps.get_model("core", "SigilRoot")
