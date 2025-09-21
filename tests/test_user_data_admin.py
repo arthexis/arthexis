@@ -58,6 +58,15 @@ class UserDataAdminTests(TransactionTestCase):
         response = self.client.get(url)
         self.assertContains(response, 'name="_user_datum"')
 
+    def test_admin_account_shows_userdatum_checkbox(self):
+        User = get_user_model()
+        admin_user = User.objects.create_superuser(User.ADMIN_USERNAME, password="pw")
+        self.client.logout()
+        self.client.login(username=admin_user.username, password="pw")
+        url = reverse("admin:teams_odooprofile_change", args=[self.profile.pk])
+        response = self.client.get(url)
+        self.assertContains(response, 'name="_user_datum"')
+
     def test_user_change_view_hides_user_datum_checkbox(self):
         UserModel = get_user_model()
         admin_model = None
