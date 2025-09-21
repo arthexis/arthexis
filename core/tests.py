@@ -902,6 +902,53 @@ class ReleaseProcessTests(TestCase):
             self.assertEqual(count_file.read_text(), "1")
 
 
+class ReleaseProgressSyncTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_superuser("admin", "admin@example.com", "pw")
+        self.client.force_login(self.user)
+        self.package = Package.objects.get(name="arthexis")
+        self.version_path = Path("VERSION")
+        self.original_version = self.version_path.read_text(encoding="utf-8")
+        self.version_path.write_text("1.2.3", encoding="utf-8")
+
+    def tearDown(self):
+        self.version_path.write_text(self.original_version, encoding="utf-8")
+
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    @mock.patch("core.views.revision.get_revision", return_value="abc123")
+    def test_unpublished_release_syncs_version_and_revision(
+        self, get_revision, dump_fixture
+    ):
+        release = PackageRelease.objects.create(
+            package=self.package,
+            version="1.0.0",
+        )
+        release.revision = "oldrev"
+        release.save(update_fields=["revision"])
+
+        url = reverse("release-progress", args=[release.pk, "publish"])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        release.refresh_from_db()
+        self.assertEqual(release.version, "1.2.4")
+        self.assertEqual(release.revision, "abc123")
+        dump_fixture.assert_called_once()
+
+    def test_published_release_not_current_returns_404(self):
+        release = PackageRelease.objects.create(
+            package=self.package,
+            version="1.2.4",
+            pypi_url="https://example.com",
+        )
+
+        url = reverse("release-progress", args=[release.pk, "publish"])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 404)
+
+
 class PackageReleaseAdminActionTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()

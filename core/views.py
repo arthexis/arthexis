@@ -14,9 +14,9 @@ from django.utils.translation import gettext as _
 from django.urls import NoReverseMatch, reverse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
+from packaging.version import InvalidVersion, Version
 from pathlib import Path
 import subprocess
-import json
 
 from utils import revision
 from utils.api import api_login_required
@@ -122,6 +122,55 @@ def _format_condition_failure(todo: Todo, result) -> str:
         "todo": todo.request,
         "detail": detail,
     }
+
+
+def _expected_release_version(current_version: str) -> str | None:
+    if not current_version:
+        return None
+    try:
+        parsed = Version(current_version)
+    except InvalidVersion:
+        return None
+    release = list(parsed.release)
+    if not release:
+        return None
+    while len(release) < 3:
+        release.append(0)
+    major, minor, patch = release[:3]
+    return f"{major}.{minor}.{patch + 1}"
+
+
+def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
+    """Update ``release`` to align with the repository revision.
+
+    Returns a tuple ``(updated, previous_version)`` where ``updated`` indicates
+    whether the object was modified and ``previous_version`` stores the original
+    version before any adjustments were applied.
+    """
+
+    previous_version = release.version
+    version_path = Path("VERSION")
+    current_version = ""
+    if version_path.exists():
+        current_version = version_path.read_text(encoding="utf-8").strip()
+    expected_version = _expected_release_version(current_version)
+
+    updated_fields: list[str] = []
+    if expected_version and release.version != expected_version:
+        release.version = expected_version
+        updated_fields.append("version")
+
+    current_revision = revision.get_revision()
+    if release.revision != current_revision:
+        release.revision = current_revision
+        updated_fields.append("revision")
+
+    if updated_fields:
+        release.save(update_fields=updated_fields)
+        PackageRelease.dump_fixture()
+        return True, previous_version
+
+    return False, previous_version
 
 
 def _step_check_todos(release, ctx, log_path: Path) -> None:
@@ -553,11 +602,25 @@ def release_progress(request, pk: int, action: str):
     release = get_object_or_404(PackageRelease, pk=pk)
     if action != "publish":
         raise Http404("Unknown action")
-    if not release.is_current:
-        raise Http404("Release is not current")
     session_key = f"release_publish_{pk}"
     lock_path = Path("locks") / f"release_publish_{pk}.json"
     restart_path = Path("locks") / f"release_publish_{pk}.restarts"
+
+    if not release.is_current:
+        if release.is_published:
+            raise Http404("Release is not current")
+        updated, previous_version = _sync_release_with_revision(release)
+        if updated:
+            request.session.pop(session_key, None)
+            if lock_path.exists():
+                lock_path.unlink()
+            if restart_path.exists():
+                restart_path.unlink()
+            log_dir = Path("logs")
+            for log_file in log_dir.glob(
+                f"{release.package.name}-{previous_version}*.log"
+            ):
+                log_file.unlink()
 
     if request.GET.get("restart"):
         count = 0
