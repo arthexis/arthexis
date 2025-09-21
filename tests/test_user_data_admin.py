@@ -228,7 +228,7 @@ class UserDataAdminTests(TransactionTestCase):
         self.assertFalse(empty.exists())
         mock_call.assert_not_called()
 
-    def test_admin_fixtures_delegate_to_system_user(self):
+    def test_admin_fixtures_use_admin_account(self):
         User = get_user_model()
         User.all_objects.filter(username=User.ADMIN_USERNAME).delete()
         system_user, _ = User.all_objects.get_or_create(
@@ -257,19 +257,19 @@ class UserDataAdminTests(TransactionTestCase):
         admin_user.save(update_fields=["operate_as"])
 
         with TemporaryDirectory() as temp_dir:
-            system_user.data_path = temp_dir
-            system_user.save(update_fields=["data_path"])
+            admin_user.data_path = temp_dir
+            admin_user.save(update_fields=["data_path"])
             todo = Todo.objects.create(request="Delegate fixture")
             Todo.all_objects.filter(pk=todo.pk).update(is_user_data=True)
             todo.refresh_from_db()
 
             target_user = _resolve_fixture_user(todo, admin_user)
-            self.assertEqual(target_user, system_user)
+            self.assertEqual(target_user, admin_user)
 
             dump_user_fixture(todo, target_user)
             expected_path = (
                 Path(temp_dir)
-                / system_user.username
+                / admin_user.username
                 / f"{todo._meta.app_label}_{todo._meta.model_name}_{todo.pk}.json"
             )
             self.assertTrue(expected_path.exists())

@@ -44,9 +44,6 @@ def _user_allows_user_data(user) -> bool:
         return False
     username = _username_for(user)
     UserModel = get_user_model()
-    admin_username = getattr(UserModel, "ADMIN_USERNAME", "")
-    if admin_username and username == admin_username:
-        return False
     system_username = getattr(UserModel, "SYSTEM_USERNAME", "")
     if system_username and username == system_username:
         return True
