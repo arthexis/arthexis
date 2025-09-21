@@ -5,7 +5,7 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "module": ["Satellite", "/ocpp/rfid/"],
+      "module": ["Satellite", "/ocpp/"],
       "path": "/ocpp/rfid/",
       "label": "RFID Scanner",
       "enabled": true,
