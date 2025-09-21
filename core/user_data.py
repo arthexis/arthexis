@@ -142,6 +142,16 @@ def _resolve_fixture_user(instance, fallback=None):
     selected = _select_fixture_user(owner, UserModel)
     if selected is not None:
         return selected
+    extended_owner = getattr(instance, "user_datum_owner", None)
+    if extended_owner is not None:
+        try:
+            candidate = extended_owner() if callable(extended_owner) else extended_owner
+        except Exception:
+            candidate = None
+        else:
+            selected = _select_fixture_user(candidate, UserModel)
+            if selected is not None:
+                return selected
     if hasattr(instance, "owner"):
         try:
             owner_value = instance.owner
@@ -323,9 +333,15 @@ class UserDatumAdminMixin(admin.ModelAdmin):
     def render_change_form(
         self, request, context, add=False, change=False, form_url="", obj=None
     ):
-        context["show_user_datum"] = issubclass(
-            self.model, Entity
-        ) and _user_allows_user_data(request.user)
+        allow_user_datum = _user_allows_user_data(request.user)
+        if obj is not None and getattr(obj, "pk", None) and not allow_user_datum:
+            try:
+                fallback_user = _resolve_fixture_user(obj, request.user)
+            except Exception:
+                fallback_user = None
+            else:
+                allow_user_datum = _user_allows_user_data(fallback_user)
+        context["show_user_datum"] = issubclass(self.model, Entity) and allow_user_datum
         context["show_seed_datum"] = issubclass(self.model, Entity)
         context["show_save_as_copy"] = issubclass(self.model, Entity) or hasattr(
             self.model, "clone"

@@ -1010,6 +1010,24 @@ class RFID(Entity):
     added_on = models.DateTimeField(auto_now_add=True)
     last_seen_on = models.DateTimeField(null=True, blank=True)
 
+    def user_datum_owner(self):
+        """Return the user that should own fixtures generated for this RFID."""
+
+        if not getattr(self, "pk", None):
+            return None
+        try:
+            account = (
+                self.energy_accounts.select_related("user")
+                .filter(user__isnull=False)
+                .first()
+            )
+        except ValueError:
+            # Many-to-many relations require a saved instance.
+            return None
+        if account and account.user_id:
+            return account.user
+        return None
+
     def save(self, *args, **kwargs):
         if self.pk:
             old = type(self).objects.filter(pk=self.pk).values("key_a", "key_b").first()

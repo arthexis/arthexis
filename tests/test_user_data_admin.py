@@ -5,7 +5,7 @@ from unittest.mock import patch
 from django import forms
 from django.contrib import admin
 from django.contrib.messages.storage.fallback import FallbackStorage
-from django.test import TransactionTestCase, RequestFactory
+from django.test import TestCase, TransactionTestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.conf import settings
@@ -21,6 +21,8 @@ from core.models import (
     ReleaseManager as CoreReleaseManager,
     AssistantProfile as CoreAssistantProfile,
     Todo,
+    EnergyAccount,
+    RFID,
 )
 from core.user_data import dump_user_fixture, load_user_fixtures, _resolve_fixture_user
 
@@ -273,3 +275,26 @@ class UserDataAdminTests(TransactionTestCase):
                 / f"{todo._meta.app_label}_{todo._meta.model_name}_{todo.pk}.json"
             )
             self.assertTrue(expected_path.exists())
+
+
+class RFIDUserDatumAdminTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        owner = User.objects.create_user("rfidowner", password="pw")
+        self.account = EnergyAccount.objects.create(name="Owner", user=owner)
+        self.rfid_with_owner = RFID.objects.create(rfid="ABCD1234")
+        self.rfid_with_owner.energy_accounts.add(self.account)
+        self.rfid_without_owner = RFID.objects.create(rfid="DCBA4321")
+        admin_username = User.ADMIN_USERNAME or "admin"
+        self.admin_user = User.objects.create_superuser(admin_username, password="pw")
+        self.client.login(username=admin_username, password="pw")
+
+    def test_admin_sees_user_datum_for_owned_rfid(self):
+        url = reverse("admin:core_rfid_change", args=[self.rfid_with_owner.pk])
+        response = self.client.get(url)
+        self.assertContains(response, 'name="_user_datum"')
+
+    def test_admin_does_not_see_user_datum_without_owner(self):
+        url = reverse("admin:core_rfid_change", args=[self.rfid_without_owner.pk])
+        response = self.client.get(url)
+        self.assertNotContains(response, 'name="_user_datum"')
