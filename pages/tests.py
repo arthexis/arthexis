@@ -708,6 +708,37 @@ class ConstellationNavTests(TestCase):
         self.assertContains(resp, 'href="/ocpp/"')
 
 
+class PowerNavTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={"hostname": "localhost", "address": "127.0.0.1", "role": role},
+        )
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
+        )
+        app, _ = Application.objects.get_or_create(name="awg")
+        module, _ = Module.objects.get_or_create(
+            node_role=role, application=app, path="/awg/"
+        )
+        module.create_landings()
+
+    def test_power_pill_lists_calculators(self):
+        resp = self.client.get(reverse("pages:index"))
+        power_module = None
+        for module in resp.context["nav_modules"]:
+            if module.path == "/awg/":
+                power_module = module
+                break
+        self.assertIsNotNone(power_module)
+        self.assertEqual(power_module.menu_label.upper(), "POWER")
+        landing_labels = {landing.label for landing in power_module.enabled_landings}
+        self.assertIn("AWG Calculator", landing_labels)
+        self.assertIn("Energy Tariff Calculator", landing_labels)
+
+
 class StaffNavVisibilityTests(TestCase):
     def setUp(self):
         self.client = Client()
