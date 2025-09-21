@@ -1,0 +1,18 @@
+[
+  {
+    "model": "core.energytariff",
+    "fields": {
+      "year": 2025,
+      "season": "summer",
+      "zone": "1D",
+      "contract_type": "domestic",
+      "period": "intermediate_2",
+      "unit": "kwh",
+      "start_time": "00:00:00",
+      "end_time": "23:59:59",
+      "price_mxn": "1.2078",
+      "cost_mxn": "1.2078",
+      "notes": "Segundo bloque intermedio de verano para zona 1D antes de pasar a excedente."
+    }
+  }
+]

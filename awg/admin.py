@@ -145,10 +145,11 @@ class PowerLeadAdmin(EntityModelAdmin):
 class EnergyTariffAdmin(EntityModelAdmin):
     list_display = (
         "year",
-        "month_name",
+        "season_label",
         "zone",
         "contract_type_label",
-        "time_of_day_label",
+        "period_label",
+        "unit",
         "start_time",
         "end_time",
         "price_mxn",
@@ -156,38 +157,48 @@ class EnergyTariffAdmin(EntityModelAdmin):
     )
     list_filter = (
         "year",
-        "month",
+        "season",
         "zone",
         "contract_type",
-        "time_of_day",
+        "period",
+        "unit",
     )
     search_fields = ("zone", "contract_type")
-    ordering = ("-year", "-month", "zone", "contract_type", "time_of_day", "start_time")
+    ordering = (
+        "-year",
+        "season",
+        "zone",
+        "contract_type",
+        "period",
+        "start_time",
+    )
     fieldsets = (
         (
             None,
             {
                 "fields": (
                     "year",
-                    "month",
+                    "season",
                     "zone",
                     "contract_type",
-                    "time_of_day",
+                    "period",
+                    "unit",
                     ("start_time", "end_time"),
                     ("price_mxn", "cost_mxn"),
+                    "notes",
                 )
             },
         ),
     )
 
-    @admin.display(description=_("Month"), ordering="month")
-    def month_name(self, obj):
-        return obj.get_month_display()
+    @admin.display(description=_("Season"), ordering="season")
+    def season_label(self, obj):
+        return obj.get_season_display()
 
     @admin.display(description=_("Contract type"), ordering="contract_type")
     def contract_type_label(self, obj):
         return obj.get_contract_type_display()
 
-    @admin.display(description=_("Time of day"), ordering="time_of_day")
-    def time_of_day_label(self, obj):
-        return obj.get_time_of_day_display()
+    @admin.display(description=_("Period"), ordering="period")
+    def period_label(self, obj):
+        return obj.get_period_display()
