@@ -6,6 +6,7 @@ import math
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Literal, Optional, Union
 
+from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.translation import gettext as _, gettext_lazy as _lazy
@@ -368,6 +369,7 @@ def calculator(request):
 
 @csrf_exempt
 @landing(_lazy("Energy Tariff Calculator"))
+@login_required(login_url="pages:login")
 def energy_tariff_calculator(request):
     """Estimate MXN costs for a given kWh consumption using CFE tariffs."""
 
