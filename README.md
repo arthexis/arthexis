@@ -7,15 +7,9 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 ## Features
 
 - Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) central system, handling:
-  - BootNotification
-  - Heartbeat
-  - StatusNotification
-  - Authorize
-  - MeterValues
-  - DiagnosticsStatusNotification
-  - StartTransaction
-  - StopTransaction
-  - FirmwareStatusNotification
+  - Lifecycle & sessions: BootNotification, Heartbeat, StatusNotification, StartTransaction, StopTransaction
+  - Access & metering: Authorize, MeterValues
+  - Maintenance & firmware: DiagnosticsStatusNotification, FirmwareStatusNotification
 - [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/), syncing:
   - Employee credentials via `res.users`
   - Product catalog lookups via `product.product`
@@ -28,39 +22,64 @@ Project under active development.
 
 Arthexis Constellation ships in four node roles tailored to different deployment scenarios.
 
-| Role | Description & Common Features |
-| --- | --- |
-| Terminal | Single-User Research & Development<br>Features: GUI Toast |
-| Control | Single-Device Testing & Special Task Appliances<br>Features: AP Public Wi-Fi, Celery Queue, GUI Toast, LCD Screen, NGINX Server, RFID Scanner |
-| Satellite | Multi-Device Edge, Network & Data Acquisition<br>Features: AP Router, Celery Queue, NGINX Server, RFID Scanner |
-| Constellation | Multi-User Cloud & Orchestration<br>Features: Celery Queue, NGINX Server |
+<table border="1" cellpadding="8" cellspacing="0">
+  <thead>
+    <tr>
+      <th align="left">Role</th>
+      <th align="left">Description &amp; Common Features</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td valign="top"><strong>Terminal</strong></td>
+      <td valign="top"><strong>Single-User Research &amp; Development</strong><br />Features: GUI Toast</td>
+    </tr>
+    <tr>
+      <td valign="top"><strong>Control</strong></td>
+      <td valign="top"><strong>Single-Device Testing &amp; Special Task Appliances</strong><br />Features: AP Public Wi-Fi, Celery Queue, GUI Toast, LCD Screen, NGINX Server, RFID Scanner</td>
+    </tr>
+    <tr>
+      <td valign="top"><strong>Satellite</strong></td>
+      <td valign="top"><strong>Multi-Device Edge, Network &amp; Data Acquisition</strong><br />Features: AP Router, Celery Queue, NGINX Server, RFID Scanner</td>
+    </tr>
+    <tr>
+      <td valign="top"><strong>Constellation</strong></td>
+      <td valign="top"><strong>Multi-User Cloud &amp; Orchestration</strong><br />Features: Celery Queue, NGINX Server</td>
+    </tr>
+  </tbody>
+</table>
 
 ## Quick Guide
 
 ### 1. Clone
-- **[Linux](https://en.wikipedia.org/wiki/Linux)**: open a [terminal](https://en.wikipedia.org/wiki/Command-line_interface) and run  
-  `git clone https://github.com/arthexis/arthexis.git`
+- **[Linux](https://en.wikipedia.org/wiki/Linux)**: open a [terminal](https://en.wikipedia.org/wiki/Command-line_interface) and run `git clone https://github.com/arthexis/arthexis.git`.
 - **[Windows](https://en.wikipedia.org/wiki/Microsoft_Windows)**: open [PowerShell](https://learn.microsoft.com/powershell/) or [Git Bash](https://gitforwindows.org/) and run the same command.
 
 ### 2. Start and stop
-Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Constellation roles require installation first. Both approaches listen on [`http://localhost:8000/`](http://localhost:8000/) by default—pass `--port` to use a different value.
+Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Constellation roles require installation first. Both approaches listen on [`http://localhost:8000/`](http://localhost:8000/) by default.
 
-- **[VS Code](https://code.visualstudio.com/)**
-  - Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
-  - Select the **Run Server** (or **Debug Server**) configuration.
-  - Press the green start button. Stop the server with the red square button (`Shift+F5`).
-- **[Shell](https://en.wikipedia.org/wiki/Shell_(computing))**
-  - Linux: run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh).
-  - Windows: run [`start.bat`](start.bat) and stop with `Ctrl+C`.
+**[VS Code](https://code.visualstudio.com/)**
+- Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
+- Select the **Run Server** (or **Debug Server**) configuration.
+- Press the green start button. Stop the server with the red square button (`Shift+F5`).
+
+**[Shell](https://en.wikipedia.org/wiki/Shell_(computing))**
+- Linux: run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh).
+- Windows: run [`start.bat`](start.bat) and stop with `Ctrl+C`.
 
 ### 3. Install and upgrade
-- **Linux**: run [`./install.sh`](install.sh) with a node role flag:
-  - `--terminal` – default when unspecified and recommended if you're unsure. Terminal nodes can also use the start/stop scripts above without installing.
-  - `--control` – prepares the single-device testing appliance.
-  - `--satellite` – configures the edge data acquisition node.
-  - `--constellation` – enables the multi-user orchestration stack.
-  Use `./install.sh --help` to list every available flag if you need to customize the node beyond the role defaults. Upgrade with [`./upgrade.sh`](upgrade.sh).
-- **Windows**: run [`install.bat`](install.bat) to install (Terminal role) and [`upgrade.bat`](upgrade.bat) to upgrade.
+**Linux:** run [`./install.sh`](install.sh) with a node role flag:
+- `--terminal` – default when unspecified and recommended if you're unsure. Terminal nodes can also use the start/stop scripts above without installing.
+- `--control` – prepares the single-device testing appliance.
+- `--satellite` – configures the edge data acquisition node.
+- `--constellation` – enables the multi-user orchestration stack.
+Use `./install.sh --help` to list every available flag if you need to customize the node beyond the role defaults.
+
+Upgrade with [`./upgrade.sh`](upgrade.sh).
+
+**Windows:**
+- Run [`install.bat`](install.bat) to install (Terminal role) and [`upgrade.bat`](upgrade.bat) to upgrade.
+- Installation is not required to start in Terminal mode (the default).
 
 ### 4. Administration
 Visit [`http://localhost:8000/admin/`](http://localhost:8000/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use `--port` with the start scripts or installer when you need to expose a different port.

@@ -7,15 +7,9 @@
 ## Возможности
 
 - Совместим с [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) в роли центральной системы и обрабатывает:
-  - BootNotification
-  - Heartbeat
-  - StatusNotification
-  - Authorize
-  - MeterValues
-  - DiagnosticsStatusNotification
-  - StartTransaction
-  - StopTransaction
-  - FirmwareStatusNotification
+  - Управление жизненным циклом и сессиями: BootNotification, Heartbeat, StatusNotification, StartTransaction, StopTransaction
+  - Доступ и учёт показаний: Authorize, MeterValues
+  - Обслуживание и прошивка: DiagnosticsStatusNotification, FirmwareStatusNotification
 - [API](https://ru.wikipedia.org/wiki/API) интеграция с [Odoo](https://www.odoo.com/) для:
   - Синхронизации учётных данных сотрудников через `res.users`
   - Запроса каталога продуктов через `product.product`
@@ -26,40 +20,70 @@
 
 Созвездие Arthexis поставляется в четырёх ролях узлов, чтобы адаптировать платформу к различным сценариям развёртывания.
 
-| Роль | Описание | Типичные функции |
-| --- | --- | --- |
-| Terminal | Исследования и разработка для одного пользователя | • GUI Toast |
-| Control | Тестирование отдельных устройств и специализированные аппаратные комплексы | • AP Public Wi-Fi<br>• Celery Queue<br>• GUI Toast<br>• LCD Screen<br>• NGINX Server<br>• RFID Scanner |
-| Satellite | Периферийная многоприборная инфраструктура, сеть и сбор данных | • AP Router<br>• Celery Queue<br>• NGINX Server<br>• RFID Scanner |
-| Constellation | Многопользовательское облако и оркестрация | • Celery Queue<br>• NGINX Server |
+<table border="1" cellpadding="8" cellspacing="0">
+  <thead>
+    <tr>
+      <th align="left">Роль</th>
+      <th align="left">Описание</th>
+      <th align="left">Типичные функции</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td valign="top"><strong>Terminal</strong></td>
+      <td valign="top"><strong>Исследования и разработка для одного пользователя</strong></td>
+      <td valign="top">GUI Toast</td>
+    </tr>
+    <tr>
+      <td valign="top"><strong>Control</strong></td>
+      <td valign="top"><strong>Тестирование отдельных устройств и специализированные аппаратные комплексы</strong></td>
+      <td valign="top">AP Public Wi-Fi<br />Celery Queue<br />GUI Toast<br />LCD Screen<br />NGINX Server<br />RFID Scanner</td>
+    </tr>
+    <tr>
+      <td valign="top"><strong>Satellite</strong></td>
+      <td valign="top"><strong>Периферийная многоприборная инфраструктура, сеть и сбор данных</strong></td>
+      <td valign="top">AP Router<br />Celery Queue<br />NGINX Server<br />RFID Scanner</td>
+    </tr>
+    <tr>
+      <td valign="top"><strong>Constellation</strong></td>
+      <td valign="top"><strong>Многопользовательское облако и оркестрация</strong></td>
+      <td valign="top">Celery Queue<br />NGINX Server</td>
+    </tr>
+  </tbody>
+</table>
 
 ## Quick Guide
 
 ### 1. Клонирование
-- **[Linux](https://ru.wikipedia.org/wiki/Linux)**: откройте [терминал](https://ru.wikipedia.org/wiki/Командная_оболочка) и выполните  
-  `git clone https://github.com/arthexis/arthexis.git`
+- **[Linux](https://ru.wikipedia.org/wiki/Linux)**: откройте [терминал](https://ru.wikipedia.org/wiki/Командная_оболочка) и выполните `git clone https://github.com/arthexis/arthexis.git`.
 - **[Windows](https://ru.wikipedia.org/wiki/Microsoft_Windows)**: откройте [PowerShell](https://learn.microsoft.com/ru-ru/powershell/) или [Git Bash](https://gitforwindows.org/) и выполните ту же команду.
 
 ### 2. Запуск и остановка
-Узлы Terminal можно запускать напрямую приведёнными ниже скриптами без установки; роли Control, Satellite и Constellation требуют предварительной установки. Оба варианта по умолчанию слушают [`http://localhost:8000/`](http://localhost:8000/) — используйте `--port`, чтобы выбрать другой порт.
+Узлы Terminal можно запускать напрямую приведёнными ниже скриптами без установки; роли Control, Satellite и Constellation требуют предварительной установки. Оба варианта по умолчанию слушают [`http://localhost:8000/`](http://localhost:8000/).
 
-- **[VS Code](https://code.visualstudio.com/)**
-  - Откройте папку и перейдите на панель **Run and Debug** (`Ctrl+Shift+D`).
-  - Выберите конфигурацию **Run Server** (или **Debug Server**).
-  - Нажмите зелёную кнопку запуска. Остановите сервер красным квадратом (`Shift+F5`).
-- **[Shell](https://ru.wikipedia.org/wiki/Командная_оболочка)**
-  - Linux: запустите [`./start.sh`](start.sh) и остановите [`./stop.sh`](stop.sh).
-  - Windows: запустите [`start.bat`](start.bat) и остановите `Ctrl+C`.
+**[VS Code](https://code.visualstudio.com/)**
+- Откройте папку и перейдите на панель **Run and Debug** (`Ctrl+Shift+D`).
+- Выберите конфигурацию **Run Server** (или **Debug Server**).
+- Нажмите зелёную кнопку запуска. Остановите сервер красным квадратом (`Shift+F5`).
+
+**[Shell](https://ru.wikipedia.org/wiki/Командная_оболочка)**
+- Linux: запустите [`./start.sh`](start.sh) и остановите [`./stop.sh`](stop.sh).
+- Windows: запустите [`start.bat`](start.bat) и остановите `Ctrl+C`.
 
 
 ### 3. Установка и обновление
-- **Linux**: выполните [`./install.sh`](install.sh) с флагом роли узла:
-  - `--terminal` — роль по умолчанию, если флаг не указан, и рекомендуемый выбор, если вы не уверены. Узлы Terminal также могут использовать приведённые выше скрипты запуска/остановки без установки.
-  - `--control` — подготавливает устройство для тестирования одного зарядного устройства.
-  - `--satellite` — настраивает периферийный узел сбора данных.
-  - `--constellation` — включает мультипользовательский оркестратор.
-  Используйте `./install.sh --help`, чтобы увидеть полный список флагов, если требуется дополнительная настройка сверх выбранной роли. Обновляйте систему с помощью [`./upgrade.sh`](upgrade.sh).
-- **Windows**: выполните [`install.bat`](install.bat) для установки (роль Terminal) и [`upgrade.bat`](upgrade.bat) для обновления.
+**Linux:** выполните [`./install.sh`](install.sh) с флагом роли узла:
+- `--terminal` — роль по умолчанию, если флаг не указан, и рекомендуемый выбор, если вы не уверены. Узлы Terminal также могут использовать приведённые выше скрипты запуска/остановки без установки.
+- `--control` — подготавливает устройство для тестирования одного зарядного устройства.
+- `--satellite` — настраивает периферийный узел сбора данных.
+- `--constellation` — включает мультипользовательский оркестратор.
+Используйте `./install.sh --help`, чтобы увидеть полный список флагов, если требуется дополнительная настройка сверх выбранной роли.
+
+Обновляйте систему с помощью [`./upgrade.sh`](upgrade.sh).
+
+**Windows:**
+- Выполните [`install.bat`](install.bat) для установки (роль Terminal) и [`upgrade.bat`](upgrade.bat) для обновления.
+- Установка не требуется для запуска в режиме Terminal (режим по умолчанию).
 
 ### 4. Администрирование
 Перейдите на [`http://localhost:8000/admin/`](http://localhost:8000/admin/) для [панели администратора Django](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) и [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) для [административной документации](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Используйте `--port` со скриптами запуска или установщиком, если нужно открыть другой порт.
