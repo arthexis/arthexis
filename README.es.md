@@ -52,6 +52,15 @@ Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plat
   </tbody>
 </table>
 
+## Idiomas
+
+Constelación Arthexis está disponible en:
+
+- Español
+- Inglés
+- Italiano
+- Alemán
+
 ## Quick Guide
 
 ### 1. Clonar

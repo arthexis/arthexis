@@ -38,24 +38,24 @@ class LanguageSwitchTests(TestCase):
         # Visit the home page to ensure site is set up
         self.client.get(reverse("pages:index"))
         resp = self.client.post(
-            reverse("set_language"), {"language": "fr", "next": "/"}, follow=True
+            reverse("set_language"), {"language": "it", "next": "/"}, follow=True
         )
-        self.assertContains(resp, "Constellation Arthexis")
+        self.assertContains(resp, "Costellazione Arthexis")
 
-    def test_french_readme_rendered(self):
-        """Switch to French and ensure the localized README is shown."""
+    def test_italian_readme_rendered(self):
+        """Switch to Italian and ensure the localized README is shown."""
         # Visit the home page to ensure site is set up
         self.client.get(reverse("pages:index"))
-        # Change language to French
-        self.client.post(reverse("set_language"), {"language": "fr", "next": "/"})
+        # Change language to Italian
+        self.client.post(reverse("set_language"), {"language": "it", "next": "/"})
         resp = self.client.get(reverse("pages:index"))
-        self.assertContains(resp, "Constellation Arthexis")
+        self.assertContains(resp, "Costellazione Arthexis")
 
-    def test_russian_readme_rendered(self):
-        """Switch to Russian and ensure the localized README is shown."""
+    def test_german_readme_rendered(self):
+        """Switch to German and ensure the localized README is shown."""
         # Visit the home page to ensure site is set up
         self.client.get(reverse("pages:index"))
-        # Change language to Russian
-        self.client.post(reverse("set_language"), {"language": "ru", "next": "/"})
+        # Change language to German
+        self.client.post(reverse("set_language"), {"language": "de", "next": "/"})
         resp = self.client.get(reverse("pages:index"))
-        self.assertContains(resp, "Созвездие Arthexis")
+        self.assertContains(resp, "Arthexis-Konstellation")
