@@ -3,20 +3,22 @@ import shutil
 from datetime import timedelta
 
 import requests
+from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, login
-from django.http import Http404, JsonResponse
 from django.contrib import messages
-from django.shortcuts import get_object_or_404, render, redirect
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
-from django.utils.translation import gettext as _
+from django.http import Http404, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from django.urls import NoReverseMatch, reverse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET, require_POST
 from pathlib import Path
 import subprocess
 import json
 
+from utils import revision
 from utils.api import api_login_required
 
 from .models import Product, EnergyAccount, PackageRelease, Todo
@@ -41,6 +43,22 @@ def odoo_products(request):
         return JsonResponse({"detail": "Unable to fetch products"}, status=502)
     items = [{"id": p.get("id"), "name": p.get("name", "")} for p in products]
     return JsonResponse(items, safe=False)
+
+
+@require_GET
+def version_info(request):
+    """Return the running application version and Git revision."""
+
+    version = ""
+    version_path = Path(settings.BASE_DIR) / "VERSION"
+    if version_path.exists():
+        version = version_path.read_text(encoding="utf-8").strip()
+    return JsonResponse(
+        {
+            "version": version,
+            "revision": revision.get_revision(),
+        }
+    )
 
 
 from . import release as release_utils

@@ -1,0 +1,177 @@
+{% load i18n %}
+{% translate "A new version of this site is available." as version_message %}
+{% translate "Refresh" as refresh_label %}
+{% translate "Version" as version_label %}
+{% translate "Revision" as revision_label %}
+<script>
+(function () {
+  const CHECK_URL = "{% url 'version-info' %}";
+  const MESSAGE_TEXT = "{{ version_message|escapejs }}";
+  const REFRESH_TEXT = "{{ refresh_label|escapejs }}";
+  const VERSION_LABEL = "{{ version_label|escapejs }}";
+  const REVISION_LABEL = "{{ revision_label|escapejs }}";
+  const CHECK_INTERVAL = 120000;
+  if (!CHECK_URL) {
+    return;
+  }
+  if (window.__versionCheckInitialized) {
+    return;
+  }
+  window.__versionCheckInitialized = true;
+
+  function start() {
+    const styleId = "version-update-style";
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement("style");
+      style.id = styleId;
+      style.textContent = `
+.version-update-banner {
+  align-items: center;
+  align-self: stretch;
+  background-color: #0b5ed7;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18);
+  box-sizing: border-box;
+  color: #fff;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: center;
+  margin: 0;
+  padding: 0.75rem 1.5rem;
+  position: sticky;
+  top: 0;
+  width: 100%;
+  z-index: 1100;
+}
+.version-update-text {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  justify-content: center;
+  font-weight: 600;
+}
+.version-update-details {
+  font-weight: 400;
+  opacity: 0.9;
+  margin-left: 0.25rem;
+}
+.version-update-refresh {
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 600;
+  padding: 0.35rem 1rem;
+  text-decoration: none;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.version-update-refresh:hover,
+.version-update-refresh:focus,
+.version-update-refresh:focus-visible {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  outline: none;
+}
+`; 
+      document.head.appendChild(style);
+    }
+
+    let currentVersion = null;
+    let currentRevision = null;
+    let bannerElement;
+    let detailsElement;
+
+    function shortRevision(value) {
+      return value ? value.slice(0, 7) : "";
+    }
+
+    function ensureBanner() {
+      if (!bannerElement) {
+        bannerElement = document.createElement("div");
+        bannerElement.className = "version-update-banner";
+        bannerElement.setAttribute("role", "status");
+        bannerElement.setAttribute("aria-live", "polite");
+
+        const textWrapper = document.createElement("span");
+        textWrapper.className = "version-update-text";
+        const messageNode = document.createElement("span");
+        messageNode.className = "version-update-message";
+        messageNode.textContent = MESSAGE_TEXT;
+        detailsElement = document.createElement("span");
+        detailsElement.className = "version-update-details";
+
+        textWrapper.appendChild(messageNode);
+        textWrapper.appendChild(detailsElement);
+
+        const refreshLink = document.createElement("a");
+        refreshLink.href = "#";
+        refreshLink.className = "version-update-refresh";
+        refreshLink.textContent = REFRESH_TEXT;
+        refreshLink.addEventListener("click", function (event) {
+          event.preventDefault();
+          window.location.reload();
+        });
+
+        bannerElement.appendChild(textWrapper);
+        bannerElement.appendChild(refreshLink);
+      }
+
+      if (!bannerElement.isConnected && document.body) {
+        document.body.prepend(bannerElement);
+      }
+
+      return bannerElement;
+    }
+
+    function updateBanner(info) {
+      const banner = ensureBanner();
+      const parts = [];
+      if (info.version) {
+        parts.push(`${VERSION_LABEL} ${info.version}`);
+      }
+      if (info.revision) {
+        parts.push(`${REVISION_LABEL} ${shortRevision(info.revision)}`);
+      }
+      if (detailsElement) {
+        detailsElement.textContent = parts.length ? `(${parts.join(" · ")})` : "";
+      }
+      return banner;
+    }
+
+    async function fetchInfo() {
+      try {
+        const response = await fetch(CHECK_URL, {
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          return;
+        }
+        const data = await response.json();
+        const version = typeof data.version === "string" ? data.version : "";
+        const revision = typeof data.revision === "string" ? data.revision : "";
+        if (currentVersion === null && currentRevision === null) {
+          currentVersion = version;
+          currentRevision = revision;
+          return;
+        }
+        if (version !== currentVersion || revision !== currentRevision) {
+          currentVersion = version;
+          currentRevision = revision;
+          updateBanner({ version, revision });
+        }
+      } catch (error) {
+        // Network issues are ignored to avoid interrupting the user experience.
+      }
+    }
+
+    fetchInfo();
+    window.setInterval(fetchInfo, CHECK_INTERVAL);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
+})();
+</script>
