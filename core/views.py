@@ -79,6 +79,53 @@ def _clean_repo() -> None:
     subprocess.run(["git", "clean", "-fd"], check=False)
 
 
+def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
+    """Ensure ``release`` matches the repository revision and version.
+
+    Returns a tuple ``(updated, previous_version)`` where ``updated`` is
+    ``True`` when any field changed and ``previous_version`` is the version
+    before synchronization.
+    """
+
+    from packaging.version import InvalidVersion, Version
+
+    previous_version = release.version
+    updated_fields: set[str] = set()
+
+    repo_version: Version | None = None
+    version_path = Path("VERSION")
+    if version_path.exists():
+        try:
+            repo_version = Version(version_path.read_text(encoding="utf-8").strip())
+        except InvalidVersion:
+            repo_version = None
+
+    try:
+        release_version = Version(release.version)
+    except InvalidVersion:
+        release_version = None
+
+    if repo_version is not None:
+        bumped_repo_version = Version(
+            f"{repo_version.major}.{repo_version.minor}.{repo_version.micro + 1}"
+        )
+        if release_version is None or release_version < bumped_repo_version:
+            release.version = str(bumped_repo_version)
+            release_version = bumped_repo_version
+            updated_fields.add("version")
+
+    current_revision = revision.get_revision()
+    if current_revision and current_revision != release.revision:
+        release.revision = current_revision
+        updated_fields.add("revision")
+
+    if updated_fields:
+        release.save(update_fields=list(updated_fields))
+        PackageRelease.dump_fixture()
+
+    return bool(updated_fields), previous_version
+
+
 def _changelog_notes(version: str) -> str:
     path = Path("CHANGELOG.rst")
     if not path.exists():
