@@ -26,12 +26,37 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
 
 Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plataforma a distintos escenarios de despliegue.
 
-| Rol | Descripción | Funciones comunes |
-| --- | --- | --- |
-| Terminal | Investigación y desarrollo de un solo usuario | • GUI Toast |
-| Control | Pruebas de un solo dispositivo y equipos para tareas especiales | • AP Public Wi-Fi<br>• Celery Queue<br>• GUI Toast<br>• LCD Screen<br>• NGINX Server<br>• RFID Scanner |
-| Satélite | Periferia multidispositivo, redes y adquisición de datos | • AP Router<br>• Celery Queue<br>• NGINX Server<br>• RFID Scanner |
-| Constelación | Nube multiusuario y orquestación | • Celery Queue<br>• NGINX Server |
+<table>
+  <thead>
+    <tr>
+      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Rol</th>
+      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Descripción</th>
+      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Funciones comunes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Terminal</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Investigación y desarrollo de un solo usuario</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">• GUI Toast</td>
+    </tr>
+    <tr>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Control</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Pruebas de un solo dispositivo y equipos para tareas especiales</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">• AP Public Wi-Fi<br>• Celery Queue<br>• GUI Toast<br>• LCD Screen<br>• NGINX Server<br>• RFID Scanner</td>
+    </tr>
+    <tr>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Satélite</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Periferia multidispositivo, redes y adquisición de datos</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">• AP Router<br>• Celery Queue<br>• NGINX Server<br>• RFID Scanner</td>
+    </tr>
+    <tr>
+      <td style="padding: 0.6rem 1rem;">Constelación</td>
+      <td style="padding: 0.6rem 1rem;">Nube multiusuario y orquestación</td>
+      <td style="padding: 0.6rem 1rem;">• Celery Queue<br>• NGINX Server</td>
+    </tr>
+  </tbody>
+</table>
 
 ## Quick Guide
 
@@ -41,25 +66,30 @@ Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plat
 - **[Windows](https://es.wikipedia.org/wiki/Microsoft_Windows)**: abre [PowerShell](https://learn.microsoft.com/es-es/powershell/) o [Git Bash](https://gitforwindows.org/) y ejecuta el mismo comando.
 
 ### 2. Iniciar y detener
-Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Constelación deben instalarse primero. Ambos métodos escuchan en [`http://localhost:8000/`](http://localhost:8000/) de forma predeterminada; usa `--port` para elegir otro valor.
+Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Constelación deben instalarse primero. Ambos métodos escuchan en [`http://localhost:8000/`](http://localhost:8000/) de forma predeterminada.
 
-- **[VS Code](https://code.visualstudio.com/)**
-  - Abre la carpeta y ve al panel **Run and Debug** (`Ctrl+Shift+D`).
-  - Selecciona la configuración **Run Server** (o **Debug Server**).
-  - Presiona el botón verde de inicio. Detén el servidor con el cuadrado rojo (`Shift+F5`).
-- **[Shell](https://es.wikipedia.org/wiki/Shell_de_unidad_de_comandos)**
-  - Linux: ejecuta [`./start.sh`](start.sh) y detén con [`./stop.sh`](stop.sh).
-  - Windows: ejecuta [`start.bat`](start.bat) y detén con `Ctrl+C`.
+**[VS Code](https://code.visualstudio.com/)**
+- Abre la carpeta y ve al panel **Run and Debug** (`Ctrl+Shift+D`).
+- Selecciona la configuración **Run Server** (o **Debug Server**).
+- Presiona el botón verde de inicio. Detén el servidor con el cuadrado rojo (`Shift+F5`).
+
+**[Shell](https://es.wikipedia.org/wiki/Shell_de_unidad_de_comandos)**
+- Linux: ejecuta [`./start.sh`](start.sh) y detén con [`./stop.sh`](stop.sh).
+- Windows: ejecuta [`start.bat`](start.bat) y detén con `Ctrl+C`.
 
 ### 3. Instalar y actualizar
-- **Linux**: ejecuta [`./install.sh`](install.sh) con un flag de rol de nodo:
-  - `--terminal`: rol predeterminado si no se especifica y recomendado si no sabes cuál elegir. Los nodos Terminal también pueden usar los scripts anteriores para iniciar/detener sin instalar.
-  - `--control`: prepara el equipo de control para pruebas de un solo dispositivo.
-  - `--satellite`: configura el nodo perimetral de adquisición de datos.
-  - `--constellation`: habilita la pila de orquestación multiusuario.
-  Usa `./install.sh --help` para ver la lista completa de flags si necesitas personalizar el nodo más allá del rol. Actualiza con [`./upgrade.sh`](upgrade.sh).
+**Linux:** ejecuta [`./install.sh`](install.sh) con un flag de rol de nodo:
+- `--terminal`: rol predeterminado si no se especifica y recomendado si no sabes cuál elegir. Los nodos Terminal también pueden usar los scripts anteriores para iniciar/detener sin instalar.
+- `--control`: prepara el equipo de control para pruebas de un solo dispositivo.
+- `--satellite`: configura el nodo perimetral de adquisición de datos.
+- `--constellation`: habilita la pila de orquestación multiusuario.
+Usa `./install.sh --help` para ver la lista completa de flags si necesitas personalizar el nodo más allá del rol.
 
-- **Windows**: ejecuta [`install.bat`](install.bat) para instalar (rol Terminal) y [`upgrade.bat`](upgrade.bat) para actualizar.
+Actualiza con [`./upgrade.sh`](upgrade.sh).
+
+**Windows:**
+- Ejecuta [`install.bat`](install.bat) para instalar (rol Terminal) y [`upgrade.bat`](upgrade.bat) para actualizar.
+- No es necesario instalar para iniciar en modo Terminal (el predeterminado).
 
 ### 4. Administración
 Visita [`http://localhost:8000/admin/`](http://localhost:8000/admin/) para el [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) y [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) para la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.

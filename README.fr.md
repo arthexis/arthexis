@@ -26,12 +26,37 @@ Constellation Arthexis est une [suite logicielle](https://fr.wikipedia.org/wiki/
 
 Constellation Arthexis est déclinée en quatre rôles de nœud pour répondre à différents scénarios de déploiement.
 
-| Rôle | Description | Fonctionnalités courantes |
-| --- | --- | --- |
-| Terminal | Recherche et développement monoposte | • GUI Toast |
-| Control | Tests sur un appareil unique et appliances spécialisées | • AP Public Wi-Fi<br>• Celery Queue<br>• GUI Toast<br>• LCD Screen<br>• NGINX Server<br>• RFID Scanner |
-| Satellite | Périphérie multi-appareils, réseau et acquisition de données | • AP Router<br>• Celery Queue<br>• NGINX Server<br>• RFID Scanner |
-| Constellation | Orchestration et cloud multi-utilisateurs | • Celery Queue<br>• NGINX Server |
+<table>
+  <thead>
+    <tr>
+      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Rôle</th>
+      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Description</th>
+      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Fonctionnalités courantes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Terminal</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Recherche et développement monoposte</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">• GUI Toast</td>
+    </tr>
+    <tr>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Control</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Tests sur un appareil unique et appliances spécialisées</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">• AP Public Wi-Fi<br>• Celery Queue<br>• GUI Toast<br>• LCD Screen<br>• NGINX Server<br>• RFID Scanner</td>
+    </tr>
+    <tr>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Satellite</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Périphérie multi-appareils, réseau et acquisition de données</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">• AP Router<br>• Celery Queue<br>• NGINX Server<br>• RFID Scanner</td>
+    </tr>
+    <tr>
+      <td style="padding: 0.6rem 1rem;">Constellation</td>
+      <td style="padding: 0.6rem 1rem;">Orchestration et cloud multi-utilisateurs</td>
+      <td style="padding: 0.6rem 1rem;">• Celery Queue<br>• NGINX Server</td>
+    </tr>
+  </tbody>
+</table>
 
 ## Quick Guide
 
@@ -41,25 +66,31 @@ Constellation Arthexis est déclinée en quatre rôles de nœud pour répondre �
 - **[Windows](https://fr.wikipedia.org/wiki/Microsoft_Windows)** : ouvrez [PowerShell](https://learn.microsoft.com/fr-fr/powershell/) ou [Git Bash](https://gitforwindows.org/) et exécutez la même commande.
 
 ### 2. Démarrer et arrêter
-Les nœuds Terminal peuvent démarrer directement avec les scripts ci-dessous sans installation ; les rôles Control, Satellite et Constellation doivent être installés au préalable. Les deux méthodes écoutent par défaut sur [`http://localhost:8000/`](http://localhost:8000/) ; utilisez `--port` pour choisir une autre valeur.
+Les nœuds Terminal peuvent démarrer directement avec les scripts ci-dessous sans installation ; les rôles Control, Satellite et Constellation doivent être installés au préalable. Les deux méthodes écoutent par défaut sur [`http://localhost:8000/`](http://localhost:8000/).
 
-- **[VS Code](https://code.visualstudio.com/)**
-  - Ouvrez le dossier et accédez au panneau **Run and Debug** (`Ctrl+Shift+D`).
-  - Sélectionnez la configuration **Run Server** (ou **Debug Server**).
-  - Appuyez sur le bouton vert de démarrage. Arrêtez le serveur avec le carré rouge (`Shift+F5`).
-- **[Shell](https://fr.wikipedia.org/wiki/Interface_en_ligne_de_commande)**
-  - Linux : exécutez [`./start.sh`](start.sh) et arrêtez avec [`./stop.sh`](stop.sh).
-  - Windows : exécutez [`start.bat`](start.bat) et arrêtez avec `Ctrl+C`.
+**[VS Code](https://code.visualstudio.com/)**
+- Ouvrez le dossier et accédez au panneau **Run and Debug** (`Ctrl+Shift+D`).
+- Sélectionnez la configuration **Run Server** (ou **Debug Server**).
+- Appuyez sur le bouton vert de démarrage. Arrêtez le serveur avec le carré rouge (`Shift+F5`).
+
+**[Shell](https://fr.wikipedia.org/wiki/Interface_en_ligne_de_commande)**
+- Linux : exécutez [`./start.sh`](start.sh) et arrêtez avec [`./stop.sh`](stop.sh).
+- Windows : exécutez [`start.bat`](start.bat) et arrêtez avec `Ctrl+C`.
 
 
 ### 3. Installer et mettre à jour
-- **Linux** : exécutez [`./install.sh`](install.sh) avec un indicateur de rôle de nœud :
-  - `--terminal` : rôle par défaut s'il n'est pas précisé et recommandé si vous hésitez. Les nœuds Terminal peuvent aussi utiliser les scripts ci-dessus pour démarrer/arrêter sans installation.
-  - `--control` : prépare l’appliance de test monoposte.
-  - `--satellite` : configure le nœud de collecte de données en périphérie.
-  - `--constellation` : active la pile d’orchestration multi-utilisateurs.
-  Utilisez `./install.sh --help` pour afficher la liste complète des indicateurs si vous devez personnaliser le nœud au-delà du rôle. Mettez à jour avec [`./upgrade.sh`](upgrade.sh).
-- **Windows** : lancez [`install.bat`](install.bat) pour installer (rôle Terminal) et [`upgrade.bat`](upgrade.bat) pour mettre à jour.
+**Linux :** exécutez [`./install.sh`](install.sh) avec un indicateur de rôle de nœud :
+- `--terminal` : rôle par défaut s'il n'est pas précisé et recommandé si vous hésitez. Les nœuds Terminal peuvent aussi utiliser les scripts ci-dessus pour démarrer/arrêter sans installation.
+- `--control` : prépare l’appliance de test monoposte.
+- `--satellite` : configure le nœud de collecte de données en périphérie.
+- `--constellation` : active la pile d’orchestration multi-utilisateurs.
+Utilisez `./install.sh --help` pour afficher la liste complète des indicateurs si vous devez personnaliser le nœud au-delà du rôle.
+
+Mettez à jour avec [`./upgrade.sh`](upgrade.sh).
+
+**Windows :**
+- Lancez [`install.bat`](install.bat) pour installer (rôle Terminal) et [`upgrade.bat`](upgrade.bat) pour mettre à jour.
+- L’installation n’est pas nécessaire pour démarrer en mode Terminal (par défaut).
 
 ### 4. Administration
 Visitez [`http://localhost:8000/admin/`](http://localhost:8000/admin/) pour l'[administration Django](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) et [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) pour la [documentation d’administration](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Utilisez `--port` avec les scripts de démarrage ou l’installateur pour exposer un autre port.

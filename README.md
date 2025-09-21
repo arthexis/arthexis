@@ -28,12 +28,32 @@ Project under active development.
 
 Arthexis Constellation ships in four node roles tailored to different deployment scenarios.
 
-| Role | Description & Common Features |
-| --- | --- |
-| Terminal | Single-User Research & Development<br>Features: GUI Toast |
-| Control | Single-Device Testing & Special Task Appliances<br>Features: AP Public Wi-Fi, Celery Queue, GUI Toast, LCD Screen, NGINX Server, RFID Scanner |
-| Satellite | Multi-Device Edge, Network & Data Acquisition<br>Features: AP Router, Celery Queue, NGINX Server, RFID Scanner |
-| Constellation | Multi-User Cloud & Orchestration<br>Features: Celery Queue, NGINX Server |
+<table>
+  <thead>
+    <tr>
+      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Role</th>
+      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Description &amp; Common Features</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Terminal</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Single-User Research &amp; Development<br>Features: GUI Toast</td>
+    </tr>
+    <tr>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Control</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Single-Device Testing &amp; Special Task Appliances<br>Features: AP Public Wi-Fi, Celery Queue, GUI Toast, LCD Screen, NGINX Server, RFID Scanner</td>
+    </tr>
+    <tr>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Satellite</td>
+      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Multi-Device Edge, Network &amp; Data Acquisition<br>Features: AP Router, Celery Queue, NGINX Server, RFID Scanner</td>
+    </tr>
+    <tr>
+      <td style="padding: 0.6rem 1rem;">Constellation</td>
+      <td style="padding: 0.6rem 1rem;">Multi-User Cloud &amp; Orchestration<br>Features: Celery Queue, NGINX Server</td>
+    </tr>
+  </tbody>
+</table>
 
 ## Quick Guide
 
@@ -43,24 +63,30 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 - **[Windows](https://en.wikipedia.org/wiki/Microsoft_Windows)**: open [PowerShell](https://learn.microsoft.com/powershell/) or [Git Bash](https://gitforwindows.org/) and run the same command.
 
 ### 2. Start and stop
-Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Constellation roles require installation first. Both approaches listen on [`http://localhost:8000/`](http://localhost:8000/) by default—pass `--port` to use a different value.
+Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Constellation roles require installation first. Both approaches listen on [`http://localhost:8000/`](http://localhost:8000/) by default.
 
-- **[VS Code](https://code.visualstudio.com/)**
-  - Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
-  - Select the **Run Server** (or **Debug Server**) configuration.
-  - Press the green start button. Stop the server with the red square button (`Shift+F5`).
-- **[Shell](https://en.wikipedia.org/wiki/Shell_(computing))**
-  - Linux: run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh).
-  - Windows: run [`start.bat`](start.bat) and stop with `Ctrl+C`.
+**[VS Code](https://code.visualstudio.com/)**
+- Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
+- Select the **Run Server** (or **Debug Server**) configuration.
+- Press the green start button. Stop the server with the red square button (`Shift+F5`).
+
+**[Shell](https://en.wikipedia.org/wiki/Shell_(computing))**
+- Linux: run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh).
+- Windows: run [`start.bat`](start.bat) and stop with `Ctrl+C`.
 
 ### 3. Install and upgrade
-- **Linux**: run [`./install.sh`](install.sh) with a node role flag:
-  - `--terminal` – default when unspecified and recommended if you're unsure. Terminal nodes can also use the start/stop scripts above without installing.
-  - `--control` – prepares the single-device testing appliance.
-  - `--satellite` – configures the edge data acquisition node.
-  - `--constellation` – enables the multi-user orchestration stack.
-  Use `./install.sh --help` to list every available flag if you need to customize the node beyond the role defaults. Upgrade with [`./upgrade.sh`](upgrade.sh).
-- **Windows**: run [`install.bat`](install.bat) to install (Terminal role) and [`upgrade.bat`](upgrade.bat) to upgrade.
+**Linux:** run [`./install.sh`](install.sh) with a node role flag:
+- `--terminal` – default when unspecified and recommended if you're unsure. Terminal nodes can also use the start/stop scripts above without installing.
+- `--control` – prepares the single-device testing appliance.
+- `--satellite` – configures the edge data acquisition node.
+- `--constellation` – enables the multi-user orchestration stack.
+Use `./install.sh --help` to list every available flag if you need to customize the node beyond the role defaults.
+
+Upgrade with [`./upgrade.sh`](upgrade.sh).
+
+**Windows:**
+- Run [`install.bat`](install.bat) to install (Terminal role) and [`upgrade.bat`](upgrade.bat) to upgrade.
+- Installation is not required to start in Terminal mode (the default).
 
 ### 4. Administration
 Visit [`http://localhost:8000/admin/`](http://localhost:8000/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use `--port` with the start scripts or installer when you need to expose a different port.
