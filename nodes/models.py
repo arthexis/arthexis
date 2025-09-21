@@ -126,6 +126,7 @@ class Node(Entity):
     badge_color = models.CharField(max_length=7, default="#28a745")
     role = models.ForeignKey(NodeRole, on_delete=models.SET_NULL, null=True, blank=True)
     last_seen = models.DateTimeField(auto_now=True)
+    popularity = models.PositiveIntegerField(default=0, editable=False)
     enable_public_api = models.BooleanField(
         default=False,
         verbose_name="enable public API",
@@ -182,6 +183,19 @@ class Node(Entity):
         return cls.objects.filter(mac_address=mac).first()
 
     @classmethod
+    def refresh_local_popularity(cls):
+        """Synchronize the local node's popularity with known nodes."""
+
+        local = cls.get_local()
+        if not local or not local.pk:
+            return None
+        known = cls.objects.exclude(pk=local.pk).count()
+        if local.popularity != known:
+            cls.objects.filter(pk=local.pk).update(popularity=known)
+            local.popularity = known
+        return local
+
+    @classmethod
     def register_current(cls):
         """Create or update the :class:`Node` entry for this host."""
         hostname = socket.gethostname()
@@ -200,6 +214,7 @@ class Node(Entity):
         node = cls.objects.filter(mac_address=mac).first()
         if not node:
             node = cls.objects.filter(public_endpoint=slug).first()
+        known_nodes = cls.objects.exclude(mac_address=mac).count()
         defaults = {
             "hostname": hostname,
             "address": address,
@@ -209,6 +224,7 @@ class Node(Entity):
             "installed_revision": installed_revision,
             "public_endpoint": slug,
             "mac_address": mac,
+            "popularity": known_nodes,
         }
         if node:
             for field, value in defaults.items():
@@ -664,13 +680,6 @@ class NetMessage(Entity):
     )
     subject = models.CharField(max_length=64, blank=True)
     body = models.CharField(max_length=256, blank=True)
-    reach = models.ForeignKey(
-        NodeRole,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        default=get_terminal_role,
-    )
     propagated_to = models.ManyToManyField(
         Node, blank=True, related_name="received_net_messages"
     )
@@ -687,26 +696,17 @@ class NetMessage(Entity):
         cls,
         subject: str,
         body: str,
-        reach: NodeRole | str | None = None,
         seen: list[str] | None = None,
     ):
-        role = None
-        if reach:
-            if isinstance(reach, NodeRole):
-                role = reach
-            else:
-                role = NodeRole.objects.filter(name=reach).first()
         msg = cls.objects.create(
             subject=subject[:64],
             body=body[:256],
-            reach=role or get_terminal_role(),
         )
         msg.propagate(seen=seen or [])
         return msg
 
     def propagate(self, seen: list[str] | None = None):
         from core.notifications import notify
-        import random
         import requests
 
         notify(self.subject, self.body)
@@ -741,6 +741,7 @@ class NetMessage(Entity):
 
         remaining = list(
             all_nodes.exclude(pk__in=self.propagated_to.values_list("pk", flat=True))
+            .order_by("-popularity", "-last_seen")
         )
         if not remaining:
             self.complete = True
@@ -749,30 +750,7 @@ class NetMessage(Entity):
 
         target_limit = min(3, len(remaining))
 
-        reach_name = self.reach.name if self.reach else "Terminal"
-        role_map = {
-            "Terminal": ["Terminal"],
-            "Control": ["Control", "Terminal"],
-            "Satellite": ["Satellite", "Control", "Terminal"],
-            "Constellation": [
-                "Constellation",
-                "Satellite",
-                "Control",
-                "Terminal",
-            ],
-        }
-        role_order = role_map.get(reach_name, ["Terminal"])
-        selected: list[Node] = []
-        for role_name in role_order:
-            role_nodes = [n for n in remaining if n.role and n.role.name == role_name]
-            random.shuffle(role_nodes)
-            for n in role_nodes:
-                selected.append(n)
-                remaining.remove(n)
-                if len(selected) >= target_limit:
-                    break
-            if len(selected) >= target_limit:
-                break
+        selected = remaining[:target_limit]
 
         seen_list = seen.copy()
         selected_ids = [str(n.uuid) for n in selected]
@@ -783,7 +761,6 @@ class NetMessage(Entity):
                 "subject": self.subject,
                 "body": self.body,
                 "seen": payload_seen,
-                "reach": reach_name,
                 "sender": local_id,
             }
             payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)

@@ -16,7 +16,7 @@ from utils.api import api_login_required
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
-from .models import Node, NetMessage, NodeRole
+from .models import Node, NetMessage
 from .utils import capture_screenshot, save_screenshot
 
 
@@ -117,6 +117,9 @@ def node_info(request):
     node = Node.get_local()
     if node is None:
         node, _ = Node.register_current()
+    refreshed = Node.refresh_local_popularity()
+    if refreshed is not None:
+        node = refreshed
 
     token = request.GET.get("token", "")
     address = _get_advertised_address(request, node)
@@ -127,6 +130,7 @@ def node_info(request):
         "mac_address": node.mac_address,
         "public_key": node.public_key,
         "features": list(node.features.values_list("slug", flat=True)),
+        "popularity": node.popularity,
     }
 
     if token:
@@ -202,6 +206,13 @@ def register_node(request):
     public_key = data.get("public_key")
     token = data.get("token")
     signature = data.get("signature")
+    popularity_value = data.get("popularity")
+    popularity_int = None
+    if popularity_value is not None:
+        try:
+            popularity_int = max(int(popularity_value), 0)
+        except (TypeError, ValueError):
+            popularity_int = 0
 
     if not hostname or not address or not mac_address:
         response = JsonResponse(
@@ -236,6 +247,8 @@ def register_node(request):
     }
     if verified:
         defaults["public_key"] = public_key
+    if popularity_int is not None:
+        defaults["popularity"] = popularity_int
 
     node, created = Node.objects.get_or_create(
         mac_address=mac_address,
@@ -249,6 +262,9 @@ def register_node(request):
         if verified:
             node.public_key = public_key
             update_fields.append("public_key")
+        if popularity_int is not None:
+            node.popularity = popularity_int
+            update_fields.append("popularity")
         node.save(update_fields=update_fields)
         if features is not None and (verified or request.user.is_authenticated):
             if isinstance(features, (str, bytes)):
@@ -259,6 +275,7 @@ def register_node(request):
         response = JsonResponse(
             {"id": node.id, "detail": f"Node already exists (id: {node.id})"}
         )
+        Node.refresh_local_popularity()
         return _add_cors_headers(request, response)
 
     if features is not None and (verified or request.user.is_authenticated):
@@ -268,6 +285,7 @@ def register_node(request):
             feature_list = list(features)
         node.update_manual_features(feature_list)
 
+    Node.refresh_local_popularity()
     response = JsonResponse({"id": node.id})
     return _add_cors_headers(request, response)
 
@@ -352,25 +370,17 @@ def net_message(request):
     msg_uuid = data.get("uuid")
     subject = data.get("subject", "")
     body = data.get("body", "")
-    reach_name = data.get("reach")
-    reach_role = None
-    if reach_name:
-        reach_role = NodeRole.objects.filter(name=reach_name).first()
     seen = data.get("seen", [])
     if not msg_uuid:
         return JsonResponse({"detail": "uuid required"}, status=400)
     msg, created = NetMessage.objects.get_or_create(
         uuid=msg_uuid,
-        defaults={"subject": subject[:64], "body": body[:256], "reach": reach_role},
+        defaults={"subject": subject[:64], "body": body[:256]},
     )
     if not created:
         msg.subject = subject[:64]
         msg.body = body[:256]
-        update_fields = ["subject", "body"]
-        if reach_role and msg.reach_id != reach_role.id:
-            msg.reach = reach_role
-            update_fields.append("reach")
-        msg.save(update_fields=update_fields)
+        msg.save(update_fields=["subject", "body"])
     msg.propagate(seen=seen)
     return JsonResponse({"status": "propagated", "complete": msg.complete})
 

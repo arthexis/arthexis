@@ -21,11 +21,6 @@ class Command(BaseCommand):
             help="Optional body text for the message",
         )
         parser.add_argument(
-            "--reach",
-            dest="reach",
-            help="Optional node role name that limits propagation",
-        )
-        parser.add_argument(
             "--seen",
             nargs="+",
             dest="seen",
@@ -35,8 +30,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         subject: str = options["subject"]
         body: str = options["body"]
-        reach: str | None = options.get("reach")
         seen: list[str] | None = options.get("seen")
 
-        NetMessage.broadcast(subject=subject, body=body, reach=reach, seen=seen)
+        NetMessage.broadcast(subject=subject, body=body, seen=seen)
         self.stdout.write(self.style.SUCCESS("Net message broadcast"))

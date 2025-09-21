@@ -51,6 +51,7 @@ class NodeAdmin(EntityModelAdmin):
         "address",
         "port",
         "role",
+        "popularity",
         "last_seen",
     )
     search_fields = ("hostname", "address", "mac_address")
@@ -434,9 +435,9 @@ class ContentSampleAdmin(EntityModelAdmin):
 
 @admin.register(NetMessage)
 class NetMessageAdmin(EntityModelAdmin):
-    list_display = ("subject", "body", "reach", "created", "complete")
+    list_display = ("subject", "body", "created", "complete")
     search_fields = ("subject", "body")
-    list_filter = ("complete", "reach")
+    list_filter = ("complete",)
     ordering = ("-created",)
     readonly_fields = ("complete",)
     actions = ["send_messages"]

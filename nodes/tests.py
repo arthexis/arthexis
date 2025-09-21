@@ -15,6 +15,7 @@ import base64
 import json
 import uuid
 from tempfile import TemporaryDirectory
+from datetime import timedelta
 import shutil
 import stat
 import time
@@ -44,6 +45,7 @@ from .tasks import capture_node_screenshot, sample_clipboard
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from core.models import PackageRelease
+from django.utils import timezone
 
 
 class NodeTests(TestCase):
@@ -256,6 +258,35 @@ class NodeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(Node.objects.filter(mac_address="aa:bb:cc:dd:ee:ff").exists())
 
+    def test_register_node_copies_popularity(self):
+        local_mac = "aa:bb:cc:dd:ee:00"
+        payload = {
+            "hostname": "visitor",
+            "address": "127.0.0.2",
+            "port": 8002,
+            "mac_address": "aa:bb:cc:dd:ee:12",
+            "popularity": 4,
+        }
+        with patch("nodes.models.Node.get_current_mac", return_value=local_mac):
+            with patch.object(Node, "refresh_features"):
+                local = Node.objects.create(
+                    hostname="local",
+                    address="127.0.0.1",
+                    port=8000,
+                    mac_address=local_mac,
+                    public_endpoint="local",
+                )
+            response = self.client.post(
+                reverse("register-node"),
+                data=json.dumps(payload),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        node = Node.objects.get(mac_address="aa:bb:cc:dd:ee:12")
+        self.assertEqual(node.popularity, 4)
+        local.refresh_from_db()
+        self.assertEqual(local.popularity, 1)
+
 
 class NodeRegisterCurrentTests(TestCase):
     def setUp(self):
@@ -329,6 +360,33 @@ class NodeRegisterCurrentTests(TestCase):
             self.assertFalse(created3)
             node.refresh_from_db()
             self.assertTrue(node.has_feature("lcd-screen"))
+
+    def test_register_current_sets_popularity(self):
+        Node.objects.create(
+            hostname="other",
+            address="127.0.0.10",
+            port=8010,
+            mac_address="aa:bb:cc:dd:ee:aa",
+        )
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with override_settings(BASE_DIR=base):
+                with (
+                    patch(
+                        "nodes.models.Node.get_current_mac",
+                        return_value="00:ff:ee:dd:cc:bb",
+                    ),
+                    patch("nodes.models.socket.gethostname", return_value="testhost"),
+                    patch(
+                        "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
+                    ),
+                    patch("nodes.models.revision.get_revision", return_value="rev"),
+                    patch.object(Node, "ensure_keys"),
+                    patch.object(Node, "refresh_features"),
+                ):
+                    node, created = Node.register_current()
+        self.assertTrue(created)
+        self.assertEqual(node.popularity, 1)
 
     @patch("nodes.views.capture_screenshot")
     def test_capture_screenshot(self, mock_capture):
@@ -415,7 +473,6 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertEqual(NetMessage.objects.count(), pre_count + 1)
         msg = NetMessage.objects.order_by("-created").first()
         self.assertEqual(msg.body, "hello")
-        self.assertEqual(msg.reach.name, "Terminal")
 
     def test_public_api_disabled(self):
         node = Node.objects.create(
@@ -718,66 +775,55 @@ class LastNetMessageViewTests(TestCase):
         self.assertEqual(resp.json(), {"subject": "new", "body": "msg2"})
 
 
-class NetMessageReachTests(TestCase):
+class NetMessageSelectionTests(TestCase):
     def setUp(self):
-        self.roles = {}
-        for name in ["Terminal", "Control", "Satellite", "Constellation"]:
-            self.roles[name], _ = NodeRole.objects.get_or_create(name=name)
-        self.nodes = {}
-        for idx, name in enumerate(
-            ["Terminal", "Control", "Satellite", "Constellation"], start=1
-        ):
-            self.nodes[name] = Node.objects.create(
-                hostname=name.lower(),
+        self.local = Node.objects.create(
+            hostname="local",
+            address="10.0.0.1",
+            port=8001,
+            mac_address="00:11:22:33:44:00",
+            public_endpoint="local",
+        )
+        base_time = timezone.now()
+        self.remotes = []
+        settings = [
+            ("n2", "00:11:22:33:44:02", 10, base_time - timedelta(minutes=5)),
+            ("n3", "00:11:22:33:44:03", 10, base_time - timedelta(minutes=1)),
+            ("n4", "00:11:22:33:44:04", 7, base_time - timedelta(minutes=2)),
+            ("n5", "00:11:22:33:44:05", 1, base_time - timedelta(minutes=3)),
+        ]
+        for idx, (name, mac, popularity, seen_time) in enumerate(settings, start=2):
+            node = Node.objects.create(
+                hostname=name,
                 address=f"10.0.0.{idx}",
                 port=8000 + idx,
-                mac_address=f"00:11:22:33:44:{idx:02x}",
-                role=self.roles[name],
+                mac_address=mac,
+                public_endpoint=name,
+                popularity=popularity,
             )
+            Node.objects.filter(pk=node.pk).update(last_seen=seen_time)
+            node.refresh_from_db()
+            self.remotes.append(node)
 
     @patch("requests.post")
-    def test_terminal_reach_limits_nodes(self, mock_post):
-        msg = NetMessage.objects.create(
-            subject="s", body="b", reach=self.roles["Terminal"]
-        )
-        with patch.object(Node, "get_local", return_value=None):
+    def test_propagate_prioritizes_popularity_and_recency(self, mock_post):
+        msg = NetMessage.objects.create(subject="s", body="b")
+        with patch.object(Node, "get_local", return_value=self.local):
             msg.propagate()
-        roles = set(msg.propagated_to.values_list("role__name", flat=True))
-        self.assertEqual(roles, {"Terminal"})
-        self.assertEqual(mock_post.call_count, 1)
 
-    @patch("requests.post")
-    def test_control_reach_includes_control_and_terminal(self, mock_post):
-        msg = NetMessage.objects.create(
-            subject="s", body="b", reach=self.roles["Control"]
-        )
-        with patch.object(Node, "get_local", return_value=None):
-            msg.propagate()
-        roles = set(msg.propagated_to.values_list("role__name", flat=True))
-        self.assertEqual(roles, {"Control", "Terminal"})
-        self.assertEqual(mock_post.call_count, 2)
-
-    @patch("requests.post")
-    def test_satellite_reach_includes_lower_roles(self, mock_post):
-        msg = NetMessage.objects.create(
-            subject="s", body="b", reach=self.roles["Satellite"]
-        )
-        with patch.object(Node, "get_local", return_value=None):
-            msg.propagate()
-        roles = set(msg.propagated_to.values_list("role__name", flat=True))
-        self.assertEqual(roles, {"Satellite", "Control", "Terminal"})
         self.assertEqual(mock_post.call_count, 3)
-
-    @patch("requests.post")
-    def test_constellation_reach_prioritizes_constellation(self, mock_post):
-        msg = NetMessage.objects.create(
-            subject="s", body="b", reach=self.roles["Constellation"]
-        )
-        with patch.object(Node, "get_local", return_value=None):
-            msg.propagate()
-        roles = set(msg.propagated_to.values_list("role__name", flat=True))
-        self.assertEqual(roles, {"Constellation", "Satellite", "Control"})
-        self.assertEqual(mock_post.call_count, 3)
+        called_hosts = [
+            call.args[0].split("//")[1].split("/")[0]
+            for call in mock_post.call_args_list
+        ]
+        expected = []
+        sorted_nodes = sorted(
+            self.remotes,
+            key=lambda n: (-n.popularity, -n.last_seen.timestamp()),
+        )[:3]
+        for node in sorted_nodes:
+            expected.append(f"{node.address}:{node.port}")
+        self.assertEqual(called_hosts, expected)
 
 
 class NetMessagePropagationTests(TestCase):
@@ -809,7 +855,7 @@ class NetMessagePropagationTests(TestCase):
     def test_propagate_forwards_to_three_and_notifies_local(
         self, mock_notify, mock_post
     ):
-        msg = NetMessage.objects.create(subject="s", body="b", reach=self.role)
+        msg = NetMessage.objects.create(subject="s", body="b")
         with patch.object(Node, "get_local", return_value=self.local):
             msg.propagate(seen=[str(self.remotes[0].uuid)])
         mock_notify.assert_called_once_with("s", "b")
