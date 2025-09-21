@@ -12,6 +12,7 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       database_changed: ${{ steps.plan.outputs.database_changed }}
+      baseline_present: ${{ steps.plan.outputs.baseline_present }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,11 +33,13 @@ jobs:
 
           matrix = json.dumps(data['matrix'])
           database_changed = 'true' if data.get('database_changed') else 'false'
+          baseline_present = 'true' if any(not entry.get('features') for entry in data['matrix']) else 'false'
 
           output = os.environ['GITHUB_OUTPUT']
           with open(output, 'a', encoding='utf-8') as fh:
               fh.write(f"matrix={matrix}\n")
               fh.write(f"database_changed={database_changed}\n")
+              fh.write(f"baseline_present={baseline_present}\n")
 
           summary = os.environ.get('GITHUB_STEP_SUMMARY')
           if summary:
@@ -105,7 +108,7 @@ jobs:
     needs:
       - node-test-matrix
       - node-tests
-    if: needs.node-test-matrix.outputs.matrix != ''
+    if: needs.node-test-matrix.outputs.matrix != '' && needs.node-test-matrix.outputs.baseline_present == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
