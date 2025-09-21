@@ -49,6 +49,40 @@ class FixtureReloadTests(TestCase):
         self.assertEqual(code.brand.name, "Audi")
 
 
+class SiteFixtureTests(TestCase):
+    def test_core_site_fixtures_cover_expected_domains(self):
+        base_dir = Path(settings.BASE_DIR)
+        expected_domains = {
+            "arthexis.com": "Arthexis",
+            "127.0.0.1": "Local",
+            "10.42.0.1": "Router",
+            "192.168.129.10": "Gateway",
+        }
+        fixtures = {}
+        for path in sorted(
+            (base_dir / "core" / "fixtures").glob("references__00_site_*.json")
+        ):
+            try:
+                data = json.loads(path.read_text())
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(data, list):
+                continue
+            for obj in data:
+                if not isinstance(obj, dict):
+                    continue
+                if obj.get("model") != "sites.site":
+                    continue
+                fields = obj.get("fields", {})
+                domain = fields.get("domain")
+                name = fields.get("name")
+                if domain:
+                    fixtures[domain] = name
+
+        found = {domain: fixtures.get(domain) for domain in expected_domains}
+        self.assertEqual(found, expected_domains)
+
+
 class EntityInheritanceTests(TestCase):
     def test_local_models_inherit_entity(self):
         from django.apps import apps
