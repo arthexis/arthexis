@@ -17,7 +17,6 @@ from django.views.decorators.http import require_GET, require_POST
 from django.utils.http import url_has_allowed_host_and_scheme
 from pathlib import Path
 import subprocess
-import json
 
 from utils import revision
 from utils.api import api_login_required
@@ -574,11 +573,25 @@ def release_progress(request, pk: int, action: str):
     release = get_object_or_404(PackageRelease, pk=pk)
     if action != "publish":
         raise Http404("Unknown action")
-    if not release.is_current:
-        raise Http404("Release is not current")
     session_key = f"release_publish_{pk}"
     lock_path = Path("locks") / f"release_publish_{pk}.json"
     restart_path = Path("locks") / f"release_publish_{pk}.restarts"
+
+    if not release.is_current:
+        if release.is_published:
+            raise Http404("Release is not current")
+        updated, previous_version = _sync_release_with_revision(release)
+        if updated:
+            request.session.pop(session_key, None)
+            if lock_path.exists():
+                lock_path.unlink()
+            if restart_path.exists():
+                restart_path.unlink()
+            log_dir = Path("logs")
+            for log_file in log_dir.glob(
+                f"{release.package.name}-{previous_version}*.log"
+            ):
+                log_file.unlink()
 
     if request.GET.get("restart"):
         count = 0

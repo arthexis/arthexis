@@ -1,6 +1,7 @@
 """Tests for assistant profile issuance and authentication."""
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.test import TestCase
 
@@ -28,3 +29,21 @@ class AssistantProfileAPITests(TestCase):
 
         bad = self.client.get(test_url, HTTP_AUTHORIZATION="Bearer bad")
         self.assertEqual(bad.status_code, 401)
+
+    def test_system_user_can_have_profile(self):
+        User = get_user_model()
+        system_user, _ = User.objects.get_or_create(
+            username=User.SYSTEM_USERNAME,
+            defaults={"email": "arthexis@example.com"},
+        )
+        AssistantProfile.objects.filter(user=system_user).delete()
+
+        profile = AssistantProfile(
+            user=system_user,
+            user_key_hash=hash_key("system-profile-allowed"),
+        )
+
+        try:
+            profile.full_clean()
+        except ValidationError as exc:  # pragma: no cover - explicit failure path
+            self.fail(f"System user should allow profiles: {exc}")
