@@ -108,6 +108,7 @@ document.addEventListener('DOMContentLoaded', function () {
     setInterval(update, 1000);
 });
 </script>
+{% include "core/version_check.html" %}
 {% endblock %}
 {% block extrastyle %}
 {{ block.super }}

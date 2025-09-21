@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
+import sys
 from pathlib import Path
 import json
 from collections import defaultdict
@@ -126,13 +126,14 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     default_db = settings.DATABASES["default"]
     using_sqlite = default_db["ENGINE"] == "django.db.backends.sqlite3"
 
+    base_dir = Path(settings.BASE_DIR)
     local_apps = _local_app_labels()
 
     _remove_integrator_from_auth_migration()
 
     try:
         call_command("makemigrations", *local_apps, interactive=False)
-    except CommandError:
+    except CommandError as exc:
         call_command("makemigrations", *local_apps, merge=True, interactive=False)
     except InconsistentMigrationHistory:
         if using_sqlite:
@@ -142,7 +143,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
             raise
 
     # Compute migrations hash and compare with stored value
-    hash_file = Path(settings.BASE_DIR) / "migrations.md5"
+    hash_file = base_dir / "migrations.md5"
     new_hash = _migration_hash(local_apps)
     stored_hash = hash_file.read_text().strip() if hash_file.exists() else ""
 
