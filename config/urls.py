@@ -118,6 +118,7 @@ urlpatterns = [
         admin.site.admin_view(pages_views.admin_model_graph),
         name="admin-model-graph",
     ),
+    path("version/", core_views.version_info, name="version-info"),
     path(
         "admin/core/releases/<int:pk>/<str:action>/",
         core_views.release_progress,
