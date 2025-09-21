@@ -3,6 +3,87 @@
 from django.db import migrations, models
 
 
+def collapse_monthly_tariffs(apps, schema_editor):
+    """Remove duplicate tariff rows created when dropping the month column."""
+
+    EnergyTariff = apps.get_model("core", "EnergyTariff")
+    connection = schema_editor.connection
+    table = EnergyTariff._meta.db_table
+    pk_column = EnergyTariff._meta.pk.column
+    quoted_table = connection.ops.quote_name(table)
+    quoted_pk = connection.ops.quote_name(pk_column)
+    partition_fields = [
+        "year",
+        "season",
+        "zone",
+        "contract_type",
+        "period",
+        "unit",
+        "start_time",
+        "end_time",
+    ]
+    partition_columns = ", ".join(
+        connection.ops.quote_name(field) for field in partition_fields
+    )
+    order_expression = ", ".join(
+        [
+            f"{connection.ops.quote_name('is_deleted')} ASC",
+            f"{quoted_pk} ASC",
+        ]
+    )
+
+    if getattr(connection.features, "supports_over_clause", False):
+        sql = f"""
+            DELETE FROM {quoted_table}
+            WHERE {quoted_pk} IN (
+                SELECT {quoted_pk}
+                FROM (
+                    SELECT
+                        {quoted_pk},
+                        ROW_NUMBER() OVER (
+                            PARTITION BY {partition_columns}
+                            ORDER BY {order_expression}
+                        ) AS rn
+                    FROM {quoted_table}
+                ) AS ranked
+                WHERE rn > 1
+            )
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+        return
+
+    manager = getattr(EnergyTariff, "all_objects", EnergyTariff._default_manager)
+    seen: dict[tuple, object] = {}
+    removals: set[int] = set()
+    order_by_fields = partition_fields + ["is_deleted", EnergyTariff._meta.pk.name]
+
+    for tariff in manager.all().order_by(*order_by_fields):
+        key = tuple(getattr(tariff, field) for field in partition_fields)
+        keep = seen.get(key)
+        if keep is None:
+            seen[key] = tariff
+            continue
+
+        keep_deleted = getattr(keep, "is_deleted", False)
+        current_deleted = getattr(tariff, "is_deleted", False)
+
+        if keep_deleted and not current_deleted:
+            removals.add(keep.pk)
+            seen[key] = tariff
+        else:
+            removals.add(tariff.pk)
+
+    if removals:
+        placeholders = ", ".join(["%s"] * len(removals))
+        sql = (
+            f"DELETE FROM {quoted_table} "
+            f"WHERE {quoted_pk} IN ({placeholders})"
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(sql, sorted(removals))
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -130,6 +211,9 @@ class Migration(migrations.Migration):
                 fields=["year", "season", "zone", "contract_type"],
                 name="energy_tariff_scope_idx",
             ),
+        ),
+        migrations.RunPython(
+            collapse_monthly_tariffs, migrations.RunPython.noop
         ),
         migrations.AddConstraint(
             model_name="energytariff",
