@@ -30,16 +30,27 @@
 - **[Windows](https://ru.wikipedia.org/wiki/Microsoft_Windows)**: откройте [PowerShell](https://learn.microsoft.com/ru-ru/powershell/) или [Git Bash](https://gitforwindows.org/) и выполните ту же команду.
 
 ### 2. Запуск и остановка
-- **[VS Code](https://code.visualstudio.com/)**: откройте папку и выполните  
-  `python [vscode_manage.py](vscode_manage.py) runserver`; для остановки нажмите `Ctrl+C`.
-- **[Shell](https://ru.wikipedia.org/wiki/Командная_оболочка)**: в Linux запустите [`./start.sh`](start.sh) и остановите [`./stop.sh`](stop.sh); в Windows запустите [`start.bat`](start.bat) и остановите `Ctrl+C`.
+Узлы Terminal можно запускать напрямую приведёнными ниже скриптами без установки; роли Control, Satellite и Constellation требуют предварительной установки. Оба варианта по умолчанию слушают [`http://localhost:8000/`](http://localhost:8000/) — используйте `--port`, чтобы выбрать другой порт.
+
+- **[VS Code](https://code.visualstudio.com/)**
+  - Откройте папку и перейдите на панель **Run and Debug** (`Ctrl+Shift+D`).
+  - Выберите конфигурацию **Run Server** (или **Debug Server**).
+  - Нажмите зелёную кнопку запуска. Остановите сервер красным квадратом (`Shift+F5`).
+- **[Shell](https://ru.wikipedia.org/wiki/Командная_оболочка)**
+  - Linux: запустите [`./start.sh`](start.sh) и остановите [`./stop.sh`](stop.sh).
+  - Windows: запустите [`start.bat`](start.bat) и остановите `Ctrl+C`.
 
 ### 3. Установка и обновление
-- **Linux**: используйте [`./install.sh`](install.sh) с опциями `--service ИМЯ`, `--public` или `--internal`, `--port ПОРТ`, `--upgrade`, `--auto-upgrade`, `--latest`, `--celery`, `--lcd-screen`, `--no-lcd-screen`, `--clean`, `--datasette`. Обновляйте через [`./upgrade.sh`](upgrade.sh), применяя `--latest`, `--clean` или `--no-restart`.
-- **Windows**: выполните [`install.bat`](install.bat) для установки и [`upgrade.bat`](upgrade.bat) для обновления.
+- **Linux**: выполните [`./install.sh`](install.sh) с флагом роли узла:
+  - `--terminal` — роль по умолчанию, если флаг не указан, и рекомендуемый выбор, если вы не уверены. Узлы Terminal также могут использовать приведённые выше скрипты запуска/остановки без установки.
+  - `--control` — подготавливает устройство для тестирования одного зарядного устройства.
+  - `--satellite` — настраивает периферийный узел сбора данных.
+  - `--constellation` — включает мультипользовательский оркестратор.
+  Используйте `./install.sh --help`, чтобы увидеть полный список флагов, если требуется дополнительная настройка сверх выбранной роли. Обновляйте систему с помощью [`./upgrade.sh`](upgrade.sh).
+- **Windows**: выполните [`install.bat`](install.bat) для установки (роль Terminal) и [`upgrade.bat`](upgrade.bat) для обновления.
 
 ### 4. Администрирование
-Перейдите на [`http://localhost:8888/admin/`](http://localhost:8888/admin/) для [панели администратора Django](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) и [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) для [административной документации](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Используйте порт `8000`, если запуск был через [`start.bat`](start.bat) или с опцией `--public`.
+Перейдите на [`http://localhost:8000/admin/`](http://localhost:8000/admin/) для [панели администратора Django](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) и [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) для [административной документации](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Используйте `--port` со скриптами запуска или установщиком, если нужно открыть другой порт.
 
 ## Поддержка
 
