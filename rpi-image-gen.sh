@@ -147,6 +147,89 @@ if [[ ! -d "$RPI_DIR" ]]; then
   mv "$WORK_ROOT/rpi-image-gen-master" "$RPI_DIR"
 fi
 
+ensure_dependencies() {
+  local dependencies_sh="$RPI_DIR/lib/dependencies.sh"
+  local install_script="$RPI_DIR/install_deps.sh"
+  local depends_file="$RPI_DIR/depends"
+
+  if [[ ! -r "$dependencies_sh" || ! -f "$depends_file" ]]; then
+    return
+  fi
+
+  local check_output=""
+  local check_status=0
+
+  set +e
+  check_output=$( ( source "$dependencies_sh"; dependencies_check "$depends_file" ) 2>&1 )
+  check_status=$?
+  set -e
+
+  if (( check_status == 0 )); then
+    return
+  fi
+
+  if [[ -n "$check_output" ]]; then
+    printf '%s\n' "$check_output"
+  fi
+
+  if (( EUID == 0 )); then
+    echo "Missing dependencies detected. Attempting automatic installation..."
+
+    if ! command -v apt >/dev/null 2>&1; then
+      echo "Automatic dependency installation requires apt but it was not found. Install the packages manually."
+      exit 1
+    fi
+
+    if [[ ! -f "$install_script" ]]; then
+      echo "Automatic dependency installation script not found at $install_script. Install the packages manually."
+      exit 1
+    fi
+
+    if [[ ! -x "$install_script" ]]; then
+      chmod +x "$install_script" 2>/dev/null || true
+    fi
+
+    set +e
+    DEBIAN_FRONTEND=${DEBIAN_FRONTEND:-noninteractive} "$install_script"
+    local install_status=$?
+    set -e
+    if (( install_status != 0 )); then
+      local failure_output=""
+      set +e
+      failure_output=$( ( source "$dependencies_sh"; dependencies_check "$depends_file" ) 2>&1 )
+      set -e
+      if [[ -n "$failure_output" ]]; then
+        printf '%s\n' "$failure_output"
+      fi
+      echo "Automatic dependency installation failed with exit code $install_status. Please review the output above and install the packages manually."
+      exit $install_status
+    fi
+
+    local recheck_output=""
+    local recheck_status=0
+    set +e
+    recheck_output=$( ( source "$dependencies_sh"; dependencies_check "$depends_file" ) 2>&1 )
+    recheck_status=$?
+    set -e
+
+    if (( recheck_status == 0 )); then
+      echo "Dependencies installed successfully."
+      return
+    fi
+
+    if [[ -n "$recheck_output" ]]; then
+      printf '%s\n' "$recheck_output"
+    fi
+    echo "Dependencies remain missing after the automatic installation attempt. Please install them manually."
+    exit 1
+  fi
+
+  echo "Run this script again with sudo to install the missing dependencies automatically, or install them manually using the instructions above."
+  exit 1
+}
+
+ensure_dependencies
+
 PASSWORD_FILE="$RUN_DIR/.user-password"
 chmod 700 "$RUN_DIR"
 printf '%s\n' "$PASSWORD" > "$PASSWORD_FILE"
