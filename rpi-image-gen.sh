@@ -11,7 +11,9 @@ exec > >(tee "$LOG_FILE") 2>&1
 ROLE=""
 USERNAME="arthe"
 PASSWORD=""
-DEVICE_LAYER="pi4"
+DEVICE_LAYER_REQUEST="pi4"
+DEVICE_LAYER_CANONICAL=""
+DEVICE_LAYER_ALIAS=""
 PASSWORD_PROVIDED=false
 HOSTNAME=""
 
@@ -25,7 +27,7 @@ Options:
   --hostname NAME     Assign NAME as the system hostname (required).
   --user NAME         Provision the named Linux account (default: arthe).
   --password PASS     Use PASS as the account password (otherwise prompt).
-  --device LAYER      Target rpi-image-gen device layer (default: pi4).
+  --device LAYER      Target rpi-image-gen device layer alias (default: pi4; resolves canonical names automatically).
   -h, --help          Show this help message.
 USAGE
 }
@@ -74,7 +76,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --device)
       [[ $# -ge 2 ]] || error "--device requires a value"
-      DEVICE_LAYER="$2"
+      DEVICE_LAYER_REQUEST="$2"
       shift
       ;;
     --hostname)
@@ -97,12 +99,6 @@ done
 [[ -n "$HOSTNAME" ]] || error "Hostname is required (--hostname)"
 validate_hostname "$HOSTNAME"
 validate_username "$USERNAME"
-
-case "$DEVICE_LAYER" in
-  pi5|cm5)
-    error "Device layer '$DEVICE_LAYER' targets hardware newer than the Raspberry Pi 4B, which is not supported. Use --device pi4 or an earlier model."
-    ;;
-esac
 
 if [[ "$PASSWORD_PROVIDED" = false ]]; then
   while true; do
@@ -144,45 +140,126 @@ cleanup() {
 trap cleanup EXIT
 
 RPI_TARBALL="$WORK_ROOT/rpi-image-gen.tar.gz"
-device_layer_exists() {
+RESOLVED_DEVICE_ALIAS=""
+
+find_device_layer_metadata() {
   local layer_name="$1"
   local base_dir="$RPI_DIR/device"
 
   if [[ -d "$base_dir/$layer_name" ]]; then
     for candidate in device layer; do
       if [[ -f "$base_dir/$layer_name/${candidate}.yaml" ]]; then
+        printf '%s\n' "$base_dir/$layer_name/${candidate}.yaml"
         return 0
       fi
     done
-    if compgen -G "$base_dir/$layer_name/"'*.yaml' >/dev/null; then
+
+    local yaml_files=()
+    shopt -s nullglob
+    yaml_files=("$base_dir/$layer_name/"*.yaml)
+    shopt -u nullglob
+    if (( ${#yaml_files[@]} > 0 )); then
+      printf '%s\n' "${yaml_files[0]}"
       return 0
     fi
   fi
 
   if [[ -f "$base_dir/$layer_name.yaml" ]]; then
+    printf '%s\n' "$base_dir/$layer_name.yaml"
     return 0
   fi
 
   return 1
 }
 
-if [[ -d "$RPI_DIR" ]] && ! device_layer_exists "$DEVICE_LAYER"; then
-  echo "Refreshing cached rpi-image-gen sources (missing device layer '$DEVICE_LAYER')."
-  rm -rf "$RPI_DIR"
-fi
+read_canonical_device_layer_name() {
+  local metadata_file="$1"
+  awk '
+    /^# *X-Env-Layer-Name:/ {
+      sub(/^# *X-Env-Layer-Name:[[:space:]]*/, "")
+      gsub(/\r/, "")
+      name=$0
+      sub(/^[[:space:]]+/, "", name)
+      sub(/[[:space:]]+$/, "", name)
+      print name
+      exit
+    }
+  ' "$metadata_file"
+}
 
-if [[ ! -d "$RPI_DIR" ]]; then
+resolve_device_layer() {
+  local requested_layer="$1"
+  local base_dir="$RPI_DIR/device"
+  local metadata_file=""
+  local canonical_layer=""
+  local alias_layer="$requested_layer"
+
+  if metadata_file=$(find_device_layer_metadata "$requested_layer" 2>/dev/null); then
+    canonical_layer="$(read_canonical_device_layer_name "$metadata_file")"
+    if [[ -z "$canonical_layer" ]]; then
+      canonical_layer="$alias_layer"
+    fi
+    RESOLVED_DEVICE_ALIAS="$alias_layer"
+    printf '%s\n' "$canonical_layer"
+    return 0
+  fi
+
+  shopt -s nullglob
+  local candidate_dir
+  for candidate_dir in "$base_dir"/*; do
+    [[ -d "$candidate_dir" ]] || continue
+    local candidate_alias
+    candidate_alias="$(basename "$candidate_dir")"
+    metadata_file=$(find_device_layer_metadata "$candidate_alias" 2>/dev/null) || continue
+    canonical_layer="$(read_canonical_device_layer_name "$metadata_file")"
+    if [[ -n "$canonical_layer" && "$canonical_layer" == "$requested_layer" ]]; then
+      RESOLVED_DEVICE_ALIAS="$candidate_alias"
+      printf '%s\n' "$canonical_layer"
+      shopt -u nullglob
+      return 0
+    fi
+  done
+  shopt -u nullglob
+
+  return 1
+}
+
+fetch_rpi_image_gen() {
   echo "Fetching rpi-image-gen..."
   rm -f "$RPI_TARBALL"
   curl -L "https://github.com/raspberrypi/rpi-image-gen/archive/refs/heads/master.tar.gz" -o "$RPI_TARBALL"
   rm -rf "$WORK_ROOT/rpi-image-gen-master"
   tar -xzf "$RPI_TARBALL" -C "$WORK_ROOT"
   mv "$WORK_ROOT/rpi-image-gen-master" "$RPI_DIR"
+}
+
+if [[ ! -d "$RPI_DIR" ]]; then
+  fetch_rpi_image_gen
 fi
 
-if ! device_layer_exists "$DEVICE_LAYER"; then
-  error "Device layer '$DEVICE_LAYER' not found in rpi-image-gen repository at $RPI_DIR."
+if DEVICE_LAYER_CANONICAL="$(resolve_device_layer "$DEVICE_LAYER_REQUEST" 2>/dev/null)"; then
+  :
+else
+  echo "Refreshing cached rpi-image-gen sources (missing device layer '$DEVICE_LAYER_REQUEST')."
+  rm -rf "$RPI_DIR"
+  fetch_rpi_image_gen
+  DEVICE_LAYER_CANONICAL="$(resolve_device_layer "$DEVICE_LAYER_REQUEST")" || \
+    error "Device layer '$DEVICE_LAYER_REQUEST' not found in rpi-image-gen repository at $RPI_DIR."
 fi
+
+DEVICE_LAYER_ALIAS="${RESOLVED_DEVICE_ALIAS:-$DEVICE_LAYER_REQUEST}"
+
+if [[ "$DEVICE_LAYER_ALIAS" != "$DEVICE_LAYER_REQUEST" || "$DEVICE_LAYER_CANONICAL" != "$DEVICE_LAYER_REQUEST" ]]; then
+  echo "Resolved device layer '$DEVICE_LAYER_REQUEST' to alias '$DEVICE_LAYER_ALIAS' (canonical '$DEVICE_LAYER_CANONICAL')."
+else
+  echo "Using device layer '$DEVICE_LAYER_CANONICAL'."
+fi
+
+case "$DEVICE_LAYER_CANONICAL" in
+  rpi5|rpi-cm5)
+    error "Device layer '$DEVICE_LAYER_CANONICAL' targets hardware newer than the Raspberry Pi 4B, which is not supported. Use --device pi4 or an earlier model."
+    ;;
+esac
 
 ensure_dependencies() {
   local dependencies_sh="$RPI_DIR/lib/dependencies.sh"
@@ -292,7 +369,7 @@ IMAGE_NAME="arthexis-${ROLE}-${HOSTNAME}"
 CONFIG_FILE="$CONFIG_DIR/${IMAGE_NAME}.yaml"
 cat > "$CONFIG_FILE" <<CFG
 device:
-  layer: $DEVICE_LAYER
+  layer: $DEVICE_LAYER_CANONICAL
 
 image:
   layer: image-rpios
@@ -663,6 +740,7 @@ RPI_BIN="$RPI_DIR/rpi-image-gen"
 [[ -x "$RPI_BIN" ]] || chmod +x "$RPI_BIN"
 
 BUILD_CMD=("$RPI_BIN" build -S "$SOURCE_DIR" -c "$CONFIG_FILE" -B "$BUILD_DIR" -- \
+  "IGconf_device_layer=$DEVICE_LAYER_CANONICAL" \
   "IGconf_arthexis_username=$USERNAME" \
   "IGconf_arthexis_password_file=$PASSWORD_FILE" \
   "IGconf_arthexis_role=$ROLE" \
