@@ -1,4 +1,5 @@
 import types
+from datetime import datetime
 
 import pytest
 
@@ -62,5 +63,18 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
 
     tasks.check_github_updates()
 
-    assert ("Upgrading...", "") in notify_calls
+    assert any(
+        subject == "Upgrading..."
+        and body.startswith("@")
+        and _is_iso_datetime(body[1:])
+        for subject, body in notify_calls
+    )
     assert any("upgrade.sh" in cmd[0] for cmd in run_calls)
+
+
+def _is_iso_datetime(candidate: str) -> bool:
+    try:
+        datetime.fromisoformat(candidate)
+    except ValueError:
+        return False
+    return True

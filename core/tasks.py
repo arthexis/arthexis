@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from datetime import datetime
 from pathlib import Path
 
 from celery import shared_task
@@ -57,7 +56,9 @@ def check_github_updates() -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "auto-upgrade.log"
     with log_file.open("a") as fh:
-        fh.write(f"{datetime.utcnow().isoformat()} check_github_updates triggered\n")
+        fh.write(
+            f"{timezone.now().isoformat()} check_github_updates triggered\n"
+        )
 
     notify = None
     startup = None
@@ -69,6 +70,8 @@ def check_github_updates() -> None:
         from nodes.apps import _startup_notification as startup  # type: ignore
     except Exception:
         startup = None
+
+    upgrade_stamp = f"@{timezone.now().isoformat()}"
 
     if mode == "latest":
         local = (
@@ -93,7 +96,7 @@ def check_github_updates() -> None:
                 startup()
             return
         if notify:
-            notify("Upgrading...", "")
+            notify("Upgrading...", upgrade_stamp)
         args = ["./upgrade.sh", "--latest", "--no-restart"]
     else:
         local = "0"
@@ -117,11 +120,13 @@ def check_github_updates() -> None:
                 startup()
             return
         if notify:
-            notify("Upgrading...", "")
+            notify("Upgrading...", upgrade_stamp)
         args = ["./upgrade.sh", "--no-restart"]
 
     with log_file.open("a") as fh:
-        fh.write(f"{datetime.utcnow().isoformat()} running: {' '.join(args)}\n")
+        fh.write(
+            f"{timezone.now().isoformat()} running: {' '.join(args)}\n"
+        )
 
     subprocess.run(args, cwd=base_dir, check=True)
 
