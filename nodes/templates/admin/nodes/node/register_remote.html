@@ -8,10 +8,63 @@
 <script>
 (async function() {
     const token = "{{ token }}";
-    const infoUrl = "http://localhost:8000/nodes/info/?token=" + token;
+
+    function buildUrlVariants(url) {
+        const variants = [];
+        try {
+            const parsed = new URL(url, window.location.href);
+            if (parsed.protocol === "http:") {
+                const secure = new URL(parsed.href);
+                secure.protocol = "https:";
+                variants.push(secure.href);
+            }
+            variants.push(parsed.href);
+        } catch (err) {
+            variants.push(url);
+        }
+        return variants.filter((value, index, self) => self.indexOf(value) === index);
+    }
+
+    async function fetchJson(url, options) {
+        const response = await fetch(url, options);
+        const text = await response.text();
+        let payload;
+        try {
+            payload = JSON.parse(text);
+        } catch (err) {
+            payload = text;
+        }
+        if (!response.ok) {
+            const detail = payload && payload.detail ? payload.detail : text || response.statusText;
+            throw new Error(detail);
+        }
+        return payload;
+    }
+
+    async function fetchJsonWithFallback(urls, options) {
+        const targets = Array.isArray(urls) ? urls : [urls];
+        let lastError = null;
+        for (const target of targets) {
+            try {
+                return await fetchJson(target, options);
+            } catch (error) {
+                const message = error && error.message ? error.message : "";
+                if (error instanceof TypeError || message === "Failed to fetch") {
+                    lastError = error;
+                    continue;
+                }
+                throw error;
+            }
+        }
+        if (lastError) {
+            throw lastError;
+        }
+        throw new Error("Request failed");
+    }
+
     try {
-        const infoResp = await fetch(infoUrl);
-        const info = await infoResp.json();
+        const infoTargets = buildUrlVariants("http://localhost:8000/nodes/info/?token=" + token);
+        const info = await fetchJsonWithFallback(infoTargets);
         const resp = await fetch("{{ register_url }}", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -28,7 +81,8 @@
         const result = await resp.json();
         document.getElementById("result").textContent = result.detail || ("Registered node ID " + result.id);
     } catch(err) {
-        document.getElementById("result").textContent = err;
+        const message = err && err.message ? err.message : err;
+        document.getElementById("result").textContent = message;
     }
 })();
 </script>

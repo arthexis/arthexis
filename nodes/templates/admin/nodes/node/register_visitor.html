@@ -26,7 +26,7 @@
     const token = "{{ token|escapejs }}";
     const hostInfoUrl = "{{ info_url|escapejs }}?token=" + token;
     const hostRegisterUrl = "{{ register_url|escapejs }}";
-    const visitorInfoUrl = "{{ visitor_info_url|escapejs }}?token=" + token;
+    const visitorInfoUrl = "{{ visitor_info_url|escapejs }}";
     const visitorRegisterUrl = "{{ visitor_register_url|escapejs }}";
     const hostResult = document.getElementById("host-result");
     const visitorResult = document.getElementById("visitor-result");
@@ -69,6 +69,43 @@
         return payload;
     }
 
+    function buildUrlVariants(url) {
+        const variants = [];
+        try {
+            const parsed = new URL(url, window.location.href);
+            if (parsed.protocol === "http:") {
+                const secure = new URL(parsed.href);
+                secure.protocol = "https:";
+                variants.push(secure.href);
+            }
+            variants.push(parsed.href);
+        } catch (err) {
+            variants.push(url);
+        }
+        return variants.filter((value, index, self) => self.indexOf(value) === index);
+    }
+
+    async function requestWithFallback(urls, options) {
+        const targets = Array.isArray(urls) ? urls : [urls];
+        let lastError = null;
+        for (const target of targets) {
+            try {
+                return await loadJson(target, options);
+            } catch (error) {
+                const message = error && error.message ? error.message : "";
+                if (error instanceof TypeError || message === "Failed to fetch") {
+                    lastError = error;
+                    continue;
+                }
+                throw error;
+            }
+        }
+        if (lastError) {
+            throw lastError;
+        }
+        throw new Error("Request failed");
+    }
+
     function buildPayload(info) {
         return {
             hostname: info.hostname,
@@ -89,9 +126,12 @@
 
     (async function() {
         try {
+            const visitorInfoTargets = buildUrlVariants(visitorInfoUrl + "?token=" + token);
+            const visitorInfoPromise = requestWithFallback(visitorInfoTargets);
+            const hostInfoPromise = loadJson(hostInfoUrl);
             const [visitorInfo, hostInfo] = await Promise.all([
-                loadJson(visitorInfoUrl),
-                loadJson(hostInfoUrl),
+                visitorInfoPromise,
+                hostInfoPromise,
             ]);
 
             if (!visitorInfo || typeof visitorInfo !== "object") {
@@ -122,7 +162,8 @@
             const visitorPayload = buildPayload(hostInfo);
             addSignature(visitorPayload, hostInfo);
             try {
-                const result = await loadJson(visitorRegisterUrl, {
+                const visitorRegisterTargets = buildUrlVariants(visitorRegisterUrl);
+                const result = await requestWithFallback(visitorRegisterTargets, {
                     method: "POST",
                     credentials: "include",
                     body: JSON.stringify(visitorPayload),
