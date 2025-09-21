@@ -7,15 +7,9 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
 ## Características
 
 - Compatible con el [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) como sistema central, gestionando:
-  - BootNotification
-  - Heartbeat
-  - StatusNotification
-  - Authorize
-  - MeterValues
-  - DiagnosticsStatusNotification
-  - StartTransaction
-  - StopTransaction
-  - FirmwareStatusNotification
+  - Ciclo de vida y sesiones: BootNotification, Heartbeat, StatusNotification, StartTransaction, StopTransaction
+  - Acceso y medición: Authorize, MeterValues
+  - Mantenimiento y firmware: DiagnosticsStatusNotification, FirmwareStatusNotification
 - Integración de [API](https://es.wikipedia.org/wiki/Interfaz_de_programaci%C3%B3n_de_aplicaciones) con [Odoo](https://www.odoo.com/) para:
   - Sincronizar credenciales de empleados mediante `res.users`
   - Consultar el catálogo de productos mediante `product.product`
@@ -26,34 +20,34 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
 
 Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plataforma a distintos escenarios de despliegue.
 
-<table>
+<table border="1" cellpadding="8" cellspacing="0">
   <thead>
     <tr>
-      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Rol</th>
-      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Descripción</th>
-      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Funciones comunes</th>
+      <th align="left">Rol</th>
+      <th align="left">Descripción</th>
+      <th align="left">Funciones comunes</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Terminal</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Investigación y desarrollo de un solo usuario</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">• GUI Toast</td>
+      <td valign="top"><strong>Terminal</strong></td>
+      <td valign="top"><strong>Investigación y desarrollo de un solo usuario</strong></td>
+      <td valign="top">GUI Toast</td>
     </tr>
     <tr>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Control</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Pruebas de un solo dispositivo y equipos para tareas especiales</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">• AP Public Wi-Fi<br>• Celery Queue<br>• GUI Toast<br>• LCD Screen<br>• NGINX Server<br>• RFID Scanner</td>
+      <td valign="top"><strong>Control</strong></td>
+      <td valign="top"><strong>Pruebas de un solo dispositivo y equipos para tareas especiales</strong></td>
+      <td valign="top">AP Public Wi-Fi<br />Celery Queue<br />GUI Toast<br />LCD Screen<br />NGINX Server<br />RFID Scanner</td>
     </tr>
     <tr>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Satélite</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Periferia multidispositivo, redes y adquisición de datos</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">• AP Router<br>• Celery Queue<br>• NGINX Server<br>• RFID Scanner</td>
+      <td valign="top"><strong>Satélite</strong></td>
+      <td valign="top"><strong>Periferia multidispositivo, redes y adquisición de datos</strong></td>
+      <td valign="top">AP Router<br />Celery Queue<br />NGINX Server<br />RFID Scanner</td>
     </tr>
     <tr>
-      <td style="padding: 0.6rem 1rem;">Constelación</td>
-      <td style="padding: 0.6rem 1rem;">Nube multiusuario y orquestación</td>
-      <td style="padding: 0.6rem 1rem;">• Celery Queue<br>• NGINX Server</td>
+      <td valign="top"><strong>Constelación</strong></td>
+      <td valign="top"><strong>Nube multiusuario y orquestación</strong></td>
+      <td valign="top">Celery Queue<br />NGINX Server</td>
     </tr>
   </tbody>
 </table>
@@ -61,8 +55,7 @@ Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plat
 ## Quick Guide
 
 ### 1. Clonar
-- **[Linux](https://es.wikipedia.org/wiki/Linux)**: abre una [terminal](https://es.wikipedia.org/wiki/Interfaz_de_l%C3%ADnea_de_comandos) y ejecuta  
-  `git clone https://github.com/arthexis/arthexis.git`
+- **[Linux](https://es.wikipedia.org/wiki/Linux)**: abre una [terminal](https://es.wikipedia.org/wiki/Interfaz_de_l%C3%ADnea_de_comandos) y ejecuta `git clone https://github.com/arthexis/arthexis.git`.
 - **[Windows](https://es.wikipedia.org/wiki/Microsoft_Windows)**: abre [PowerShell](https://learn.microsoft.com/es-es/powershell/) o [Git Bash](https://gitforwindows.org/) y ejecuta el mismo comando.
 
 ### 2. Iniciar y detener

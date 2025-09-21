@@ -7,15 +7,9 @@
 ## Возможности
 
 - Совместим с [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) в роли центральной системы и обрабатывает:
-  - BootNotification
-  - Heartbeat
-  - StatusNotification
-  - Authorize
-  - MeterValues
-  - DiagnosticsStatusNotification
-  - StartTransaction
-  - StopTransaction
-  - FirmwareStatusNotification
+  - Управление жизненным циклом и сессиями: BootNotification, Heartbeat, StatusNotification, StartTransaction, StopTransaction
+  - Доступ и учёт показаний: Authorize, MeterValues
+  - Обслуживание и прошивка: DiagnosticsStatusNotification, FirmwareStatusNotification
 - [API](https://ru.wikipedia.org/wiki/API) интеграция с [Odoo](https://www.odoo.com/) для:
   - Синхронизации учётных данных сотрудников через `res.users`
   - Запроса каталога продуктов через `product.product`
@@ -26,34 +20,34 @@
 
 Созвездие Arthexis поставляется в четырёх ролях узлов, чтобы адаптировать платформу к различным сценариям развёртывания.
 
-<table>
+<table border="1" cellpadding="8" cellspacing="0">
   <thead>
     <tr>
-      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Роль</th>
-      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Описание</th>
-      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Типичные функции</th>
+      <th align="left">Роль</th>
+      <th align="left">Описание</th>
+      <th align="left">Типичные функции</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Terminal</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Исследования и разработка для одного пользователя</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">• GUI Toast</td>
+      <td valign="top"><strong>Terminal</strong></td>
+      <td valign="top"><strong>Исследования и разработка для одного пользователя</strong></td>
+      <td valign="top">GUI Toast</td>
     </tr>
     <tr>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Control</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Тестирование отдельных устройств и специализированные аппаратные комплексы</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">• AP Public Wi-Fi<br>• Celery Queue<br>• GUI Toast<br>• LCD Screen<br>• NGINX Server<br>• RFID Scanner</td>
+      <td valign="top"><strong>Control</strong></td>
+      <td valign="top"><strong>Тестирование отдельных устройств и специализированные аппаратные комплексы</strong></td>
+      <td valign="top">AP Public Wi-Fi<br />Celery Queue<br />GUI Toast<br />LCD Screen<br />NGINX Server<br />RFID Scanner</td>
     </tr>
     <tr>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Satellite</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Периферийная многоприборная инфраструктура, сеть и сбор данных</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">• AP Router<br>• Celery Queue<br>• NGINX Server<br>• RFID Scanner</td>
+      <td valign="top"><strong>Satellite</strong></td>
+      <td valign="top"><strong>Периферийная многоприборная инфраструктура, сеть и сбор данных</strong></td>
+      <td valign="top">AP Router<br />Celery Queue<br />NGINX Server<br />RFID Scanner</td>
     </tr>
     <tr>
-      <td style="padding: 0.6rem 1rem;">Constellation</td>
-      <td style="padding: 0.6rem 1rem;">Многопользовательское облако и оркестрация</td>
-      <td style="padding: 0.6rem 1rem;">• Celery Queue<br>• NGINX Server</td>
+      <td valign="top"><strong>Constellation</strong></td>
+      <td valign="top"><strong>Многопользовательское облако и оркестрация</strong></td>
+      <td valign="top">Celery Queue<br />NGINX Server</td>
     </tr>
   </tbody>
 </table>
@@ -61,8 +55,7 @@
 ## Quick Guide
 
 ### 1. Клонирование
-- **[Linux](https://ru.wikipedia.org/wiki/Linux)**: откройте [терминал](https://ru.wikipedia.org/wiki/Командная_оболочка) и выполните  
-  `git clone https://github.com/arthexis/arthexis.git`
+- **[Linux](https://ru.wikipedia.org/wiki/Linux)**: откройте [терминал](https://ru.wikipedia.org/wiki/Командная_оболочка) и выполните `git clone https://github.com/arthexis/arthexis.git`.
 - **[Windows](https://ru.wikipedia.org/wiki/Microsoft_Windows)**: откройте [PowerShell](https://learn.microsoft.com/ru-ru/powershell/) или [Git Bash](https://gitforwindows.org/) и выполните ту же команду.
 
 ### 2. Запуск и остановка

@@ -7,15 +7,9 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 ## Features
 
 - Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) central system, handling:
-  - BootNotification
-  - Heartbeat
-  - StatusNotification
-  - Authorize
-  - MeterValues
-  - DiagnosticsStatusNotification
-  - StartTransaction
-  - StopTransaction
-  - FirmwareStatusNotification
+  - Lifecycle & sessions: BootNotification, Heartbeat, StatusNotification, StartTransaction, StopTransaction
+  - Access & metering: Authorize, MeterValues
+  - Maintenance & firmware: DiagnosticsStatusNotification, FirmwareStatusNotification
 - [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/), syncing:
   - Employee credentials via `res.users`
   - Product catalog lookups via `product.product`
@@ -28,29 +22,29 @@ Project under active development.
 
 Arthexis Constellation ships in four node roles tailored to different deployment scenarios.
 
-<table>
+<table border="1" cellpadding="8" cellspacing="0">
   <thead>
     <tr>
-      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Role</th>
-      <th style="padding: 0.6rem 1rem; border-bottom: 2px solid #444; text-align: left;">Description &amp; Common Features</th>
+      <th align="left">Role</th>
+      <th align="left">Description &amp; Common Features</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Terminal</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Single-User Research &amp; Development<br>Features: GUI Toast</td>
+      <td valign="top"><strong>Terminal</strong></td>
+      <td valign="top"><strong>Single-User Research &amp; Development</strong><br />Features: GUI Toast</td>
     </tr>
     <tr>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Control</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Single-Device Testing &amp; Special Task Appliances<br>Features: AP Public Wi-Fi, Celery Queue, GUI Toast, LCD Screen, NGINX Server, RFID Scanner</td>
+      <td valign="top"><strong>Control</strong></td>
+      <td valign="top"><strong>Single-Device Testing &amp; Special Task Appliances</strong><br />Features: AP Public Wi-Fi, Celery Queue, GUI Toast, LCD Screen, NGINX Server, RFID Scanner</td>
     </tr>
     <tr>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Satellite</td>
-      <td style="padding: 0.6rem 1rem; border-bottom: 1px solid #444;">Multi-Device Edge, Network &amp; Data Acquisition<br>Features: AP Router, Celery Queue, NGINX Server, RFID Scanner</td>
+      <td valign="top"><strong>Satellite</strong></td>
+      <td valign="top"><strong>Multi-Device Edge, Network &amp; Data Acquisition</strong><br />Features: AP Router, Celery Queue, NGINX Server, RFID Scanner</td>
     </tr>
     <tr>
-      <td style="padding: 0.6rem 1rem;">Constellation</td>
-      <td style="padding: 0.6rem 1rem;">Multi-User Cloud &amp; Orchestration<br>Features: Celery Queue, NGINX Server</td>
+      <td valign="top"><strong>Constellation</strong></td>
+      <td valign="top"><strong>Multi-User Cloud &amp; Orchestration</strong><br />Features: Celery Queue, NGINX Server</td>
     </tr>
   </tbody>
 </table>
@@ -58,8 +52,7 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 ## Quick Guide
 
 ### 1. Clone
-- **[Linux](https://en.wikipedia.org/wiki/Linux)**: open a [terminal](https://en.wikipedia.org/wiki/Command-line_interface) and run  
-  `git clone https://github.com/arthexis/arthexis.git`
+- **[Linux](https://en.wikipedia.org/wiki/Linux)**: open a [terminal](https://en.wikipedia.org/wiki/Command-line_interface) and run `git clone https://github.com/arthexis/arthexis.git`.
 - **[Windows](https://en.wikipedia.org/wiki/Microsoft_Windows)**: open [PowerShell](https://learn.microsoft.com/powershell/) or [Git Bash](https://gitforwindows.org/) and run the same command.
 
 ### 2. Start and stop
