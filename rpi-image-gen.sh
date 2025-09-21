@@ -233,6 +233,98 @@ fetch_rpi_image_gen() {
   mv "$WORK_ROOT/rpi-image-gen-master" "$RPI_DIR"
 }
 
+ensure_mmdebstrap_mode_unshare() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    error "python3 is required to configure mmdebstrap for rootless builds. Install python3 and rerun."
+  fi
+
+  local file backup
+  local -a yaml_files=()
+  while IFS= read -r -d '' file; do
+    yaml_files+=("$file")
+  done < <(find "$RPI_DIR" -type f \( -name '*.yaml' -o -name '*.yml' \) -print0)
+
+  for file in "${yaml_files[@]}"; do
+    [[ -f "$file" ]] || continue
+    if ! grep -q 'mmdebstrap:' "$file"; then
+      continue
+    fi
+
+    backup=$(mktemp)
+    cp "$file" "$backup"
+
+    python3 - "$file" <<'PY'
+import sys
+import pathlib
+
+path = pathlib.Path(sys.argv[1])
+text = path.read_text()
+lines = text.splitlines()
+
+mm_index = None
+mm_indent = None
+for idx, line in enumerate(lines):
+    stripped = line.lstrip()
+    if stripped.startswith('mmdebstrap:'):
+        mm_index = idx
+        mm_indent = len(line) - len(line.lstrip())
+        break
+
+if mm_index is None:
+    sys.exit(0)
+
+changed = False
+block_indent = None
+insert_at = mm_index + 1
+
+for j in range(mm_index + 1, len(lines)):
+    line = lines[j]
+    stripped = line.strip()
+    indent = len(line) - len(line.lstrip())
+
+    if stripped and indent <= mm_indent:
+        insert_at = j
+        break
+
+    if not stripped:
+        insert_at = j + 1
+        continue
+
+    if block_indent is None:
+        block_indent = indent
+
+    if stripped.startswith('mode:'):
+        value = stripped.split(':', 1)[1].strip()
+        if value == 'unshare':
+            sys.exit(0)
+        lines[j] = ' ' * indent + 'mode: unshare'
+        changed = True
+        break
+
+    insert_at = j + 1
+else:
+    insert_at = len(lines)
+
+if not changed:
+    if block_indent is None:
+        block_indent = mm_indent + 2
+    line_to_insert = ' ' * block_indent + 'mode: unshare'
+    lines.insert(insert_at, line_to_insert)
+    changed = True
+
+if changed:
+    ending = '\n' if text.endswith('\n') else ''
+    path.write_text('\n'.join(lines) + ending)
+PY
+
+    if ! cmp -s "$backup" "$file"; then
+      echo "Configured mmdebstrap mode to unshare in $file"
+    fi
+
+    rm -f "$backup"
+  done
+}
+
 if [[ ! -d "$RPI_DIR" ]]; then
   fetch_rpi_image_gen
 fi
@@ -262,6 +354,8 @@ if [[ "$DEVICE_LAYER_CANONICAL" != "rpi4" ]]; then
     error "Device layer '$DEVICE_LAYER_CANONICAL' is not supported. This tool only supports the Raspberry Pi 4."
   fi
 fi
+
+ensure_mmdebstrap_mode_unshare
 
 ensure_dependencies() {
   local dependencies_sh="$RPI_DIR/lib/dependencies.sh"
@@ -424,6 +518,7 @@ cat > "$LAYER_FILE" <<'LAYER'
 # METAEND
 ---
 mmdebstrap:
+  mode: unshare
   packages:
     - sudo
     - git
