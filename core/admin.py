@@ -998,6 +998,7 @@ class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
     add_fieldsets = _append_operate_as(DjangoUserAdmin.add_fieldsets)
     inlines = USER_PROFILE_INLINES + [UserPhoneNumberInline]
     change_form_template = "admin/user_profile_change_form.html"
+    _skip_entity_user_datum = True
 
     def _get_operate_as_profile_template(self):
         opts = self.model._meta
@@ -1027,7 +1028,7 @@ class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
         else:
             context_data = getattr(response, "context_data", None)
         if context_data is not None:
-            context_data["show_user_datum"] = True
+            context_data["show_user_datum"] = False
             context_data["show_seed_datum"] = False
             context_data["show_save_as_copy"] = False
         operate_as_user = None
@@ -1100,23 +1101,13 @@ class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
         target_user = _resolve_fixture_user(obj, obj)
         allow_user_data = _user_allows_user_data(target_user)
         if request.POST.get("_user_datum") == "on":
-            if allow_user_data:
-                if not obj.is_user_data:
-                    type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=True)
-                    obj.is_user_data = True
-                dump_user_fixture(obj, target_user)
-                path = _fixture_path(target_user, obj)
-                self.message_user(request, f"User datum saved to {path}")
-            else:
-                if obj.is_user_data:
-                    type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=False)
-                    obj.is_user_data = False
-                    delete_user_fixture(obj, target_user)
-                self.message_user(
-                    request,
-                    _("User data is not available for this account."),
-                    level=messages.WARNING,
-                )
+            type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=False)
+            obj.is_user_data = False
+            delete_user_fixture(obj, target_user)
+            self.message_user(
+                request,
+                _("User data for user accounts is managed through the profile sections."),
+            )
         elif obj.is_user_data:
             type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=False)
             obj.is_user_data = False

@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen User admin change view",
+      "url": "admin/teams/user/",
+      "request_details": "Open the Teams user change form and confirm the Release Manager, Email Inbox, Email Outbox, and Assistant profile panels render with working user datum controls."
+    }
+  }
+]

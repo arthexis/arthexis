@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Review regression: Restore user admin profile sections",
+      "url": "admin/teams/user/",
+      "request_details": "Verify that the Teams user change view once again lists each profile inline (Odoo, Release Manager, Email Inbox, Email Outbox, Assistant) and that their user data toggles function as expected."
+    }
+  }
+]
