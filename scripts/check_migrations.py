@@ -93,7 +93,10 @@ def _check_migrations(labels: Iterable[str]) -> int:
 
 def main() -> int:
     # Detect merge migrations
-    known_merges = {REPO_ROOT / "core" / "migrations" / "0009_merge_20250901_2230.py"}
+    known_merges = {
+        REPO_ROOT / "core" / "migrations" / "0009_merge_20250901_2230.py",
+        REPO_ROOT / "core" / "migrations" / "0041_merge_20250921_0415.py",
+    }
     for path in REPO_ROOT.rglob("migrations/*merge*.py"):
         if path not in known_merges:
             print(f"Merge migrations detected: {path}", file=sys.stderr)

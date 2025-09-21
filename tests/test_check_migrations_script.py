@@ -1,6 +1,7 @@
 import importlib
 import shutil
 import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 
 import scripts.check_migrations as check_migrations
