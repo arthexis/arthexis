@@ -68,7 +68,7 @@ class EmailProfileIntegrationTests(TestCase):
         outbox.full_clean()
 
 
-class UserAdminSidebarTests(TestCase):
+class UserAdminProfileTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_superuser(
@@ -80,13 +80,29 @@ class UserAdminSidebarTests(TestCase):
         self.assertIn(EmailInbox, inline_models)
         self.assertIn(EmailOutbox, inline_models)
 
-    def test_change_form_contains_section_sidebar(self):
+    def test_change_form_omits_section_sidebar(self):
         self.client.force_login(self.user)
         url = reverse("admin:teams_user_change", args=[self.user.pk])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertIn('id="user-changeform-sections"', content)
+        self.assertNotIn('id="user-changeform-sections"', content)
+
+    def test_admin_index_lists_profile_models(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("admin:index"))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        profile_urls = [
+            reverse("admin:teams_odooprofile_changelist"),
+            reverse("admin:teams_releasemanager_changelist"),
+            reverse("admin:teams_assistantprofile_changelist"),
+            reverse("admin:teams_emailinbox_changelist"),
+            reverse("admin:teams_emailoutbox_changelist"),
+        ]
+        for url in profile_urls:
+            with self.subTest(url=url):
+                self.assertIn(f'href="{url}"', content)
 
     def test_change_form_shows_profiles_for_admin_user(self):
         User = get_user_model()

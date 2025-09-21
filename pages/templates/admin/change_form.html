@@ -12,133 +12,9 @@
   {{ block.super }}
   <link rel="stylesheet" href="{% static "admin/css/forms.css" %}">
   <style>
-    #content-related.changeform-sections {
-      float: right;
-      width: 260px;
-      margin-right: -300px;
-    }
-
-    #content-related.changeform-sections.is-collapsed {
-      float: none;
-      width: auto;
-      margin: 1.5rem 0 0;
-    }
-
-    #content-related.changeform-sections .changeform-sections__container {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      background: var(--darkened-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 1rem;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-    }
-
-    @media (min-width: 1024px) {
-      #content-related.changeform-sections {
-        position: sticky;
-        top: 1.5rem;
-      }
-
-      #content-related.changeform-sections.is-collapsed {
-        position: static;
-        top: auto;
-      }
-    }
-
-    #content-related.changeform-sections .changeform-sections__toggle {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem;
-      width: 100%;
-      padding: 0.5rem 0.75rem;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      background: var(--button-bg);
-      color: var(--button-fg);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      cursor: pointer;
-      transition: background 0.2s ease, border-color 0.2s ease;
-    }
-
-    #content-related.changeform-sections .changeform-sections__toggle:hover,
-    #content-related.changeform-sections .changeform-sections__toggle:focus {
-      background: var(--button-hover-bg);
-      outline: none;
-    }
-
-    #content-related.changeform-sections .changeform-sections__chevron::before {
-      content: "▾";
-      display: inline-block;
-      transition: transform 0.2s ease;
-    }
-
-    #content-related.changeform-sections.is-collapsed .changeform-sections__chevron::before {
-      transform: rotate(-90deg);
-    }
-
-    #content-related.changeform-sections .changeform-sections__panel {
-      border-top: 1px solid var(--border-color);
-      padding-top: 0.5rem;
-      max-height: 70vh;
-      overflow-y: auto;
-    }
-
-    #content-related.changeform-sections.is-collapsed .changeform-sections__panel {
-      display: none;
-    }
-
-    #content-related.changeform-sections .changeform-sections__list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-    }
-
-    #content-related.changeform-sections .changeform-sections__item {
-      margin: 0;
-    }
-
-    #content-related.changeform-sections .changeform-sections__link {
-      display: block;
-      padding: 0.4rem 0.5rem;
-      border-radius: 6px;
-      color: var(--body-fg);
-      border: 1px solid transparent;
-      transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
-    }
-
-    #content-related.changeform-sections .changeform-sections__link:hover,
-    #content-related.changeform-sections .changeform-sections__link:focus {
-      border-color: var(--link-fg);
-      background: var(--darkened-bg);
-      color: var(--link-fg);
-      outline: none;
-    }
-
     .fieldset-heading,
     .inline-heading {
       scroll-margin-top: 80px;
-    }
-
-    @media (max-width: 1023px) {
-      #content-related.changeform-sections {
-        float: none;
-        width: auto;
-        margin: 1.5rem 0 0;
-        position: static;
-        top: auto;
-      }
-
-      #content-related.changeform-sections .changeform-sections__panel {
-        max-height: none;
-      }
     }
 
     .related-models {
@@ -185,7 +61,7 @@
   </style>
 {% endblock %}
 
-{% block coltype %}colMS{% endblock %}
+{% block coltype %}colM{% endblock %}
 
 {% block bodyclass %}{{ block.super }} app-{{ opts.app_label }} model-{{ opts.model_name }} change-form{% endblock %}
 
@@ -262,72 +138,6 @@
             {% endif %}
             async>
     </script>
-    <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      const sidebar = document.querySelector('#content-related.changeform-sections');
-      if (!sidebar) {
-        return;
-      }
-      const list = sidebar.querySelector('.changeform-sections__list');
-      const panel = sidebar.querySelector('.changeform-sections__panel');
-      const toggle = sidebar.querySelector('.changeform-sections__toggle');
-      const content = document.getElementById('content');
-
-      if (!list || !panel || !toggle || !list.querySelector('li')) {
-        sidebar.remove();
-        if (content) {
-          content.classList.remove('colMS');
-          if (!content.classList.contains('colM')) {
-            content.classList.add('colM');
-          }
-        }
-        return;
-      }
-
-      const collapseQuery = window.matchMedia ? window.matchMedia('(max-width: 1023px)') : null;
-      let userOverride = false;
-
-      function setCollapsed(state) {
-        panel.hidden = !!state;
-        toggle.setAttribute('aria-expanded', String(!state));
-        sidebar.classList.toggle('is-collapsed', state);
-        if (content) {
-          if (state) {
-            content.classList.remove('colMS');
-            if (!content.classList.contains('colM')) {
-              content.classList.add('colM');
-            }
-          } else {
-            content.classList.remove('colM');
-            if (!content.classList.contains('colMS')) {
-              content.classList.add('colMS');
-            }
-          }
-        }
-      }
-
-      function applyMedia(event) {
-        if (userOverride) {
-          return;
-        }
-        const matches = event && typeof event.matches === 'boolean' ? event.matches : false;
-        setCollapsed(matches);
-      }
-
-      if (collapseQuery) {
-        applyMedia(collapseQuery);
-        collapseQuery.addEventListener('change', applyMedia);
-      } else {
-        setCollapsed(false);
-      }
-
-      toggle.addEventListener('click', function () {
-        userOverride = true;
-        const nextState = !sidebar.classList.contains('is-collapsed');
-        setCollapsed(nextState);
-      });
-    });
-    </script>
 {% endblock %}
 
 {% comment %} JavaScript for prepopulated fields {% endcomment %}
@@ -337,35 +147,4 @@
 </form></div>
 {% endblock %}
 
-{% block sidebar %}
-<div id="content-related" class="changeform-sections">
-  <div class="changeform-sections__container">
-    <button type="button" class="changeform-sections__toggle" aria-expanded="true" aria-controls="{{ opts.model_name }}-changeform-sections">
-      <span class="changeform-sections__label">{% translate "Sections" %}</span>
-      <span class="changeform-sections__chevron" aria-hidden="true"></span>
-    </button>
-    <nav id="{{ opts.model_name }}-changeform-sections" class="changeform-sections__panel" aria-label="{% translate 'Form sections' %}">
-      <ol class="changeform-sections__list">
-        {% for fieldset in adminform %}
-          {% if fieldset.name %}
-          <li class="changeform-sections__item">
-            <a class="changeform-sections__link" href="#fieldset-0-{{ forloop.counter0 }}-heading">{{ fieldset.name }}</a>
-          </li>
-          {% endif %}
-        {% endfor %}
-        {% for inline_admin_formset in inline_admin_formsets %}
-          <li class="changeform-sections__item">
-            <a class="changeform-sections__link" href="#{{ inline_admin_formset.formset.prefix }}-heading">
-              {% if inline_admin_formset.formset.max_num == 1 %}
-                {{ inline_admin_formset.opts.verbose_name|capfirst }}
-              {% else %}
-                {{ inline_admin_formset.opts.verbose_name_plural|capfirst }}
-              {% endif %}
-            </a>
-          </li>
-        {% endfor %}
-      </ol>
-    </nav>
-  </div>
-</div>
-{% endblock %}
+{% block sidebar %}{{ block.super }}{% endblock %}
