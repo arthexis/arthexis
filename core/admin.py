@@ -333,9 +333,6 @@ class ReleaseManagerAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 request, f"{manager} credentials check failed: {exc}", messages.ERROR
             )
 
-    def get_model_perms(self, request):
-        return {}
-
 
 @admin.register(Package)
 class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
@@ -1158,9 +1155,6 @@ class OdooProfileAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     verify_credentials_action.label = "Test credentials"
     verify_credentials_action.short_description = "Test credentials"
 
-    def get_model_perms(self, request):
-        return {}
-
 
 class EmailSearchForm(forms.Form):
     subject = forms.CharField(
@@ -1475,9 +1469,6 @@ class AssistantProfileAdmin(EntityModelAdmin):
             msg = f"{msg} {status['last_error']}"
         self.message_user(request, msg, level=level)
         return self._redirect_to_changelist()
-
-    def get_model_perms(self, request):
-        return {}
 
 
 class EnergyCreditInline(admin.TabularInline):

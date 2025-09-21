@@ -284,9 +284,6 @@ class EmailOutboxAdmin(EntityModelAdmin):
             self.message_user(request, str(exc), messages.ERROR)
         return redirect("..")
 
-    def get_model_perms(self, request):  # pragma: no cover - hide from index
-        return {}
-
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}
         if object_id:
