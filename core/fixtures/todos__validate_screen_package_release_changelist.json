@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Package release changelist",
+      "url": "/admin/core/packagerelease/",
+      "request_details": "Open the Package release changelist and confirm the Prepare next Release button is visible and launches the release preparation workflow."
+    }
+  }
+]

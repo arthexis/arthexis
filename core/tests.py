@@ -989,9 +989,12 @@ class PackageReleaseChangelistTests(TestCase):
         User.objects.create_superuser("admin", "admin@example.com", "pw")
         self.client.force_login(User.objects.get(username="admin"))
 
-    def test_prepare_next_release_button_hidden(self):
+    def test_prepare_next_release_button_present(self):
         response = self.client.get(reverse("admin:core_packagerelease_changelist"))
-        self.assertNotContains(response, "Prepare next Release")
+        prepare_url = reverse(
+            "admin:core_packagerelease_actions", args=["prepare_next_release"]
+        )
+        self.assertContains(response, prepare_url, html=False)
 
     def test_refresh_from_pypi_button_present(self):
         response = self.client.get(reverse("admin:core_packagerelease_changelist"))
@@ -999,6 +1002,19 @@ class PackageReleaseChangelistTests(TestCase):
             "admin:core_packagerelease_actions", args=["refresh_from_pypi"]
         )
         self.assertContains(response, refresh_url, html=False)
+
+    def test_prepare_next_release_action_creates_release(self):
+        package = Package.objects.get(name="arthexis")
+        PackageRelease.all_objects.filter(package=package).delete()
+        response = self.client.post(
+            reverse(
+                "admin:core_packagerelease_actions", args=["prepare_next_release"]
+            )
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            PackageRelease.all_objects.filter(package=package).exists()
+        )
 
 
 class PackageAdminPrepareNextReleaseTests(TestCase):
