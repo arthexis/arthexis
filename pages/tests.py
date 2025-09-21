@@ -1335,7 +1335,7 @@ class AdminActionListTests(TestCase):
             with self.subTest(model=f"{app_label}.{object_name}"):
                 actions = model_admin_actions(context, app_label, object_name)
                 labels = {action["label"] for action in actions}
-                self.assertIn("My Profile", labels)
+                self.assertIn("Active Profile", labels)
 
 
 class AdminModelGraphViewTests(TestCase):

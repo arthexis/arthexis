@@ -79,14 +79,19 @@ def model_admin_actions(context, app_label, model_name):
         if action_name == "delete_selected" or uses_queryset(func):
             continue
         url = None
+        if action_name == "my_profile":
+            getter = getattr(model_admin, "get_my_profile_url", None)
+            if callable(getter):
+                url = getter(request)
         base = f"admin:{model_admin.opts.app_label}_{model_admin.opts.model_name}_"
-        try:
-            url = reverse(base + action_name)
-        except NoReverseMatch:
+        if not url:
             try:
-                url = reverse(base + action_name.split("_")[0])
+                url = reverse(base + action_name)
             except NoReverseMatch:
-                url = reverse(base + "changelist") + f"?action={action_name}"
+                try:
+                    url = reverse(base + action_name.split("_")[0])
+                except NoReverseMatch:
+                    url = reverse(base + "changelist") + f"?action={action_name}"
         actions.append({"url": url, "label": description or _name.replace("_", " ")})
     return actions
 
