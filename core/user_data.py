@@ -323,9 +323,7 @@ class UserDatumAdminMixin(admin.ModelAdmin):
     def render_change_form(
         self, request, context, add=False, change=False, form_url="", obj=None
     ):
-        context["show_user_datum"] = issubclass(
-            self.model, Entity
-        ) and _user_allows_user_data(request.user)
+        context["show_user_datum"] = issubclass(self.model, Entity)
         context["show_seed_datum"] = issubclass(self.model, Entity)
         context["show_save_as_copy"] = issubclass(self.model, Entity) or hasattr(
             self.model, "clone"
