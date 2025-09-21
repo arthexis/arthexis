@@ -6,8 +6,19 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 
 ## Features
 
-- Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/)
-- [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/) 1.6
+- Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) central system, handling:
+  - BootNotification
+  - Heartbeat
+  - StatusNotification
+  - Authorize
+  - MeterValues
+  - DiagnosticsStatusNotification
+  - StartTransaction
+  - StopTransaction
+  - FirmwareStatusNotification
+- [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/), syncing:
+  - Employee credentials via `res.users`
+  - Product catalog lookups via `product.product`
 - Runs on [Windows 11](https://www.microsoft.com/windows/windows-11) and [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Tested for the [Raspberry Pi 4 Model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 
@@ -32,6 +43,7 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 - **[Windows](https://en.wikipedia.org/wiki/Microsoft_Windows)**: open [PowerShell](https://learn.microsoft.com/powershell/) or [Git Bash](https://gitforwindows.org/) and run the same command.
 
 ### 2. Start and stop
+Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Constellation roles require installation first. Both approaches listen on [`http://localhost:8000/`](http://localhost:8000/) by default—pass `--port` to use a different value.
 - **[VS Code](https://code.visualstudio.com/)**: open the folder, go to the
   **Run and Debug** panel (`Ctrl+Shift+D`), select the **Run Server** (or
   **Debug Server**) configuration, and press the green start button. Stop the
@@ -39,11 +51,16 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 - **[Shell](https://en.wikipedia.org/wiki/Shell_(computing))**: on Linux run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh); on Windows run [`start.bat`](start.bat) and stop with `Ctrl+C`.
 
 ### 3. Install and upgrade
-- **Linux**: use [`./install.sh`](install.sh) with options like `--service NAME`, `--public` or `--internal`, `--port PORT`, `--upgrade`, `--auto-upgrade`, `--latest`, `--celery`, `--lcd-screen`, `--no-lcd-screen`, `--clean`, `--datasette`. Upgrade with [`./upgrade.sh`](upgrade.sh) using flags such as `--latest`, `--clean`, or `--no-restart`.
-- **Windows**: run [`install.bat`](install.bat) to install and [`upgrade.bat`](upgrade.bat) to upgrade.
+- **Linux**: run [`./install.sh`](install.sh) with a node role flag:
+  - `--terminal` – default when unspecified and recommended if you're unsure. Terminal nodes can also use the start/stop scripts above without installing.
+  - `--control` – prepares the single-device testing appliance.
+  - `--satellite` – configures the edge data acquisition node.
+  - `--constellation` – enables the multi-user orchestration stack.
+  Use `./install.sh --help` to list every available flag if you need to customize the node beyond the role defaults. Upgrade with [`./upgrade.sh`](upgrade.sh).
+- **Windows**: run [`install.bat`](install.bat) to install (Terminal role) and [`upgrade.bat`](upgrade.bat) to upgrade.
 
 ### 4. Administration
-Visit [`http://localhost:8888/admin/`](http://localhost:8888/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use port `8000` if you started with [`start.bat`](start.bat) or the `--public` option.
+Visit [`http://localhost:8000/admin/`](http://localhost:8000/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use `--port` with the start scripts or installer when you need to expose a different port.
 
 ## Support
 
