@@ -6,8 +6,19 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 
 ## Features
 
-- Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/)
-- [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/) 1.6
+- Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) central system, handling:
+  - BootNotification
+  - Heartbeat
+  - StatusNotification
+  - Authorize
+  - MeterValues
+  - DiagnosticsStatusNotification
+  - StartTransaction
+  - StopTransaction
+  - FirmwareStatusNotification
+- [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/), syncing:
+  - Employee credentials via `res.users`
+  - Product catalog lookups via `product.product`
 - Runs on [Windows 11](https://www.microsoft.com/windows/windows-11) and [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Tested for the [Raspberry Pi 4 Model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 

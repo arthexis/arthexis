@@ -6,8 +6,19 @@
 
 ## Возможности
 
-- Совместим с [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/)
-- [API](https://ru.wikipedia.org/wiki/API) интеграция с [Odoo](https://www.odoo.com/) 1.6
+- Совместим с [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) в роли центральной системы и обрабатывает:
+  - BootNotification
+  - Heartbeat
+  - StatusNotification
+  - Authorize
+  - MeterValues
+  - DiagnosticsStatusNotification
+  - StartTransaction
+  - StopTransaction
+  - FirmwareStatusNotification
+- [API](https://ru.wikipedia.org/wiki/API) интеграция с [Odoo](https://www.odoo.com/) для:
+  - Синхронизации учётных данных сотрудников через `res.users`
+  - Запроса каталога продуктов через `product.product`
 - Работает на [Windows 11](https://www.microsoft.com/windows/windows-11) и [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Протестирован на [Raspberry Pi 4 Model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 
@@ -39,6 +50,7 @@
 - **[Shell](https://ru.wikipedia.org/wiki/Командная_оболочка)**
   - Linux: запустите [`./start.sh`](start.sh) и остановите [`./stop.sh`](stop.sh).
   - Windows: запустите [`start.bat`](start.bat) и остановите `Ctrl+C`.
+
 
 ### 3. Установка и обновление
 - **Linux**: выполните [`./install.sh`](install.sh) с флагом роли узла:

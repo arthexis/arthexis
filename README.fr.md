@@ -6,8 +6,19 @@ Constellation Arthexis est une [suite logicielle](https://fr.wikipedia.org/wiki/
 
 ## Fonctionnalités
 
-- Compatible avec le [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/)
-- Intégration de [API](https://fr.wikipedia.org/wiki/Interface_de_programmation) avec [Odoo](https://www.odoo.com/) 1.6
+- Compatible avec le [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) en tant que système central, prenant en charge :
+  - BootNotification
+  - Heartbeat
+  - StatusNotification
+  - Authorize
+  - MeterValues
+  - DiagnosticsStatusNotification
+  - StartTransaction
+  - StopTransaction
+  - FirmwareStatusNotification
+- Intégration de [API](https://fr.wikipedia.org/wiki/Interface_de_programmation) avec [Odoo](https://www.odoo.com/) pour :
+  - Synchroniser les identifiants employés via `res.users`
+  - Consulter le catalogue produits via `product.product`
 - Fonctionne sur [Windows 11](https://www.microsoft.com/windows/windows-11) et [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Testé pour le [Raspberry Pi 4 Modèle B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 
@@ -39,6 +50,7 @@ Les nœuds Terminal peuvent démarrer directement avec les scripts ci-dessous sa
 - **[Shell](https://fr.wikipedia.org/wiki/Interface_en_ligne_de_commande)**
   - Linux : exécutez [`./start.sh`](start.sh) et arrêtez avec [`./stop.sh`](stop.sh).
   - Windows : exécutez [`start.bat`](start.bat) et arrêtez avec `Ctrl+C`.
+
 
 ### 3. Installer et mettre à jour
 - **Linux** : exécutez [`./install.sh`](install.sh) avec un indicateur de rôle de nœud :

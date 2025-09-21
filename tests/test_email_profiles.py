@@ -1,5 +1,4 @@
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from django.urls import reverse
@@ -40,7 +39,7 @@ class EmailProfileIntegrationTests(TestCase):
 
         self.assertEqual(self.user.get_profile(EmailOutbox), outbox)
 
-    def test_admin_user_cannot_have_profiles(self):
+    def test_admin_user_can_have_profiles(self):
         User = get_user_model()
         admin_user = User.objects.create_superuser(
             username="admin", email="admin@example.com", password="pwd"
@@ -54,8 +53,8 @@ class EmailProfileIntegrationTests(TestCase):
             protocol=EmailInbox.IMAP,
             use_ssl=True,
         )
-        with self.assertRaises(ValidationError):
-            inbox.full_clean()
+        # Should validate successfully for the admin user.
+        inbox.full_clean()
 
     def test_email_outbox_clean_allows_ownerless_entries(self):
         outbox = EmailOutbox(
@@ -69,7 +68,7 @@ class EmailProfileIntegrationTests(TestCase):
         outbox.full_clean()
 
 
-class UserAdminSidebarTests(TestCase):
+class UserAdminProfileTests(TestCase):
     def setUp(self):
         User = get_user_model()
         self.user = User.objects.create_superuser(
@@ -81,15 +80,31 @@ class UserAdminSidebarTests(TestCase):
         self.assertIn(EmailInbox, inline_models)
         self.assertIn(EmailOutbox, inline_models)
 
-    def test_change_form_contains_section_sidebar(self):
+    def test_change_form_omits_section_sidebar(self):
         self.client.force_login(self.user)
         url = reverse("admin:teams_user_change", args=[self.user.pk])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertIn('id="user-changeform-sections"', content)
+        self.assertNotIn('id="user-changeform-sections"', content)
 
-    def test_change_form_hides_profiles_for_admin_user(self):
+    def test_admin_index_lists_profile_models(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("admin:index"))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        profile_urls = [
+            reverse("admin:teams_odooprofile_changelist"),
+            reverse("admin:teams_releasemanager_changelist"),
+            reverse("admin:teams_assistantprofile_changelist"),
+            reverse("admin:teams_emailinbox_changelist"),
+            reverse("admin:teams_emailoutbox_changelist"),
+        ]
+        for url in profile_urls:
+            with self.subTest(url=url):
+                self.assertIn(f'href="{url}"', content)
+
+    def test_change_form_shows_profiles_for_admin_user(self):
         User = get_user_model()
         admin_user = User.objects.create_superuser(
             username="admin", email="admin@example.com", password="pwd"
@@ -99,7 +114,7 @@ class UserAdminSidebarTests(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertNotIn("profile-inline-heading", content)
+        self.assertIn("profile-inline-heading", content)
 
     def test_change_form_profile_inline_prefixes(self):
         User = get_user_model()
@@ -120,3 +135,23 @@ class UserAdminSidebarTests(TestCase):
             with self.subTest(prefix=prefix):
                 self.assertIn(f'data-inline-prefix="{prefix}"', content)
                 self.assertIn(f'name="{prefix}-TOTAL_FORMS"', content)
+
+    def test_change_form_uses_profile_user_datum_controls(self):
+        User = get_user_model()
+        target = User.objects.create_user("profiledatum", password="pwd")
+        self.client.force_login(self.user)
+        url = reverse("admin:teams_user_change", args=[target.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertNotIn('name="_user_datum"', content)
+        prefixes = (
+            "odooprofile",
+            "emailinbox",
+            "emailoutbox",
+            "releasemanager",
+            "assistantprofile",
+        )
+        for prefix in prefixes:
+            with self.subTest(prefix=prefix):
+                self.assertIn(f'name="{prefix}-0-user_datum"', content)

@@ -67,7 +67,7 @@ class UserDataAdminTests(TransactionTestCase):
         response = self.client.get(url)
         self.assertContains(response, 'name="_user_datum"')
 
-    def test_user_change_view_shows_user_datum_checkbox(self):
+    def test_user_change_view_hides_global_user_datum_checkbox(self):
         UserModel = get_user_model()
         admin_model = None
         for model in admin.site._registry:
@@ -80,7 +80,7 @@ class UserDataAdminTests(TransactionTestCase):
             args=[self.user.pk],
         )
         response = self.client.get(url)
-        self.assertContains(response, 'name="_user_datum"')
+        self.assertNotContains(response, 'name="_user_datum"')
 
     def test_save_user_datum_creates_fixture(self):
         url = reverse("admin:teams_odooprofile_change", args=[self.profile.pk])
@@ -202,7 +202,7 @@ class UserDataAdminTests(TransactionTestCase):
         core_user.refresh_from_db()
         self.assertFalse(core_user.is_user_data)
 
-    def test_user_userdatum_creation_and_removal(self):
+    def test_user_userdatum_checkbox_ignored(self):
         UserModel = get_user_model()
         admin_model = None
         user_admin = None
@@ -233,8 +233,8 @@ class UserDataAdminTests(TransactionTestCase):
         self.assertTrue(form.is_valid())
         user_admin.save_model(request, admin_user, form, True)
         admin_user.refresh_from_db()
-        self.assertTrue(admin_user.is_user_data)
-        self.assertTrue(user_fixture.exists())
+        self.assertFalse(admin_user.is_user_data)
+        self.assertFalse(user_fixture.exists())
 
         request = rf.post("/", {})
         request.user = self.user

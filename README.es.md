@@ -6,8 +6,19 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
 
 ## Características
 
-- Compatible con el [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/)
-- Integración de [API](https://es.wikipedia.org/wiki/Interfaz_de_programaci%C3%B3n_de_aplicaciones) con [Odoo](https://www.odoo.com/) 1.6
+- Compatible con el [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) como sistema central, gestionando:
+  - BootNotification
+  - Heartbeat
+  - StatusNotification
+  - Authorize
+  - MeterValues
+  - DiagnosticsStatusNotification
+  - StartTransaction
+  - StopTransaction
+  - FirmwareStatusNotification
+- Integración de [API](https://es.wikipedia.org/wiki/Interfaz_de_programaci%C3%B3n_de_aplicaciones) con [Odoo](https://www.odoo.com/) para:
+  - Sincronizar credenciales de empleados mediante `res.users`
+  - Consultar el catálogo de productos mediante `product.product`
 - Funciona en [Windows 11](https://www.microsoft.com/es-es/windows/windows-11) y [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Probado para la [Raspberry Pi 4 Modelo B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 
@@ -47,6 +58,7 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
   - `--satellite`: configura el nodo perimetral de adquisición de datos.
   - `--constellation`: habilita la pila de orquestación multiusuario.
   Usa `./install.sh --help` para ver la lista completa de flags si necesitas personalizar el nodo más allá del rol. Actualiza con [`./upgrade.sh`](upgrade.sh).
+
 - **Windows**: ejecuta [`install.bat`](install.bat) para instalar (rol Terminal) y [`upgrade.bat`](upgrade.bat) para actualizar.
 
 ### 4. Administración
