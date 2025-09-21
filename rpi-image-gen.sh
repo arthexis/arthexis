@@ -424,6 +424,7 @@ cat > "$LAYER_FILE" <<'LAYER'
 # METAEND
 ---
 mmdebstrap:
+  mode: unshare
   packages:
     - sudo
     - git
