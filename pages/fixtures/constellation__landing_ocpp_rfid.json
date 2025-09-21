@@ -4,8 +4,8 @@
     "model": "pages.landing",
     "fields": {
       "is_seed_data": true,
-      "is_deleted": true,
-      "module": ["Constellation", "/ocpp/rfid/"],
+      "is_deleted": false,
+      "module": ["Constellation", "/ocpp/"],
       "path": "/ocpp/rfid/",
       "label": "RFID Scanner",
       "enabled": true,
