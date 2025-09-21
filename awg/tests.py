@@ -1,6 +1,7 @@
 from datetime import time
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from pathlib import Path
@@ -340,6 +341,10 @@ class CalculatorTemplateTests(TestCase):
 
 class EnergyTariffCalculatorTests(TestCase):
     def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username="user", password="pw")
+        self.client.force_login(self.user)
+
         self.tariff = EnergyTariff.objects.create(
             year=2025,
             season=EnergyTariff.Season.SUMMER,
@@ -402,3 +407,11 @@ class EnergyTariffCalculatorTests(TestCase):
         }
         resp = self.client.post(reverse("awg:energy_tariff"), data)
         self.assertContains(resp, "greater than zero")
+
+    def test_requires_login(self):
+        self.client.logout()
+        target = reverse("awg:energy_tariff")
+        login_url = reverse("pages:login")
+        resp = self.client.get(target)
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, f"{login_url}?next={target}")
