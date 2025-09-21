@@ -1,4 +1,4 @@
-from django.test import Client, TestCase, override_settings
+from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from urllib.parse import quote
 from django.contrib.auth import get_user_model
@@ -16,6 +16,7 @@ from pages.screenshot_specs import (
 )
 from django.apps import apps as django_apps
 from core import mailer
+from core.admin import ProfileAdminMixin
 from core.models import AdminHistory, InviteLead, Package, ReleaseManager, Todo
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
@@ -1289,6 +1290,37 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "Release manager tasks")
         self.assertContains(resp, todo.request)
+
+
+class AdminActionListTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        User.objects.filter(username="action-admin").delete()
+        self.user = User.objects.create_superuser(
+            username="action-admin",
+            password="pwd",
+            email="action@example.com",
+        )
+        self.factory = RequestFactory()
+
+    def test_profile_actions_available_without_selection(self):
+        from pages.templatetags.admin_extras import model_admin_actions
+
+        request = self.factory.get("/")
+        request.user = self.user
+        context = {"request": request}
+
+        registered = [
+            (model._meta.app_label, model._meta.object_name)
+            for model, admin_instance in admin.site._registry.items()
+            if isinstance(admin_instance, ProfileAdminMixin)
+        ]
+
+        for app_label, object_name in registered:
+            with self.subTest(model=f"{app_label}.{object_name}"):
+                actions = model_admin_actions(context, app_label, object_name)
+                labels = {action["label"] for action in actions}
+                self.assertIn("My Profile", labels)
 
 
 class AdminModelGraphViewTests(TestCase):
