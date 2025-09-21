@@ -231,7 +231,7 @@
         <label>
           <input type="checkbox" class="todo-check">
           {% if todo.url %}
-          <a href="{{ todo.url }}" target="_blank" rel="noopener" class="todo-link">{{ todo.request }}</a>
+          <a href="{% url 'todo-focus' todo.id %}?next={{ request.get_full_path|urlencode }}" class="todo-link">{{ todo.request }}</a>
           {% else %}
           {{ todo.request }}
           {% endif %}

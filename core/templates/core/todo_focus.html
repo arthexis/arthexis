@@ -1,0 +1,114 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE|default:'en' }}">
+<head>
+  <meta charset="utf-8">
+  <title>{{ todo.request }}</title>
+  <style>
+    html, body {
+      height: 100%;
+    }
+    body {
+      margin: 0;
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+      background: #f5f6f8;
+      color: #25324b;
+      display: flex;
+      flex-direction: column;
+    }
+    .todo-focus-bar {
+      background: #ffffff;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+      padding: 0.85rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .todo-info {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .todo-title {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin: 0;
+      line-height: 1.4;
+    }
+    .todo-details {
+      margin-top: 0.35rem;
+      font-size: 0.85rem;
+      color: #526079;
+      line-height: 1.4;
+    }
+    .todo-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-shrink: 0;
+    }
+    .todo-button, .todo-button:visited {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.4rem 1.1rem;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-decoration: none;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .todo-button-done {
+      background: #2563eb;
+      color: #ffffff;
+      border-color: #1d4ed8;
+      box-shadow: 0 1px 4px rgba(37, 99, 235, 0.25);
+    }
+    .todo-button-done:hover {
+      background: #1d4ed8;
+    }
+    .todo-button-back {
+      background: transparent;
+      color: #1e293b;
+      border-color: rgba(30, 41, 59, 0.2);
+    }
+    .todo-button-back:hover {
+      background: rgba(148, 163, 184, 0.12);
+    }
+    .todo-done-form {
+      margin: 0;
+    }
+    iframe.todo-frame {
+      flex: 1 1 auto;
+      width: 100%;
+      border: 0;
+      background: #ffffff;
+    }
+  </style>
+</head>
+<body>
+  <div class="todo-focus-bar">
+    <div class="todo-info">
+      <p class="todo-title">{{ todo.request }}</p>
+      {% if todo.request_details %}
+      <p class="todo-details">{{ todo.request_details }}</p>
+      {% endif %}
+    </div>
+    <div class="todo-actions">
+      <form method="post" action="{{ done_url }}" class="todo-done-form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next_url }}">
+        <button type="submit" class="todo-button todo-button-done">{% trans "Done" %}</button>
+      </form>
+      <a href="{{ next_url }}" class="todo-button todo-button-back">{% trans "Back" %}</a>
+    </div>
+  </div>
+  <iframe src="{{ iframe_url }}" class="todo-frame" title="{{ todo.request }}"></iframe>
+</body>
+</html>

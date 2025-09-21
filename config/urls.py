@@ -125,6 +125,11 @@ urlpatterns = [
         name="release-progress",
     ),
     path(
+        "admin/core/todos/<int:pk>/focus/",
+        core_views.todo_focus,
+        name="todo-focus",
+    ),
+    path(
         "admin/core/todos/<int:pk>/done/",
         core_views.todo_done,
         name="todo-done",

@@ -283,7 +283,7 @@ def future_action_items(context):
     if node_role_name == "Terminal" and user.has_profile(ReleaseManager):
         todos = [
             {
-                "url": todo.url or reverse("admin:core_todo_change", args=[todo.pk]),
+                "url": reverse("todo-focus", args=[todo.pk]),
                 "label": todo.request,
                 "details": todo.request_details,
                 "done_url": reverse("todo-done", args=[todo.pk]),
