@@ -393,24 +393,31 @@ cat > "$LAYER_FILE" <<'LAYER'
 # X-Env-Layer-Version: 1.0.0
 # X-Env-Layer-Requires: bookworm-minbase
 # X-Env-VarPrefix: arthexis
+# X-Env-Var-username: __ARTHEXIS_USER__
 # X-Env-Var-username-Desc: Service account name
 # X-Env-Var-username-Required: y
 # X-Env-Var-username-Valid: string
+# X-Env-Var-password_file: __ARTHEXIS_PASSWORD_FILE__
 # X-Env-Var-password_file-Desc: Path to a file containing the account password
 # X-Env-Var-password_file-Required: y
-# X-Env-Var-password_file-Valid: path
+# X-Env-Var-password_file-Valid: string
+# X-Env-Var-role: __ARTHEXIS_ROLE__
 # X-Env-Var-role-Desc: Target node role (control or satellite)
 # X-Env-Var-role-Required: y
 # X-Env-Var-role-Valid: string
+# X-Env-Var-hostname: __ARTHEXIS_HOSTNAME__
 # X-Env-Var-hostname-Desc: Hostname to assign to the device
 # X-Env-Var-hostname-Required: y
 # X-Env-Var-hostname-Valid: string
+# X-Env-Var-repo_src: __ARTHEXIS_REPO_SRC__
 # X-Env-Var-repo_src-Desc: Host path to the Arthexis repository
 # X-Env-Var-repo_src-Required: y
-# X-Env-Var-repo_src-Valid: path
+# X-Env-Var-repo_src-Valid: string
+# X-Env-Var-wifi_uuid: __ARTHEXIS_AP_UUID__
 # X-Env-Var-wifi_uuid-Desc: UUID for the gelectriic access point connection
 # X-Env-Var-wifi_uuid-Required: y
 # X-Env-Var-wifi_uuid-Valid: string
+# X-Env-Var-eth_uuid: __ARTHEXIS_ETH_UUID__
 # X-Env-Var-eth_uuid-Desc: UUID for the eth0 shared connection
 # X-Env-Var-eth_uuid-Required: y
 # X-Env-Var-eth_uuid-Valid: string
@@ -736,6 +743,10 @@ sed -i "s#__ARTHEXIS_INSTALL_ARGS__#--$ROLE#g" "$LAYER_FILE"
 sed -i "s#__ARTHEXIS_AP_UUID__#$AP_UUID#g" "$LAYER_FILE"
 sed -i "s#__ARTHEXIS_ETH_UUID__#$ETH_UUID#g" "$LAYER_FILE"
 sed -i "s#__ARTHEXIS_USER__#$USERNAME#g" "$LAYER_FILE"
+sed -i "s#__ARTHEXIS_PASSWORD_FILE__#$PASSWORD_FILE#g" "$LAYER_FILE"
+sed -i "s#__ARTHEXIS_ROLE__#$ROLE#g" "$LAYER_FILE"
+sed -i "s#__ARTHEXIS_HOSTNAME__#$HOSTNAME#g" "$LAYER_FILE"
+sed -i "s#__ARTHEXIS_REPO_SRC__#$BASE_DIR#g" "$LAYER_FILE"
 sed -i "s#__ARTHEXIS_FIRSTBOOT_FLAG__#/var/lib/arthexis-image/firstboot.done#g" "$LAYER_FILE"
 
 RPI_BIN="$RPI_DIR/rpi-image-gen"
