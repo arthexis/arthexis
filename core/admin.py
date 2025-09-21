@@ -2060,7 +2060,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     list_display_links = ("version",)
     actions = ["publish_release", "validate_releases"]
     change_actions = ["publish_release_action"]
-    changelist_actions = ["refresh_from_pypi"]
+    changelist_actions = ["refresh_from_pypi", "prepare_next_release"]
     readonly_fields = ("pypi_url", "is_current", "revision")
     fields = (
         "package",
@@ -2121,6 +2121,16 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
     refresh_from_pypi.label = "Refresh from PyPI"
     refresh_from_pypi.short_description = "Refresh from PyPI"
+
+    def prepare_next_release(self, request, queryset):
+        package = Package.objects.filter(is_active=True).first()
+        if not package:
+            self.message_user(request, "No active package", messages.ERROR)
+            return redirect("admin:core_packagerelease_changelist")
+        return PackageAdmin._prepare(self, request, package)
+
+    prepare_next_release.label = "Prepare next Release"
+    prepare_next_release.short_description = "Prepare next release"
 
     def _publish_release(self, request, release):
         try:
