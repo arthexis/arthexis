@@ -43,7 +43,7 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 - **[Windows](https://en.wikipedia.org/wiki/Microsoft_Windows)**: open [PowerShell](https://learn.microsoft.com/powershell/) or [Git Bash](https://gitforwindows.org/) and run the same command.
 
 ### 2. Start and stop
-Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Constellation roles require installation first. Both approaches listen on [`http://localhost:8000/`](http://localhost:8000/) by default—pass `--port` to use a different value.
+Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Constellation roles require installation first. Both approaches listen on [`http://localhost:8888/`](http://localhost:8888/) by default—pass `--port` to use a different value, or add `--public` to expose the service on `0.0.0.0:8000` so other devices can reach it (for example `http://192.168.1.10:8000/`). Constellation installations enable public mode automatically.
 - **[VS Code](https://code.visualstudio.com/)**: open the folder, go to the
   **Run and Debug** panel (`Ctrl+Shift+D`), select the **Run Server** (or
   **Debug Server**) configuration, and press the green start button. Stop the
@@ -57,10 +57,11 @@ Terminal nodes can start directly with the scripts below without installing; Con
   - `--satellite` – configures the edge data acquisition node.
   - `--constellation` – enables the multi-user orchestration stack.
   Use `./install.sh --help` to list every available flag if you need to customize the node beyond the role defaults. Upgrade with [`./upgrade.sh`](upgrade.sh).
+  Constellation installations run in public mode on port 8000; Terminal, Control, and Satellite default to the internal port 8888 unless you pass `--public` or override the port.
 - **Windows**: run [`install.bat`](install.bat) to install (Terminal role) and [`upgrade.bat`](upgrade.bat) to upgrade.
 
 ### 4. Administration
-Visit [`http://localhost:8000/admin/`](http://localhost:8000/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use `--port` with the start scripts or installer when you need to expose a different port.
+Visit [`http://localhost:8888/admin/`](http://localhost:8888/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). If you've enabled public mode (either manually with `--public` or by installing the Constellation role), open [`http://localhost:8000/`](http://localhost:8000/) on the host itself or replace `localhost` with the machine's IP when connecting from another device. Use `--port` with the start scripts or installer when you need to expose a different port.
 
 ## Support
 
