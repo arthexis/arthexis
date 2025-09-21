@@ -1,6 +1,7 @@
 from django.contrib import admin, messages
 from django.urls import path, reverse
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.utils.html import format_html
 from django import forms
 from django.contrib.admin.widgets import FilteredSelectMultiple
@@ -9,12 +10,13 @@ from django.db.models import Count
 from django.conf import settings
 from pathlib import Path
 from django.http import HttpResponse
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import gettext_lazy as _, ngettext
 import base64
 import pyperclip
 from pyperclip import PyperclipException
 import uuid
 import subprocess
+import requests
 from .utils import capture_screenshot, save_screenshot
 from .actions import NodeAction
 
@@ -52,12 +54,13 @@ class NodeAdmin(EntityModelAdmin):
         "port",
         "role",
         "last_seen",
+        "is_verified",
     )
     search_fields = ("hostname", "address", "mac_address")
     change_list_template = "admin/nodes/node/change_list.html"
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
-    actions = ["register_visitor", "run_task", "take_screenshots"]
+    actions = ["register_visitor", "refresh_nodes", "run_task", "take_screenshots"]
     inlines = [NodeFeatureAssignmentInline]
 
     def get_urls(self):
@@ -192,6 +195,68 @@ class NodeAdmin(EntityModelAdmin):
                 if sample:
                     count += 1
         self.message_user(request, f"{count} screenshots captured", messages.SUCCESS)
+
+    @admin.action(description="Refresh selected nodes")
+    def refresh_nodes(self, request, queryset):
+        success = 0
+        for node in queryset:
+            if not node.address:
+                node.is_verified = False
+                node.save(update_fields=["is_verified"])
+                self.message_user(
+                    request,
+                    f"{node}: missing address",
+                    messages.ERROR,
+                )
+                continue
+            url = f"http://{node.address}:{node.port}/nodes/info/"
+            try:
+                response = requests.get(url, timeout=5)
+                response.raise_for_status()
+                data = response.json()
+            except Exception as exc:  # pragma: no cover - defensive
+                node.is_verified = False
+                node.save(update_fields=["is_verified"])
+                self.message_user(request, f"{node}: {exc}", messages.ERROR)
+                continue
+
+            remote_mac = (data.get("mac_address") or "").lower()
+            local_mac = (node.mac_address or "").lower()
+            if local_mac and remote_mac and local_mac != remote_mac:
+                node.is_verified = False
+                node.save(update_fields=["is_verified"])
+                self.message_user(
+                    request,
+                    f"{node}: MAC address mismatch",
+                    messages.ERROR,
+                )
+                continue
+
+            node.last_seen = timezone.now()
+            node.is_verified = True
+            update_fields = ["last_seen", "is_verified"]
+            hostname = data.get("hostname")
+            if hostname and hostname != node.hostname:
+                node.hostname = hostname
+                update_fields.append("hostname")
+            public_key = data.get("public_key")
+            if public_key and public_key != node.public_key:
+                node.public_key = public_key
+                update_fields.append("public_key")
+            node.save(update_fields=update_fields)
+            success += 1
+
+        if success:
+            self.message_user(
+                request,
+                ngettext(
+                    "%d node refreshed successfully.",
+                    "%d nodes refreshed successfully.",
+                    success,
+                )
+                % success,
+                messages.SUCCESS,
+            )
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}

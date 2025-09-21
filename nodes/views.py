@@ -9,6 +9,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
 from django.conf import settings
 from pathlib import Path
+from django.utils import timezone
 from django.utils.cache import patch_vary_headers
 
 from utils.api import api_login_required
@@ -229,6 +230,7 @@ def register_node(request):
         return _add_cors_headers(request, response)
 
     mac_address = mac_address.lower()
+    now = timezone.now()
     defaults = {
         "hostname": hostname,
         "address": address,
@@ -236,6 +238,8 @@ def register_node(request):
     }
     if verified:
         defaults["public_key"] = public_key
+    defaults["last_seen"] = now
+    defaults["is_verified"] = True
 
     node, created = Node.objects.get_or_create(
         mac_address=mac_address,
@@ -246,6 +250,9 @@ def register_node(request):
         node.address = address
         node.port = port
         update_fields = ["hostname", "address", "port"]
+        node.last_seen = now
+        node.is_verified = True
+        update_fields.extend(["last_seen", "is_verified"])
         if verified:
             node.public_key = public_key
             update_fields.append("public_key")

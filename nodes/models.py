@@ -8,6 +8,7 @@ from core.fields import SigilShortAutoField
 import re
 import json
 import base64
+from django.utils import timezone
 from django.utils.text import slugify
 from django.conf import settings
 from django.contrib.sites.models import Site
@@ -125,7 +126,8 @@ class Node(Entity):
     port = models.PositiveIntegerField(default=8000)
     badge_color = models.CharField(max_length=7, default="#28a745")
     role = models.ForeignKey(NodeRole, on_delete=models.SET_NULL, null=True, blank=True)
-    last_seen = models.DateTimeField(auto_now=True)
+    last_seen = models.DateTimeField(null=True, blank=True)
+    is_verified = models.BooleanField(default=False)
     enable_public_api = models.BooleanField(
         default=False,
         verbose_name="enable public API",
@@ -200,6 +202,7 @@ class Node(Entity):
         node = cls.objects.filter(mac_address=mac).first()
         if not node:
             node = cls.objects.filter(public_endpoint=slug).first()
+        now = timezone.now()
         defaults = {
             "hostname": hostname,
             "address": address,
@@ -209,6 +212,8 @@ class Node(Entity):
             "installed_revision": installed_revision,
             "public_endpoint": slug,
             "mac_address": mac,
+            "last_seen": now,
+            "is_verified": True,
         }
         if node:
             for field, value in defaults.items():

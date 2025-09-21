@@ -5,6 +5,7 @@ import django
 
 django.setup()
 
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch, call, MagicMock
@@ -26,6 +27,7 @@ from django.contrib import admin
 from django.contrib.sites.models import Site
 from django_celery_beat.models import PeriodicTask
 from django.conf import settings
+from django.utils import timezone
 from .actions import NodeAction
 from selenium.common.exceptions import WebDriverException
 from .utils import capture_screenshot
@@ -86,6 +88,9 @@ class NodeTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Node.objects.count(), 1)
+        node = Node.objects.get(mac_address="00:11:22:33:44:55")
+        self.assertIsNotNone(node.last_seen)
+        self.assertTrue(node.is_verified)
 
         # allow same IP with different MAC
         self.client.post(
@@ -99,6 +104,9 @@ class NodeTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(Node.objects.count(), 2)
+        node2 = Node.objects.get(mac_address="00:11:22:33:44:66")
+        self.assertIsNotNone(node2.last_seen)
+        self.assertTrue(node2.is_verified)
 
         # duplicate MAC should not create new node
         dup = self.client.post(
@@ -114,6 +122,8 @@ class NodeTests(TestCase):
         self.assertEqual(Node.objects.count(), 2)
         self.assertIn("already exists", dup.json()["detail"])
         self.assertEqual(dup.json()["id"], response.json()["id"])
+        node.refresh_from_db()
+        self.assertTrue(node.is_verified)
 
         list_resp = self.client.get(reverse("node-list"))
         self.assertEqual(list_resp.status_code, 200)
@@ -594,6 +604,63 @@ class NodeAdminTests(TestCase):
             f'attachment; filename="{node.public_endpoint}.pub"',
         )
         self.assertIn(node.public_key.strip(), resp.content.decode())
+
+    @patch("nodes.admin.requests.get")
+    def test_refresh_nodes_action_updates_state(self, mock_get):
+        response = MagicMock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "hostname": "refreshed",
+            "mac_address": "00:11:22:33:aa:bb",
+            "public_key": "pub-key",
+        }
+        mock_get.return_value = response
+        node = Node.objects.create(
+            hostname="stale",
+            address="127.0.0.5",
+            port=9001,
+            mac_address="00:11:22:33:aa:bb",
+        )
+        url = reverse("admin:nodes_node_changelist")
+        result = self.client.post(
+            url,
+            {"action": "refresh_nodes", "_selected_action": [str(node.pk)]},
+            follow=True,
+        )
+        self.assertEqual(result.status_code, 200)
+        mock_get.assert_called_once_with(
+            "http://127.0.0.5:9001/nodes/info/", timeout=5
+        )
+        node.refresh_from_db()
+        self.assertTrue(node.is_verified)
+        self.assertIsNotNone(node.last_seen)
+        self.assertEqual(node.hostname, "refreshed")
+        self.assertEqual(node.public_key, "pub-key")
+
+    @patch("nodes.admin.requests.get")
+    def test_refresh_nodes_action_handles_failure(self, mock_get):
+        node = Node.objects.create(
+            hostname="offline",
+            address="127.0.0.6",
+            port=9002,
+            mac_address="00:11:22:33:bb:cc",
+            is_verified=True,
+        )
+        previous_seen = timezone.now() - timedelta(hours=1)
+        node.last_seen = previous_seen
+        node.save(update_fields=["last_seen", "is_verified"])
+        mock_get.side_effect = Exception("boom")
+        url = reverse("admin:nodes_node_changelist")
+        result = self.client.post(
+            url,
+            {"action": "refresh_nodes", "_selected_action": [str(node.pk)]},
+            follow=True,
+        )
+        self.assertEqual(result.status_code, 200)
+        mock_get.assert_called_once()
+        node.refresh_from_db()
+        self.assertFalse(node.is_verified)
+        self.assertEqual(node.last_seen, previous_seen)
 
     @patch("nodes.admin.capture_screenshot")
     def test_capture_site_screenshot_from_admin(self, mock_capture_screenshot):
