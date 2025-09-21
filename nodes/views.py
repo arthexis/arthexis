@@ -16,7 +16,7 @@ from utils.api import api_login_required
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
-from .models import Node, NetMessage, NodeRole
+from .models import Node, NetMessage, NodeRole, node_information_updated
 from .utils import capture_screenshot, save_screenshot
 
 
@@ -202,6 +202,8 @@ def register_node(request):
     public_key = data.get("public_key")
     token = data.get("token")
     signature = data.get("signature")
+    installed_version = data.get("installed_version")
+    installed_revision = data.get("installed_revision")
 
     if not hostname or not address or not mac_address:
         response = JsonResponse(
@@ -236,12 +238,18 @@ def register_node(request):
     }
     if verified:
         defaults["public_key"] = public_key
+    if installed_version is not None:
+        defaults["installed_version"] = str(installed_version)[:20]
+    if installed_revision is not None:
+        defaults["installed_revision"] = str(installed_revision)[:40]
 
     node, created = Node.objects.get_or_create(
         mac_address=mac_address,
         defaults=defaults,
     )
     if not created:
+        previous_version = (node.installed_version or "").strip()
+        previous_revision = (node.installed_revision or "").strip()
         node.hostname = hostname
         node.address = address
         node.port = port
@@ -249,7 +257,26 @@ def register_node(request):
         if verified:
             node.public_key = public_key
             update_fields.append("public_key")
+        if installed_version is not None:
+            node.installed_version = str(installed_version)[:20]
+            if "installed_version" not in update_fields:
+                update_fields.append("installed_version")
+        if installed_revision is not None:
+            node.installed_revision = str(installed_revision)[:40]
+            if "installed_revision" not in update_fields:
+                update_fields.append("installed_revision")
         node.save(update_fields=update_fields)
+        current_version = (node.installed_version or "").strip()
+        current_revision = (node.installed_revision or "").strip()
+        node_information_updated.send(
+            sender=Node,
+            node=node,
+            previous_version=previous_version,
+            previous_revision=previous_revision,
+            current_version=current_version,
+            current_revision=current_revision,
+            request=request,
+        )
         if features is not None and (verified or request.user.is_authenticated):
             if isinstance(features, (str, bytes)):
                 feature_list = [features]
@@ -267,6 +294,18 @@ def register_node(request):
         else:
             feature_list = list(features)
         node.update_manual_features(feature_list)
+
+    current_version = (node.installed_version or "").strip()
+    current_revision = (node.installed_revision or "").strip()
+    node_information_updated.send(
+        sender=Node,
+        node=node,
+        previous_version="",
+        previous_revision="",
+        current_version=current_version,
+        current_revision=current_revision,
+        request=request,
+    )
 
     response = JsonResponse({"id": node.id})
     return _add_cors_headers(request, response)
