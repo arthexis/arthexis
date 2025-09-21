@@ -209,7 +209,10 @@ class NodeAdmin(EntityModelAdmin):
                     messages.ERROR,
                 )
                 continue
-            url = f"http://{node.address}:{node.port}/nodes/info/"
+            address = node.address
+            if ":" in address and not address.startswith("["):
+                address = f"[{address}]"
+            url = f"http://{address}:{node.port}/nodes/info/"
             try:
                 response = requests.get(url, timeout=5)
                 response.raise_for_status()
