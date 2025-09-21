@@ -27,6 +27,7 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from core import mailer, public_wifi
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.core.cache import cache
 from django.views.decorators.cache import never_cache
 from django.utils.cache import patch_vary_headers
 from django.core.exceptions import PermissionDenied

@@ -18,7 +18,6 @@ from datetime import time as datetime_time, timedelta
 from django.contrib.contenttypes.models import ContentType
 import hashlib
 import os
-import calendar
 import subprocess
 import secrets
 import re
@@ -1051,10 +1050,11 @@ class EnergyTariffManager(EntityManager):
     def get_by_natural_key(
         self,
         year: int,
-        month: int,
+        season: str,
         zone: str,
         contract_type: str,
-        time_of_day: str,
+        period: str,
+        unit: str,
         start_time,
         end_time,
     ):
@@ -1064,10 +1064,11 @@ class EnergyTariffManager(EntityManager):
             end_time = datetime_time.fromisoformat(end_time)
         return self.get(
             year=year,
-            month=month,
+            season=season,
             zone=zone,
             contract_type=contract_type,
-            time_of_day=time_of_day,
+            period=period,
+            unit=unit,
             start_time=start_time,
             end_time=end_time,
         )
@@ -1083,33 +1084,48 @@ class EnergyTariff(Entity):
         ONE_E = "1E", _("Zone 1E")
         ONE_F = "1F", _("Zone 1F")
 
-    class TimeOfDay(models.TextChoices):
-        FLAT = "flat", _("All day")
+    class Season(models.TextChoices):
+        ANNUAL = "annual", _("All year")
+        SUMMER = "summer", _("Summer season")
+        NON_SUMMER = "non_summer", _("Non-summer season")
+
+    class Period(models.TextChoices):
+        FLAT = "flat", _("Flat rate")
+        BASIC = "basic", _("Basic block")
+        INTERMEDIATE_1 = "intermediate_1", _("Intermediate block 1")
+        INTERMEDIATE_2 = "intermediate_2", _("Intermediate block 2")
+        EXCESS = "excess", _("Excess consumption")
         BASE = "base", _("Base")
         INTERMEDIATE = "intermediate", _("Intermediate")
         PEAK = "peak", _("Peak")
         CRITICAL_PEAK = "critical_peak", _("Critical peak")
+        DEMAND = "demand", _("Demand charge")
+        CAPACITY = "capacity", _("Capacity charge")
+        DISTRIBUTION = "distribution", _("Distribution charge")
+        FIXED = "fixed", _("Fixed charge")
 
     class ContractType(models.TextChoices):
         DOMESTIC = "domestic", _("Domestic service (Tarifa 1)")
         DAC = "dac", _("High consumption domestic (DAC)")
         PDBT = "pdbt", _("General service low demand (PDBT)")
+        GDBT = "gdbt", _("General service high demand (GDBT)")
         GDMTO = "gdmto", _("General distribution medium tension (GDMTO)")
         GDMTH = "gdmth", _("General distribution medium tension hourly (GDMTH)")
 
-    MONTH_CHOICES = tuple(
-        (month_index, _(calendar.month_name[month_index]))
-        for month_index in range(1, 13)
-    )
+    class Unit(models.TextChoices):
+        KWH = "kwh", _("Kilowatt-hour")
+        KW = "kw", _("Kilowatt")
+        MONTH = "month", _("Monthly charge")
 
     year = models.PositiveIntegerField(
         validators=[MinValueValidator(2000)],
         help_text=_("Calendar year when the tariff applies."),
     )
-    month = models.PositiveSmallIntegerField(
-        choices=MONTH_CHOICES,
-        validators=[MinValueValidator(1), MaxValueValidator(12)],
-        help_text=_("Calendar month when the tariff applies."),
+    season = models.CharField(
+        max_length=16,
+        choices=Season.choices,
+        default=Season.ANNUAL,
+        help_text=_("Season or applicability window defined by CFE."),
     )
     zone = models.CharField(
         max_length=3,
@@ -1121,10 +1137,16 @@ class EnergyTariff(Entity):
         choices=ContractType.choices,
         help_text=_("Type of service contract regulated by CFE."),
     )
-    time_of_day = models.CharField(
+    period = models.CharField(
         max_length=32,
-        choices=TimeOfDay.choices,
-        help_text=_("Day-part or consumption block where the tariff applies."),
+        choices=Period.choices,
+        help_text=_("Tariff block, demand component, or time-of-use period."),
+    )
+    unit = models.CharField(
+        max_length=16,
+        choices=Unit.choices,
+        default=Unit.KWH,
+        help_text=_("Measurement unit for the tariff charge."),
     )
     start_time = models.TimeField(
         help_text=_("Start time for the tariff's applicability window."),
@@ -1135,12 +1157,17 @@ class EnergyTariff(Entity):
     price_mxn = models.DecimalField(
         max_digits=10,
         decimal_places=4,
-        help_text=_("Customer price per kWh in MXN."),
+        help_text=_("Customer price per unit in MXN."),
     )
     cost_mxn = models.DecimalField(
         max_digits=10,
         decimal_places=4,
-        help_text=_("Provider cost per kWh in MXN."),
+        help_text=_("Provider cost per unit in MXN."),
+    )
+    notes = models.TextField(
+        blank=True,
+        default="",
+        help_text=_("Context or special billing conditions published by CFE."),
     )
 
     objects = EnergyTariffManager()
@@ -1150,20 +1177,21 @@ class EnergyTariff(Entity):
         verbose_name_plural = _("Energy Tariffs")
         ordering = (
             "-year",
-            "-month",
+            "season",
             "zone",
             "contract_type",
-            "time_of_day",
+            "period",
             "start_time",
         )
         constraints = [
             models.UniqueConstraint(
                 fields=[
                     "year",
-                    "month",
+                    "season",
                     "zone",
                     "contract_type",
-                    "time_of_day",
+                    "period",
+                    "unit",
                     "start_time",
                     "end_time",
                 ],
@@ -1172,8 +1200,8 @@ class EnergyTariff(Entity):
         ]
         indexes = [
             models.Index(
-                fields=["year", "month", "zone", "contract_type"],
-                name="energy_tariff_schedule_idx",
+                fields=["year", "season", "zone", "contract_type"],
+                name="energy_tariff_scope_idx",
             )
         ]
 
@@ -1185,22 +1213,22 @@ class EnergyTariff(Entity):
             )
 
     def __str__(self):  # pragma: no cover - simple representation
-        month_label = dict(self.MONTH_CHOICES).get(self.month, str(self.month))
-        return _("%(contract)s %(zone)s %(month)s %(year)s (%(period)s)") % {
+        return _("%(contract)s %(zone)s %(season)s %(year)s (%(period)s)") % {
             "contract": self.get_contract_type_display(),
             "zone": self.zone,
-            "month": month_label,
+            "season": self.get_season_display(),
             "year": self.year,
-            "period": self.get_time_of_day_display(),
+            "period": self.get_period_display(),
         }
 
     def natural_key(self):  # pragma: no cover - simple representation
         return (
             self.year,
-            self.month,
+            self.season,
             self.zone,
             self.contract_type,
-            self.time_of_day,
+            self.period,
+            self.unit,
             self.start_time.isoformat(),
             self.end_time.isoformat(),
         )
