@@ -178,7 +178,7 @@
   .client-report-form fieldset {
     border: 1px solid var(--hairline-color, rgba(0, 0, 0, 0.1));
     border-radius: 8px;
-    padding: 1.5rem;
+    padding: 0 1.5rem 1.5rem;
     background-color: var(--form-bg, rgba(255, 255, 255, 0.04));
   }
 
@@ -191,15 +191,19 @@
     display: block;
     box-sizing: border-box;
     width: calc(100% + 3rem);
-    margin: -1.5rem -1.5rem 1.25rem;
-    padding: 1.25rem 1.5rem 1rem;
+    margin: 0 -1.5rem 0.75rem;
+    padding: 1.25rem 1.5rem 0.75rem;
     background-color: inherit;
     border-bottom: 1px solid var(--hairline-color, rgba(0, 0, 0, 0.12));
     border-radius: 8px 8px 0 0;
   }
 
+  .client-report-form fieldset > legend + * {
+    margin-top: 0.75rem;
+  }
+
   .client-report-form .section-description {
-    margin: 0 0 1.25rem;
+    margin: 0 0 1rem;
     color: var(--body-quiet-color, #6b7280);
   }
 
