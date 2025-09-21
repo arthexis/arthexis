@@ -269,7 +269,7 @@ def _cleanup_public_wifi_on_delete(sender, instance, **kwargs):
 class User(Entity, AbstractUser):
     SYSTEM_USERNAME = "arthexis"
     ADMIN_USERNAME = "admin"
-    PROFILE_RESTRICTED_USERNAMES = frozenset({SYSTEM_USERNAME, ADMIN_USERNAME})
+    PROFILE_RESTRICTED_USERNAMES = frozenset({SYSTEM_USERNAME})
 
     objects = EntityUserManager()
     all_objects = DjangoUserManager()

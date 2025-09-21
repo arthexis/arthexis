@@ -44,9 +44,6 @@ def _user_allows_user_data(user) -> bool:
         return False
     username = _username_for(user)
     UserModel = get_user_model()
-    admin_username = getattr(UserModel, "ADMIN_USERNAME", "")
-    if admin_username and username == admin_username:
-        return False
     system_username = getattr(UserModel, "SYSTEM_USERNAME", "")
     if system_username and username == system_username:
         return True
@@ -126,6 +123,18 @@ def _select_fixture_user(candidate, user_model):
         if identifier in visited:
             break
         visited.add(identifier)
+        username = _username_for(user)
+        admin_username = getattr(user_model, "ADMIN_USERNAME", "")
+        if admin_username and username == admin_username:
+            try:
+                delegate = getattr(user, "operate_as", None)
+            except user_model.DoesNotExist:
+                delegate = None
+            else:
+                delegate = _coerce_user(delegate, user_model)
+            if delegate is not None and delegate is not user:
+                user = delegate
+                continue
         if _user_allows_user_data(user):
             return user
         try:
@@ -364,6 +373,9 @@ class EntityModelAdmin(UserDatumAdminMixin, admin.ModelAdmin):
                 )
         if copied:
             return
+        if getattr(self, "_skip_entity_user_datum", False):
+            return
+
         target_user = _resolve_fixture_user(obj, request.user)
         allow_user_data = _user_allows_user_data(target_user)
         if request.POST.get("_user_datum") == "on":
