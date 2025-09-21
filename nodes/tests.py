@@ -173,6 +173,74 @@ class NodeTests(TestCase):
         self.assertEqual(response["Access-Control-Allow-Origin"], "http://example.com")
         self.assertEqual(response["Access-Control-Allow-Credentials"], "true")
 
+    def test_register_node_requires_auth_without_signature(self):
+        self.client.logout()
+        payload = {
+            "hostname": "visitor",
+            "address": "127.0.0.1",
+            "port": 8000,
+            "mac_address": "aa:bb:cc:dd:ee:00",
+        }
+        response = self.client.post(
+            reverse("register-node"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_ORIGIN="http://example.com",
+        )
+        self.assertEqual(response.status_code, 401)
+        data = response.json()
+        self.assertEqual(data["detail"], "authentication required")
+        self.assertEqual(response["Access-Control-Allow-Origin"], "http://example.com")
+
+    def test_register_node_allows_preflight_without_authentication(self):
+        self.client.logout()
+        response = self.client.options(
+            reverse("register-node"), HTTP_ORIGIN="https://example.com"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Access-Control-Allow-Origin"], "https://example.com")
+        self.assertEqual(response["Access-Control-Allow-Credentials"], "true")
+
+    def test_register_node_accepts_signed_payload_without_login(self):
+        self.client.logout()
+        NodeFeature.objects.get_or_create(
+            slug="clipboard-poll", defaults={"display": "Clipboard Poll"}
+        )
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_bytes = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode()
+        token = "visitor-token"
+        signature = base64.b64encode(
+            private_key.sign(
+                token.encode(),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+        ).decode()
+        payload = {
+            "hostname": "visitor",
+            "address": "127.0.0.1",
+            "port": 8000,
+            "mac_address": "aa:bb:cc:dd:ee:11",
+            "public_key": public_bytes,
+            "token": token,
+            "signature": signature,
+            "features": ["clipboard-poll"],
+        }
+        response = self.client.post(
+            reverse("register-node"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_ORIGIN="http://example.com",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Access-Control-Allow-Origin"], "http://example.com")
+        node = Node.objects.get(mac_address="aa:bb:cc:dd:ee:11")
+        self.assertEqual(node.public_key, public_bytes)
+        self.assertTrue(node.has_feature("clipboard-poll"))
+
     def test_register_node_accepts_text_plain_payload(self):
         payload = {
             "hostname": "plain",
@@ -444,6 +512,15 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertTrue(PeriodicTask.objects.filter(name=task_name).exists())
         NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
+
+
+class CheckRegistrationReadyCommandTests(TestCase):
+    def test_command_completes_successfully(self):
+        NodeRole.objects.get_or_create(name="Terminal")
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with override_settings(BASE_DIR=base):
+                call_command("check_registration_ready")
 
 
 class NodeAdminTests(TestCase):

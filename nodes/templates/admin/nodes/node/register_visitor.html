@@ -39,6 +39,7 @@
         aborted: "{{ _('Registration aborted.')|escapejs }}",
         visitorInfoError: "{{ _('Unable to read visitor node information.')|escapejs }}",
         hostInfoError: "{{ _('Unable to read host node information.')|escapejs }}",
+        fetchAdvice: "{{ _('Make sure the visiting node is reachable. Run "./manage.py check_registration_ready" on the visiting node to verify readiness.')|escapejs }}",
     };
 
     function setStatus(element, message, isError) {
@@ -106,6 +107,21 @@
         throw new Error("Request failed");
     }
 
+    function formatError(error) {
+        let message = "";
+        if (error && typeof error.message === "string") {
+            message = error.message;
+        } else if (typeof error === "string") {
+            message = error;
+        } else if (error) {
+            message = String(error);
+        }
+        if (message === "Failed to fetch") {
+            return `${message} — ${messages.fetchAdvice}`;
+        }
+        return message || messages.partial;
+    }
+
     function buildPayload(info) {
         return {
             hostname: info.hostname,
@@ -156,7 +172,7 @@
                     setStatus(hostResult, messages.hostRegistered, false);
                 }
             } catch (error) {
-                setStatus(hostResult, error.message, true);
+                setStatus(hostResult, formatError(error), true);
             }
 
             const visitorPayload = buildPayload(hostInfo);
@@ -174,7 +190,7 @@
                     setStatus(visitorResult, messages.visitorRegistered, false);
                 }
             } catch (error) {
-                setStatus(visitorResult, error.message, true);
+                setStatus(visitorResult, formatError(error), true);
             }
 
             if (!hostResult.classList.contains("errornote") && !visitorResult.classList.contains("errornote")) {
@@ -183,7 +199,7 @@
                 setStatus(summary, messages.partial, true);
             }
         } catch (error) {
-            const message = error.message || error;
+            const message = formatError(error);
             setStatus(summary, message, true);
             if (!hostResult.classList.contains("errornote")) {
                 setStatus(hostResult, messages.aborted, true);

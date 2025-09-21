@@ -91,7 +91,6 @@ def _add_cors_headers(request, response):
 
 
 @csrf_exempt
-@api_login_required
 def register_node(request):
     """Register or update a node from POSTed JSON data."""
 
@@ -148,6 +147,10 @@ def register_node(request):
             response = JsonResponse({"detail": "invalid signature"}, status=403)
             return _add_cors_headers(request, response)
 
+    if not verified and not request.user.is_authenticated:
+        response = JsonResponse({"detail": "authentication required"}, status=401)
+        return _add_cors_headers(request, response)
+
     mac_address = mac_address.lower()
     defaults = {
         "hostname": hostname,
@@ -170,7 +173,7 @@ def register_node(request):
             node.public_key = public_key
             update_fields.append("public_key")
         node.save(update_fields=update_fields)
-        if features is not None:
+        if features is not None and (verified or request.user.is_authenticated):
             if isinstance(features, (str, bytes)):
                 feature_list = [features]
             else:
@@ -181,7 +184,7 @@ def register_node(request):
         )
         return _add_cors_headers(request, response)
 
-    if features is not None:
+    if features is not None and (verified or request.user.is_authenticated):
         if isinstance(features, (str, bytes)):
             feature_list = [features]
         else:
