@@ -39,9 +39,12 @@ def ensure_auto_upgrade_periodic_task(
     except Exception:
         return
 
+    mode = mode_file.read_text().strip() or "version"
+    interval_minutes = 5 if mode == "latest" else 10
+
     try:
         schedule, _ = IntervalSchedule.objects.get_or_create(
-            every=10, period=IntervalSchedule.MINUTES
+            every=interval_minutes, period=IntervalSchedule.MINUTES
         )
         PeriodicTask.objects.update_or_create(
             name=AUTO_UPGRADE_TASK_NAME,
