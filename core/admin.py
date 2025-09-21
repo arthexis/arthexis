@@ -173,19 +173,18 @@ class SaveBeforeChangeAction(DjangoObjectActions):
 class ProfileAdminMixin:
     """Reusable actions for profile-bound admin classes."""
 
-    def _redirect_to_my_profile(self, request):
+    def _resolve_my_profile_target(self, request):
         opts = self.model._meta
         changelist_url = reverse(
             f"admin:{opts.app_label}_{opts.model_name}_changelist"
         )
         user = getattr(request, "user", None)
         if not getattr(user, "is_authenticated", False):
-            self.message_user(
-                request,
+            return (
+                changelist_url,
                 _("You must be logged in to manage your profile."),
-                level=messages.ERROR,
+                messages.ERROR,
             )
-            return HttpResponseRedirect(changelist_url)
 
         profile = self.model._default_manager.filter(user=user).first()
         if profile is not None:
@@ -200,13 +199,12 @@ class ProfileAdminMixin:
                     f"admin:{opts.app_label}_{opts.model_name}_change",
                     args=[profile.pk],
                 )
-                return HttpResponseRedirect(change_url)
-            self.message_user(
-                request,
+                return change_url, None, None
+            return (
+                changelist_url,
                 _("You do not have permission to view this profile."),
-                level=messages.ERROR,
+                messages.ERROR,
             )
-            return HttpResponseRedirect(changelist_url)
 
         if self.has_add_permission(request):
             add_url = reverse(f"admin:{opts.app_label}_{opts.model_name}_add")
@@ -216,24 +214,33 @@ class ProfileAdminMixin:
                 params["user"] = user_id
             if params:
                 add_url = f"{add_url}?{urlencode(params)}"
-            return HttpResponseRedirect(add_url)
+            return add_url, None, None
 
-        self.message_user(
-            request,
+        return (
+            changelist_url,
             _("You do not have permission to create this profile."),
-            level=messages.ERROR,
+            messages.ERROR,
         )
-        return HttpResponseRedirect(changelist_url)
 
-    @admin.action(description=_("My Profile"))
+    def get_my_profile_url(self, request):
+        url, _message, _level = self._resolve_my_profile_target(request)
+        return url
+
+    def _redirect_to_my_profile(self, request):
+        target_url, message, level = self._resolve_my_profile_target(request)
+        if message:
+            self.message_user(request, message, level=level)
+        return HttpResponseRedirect(target_url)
+
+    @admin.action(description=_("Active Profile"))
     def my_profile(self, request, queryset=None):
         return self._redirect_to_my_profile(request)
 
     def my_profile_action(self, request, obj=None):
         return self._redirect_to_my_profile(request)
 
-    my_profile_action.label = _("My Profile")
-    my_profile_action.short_description = _("My Profile")
+    my_profile_action.label = _("Active Profile")
+    my_profile_action.short_description = _("Active Profile")
 
     def get_actions(self, request):
         actions = super().get_actions(request)
@@ -243,7 +250,7 @@ class ProfileAdminMixin:
                 actions["my_profile"] = (
                     action,
                     "my_profile",
-                    getattr(action, "short_description", _("My Profile")),
+                    getattr(action, "short_description", _("Active Profile")),
                 )
         return actions
 

@@ -26,5 +26,5 @@ class AdminProfileLinkTests(TestCase):
     def test_profile_link_points_to_user_admin(self):
         response = self.client.get(reverse("admin:index"))
         expected_url = reverse("admin:teams_user_change", args=[self.user.pk])
-        self.assertContains(response, "MY PROFILE")
+        self.assertContains(response, "Active Profile")
         self.assertContains(response, f'href="{expected_url}"')
