@@ -673,13 +673,13 @@ msgstr "Entradas"
 msgid "Models"
 msgstr "Modelos"
 
-#: config/settings.py:308
-msgid "French"
-msgstr "Francés"
+#: config/settings.py:409
+msgid "Italian"
+msgstr "Italiano"
 
-#: config/settings.py:309
-msgid "Russian"
-msgstr "Ruso"
+#: config/settings.py:410
+msgid "German"
+msgstr "Alemán"
 
 #: ocpp/views.py:26 ocpp/templates/ocpp/charger_page.html:18
 msgid "Charging"

@@ -405,10 +405,10 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = "en-us"
 
 LANGUAGES = [
-    ("en", _("English")),
     ("es", _("Spanish")),
-    ("fr", _("French")),
-    ("ru", _("Russian")),
+    ("en", _("English")),
+    ("it", _("Italian")),
+    ("de", _("German")),
 ]
 
 LOCALE_PATHS = [BASE_DIR / "locale"]

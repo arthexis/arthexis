@@ -56,6 +56,6 @@ class ReadmeLanguageTests(TestCase):
         Module.objects.create(
             node_role=role, application=app, path="/foo/", is_default=True
         )
-        self.client.post("/i18n/setlang/", {"language": "fr", "next": "/"})
+        self.client.post("/i18n/setlang/", {"language": "de", "next": "/"})
         response = self.client.get("/")
-        self.assertContains(response, "Constellation Arthexis")
+        self.assertContains(response, "Arthexis-Konstellation")
