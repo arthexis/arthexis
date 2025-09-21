@@ -1,7 +1,10 @@
-import json
 import base64
+import ipaddress
+import json
+import socket
 
 from django.http import JsonResponse
+from django.http.request import split_domain_port
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
 from django.conf import settings
@@ -15,6 +18,79 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 from .models import Node, NetMessage, NodeRole
 from .utils import capture_screenshot, save_screenshot
+
+
+def _get_client_ip(request):
+    """Return the client IP from the request headers."""
+
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded_for:
+        for value in forwarded_for.split(","):
+            candidate = value.strip()
+            if candidate:
+                return candidate
+    return request.META.get("REMOTE_ADDR", "")
+
+
+def _get_route_address(remote_ip: str, port: int) -> str:
+    """Return the local address used to reach ``remote_ip``."""
+
+    if not remote_ip:
+        return ""
+    try:
+        parsed = ipaddress.ip_address(remote_ip)
+    except ValueError:
+        return ""
+
+    try:
+        target_port = int(port)
+    except (TypeError, ValueError):
+        target_port = 1
+    if target_port <= 0 or target_port > 65535:
+        target_port = 1
+
+    family = socket.AF_INET6 if parsed.version == 6 else socket.AF_INET
+    try:
+        with socket.socket(family, socket.SOCK_DGRAM) as sock:
+            if family == socket.AF_INET6:
+                sock.connect((remote_ip, target_port, 0, 0))
+            else:
+                sock.connect((remote_ip, target_port))
+            return sock.getsockname()[0]
+    except OSError:
+        return ""
+
+
+def _get_host_ip(request) -> str:
+    """Return the IP address from the host header if available."""
+
+    try:
+        host = request.get_host()
+    except Exception:  # pragma: no cover - defensive
+        return ""
+    if not host:
+        return ""
+    domain, _ = split_domain_port(host)
+    if not domain:
+        return ""
+    try:
+        ipaddress.ip_address(domain)
+    except ValueError:
+        return ""
+    return domain
+
+
+def _get_advertised_address(request, node) -> str:
+    """Return the best address for the client to reach this node."""
+
+    client_ip = _get_client_ip(request)
+    route_address = _get_route_address(client_ip, node.port)
+    if route_address:
+        return route_address
+    host_ip = _get_host_ip(request)
+    if host_ip:
+        return host_ip
+    return node.address
 
 
 @api_login_required
@@ -43,9 +119,10 @@ def node_info(request):
         node, _ = Node.register_current()
 
     token = request.GET.get("token", "")
+    address = _get_advertised_address(request, node)
     data = {
         "hostname": node.hostname,
-        "address": node.address,
+        "address": address,
         "port": node.port,
         "mac_address": node.mac_address,
         "public_key": node.public_key,
