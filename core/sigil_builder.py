@@ -88,16 +88,27 @@ def _sigil_builder_view(request):
 
     sigils_text = ""
     resolved_text = ""
+    show_sigils_input = True
+    show_result = False
     if request.method == "POST":
         sigils_text = request.POST.get("sigils_text", "")
+        source_text = sigils_text
         upload = request.FILES.get("sigils_file")
         if upload:
-            sigils_text = upload.read().decode("utf-8", errors="ignore")
+            source_text = upload.read().decode("utf-8", errors="ignore")
+            show_sigils_input = False
         else:
             single = request.POST.get("sigil", "")
             if single:
-                sigils_text = f"[{single}]" if not single.startswith("[") else single
-        resolved_text = resolve_sigils_in_text(sigils_text) if sigils_text else ""
+                source_text = (
+                    f"[{single}]" if not single.startswith("[") else single
+                )
+                sigils_text = source_text
+        if source_text:
+            resolved_text = resolve_sigils_in_text(source_text)
+            show_result = True
+        if upload:
+            sigils_text = ""
 
     context = admin.site.each_context(request)
     context.update(
@@ -108,6 +119,8 @@ def _sigil_builder_view(request):
             "auto_fields": auto_fields,
             "sigils_text": sigils_text,
             "resolved_text": resolved_text,
+            "show_sigils_input": show_sigils_input,
+            "show_result": show_result,
         }
     )
     return TemplateResponse(request, "admin/sigil_builder.html", context)

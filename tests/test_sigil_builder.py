@@ -31,6 +31,8 @@ class SigilBuilderTests(TestCase):
             {"sigils_file": upload},
         )
         self.assertContains(response, settings.LANGUAGE_CODE)
+        self.assertFalse(response.context["show_sigils_input"])
+        self.assertTrue(response.context["show_result"])
 
     def test_builder_groups_multiple_roots(self):
         from django.contrib.contenttypes.models import ContentType
