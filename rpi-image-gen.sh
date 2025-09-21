@@ -255,11 +255,25 @@ else
   echo "Using device layer '$DEVICE_LAYER_CANONICAL'."
 fi
 
+unsupported_layer=""
+
 case "$DEVICE_LAYER_CANONICAL" in
-  rpi5|rpi-cm5)
-    error "Device layer '$DEVICE_LAYER_CANONICAL' targets hardware newer than the Raspberry Pi 4B, which is not supported. Use --device pi4 or an earlier model."
+  pi5|cm5|rpi5|rpi-cm5)
+    unsupported_layer="$DEVICE_LAYER_CANONICAL"
     ;;
 esac
+
+if [[ -z "$unsupported_layer" ]]; then
+  case "$DEVICE_LAYER_ALIAS" in
+    pi5|cm5|rpi5|rpi-cm5)
+      unsupported_layer="$DEVICE_LAYER_ALIAS"
+      ;;
+  esac
+fi
+
+if [[ -n "$unsupported_layer" ]]; then
+  error "Device layer '$unsupported_layer' targets hardware newer than the Raspberry Pi 4B, which is not supported. Use --device pi4 or an earlier model."
+fi
 
 ensure_dependencies() {
   local dependencies_sh="$RPI_DIR/lib/dependencies.sh"
