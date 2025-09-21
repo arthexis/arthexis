@@ -58,6 +58,30 @@ validate_hostname() {
   fi
 }
 
+ensure_path_owned_by_build_user() {
+  local path="$1"
+  [[ -n "$RUN_BUILD_AS_USER" ]] || return 0
+  [[ -e "$path" ]] || return 0
+
+  local current_uid current_gid
+  if ! current_uid=$(stat -c '%u' "$path" 2>/dev/null); then
+    return 0
+  fi
+  if ! current_gid=$(stat -c '%g' "$path" 2>/dev/null); then
+    return 0
+  fi
+
+  if [[ "$current_uid" == "$RUN_BUILD_AS_UID" && "$current_gid" == "$RUN_BUILD_AS_GID" ]]; then
+    return 0
+  fi
+
+  if [[ -d "$path" ]]; then
+    chown -R "$RUN_BUILD_AS_UID:$RUN_BUILD_AS_GID" "$path"
+  else
+    chown "$RUN_BUILD_AS_UID:$RUN_BUILD_AS_GID" "$path"
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --control)
@@ -163,30 +187,6 @@ trap cleanup EXIT
 
 RPI_TARBALL="$WORK_ROOT/rpi-image-gen.tar.gz"
 RESOLVED_DEVICE_ALIAS=""
-
-ensure_path_owned_by_build_user() {
-  local path="$1"
-  [[ -n "$RUN_BUILD_AS_USER" ]] || return 0
-  [[ -e "$path" ]] || return 0
-
-  local current_uid current_gid
-  if ! current_uid=$(stat -c '%u' "$path" 2>/dev/null); then
-    return 0
-  fi
-  if ! current_gid=$(stat -c '%g' "$path" 2>/dev/null); then
-    return 0
-  fi
-
-  if [[ "$current_uid" == "$RUN_BUILD_AS_UID" && "$current_gid" == "$RUN_BUILD_AS_GID" ]]; then
-    return 0
-  fi
-
-  if [[ -d "$path" ]]; then
-    chown -R "$RUN_BUILD_AS_UID:$RUN_BUILD_AS_GID" "$path"
-  else
-    chown "$RUN_BUILD_AS_UID:$RUN_BUILD_AS_GID" "$path"
-  fi
-}
 
 find_device_layer_metadata() {
   local layer_name="$1"
