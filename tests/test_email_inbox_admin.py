@@ -1,4 +1,5 @@
 from django.test import TestCase, RequestFactory
+from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.admin.sites import AdminSite
 import os
@@ -131,6 +132,74 @@ class EmailInboxAdminActionTests(TestCase):
         )
         self.factory = RequestFactory()
         self.admin = EmailInboxAdmin(EmailInbox, AdminSite())
+
+    def test_my_profile_redirects_to_existing_profile(self):
+        request = self.factory.get("/")
+        request.user = self.user
+        request.session = self.client.session
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        request._messages = FallbackStorage(request)
+        response = self.admin.my_profile(request, EmailInbox.objects.none())
+        self.assertEqual(response.status_code, 302)
+        opts = self.admin.model._meta
+        expected = reverse(
+            f"admin:{opts.app_label}_{opts.model_name}_change", args=[self.inbox.pk]
+        )
+        self.assertEqual(response.url, expected)
+
+    def test_my_profile_redirects_to_add_when_missing(self):
+        self.inbox.delete()
+        request = self.factory.get("/")
+        request.user = self.user
+        request.session = self.client.session
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        request._messages = FallbackStorage(request)
+        response = self.admin.my_profile(request, EmailInbox.objects.none())
+        self.assertEqual(response.status_code, 302)
+        opts = self.admin.model._meta
+        expected = (
+            f"{reverse(f'admin:{opts.app_label}_{opts.model_name}_add')}?user={self.user.pk}"
+        )
+        self.assertEqual(response.url, expected)
+
+    def test_my_profile_without_add_permission_shows_error(self):
+        self.inbox.delete()
+        User = get_user_model()
+        limited = User.objects.create_user(
+            username="limited", password="pwd", is_staff=True
+        )
+        request = self.factory.get("/")
+        request.user = limited
+        request.session = self.client.session
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        request._messages = FallbackStorage(request)
+        response = self.admin.my_profile(request, EmailInbox.objects.none())
+        self.assertEqual(response.status_code, 302)
+        opts = self.admin.model._meta
+        self.assertEqual(
+            response.url,
+            reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist"),
+        )
+        messages = [m.message.lower() for m in request._messages]
+        self.assertTrue(any("permission" in message for message in messages))
+
+    def test_my_profile_change_action_redirects(self):
+        request = self.factory.get("/")
+        request.user = self.user
+        request.session = self.client.session
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        request._messages = FallbackStorage(request)
+        response = self.admin.my_profile_action(request, self.inbox)
+        self.assertEqual(response.status_code, 302)
+        opts = self.admin.model._meta
+        expected = reverse(
+            f"admin:{opts.app_label}_{opts.model_name}_change", args=[self.inbox.pk]
+        )
+        self.assertEqual(response.url, expected)
 
     def test_test_inbox_action(self):
         request = self.factory.get("/")
