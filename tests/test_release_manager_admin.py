@@ -4,6 +4,7 @@ import pytest
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
 
 from core.admin import ReleaseManagerAdmin
 from core.models import ReleaseManager
@@ -32,6 +33,49 @@ class ReleaseManagerAdminActionTests(TestCase):
 
         request._messages = FallbackStorage(request)
         return request
+
+    def test_my_profile_redirects_to_existing_profile(self):
+        request = self._get_request()
+        response = self.admin.my_profile(request, ReleaseManager.objects.none())
+        self.assertEqual(response.status_code, 302)
+        expected = reverse("admin:core_releasemanager_change", args=[self.manager.pk])
+        self.assertEqual(response.url, expected)
+
+    def test_my_profile_redirects_to_add_when_missing(self):
+        self.manager.delete()
+        request = self._get_request()
+        response = self.admin.my_profile(request, ReleaseManager.objects.none())
+        self.assertEqual(response.status_code, 302)
+        expected = f"{reverse('admin:core_releasemanager_add')}?user={self.user.pk}"
+        self.assertEqual(response.url, expected)
+
+    def test_my_profile_without_add_permission_shows_error(self):
+        self.manager.delete()
+        User = get_user_model()
+        limited = User.objects.create_user(
+            username="limited", password="pwd", is_staff=True
+        )
+        request = self.factory.get("/")
+        request.user = limited
+        request.session = self.client.session
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        request._messages = FallbackStorage(request)
+        response = self.admin.my_profile(request, ReleaseManager.objects.none())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("admin:core_releasemanager_changelist"),
+        )
+        messages = [m.message.lower() for m in request._messages]
+        self.assertTrue(any("permission" in message for message in messages))
+
+    def test_my_profile_change_action_redirects(self):
+        request = self._get_request()
+        response = self.admin.my_profile_action(request, self.manager)
+        self.assertEqual(response.status_code, 302)
+        expected = reverse("admin:core_releasemanager_change", args=[self.manager.pk])
+        self.assertEqual(response.url, expected)
 
     @pytest.mark.skip("Release manager credentials action not exercised in environment")
     @patch("core.admin.requests.get")

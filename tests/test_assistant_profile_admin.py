@@ -1,10 +1,12 @@
 """Tests for AssistantProfile admin features."""
 
+from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.urls import reverse
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from unittest import mock
 
+from core.admin import AssistantProfileAdmin
 from core.models import AssistantProfile, hash_key
 from core.mcp import process as mcp_process
 
@@ -99,3 +101,65 @@ class AssistantProfileAdminTests(TestCase):
             fetch_redirect_response=False,
         )
         get_status.assert_called_once_with()
+
+
+class AssistantProfileAdminActionTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="mcpadmin", email="a@example.com", password="pwd"
+        )
+        self.profile = AssistantProfile.objects.create(user=self.user)
+        self.factory = RequestFactory()
+        self.admin = AssistantProfileAdmin(AssistantProfile, AdminSite())
+
+    def _get_request(self, user=None):
+        request = self.factory.get("/")
+        request.user = user or self.user
+        request.session = self.client.session
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        request._messages = FallbackStorage(request)
+        return request
+
+    def test_my_profile_redirects_to_existing_profile(self):
+        request = self._get_request()
+        response = self.admin.my_profile(request, AssistantProfile.objects.none())
+        self.assertEqual(response.status_code, 302)
+        expected = reverse(
+            "admin:core_assistantprofile_change", args=[self.profile.pk]
+        )
+        self.assertEqual(response.url, expected)
+
+    def test_my_profile_redirects_to_add_when_missing(self):
+        self.profile.delete()
+        request = self._get_request()
+        response = self.admin.my_profile(request, AssistantProfile.objects.none())
+        self.assertEqual(response.status_code, 302)
+        expected = f"{reverse('admin:core_assistantprofile_add')}?user={self.user.pk}"
+        self.assertEqual(response.url, expected)
+
+    def test_my_profile_without_add_permission_shows_error(self):
+        self.profile.delete()
+        User = get_user_model()
+        limited = User.objects.create_user(
+            username="limited", password="pwd", is_staff=True
+        )
+        request = self._get_request(user=limited)
+        response = self.admin.my_profile(request, AssistantProfile.objects.none())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("admin:core_assistantprofile_changelist"),
+        )
+        messages = [m.message.lower() for m in request._messages]
+        self.assertTrue(any("permission" in message for message in messages))
+
+    def test_my_profile_change_action_redirects(self):
+        request = self._get_request()
+        response = self.admin.my_profile_action(request, self.profile)
+        self.assertEqual(response.status_code, 302)
+        expected = reverse(
+            "admin:core_assistantprofile_change", args=[self.profile.pk]
+        )
+        self.assertEqual(response.url, expected)

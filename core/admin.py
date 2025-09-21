@@ -2,6 +2,7 @@ from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
 from django.urls import NoReverseMatch, path, reverse
+from urllib.parse import urlencode
 from django.shortcuts import redirect, render
 from django.http import JsonResponse, HttpResponseBase, HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -169,6 +170,72 @@ class SaveBeforeChangeAction(DjangoObjectActions):
         return super().response_change(request, obj)
 
 
+class ProfileAdminMixin:
+    """Reusable actions for profile-bound admin classes."""
+
+    def _redirect_to_my_profile(self, request):
+        opts = self.model._meta
+        changelist_url = reverse(
+            f"admin:{opts.app_label}_{opts.model_name}_changelist"
+        )
+        user = getattr(request, "user", None)
+        if not getattr(user, "is_authenticated", False):
+            self.message_user(
+                request,
+                _("You must be logged in to manage your profile."),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(changelist_url)
+
+        profile = self.model._default_manager.filter(user=user).first()
+        if profile is not None:
+            permission_check = getattr(self, "has_view_or_change_permission", None)
+            has_permission = (
+                permission_check(request, obj=profile)
+                if callable(permission_check)
+                else self.has_change_permission(request, obj=profile)
+            )
+            if has_permission:
+                change_url = reverse(
+                    f"admin:{opts.app_label}_{opts.model_name}_change",
+                    args=[profile.pk],
+                )
+                return HttpResponseRedirect(change_url)
+            self.message_user(
+                request,
+                _("You do not have permission to view this profile."),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(changelist_url)
+
+        if self.has_add_permission(request):
+            add_url = reverse(f"admin:{opts.app_label}_{opts.model_name}_add")
+            params = {}
+            user_id = getattr(user, "pk", None)
+            if user_id:
+                params["user"] = user_id
+            if params:
+                add_url = f"{add_url}?{urlencode(params)}"
+            return HttpResponseRedirect(add_url)
+
+        self.message_user(
+            request,
+            _("You do not have permission to create this profile."),
+            level=messages.ERROR,
+        )
+        return HttpResponseRedirect(changelist_url)
+
+    @admin.action(description=_("My Profile"))
+    def my_profile(self, request, queryset):
+        return self._redirect_to_my_profile(request)
+
+    def my_profile_action(self, request, obj=None):
+        return self._redirect_to_my_profile(request)
+
+    my_profile_action.label = _("My Profile")
+    my_profile_action.short_description = _("My Profile")
+
+
 @admin.register(ExperienceReference)
 class ReferenceAdmin(EntityModelAdmin):
     list_display = (
@@ -268,11 +335,12 @@ class ReleaseManagerAdminForm(forms.ModelForm):
 
 
 @admin.register(ReleaseManager)
-class ReleaseManagerAdmin(SaveBeforeChangeAction, EntityModelAdmin):
+class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
     form = ReleaseManagerAdminForm
     list_display = ("owner", "pypi_username", "pypi_url")
     actions = ["test_credentials"]
-    change_actions = ["test_credentials_action"]
+    change_actions = ["test_credentials_action", "my_profile_action"]
+    changelist_actions = ["my_profile"]
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
         (
@@ -1114,13 +1182,14 @@ class EmailCollectorAdmin(EntityModelAdmin):
 
 
 @admin.register(OdooProfile)
-class OdooProfileAdmin(SaveBeforeChangeAction, EntityModelAdmin):
+class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
     change_form_template = "django_object_actions/change_form.html"
     form = OdooProfileAdminForm
     list_display = ("owner", "host", "database", "verified_on")
     readonly_fields = ("verified_on", "odoo_uid", "name", "email")
     actions = ["verify_credentials"]
-    change_actions = ["verify_credentials_action"]
+    change_actions = ["verify_credentials_action", "my_profile_action"]
+    changelist_actions = ["my_profile"]
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
         (None, {"fields": ("host", "database", "username", "password")}),
@@ -1171,11 +1240,12 @@ class EmailSearchForm(forms.Form):
     )
 
 
-class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
+class EmailInboxAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
     form = EmailInboxAdminForm
     list_display = ("owner_label", "username", "host", "protocol")
     actions = ["test_connection", "search_inbox", "test_collectors"]
-    change_actions = ["test_collectors_action"]
+    change_actions = ["test_collectors_action", "my_profile_action"]
+    changelist_actions = ["my_profile"]
     change_form_template = "admin/core/emailinbox/change_form.html"
     inlines = [EmailCollectorInline]
 
@@ -1308,12 +1378,16 @@ class EmailInboxAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
 
 @admin.register(AssistantProfile)
-class AssistantProfileAdmin(EntityModelAdmin):
+class AssistantProfileAdmin(
+    ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
+):
     list_display = ("owner", "created_at", "last_used_at", "is_active")
     readonly_fields = ("user_key_hash", "created_at", "last_used_at")
 
     change_form_template = "admin/workgroupassistantprofile_change_form.html"
     change_list_template = "admin/assistantprofile_change_list.html"
+    change_actions = ["my_profile_action"]
+    changelist_actions = ["my_profile"]
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
         (
