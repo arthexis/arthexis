@@ -258,7 +258,7 @@ def register_node(request):
         node.hostname = hostname
         node.address = address
         node.port = port
-        update_fields = ["hostname", "address", "port"]
+        update_fields = ["hostname", "address", "port", "last_seen"]
         if verified:
             node.public_key = public_key
             update_fields.append("public_key")
