@@ -1126,10 +1126,15 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "Browse Applications")
 
-    def test_dashboard_uses_todo_url_if_set(self):
-        Todo.objects.create(request="Check docs", url="/docs/")
+    def test_dashboard_links_to_focus_view(self):
+        todo = Todo.objects.create(request="Check docs", url="/docs/")
         resp = self.client.get(reverse("admin:index"))
-        self.assertContains(resp, 'href="/docs/"')
+        focus_url = reverse("todo-focus", args=[todo.pk])
+        expected_next = quote(reverse("admin:index"))
+        self.assertContains(
+            resp,
+            f'href="{focus_url}?next={expected_next}"',
+        )
 
     def test_dashboard_shows_todo_with_done_button(self):
         todo = Todo.objects.create(request="Do thing")

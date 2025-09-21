@@ -172,12 +172,13 @@
             <ul class="actionlist">
                 {% for todo in future_items.todos %}
                 <li class="changelink">
-                    <a href="{{ todo.url }}" class="todo-link">{{ todo.label }}</a>
+                    <a href="{{ todo.url }}?next={{ request.get_full_path|urlencode }}" class="todo-link">{{ todo.label }}</a>
                     {% if todo.details %}
                     <div class="todo-details">{{ todo.details }}</div>
                     {% endif %}
                     <form method="post" action="{{ todo.done_url }}" style="display:inline; float:right;">
                         {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
                         <button class="button" title="Done" style="padding-bottom:2px;">DONE</button>
                     </form>
                 </li>

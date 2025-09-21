@@ -8,12 +8,13 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, login
 from django.contrib import messages
 from django.http import Http404, JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.urls import NoReverseMatch, reverse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
+from django.utils.http import url_has_allowed_host_and_scheme
 from pathlib import Path
 import subprocess
 import json
@@ -122,6 +123,26 @@ def _format_condition_failure(todo: Todo, result) -> str:
         "todo": todo.request,
         "detail": detail,
     }
+
+
+def _get_return_url(request) -> str:
+    """Return a safe URL to redirect back to after completing a TODO."""
+
+    candidates = [request.GET.get("next"), request.POST.get("next")]
+    referer = request.META.get("HTTP_REFERER")
+    if referer:
+        candidates.append(referer)
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        if url_has_allowed_host_and_scheme(
+            candidate,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return candidate
+    return resolve_url("admin:index")
 
 
 def _step_check_todos(release, ctx, log_path: Path) -> None:
@@ -845,13 +866,30 @@ def release_progress(request, pk: int, action: str):
 
 
 @staff_member_required
+def todo_focus(request, pk: int):
+    todo = get_object_or_404(Todo, pk=pk, is_deleted=False)
+    if todo.done_on:
+        return redirect(_get_return_url(request))
+
+    iframe_url = todo.url or reverse("admin:core_todo_change", args=[todo.pk])
+    context = {
+        "todo": todo,
+        "iframe_url": iframe_url,
+        "next_url": _get_return_url(request),
+        "done_url": reverse("todo-done", args=[todo.pk]),
+    }
+    return render(request, "core/todo_focus.html", context)
+
+
+@staff_member_required
 @require_POST
 def todo_done(request, pk: int):
     todo = get_object_or_404(Todo, pk=pk, is_deleted=False, done_on__isnull=True)
+    redirect_to = _get_return_url(request)
     result = todo.check_on_done_condition()
     if not result.passed:
         messages.error(request, _format_condition_failure(todo, result))
-        return redirect("admin:index")
+        return redirect(redirect_to)
     todo.done_on = timezone.now()
     todo.save(update_fields=["done_on"])
-    return redirect("admin:index")
+    return redirect(redirect_to)

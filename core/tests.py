@@ -17,6 +17,7 @@ import subprocess
 from glob import glob
 from datetime import timedelta
 import tempfile
+from urllib.parse import quote
 
 from django.utils import timezone
 from django.contrib.auth.models import Permission
@@ -1100,6 +1101,62 @@ class TodoDoneTests(TestCase):
         resolver.assert_called_once_with("on_done_condition")
         todo.refresh_from_db()
         self.assertIsNotNone(todo.done_on)
+
+    def test_mark_done_respects_next_parameter(self):
+        todo = Todo.objects.create(request="Task")
+        next_url = reverse("admin:index") + "?section=todos"
+        resp = self.client.post(
+            reverse("todo-done", args=[todo.pk]),
+            {"next": next_url},
+        )
+        self.assertRedirects(resp, next_url, target_status_code=200)
+        todo.refresh_from_db()
+        self.assertIsNotNone(todo.done_on)
+
+    def test_mark_done_rejects_external_next(self):
+        todo = Todo.objects.create(request="Task")
+        resp = self.client.post(
+            reverse("todo-done", args=[todo.pk]),
+            {"next": "https://example.com/"},
+        )
+        self.assertRedirects(resp, reverse("admin:index"))
+        todo.refresh_from_db()
+        self.assertIsNotNone(todo.done_on)
+
+
+class TodoFocusViewTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User.objects.create_superuser("admin", "admin@example.com", "pw")
+        self.client.force_login(User.objects.get(username="admin"))
+
+    def test_focus_view_renders_requested_page(self):
+        todo = Todo.objects.create(request="Task", url="/docs/")
+        next_url = reverse("admin:index")
+        resp = self.client.get(
+            f"{reverse('todo-focus', args=[todo.pk])}?next={quote(next_url)}"
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, todo.request)
+        self.assertContains(resp, f'src="{todo.url}"')
+        self.assertContains(resp, "Done")
+        self.assertContains(resp, "Back")
+
+    def test_focus_view_uses_admin_change_when_no_url(self):
+        todo = Todo.objects.create(request="Task")
+        resp = self.client.get(reverse("todo-focus", args=[todo.pk]))
+        change_url = reverse("admin:core_todo_change", args=[todo.pk])
+        self.assertContains(resp, f'src="{change_url}"')
+
+    def test_focus_view_redirects_if_todo_completed(self):
+        todo = Todo.objects.create(request="Task")
+        todo.done_on = timezone.now()
+        todo.save(update_fields=["done_on"])
+        next_url = reverse("admin:index")
+        resp = self.client.get(
+            f"{reverse('todo-focus', args=[todo.pk])}?next={quote(next_url)}"
+        )
+        self.assertRedirects(resp, next_url, target_status_code=200)
 
 
 class TodoUrlValidationTests(TestCase):
