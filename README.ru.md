@@ -41,7 +41,7 @@
 - **[Windows](https://ru.wikipedia.org/wiki/Microsoft_Windows)**: откройте [PowerShell](https://learn.microsoft.com/ru-ru/powershell/) или [Git Bash](https://gitforwindows.org/) и выполните ту же команду.
 
 ### 2. Запуск и остановка
-Узлы Terminal можно запускать напрямую приведёнными ниже скриптами без установки; роли Control, Satellite и Constellation требуют предварительной установки. Оба варианта по умолчанию слушают [`http://localhost:8000/`](http://localhost:8000/) — используйте `--port`, чтобы выбрать другой порт.
+Узлы Terminal можно запускать напрямую приведёнными ниже скриптами без установки; роли Control, Satellite и Constellation требуют предварительной установки. Оба варианта по умолчанию слушают [`http://localhost:8888/`](http://localhost:8888/) — используйте `--port`, чтобы выбрать другой порт или добавьте `--public`, чтобы открыть сервис на `0.0.0.0:8000` и дать доступ другим устройствам (например, `http://192.168.1.10:8000/`). Установки Constellation автоматически включают публичный режим.
 - **[VS Code](https://code.visualstudio.com/)**: откройте папку, перейдите на панель **Run and Debug** (`Ctrl+Shift+D`), выберите конфигурацию **Run Server** (или **Debug Server**) и нажмите зелёную кнопку запуска. Остановите сервер красным квадратом (`Shift+F5`).
 - **[Shell](https://ru.wikipedia.org/wiki/Командная_оболочка)**: в Linux запустите [`./start.sh`](start.sh) и остановите [`./stop.sh`](stop.sh); в Windows запустите [`start.bat`](start.bat) и остановите `Ctrl+C`.
 
@@ -52,10 +52,11 @@
   - `--satellite` — настраивает периферийный узел сбора данных.
   - `--constellation` — включает мультипользовательский оркестратор.
   Используйте `./install.sh --help`, чтобы увидеть полный список флагов, если требуется дополнительная настройка сверх выбранной роли. Обновляйте систему с помощью [`./upgrade.sh`](upgrade.sh).
+  Установки Constellation работают в публичном режиме на порту 8000; Terminal, Control и Satellite по умолчанию используют внутренний порт 8888, пока вы не добавите `--public` или не зададите другой порт.
 - **Windows**: выполните [`install.bat`](install.bat) для установки (роль Terminal) и [`upgrade.bat`](upgrade.bat) для обновления.
 
 ### 4. Администрирование
-Перейдите на [`http://localhost:8000/admin/`](http://localhost:8000/admin/) для [панели администратора Django](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) и [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) для [административной документации](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Используйте `--port` со скриптами запуска или установщиком, если нужно открыть другой порт.
+Перейдите на [`http://localhost:8888/admin/`](http://localhost:8888/admin/) для [панели администратора Django](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) и [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) для [административной документации](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Если включён публичный режим (вручную через `--public` или при установке роли Constellation), откройте [`http://localhost:8000/`](http://localhost:8000/) на самом узле или замените `localhost` IP-адресом машины при подключении с другого устройства. Используйте `--port` со скриптами запуска или установщиком, если нужно открыть другой порт.
 
 ## Поддержка
 
