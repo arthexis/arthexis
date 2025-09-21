@@ -53,6 +53,7 @@ from django.core.management import call_command
 from django.db import IntegrityError
 from .backends import LocalhostAdminBackend
 from core.views import _step_check_version, _step_promote_build, _step_publish
+from core import views as core_views
 from core import public_wifi
 
 
@@ -948,6 +949,92 @@ class ReleaseProgressSyncTests(TestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, 404)
+
+
+class ReleaseProgressFixtureVisibilityTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_superuser(
+            "fixture-check", "fixture@example.com", "pw"
+        )
+        self.client.force_login(self.user)
+        current_version = Path("VERSION").read_text(encoding="utf-8").strip()
+        package = Package.objects.filter(is_active=True).first()
+        if package is None:
+            package = Package.objects.create(name="fixturepkg", is_active=True)
+        try:
+            self.release = PackageRelease.objects.get(
+                package=package, version=current_version
+            )
+        except PackageRelease.DoesNotExist:
+            self.release = PackageRelease.objects.create(
+                package=package, version=current_version
+            )
+        self.session_key = f"release_publish_{self.release.pk}"
+        self.log_name = f"{self.release.package.name}-{self.release.version}.log"
+        self.lock_path = Path("locks") / f"{self.session_key}.json"
+        self.restart_path = Path("locks") / f"{self.session_key}.restarts"
+        self.log_path = Path("logs") / self.log_name
+        for path in (self.lock_path, self.restart_path, self.log_path):
+            if path.exists():
+                path.unlink()
+        try:
+            self.fixture_step_index = next(
+                idx
+                for idx, (name, _) in enumerate(core_views.PUBLISH_STEPS)
+                if name == core_views.FIXTURE_REVIEW_STEP_NAME
+            )
+        except StopIteration:  # pragma: no cover - defensive guard
+            self.fail("Fixture review step not configured in publish steps")
+        self.url = reverse("release-progress", args=[self.release.pk, "publish"])
+
+    def tearDown(self):
+        session = self.client.session
+        if self.session_key in session:
+            session.pop(self.session_key)
+            session.save()
+        for path in (self.lock_path, self.restart_path, self.log_path):
+            if path.exists():
+                path.unlink()
+        super().tearDown()
+
+    def _set_session(self, step: int, fixtures: list[dict]):
+        session = self.client.session
+        session[self.session_key] = {
+            "step": step,
+            "fixtures": fixtures,
+            "log": self.log_name,
+            "started": True,
+        }
+        session.save()
+
+    def test_fixture_summary_visible_until_migration_step(self):
+        fixtures = [
+            {
+                "path": "core/fixtures/example.json",
+                "count": 2,
+                "models": ["core.Model"],
+            }
+        ]
+        self._set_session(self.fixture_step_index, fixtures)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["fixtures"], fixtures)
+        self.assertContains(response, "Fixture changes")
+
+    def test_fixture_summary_hidden_after_migration_step(self):
+        fixtures = [
+            {
+                "path": "core/fixtures/example.json",
+                "count": 2,
+                "models": ["core.Model"],
+            }
+        ]
+        self._set_session(self.fixture_step_index + 1, fixtures)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["fixtures"])
+        self.assertNotContains(response, "Fixture changes")
 
 
 class PackageReleaseAdminActionTests(TestCase):

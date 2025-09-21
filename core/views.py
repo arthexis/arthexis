@@ -418,10 +418,13 @@ def _step_publish(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Upload complete")
 
 
+FIXTURE_REVIEW_STEP_NAME = "Freeze, squash and approve migrations"
+
+
 PUBLISH_STEPS = [
     ("Check version number availability", _step_check_version),
     ("Confirm release TODO completion", _step_check_todos),
-    ("Freeze, squash and approve migrations", _step_handle_migrations),
+    (FIXTURE_REVIEW_STEP_NAME, _step_handle_migrations),
     ("Compose CHANGELOG and documentation", _step_changelog_docs),
     ("Execute pre-release actions", _step_pre_release_actions),
     ("Build release artifacts", _step_promote_build),
@@ -753,6 +756,14 @@ def release_progress(request, pk: int, action: str):
             log_path.unlink()
 
     steps = PUBLISH_STEPS
+    fixtures_step_index = next(
+        (
+            index
+            for index, (name, _) in enumerate(steps)
+            if name == FIXTURE_REVIEW_STEP_NAME
+        ),
+        None,
+    )
     error = ctx.get("error")
 
     if (
@@ -887,6 +898,14 @@ def release_progress(request, pk: int, action: str):
             "admin:core_user_change", args=[request.user.pk]
         )
 
+    fixtures_summary = ctx.get("fixtures")
+    if (
+        fixtures_summary
+        and fixtures_step_index is not None
+        and step_count > fixtures_step_index
+    ):
+        fixtures_summary = None
+
     context = {
         "release": release,
         "action": "publish",
@@ -898,7 +917,7 @@ def release_progress(request, pk: int, action: str):
         "log_content": log_content,
         "log_path": str(log_path),
         "cert_log": ctx.get("cert_log"),
-        "fixtures": ctx.get("fixtures"),
+        "fixtures": fixtures_summary,
         "todos": ctx.get("todos"),
         "restart_count": restart_count,
         "started": ctx.get("started", False),
