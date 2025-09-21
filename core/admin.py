@@ -61,7 +61,15 @@ from .models import (
     Todo,
     hash_key,
 )
-from .user_data import EntityModelAdmin, delete_user_fixture, dump_user_fixture
+from .user_data import (
+    EntityModelAdmin,
+    UserDatumAdminMixin,
+    delete_user_fixture,
+    dump_user_fixture,
+    _fixture_path,
+    _resolve_fixture_user,
+    _user_allows_user_data,
+)
 from .widgets import OdooProductWidget
 from .mcp import process as mcp_process
 
@@ -985,7 +993,7 @@ class UserPhoneNumberInline(admin.TabularInline):
     fields = ("number", "priority")
 
 
-class UserAdmin(DjangoUserAdmin):
+class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
     fieldsets = _append_operate_as(DjangoUserAdmin.fieldsets)
     add_fieldsets = _append_operate_as(DjangoUserAdmin.add_fieldsets)
     inlines = USER_PROFILE_INLINES + [UserPhoneNumberInline]
@@ -1011,11 +1019,17 @@ class UserAdmin(DjangoUserAdmin):
     def render_change_form(
         self, request, context, add=False, change=False, form_url="", obj=None
     ):
-        context = super().render_change_form(
+        response = super().render_change_form(
             request, context, add=add, change=change, form_url=form_url, obj=obj
         )
-        context["show_user_datum"] = False
-        context["show_seed_datum"] = False
+        if isinstance(response, dict):
+            context_data = response
+        else:
+            context_data = getattr(response, "context_data", None)
+        if context_data is not None:
+            context_data["show_user_datum"] = True
+            context_data["show_seed_datum"] = False
+            context_data["show_save_as_copy"] = False
         operate_as_user = None
         operate_as_template = self._get_operate_as_profile_template()
         operate_as_url = None
@@ -1028,10 +1042,11 @@ class UserAdmin(DjangoUserAdmin):
                 operate_as_url = operate_as_template.replace(
                     "__ID__", str(operate_as_user.pk)
                 )
-        context["operate_as_user"] = operate_as_user
-        context["operate_as_profile_url_template"] = operate_as_template
-        context["operate_as_profile_url"] = operate_as_url
-        return context
+        if context_data is not None:
+            context_data["operate_as_user"] = operate_as_user
+            context_data["operate_as_profile_url_template"] = operate_as_template
+            context_data["operate_as_profile_url"] = operate_as_url
+        return response
 
     def get_inline_instances(self, request, obj=None):
         inline_instances = super().get_inline_instances(request, obj)
@@ -1077,6 +1092,35 @@ class UserAdmin(DjangoUserAdmin):
             owner_user = getattr(instance, "user", None) or owner
             should_store = bool(inline_form.cleaned_data.get("user_datum"))
             self._update_profile_fixture(instance, owner_user, store=should_store)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if not getattr(obj, "pk", None):
+            return
+        target_user = _resolve_fixture_user(obj, obj)
+        allow_user_data = _user_allows_user_data(target_user)
+        if request.POST.get("_user_datum") == "on":
+            if allow_user_data:
+                if not obj.is_user_data:
+                    type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=True)
+                    obj.is_user_data = True
+                dump_user_fixture(obj, target_user)
+                path = _fixture_path(target_user, obj)
+                self.message_user(request, f"User datum saved to {path}")
+            else:
+                if obj.is_user_data:
+                    type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=False)
+                    obj.is_user_data = False
+                    delete_user_fixture(obj, target_user)
+                self.message_user(
+                    request,
+                    _("User data is not available for this account."),
+                    level=messages.WARNING,
+                )
+        elif obj.is_user_data:
+            type(obj).all_objects.filter(pk=obj.pk).update(is_user_data=False)
+            obj.is_user_data = False
+            delete_user_fixture(obj, target_user)
 
 
 class EmailCollectorInline(admin.TabularInline):

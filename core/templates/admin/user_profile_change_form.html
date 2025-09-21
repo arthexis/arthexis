@@ -3,28 +3,42 @@
 {% block content_title %}
 <div style="display:flex; justify-content:space-between; align-items:center;">
     <h1>{{ title }}</h1>
-    {% if operate_as_profile_url_template %}
-    <div
-        id="operate-as-profile-link"
-        data-url-template="{{ operate_as_profile_url_template }}"
-        data-link-text-template="{% blocktrans %}View __USER__'s profile{% endblocktrans %}"
-        data-link-text-empty="{% trans "View selected user's profile" %}"
-        {% if not operate_as_profile_url %}style="display:none;"{% endif %}
-    >
-        <a
-            id="operate-as-profile-anchor"
-            href="{% if operate_as_profile_url %}{{ operate_as_profile_url }}{% else %}#{% endif %}"
-            target="_blank"
-            rel="noopener"
+    <div style="display:flex; align-items:center; gap:1em; flex-wrap:wrap;">
+        {% if show_user_datum %}
+        <label style="color: var(--body-quiet-color); display:flex; align-items:center; gap:0.35rem;">
+            <input type="checkbox" name="_user_datum" form="{{ opts.model_name }}_form"{% if is_user_datum %} checked{% endif %}>
+            <span>{% trans "User Datum" %} [ <a href="{% url 'admin:user_data' %}">{% trans "View" %}</a> ]</span>
+        </label>
+        {% endif %}
+        {% if show_seed_datum %}
+        <label style="color: var(--body-quiet-color); display:flex; align-items:center; gap:0.35rem;">
+            <input type="checkbox" name="_seed_datum" form="{{ opts.model_name }}_form"{% if original and original.is_seed_data %} checked{% endif %} disabled>
+            <span>{% trans "Seed Datum" %} [ <a href="{% url 'admin:seed_data' %}">{% trans "View" %}</a> ]</span>
+        </label>
+        {% endif %}
+        {% if operate_as_profile_url_template %}
+        <div
+            id="operate-as-profile-link"
+            data-url-template="{{ operate_as_profile_url_template }}"
+            data-link-text-template="{% blocktrans %}View __USER__'s profile{% endblocktrans %}"
+            data-link-text-empty="{% trans "View selected user's profile" %}"
+            {% if not operate_as_profile_url %}style="display:none;"{% endif %}
         >
-            {% if operate_as_user %}
-                {% blocktrans with username=operate_as_user %}View {{ username }}'s profile{% endblocktrans %}
-            {% else %}
-                {% trans "View selected user's profile" %}
-            {% endif %}
-        </a>
+            <a
+                id="operate-as-profile-anchor"
+                href="{% if operate_as_profile_url %}{{ operate_as_profile_url }}{% else %}#{% endif %}"
+                target="_blank"
+                rel="noopener"
+            >
+                {% if operate_as_user %}
+                    {% blocktrans with username=operate_as_user %}View {{ username }}'s profile{% endblocktrans %}
+                {% else %}
+                    {% trans "View selected user's profile" %}
+                {% endif %}
+            </a>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 {% endblock %}
 

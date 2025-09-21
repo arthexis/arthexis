@@ -67,7 +67,7 @@ class UserDataAdminTests(TransactionTestCase):
         response = self.client.get(url)
         self.assertContains(response, 'name="_user_datum"')
 
-    def test_user_change_view_hides_user_datum_checkbox(self):
+    def test_user_change_view_shows_user_datum_checkbox(self):
         UserModel = get_user_model()
         admin_model = None
         for model in admin.site._registry:
@@ -80,7 +80,7 @@ class UserDataAdminTests(TransactionTestCase):
             args=[self.user.pk],
         )
         response = self.client.get(url)
-        self.assertNotContains(response, 'name="_user_datum"')
+        self.assertContains(response, 'name="_user_datum"')
 
     def test_save_user_datum_creates_fixture(self):
         url = reverse("admin:teams_odooprofile_change", args=[self.profile.pk])
@@ -201,6 +201,51 @@ class UserDataAdminTests(TransactionTestCase):
 
         core_user.refresh_from_db()
         self.assertFalse(core_user.is_user_data)
+
+    def test_user_userdatum_creation_and_removal(self):
+        UserModel = get_user_model()
+        admin_model = None
+        user_admin = None
+        for model, admin_instance in admin.site._registry.items():
+            if model._meta.concrete_model is UserModel:
+                admin_model = model
+                user_admin = admin_instance
+                break
+        self.assertIsNotNone(user_admin)
+        admin_user = admin_model.objects.get(pk=self.user.pk)
+        rf = RequestFactory()
+
+        class SimpleUserForm(forms.ModelForm):
+            class Meta:
+                model = admin_model
+                fields = ["username"]
+
+        user_fixture = (
+            self.data_dir
+            / f"{admin_model._meta.app_label}_{admin_model._meta.model_name}_{admin_user.pk}.json"
+        )
+
+        request = rf.post("/", {"_user_datum": "on"})
+        request.user = self.user
+        request.session = self.client.session
+        setattr(request, "_messages", FallbackStorage(request))
+        form = SimpleUserForm({"username": admin_user.username}, instance=admin_user)
+        self.assertTrue(form.is_valid())
+        user_admin.save_model(request, admin_user, form, True)
+        admin_user.refresh_from_db()
+        self.assertTrue(admin_user.is_user_data)
+        self.assertTrue(user_fixture.exists())
+
+        request = rf.post("/", {})
+        request.user = self.user
+        request.session = self.client.session
+        setattr(request, "_messages", FallbackStorage(request))
+        form = SimpleUserForm({"username": admin_user.username}, instance=admin_user)
+        self.assertTrue(form.is_valid())
+        user_admin.save_model(request, admin_user, form, True)
+        admin_user.refresh_from_db()
+        self.assertFalse(admin_user.is_user_data)
+        self.assertFalse(user_fixture.exists())
 
     def test_load_user_fixture_marks_user_data_flag(self):
         core_profile = CoreOdooProfile.objects.get(pk=self.profile.pk)
