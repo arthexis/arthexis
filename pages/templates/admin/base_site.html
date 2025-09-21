@@ -264,12 +264,41 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
     flex-wrap: nowrap;
 }
 
+.related-widget-wrapper > div {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .related-widget-wrapper input,
 .related-widget-wrapper select,
 .related-widget-wrapper textarea {
     flex: 1 1 auto;
     min-width: 0;
     width: auto !important;
+}
+
+.related-widget-wrapper .related-lookup {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    width: 2.25rem;
+    height: 2.25rem;
+    margin-left: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--button-bg);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 1rem;
+}
+
+.related-widget-wrapper .related-lookup:hover {
+    background-color: var(--button-hover-bg);
 }
 
 /* Ensure related object buttons match theme */
