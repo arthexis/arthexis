@@ -40,6 +40,7 @@ if git show-ref --verify --quiet "refs/remotes/upstream/${current_branch}"; then
   else
     echo "env-refresh.sh not found. Skipping environment refresh." >&2
   fi
+
 else
   echo "No matching upstream branch for ${current_branch}. Skipping pull."
 fi
