@@ -983,6 +983,24 @@ class PackageReleaseCurrentTests(TestCase):
         self.assertFalse(self.release.is_current)
 
 
+class PackageReleaseChangelistTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User.objects.create_superuser("admin", "admin@example.com", "pw")
+        self.client.force_login(User.objects.get(username="admin"))
+
+    def test_prepare_next_release_button_hidden(self):
+        response = self.client.get(reverse("admin:core_packagerelease_changelist"))
+        self.assertNotContains(response, "Prepare next Release")
+
+    def test_refresh_from_pypi_button_present(self):
+        response = self.client.get(reverse("admin:core_packagerelease_changelist"))
+        refresh_url = reverse(
+            "admin:core_packagerelease_actions", args=["refresh_from_pypi"]
+        )
+        self.assertContains(response, refresh_url, html=False)
+
+
 class PackageAdminPrepareNextReleaseTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
@@ -1001,24 +1019,18 @@ class PackageAdminPrepareNextReleaseTests(TestCase):
         )
 
 
-class PackageReleaseChangelistTests(TestCase):
+class PackageAdminChangeViewTests(TestCase):
     def setUp(self):
         self.client = Client()
         User.objects.create_superuser("admin", "admin@example.com", "pw")
         self.client.force_login(User.objects.get(username="admin"))
+        self.package = Package.objects.get(name="arthexis")
 
-    def test_prepare_next_release_button_present(self):
-        response = self.client.get(reverse("admin:core_packagerelease_changelist"))
-        self.assertContains(
-            response, reverse("admin:core_package_prepare_next_release"), html=False
+    def test_prepare_next_release_button_visible_on_change_view(self):
+        response = self.client.get(
+            reverse("admin:core_package_change", args=[self.package.pk])
         )
-
-    def test_refresh_from_pypi_button_present(self):
-        response = self.client.get(reverse("admin:core_packagerelease_changelist"))
-        refresh_url = reverse(
-            "admin:core_packagerelease_actions", args=["refresh_from_pypi"]
-        )
-        self.assertContains(response, refresh_url, html=False)
+        self.assertContains(response, "Prepare next Release")
 
 
 class TodoDoneTests(TestCase):

@@ -41,9 +41,6 @@
               {% if model.admin_url and show_changelinks %}
                 {% model_admin_actions app.app_label model.object_name as extra_actions %}
                 <td class="actions">
-                  {% if app.app_label == 'core' and model.object_name == 'Package' %}
-                    <a href="{% url 'admin:core_package_prepare_next_release' %}" class="actionlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">Prepare next Release</a>
-                  {% endif %}
                   {% for action in extra_actions %}
                     <a href="{{ action.url }}" class="actionlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{{ action.label }}</a>
                   {% endfor %}

@@ -346,7 +346,6 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "release_manager",
         "is_active",
     )
-    actions = ["prepare_next_release"]
     change_actions = ["prepare_next_release_action"]
 
     def _prepare(self, request, package):
@@ -402,13 +401,6 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             self.message_user(request, "No active package", messages.ERROR)
             return redirect("admin:core_package_changelist")
         return self._prepare(request, package)
-
-    @admin.action(description="Prepare next Release")
-    def prepare_next_release(self, request, queryset):
-        if queryset.count() != 1:
-            self.message_user(request, "Select exactly one package", messages.ERROR)
-            return
-        return self._prepare(request, queryset.first())
 
     def prepare_next_release_action(self, request, obj):
         return self._prepare(request, obj)
