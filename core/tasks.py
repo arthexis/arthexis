@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from datetime import UTC, datetime
 from pathlib import Path
 
 from celery import shared_task
@@ -58,7 +57,7 @@ def check_github_updates() -> None:
     log_file = log_dir / "auto-upgrade.log"
     with log_file.open("a") as fh:
         fh.write(
-            f"{datetime.now(UTC).isoformat()} check_github_updates triggered\n"
+            f"{timezone.now().isoformat()} check_github_updates triggered\n"
         )
 
     notify = None
@@ -72,7 +71,7 @@ def check_github_updates() -> None:
     except Exception:
         startup = None
 
-    upgrade_stamp = f"@{datetime.now(UTC).isoformat()}"
+    upgrade_stamp = f"@{timezone.now().isoformat()}"
 
     if mode == "latest":
         local = (
@@ -126,7 +125,7 @@ def check_github_updates() -> None:
 
     with log_file.open("a") as fh:
         fh.write(
-            f"{datetime.now(UTC).isoformat()} running: {' '.join(args)}\n"
+            f"{timezone.now().isoformat()} running: {' '.join(args)}\n"
         )
 
     subprocess.run(args, cwd=base_dir, check=True)
