@@ -71,7 +71,7 @@
                 "command": "${workspaceFolder}\\live-server-update.bat"
             },
             "problemMatcher": [],
-            "detail": "Stop the development server and sync with the upstream remote before launch"
+            "detail": "Stop the development server, sync with the upstream remote, and refresh the environment before launch"
         },
         {
             "label": "Dev: manage",

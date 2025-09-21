@@ -30,6 +30,17 @@ echo "Checking for upstream branch $current_branch..."
 if git show-ref --verify --quiet "refs/remotes/upstream/${current_branch}"; then
   echo "Pulling latest commits for ${current_branch}..."
   git pull --ff-only upstream "$current_branch"
+  REFRESH_SCRIPT="$REPO_ROOT/env-refresh.sh"
+  if [ -x "$REFRESH_SCRIPT" ]; then
+    echo "Refreshing environment with env-refresh.sh --latest..."
+    "$REFRESH_SCRIPT" --latest
+  elif [ -f "$REFRESH_SCRIPT" ]; then
+    echo "env-refresh.sh is not marked executable. Attempting to run with bash." >&2
+    bash "$REFRESH_SCRIPT" --latest
+  else
+    echo "env-refresh.sh not found. Skipping environment refresh." >&2
+  fi
+
 else
   echo "No matching upstream branch for ${current_branch}. Skipping pull."
 fi

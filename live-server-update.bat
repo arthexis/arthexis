@@ -1,6 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 
+set "SCRIPT_DIR=%~dp0"
+cd /d "%SCRIPT_DIR%"
+
 echo Stopping existing development server (if running)...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'manage.py runserver' } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -ErrorAction Stop } catch { } }" >nul 2>&1
 
@@ -35,6 +38,17 @@ git pull --ff-only upstream %BRANCH%
 if errorlevel 1 (
     echo Failed to pull from upstream.
     exit /b 1
+)
+
+if exist "%SCRIPT_DIR%env-refresh.bat" (
+    echo Refreshing environment with env-refresh.bat --latest...
+    call "%SCRIPT_DIR%env-refresh.bat" --latest
+    if errorlevel 1 (
+        echo Environment refresh failed.
+        exit /b 1
+    )
+) else (
+    echo env-refresh.bat not found. Skipping environment refresh.
 )
 
 exit /b 0
