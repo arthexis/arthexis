@@ -1,6 +1,7 @@
 import ast
 import inspect
 import textwrap
+from pathlib import Path
 
 from django import template
 from django.apps import apps
@@ -8,6 +9,7 @@ from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
 from django.db.models import Model
+from django.conf import settings
 from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
 
@@ -290,3 +292,19 @@ def future_action_items(context):
         ]
 
     return {"models": model_items, "todos": todos}
+
+
+@register.simple_tag(takes_context=True)
+def celery_feature_enabled(context) -> bool:
+    """Return ``True`` when Celery support is enabled for the current node."""
+
+    node = context.get("badge_node")
+    if node is not None and hasattr(node, "has_feature"):
+        try:
+            if node.has_feature("celery-queue"):
+                return True
+        except Exception:  # pragma: no cover - defensive
+            pass
+
+    lock_path = Path(settings.BASE_DIR) / "locks" / "celery.lck"
+    return lock_path.exists()

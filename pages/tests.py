@@ -336,6 +336,56 @@ class AdminBadgesTests(TestCase):
         self.assertContains(resp, f'href="{node_change}"')
 
 
+class AdminDashboardAppListTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="dashboard_admin", password="pwd", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "test", "domain": "testserver"}
+        )
+        self.locks_dir = Path(settings.BASE_DIR) / "locks"
+        self.locks_dir.mkdir(parents=True, exist_ok=True)
+        self.celery_lock = self.locks_dir / "celery.lck"
+        if self.celery_lock.exists():
+            self.celery_lock.unlink()
+        self.addCleanup(self._remove_celery_lock)
+        self.node, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": socket.gethostname(),
+                "address": socket.gethostbyname(socket.gethostname()),
+                "base_path": settings.BASE_DIR,
+                "port": 8000,
+            },
+        )
+        self.node.features.clear()
+
+    def _remove_celery_lock(self):
+        try:
+            self.celery_lock.unlink()
+        except FileNotFoundError:
+            pass
+
+    def test_horologia_hidden_without_celery_feature(self):
+        resp = self.client.get(reverse("admin:index"))
+        self.assertNotContains(resp, "5. Horologia MODELS")
+
+    def test_horologia_visible_with_celery_feature(self):
+        feature = NodeFeature.objects.create(slug="celery-queue", display="Celery Queue")
+        NodeFeatureAssignment.objects.create(node=self.node, feature=feature)
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, "5. Horologia MODELS")
+
+    def test_horologia_visible_with_celery_lock(self):
+        self.celery_lock.write_text("")
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, "5. Horologia MODELS")
+
+
 class AdminSidebarTests(TestCase):
     def setUp(self):
         self.client = Client()
