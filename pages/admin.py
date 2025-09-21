@@ -32,6 +32,11 @@ from .models import (
 from django.contrib.contenttypes.models import ContentType
 from core.user_data import EntityModelAdmin
 
+from .site_badge_defaults import ensure_site_default_badge_color_field
+
+
+ensure_site_default_badge_color_field()
+
 
 def get_local_app_choices():
     choices = []
@@ -58,13 +63,14 @@ class SiteForm(forms.ModelForm):
     class Meta:
         model = Site
         fields = "__all__"
+        widgets = {"default_badge_color": CopyColorWidget}
 
 
 class SiteAdmin(DjangoSiteAdmin):
     form = SiteForm
     inlines = [SiteBadgeInline]
     change_list_template = "admin/sites/site/change_list.html"
-    fields = ("domain", "name")
+    fields = ("domain", "name", "default_badge_color")
     list_display = ("domain", "name")
     actions = ["capture_screenshot"]
 

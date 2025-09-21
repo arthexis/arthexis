@@ -1,8 +1,26 @@
 import socket
 
-from django.contrib.sites.models import Site
-from django.http import HttpRequest
 from django.conf import settings
+from django.contrib.sites.models import Site
+from django.core.exceptions import ObjectDoesNotExist
+from django.http import HttpRequest
+
+from pages.site_badge_defaults import (
+    DEFAULT_SITE_BADGE_COLOR,
+    ROUTER_BADGE_COLOR,
+    ROUTER_DOMAINS,
+    ROUTER_NAMES,
+    ensure_site_default_badge_color_field,
+)
+
+
+def _is_router_site(site: Site | None) -> bool:
+    if not site:
+        return False
+
+    name = (site.name or "").strip().lower()
+    domain = (site.domain or "").strip().lower()
+    return name in ROUTER_NAMES or domain in ROUTER_DOMAINS
 
 
 def site_and_node(request: HttpRequest):
@@ -13,7 +31,10 @@ def site_and_node(request: HttpRequest):
     ``badge_node`` is a ``Node`` instance or ``None`` if no match.
     ``badge_site_color`` and ``badge_node_color`` provide the configured colors.
     """
+    ensure_site_default_badge_color_field()
+
     host = request.get_host().split(":")[0]
+    normalized_host = host.strip().lower()
     site = Site.objects.filter(domain__iexact=host).first()
 
     node = None
@@ -42,12 +63,29 @@ def site_and_node(request: HttpRequest):
     except Exception:
         node = None
 
-    site_color = "#28a745"
+    router_site = _is_router_site(site)
+    default_color = DEFAULT_SITE_BADGE_COLOR
+    if site:
+        try:
+            default_color = site.default_badge_color or DEFAULT_SITE_BADGE_COLOR
+        except AttributeError:
+            default_color = DEFAULT_SITE_BADGE_COLOR
+        except Exception:
+            default_color = DEFAULT_SITE_BADGE_COLOR
+
+        if router_site and default_color == DEFAULT_SITE_BADGE_COLOR:
+            default_color = ROUTER_BADGE_COLOR
+    elif normalized_host in ROUTER_DOMAINS:
+        default_color = ROUTER_BADGE_COLOR
+
+    site_color = default_color
     if site:
         try:
             site_color = site.badge.badge_color
+        except ObjectDoesNotExist:
+            site_color = default_color
         except Exception:
-            pass
+            site_color = default_color
 
     node_color = "#28a745"
     if node:
