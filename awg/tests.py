@@ -1,9 +1,18 @@
+from datetime import time
+from decimal import Decimal
+
 from django.test import TestCase
 from django.urls import reverse
 from pathlib import Path
 from unittest.mock import patch
 
-from .models import CableSize, ConduitFill, CalculatorTemplate, PowerLead
+from .models import (
+    CableSize,
+    ConduitFill,
+    CalculatorTemplate,
+    EnergyTariff,
+    PowerLead,
+)
 
 
 class AWGCalculatorTests(TestCase):
@@ -327,3 +336,69 @@ class CalculatorTemplateTests(TestCase):
 
         self.assertIn((2, "AC Two Phases (2)"), form.fields["phases"].choices)
         self.assertEqual(form.fields["ground"].choices, [(1, "1"), (0, "0")])
+
+
+class EnergyTariffCalculatorTests(TestCase):
+    def setUp(self):
+        self.tariff = EnergyTariff.objects.create(
+            year=2025,
+            season=EnergyTariff.Season.SUMMER,
+            zone="1C",
+            contract_type=EnergyTariff.ContractType.DOMESTIC,
+            period=EnergyTariff.Period.BASIC,
+            unit=EnergyTariff.Unit.KWH,
+            start_time=time(0, 0),
+            end_time=time(23, 59, 59),
+            price_mxn=Decimal("0.8062"),
+            cost_mxn=Decimal("0.6000"),
+            notes="Residential summer block",
+        )
+        EnergyTariff.objects.create(
+            year=2025,
+            season=EnergyTariff.Season.SUMMER,
+            zone="1C",
+            contract_type=EnergyTariff.ContractType.DOMESTIC,
+            period=EnergyTariff.Period.BASIC,
+            unit=EnergyTariff.Unit.KW,
+            start_time=time(0, 0),
+            end_time=time(23, 59, 59),
+            price_mxn=Decimal("3.0000"),
+            cost_mxn=Decimal("2.5000"),
+            notes="Demand charge",
+        )
+
+    def test_page_lists_only_kwh_tariffs(self):
+        resp = self.client.get(reverse("awg:energy_tariff"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Energy Tariff Calculator")
+        self.assertEqual(len(resp.context["tariff_options"]), 1)
+        self.assertIn("0.8062", resp.content.decode())
+
+    def test_calculates_estimated_bill(self):
+        data = {
+            "kwh": "150",
+            "year": "2025",
+            "contract_type": self.tariff.contract_type,
+            "zone": self.tariff.zone,
+            "season": self.tariff.season,
+            "period": self.tariff.period,
+            "tariff": str(self.tariff.pk),
+        }
+        resp = self.client.post(reverse("awg:energy_tariff"), data)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Estimated Bill")
+        self.assertContains(resp, "$120.93 MXN")
+        self.assertContains(resp, "Residential summer block")
+
+    def test_invalid_kwh_shows_error(self):
+        data = {
+            "kwh": "-5",
+            "year": "2025",
+            "contract_type": self.tariff.contract_type,
+            "zone": self.tariff.zone,
+            "season": self.tariff.season,
+            "period": self.tariff.period,
+            "tariff": str(self.tariff.pk),
+        }
+        resp = self.client.post(reverse("awg:energy_tariff"), data)
+        self.assertContains(resp, "greater than zero")

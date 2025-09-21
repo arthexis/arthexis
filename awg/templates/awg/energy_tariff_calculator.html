@@ -1,0 +1,119 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+{% block title %}{% trans "Energy Tariff Calculator" %}{% endblock %}
+{% block content %}
+<h1>{% trans "Energy Tariff Calculator" %}</h1>
+<form method="post" id="energy-tariff-calculator">
+  {% csrf_token %}
+  <div class="row g-4 mb-3">
+    <div class="col-lg-4">
+      <div class="mb-3">
+        <label class="form-label" for="kwh">{% trans "Consumption (kWh):" %}</label>
+        <input id="kwh" type="number" step="0.01" min="0.01" class="form-control" name="kwh" required value="{{ form.kwh }}" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="year">{% trans "Year:" %}</label>
+        <select id="year" name="year" class="form-select">
+          {% for year in years %}
+          <option value="{{ year }}" {% if form.year == year|stringformat:"s" %}selected{% endif %}>{{ year }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="contract_type">{% trans "Contract type:" %}</label>
+        <select id="contract_type" name="contract_type" class="form-select">
+          <option value="" {% if not form.contract_type %}selected{% endif %}>{% trans "All contract types" %}</option>
+          {% for option in contract_options %}
+          <option value="{{ option.value }}" {% if form.contract_type == option.value %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="mb-3">
+        <label class="form-label" for="zone">{% trans "Climate zone:" %}</label>
+        <select id="zone" name="zone" class="form-select">
+          <option value="" {% if not form.zone %}selected{% endif %}>{% trans "All climate zones" %}</option>
+          {% for zone in zone_options %}
+          <option value="{{ zone }}" {% if form.zone == zone %}selected{% endif %}>{{ zone }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="season">{% trans "Season:" %}</label>
+        <select id="season" name="season" class="form-select">
+          <option value="" {% if not form.season %}selected{% endif %}>{% trans "All seasons" %}</option>
+          {% for option in season_options %}
+          <option value="{{ option.value }}" {% if form.season == option.value %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="period">{% trans "Billing period:" %}</label>
+        <select id="period" name="period" class="form-select">
+          <option value="" {% if not form.period %}selected{% endif %}>{% trans "All billing periods" %}</option>
+          {% for option in period_options %}
+          <option value="{{ option.value }}" {% if form.period == option.value %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="tariff">{% trans "Tariff window:" %}</label>
+        <select id="tariff" name="tariff" class="form-select" {% if not tariff_options %}disabled{% endif %}>
+          {% for option in tariff_options %}
+          <option value="{{ option.id }}" {% if form.tariff == option.id %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+        <small class="text-muted d-block mt-1">
+          {% blocktrans trimmed count count=tariff_options|length %}
+            {{ count }} tariff available
+          {% plural %}
+            {{ count }} tariffs available
+          {% endblocktrans %}
+        </small>
+      </div>
+    </div>
+    <div class="col-lg-4 d-flex flex-column{% if result or error or no_tariffs %} order-first order-lg-last{% endif %}">
+      {% if not result and not error and not no_tariffs %}
+      <div class="mb-3">
+        <button type="submit" class="btn btn-primary w-100 fs-4">{% trans "Calculate" %}</button>
+      </div>
+      <p class="text-muted">{% trans "Select a CFE tariff and enter your expected kWh consumption to estimate the energy bill in MXN." %}</p>
+      {% else %}
+      {% if error %}
+      <p class="text-danger">{{ error }}</p>
+      {% elif no_tariffs %}
+      <p class="text-warning">{% trans "No tariffs match the selected filters. Try expanding your search." %}</p>
+      {% elif result %}
+      <div class="calc-result">
+        <h2>{% trans "Estimated Bill" %}</h2>
+        <table class="table table-sm">
+          <tbody>
+            <tr><th>{% trans "Tariff" %}</th><td>{{ result.tariff }}</td></tr>
+            <tr><th>{% trans "Year" %}</th><td>{{ result.tariff.year }}</td></tr>
+            <tr><th>{% trans "Contract type" %}</th><td>{{ result.tariff.get_contract_type_display }}</td></tr>
+            <tr><th>{% trans "Climate zone" %}</th><td>{{ result.tariff.zone }}</td></tr>
+            <tr><th>{% trans "Season" %}</th><td>{{ result.tariff.get_season_display }}</td></tr>
+            <tr><th>{% trans "Billing period" %}</th><td>{{ result.tariff.get_period_display }}</td></tr>
+            <tr><th>{% trans "Time window" %}</th><td>{{ result.tariff.start_time|time:"H:i" }} &ndash; {{ result.tariff.end_time|time:"H:i" }}</td></tr>
+            <tr><th>{% trans "Unit price" %}</th><td>${{ result.unit_price|floatformat:4 }} MXN/kWh</td></tr>
+            <tr><th>{% trans "Unit cost" %}</th><td>${{ result.unit_cost|floatformat:4 }} MXN/kWh</td></tr>
+            <tr><th>{% trans "Consumption" %}</th><td>{{ result.kwh|floatformat:2 }} kWh</td></tr>
+            <tr><th>{% trans "Estimated bill" %}</th><td>${{ result.total_price|floatformat:2 }} MXN</td></tr>
+            <tr><th>{% trans "Provider cost" %}</th><td>${{ result.total_cost|floatformat:2 }} MXN</td></tr>
+            <tr><th>{% trans "Gross margin" %}</th><td>${{ result.margin_total|floatformat:2 }} MXN</td></tr>
+          </tbody>
+        </table>
+        {% if result.tariff.notes %}
+        <p class="small text-muted">{{ result.tariff.notes }}</p>
+        {% endif %}
+      </div>
+      {% endif %}
+      <div class="mt-auto mb-3">
+        <button type="submit" class="btn btn-primary w-100 fs-4">{% trans "Calculate Again" %}</button>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</form>
+{% endblock %}
