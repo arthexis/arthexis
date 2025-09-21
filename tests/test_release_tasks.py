@@ -65,16 +65,17 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
 
     assert any(
         subject == "Upgrading..."
-        and body.startswith("@")
-        and _is_iso_datetime(body[1:])
+        and _is_lcd_timestamp(body)
         for subject, body in notify_calls
     )
     assert any("upgrade.sh" in cmd[0] for cmd in run_calls)
 
 
-def _is_iso_datetime(candidate: str) -> bool:
+def _is_lcd_timestamp(candidate: str) -> bool:
+    if len(candidate) > 16:
+        return False
     try:
-        datetime.fromisoformat(candidate)
+        datetime.strptime(candidate, "@%Y%m%d %H%M%S")
     except ValueError:
         return False
     return True
