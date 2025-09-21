@@ -138,6 +138,33 @@ cleanup() {
 trap cleanup EXIT
 
 RPI_TARBALL="$WORK_ROOT/rpi-image-gen.tar.gz"
+device_layer_exists() {
+  local layer_name="$1"
+  local base_dir="$RPI_DIR/device"
+
+  if [[ -d "$base_dir/$layer_name" ]]; then
+    for candidate in device layer; do
+      if [[ -f "$base_dir/$layer_name/${candidate}.yaml" ]]; then
+        return 0
+      fi
+    done
+    if compgen -G "$base_dir/$layer_name/"'*.yaml' >/dev/null; then
+      return 0
+    fi
+  fi
+
+  if [[ -f "$base_dir/$layer_name.yaml" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
+if [[ -d "$RPI_DIR" ]] && ! device_layer_exists "$DEVICE_LAYER"; then
+  echo "Refreshing cached rpi-image-gen sources (missing device layer '$DEVICE_LAYER')."
+  rm -rf "$RPI_DIR"
+fi
+
 if [[ ! -d "$RPI_DIR" ]]; then
   echo "Fetching rpi-image-gen..."
   rm -f "$RPI_TARBALL"
@@ -145,6 +172,10 @@ if [[ ! -d "$RPI_DIR" ]]; then
   rm -rf "$WORK_ROOT/rpi-image-gen-master"
   tar -xzf "$RPI_TARBALL" -C "$WORK_ROOT"
   mv "$WORK_ROOT/rpi-image-gen-master" "$RPI_DIR"
+fi
+
+if ! device_layer_exists "$DEVICE_LAYER"; then
+  error "Device layer '$DEVICE_LAYER' not found in rpi-image-gen repository at $RPI_DIR."
 fi
 
 ensure_dependencies() {
