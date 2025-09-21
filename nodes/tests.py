@@ -156,6 +156,118 @@ class NodeTests(TestCase):
         node.refresh_from_db()
         self.assertFalse(node.has_feature("clipboard-poll"))
 
+    def test_register_node_records_version_details(self):
+        url = reverse("register-node")
+        payload = {
+            "hostname": "versioned",
+            "address": "127.0.0.5",
+            "port": 8100,
+            "mac_address": "aa:bb:cc:dd:ee:10",
+            "installed_version": "2.0.1",
+            "installed_revision": "rev-abcdef",
+        }
+        response = self.client.post(
+            url, data=json.dumps(payload), content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        node = Node.objects.get(mac_address="aa:bb:cc:dd:ee:10")
+        self.assertEqual(node.installed_version, "2.0.1")
+        self.assertEqual(node.installed_revision, "rev-abcdef")
+
+        update_payload = {
+            **payload,
+            "installed_version": "2.1.0",
+            "installed_revision": "rev-fedcba",
+        }
+        second = self.client.post(
+            url, data=json.dumps(update_payload), content_type="application/json"
+        )
+        self.assertEqual(second.status_code, 200)
+        node.refresh_from_db()
+        self.assertEqual(node.installed_version, "2.1.0")
+        self.assertEqual(node.installed_revision, "rev-fedcba")
+
+    def test_register_node_update_triggers_notification(self):
+        node = Node.objects.create(
+            hostname="friend",
+            address="10.1.1.5",
+            port=8123,
+            mac_address="aa:bb:cc:dd:ee:01",
+            installed_version="1.0.0",
+            installed_revision="rev-old",
+        )
+        url = reverse("register-node")
+        payload = {
+            "hostname": "friend",
+            "address": "10.1.1.5",
+            "port": 8123,
+            "mac_address": "aa:bb:cc:dd:ee:01",
+            "installed_version": "2.0.0",
+            "installed_revision": "abcdef123456",
+        }
+        with patch("nodes.models.notify_async") as mock_notify:
+            response = self.client.post(
+                url, data=json.dumps(payload), content_type="application/json"
+            )
+        self.assertEqual(response.status_code, 200)
+        node.refresh_from_db()
+        self.assertEqual(node.installed_version, "2.0.0")
+        self.assertEqual(node.installed_revision, "abcdef123456")
+        mock_notify.assert_called_once()
+        subject, body = mock_notify.call_args[0]
+        self.assertEqual(subject, "UP friend")
+        self.assertEqual(body, "v2.0.0 r123456")
+
+    def test_register_node_update_without_version_change_still_notifies(self):
+        node = Node.objects.create(
+            hostname="friend",
+            address="10.1.1.5",
+            port=8123,
+            mac_address="aa:bb:cc:dd:ee:02",
+            installed_version="2.0.0",
+            installed_revision="abcdef123456",
+        )
+        url = reverse("register-node")
+        payload = {
+            "hostname": "friend",
+            "address": "10.1.1.5",
+            "port": 8123,
+            "mac_address": "aa:bb:cc:dd:ee:02",
+            "installed_version": "2.0.0",
+            "installed_revision": "abcdef123456",
+        }
+        with patch("nodes.models.notify_async") as mock_notify:
+            response = self.client.post(
+                url, data=json.dumps(payload), content_type="application/json"
+            )
+        self.assertEqual(response.status_code, 200)
+        node.refresh_from_db()
+        mock_notify.assert_called_once()
+        subject, body = mock_notify.call_args[0]
+        self.assertEqual(subject, "UP friend")
+        self.assertEqual(body, "v2.0.0 r123456")
+
+    def test_register_node_creation_triggers_notification(self):
+        url = reverse("register-node")
+        payload = {
+            "hostname": "newbie",
+            "address": "10.1.1.6",
+            "port": 8124,
+            "mac_address": "aa:bb:cc:dd:ee:03",
+            "installed_version": "3.0.0",
+            "installed_revision": "rev-1234567890",
+        }
+        with patch("nodes.models.notify_async") as mock_notify:
+            response = self.client.post(
+                url, data=json.dumps(payload), content_type="application/json"
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Node.objects.filter(mac_address="aa:bb:cc:dd:ee:03").exists())
+        mock_notify.assert_called_once()
+        subject, body = mock_notify.call_args[0]
+        self.assertEqual(subject, "UP newbie")
+        self.assertEqual(body, "v3.0.0 r567890")
+
     def test_register_node_sets_cors_headers(self):
         payload = {
             "hostname": "cors",
@@ -265,6 +377,26 @@ class NodeRegisterCurrentTests(TestCase):
         self.client.force_login(self.user)
         NodeRole.objects.get_or_create(name="Terminal")
 
+    def test_register_current_notifies_peers_on_start(self):
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with override_settings(BASE_DIR=base):
+                with (
+                    patch(
+                        "nodes.models.Node.get_current_mac",
+                        return_value="00:ff:ee:dd:cc:bb",
+                    ),
+                    patch("nodes.models.socket.gethostname", return_value="testhost"),
+                    patch(
+                        "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
+                    ),
+                    patch("nodes.models.revision.get_revision", return_value="rev"),
+                    patch.object(Node, "ensure_keys"),
+                    patch.object(Node, "notify_peers_of_update") as mock_notify,
+                ):
+                    Node.register_current()
+        mock_notify.assert_called_once()
+
     def test_register_current_refreshes_lcd_feature(self):
         NodeFeature.objects.get_or_create(
             slug="lcd-screen", defaults={"display": "LCD Screen"}
@@ -329,6 +461,94 @@ class NodeRegisterCurrentTests(TestCase):
             self.assertFalse(created3)
             node.refresh_from_db()
             self.assertTrue(node.has_feature("lcd-screen"))
+
+    def test_register_current_notifies_peers_on_version_upgrade(self):
+        remote = Node.objects.create(
+            hostname="remote",
+            address="10.0.0.2",
+            port=9100,
+            mac_address="aa:bb:cc:dd:ee:ff",
+        )
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / "VERSION").write_text("2.0.0")
+            with override_settings(BASE_DIR=base):
+                with (
+                    patch(
+                        "nodes.models.Node.get_current_mac",
+                        return_value="00:ff:ee:dd:cc:bb",
+                    ),
+                    patch("nodes.models.socket.gethostname", return_value="localnode"),
+                    patch(
+                        "nodes.models.socket.gethostbyname",
+                        return_value="192.168.1.5",
+                    ),
+                    patch("nodes.models.revision.get_revision", return_value="newrev"),
+                    patch("requests.post") as mock_post,
+                ):
+                    Node.objects.create(
+                        hostname="localnode",
+                        address="192.168.1.5",
+                        port=8000,
+                        mac_address="00:ff:ee:dd:cc:bb",
+                        installed_version="1.9.0",
+                        installed_revision="oldrev",
+                    )
+                    mock_post.return_value = SimpleNamespace(
+                        ok=True, status_code=200, text=""
+                    )
+                    node, created = Node.register_current()
+        self.assertFalse(created)
+        self.assertGreaterEqual(mock_post.call_count, 1)
+        args, kwargs = mock_post.call_args
+        self.assertIn(str(remote.port), args[0])
+        payload = json.loads(kwargs["data"])
+        self.assertEqual(payload["hostname"], "localnode")
+        self.assertEqual(payload["installed_version"], "2.0.0")
+        self.assertEqual(payload["installed_revision"], "newrev")
+
+    def test_register_current_notifies_peers_without_version_change(self):
+        Node.objects.create(
+            hostname="remote",
+            address="10.0.0.3",
+            port=9200,
+            mac_address="aa:bb:cc:dd:ee:11",
+        )
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / "VERSION").write_text("1.0.0")
+            with override_settings(BASE_DIR=base):
+                with (
+                    patch(
+                        "nodes.models.Node.get_current_mac",
+                        return_value="00:ff:ee:dd:cc:cc",
+                    ),
+                    patch("nodes.models.socket.gethostname", return_value="samever"),
+                    patch(
+                        "nodes.models.socket.gethostbyname",
+                        return_value="192.168.1.6",
+                    ),
+                    patch("nodes.models.revision.get_revision", return_value="rev1"),
+                    patch("requests.post") as mock_post,
+                ):
+                    Node.objects.create(
+                        hostname="samever",
+                        address="192.168.1.6",
+                        port=8000,
+                        mac_address="00:ff:ee:dd:cc:cc",
+                        installed_version="1.0.0",
+                        installed_revision="rev1",
+                    )
+                    mock_post.return_value = SimpleNamespace(
+                        ok=True, status_code=200, text=""
+                    )
+                    Node.register_current()
+        self.assertEqual(mock_post.call_count, 1)
+        args, kwargs = mock_post.call_args
+        self.assertIn("/nodes/register/", args[0])
+        payload = json.loads(kwargs["data"])
+        self.assertEqual(payload["installed_version"], "1.0.0")
+        self.assertEqual(payload.get("installed_revision"), "rev1")
 
     @patch("nodes.views.capture_screenshot")
     def test_capture_screenshot(self, mock_capture):

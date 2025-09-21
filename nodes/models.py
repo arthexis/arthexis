@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from django.db import models
 from django.db.models.signals import post_delete
-from django.dispatch import receiver
+from django.dispatch import Signal, receiver
 from core.entity import Entity
 from core.models import Profile
 from core.fields import SigilShortAutoField
@@ -19,6 +19,7 @@ import stat
 import subprocess
 from pathlib import Path
 from utils import revision
+from core.notifications import notify_async
 from django.core.exceptions import ValidationError
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
@@ -235,7 +236,111 @@ class Node(Entity):
                 node.save(update_fields=["role"])
         Site.objects.get_or_create(domain=hostname, defaults={"name": "host"})
         node.ensure_keys()
+        node.notify_peers_of_update()
         return node, created
+
+    def notify_peers_of_update(self):
+        """Attempt to update this node's registration with known peers."""
+
+        from secrets import token_hex
+
+        try:
+            import requests
+        except Exception:  # pragma: no cover - requests should be available
+            return
+
+        security_dir = Path(self.base_path or settings.BASE_DIR) / "security"
+        priv_path = security_dir / f"{self.public_endpoint}"
+        if not priv_path.exists():
+            logger.debug("Private key for %s not found; skipping peer update", self)
+            return
+        try:
+            private_key = serialization.load_pem_private_key(
+                priv_path.read_bytes(), password=None
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Failed to load private key for %s: %s", self, exc)
+            return
+        token = token_hex(16)
+        try:
+            signature = private_key.sign(
+                token.encode(),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Failed to sign peer update for %s: %s", self, exc)
+            return
+
+        payload = {
+            "hostname": self.hostname,
+            "address": self.address,
+            "port": self.port,
+            "mac_address": self.mac_address,
+            "public_key": self.public_key,
+            "token": token,
+            "signature": base64.b64encode(signature).decode(),
+        }
+        if self.installed_version:
+            payload["installed_version"] = self.installed_version
+        if self.installed_revision:
+            payload["installed_revision"] = self.installed_revision
+
+        payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        headers = {"Content-Type": "application/json"}
+
+        peers = Node.objects.exclude(pk=self.pk)
+        for peer in peers:
+            host_candidates: list[str] = []
+            if peer.address:
+                host_candidates.append(peer.address)
+            if peer.hostname and peer.hostname not in host_candidates:
+                host_candidates.append(peer.hostname)
+            port = peer.port or 8000
+            urls: list[str] = []
+            for host in host_candidates:
+                host = host.strip()
+                if not host:
+                    continue
+                if ":" in host and not host.startswith("["):
+                    host = f"[{host}]"
+                http_url = (
+                    f"http://{host}/nodes/register/"
+                    if port == 80
+                    else f"http://{host}:{port}/nodes/register/"
+                )
+                https_url = (
+                    f"https://{host}/nodes/register/"
+                    if port in {80, 443}
+                    else f"https://{host}:{port}/nodes/register/"
+                )
+                for url in (https_url, http_url):
+                    if url not in urls:
+                        urls.append(url)
+            if not urls:
+                continue
+            for url in urls:
+                try:
+                    response = requests.post(
+                        url, data=payload_json, headers=headers, timeout=2
+                    )
+                except Exception as exc:  # pragma: no cover - best effort
+                    logger.debug("Failed to update %s via %s: %s", peer, url, exc)
+                    continue
+                if response.ok:
+                    version_display = _format_upgrade_body(
+                        self.installed_version,
+                        self.installed_revision,
+                    )
+                    version_suffix = f" ({version_display})" if version_display else ""
+                    logger.info(
+                        "Announced startup to %s%s",
+                        peer,
+                        version_suffix,
+                    )
+                    break
+            else:
+                logger.warning("Unable to notify node %s of startup", peer)
 
     def ensure_keys(self):
         security_dir = Path(settings.BASE_DIR) / "security"
@@ -524,6 +629,52 @@ class Node(Entity):
             outbox=outbox,
             **kwargs,
         )
+
+
+node_information_updated = Signal()
+
+
+def _format_upgrade_body(version: str, revision: str) -> str:
+    version = (version or "").strip()
+    revision = (revision or "").strip()
+    parts: list[str] = []
+    if version:
+        normalized = version.lstrip("vV") or version
+        parts.append(f"v{normalized}")
+    if revision:
+        rev_clean = re.sub(r"[^0-9A-Za-z]", "", revision)
+        rev_short = (rev_clean[-6:] if rev_clean else revision[-6:])
+        parts.append(f"r{rev_short}")
+    return " ".join(parts).strip()
+
+
+@receiver(node_information_updated)
+def _announce_peer_startup(
+    sender,
+    *,
+    node: "Node",
+    previous_version: str = "",
+    previous_revision: str = "",
+    current_version: str = "",
+    current_revision: str = "",
+    **_: object,
+) -> None:
+    current_version = (current_version or "").strip()
+    current_revision = (current_revision or "").strip()
+    previous_version = (previous_version or "").strip()
+    previous_revision = (previous_revision or "").strip()
+
+    local = Node.get_local()
+    if local and node.pk == local.pk:
+        return
+
+    body = _format_upgrade_body(current_version, current_revision)
+    if not body:
+        body = "Online"
+
+    hostname = (node.hostname or "Node").strip() or "Node"
+    subject = f"UP {hostname}"
+    notify_async(subject, body)
 
 
 class NodeFeatureAssignment(Entity):
