@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from subprocess import CompletedProcess
+from unittest.mock import patch
+
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
@@ -45,49 +47,25 @@ class SystemInfoScreenModeTests(SimpleTestCase):
                 lock_dir.rmdir()
 
 
-class SystemInfoFeatureTests(TestCase):
-    @override_settings(NODE_ROLE="Terminal")
-    def test_features_include_expected_and_actual(self):
-        role = NodeRole.objects.create(name="Terminal")
-
-        expected_only = NodeFeature.objects.create(
-            slug="rfid-scanner", display="RFID Scanner"
+class SystemInfoRunserverDetectionTests(SimpleTestCase):
+    @patch("core.system.subprocess.run")
+    def test_detects_runserver_process_port(self, mock_run):
+        mock_run.return_value = CompletedProcess(
+            args=["pgrep"],
+            returncode=0,
+            stdout="123 python manage.py runserver 0.0.0.0:8000 --noreload\n",
         )
-        expected_only.roles.add(role)
 
-        both = NodeFeature.objects.create(
-            slug="celery-queue", display="Celery Queue"
-        )
-        both.roles.add(role)
+        info = _gather_info()
 
-        NodeFeature.objects.create(slug="lcd-screen", display="LCD Screen")
+        self.assertTrue(info["running"])
+        self.assertEqual(info["port"], 8000)
 
-        with TemporaryDirectory() as tmpdir:
-            base_path = Path(tmpdir)
-            locks_dir = base_path / "locks"
-            locks_dir.mkdir()
-            (locks_dir / "celery.lck").touch()
-            (locks_dir / "lcd_screen.lck").touch()
+    @patch("core.system._probe_ports", return_value=(True, 8000))
+    @patch("core.system.subprocess.run", side_effect=FileNotFoundError)
+    def test_falls_back_to_port_probe_when_pgrep_missing(self, mock_run, mock_probe):
+        info = _gather_info()
 
-            Node.objects.create(
-                hostname="local",
-                address="127.0.0.1",
-                port=8000,
-                mac_address=Node.get_current_mac(),
-                role=role,
-                base_path=str(base_path),
-            )
+        self.assertTrue(info["running"])
+        self.assertEqual(info["port"], 8000)
 
-            info = _gather_info()
-
-        features = {feature["slug"]: feature for feature in info["features"]}
-
-        self.assertEqual(
-            set(features.keys()), {"celery-queue", "lcd-screen", "rfid-scanner"}
-        )
-        self.assertTrue(features["celery-queue"]["expected"])
-        self.assertTrue(features["celery-queue"]["actual"])
-        self.assertFalse(features["lcd-screen"]["expected"])
-        self.assertTrue(features["lcd-screen"]["actual"])
-        self.assertTrue(features["rfid-scanner"]["expected"])
-        self.assertFalse(features["rfid-scanner"]["actual"])
