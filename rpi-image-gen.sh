@@ -1220,6 +1220,16 @@ SERVICE_NAME="arthexis"
 if [ -r "$ARTHEXIS_HOME/locks/service.lck" ]; then
   SERVICE_NAME="$(head -n1 "$ARTHEXIS_HOME/locks/service.lck")"
 fi
+NETWORK_SETUP_SCRIPT="$ARTHEXIS_HOME/network-setup.sh"
+if [ -x "$NETWORK_SETUP_SCRIPT" ]; then
+  echo "Running Arthexis network setup via $NETWORK_SETUP_SCRIPT"
+  if ! "$NETWORK_SETUP_SCRIPT"; then
+    echo "Arthexis network setup failed" >&2
+    exit 1
+  fi
+else
+  echo "Network setup script not found at $NETWORK_SETUP_SCRIPT" >&2
+fi
 declare -a units=("redis-server" "nginx" "NetworkManager" "ssh" "$SERVICE_NAME")
 if [ -f "$ARTHEXIS_HOME/locks/celery.lck" ]; then
   units+=("celery-$SERVICE_NAME" "celery-beat-$SERVICE_NAME")
