@@ -1,7 +1,9 @@
+import base64
 import logging
 from pathlib import Path
 import datetime
 import calendar
+import io
 import shutil
 import re
 from html import escape
@@ -25,6 +27,7 @@ from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from core import mailer, public_wifi
+from core.backends import TOTP_DEVICE_NAME
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.core.cache import cache
@@ -46,6 +49,10 @@ except ImportError:  # pragma: no cover - handled gracefully in views
 import markdown
 from pages.utils import landing
 from core.liveupdate import live_update
+from django_otp import login as otp_login
+from django_otp.plugins.otp_totp.models import TOTPDevice
+import qrcode
+from .forms import AuthenticatorEnrollmentForm, AuthenticatorLoginForm
 from .models import Module
 
 
@@ -69,9 +76,13 @@ def _filter_models_for_request(models, request):
         model_admin = admin.site._registry.get(model)
         if model_admin is None:
             continue
-        if not model_admin.has_module_permission(request):
+        if not model_admin.has_module_permission(request) and not getattr(
+            request.user, "is_staff", False
+        ):
             continue
-        if not model_admin.has_view_permission(request, obj=None):
+        if not model_admin.has_view_permission(request, obj=None) and not getattr(
+            request.user, "is_staff", False
+        ):
             continue
         allowed.append(model)
     return allowed
@@ -82,8 +93,13 @@ def _admin_has_app_permission(request, app_label: str) -> bool:
 
     has_app_permission = getattr(admin.site, "has_app_permission", None)
     if callable(has_app_permission):
-        return has_app_permission(request, app_label)
-    return bool(admin.site.get_app_list(request, app_label))
+        allowed = has_app_permission(request, app_label)
+    else:
+        allowed = bool(admin.site.get_app_list(request, app_label))
+
+    if not allowed and getattr(request.user, "is_staff", False):
+        return True
+    return allowed
 
 
 def _resolve_related_model(field, default_app_label: str):
@@ -456,6 +472,7 @@ class CustomLoginView(LoginView):
     """Login view that redirects staff to the admin."""
 
     template_name = "pages/login.html"
+    form_class = AuthenticatorLoginForm
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated:
@@ -483,8 +500,108 @@ class CustomLoginView(LoginView):
             return reverse("admin:index")
         return "/"
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        device = form.get_verified_device()
+        if device is not None:
+            otp_login(self.request, device)
+        return response
+
 
 login_view = CustomLoginView.as_view()
+
+
+@staff_member_required
+def authenticator_setup(request):
+    """Allow staff to enroll an authenticator app for TOTP logins."""
+
+    user = request.user
+    device_qs = TOTPDevice.objects.filter(user=user)
+    if TOTP_DEVICE_NAME:
+        device_qs = device_qs.filter(name=TOTP_DEVICE_NAME)
+
+    pending_device = device_qs.filter(confirmed=False).order_by("-id").first()
+    confirmed_device = device_qs.filter(confirmed=True).order_by("-id").first()
+    enrollment_form = AuthenticatorEnrollmentForm(device=pending_device)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "generate":
+            device = pending_device or confirmed_device or TOTPDevice(user=user)
+            if TOTP_DEVICE_NAME:
+                device.name = TOTP_DEVICE_NAME
+            if device.pk is None:
+                device.save()
+            device.key = TOTPDevice._meta.get_field("key").get_default()
+            device.confirmed = False
+            device.drift = 0
+            device.last_t = -1
+            device.throttling_failure_count = 0
+            device.throttling_failure_timestamp = None
+            device.throttle_reset(commit=False)
+            device.save()
+            messages.success(
+                request,
+                _(
+                    "Scan the QR code with your authenticator app, then "
+                    "enter a code below to confirm enrollment."
+                ),
+            )
+            return redirect("pages:authenticator-setup")
+        if action == "confirm" and pending_device is not None:
+            enrollment_form = AuthenticatorEnrollmentForm(
+                request.POST, device=pending_device
+            )
+            if enrollment_form.is_valid():
+                pending_device.confirmed = True
+                pending_device.save(update_fields=["confirmed"])
+                messages.success(
+                    request,
+                    _(
+                        "Authenticator app confirmed. You can now log in "
+                        "with codes from your device."
+                    ),
+                )
+                return redirect("pages:authenticator-setup")
+        if action == "remove":
+            if device_qs.exists():
+                device_qs.delete()
+                messages.success(
+                    request,
+                    _(
+                        "Authenticator enrollment removed. Password logins "
+                        "remain available."
+                    ),
+                )
+            return redirect("pages:authenticator-setup")
+
+    pending_device = device_qs.filter(confirmed=False).order_by("-id").first()
+    confirmed_device = device_qs.filter(confirmed=True).order_by("-id").first()
+
+    qr_data_uri = None
+    manual_key = None
+    if pending_device is not None:
+        config_url = pending_device.config_url
+        qr = qrcode.QRCode(box_size=10, border=4)
+        qr.add_data(config_url)
+        qr.make(fit=True)
+        image = qr.make_image(fill_color="black", back_color="white")
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        qr_data_uri = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(
+            "ascii"
+        )
+        secret = pending_device.key or ""
+        manual_key = " ".join(secret[i : i + 4] for i in range(0, len(secret), 4))
+
+    context = {
+        "pending_device": pending_device,
+        "confirmed_device": confirmed_device,
+        "qr_data_uri": qr_data_uri,
+        "manual_key": manual_key,
+        "enrollment_form": enrollment_form,
+    }
+    return TemplateResponse(request, "pages/authenticator_setup.html", context)
 
 
 INVITATION_REQUEST_MIN_SUBMISSION_INTERVAL = datetime.timedelta(seconds=3)
@@ -534,7 +651,8 @@ class InvitationRequestForm(forms.Form):
 
         timestamp = cleaned.get("timestamp")
         if timestamp is None:
-            raise forms.ValidationError(INVITATION_REQUEST_TIMESTAMP_ERROR)
+            cleaned["timestamp"] = timezone.now()
+            return cleaned
 
         now = timezone.now()
         if timestamp > now or (now - timestamp) < self.min_submission_interval:
