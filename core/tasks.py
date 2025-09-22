@@ -71,7 +71,7 @@ def check_github_updates() -> None:
     except Exception:
         startup = None
 
-    upgrade_stamp = f"@{timezone.now().isoformat()}"
+    upgrade_stamp = timezone.now().strftime("@ %Y%m%d %H:%M")
 
     if mode == "latest":
         local = (

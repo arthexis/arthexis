@@ -65,16 +65,20 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
 
     assert any(
         subject == "Upgrading..."
-        and body.startswith("@")
-        and _is_iso_datetime(body[1:])
+        and _matches_upgrade_stamp(body)
         for subject, body in notify_calls
     )
     assert any("upgrade.sh" in cmd[0] for cmd in run_calls)
 
 
-def _is_iso_datetime(candidate: str) -> bool:
+def _matches_upgrade_stamp(body: str) -> bool:
+    if not body.startswith("@ "):
+        return False
+
+    candidate = body[2:]
+
     try:
-        datetime.fromisoformat(candidate)
+        datetime.strptime(candidate, "%Y%m%d %H:%M")
     except ValueError:
         return False
     return True
