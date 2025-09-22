@@ -62,7 +62,7 @@
                   {% if model.view_only %}
                     <a href="{{ model.admin_url }}" class="viewlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'View' %}</a>
                   {% else %}
-                    <a href="{{ model.admin_url }}" class="changelink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'Browse' %}</a>
+                    <a href="{{ model.admin_url }}" class="changelink" aria-describedby="{{ app.app_label }}-{{ model_name }}" target="_blank" rel="noopener noreferrer">{% translate 'Change' %}</a>
                   {% endif %}
                 </td>
               {% elif show_changelinks %}
