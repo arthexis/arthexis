@@ -579,6 +579,11 @@ class Simulator(Entity):
     repeat = models.BooleanField(default=False)
     username = models.CharField(max_length=100, blank=True)
     password = models.CharField(max_length=100, blank=True)
+    door_open = models.BooleanField(
+        _("Door Open"),
+        default=False,
+        help_text=_("Send a DoorOpen error StatusNotification when enabled."),
+    )
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
