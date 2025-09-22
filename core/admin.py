@@ -1870,76 +1870,81 @@ class ProductAdmin(EntityModelAdmin):
                 results = []
             else:
                 if is_import:
-                    product_id = request.POST.get("product_id")
-                    if not product_id:
-                        form.add_error(None, _("Select a product to import."))
+                    if not self.has_add_permission(request):
+                        form.add_error(
+                            None, _("You do not have permission to add products.")
+                        )
                     else:
-                        try:
-                            odoo_id = int(product_id)
-                        except (TypeError, ValueError):
-                            form.add_error(None, _("Invalid product selection."))
+                        product_id = request.POST.get("product_id")
+                        if not product_id:
+                            form.add_error(None, _("Select a product to import."))
                         else:
-                            match = next(
-                                (item for item in results if item.get("id") == odoo_id),
-                                None,
-                            )
-                            if not match:
-                                form.add_error(
-                                    None,
-                                    _(
-                                        "The selected product was not found. Run the search again."
-                                    ),
-                                )
+                            try:
+                                odoo_id = int(product_id)
+                            except (TypeError, ValueError):
+                                form.add_error(None, _("Invalid product selection."))
                             else:
-                                existing = self.model.objects.filter(
-                                    odoo_product__id=odoo_id
-                                ).first()
-                                if existing:
+                                match = next(
+                                    (item for item in results if item.get("id") == odoo_id),
+                                    None,
+                                )
+                                if not match:
+                                    form.add_error(
+                                        None,
+                                        _(
+                                            "The selected product was not found. Run the search again."
+                                        ),
+                                    )
+                                else:
+                                    existing = self.model.objects.filter(
+                                        odoo_product__id=odoo_id
+                                    ).first()
+                                    if existing:
+                                        self.message_user(
+                                            request,
+                                            _(
+                                                "Product %(name)s already imported; opening existing record."
+                                            )
+                                            % {"name": existing.name},
+                                            level=messages.WARNING,
+                                        )
+                                        return HttpResponseRedirect(
+                                            reverse(
+                                                "admin:%s_%s_change"
+                                                % (
+                                                    existing._meta.app_label,
+                                                    existing._meta.model_name,
+                                                ),
+                                                args=[existing.pk],
+                                            )
+                                        )
+                                    product = self.model.objects.create(
+                                        name=match.get("name") or f"Odoo Product {odoo_id}",
+                                        description=match.get("description_sale", "") or "",
+                                        renewal_period=form.cleaned_data["renewal_period"],
+                                        odoo_product={
+                                            "id": odoo_id,
+                                            "name": match.get("name", ""),
+                                        },
+                                    )
+                                    self.log_addition(
+                                        request, product, "Imported product from Odoo"
+                                    )
                                     self.message_user(
                                         request,
-                                        _(
-                                            "Product %(name)s already imported; opening existing record."
-                                        )
-                                        % {"name": existing.name},
-                                        level=messages.WARNING,
+                                        _("Imported %(name)s from Odoo.")
+                                        % {"name": product.name},
                                     )
                                     return HttpResponseRedirect(
                                         reverse(
                                             "admin:%s_%s_change"
                                             % (
-                                                existing._meta.app_label,
-                                                existing._meta.model_name,
+                                                product._meta.app_label,
+                                                product._meta.model_name,
                                             ),
-                                            args=[existing.pk],
+                                            args=[product.pk],
                                         )
                                     )
-                                product = self.model.objects.create(
-                                    name=match.get("name") or f"Odoo Product {odoo_id}",
-                                    description=match.get("description_sale", "") or "",
-                                    renewal_period=form.cleaned_data["renewal_period"],
-                                    odoo_product={
-                                        "id": odoo_id,
-                                        "name": match.get("name", ""),
-                                    },
-                                )
-                                self.log_addition(
-                                    request, product, "Imported product from Odoo"
-                                )
-                                self.message_user(
-                                    request,
-                                    _("Imported %(name)s from Odoo.")
-                                    % {"name": product.name},
-                                )
-                                return HttpResponseRedirect(
-                                    reverse(
-                                        "admin:%s_%s_change"
-                                        % (
-                                            product._meta.app_label,
-                                            product._meta.model_name,
-                                        ),
-                                        args=[product.pk],
-                                    )
-                                )
         context.update(
             {
                 "form": form,
