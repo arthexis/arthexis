@@ -687,6 +687,7 @@ class NodeRegisterCurrentTests(TestCase):
             "body": "world",
             "seen": [],
             "sender": str(sender.uuid),
+            "origin": str(sender.uuid),
         }
         payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
         signature = key.sign(payload_json.encode(), padding.PKCS1v15(), hashes.SHA256())
@@ -698,6 +699,8 @@ class NodeRegisterCurrentTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(NetMessage.objects.filter(uuid=msg_id).exists())
+        message = NetMessage.objects.get(uuid=msg_id)
+        self.assertEqual(message.node_origin, sender)
 
     def test_clipboard_polling_creates_task(self):
         feature, _ = NodeFeature.objects.get_or_create(
@@ -1024,6 +1027,11 @@ class NetMessagePropagationTests(TestCase):
                 )
             )
 
+    def test_broadcast_sets_node_origin(self):
+        with patch.object(Node, "get_local", return_value=self.local):
+            msg = NetMessage.broadcast(subject="subject", body="body")
+        self.assertEqual(msg.node_origin, self.local)
+
     @patch("requests.post")
     @patch("core.notifications.notify")
     def test_propagate_forwards_to_three_and_notifies_local(
@@ -1034,6 +1042,9 @@ class NetMessagePropagationTests(TestCase):
             msg.propagate(seen=[str(self.remotes[0].uuid)])
         mock_notify.assert_called_once_with("s", "b")
         self.assertEqual(mock_post.call_count, 3)
+        for call_args in mock_post.call_args_list:
+            payload = json.loads(call_args.kwargs["data"])
+            self.assertEqual(payload.get("origin"), str(self.local.uuid))
         targets = {
             call.args[0].split("//")[1].split("/")[0]
             for call in mock_post.call_args_list
