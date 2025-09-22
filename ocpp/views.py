@@ -282,42 +282,42 @@ def charger_list(request):
             charger,
             tx_obj if charger.connector_id is not None else (sessions if sessions else None),
         )
-        data.append(
-            {
-                "charger_id": cid,
-                "name": charger.name,
-                "connector_id": charger.connector_id,
-                "connector_slug": charger.connector_slug,
-                "connector_label": charger.connector_label,
-                "require_rfid": charger.require_rfid,
-                "transaction": tx_data,
-                "activeTransactions": active_transactions,
-                "lastHeartbeat": (
-                    charger.last_heartbeat.isoformat()
-                    if charger.last_heartbeat
-                    else None
-                ),
-                "lastMeterValues": charger.last_meter_values,
-                "firmwareStatus": charger.firmware_status,
-                "firmwareStatusInfo": charger.firmware_status_info,
-                "firmwareTimestamp": (
-                    charger.firmware_timestamp.isoformat()
-                    if charger.firmware_timestamp
-                    else None
-                ),
-                "connected": store.is_connected(cid, charger.connector_id),
-                "lastStatus": charger.last_status or None,
-                "lastErrorCode": charger.last_error_code or None,
-                "lastStatusTimestamp": (
-                    charger.last_status_timestamp.isoformat()
-                    if charger.last_status_timestamp
-                    else None
-                ),
-                "lastStatusVendorInfo": charger.last_status_vendor_info,
-                "status": state,
-                "statusColor": color,
-            }
-        )
+        entry = {
+            "charger_id": cid,
+            "name": charger.name,
+            "connector_id": charger.connector_id,
+            "connector_slug": charger.connector_slug,
+            "connector_label": charger.connector_label,
+            "require_rfid": charger.require_rfid,
+            "transaction": tx_data,
+            "activeTransactions": active_transactions,
+            "lastHeartbeat": (
+                charger.last_heartbeat.isoformat()
+                if charger.last_heartbeat
+                else None
+            ),
+            "lastMeterValues": charger.last_meter_values,
+            "firmwareStatus": charger.firmware_status,
+            "firmwareStatusInfo": charger.firmware_status_info,
+            "firmwareTimestamp": (
+                charger.firmware_timestamp.isoformat()
+                if charger.firmware_timestamp
+                else None
+            ),
+            "connected": store.is_connected(cid, charger.connector_id),
+            "lastStatus": charger.last_status or None,
+            "lastErrorCode": charger.last_error_code or None,
+            "lastStatusTimestamp": (
+                charger.last_status_timestamp.isoformat()
+                if charger.last_status_timestamp
+                else None
+            ),
+            "lastStatusVendorInfo": charger.last_status_vendor_info,
+            "status": state,
+            "statusColor": color,
+        }
+        entry.update(_diagnostics_payload(charger))
+        data.append(entry)
     return JsonResponse({"chargers": data})
 
 
@@ -378,39 +378,39 @@ def charger_detail(request, cid, connector=None):
         charger,
         tx_obj if charger.connector_id is not None else (sessions if sessions else None),
     )
-    return JsonResponse(
-        {
-            "charger_id": cid,
-            "connector_id": charger.connector_id,
-            "connector_slug": connector_slug,
-            "name": charger.name,
-            "require_rfid": charger.require_rfid,
-            "transaction": tx_data,
-            "activeTransactions": active_transactions,
-            "lastHeartbeat": (
-                charger.last_heartbeat.isoformat() if charger.last_heartbeat else None
-            ),
-            "lastMeterValues": charger.last_meter_values,
-            "firmwareStatus": charger.firmware_status,
-            "firmwareStatusInfo": charger.firmware_status_info,
-            "firmwareTimestamp": (
-                charger.firmware_timestamp.isoformat()
-                if charger.firmware_timestamp
-                else None
-            ),
-            "log": log,
-            "lastStatus": charger.last_status or None,
-            "lastErrorCode": charger.last_error_code or None,
-            "lastStatusTimestamp": (
-                charger.last_status_timestamp.isoformat()
-                if charger.last_status_timestamp
-                else None
-            ),
-            "lastStatusVendorInfo": charger.last_status_vendor_info,
-            "status": state,
-            "statusColor": color,
-        }
-    )
+    payload = {
+        "charger_id": cid,
+        "connector_id": charger.connector_id,
+        "connector_slug": connector_slug,
+        "name": charger.name,
+        "require_rfid": charger.require_rfid,
+        "transaction": tx_data,
+        "activeTransactions": active_transactions,
+        "lastHeartbeat": (
+            charger.last_heartbeat.isoformat() if charger.last_heartbeat else None
+        ),
+        "lastMeterValues": charger.last_meter_values,
+        "firmwareStatus": charger.firmware_status,
+        "firmwareStatusInfo": charger.firmware_status_info,
+        "firmwareTimestamp": (
+            charger.firmware_timestamp.isoformat()
+            if charger.firmware_timestamp
+            else None
+        ),
+        "log": log,
+        "lastStatus": charger.last_status or None,
+        "lastErrorCode": charger.last_error_code or None,
+        "lastStatusTimestamp": (
+            charger.last_status_timestamp.isoformat()
+            if charger.last_status_timestamp
+            else None
+        ),
+        "lastStatusVendorInfo": charger.last_status_vendor_info,
+        "status": state,
+        "statusColor": color,
+    }
+    payload.update(_diagnostics_payload(charger))
+    return JsonResponse(payload)
 
 
 @landing("Dashboard")

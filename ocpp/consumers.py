@@ -94,6 +94,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             connector_id=None,
             defaults={"last_path": self.scope.get("path", "")},
         )
+        await database_sync_to_async(self.charger.refresh_manager_node)()
         self.aggregate_charger = self.charger
         location_name = await sync_to_async(
             lambda: self.charger.location.name if self.charger.location else ""
@@ -134,15 +135,15 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             not self.aggregate_charger
             or self.aggregate_charger.connector_id is not None
         ):
-            self.aggregate_charger = await database_sync_to_async(
+            aggregate, _ = await database_sync_to_async(
                 Charger.objects.get_or_create
             )(
                 charger_id=self.charger_id,
                 connector_id=None,
                 defaults={"last_path": self.scope.get("path", "")},
-            )[
-                0
-            ]
+            )
+            await database_sync_to_async(aggregate.refresh_manager_node)()
+            self.aggregate_charger = aggregate
         existing = await database_sync_to_async(
             Charger.objects.filter(
                 charger_id=self.charger_id, connector_id=connector_value
@@ -150,6 +151,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         )()
         if existing:
             self.charger = existing
+            await database_sync_to_async(self.charger.refresh_manager_node)()
         else:
 
             def _create_connector():
@@ -163,6 +165,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 ):
                     charger.last_path = self.scope.get("path")
                     charger.save(update_fields=["last_path"])
+                charger.refresh_manager_node()
                 return charger
 
             self.charger = await database_sync_to_async(_create_connector)()
