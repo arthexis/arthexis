@@ -3,7 +3,7 @@ import json
 import base64
 from datetime import datetime
 from django.utils import timezone
-from core.models import EnergyAccount, RFID as CoreRFID
+from core.models import EnergyAccount, Reference, RFID as CoreRFID
 from nodes.models import NetMessage
 
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -64,6 +64,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             subprotocol = "ocpp1.6"
         client = self.scope.get("client")
         self.client_ip = client[0] if client else None
+        self._header_reference_created = False
         # Close any pending connection for this charger so reconnections do
         # not leak stale consumers when the connector id has not been
         # negotiated yet.
@@ -120,11 +121,19 @@ class CSMSConsumer(AsyncWebsocketConsumer):
 
     async def _assign_connector(self, connector: int | str | None) -> None:
         """Ensure ``self.charger`` matches the provided connector id."""
-        if connector is None:
-            return
-        try:
-            connector_value = int(connector)
-        except (TypeError, ValueError):
+        if connector in (None, "", "-"):
+            connector_value = None
+        else:
+            try:
+                connector_value = int(connector)
+                if connector_value == 0:
+                    connector_value = None
+            except (TypeError, ValueError):
+                return
+        if connector_value is None:
+            if not self._header_reference_created and self.client_ip:
+                await database_sync_to_async(self._ensure_console_reference)()
+                self._header_reference_created = True
             return
         if (
             self.connector_value == connector_value
@@ -194,6 +203,39 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         )
         self.store_key = new_key
         self.connector_value = connector_value
+
+    def _ensure_console_reference(self) -> None:
+        """Create or update a header reference for the connected charger."""
+
+        ip = (self.client_ip or "").strip()
+        serial = (self.charger_id or "").strip()
+        if not ip or not serial:
+            return
+        host = ip
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        url = f"http://{host}:8900"
+        alt_text = f"{serial} Console"
+        reference, _ = Reference.objects.get_or_create(
+            alt_text=alt_text,
+            defaults={
+                "value": url,
+                "show_in_header": True,
+                "method": "link",
+            },
+        )
+        updated_fields: list[str] = []
+        if reference.value != url:
+            reference.value = url
+            updated_fields.append("value")
+        if reference.method != "link":
+            reference.method = "link"
+            updated_fields.append("method")
+        if not reference.show_in_header:
+            reference.show_in_header = True
+            updated_fields.append("show_in_header")
+        if updated_fields:
+            reference.save(update_fields=updated_fields)
 
     async def _store_meter_values(self, payload: dict, raw_message: str) -> None:
         """Parse a MeterValues payload into MeterValue rows."""

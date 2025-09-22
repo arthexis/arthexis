@@ -848,6 +848,9 @@ class Reference(Entity):
     include_in_footer = models.BooleanField(
         default=False, verbose_name="Include in Footer"
     )
+    show_in_header = models.BooleanField(
+        default=False, verbose_name="Show in Header"
+    )
     FOOTER_PUBLIC = "public"
     FOOTER_PRIVATE = "private"
     FOOTER_STAFF = "staff"

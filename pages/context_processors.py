@@ -4,6 +4,8 @@ from django.conf import settings
 from pathlib import Path
 from types import SimpleNamespace
 from nodes.models import Node
+from core.models import Reference
+from core.reference_utils import filter_visible_references
 from .models import Module
 
 _favicon_path = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data" / "favicon.txt"
@@ -81,7 +83,21 @@ def nav_links(request):
         if not favicon_url:
             favicon_url = _DEFAULT_FAVICON
 
+    header_refs_qs = (
+        Reference.objects.filter(show_in_header=True)
+        .exclude(value="")
+        .prefetch_related("roles", "features", "sites")
+    )
+    header_references = filter_visible_references(
+        header_refs_qs,
+        request=request,
+        site=site,
+        node=node,
+        respect_footer_visibility=False,
+    )
+
     return {
         "nav_modules": valid_modules,
         "favicon_url": favicon_url,
+        "header_references": header_references,
     }

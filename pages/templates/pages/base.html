@@ -138,6 +138,20 @@
                   {% endwith %}
                 {% endfor %}
               {% endif %}
+              {% if header_references %}
+                <li class="nav-item dropdown">
+                  <a class="nav-link" href="#" role="button">
+                    <span class="badge rounded-pill text-bg-secondary">LINKS</span>
+                  </a>
+                  <ul class="dropdown-menu">
+                    {% for reference in header_references %}
+                      <li>
+                        <a class="dropdown-item" href="{{ reference.value }}">{{ reference.alt_text }}</a>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                </li>
+              {% endif %}
             </ul>
             <div class="toolbar ms-lg-3 d-flex align-items-center" role="toolbar">
               <button id="theme-toggle" class="btn btn-sm btn-outline-light me-2" onclick="toggleTheme()" aria-label="{% trans "Dark Mode" %}">

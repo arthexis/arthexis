@@ -28,8 +28,7 @@ from config.asgi import application
 
 from .models import Transaction, Charger, Simulator, MeterReading, Location
 from .consumers import CSMSConsumer
-from core.models import EnergyAccount, EnergyCredit
-from core.models import RFID
+from core.models import EnergyAccount, EnergyCredit, Reference, RFID
 from . import store
 from django.db.models.deletion import ProtectedError
 from decimal import Decimal
@@ -611,6 +610,41 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertIn(1, connectors)
         self.assertIn(2, connectors)
         self.assertIn(None, connectors)
+
+    async def test_console_reference_created_for_aggregate_connector(self):
+        communicator = ClientWebsocketCommunicator(
+            application,
+            "/CONREF/",
+            client=("203.0.113.5", 12345),
+        )
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to([2, "1", "BootNotification", {}])
+        await communicator.receive_json_from()
+
+        reference = await database_sync_to_async(
+            lambda: Reference.objects.get(alt_text="CONREF Console")
+        )()
+        self.assertEqual(reference.value, "http://203.0.113.5:8900")
+        self.assertTrue(reference.show_in_header)
+
+        await communicator.send_json_to(
+            [
+                2,
+                "2",
+                "StatusNotification",
+                {"connectorId": 1, "status": "Available"},
+            ]
+        )
+        await communicator.receive_json_from()
+
+        count = await database_sync_to_async(
+            lambda: Reference.objects.filter(alt_text="CONREF Console").count()
+        )()
+        self.assertEqual(count, 1)
+
+        await communicator.disconnect()
 
     async def test_transaction_created_from_meter_values(self):
         communicator = WebsocketCommunicator(application, "/NOSTART/")

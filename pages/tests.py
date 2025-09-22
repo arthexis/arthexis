@@ -26,7 +26,14 @@ from pages.screenshot_specs import (
 from django.apps import apps as django_apps
 from core import mailer
 from core.admin import ProfileAdminMixin
-from core.models import AdminHistory, InviteLead, Package, ReleaseManager, Todo
+from core.models import (
+    AdminHistory,
+    InviteLead,
+    Package,
+    Reference,
+    ReleaseManager,
+    Todo,
+)
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
 import tempfile
@@ -881,6 +888,33 @@ class ConstellationNavTests(TestCase):
     def test_ocpp_dashboard_visible(self):
         resp = self.client.get(reverse("pages:index"))
         self.assertContains(resp, 'href="/ocpp/"')
+
+    def test_header_links_visible_when_defined(self):
+        Reference.objects.create(
+            alt_text="Console",
+            value="https://example.com/console",
+            show_in_header=True,
+        )
+
+        resp = self.client.get(reverse("pages:index"))
+
+        self.assertIn("header_references", resp.context)
+        self.assertTrue(resp.context["header_references"])
+        self.assertContains(resp, "LINKS")
+        self.assertContains(resp, 'href="https://example.com/console"')
+
+    def test_header_links_hidden_when_flag_false(self):
+        Reference.objects.create(
+            alt_text="Hidden",
+            value="https://example.com/hidden",
+            show_in_header=False,
+        )
+
+        resp = self.client.get(reverse("pages:index"))
+
+        self.assertIn("header_references", resp.context)
+        self.assertFalse(resp.context["header_references"])
+        self.assertNotContains(resp, "https://example.com/hidden")
 
 
 class PowerNavTests(TestCase):
