@@ -7,6 +7,8 @@ import socket
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
+from django.core.exceptions import DisallowedHost
+from django.http.request import split_domain_port
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from .models import EnergyAccount
@@ -124,6 +126,7 @@ class LocalhostAdminBackend(ModelBackend):
     _ALLOWED_NETWORKS = (
         ipaddress.ip_network("::1/128"),
         ipaddress.ip_network("127.0.0.0/8"),
+        ipaddress.ip_network("10.42.0.0/16"),
         ipaddress.ip_network("192.168.0.0/16"),
     )
     _CONTROL_ALLOWED_NETWORKS = (ipaddress.ip_network("10.0.0.0/8"),)
@@ -136,6 +139,17 @@ class LocalhostAdminBackend(ModelBackend):
 
     def authenticate(self, request, username=None, password=None, **kwargs):
         if username == "admin" and password == "admin" and request is not None:
+            try:
+                host = request.get_host()
+            except DisallowedHost:
+                return None
+            host, _port = split_domain_port(host)
+            if host.startswith("[") and host.endswith("]"):
+                host = host[1:-1]
+            try:
+                ipaddress.ip_address(host)
+            except ValueError:
+                return None
             forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
             if forwarded:
                 remote = forwarded.split(",")[0].strip()
