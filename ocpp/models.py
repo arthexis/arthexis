@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from core.entity import Entity, EntityManager
+from nodes.models import Node
 
 from core.models import (
     EnergyAccount,
@@ -126,6 +127,13 @@ class Charger(Entity):
         related_name="chargers",
     )
     last_path = models.CharField(max_length=255, blank=True)
+    manager_node = models.ForeignKey(
+        "nodes.Node",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="managed_chargers",
+    )
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.charger_id
@@ -245,6 +253,13 @@ class Charger(Entity):
 
     def save(self, *args, **kwargs):
         update_fields = kwargs.get("update_fields")
+        update_list = list(update_fields) if update_fields is not None else None
+        if not self.manager_node_id:
+            local_node = Node.get_local()
+            if local_node:
+                self.manager_node = local_node
+                if update_list is not None and "manager_node" not in update_list:
+                    update_list.append("manager_node")
         if not self.location_id:
             existing = (
                 type(self)
@@ -258,11 +273,10 @@ class Charger(Entity):
             else:
                 location, _ = Location.objects.get_or_create(name=self.charger_id)
                 self.location = location
-            if update_fields is not None:
-                update_list = list(update_fields)
-                if "location" not in update_list:
-                    update_list.append("location")
-                kwargs["update_fields"] = update_list
+            if update_list is not None and "location" not in update_list:
+                update_list.append("location")
+        if update_list is not None:
+            kwargs["update_fields"] = update_list
         super().save(*args, **kwargs)
         ref_value = self._full_url()
         if not self.reference or self.reference.value != ref_value:
@@ -270,6 +284,20 @@ class Charger(Entity):
                 value=ref_value, alt_text=self.charger_id
             )
             super().save(update_fields=["reference"])
+
+    def refresh_manager_node(self, node: Node | None = None) -> Node | None:
+        """Ensure ``manager_node`` matches the provided or local node."""
+
+        node = node or Node.get_local()
+        if not node:
+            return None
+        if self.pk is None:
+            self.manager_node = node
+            return node
+        if self.manager_node_id != node.pk:
+            type(self).objects.filter(pk=self.pk).update(manager_node=node)
+            self.manager_node = node
+        return node
 
     @property
     def name(self) -> str:
