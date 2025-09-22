@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Ocpp Charger Status Chart",
+      "url": "/ocpp/c/<charger_id>/status/",
+      "request_details": "Ensure the charger status dashboard renders historical charts using the vendored Chart.js bundle."
+    }
+  }
+]
