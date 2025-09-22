@@ -646,6 +646,27 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_console_reference_uses_forwarded_for_header(self):
+        communicator = ClientWebsocketCommunicator(
+            application,
+            "/FORWARDED/",
+            client=("127.0.0.1", 23456),
+            headers=[(b"x-forwarded-for", b"198.51.100.75, 127.0.0.1")],
+        )
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        self.assertIn("198.51.100.75", store.ip_connections)
+
+        await communicator.send_json_to([2, "1", "BootNotification", {}])
+        await communicator.receive_json_from()
+
+        reference = await database_sync_to_async(
+            lambda: Reference.objects.get(alt_text="FORWARDED Console")
+        )()
+        self.assertEqual(reference.value, "http://198.51.100.75:8900")
+
+        await communicator.disconnect()
+
     async def test_transaction_created_from_meter_values(self):
         communicator = WebsocketCommunicator(application, "/NOSTART/")
         connected, _ = await communicator.connect()

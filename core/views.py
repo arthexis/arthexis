@@ -7,6 +7,7 @@ from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, login
 from django.contrib import messages
+from django.contrib.sites.models import Site
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.utils import timezone
@@ -16,6 +17,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.utils.http import url_has_allowed_host_and_scheme
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 import subprocess
 
 from utils import revision
@@ -944,13 +946,68 @@ def release_progress(request, pk: int, action: str):
     return render(request, "core/release_progress.html", context)
 
 
+def _todo_iframe_url(request, todo: Todo) -> str:
+    """Return a safe iframe URL for ``todo`` scoped to the current host."""
+
+    fallback = reverse("admin:core_todo_change", args=[todo.pk])
+    raw_url = (todo.url or "").strip()
+    if not raw_url:
+        return fallback
+
+    parsed = urlsplit(raw_url)
+    if not parsed.scheme and not parsed.netloc:
+        return raw_url
+
+    if parsed.scheme and parsed.scheme.lower() not in {"http", "https"}:
+        return fallback
+
+    request_host = request.get_host().strip().lower()
+    host_without_port = request_host.split(":", 1)[0]
+    allowed_hosts = {
+        request_host,
+        host_without_port,
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "::1",
+    }
+
+    site_domain = ""
+    try:
+        site_domain = Site.objects.get_current().domain.strip().lower()
+    except Site.DoesNotExist:
+        site_domain = ""
+    if site_domain:
+        allowed_hosts.add(site_domain)
+        allowed_hosts.add(site_domain.split(":", 1)[0])
+
+    for host in getattr(settings, "ALLOWED_HOSTS", []):
+        if not isinstance(host, str):
+            continue
+        normalized = host.strip().lower()
+        if not normalized or normalized.startswith("*"):
+            continue
+        allowed_hosts.add(normalized)
+        allowed_hosts.add(normalized.split(":", 1)[0])
+
+    hostname = (parsed.hostname or "").strip().lower()
+    netloc = parsed.netloc.strip().lower()
+    if hostname in allowed_hosts or netloc in allowed_hosts:
+        path = parsed.path or "/"
+        if not path.startswith("/"):
+            path = f"/{path}"
+        return urlunsplit(("", "", path, parsed.query, parsed.fragment)) or fallback
+
+    return fallback
+
+
 @staff_member_required
 def todo_focus(request, pk: int):
     todo = get_object_or_404(Todo, pk=pk, is_deleted=False)
     if todo.done_on:
         return redirect(_get_return_url(request))
 
-    iframe_url = todo.url or reverse("admin:core_todo_change", args=[todo.pk])
+    iframe_url = _todo_iframe_url(request, todo)
     context = {
         "todo": todo,
         "iframe_url": iframe_url,
