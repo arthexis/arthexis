@@ -8,6 +8,7 @@ django.setup()
 
 from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
+from django.templatetags.static import static
 from urllib.parse import quote
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
