@@ -1223,7 +1223,7 @@ fi
 NETWORK_SETUP_SCRIPT="$ARTHEXIS_HOME/network-setup.sh"
 if [ -x "$NETWORK_SETUP_SCRIPT" ]; then
   echo "Running Arthexis network setup via $NETWORK_SETUP_SCRIPT"
-  if ! "$NETWORK_SETUP_SCRIPT"; then
+  if ! "$NETWORK_SETUP_SCRIPT" --no-vnc; then
     echo "Arthexis network setup failed" >&2
     exit 1
   fi
