@@ -20,6 +20,7 @@ from core.log_paths import select_log_dir
 from django.utils.translation import gettext_lazy as _
 from celery.schedules import crontab
 from django.http import request as http_request
+from django.http.request import split_domain_port
 from django.middleware.csrf import CsrfViewMiddleware
 from django.core.exceptions import DisallowedHost
 from django.contrib.sites import shortcuts as sites_shortcuts
@@ -34,13 +35,36 @@ if not hasattr(encoding, "force_text"):  # pragma: no cover - Django>=5 compatib
     encoding.force_text = force_str
 
 
+
 _original_validate_host = http_request.validate_host
 
 
-def _validate_host_with_subnets(host, allowed_hosts):
+def _strip_ipv6_brackets(host: str) -> str:
+    if host.startswith("[") and host.endswith("]"):
+        return host[1:-1]
+    return host
+
+
+def _extract_ip_from_host(host: str):
+    """Return an :mod:`ipaddress` object for ``host`` when possible."""
+
+    candidate = _strip_ipv6_brackets(host)
     try:
-        ip = ipaddress.ip_address(host)
+        return ipaddress.ip_address(candidate)
     except ValueError:
+        domain, _port = split_domain_port(host)
+        if domain and domain != host:
+            candidate = _strip_ipv6_brackets(domain)
+            try:
+                return ipaddress.ip_address(candidate)
+            except ValueError:
+                return None
+    return None
+
+
+def _validate_host_with_subnets(host, allowed_hosts):
+    ip = _extract_ip_from_host(host)
+    if ip is None:
         return _original_validate_host(host, allowed_hosts)
     for pattern in allowed_hosts:
         try:
@@ -117,6 +141,18 @@ ALLOWED_HOSTS = [
 ]
 
 
+_DEFAULT_PORTS = {"http": "80", "https": "443"}
+
+
+def _get_allowed_hosts() -> list[str]:
+    from django.conf import settings as django_settings
+
+    configured = getattr(django_settings, "ALLOWED_HOSTS", None)
+    if configured is None:
+        return ALLOWED_HOSTS
+    return list(configured)
+
+
 def _iter_local_hostnames(hostname: str, fqdn: str | None = None) -> list[str]:
     """Return unique hostname variants for the current machine."""
 
@@ -152,39 +188,191 @@ for host in _iter_local_hostnames(_local_hostname, _local_fqdn):
 
 # Allow CSRF origin verification for hosts within allowed subnets.
 _original_origin_verified = CsrfViewMiddleware._origin_verified
+_original_check_referer = CsrfViewMiddleware._check_referer
+
+
+def _host_is_allowed(host: str, allowed_hosts: list[str]) -> bool:
+    if http_request.validate_host(host, allowed_hosts):
+        return True
+    domain, _port = split_domain_port(host)
+    if domain and domain != host:
+        return http_request.validate_host(domain, allowed_hosts)
+    return False
+
+
+def _parse_forwarded_header(header_value: str) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    if not header_value:
+        return entries
+    for forwarded_part in header_value.split(","):
+        entry: dict[str, str] = {}
+        for element in forwarded_part.split(";"):
+            if "=" not in element:
+                continue
+            key, value = element.split("=", 1)
+            entry[key.strip().lower()] = value.strip().strip('"')
+        if entry:
+            entries.append(entry)
+    return entries
+
+
+def _get_request_scheme(request, forwarded_entry: dict[str, str] | None = None) -> str:
+    """Return the scheme used by the client, honoring proxy headers."""
+
+    if forwarded_entry and forwarded_entry.get("proto", "").lower() in {"http", "https"}:
+        return forwarded_entry["proto"].lower()
+
+    if request.is_secure():
+        return "https"
+
+    forwarded_proto = request.META.get("HTTP_X_FORWARDED_PROTO", "")
+    if forwarded_proto:
+        candidate = forwarded_proto.split(",")[0].strip().lower()
+        if candidate in {"http", "https"}:
+            return candidate
+
+    forwarded_header = request.META.get("HTTP_FORWARDED", "")
+    for forwarded_entry in _parse_forwarded_header(forwarded_header):
+        candidate = forwarded_entry.get("proto", "").lower()
+        if candidate in {"http", "https"}:
+            return candidate
+
+    return "http"
+
+
+def _normalize_origin_tuple(scheme: str | None, host: str) -> tuple[str, str, str | None] | None:
+    if not scheme or scheme.lower() not in {"http", "https"}:
+        return None
+    domain, port = split_domain_port(host)
+    normalized_host = _strip_ipv6_brackets(domain.strip().lower())
+    if not normalized_host:
+        return None
+    normalized_port = port.strip() if isinstance(port, str) else port
+    if not normalized_port:
+        normalized_port = _DEFAULT_PORTS.get(scheme.lower())
+    if normalized_port is not None:
+        normalized_port = str(normalized_port)
+    return scheme.lower(), normalized_host, normalized_port
+
+
+def _normalized_request_origin(origin: str) -> tuple[str, str, str | None] | None:
+    parsed = urlsplit(origin)
+    if not parsed.scheme or not parsed.hostname:
+        return None
+    scheme = parsed.scheme.lower()
+    host = parsed.hostname.lower()
+    port = str(parsed.port) if parsed.port is not None else _DEFAULT_PORTS.get(scheme)
+    return scheme, host, port
+
+
+def _candidate_origin_tuples(request, allowed_hosts: list[str]) -> list[tuple[str, str, str | None]]:
+    default_scheme = _get_request_scheme(request)
+    candidates: list[tuple[str, str, str | None]] = []
+    seen: set[tuple[str, str, str | None]] = set()
+
+    def _append_candidate(scheme: str | None, host: str) -> None:
+        if not scheme or not host:
+            return
+        normalized = _normalize_origin_tuple(scheme, host)
+        if normalized is None:
+            return
+        if not _host_is_allowed(host, allowed_hosts):
+            return
+        if normalized in seen:
+            return
+        candidates.append(normalized)
+        seen.add(normalized)
+
+    forwarded_header = request.META.get("HTTP_FORWARDED", "")
+    for forwarded_entry in _parse_forwarded_header(forwarded_header):
+        host = forwarded_entry.get("host", "").strip()
+        scheme = _get_request_scheme(request, forwarded_entry)
+        _append_candidate(scheme, host)
+
+    forwarded_host = request.META.get("HTTP_X_FORWARDED_HOST", "")
+    if forwarded_host:
+        host = forwarded_host.split(",")[0].strip()
+        _append_candidate(default_scheme, host)
+
+    try:
+        good_host = request.get_host()
+    except DisallowedHost:
+        good_host = ""
+    if good_host:
+        _append_candidate(default_scheme, good_host)
+
+    return candidates
 
 
 def _origin_verified_with_subnets(self, request):
     request_origin = request.META["HTTP_ORIGIN"]
-    try:
-        good_host = request.get_host()
-    except DisallowedHost:
-        pass
-    else:
-        good_origin = "%s://%s" % (
-            "https" if request.is_secure() else "http",
-            good_host,
-        )
-        if request_origin == good_origin:
+    allowed_hosts = _get_allowed_hosts()
+    normalized_origin = _normalized_request_origin(request_origin)
+    if normalized_origin is None:
+        return _original_origin_verified(self, request)
+
+    origin_ip = _extract_ip_from_host(normalized_origin[1])
+
+    for candidate in _candidate_origin_tuples(request, allowed_hosts):
+        if candidate == normalized_origin:
             return True
-        try:
-            origin_host = urlsplit(request_origin).hostname
-            origin_ip = ipaddress.ip_address(origin_host)
-            request_ip = ipaddress.ip_address(good_host.split(":")[0])
-        except ValueError:
-            pass
-        else:
-            for pattern in ALLOWED_HOSTS:
+
+        candidate_ip = _extract_ip_from_host(candidate[1])
+        if origin_ip and candidate_ip:
+            for pattern in allowed_hosts:
                 try:
                     network = ipaddress.ip_network(pattern)
                 except ValueError:
                     continue
-                if origin_ip in network and request_ip in network:
+                if origin_ip in network and candidate_ip in network:
                     return True
     return _original_origin_verified(self, request)
 
 
 CsrfViewMiddleware._origin_verified = _origin_verified_with_subnets
+
+
+def _check_referer_with_forwarded(self, request):
+    referer = request.META.get("HTTP_REFERER")
+    if referer is None:
+        return _original_check_referer(self, request)
+
+    try:
+        parsed = urlsplit(referer)
+    except ValueError:
+        return _original_check_referer(self, request)
+
+    if "" in (parsed.scheme, parsed.netloc):
+        return _original_check_referer(self, request)
+
+    if parsed.scheme.lower() != "https":
+        return _original_check_referer(self, request)
+
+    normalized_referer = _normalize_origin_tuple(parsed.scheme.lower(), parsed.netloc)
+    if normalized_referer is None:
+        return _original_check_referer(self, request)
+
+    allowed_hosts = _get_allowed_hosts()
+    referer_ip = _extract_ip_from_host(normalized_referer[1])
+
+    for candidate in _candidate_origin_tuples(request, allowed_hosts):
+        if candidate == normalized_referer:
+            return
+
+        candidate_ip = _extract_ip_from_host(candidate[1])
+        if referer_ip and candidate_ip:
+            for pattern in allowed_hosts:
+                try:
+                    network = ipaddress.ip_network(pattern)
+                except ValueError:
+                    continue
+                if referer_ip in network and candidate_ip in network:
+                    return
+
+    return _original_check_referer(self, request)
+
+
+CsrfViewMiddleware._check_referer = _check_referer_with_forwarded
 
 
 # Application definition
