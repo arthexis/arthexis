@@ -66,6 +66,23 @@ validate_hostname() {
   fi
 }
 
+sanitize_filename_component() {
+  local value="${1,,}"
+
+  value="${value//[^a-z0-9._-]/-}"
+  while [[ "$value" == *--* ]]; do
+    value="${value//--/-}"
+  done
+  value="${value##-}"
+  value="${value%%-}"
+
+  if [[ -z "$value" ]]; then
+    value="device"
+  fi
+
+  printf '%s\n' "$value"
+}
+
 ensure_path_owned_by_build_user() {
   local path="$1"
   [[ -n "$RUN_BUILD_AS_USER" ]] || return 0
@@ -218,7 +235,8 @@ else
   REVISION="000000"
 fi
 
-FINAL_IMAGE_BASE="${ROLE}-${HOSTNAME}-${VERSION}-${REVISION}"
+DEVICE_LAYER_SEGMENT="$(sanitize_filename_component "$DEVICE_LAYER_REQUEST")"
+FINAL_IMAGE_BASE="${ROLE}-${HOSTNAME}-${DEVICE_LAYER_SEGMENT}-${VERSION}-${REVISION}"
 FINAL_IMAGE_IMG="$OUTPUT_DIR/${FINAL_IMAGE_BASE}.img"
 FINAL_IMAGE_XZ="${FINAL_IMAGE_IMG}.xz"
 FINAL_IMAGE=""
