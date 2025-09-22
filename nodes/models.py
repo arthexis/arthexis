@@ -8,9 +8,11 @@ from core.fields import SigilShortAutoField
 import re
 import json
 import base64
+from django.utils import timezone
 from django.utils.text import slugify
 from django.conf import settings
 from django.contrib.sites.models import Site
+from datetime import timedelta
 import uuid
 import os
 import shutil
@@ -869,8 +871,18 @@ class NetMessage(Entity):
         import random
         import requests
 
-        notify(self.subject, self.body)
+        displayed = notify(self.subject, self.body)
         local = Node.get_local()
+        if displayed:
+            cutoff = timezone.now() - timedelta(days=7)
+            prune_qs = type(self).objects.filter(created__lt=cutoff)
+            if local:
+                prune_qs = prune_qs.filter(
+                    models.Q(node_origin=local) | models.Q(node_origin__isnull=True)
+                )
+            else:
+                prune_qs = prune_qs.filter(node_origin__isnull=True)
+            prune_qs.delete()
         if local and not self.node_origin_id:
             self.node_origin = local
             self.save(update_fields=["node_origin"])
