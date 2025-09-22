@@ -154,6 +154,33 @@ for host in _iter_local_hostnames(_local_hostname, _local_fqdn):
 _original_origin_verified = CsrfViewMiddleware._origin_verified
 
 
+def _get_request_scheme(request) -> str:
+    """Return the scheme used by the client, honoring proxy headers."""
+
+    if request.is_secure():
+        return "https"
+
+    forwarded_proto = request.META.get("HTTP_X_FORWARDED_PROTO", "")
+    if forwarded_proto:
+        candidate = forwarded_proto.split(",")[0].strip().lower()
+        if candidate in {"http", "https"}:
+            return candidate
+
+    forwarded_header = request.META.get("HTTP_FORWARDED", "")
+    if forwarded_header:
+        for forwarded_part in forwarded_header.split(","):
+            for element in forwarded_part.split(";"):
+                if "=" not in element:
+                    continue
+                key, value = element.split("=", 1)
+                if key.strip().lower() == "proto":
+                    candidate = value.strip().strip('"').lower()
+                    if candidate in {"http", "https"}:
+                        return candidate
+
+    return "http"
+
+
 def _origin_verified_with_subnets(self, request):
     request_origin = request.META["HTTP_ORIGIN"]
     try:
@@ -162,7 +189,7 @@ def _origin_verified_with_subnets(self, request):
         pass
     else:
         good_origin = "%s://%s" % (
-            "https" if request.is_secure() else "http",
+            _get_request_scheme(request),
             good_host,
         )
         if request_origin == good_origin:

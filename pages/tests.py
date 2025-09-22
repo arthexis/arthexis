@@ -168,7 +168,25 @@ class LoginViewTests(TestCase):
         self.assertTrue(resp.context["can_request_invite"])
         self.assertContains(resp, reverse("pages:request-invite"))
 
-
+    @override_settings(ALLOWED_HOSTS=["gway-qk32000"])
+    def test_login_allows_forwarded_https_origin(self):
+        secure_client = Client(enforce_csrf_checks=True)
+        login_url = reverse("pages:login")
+        response = secure_client.get(login_url, HTTP_HOST="gway-qk32000")
+        csrf_cookie = response.cookies["csrftoken"].value
+        submit = secure_client.post(
+            login_url,
+            {
+                "username": "staff",
+                "password": "pwd",
+                "csrfmiddlewaretoken": csrf_cookie,
+            },
+            HTTP_HOST="gway-qk32000",
+            HTTP_ORIGIN="https://gway-qk32000",
+            HTTP_X_FORWARDED_PROTO="https",
+            HTTP_REFERER="https://gway-qk32000/login/",
+        )
+        self.assertRedirects(submit, reverse("admin:index"))
 
 class AuthenticatorSetupTests(TestCase):
     def setUp(self):
