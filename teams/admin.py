@@ -102,4 +102,4 @@ except NotRegistered:
 
 @admin.register(TOTPDevice)
 class TOTPDeviceAdminProxy(CoreTOTPDeviceAdmin):
-    pass
+    raw_id_fields = ()
