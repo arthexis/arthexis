@@ -291,7 +291,7 @@ fi
 HYPERLINE_NAME="hyperline"
 AP_NAME_LOWER="$(printf '%s' "$AP_NAME" | tr '[:upper:]' '[:lower:]')"
 AP_HYPERLINE_BY_USER=false
-if [[ $AP_SPECIFIED == true && "$AP_NAME_LOWER" == "$HYPERLINE_NAME" ]]; then
+if [[ "$AP_NAME_LOWER" == "$HYPERLINE_NAME" ]]; then
     AP_HYPERLINE_BY_USER=true
 fi
 EXISTING_PASS=""
