@@ -1282,6 +1282,23 @@ class TodoFocusViewTests(TestCase):
         change_url = reverse("admin:core_todo_change", args=[todo.pk])
         self.assertContains(resp, f'src="{change_url}"')
 
+    def test_focus_view_sanitizes_loopback_absolute_url(self):
+        todo = Todo.objects.create(
+            request="Task",
+            url="http://127.0.0.1:8000/docs/?section=chart",
+        )
+        resp = self.client.get(reverse("todo-focus", args=[todo.pk]))
+        self.assertContains(resp, 'src="/docs/?section=chart"')
+
+    def test_focus_view_rejects_external_absolute_url(self):
+        todo = Todo.objects.create(
+            request="Task",
+            url="https://outside.invalid/external/",
+        )
+        resp = self.client.get(reverse("todo-focus", args=[todo.pk]))
+        change_url = reverse("admin:core_todo_change", args=[todo.pk])
+        self.assertContains(resp, f'src="{change_url}"')
+
     def test_focus_view_redirects_if_todo_completed(self):
         todo = Todo.objects.create(request="Task")
         todo.done_on = timezone.now()
