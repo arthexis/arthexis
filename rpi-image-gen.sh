@@ -16,6 +16,9 @@ DEVICE_LAYER_CANONICAL=""
 DEVICE_LAYER_ALIAS=""
 PASSWORD_PROVIDED=false
 HOSTNAME=""
+RUN_BUILD_AS_USER=""
+RUN_BUILD_AS_UID=""
+RUN_BUILD_AS_GID=""
 
 usage() {
   cat <<USAGE
@@ -52,6 +55,30 @@ validate_hostname() {
   fi
   if [[ ! $name =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
     error "Hostname must match ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+  fi
+}
+
+ensure_path_owned_by_build_user() {
+  local path="$1"
+  [[ -n "$RUN_BUILD_AS_USER" ]] || return 0
+  [[ -e "$path" ]] || return 0
+
+  local current_uid current_gid
+  if ! current_uid=$(stat -c '%u' "$path" 2>/dev/null); then
+    return 0
+  fi
+  if ! current_gid=$(stat -c '%g' "$path" 2>/dev/null); then
+    return 0
+  fi
+
+  if [[ "$current_uid" == "$RUN_BUILD_AS_UID" && "$current_gid" == "$RUN_BUILD_AS_GID" ]]; then
+    return 0
+  fi
+
+  if [[ -d "$path" ]]; then
+    chown -R "$RUN_BUILD_AS_UID:$RUN_BUILD_AS_GID" "$path"
+  else
+    chown "$RUN_BUILD_AS_UID:$RUN_BUILD_AS_GID" "$path"
   fi
 }
 
@@ -100,6 +127,24 @@ done
 validate_hostname "$HOSTNAME"
 validate_username "$USERNAME"
 
+if [[ $EUID -eq 0 ]]; then
+  if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+    RUN_BUILD_AS_USER="$SUDO_USER"
+    if [[ -n "${SUDO_UID:-}" ]]; then
+      RUN_BUILD_AS_UID="$SUDO_UID"
+    else
+      RUN_BUILD_AS_UID="$(id -u "$RUN_BUILD_AS_USER")"
+    fi
+    if [[ -n "${SUDO_GID:-}" ]]; then
+      RUN_BUILD_AS_GID="$SUDO_GID"
+    else
+      RUN_BUILD_AS_GID="$(id -g "$RUN_BUILD_AS_USER")"
+    fi
+  else
+    error "Running this tool directly as root is not supported; rpi-image-gen requires rootless execution. Please run without sudo or invoke it via sudo from a non-root account."
+  fi
+fi
+
 if [[ "$PASSWORD_PROVIDED" = false ]]; then
   while true; do
     read -rsp "Password for user '$USERNAME': " p1
@@ -131,6 +176,7 @@ LAYER_DIR="$SOURCE_DIR/layer"
 OUTPUT_DIR="$BASE_DIR/build/images"
 BUILD_DIR="$RUN_DIR/build"
 mkdir -p "$RUN_DIR" "$SOURCE_DIR" "$CONFIG_DIR" "$LAYER_DIR" "$OUTPUT_DIR" "$BUILD_DIR"
+ensure_path_owned_by_build_user "$RUN_DIR"
 
 cleanup() {
   if [[ -n "${PASSWORD_FILE:-}" && -f "$PASSWORD_FILE" ]]; then
@@ -328,6 +374,7 @@ PY
 if [[ ! -d "$RPI_DIR" ]]; then
   fetch_rpi_image_gen
 fi
+ensure_path_owned_by_build_user "$RPI_DIR"
 
 if DEVICE_LAYER_CANONICAL="$(resolve_device_layer "$DEVICE_LAYER_REQUEST" 2>/dev/null)"; then
   :
@@ -337,6 +384,7 @@ else
   fetch_rpi_image_gen
   DEVICE_LAYER_CANONICAL="$(resolve_device_layer "$DEVICE_LAYER_REQUEST")" || \
     error "Device layer '$DEVICE_LAYER_REQUEST' not found in rpi-image-gen repository at $RPI_DIR."
+  ensure_path_owned_by_build_user "$RPI_DIR"
 fi
 
 DEVICE_LAYER_ALIAS="${RESOLVED_DEVICE_ALIAS:-$DEVICE_LAYER_REQUEST}"
@@ -444,6 +492,7 @@ PASSWORD_FILE="$RUN_DIR/.user-password"
 chmod 700 "$RUN_DIR"
 printf '%s\n' "$PASSWORD" > "$PASSWORD_FILE"
 chmod 600 "$PASSWORD_FILE"
+ensure_path_owned_by_build_user "$PASSWORD_FILE"
 
 generate_uuid() {
   if command -v uuidgen >/dev/null 2>&1; then
@@ -858,7 +907,14 @@ BUILD_CMD=("$RPI_BIN" build -S "$SOURCE_DIR" -c "$CONFIG_FILE" -B "$BUILD_DIR" -
   "IGconf_arthexis_eth_uuid=$ETH_UUID")
 
 echo "Running rpi-image-gen build..."
-"${BUILD_CMD[@]}"
+if [[ -n "$RUN_BUILD_AS_USER" ]]; then
+  echo "Executing build steps as $RUN_BUILD_AS_USER to satisfy rootless container requirements."
+  ensure_path_owned_by_build_user "$RUN_DIR"
+  ensure_path_owned_by_build_user "$RPI_DIR"
+  sudo -u "$RUN_BUILD_AS_USER" -- "${BUILD_CMD[@]}"
+else
+  "${BUILD_CMD[@]}"
+fi
 
 OUTPUT_IMAGE_PATH="$BUILD_DIR/image-${IMAGE_NAME}/${IMAGE_NAME}.img"
 if [[ ! -f "$OUTPUT_IMAGE_PATH" ]]; then
@@ -877,4 +933,7 @@ else
 fi
 
 cp "$OUTPUT_IMAGE_PATH" "$FINAL_IMAGE"
+if [[ -n "$RUN_BUILD_AS_USER" ]]; then
+  chown "$RUN_BUILD_AS_UID:$RUN_BUILD_AS_GID" "$FINAL_IMAGE"
+fi
 echo "Image ready: $FINAL_IMAGE"
