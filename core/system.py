@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from contextlib import closing
 from pathlib import Path
+import re
 import socket
 import subprocess
 import shutil
@@ -10,6 +12,79 @@ from django.contrib import admin
 from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.translation import gettext_lazy as _
+
+
+_RUNSERVER_PORT_PATTERN = re.compile(r":(\d{2,5})(?:\D|$)")
+_RUNSERVER_PORT_FLAG_PATTERN = re.compile(r"--port(?:=|\s+)(\d{2,5})", re.IGNORECASE)
+
+
+def _parse_runserver_port(command_line: str) -> int | None:
+    """Extract the HTTP port from a runserver command line."""
+
+    for pattern in (_RUNSERVER_PORT_PATTERN, _RUNSERVER_PORT_FLAG_PATTERN):
+        match = pattern.search(command_line)
+        if match:
+            try:
+                return int(match.group(1))
+            except ValueError:
+                continue
+    return None
+
+
+def _detect_runserver_process() -> tuple[bool, int | None]:
+    """Return whether the dev server is running and the port if available."""
+
+    try:
+        result = subprocess.run(
+            ["pgrep", "-af", "manage.py runserver"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return False, None
+    except Exception:
+        return False, None
+
+    if result.returncode != 0:
+        return False, None
+
+    output = result.stdout.strip()
+    if not output:
+        return False, None
+
+    port = None
+    for line in output.splitlines():
+        port = _parse_runserver_port(line)
+        if port is not None:
+            break
+
+    if port is None:
+        port = 8000
+
+    return True, port
+
+
+def _probe_ports(candidates: list[int]) -> tuple[bool, int | None]:
+    """Attempt to connect to localhost on the provided ports."""
+
+    for port in candidates:
+        try:
+            with closing(socket.create_connection(("localhost", port), timeout=0.25)):
+                return True, port
+        except OSError:
+            continue
+    return False, None
+
+
+def _port_candidates(default_port: int) -> list[int]:
+    """Return a prioritized list of ports to probe for the HTTP service."""
+
+    candidates = [default_port]
+    for port in (8000, 8888):
+        if port not in candidates:
+            candidates.append(port)
+    return candidates
 
 
 def _gather_info() -> dict:
@@ -26,7 +101,8 @@ def _gather_info() -> dict:
     mode_file = lock_dir / "nginx_mode.lck"
     mode = mode_file.read_text().strip() if mode_file.exists() else "internal"
     info["mode"] = mode
-    info["port"] = 8000 if mode == "public" else 8888
+    default_port = 8000 if mode == "public" else 8888
+    detected_port: int | None = None
 
     screen_file = lock_dir / "screen_mode.lck"
     info["screen_mode"] = (
@@ -58,17 +134,20 @@ def _gather_info() -> dict:
         except Exception:
             pass
     else:
-        try:
-            subprocess.run(
-                ["pgrep", "-f", "manage.py runserver"],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
+        process_running, process_port = _detect_runserver_process()
+        if process_running:
             running = True
-        except Exception:
-            running = False
+            detected_port = process_port
+
+        if not running or detected_port is None:
+            probe_running, probe_port = _probe_ports(_port_candidates(default_port))
+            if probe_running:
+                running = True
+                if detected_port is None:
+                    detected_port = probe_port
+
     info["running"] = running
+    info["port"] = detected_port if detected_port is not None else default_port
     info["service_status"] = service_status
 
     try:

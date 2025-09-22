@@ -29,14 +29,14 @@ class AdminSystemViewTests(TestCase):
     def test_system_page_displays_information(self):
         self.client.force_login(self.superuser)
         response = self.client.get(reverse("admin:system"))
-        self.assertContains(response, "Application installed")
+        self.assertContains(response, "Suite installed")
         self.assertNotContains(response, "Stop Server")
         self.assertNotContains(response, "Restart")
 
     def test_system_page_accessible_to_staff_without_controls(self):
         self.client.force_login(self.staff)
         response = self.client.get(reverse("admin:system"))
-        self.assertContains(response, "Application installed")
+        self.assertContains(response, "Suite installed")
         self.assertNotContains(response, "Stop Server")
         self.assertNotContains(response, "Restart")
 

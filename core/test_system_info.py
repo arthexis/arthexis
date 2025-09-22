@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+from subprocess import CompletedProcess
+from unittest.mock import patch
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
@@ -41,3 +43,26 @@ class SystemInfoScreenModeTests(SimpleTestCase):
             lock_file.unlink()
             if not any(lock_dir.iterdir()):
                 lock_dir.rmdir()
+
+
+class SystemInfoRunserverDetectionTests(SimpleTestCase):
+    @patch("core.system.subprocess.run")
+    def test_detects_runserver_process_port(self, mock_run):
+        mock_run.return_value = CompletedProcess(
+            args=["pgrep"],
+            returncode=0,
+            stdout="123 python manage.py runserver 0.0.0.0:8000 --noreload\n",
+        )
+
+        info = _gather_info()
+
+        self.assertTrue(info["running"])
+        self.assertEqual(info["port"], 8000)
+
+    @patch("core.system._probe_ports", return_value=(True, 8000))
+    @patch("core.system.subprocess.run", side_effect=FileNotFoundError)
+    def test_falls_back_to_port_probe_when_pgrep_missing(self, mock_run, mock_probe):
+        info = _gather_info()
+
+        self.assertTrue(info["running"])
+        self.assertEqual(info["port"], 8000)
