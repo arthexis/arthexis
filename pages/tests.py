@@ -1,3 +1,11 @@
+import os
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
+import django
+
+django.setup()
+
 from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from urllib.parse import quote
@@ -603,6 +611,7 @@ class ViewHistoryAdminTests(TestCase):
         resp = self.client.get(reverse("admin:pages_viewhistory_traffic_graph"))
         self.assertContains(resp, "viewhistory-chart")
         self.assertContains(resp, reverse("admin:pages_viewhistory_changelist"))
+        self.assertContains(resp, static("core/vendor/chart.umd.min.js"))
 
     def test_graph_data_endpoint(self):
         self._create_history("/", count=2)
@@ -624,6 +633,7 @@ class ViewHistoryAdminTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "viewhistory-mini-module")
         self.assertContains(resp, reverse("admin:pages_viewhistory_traffic_graph"))
+        self.assertContains(resp, static("core/vendor/chart.umd.min.js"))
 
 
 class AdminModelStatusTests(TestCase):

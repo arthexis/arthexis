@@ -262,14 +262,25 @@
       const emptyLabel = document.getElementById('viewhistory-mini-empty');
       if (!canvas) return;
 
+      const chartJsUrl = "{% static 'core/vendor/chart.umd.min.js' %}";
+
       const ensureChartJs = () => {
         if (window.Chart) {
           return Promise.resolve(window.Chart);
         }
         return new Promise((resolve) => {
+          const existing = document.querySelector('script[data-chartjs]');
+          if (existing) {
+            existing.addEventListener('load', () => resolve(window.Chart || null), {
+              once: true,
+            });
+            existing.addEventListener('error', () => resolve(null), { once: true });
+            return;
+          }
           const script = document.createElement('script');
-          script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+          script.src = chartJsUrl;
           script.async = true;
+          script.dataset.chartjs = 'true';
           script.onload = () => resolve(window.Chart);
           script.onerror = () => resolve(null);
           document.head.appendChild(script);
