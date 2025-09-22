@@ -19,6 +19,9 @@ HOSTNAME=""
 RUN_BUILD_AS_USER=""
 RUN_BUILD_AS_UID=""
 RUN_BUILD_AS_GID=""
+WRITE_IMAGE=false
+USB_DEVICE=""
+AUTO_CONFIRM_WRITE=false
 
 usage() {
   cat <<USAGE
@@ -31,6 +34,8 @@ Options:
   --user NAME         Provision the named Linux account (default: arthe).
   --password PASS     Use PASS as the account password (otherwise prompt).
   --device LAYER      Target rpi-image-gen device layer alias (default: pi4; resolves canonical names automatically).
+  --write             Write the generated image to a USB drive after build completion.
+  --usb DEVICE        Preselect DEVICE for writing (implies --write and skips confirmation prompts).
   -h, --help          Show this help message.
 USAGE
 }
@@ -104,6 +109,16 @@ while [[ $# -gt 0 ]]; do
     --device)
       [[ $# -ge 2 ]] || error "--device requires a value"
       DEVICE_LAYER_REQUEST="$2"
+      shift
+      ;;
+    --write)
+      WRITE_IMAGE=true
+      ;;
+    --usb)
+      [[ $# -ge 2 ]] || error "--usb requires a value"
+      USB_DEVICE="$2"
+      WRITE_IMAGE=true
+      AUTO_CONFIRM_WRITE=true
       shift
       ;;
     --hostname)
@@ -390,6 +405,365 @@ PY
 
     rm -f "$backup"
   done
+}
+
+run_with_privilege() {
+  if (( EUID == 0 )); then
+    "$@"
+  else
+    if command -v sudo >/dev/null 2>&1; then
+      sudo "$@"
+    else
+      error "Command '$*' requires elevated privileges but sudo is not available."
+    fi
+  fi
+}
+
+normalize_device_path() {
+  local path="$1"
+  [[ -n "$path" ]] || return 1
+  if [[ "$path" == /dev/* ]]; then
+    printf '%s\n' "$path"
+  else
+    printf '/dev/%s\n' "$path"
+  fi
+}
+
+usb_device_query() {
+  local mode="$1"
+  shift
+  python3 - "$mode" "$@" <<'PY'
+import json
+import os
+import subprocess
+import sys
+
+CMD = [
+    "lsblk",
+    "-J",
+    "-b",
+    "-o",
+    "NAME,TYPE,RM,TRAN,HOTPLUG,SIZE,MODEL,MOUNTPOINTS,FSSIZE,FSUSED,FSAVAIL",
+]
+
+try:
+    output = subprocess.check_output(CMD, text=True)
+except FileNotFoundError:
+    print("lsblk command not found. Install util-linux to enable USB writing support.", file=sys.stderr)
+    sys.exit(2)
+except subprocess.CalledProcessError as exc:
+    print(f"lsblk command failed with exit code {exc.returncode}.", file=sys.stderr)
+    sys.exit(exc.returncode or 1)
+
+try:
+    data = json.loads(output)
+except json.JSONDecodeError as exc:
+    print(f"Unable to parse lsblk output: {exc}", file=sys.stderr)
+    sys.exit(3)
+
+
+def to_int(value):
+    if value in (None, ""):
+        return None
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def human_readable(size):
+    value = to_int(size)
+    if value is None:
+        return "unknown size"
+    if value == 0:
+        return "0 B"
+    units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"]
+    idx = 0
+    number = float(value)
+    while number >= 1024 and idx < len(units) - 1:
+        number /= 1024
+        idx += 1
+    if units[idx] == "B":
+        return f"{int(number)} {units[idx]}"
+    return f"{number:.2f} {units[idx]}"
+
+
+def format_partition(part):
+    name = part.get("name") or ""
+    path = f"/dev/{name}" if name else "unknown partition"
+    mountpoints = [mp for mp in (part.get("mountpoints") or []) if mp]
+    mount_desc = ", ".join(mountpoints) if mountpoints else "not mounted"
+    fsused = to_int(part.get("fsused"))
+    fssize = to_int(part.get("fssize"))
+    if fsused is not None and fssize:
+        usage = f"{human_readable(fsused)} used of {human_readable(fssize)}"
+    elif fssize:
+        usage = f"filesystem size {human_readable(fssize)}"
+    else:
+        part_size = to_int(part.get("size"))
+        if part_size:
+            usage = f"partition size {human_readable(part_size)}"
+        else:
+            usage = "size unavailable"
+    return f"{path} ({mount_desc}; {usage})"
+
+
+def collect_mountpoints(dev):
+    points = []
+    for mp in dev.get("mountpoints") or []:
+        if mp:
+            points.append(mp)
+    for child in dev.get("children") or []:
+        points.extend(collect_mountpoints(child))
+    return points
+
+
+def is_usb_candidate(dev):
+    tran = (dev.get("tran") or "").lower()
+    rm = bool(dev.get("rm"))
+    hotplug = bool(dev.get("hotplug"))
+    if tran == "usb":
+        return True
+    if rm and tran in ("", None):
+        return True
+    if hotplug and tran not in ("", None, "sata"):
+        return True
+    return False
+
+
+def find_device(devices, name):
+    for dev in devices:
+        if dev.get("name") == name:
+            return dev
+    return None
+
+
+devices = data.get("blockdevices") or []
+mode = sys.argv[1]
+
+if mode == "list":
+    for dev in devices:
+        if dev.get("type") != "disk":
+            continue
+        if not is_usb_candidate(dev):
+            continue
+        summary = f"{human_readable(dev.get('size'))} - {dev.get('model') or 'Unknown model'}"
+        partitions = []
+        for child in dev.get("children") or []:
+            if child.get("type") not in {"part", "crypt", "lvm"}:
+                continue
+            partitions.append(format_partition(child))
+        if partitions:
+            summary += "; partitions: " + "; ".join(partitions)
+        else:
+            summary += "; no partitions detected"
+        summary = summary.replace("\t", " ").replace("\n", " ")
+        mounts = collect_mountpoints(dev)
+        is_system = int(any(mp == "/" for mp in mounts))
+        print(f"/dev/{dev.get('name')}\t{int(is_usb_candidate(dev))}\t{is_system}\t{dev.get('type')}\t{summary}")
+    sys.exit(0)
+
+if mode == "describe":
+    if len(sys.argv) < 3:
+        sys.exit(1)
+    path = sys.argv[2]
+    real_path = os.path.realpath(path)
+    if real_path.startswith("/dev/"):
+        name = os.path.basename(real_path)
+    else:
+        name = os.path.basename(path)
+    dev = find_device(devices, name)
+    if dev is None:
+        print(f"Device {path} not found in lsblk output.", file=sys.stderr)
+        sys.exit(4)
+    summary = f"{human_readable(dev.get('size'))} - {dev.get('model') or 'Unknown model'}"
+    partitions = []
+    for child in dev.get("children") or []:
+        if child.get("type") not in {"part", "crypt", "lvm"}:
+            continue
+        partitions.append(format_partition(child))
+    if partitions:
+        summary += "; partitions: " + "; ".join(partitions)
+    else:
+        summary += "; no partitions detected"
+    summary = summary.replace("\t", " ").replace("\n", " ")
+    mounts = collect_mountpoints(dev)
+    is_system = int(any(mp == "/" for mp in mounts))
+    print(f"/dev/{dev.get('name')}\t{int(is_usb_candidate(dev))}\t{is_system}\t{dev.get('type')}\t{summary}")
+    sys.exit(0)
+
+if mode == "mountpoints":
+    if len(sys.argv) < 3:
+        sys.exit(0)
+    path = sys.argv[2]
+    real_path = os.path.realpath(path)
+    if real_path.startswith("/dev/"):
+        name = os.path.basename(real_path)
+    else:
+        name = os.path.basename(path)
+    dev = find_device(devices, name)
+    if dev is None:
+        sys.exit(0)
+    mounts = collect_mountpoints(dev)
+    unique = []
+    for mp in mounts:
+        if mp and mp not in unique:
+            unique.append(mp)
+    unique.sort(key=len, reverse=True)
+    for mp in unique:
+        print(mp)
+    sys.exit(0)
+
+print(f"Unknown usb_device_query mode: {mode}", file=sys.stderr)
+sys.exit(5)
+PY
+}
+
+write_image_to_usb() {
+  local image_path="$1"
+  local requested_device="${2:-}"
+  local auto_confirm="${3:-false}"
+
+  [[ -f "$image_path" ]] || error "Image file '$image_path' not found for USB write."
+
+  local selected_device=""
+  local summary=""
+  local is_usb=""
+  local is_system=""
+  local device_type=""
+  local describe_output=""
+  local list_output=""
+  local -a candidate_lines=()
+
+  if [[ -n "$requested_device" ]]; then
+    local normalized
+    normalized="$(normalize_device_path "$requested_device")" || \
+      error "Invalid USB device path '$requested_device'."
+    if ! describe_output="$(usb_device_query describe "$normalized")"; then
+      error "Unable to locate device '$requested_device' for USB writing."
+    fi
+    IFS=$'\t' read -r selected_device is_usb is_system device_type summary <<<"$describe_output"
+  else
+    if ! list_output="$(usb_device_query list)"; then
+      error "Unable to enumerate removable USB drives."
+    fi
+    mapfile -t candidate_lines <<<"$list_output"
+    if (( ${#candidate_lines[@]} == 0 )); then
+      error "No removable USB drives detected. Connect a drive or specify one with --usb."
+    fi
+    echo "Available USB drives:"
+    local idx
+    for idx in "${!candidate_lines[@]}"; do
+      IFS=$'\t' read -r device is_usb is_system device_type summary <<<"${candidate_lines[$idx]}"
+      printf '  [%d] %s - %s\n' "$idx" "$device" "$summary"
+    done
+    local choice
+    while true; do
+      read -r -p "Select drive number to write the image to (or 'q' to cancel): " choice
+      if [[ "$choice" == "q" || "$choice" == "Q" ]]; then
+        echo "Skipping USB write."
+        return 0
+      fi
+      if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 0 && choice < ${#candidate_lines[@]} )); then
+        IFS=$'\t' read -r selected_device is_usb is_system device_type summary <<<"${candidate_lines[$choice]}"
+        break
+      fi
+      echo "Invalid selection. Please enter a valid number or 'q'."
+    done
+  fi
+
+  if [[ -z "$selected_device" ]]; then
+    error "No USB device selected for writing."
+  fi
+
+  if [[ "$device_type" != "disk" ]]; then
+    error "Device $selected_device is not a disk. Specify the whole device (for example /dev/sdb)."
+  fi
+
+  if [[ "$is_system" == "1" ]]; then
+    error "Refusing to write to $selected_device because it appears to host the running system."
+  fi
+
+  if [[ "$is_usb" != "1" ]]; then
+    echo "Warning: $selected_device does not appear to be a removable USB disk." >&2
+    if [[ "$auto_confirm" != "true" ]]; then
+      local proceed_choice
+      read -r -p "Proceed anyway? [y/N]: " proceed_choice
+      if [[ ! "$proceed_choice" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        echo "Skipping USB write."
+        return 0
+      fi
+    fi
+  fi
+
+  if [[ "$auto_confirm" == "true" ]]; then
+    echo "Writing image to $selected_device (auto-confirmed by --usb)."
+    echo "$summary"
+  else
+    echo "Selected drive: $selected_device - $summary"
+    local confirm
+    read -r -p "All data on this drive will be erased. Proceed? [y/N]: " confirm
+    if [[ ! "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+      echo "Skipping USB write."
+      return 0
+    fi
+  fi
+
+  echo "Unmounting partitions on $selected_device..."
+  local mount_output
+  if ! mount_output="$(usb_device_query mountpoints "$selected_device")"; then
+    error "Failed to determine mount points for $selected_device."
+  fi
+  local -a mountpoints=()
+  mapfile -t mountpoints <<<"$mount_output"
+  local mp
+  for mp in "${mountpoints[@]}"; do
+    if [[ -n "$mp" ]]; then
+      if mountpoint -q "$mp"; then
+        run_with_privilege umount "$mp"
+      fi
+    fi
+  done
+
+  local -a dd_cmd
+  if (( EUID == 0 )); then
+    dd_cmd=(dd of="$selected_device" bs=4M conv=fsync status=progress)
+  else
+    command -v sudo >/dev/null 2>&1 || \
+      error "Writing the image requires root privileges. Install sudo or rerun this script with sudo."
+    dd_cmd=(sudo dd of="$selected_device" bs=4M conv=fsync status=progress)
+  fi
+
+  if [[ "$image_path" == *.xz ]]; then
+    command -v xz >/dev/null 2>&1 || \
+      error "xz utility is required to write compressed images. Install xz-utils or decompress the image manually."
+    echo "Writing compressed image $image_path to $selected_device..."
+    xz -dc "$image_path" | "${dd_cmd[@]}"
+  else
+    echo "Writing image $image_path to $selected_device..."
+    "${dd_cmd[@]}" if="$image_path"
+  fi
+
+  echo "Syncing write buffers..."
+  run_with_privilege sync
+
+  echo "Ejecting $selected_device..."
+  if command -v udisksctl >/dev/null 2>&1; then
+    if ! run_with_privilege udisksctl power-off -b "$selected_device"; then
+      echo "udisksctl power-off failed; attempting eject fallback." >&2
+      if command -v eject >/dev/null 2>&1; then
+        run_with_privilege eject "$selected_device" || true
+      fi
+    fi
+  elif command -v eject >/dev/null 2>&1; then
+    run_with_privilege eject "$selected_device" || true
+  else
+    echo "No eject utility available. Please remove the drive safely." >&2
+  fi
+
+  echo "Image written to $selected_device successfully."
 }
 
 if [[ ! -d "$RPI_DIR" ]]; then
@@ -959,3 +1333,7 @@ if [[ -n "$RUN_BUILD_AS_USER" ]]; then
   chown "$RUN_BUILD_AS_UID:$RUN_BUILD_AS_GID" "$FINAL_IMAGE"
 fi
 echo "Image ready: $FINAL_IMAGE"
+
+if [[ "$WRITE_IMAGE" == true ]]; then
+  write_image_to_usb "$FINAL_IMAGE" "$USB_DEVICE" "$AUTO_CONFIRM_WRITE"
+fi
