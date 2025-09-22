@@ -168,6 +168,87 @@ class LoginViewTests(TestCase):
         self.assertTrue(resp.context["can_request_invite"])
         self.assertContains(resp, reverse("pages:request-invite"))
 
+    @override_settings(ALLOWED_HOSTS=["gway-qk32000"])
+    def test_login_allows_forwarded_https_origin(self):
+        secure_client = Client(enforce_csrf_checks=True)
+        login_url = reverse("pages:login")
+        response = secure_client.get(login_url, HTTP_HOST="gway-qk32000")
+        csrf_cookie = response.cookies["csrftoken"].value
+        submit = secure_client.post(
+            login_url,
+            {
+                "username": "staff",
+                "password": "pwd",
+                "csrfmiddlewaretoken": csrf_cookie,
+            },
+            HTTP_HOST="gway-qk32000",
+            HTTP_ORIGIN="https://gway-qk32000",
+            HTTP_X_FORWARDED_PROTO="https",
+            HTTP_REFERER="https://gway-qk32000/login/",
+        )
+        self.assertRedirects(submit, reverse("admin:index"))
+
+    @override_settings(ALLOWED_HOSTS=["10.42.0.0/16", "gway-qk32000"])
+    def test_login_allows_forwarded_origin_with_private_host_header(self):
+        secure_client = Client(enforce_csrf_checks=True)
+        login_url = reverse("pages:login")
+        response = secure_client.get(login_url, HTTP_HOST="10.42.0.2")
+        csrf_cookie = response.cookies["csrftoken"].value
+        submit = secure_client.post(
+            login_url,
+            {
+                "username": "staff",
+                "password": "pwd",
+                "csrfmiddlewaretoken": csrf_cookie,
+            },
+            HTTP_HOST="10.42.0.2",
+            HTTP_ORIGIN="https://gway-qk32000",
+            HTTP_X_FORWARDED_PROTO="https",
+            HTTP_X_FORWARDED_HOST="gway-qk32000",
+            HTTP_REFERER="https://gway-qk32000/login/",
+        )
+        self.assertRedirects(submit, reverse("admin:index"))
+
+    @override_settings(ALLOWED_HOSTS=["10.42.0.0/16", "gway-qk32000"])
+    def test_login_allows_forwarded_header_host_and_proto(self):
+        secure_client = Client(enforce_csrf_checks=True)
+        login_url = reverse("pages:login")
+        response = secure_client.get(login_url, HTTP_HOST="10.42.0.2")
+        csrf_cookie = response.cookies["csrftoken"].value
+        submit = secure_client.post(
+            login_url,
+            {
+                "username": "staff",
+                "password": "pwd",
+                "csrfmiddlewaretoken": csrf_cookie,
+            },
+            HTTP_HOST="10.42.0.2",
+            HTTP_ORIGIN="https://gway-qk32000",
+            HTTP_FORWARDED="proto=https;host=gway-qk32000",
+            HTTP_REFERER="https://gway-qk32000/login/",
+        )
+        self.assertRedirects(submit, reverse("admin:index"))
+
+    @override_settings(ALLOWED_HOSTS=["gway-qk32000"])
+    def test_login_allows_forwarded_origin_with_explicit_port(self):
+        secure_client = Client(enforce_csrf_checks=True)
+        login_url = reverse("pages:login")
+        response = secure_client.get(login_url, HTTP_HOST="gway-qk32000")
+        csrf_cookie = response.cookies["csrftoken"].value
+        submit = secure_client.post(
+            login_url,
+            {
+                "username": "staff",
+                "password": "pwd",
+                "csrfmiddlewaretoken": csrf_cookie,
+            },
+            HTTP_HOST="gway-qk32000",
+            HTTP_ORIGIN="https://gway-qk32000:4443",
+            HTTP_X_FORWARDED_PROTO="https",
+            HTTP_X_FORWARDED_HOST="gway-qk32000:4443",
+            HTTP_REFERER="https://gway-qk32000:4443/login/",
+        )
+        self.assertRedirects(submit, reverse("admin:index"))
 
 
 class AuthenticatorSetupTests(TestCase):
