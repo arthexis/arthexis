@@ -277,17 +277,74 @@ class SimulatorAdmin(LogViewAdminMixin, EntityModelAdmin):
         "rfid",
         ("duration", "interval", "pre_charge_delay"),
         "kw_max",
-        "repeat",
+        ("repeat", "door_open"),
         ("username", "password"),
     )
-    actions = ("start_simulator", "stop_simulator")
+    actions = ("start_simulator", "stop_simulator", "send_open_door")
 
     log_type = "simulator"
+
+    def save_model(self, request, obj, form, change):
+        previous_door_open = False
+        if change and obj.pk:
+            previous_door_open = (
+                type(obj)
+                .objects.filter(pk=obj.pk)
+                .values_list("door_open", flat=True)
+                .first()
+                or False
+            )
+        super().save_model(request, obj, form, change)
+        if obj.door_open and not previous_door_open:
+            triggered = self._queue_door_open(request, obj)
+            if not triggered:
+                type(obj).objects.filter(pk=obj.pk).update(door_open=False)
+                obj.door_open = False
+
+    def _queue_door_open(self, request, obj) -> bool:
+        sim = store.simulators.get(obj.pk)
+        if not sim:
+            self.message_user(
+                request,
+                f"{obj.name}: simulator is not running",
+                level=messages.ERROR,
+            )
+            return False
+        type(obj).objects.filter(pk=obj.pk).update(door_open=True)
+        obj.door_open = True
+        store.add_log(
+            obj.cp_path,
+            "Door open event requested from admin",
+            log_type="simulator",
+        )
+        if hasattr(sim, "trigger_door_open"):
+            sim.trigger_door_open()
+        else:  # pragma: no cover - unexpected condition
+            self.message_user(
+                request,
+                f"{obj.name}: simulator cannot send door open event",
+                level=messages.ERROR,
+            )
+            type(obj).objects.filter(pk=obj.pk).update(door_open=False)
+            obj.door_open = False
+            return False
+        type(obj).objects.filter(pk=obj.pk).update(door_open=False)
+        obj.door_open = False
+        self.message_user(
+            request,
+            f"{obj.name}: DoorOpen status notification sent",
+        )
+        return True
 
     def running(self, obj):
         return obj.pk in store.simulators
 
     running.boolean = True
+
+    @admin.action(description="Send Open Door")
+    def send_open_door(self, request, queryset):
+        for obj in queryset:
+            self._queue_door_open(request, obj)
 
     def start_simulator(self, request, queryset):
         from django.urls import reverse
@@ -297,6 +354,8 @@ class SimulatorAdmin(LogViewAdminMixin, EntityModelAdmin):
             if obj.pk in store.simulators:
                 self.message_user(request, f"{obj.name}: already running")
                 continue
+            type(obj).objects.filter(pk=obj.pk).update(door_open=False)
+            obj.door_open = False
             store.register_log_name(obj.cp_path, obj.name, log_type="simulator")
             sim = ChargePointSimulator(obj.as_config())
             started, status, log_file = sim.start()

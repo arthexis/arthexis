@@ -3,6 +3,7 @@ import base64
 import json
 import random
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Optional
 import threading
@@ -42,9 +43,57 @@ class ChargePointSimulator:
         self.config = config
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+        self._door_open_event = threading.Event()
         self.status = "stopped"
         self._connected = threading.Event()
         self._connect_error = ""
+
+    def trigger_door_open(self) -> None:
+        """Queue a DoorOpen status notification for the simulator."""
+
+        self._door_open_event.set()
+
+    async def _maybe_send_door_event(self, send, recv) -> None:
+        if not self._door_open_event.is_set():
+            return
+        self._door_open_event.clear()
+        cfg = self.config
+        store.add_log(
+            cfg.cp_path,
+            "Sending DoorOpen StatusNotification",
+            log_type="simulator",
+        )
+        event_id = uuid.uuid4().hex
+        await send(
+            json.dumps(
+                [
+                    2,
+                    f"door-open-{event_id}",
+                    "StatusNotification",
+                    {
+                        "connectorId": cfg.connector_id,
+                        "errorCode": "DoorOpen",
+                        "status": "Faulted",
+                    },
+                ]
+            )
+        )
+        await recv()
+        await send(
+            json.dumps(
+                [
+                    2,
+                    f"door-closed-{event_id}",
+                    "StatusNotification",
+                    {
+                        "connectorId": cfg.connector_id,
+                        "errorCode": "NoError",
+                        "status": "Available",
+                    },
+                ]
+            )
+        )
+        await recv()
 
     @requires_network
     async def _run_session(self) -> None:
@@ -137,6 +186,7 @@ class ChargePointSimulator:
 
             await send(json.dumps([2, "auth", "Authorize", {"idTag": cfg.rfid}]))
             await recv()
+            await self._maybe_send_door_event(send, recv)
             if not self._connected.is_set():
                 self.status = "running"
                 self._connect_error = "accepted"
@@ -185,10 +235,11 @@ class ChargePointSimulator:
                                     ],
                                 },
                             ]
-                        )
                     )
-                    await recv()
-                    await asyncio.sleep(cfg.interval)
+                )
+                await recv()
+                await self._maybe_send_door_event(send, recv)
+                await asyncio.sleep(cfg.interval)
 
             meter_start = random.randint(1000, 2000)
             await send(
@@ -253,6 +304,7 @@ class ChargePointSimulator:
                     )
                 )
                 await recv()
+                await self._maybe_send_door_event(send, recv)
                 await asyncio.sleep(cfg.interval)
 
             await send(
@@ -270,6 +322,7 @@ class ChargePointSimulator:
                 )
             )
             await recv()
+            await self._maybe_send_door_event(send, recv)
         except asyncio.TimeoutError:
             if not self._connected.is_set():
                 self._connect_error = "Timeout waiting for response"
@@ -339,6 +392,7 @@ class ChargePointSimulator:
         self.status = "starting"
         self._connected.clear()
         self._connect_error = ""
+        self._door_open_event.clear()
 
         def _runner() -> None:
             asyncio.run(self._run())

@@ -1,3 +1,11 @@
+import os
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
+import django
+
+django.setup()
+
 from asgiref.testing import ApplicationCommunicator
 from channels.testing import WebsocketCommunicator
 from channels.db import database_sync_to_async
@@ -1436,6 +1444,34 @@ class SimulatorAdminTests(TransactionTestCase):
         resp = self.client.get(url)
         self.assertContains(resp, "ws://h/SIMNP/")
 
+    def test_send_open_door_action_requires_running_simulator(self):
+        sim = Simulator.objects.create(name="SIMDO", cp_path="SIMDO")
+        url = reverse("admin:ocpp_simulator_changelist")
+        resp = self.client.post(
+            url,
+            {"action": "send_open_door", "_selected_action": [sim.pk]},
+            follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "simulator is not running")
+        self.assertFalse(Simulator.objects.get(pk=sim.pk).door_open)
+
+    def test_send_open_door_action_triggers_simulator(self):
+        sim = Simulator.objects.create(name="SIMTRIG", cp_path="SIMTRIG")
+        stub = SimpleNamespace(trigger_door_open=Mock())
+        store.simulators[sim.pk] = stub
+        url = reverse("admin:ocpp_simulator_changelist")
+        resp = self.client.post(
+            url,
+            {"action": "send_open_door", "_selected_action": [sim.pk]},
+            follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        stub.trigger_door_open.assert_called_once()
+        self.assertContains(resp, "DoorOpen status notification sent")
+        self.assertFalse(Simulator.objects.get(pk=sim.pk).door_open)
+        store.simulators.pop(sim.pk, None)
+
     def test_as_config_includes_custom_fields(self):
         sim = Simulator.objects.create(
             name="SIM3",
@@ -1452,6 +1488,45 @@ class SimulatorAdminTests(TransactionTestCase):
         self.assertEqual(cfg.duration, 500)
         self.assertEqual(cfg.pre_charge_delay, 5)
         self.assertEqual(cfg.vin, "WP0ZZZ99999999999")
+
+    def _post_simulator_change(self, sim: Simulator, **overrides):
+        url = reverse("admin:ocpp_simulator_change", args=[sim.pk])
+        data = {
+            "name": sim.name,
+            "cp_path": sim.cp_path,
+            "host": sim.host,
+            "ws_port": sim.ws_port or "",
+            "rfid": sim.rfid,
+            "duration": sim.duration,
+            "interval": sim.interval,
+            "pre_charge_delay": sim.pre_charge_delay,
+            "kw_max": sim.kw_max,
+            "repeat": "on" if sim.repeat else "",
+            "username": sim.username,
+            "password": sim.password,
+            "door_open": "on" if overrides.get("door_open", False) else "",
+            "_save": "Save",
+        }
+        data.update(overrides)
+        return self.client.post(url, data, follow=True)
+
+    def test_save_model_triggers_door_open(self):
+        sim = Simulator.objects.create(name="SIMSAVE", cp_path="SIMSAVE")
+        stub = SimpleNamespace(trigger_door_open=Mock())
+        store.simulators[sim.pk] = stub
+        resp = self._post_simulator_change(sim, door_open="on")
+        self.assertEqual(resp.status_code, 200)
+        stub.trigger_door_open.assert_called_once()
+        self.assertContains(resp, "DoorOpen status notification sent")
+        self.assertFalse(Simulator.objects.get(pk=sim.pk).door_open)
+        store.simulators.pop(sim.pk, None)
+
+    def test_save_model_reports_error_when_not_running(self):
+        sim = Simulator.objects.create(name="SIMERR", cp_path="SIMERR")
+        resp = self._post_simulator_change(sim, door_open="on")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "simulator is not running")
+        self.assertFalse(Simulator.objects.get(pk=sim.pk).door_open)
 
     async def test_unknown_charger_auto_registered(self):
         communicator = WebsocketCommunicator(application, "/NEWCHG/")
@@ -1935,6 +2010,80 @@ class ChargePointSimulatorTests(TransactionTestCase):
             await sim.stop()
             server.close()
             await server.wait_closed()
+
+    async def test_door_open_event_sends_notifications(self):
+        status_payloads = []
+
+        async def handler(ws):
+            async for msg in ws:
+                data = json.loads(msg)
+                action = data[2]
+                if action == "BootNotification":
+                    await ws.send(
+                        json.dumps(
+                            [
+                                3,
+                                data[1],
+                                {"status": "Accepted", "currentTime": "2024-01-01T00:00:00Z"},
+                            ]
+                        )
+                    )
+                elif action == "Authorize":
+                    await ws.send(json.dumps([3, data[1], {"idTagInfo": {"status": "Accepted"}}]))
+                elif action == "StatusNotification":
+                    status_payloads.append(data[3])
+                    await ws.send(json.dumps([3, data[1], {}]))
+                elif action == "StartTransaction":
+                    await ws.send(
+                        json.dumps(
+                            [
+                                3,
+                                data[1],
+                                {"transactionId": 1, "idTagInfo": {"status": "Accepted"}},
+                            ]
+                        )
+                    )
+                elif action == "MeterValues":
+                    await ws.send(json.dumps([3, data[1], {}]))
+                elif action == "StopTransaction":
+                    await ws.send(json.dumps([3, data[1], {"idTagInfo": {"status": "Accepted"}}]))
+                    break
+
+        server = await websockets.serve(
+            handler, "127.0.0.1", 0, subprotocols=["ocpp1.6"]
+        )
+        port = server.sockets[0].getsockname()[1]
+
+        cfg = SimulatorConfig(
+            host="127.0.0.1",
+            ws_port=port,
+            cp_path="SIMDOOR/",
+            duration=0.2,
+            interval=0.05,
+            pre_charge_delay=0.0,
+        )
+        sim = ChargePointSimulator(cfg)
+        sim.trigger_door_open()
+        try:
+            await sim._run_session()
+        finally:
+            server.close()
+            await server.wait_closed()
+            store.clear_log(cfg.cp_path, log_type="simulator")
+
+        door_open_messages = [p for p in status_payloads if p.get("errorCode") == "DoorOpen"]
+        door_closed_messages = [p for p in status_payloads if p.get("errorCode") == "NoError"]
+        self.assertTrue(door_open_messages)
+        self.assertTrue(door_closed_messages)
+        first_open = next(
+            idx for idx, payload in enumerate(status_payloads) if payload.get("errorCode") == "DoorOpen"
+        )
+        first_close = next(
+            idx for idx, payload in enumerate(status_payloads) if payload.get("errorCode") == "NoError"
+        )
+        self.assertLess(first_open, first_close)
+        self.assertEqual(door_open_messages[0].get("status"), "Faulted")
+        self.assertEqual(door_closed_messages[0].get("status"), "Available")
 
 
 class PurgeMeterReadingsTaskTests(TestCase):
