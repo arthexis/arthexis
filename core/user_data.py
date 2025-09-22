@@ -288,6 +288,30 @@ def _is_user_fixture(path: Path) -> bool:
     return len(parts) >= 2 and parts[1].lower() == "user"
 
 
+def _get_request_ip(request) -> str:
+    """Return the best-effort client IP for ``request``."""
+
+    if request is None:
+        return ""
+
+    meta = getattr(request, "META", None)
+    if not getattr(meta, "get", None):
+        return ""
+
+    forwarded = meta.get("HTTP_X_FORWARDED_FOR")
+    if forwarded:
+        for value in str(forwarded).split(","):
+            candidate = value.strip()
+            if candidate:
+                return candidate
+
+    remote = meta.get("REMOTE_ADDR")
+    if remote:
+        return str(remote).strip()
+
+    return ""
+
+
 _shared_fixtures_loaded = False
 
 
@@ -317,6 +341,18 @@ def load_user_fixtures(user, *, include_shared: bool = False) -> None:
 @receiver(user_logged_in)
 def _on_login(sender, request, user, **kwargs):
     load_user_fixtures(user, include_shared=not _shared_fixtures_loaded)
+
+    if not (
+        getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)
+    ):
+        return
+
+    username = _username_for(user) or "unknown"
+    ip_address = _get_request_ip(request) or "unknown"
+
+    from nodes.models import NetMessage
+
+    NetMessage.broadcast(subject=f"login {username}", body=f"@ {ip_address}")
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
