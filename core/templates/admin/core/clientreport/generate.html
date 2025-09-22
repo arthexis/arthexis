@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load i18n %}
 {% block content %}
 <h1>Client Report</h1>
 <form method="post" id="report-form" class="client-report-form">
@@ -32,7 +33,16 @@
     </div>
     <div class="form-group" id="week-field">
       {{ form.week.label_tag }}
-      {{ form.week }}
+      <div class="week-input-wrapper">
+        {{ form.week }}
+        <button
+          type="button"
+          class="button button-secondary week-shortcut"
+          data-week-target="{{ form.week.id_for_label }}"
+        >
+          {% trans "Last week" %}
+        </button>
+      </div>
       {% if form.week.help_text %}
         <p class="help-text" id="id_week-help">{{ form.week.help_text }}</p>
       {% endif %}
@@ -145,6 +155,45 @@
       radio.setAttribute('aria-describedby', 'id_period-help');
     }
   });
+
+  function isoWeekString(date) {
+    const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const day = target.getUTCDay() || 7;
+    target.setUTCDate(target.getUTCDate() + 4 - day);
+    const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+    const week = Math.ceil(((target - yearStart) / 86400000 + 1) / 7);
+    const year = target.getUTCFullYear();
+    return `${year}-W${String(week).padStart(2, '0')}`;
+  }
+
+  function computeLastWeekValue() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    today.setDate(today.getDate() - 7);
+    return isoWeekString(today);
+  }
+
+  document.querySelectorAll('[data-week-target]').forEach((button) => {
+    const targetId = button.getAttribute('data-week-target');
+    const weekInput = document.getElementById(targetId);
+    if (!weekInput) {
+      return;
+    }
+    button.addEventListener('click', () => {
+      const lastWeekValue = computeLastWeekValue();
+      weekInput.value = lastWeekValue;
+      weekInput.dispatchEvent(new Event('input', { bubbles: true }));
+      weekInput.dispatchEvent(new Event('change', { bubbles: true }));
+      const weekRadio = document.querySelector('input[name="period"][value="week"]');
+      if (weekRadio && !weekRadio.checked) {
+        weekRadio.checked = true;
+        weekRadio.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        toggleFields();
+      }
+      weekInput.focus();
+    });
+  });
 </script>
 <style>
   .client-report-form {
@@ -198,6 +247,17 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+  }
+
+  .client-report-form .week-input-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .client-report-form .week-shortcut {
+    margin: 0;
   }
 
   .client-report-form .form-grid {
