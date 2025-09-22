@@ -178,6 +178,27 @@ BUILD_DIR="$RUN_DIR/build"
 mkdir -p "$RUN_DIR" "$SOURCE_DIR" "$CONFIG_DIR" "$LAYER_DIR" "$OUTPUT_DIR" "$BUILD_DIR"
 ensure_path_owned_by_build_user "$RUN_DIR"
 
+VERSION_FILE="$BASE_DIR/VERSION"
+if [[ -f "$VERSION_FILE" ]]; then
+  VERSION="$(tr -d '\r\n\t ' < "$VERSION_FILE")"
+  if [[ -z "$VERSION" ]]; then
+    VERSION="unknown"
+  fi
+else
+  VERSION="unknown"
+fi
+
+REVISION_RAW=""
+if REVISION_RAW=$(git -C "$BASE_DIR" rev-list --count HEAD 2>/dev/null); then
+  if [[ -n "$REVISION_RAW" && "$REVISION_RAW" =~ ^[0-9]+$ ]]; then
+    printf -v REVISION "%06d" "$REVISION_RAW"
+  else
+    REVISION="000000"
+  fi
+else
+  REVISION="000000"
+fi
+
 cleanup() {
   if [[ -n "${PASSWORD_FILE:-}" && -f "$PASSWORD_FILE" ]]; then
     shred -u "$PASSWORD_FILE" >/dev/null 2>&1 || rm -f "$PASSWORD_FILE"
@@ -926,10 +947,11 @@ if [[ ! -f "$OUTPUT_IMAGE_PATH" ]]; then
   fi
 fi
 
+FINAL_IMAGE_BASE="${ROLE}-${HOSTNAME}-${VERSION}-${REVISION}"
 if [[ "$OUTPUT_IMAGE_PATH" =~ \.xz$ ]]; then
-  FINAL_IMAGE="$OUTPUT_DIR/${IMAGE_NAME}-${TIMESTAMP}.img.xz"
+  FINAL_IMAGE="$OUTPUT_DIR/${FINAL_IMAGE_BASE}.img.xz"
 else
-  FINAL_IMAGE="$OUTPUT_DIR/${IMAGE_NAME}-${TIMESTAMP}.img"
+  FINAL_IMAGE="$OUTPUT_DIR/${FINAL_IMAGE_BASE}.img"
 fi
 
 cp "$OUTPUT_IMAGE_PATH" "$FINAL_IMAGE"
