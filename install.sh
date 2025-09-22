@@ -22,9 +22,10 @@ ENABLE_CONTROL=false
 NODE_ROLE="Terminal"
 REQUIRES_REDIS=false
 ENABLE_DATASETTE=false
+START_SERVICES=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--terminal] [--control] [--constellation] [--celery] [--lcd-screen|--no-lcd-screen] [--datasette] [--clean]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--terminal] [--control] [--constellation] [--celery] [--lcd-screen|--no-lcd-screen] [--datasette] [--clean] [--start]" >&2
     exit 1
 }
 
@@ -174,6 +175,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --clean)
             CLEAN=true
+            shift
+            ;;
+        --start)
+            START_SERVICES=true
             shift
             ;;
         --satellite)
@@ -635,5 +640,9 @@ elif [ -n "$SERVICE" ]; then
     if [ "$ENABLE_DATASETTE" = true ]; then
         sudo systemctl restart "datasette-$SERVICE"
     fi
+fi
+
+if [ "$START_SERVICES" = true ]; then
+    "$BASE_DIR/start.sh"
 fi
 

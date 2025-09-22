@@ -1217,7 +1217,10 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
     changelist_actions = ["my_profile"]
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
-        (None, {"fields": ("host", "database", "username", "password")}),
+        (
+            "Configuration",
+            {"fields": ("host", "database", "username", "password")},
+        ),
         (
             "Odoo Employee",
             {"fields": ("verified_on", "odoo_uid", "name", "email")},
