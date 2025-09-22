@@ -93,7 +93,6 @@ def nav_links(request):
         request=request,
         site=site,
         node=node,
-        respect_footer_visibility=False,
     )
 
     return {
