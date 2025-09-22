@@ -163,7 +163,7 @@
         {% if future_items.models %}
             <ul class="actionlist">
                 {% for item in future_items.models %}
-                <li class="changelink"><a href="{{ item.url }}">Browse {{ item.label|capfirst }}</a></li>
+                <li class="changelink"><a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Change {{ item.label|capfirst }}</a></li>
                 {% endfor %}
             </ul>
         {% endif %}

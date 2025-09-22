@@ -1229,11 +1229,12 @@ class FavoriteTests(TestCase):
             ).exists()
         )
 
-    def test_dashboard_uses_browse_label(self):
+    def test_dashboard_uses_change_label(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
         Favorite.objects.create(user=self.user, content_type=ct)
         resp = self.client.get(reverse("admin:index"))
-        self.assertContains(resp, "Browse Applications")
+        self.assertContains(resp, "Change Applications")
+        self.assertContains(resp, 'target="_blank" rel="noopener noreferrer"')
 
     def test_dashboard_links_to_focus_view(self):
         todo = Todo.objects.create(request="Check docs", url="/docs/")
