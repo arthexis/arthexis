@@ -10,6 +10,7 @@ urlpatterns = [
     path("client-report/", views.client_report, name="client-report"),
     path("release-checklist", views.release_checklist, name="release-checklist"),
     path("login/", views.login_view, name="login"),
+    path("authenticator/setup/", views.authenticator_setup, name="authenticator-setup"),
     path("request-invite/", views.request_invite, name="request-invite"),
     path(
         "invitation/<uidb64>/<token>/",

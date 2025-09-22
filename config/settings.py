@@ -203,6 +203,8 @@ INSTALLED_APPS = [
     "whitenoise.runserver_nostatic",
     "django.contrib.admin",
     "django.contrib.admindocs",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
     "config.auth_app.AuthConfig",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -250,6 +252,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django_otp.middleware.OTPMiddleware",
     "core.middleware.AdminHistoryMiddleware",
     "core.middleware.SigilContextMiddleware",
     "pages.middleware.ViewHistoryMiddleware",
@@ -326,6 +329,7 @@ AUTH_USER_MODEL = "core.User"
 # Enable RFID authentication backend and restrict default admin login to localhost
 AUTHENTICATION_BACKENDS = [
     "core.backends.LocalhostAdminBackend",
+    "core.backends.TOTPBackend",
     "core.backends.RFIDBackend",
 ]
 

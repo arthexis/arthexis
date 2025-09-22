@@ -7,8 +7,59 @@ import socket
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
+from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from .models import EnergyAccount
+
+
+TOTP_DEVICE_NAME = "authenticator"
+
+
+class TOTPBackend(ModelBackend):
+    """Authenticate using a TOTP code from an enrolled authenticator app."""
+
+    def authenticate(self, request, username=None, otp_token=None, **kwargs):
+        if not username or otp_token in (None, ""):
+            return None
+
+        token = str(otp_token).strip().replace(" ", "")
+        if not token:
+            return None
+
+        UserModel = get_user_model()
+        try:
+            user = UserModel._default_manager.get_by_natural_key(username)
+        except UserModel.DoesNotExist:
+            return None
+
+        if not user.is_active:
+            return None
+
+        device_qs = TOTPDevice.objects.filter(user=user, confirmed=True)
+        if TOTP_DEVICE_NAME:
+            device_qs = device_qs.filter(name=TOTP_DEVICE_NAME)
+
+        device = device_qs.order_by("-id").first()
+        if device is None:
+            return None
+
+        try:
+            verified = device.verify_token(token)
+        except Exception:
+            return None
+
+        if not verified:
+            return None
+
+        user.otp_device = device
+        return user
+
+    def get_user(self, user_id):
+        UserModel = get_user_model()
+        try:
+            return UserModel._default_manager.get(pk=user_id)
+        except UserModel.DoesNotExist:
+            return None
 
 
 class RFIDBackend:

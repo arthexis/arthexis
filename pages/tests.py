@@ -34,6 +34,11 @@ from datetime import date, timedelta
 from django.core import mail
 from django.utils import timezone
 from django.utils.text import slugify
+from django_otp import DEVICE_ID_SESSION_KEY
+from django_otp.oath import TOTP
+from django_otp.plugins.otp_totp.models import TOTPDevice
+from core.backends import TOTP_DEVICE_NAME
+import time
 
 from nodes.models import (
     EmailOutbox,
@@ -59,12 +64,59 @@ class LoginViewTests(TestCase):
         resp = self.client.get(reverse("pages:index"))
         self.assertContains(resp, 'href="/login/"')
 
+    def test_login_page_shows_authenticator_toggle(self):
+        resp = self.client.get(reverse("pages:login"))
+        self.assertContains(resp, "Use Authenticator app")
+
     def test_staff_login_redirects_admin(self):
         resp = self.client.post(
             reverse("pages:login"),
             {"username": "staff", "password": "pwd"},
         )
         self.assertRedirects(resp, reverse("admin:index"))
+
+    def test_login_with_authenticator_code(self):
+        device = TOTPDevice.objects.create(
+            user=self.staff,
+            name=TOTP_DEVICE_NAME,
+            confirmed=True,
+        )
+        totp = TOTP(device.bin_key, device.step, device.t0, device.digits, device.drift)
+        totp.time = time.time()
+        token = f"{totp.token():0{device.digits}d}"
+
+        resp = self.client.post(
+            reverse("pages:login"),
+            {
+                "username": "staff",
+                "auth_method": "otp",
+                "otp_token": token,
+            },
+        )
+
+        self.assertRedirects(resp, reverse("admin:index"))
+        session = self.client.session
+        self.assertIn(DEVICE_ID_SESSION_KEY, session)
+        self.assertEqual(session[DEVICE_ID_SESSION_KEY], device.persistent_id)
+
+    def test_login_with_invalid_authenticator_code(self):
+        TOTPDevice.objects.create(
+            user=self.staff,
+            name=TOTP_DEVICE_NAME,
+            confirmed=True,
+        )
+
+        resp = self.client.post(
+            reverse("pages:login"),
+            {
+                "username": "staff",
+                "auth_method": "otp",
+                "otp_token": "000000",
+            },
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "authenticator code is invalid", status_code=200)
 
     def test_already_logged_in_staff_redirects(self):
         self.client.force_login(self.staff)
@@ -85,6 +137,8 @@ class LoginViewTests(TestCase):
         )
         self.assertRedirects(resp, "/nodes/list/")
 
+
+
     @override_settings(EMAIL_BACKEND="django.core.mail.backends.dummy.EmailBackend")
     def test_login_page_hides_request_link_without_email_backend(self):
         resp = self.client.get(reverse("pages:login"))
@@ -98,6 +152,64 @@ class LoginViewTests(TestCase):
         self.assertTrue(resp.context["can_request_invite"])
         self.assertContains(resp, reverse("pages:request-invite"))
 
+
+
+class AuthenticatorSetupTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.staff = User.objects.create_user(
+            username="staffer", password="pwd", is_staff=True
+        )
+        Site.objects.update_or_create(id=1, defaults={"name": "Terminal"})
+        self.client.force_login(self.staff)
+
+    def _current_token(self, device):
+        totp = TOTP(device.bin_key, device.step, device.t0, device.digits, device.drift)
+        totp.time = time.time()
+        return f"{totp.token():0{device.digits}d}"
+
+    def test_generate_creates_pending_device(self):
+        resp = self.client.post(
+            reverse("pages:authenticator-setup"), {"action": "generate"}
+        )
+        self.assertRedirects(resp, reverse("pages:authenticator-setup"))
+        device = TOTPDevice.objects.get(user=self.staff)
+        self.assertFalse(device.confirmed)
+        self.assertEqual(device.name, TOTP_DEVICE_NAME)
+
+    def test_pending_device_context_includes_qr(self):
+        self.client.post(reverse("pages:authenticator-setup"), {"action": "generate"})
+        resp = self.client.get(reverse("pages:authenticator-setup"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.context["qr_data_uri"].startswith("data:image/png;base64,"))
+        self.assertTrue(resp.context["manual_key"])
+
+    def test_confirm_pending_device(self):
+        self.client.post(reverse("pages:authenticator-setup"), {"action": "generate"})
+        device = TOTPDevice.objects.get(user=self.staff)
+        token = self._current_token(device)
+        resp = self.client.post(
+            reverse("pages:authenticator-setup"),
+            {"action": "confirm", "token": token},
+        )
+        self.assertRedirects(resp, reverse("pages:authenticator-setup"))
+        device.refresh_from_db()
+        self.assertTrue(device.confirmed)
+
+    def test_remove_device(self):
+        self.client.post(reverse("pages:authenticator-setup"), {"action": "generate"})
+        device = TOTPDevice.objects.get(user=self.staff)
+        token = self._current_token(device)
+        self.client.post(
+            reverse("pages:authenticator-setup"),
+            {"action": "confirm", "token": token},
+        )
+        resp = self.client.post(
+            reverse("pages:authenticator-setup"), {"action": "remove"}
+        )
+        self.assertRedirects(resp, reverse("pages:authenticator-setup"))
+        self.assertFalse(TOTPDevice.objects.filter(user=self.staff).exists())
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 class InvitationTests(TestCase):
