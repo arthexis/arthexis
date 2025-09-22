@@ -18,6 +18,7 @@ from tempfile import TemporaryDirectory
 import shutil
 import stat
 import time
+from datetime import timedelta
 
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
@@ -26,6 +27,7 @@ from django.contrib import admin
 from django.contrib.sites.models import Site
 from django_celery_beat.models import PeriodicTask
 from django.conf import settings
+from django.utils import timezone
 from .actions import NodeAction
 from selenium.common.exceptions import WebDriverException
 from .utils import capture_screenshot
@@ -1053,6 +1055,41 @@ class NetMessagePropagationTests(TestCase):
         self.assertNotIn(sender_addr, targets)
         self.assertEqual(msg.propagated_to.count(), 4)
         self.assertTrue(msg.complete)
+
+    @patch("requests.post")
+    @patch("core.notifications.notify", return_value=True)
+    def test_propagate_prunes_old_local_messages(self, mock_notify, mock_post):
+        old_local = NetMessage.objects.create(
+            subject="old local",
+            body="body",
+            reach=self.role,
+            node_origin=self.local,
+        )
+        NetMessage.objects.filter(pk=old_local.pk).update(
+            created=timezone.now() - timedelta(days=8)
+        )
+        old_remote = NetMessage.objects.create(
+            subject="old remote",
+            body="body",
+            reach=self.role,
+            node_origin=self.remotes[0],
+        )
+        NetMessage.objects.filter(pk=old_remote.pk).update(
+            created=timezone.now() - timedelta(days=8)
+        )
+        msg = NetMessage.objects.create(
+            subject="fresh",
+            body="body",
+            reach=self.role,
+            node_origin=self.local,
+        )
+        with patch.object(Node, "get_local", return_value=self.local):
+            msg.propagate()
+
+        mock_notify.assert_called_once_with("fresh", "body")
+        self.assertFalse(NetMessage.objects.filter(pk=old_local.pk).exists())
+        self.assertTrue(NetMessage.objects.filter(pk=old_remote.pk).exists())
+        self.assertTrue(NetMessage.objects.filter(pk=msg.pk).exists())
 
 
 class NodeActionTests(TestCase):
