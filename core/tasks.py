@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import subprocess
 from pathlib import Path
+import urllib.error
+import urllib.request
 
 from celery import shared_task
 from django.conf import settings
@@ -12,6 +14,10 @@ from core import github_issues
 from django.utils import timezone
 
 from nodes.models import NetMessage
+
+
+AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 30
+AUTO_UPGRADE_HEALTH_MAX_ATTEMPTS = 3
 
 
 logger = logging.getLogger(__name__)
@@ -40,6 +46,41 @@ def birthday_greetings() -> None:
             )
 
 
+def _auto_upgrade_log_path(base_dir: Path) -> Path:
+    """Return the log file used for auto-upgrade events."""
+
+    log_dir = base_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / "auto-upgrade.log"
+
+
+def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
+    """Append ``message`` to the auto-upgrade log, ignoring errors."""
+
+    try:
+        log_file = _auto_upgrade_log_path(base_dir)
+        timestamp = timezone.now().isoformat()
+        with log_file.open("a") as fh:
+            fh.write(f"{timestamp} {message}\n")
+    except Exception:  # pragma: no cover - best effort logging only
+        logger.warning("Failed to append auto-upgrade log entry: %s", message)
+
+
+def _resolve_service_url(base_dir: Path) -> str:
+    """Return the local URL used to probe the Django suite."""
+
+    lock_dir = base_dir / "locks"
+    mode_file = lock_dir / "nginx_mode.lck"
+    mode = "internal"
+    if mode_file.exists():
+        try:
+            mode = mode_file.read_text().strip() or "internal"
+        except OSError:
+            mode = "internal"
+    port = 8000 if mode == "public" else 8888
+    return f"http://127.0.0.1:{port}/"
+
+
 @shared_task
 def check_github_updates() -> None:
     """Check the GitHub repo for updates and upgrade if needed."""
@@ -52,9 +93,7 @@ def check_github_updates() -> None:
     branch = "main"
     subprocess.run(["git", "fetch", "origin", branch], cwd=base_dir, check=True)
 
-    log_dir = base_dir / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "auto-upgrade.log"
+    log_file = _auto_upgrade_log_path(base_dir)
     with log_file.open("a") as fh:
         fh.write(
             f"{timezone.now().isoformat()} check_github_updates triggered\n"
@@ -72,6 +111,8 @@ def check_github_updates() -> None:
         startup = None
 
     upgrade_stamp = timezone.now().strftime("@ %Y%m%d %H:%M")
+
+    upgrade_was_applied = False
 
     if mode == "latest":
         local = (
@@ -98,6 +139,7 @@ def check_github_updates() -> None:
         if notify:
             notify("Upgrading...", upgrade_stamp)
         args = ["./upgrade.sh", "--latest", "--no-restart"]
+        upgrade_was_applied = True
     else:
         local = "0"
         version_file = base_dir / "VERSION"
@@ -122,6 +164,7 @@ def check_github_updates() -> None:
         if notify:
             notify("Upgrading...", upgrade_stamp)
         args = ["./upgrade.sh", "--no-restart"]
+        upgrade_was_applied = True
 
     with log_file.open("a") as fh:
         fh.write(
@@ -144,6 +187,16 @@ def check_github_updates() -> None:
         )
     else:
         subprocess.run(["pkill", "-f", "manage.py runserver"])
+
+    if upgrade_was_applied:
+        _append_auto_upgrade_log(
+            base_dir,
+            (
+                "Scheduled post-upgrade health check in %s seconds"
+                % AUTO_UPGRADE_HEALTH_DELAY_SECONDS
+            ),
+        )
+        _schedule_health_check(1)
 
 
 @shared_task
@@ -184,6 +237,91 @@ def report_runtime_issue(
         logger.info("Reported runtime issue '%s' to GitHub", title)
 
     return response
+
+
+def _record_health_check_result(
+    base_dir: Path, attempt: int, status: int | None, detail: str
+) -> None:
+    status_display = status if status is not None else "unreachable"
+    message = "Health check attempt %s %s (%s)" % (attempt, detail, status_display)
+    _append_auto_upgrade_log(base_dir, message)
+
+
+def _schedule_health_check(next_attempt: int) -> None:
+    verify_auto_upgrade_health.apply_async(
+        kwargs={"attempt": next_attempt},
+        countdown=AUTO_UPGRADE_HEALTH_DELAY_SECONDS,
+    )
+
+
+@shared_task
+def verify_auto_upgrade_health(attempt: int = 1) -> bool | None:
+    """Verify the upgraded suite responds successfully.
+
+    When the check fails three times in a row the upgrade is rolled back by
+    invoking ``upgrade.sh --revert``.
+    """
+
+    base_dir = Path(__file__).resolve().parent.parent
+    url = _resolve_service_url(base_dir)
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Arthexis-AutoUpgrade/1.0"},
+    )
+
+    status: int | None = None
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            status = getattr(response, "status", response.getcode())
+    except urllib.error.HTTPError as exc:
+        status = exc.code
+        logger.warning(
+            "Auto-upgrade health check attempt %s returned HTTP %s", attempt, exc.code
+        )
+    except urllib.error.URLError as exc:
+        logger.warning(
+            "Auto-upgrade health check attempt %s failed: %s", attempt, exc
+        )
+    except Exception as exc:  # pragma: no cover - unexpected network error
+        logger.exception(
+            "Unexpected error probing suite during auto-upgrade attempt %s", attempt
+        )
+        detail = f"failed with {exc}"
+        _record_health_check_result(base_dir, attempt, status, detail)
+        if attempt >= AUTO_UPGRADE_HEALTH_MAX_ATTEMPTS:
+            _append_auto_upgrade_log(
+                base_dir,
+                "Health check raised unexpected error; reverting upgrade",
+            )
+            subprocess.run(["./upgrade.sh", "--revert"], cwd=base_dir, check=True)
+        else:
+            _schedule_health_check(attempt + 1)
+        return None
+
+    if status == 200:
+        _record_health_check_result(base_dir, attempt, status, "succeeded")
+        logger.info(
+            "Auto-upgrade health check succeeded on attempt %s with HTTP %s",
+            attempt,
+            status,
+        )
+        return True
+
+    _record_health_check_result(base_dir, attempt, status, "failed")
+
+    if attempt >= AUTO_UPGRADE_HEALTH_MAX_ATTEMPTS:
+        logger.error(
+            "Auto-upgrade health check failed after %s attempts; reverting", attempt
+        )
+        _append_auto_upgrade_log(
+            base_dir,
+            "Health check failed three times; reverting upgrade",
+        )
+        subprocess.run(["./upgrade.sh", "--revert"], cwd=base_dir, check=True)
+        return False
+
+    _schedule_health_check(attempt + 1)
+    return None
 
 
 @shared_task
