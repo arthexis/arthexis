@@ -22,6 +22,12 @@ RUN_BUILD_AS_GID=""
 WRITE_IMAGE=false
 USB_DEVICE=""
 AUTO_CONFIRM_WRITE=false
+USB_AUTO_CONFIRM_MESSAGE=""
+USB_SELECTED_DEVICE=""
+USB_SELECTED_SUMMARY=""
+USB_SELECTED_IS_USB=""
+USB_SELECTED_IS_SYSTEM=""
+USB_SELECTED_TYPE=""
 
 usage() {
   cat <<USAGE
@@ -119,6 +125,7 @@ while [[ $# -gt 0 ]]; do
       USB_DEVICE="$2"
       WRITE_IMAGE=true
       AUTO_CONFIRM_WRITE=true
+      USB_AUTO_CONFIRM_MESSAGE="auto-confirmed by --usb"
       shift
       ;;
     --hostname)
@@ -621,18 +628,20 @@ sys.exit(5)
 PY
 }
 
-write_image_to_usb() {
-  local image_path="$1"
-  local requested_device="${2:-}"
-  local auto_confirm="${3:-false}"
+reset_usb_selection() {
+  USB_SELECTED_DEVICE=""
+  USB_SELECTED_SUMMARY=""
+  USB_SELECTED_IS_USB=""
+  USB_SELECTED_IS_SYSTEM=""
+  USB_SELECTED_TYPE=""
+}
 
-  [[ -f "$image_path" ]] || error "Image file '$image_path' not found for USB write."
+usb_device_details_from_lsblk() {
+  local requested_device="${1:-}"
+  local interactive="${2:-false}"
 
-  local selected_device=""
-  local summary=""
-  local is_usb=""
-  local is_system=""
-  local device_type=""
+  reset_usb_selection
+
   local describe_output=""
   local list_output=""
   local -a candidate_lines=()
@@ -644,72 +653,201 @@ write_image_to_usb() {
     if ! describe_output="$(usb_device_query describe "$normalized")"; then
       error "Unable to locate device '$requested_device' for USB writing."
     fi
-    IFS=$'\t' read -r selected_device is_usb is_system device_type summary <<<"$describe_output"
-  else
-    if ! list_output="$(usb_device_query list)"; then
-      error "Unable to enumerate removable USB drives."
-    fi
-    mapfile -t candidate_lines <<<"$list_output"
-    if (( ${#candidate_lines[@]} == 0 )); then
-      error "No removable USB drives detected. Connect a drive or specify one with --usb."
-    fi
-    echo "Available USB drives:"
-    local idx
-    for idx in "${!candidate_lines[@]}"; do
-      IFS=$'\t' read -r device is_usb is_system device_type summary <<<"${candidate_lines[$idx]}"
-      printf '  [%d] %s - %s\n' "$idx" "$device" "$summary"
-    done
-    local choice
-    while true; do
-      read -r -p "Select drive number to write the image to (or 'q' to cancel): " choice
-      if [[ "$choice" == "q" || "$choice" == "Q" ]]; then
-        echo "Skipping USB write."
-        return 0
-      fi
-      if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 0 && choice < ${#candidate_lines[@]} )); then
-        IFS=$'\t' read -r selected_device is_usb is_system device_type summary <<<"${candidate_lines[$choice]}"
-        break
-      fi
-      echo "Invalid selection. Please enter a valid number or 'q'."
-    done
+    IFS=$'\t' read -r \
+      USB_SELECTED_DEVICE \
+      USB_SELECTED_IS_USB \
+      USB_SELECTED_IS_SYSTEM \
+      USB_SELECTED_TYPE \
+      USB_SELECTED_SUMMARY <<<"$describe_output"
+    return 0
   fi
 
-  if [[ -z "$selected_device" ]]; then
+  if [[ "$interactive" != "true" ]]; then
     error "No USB device selected for writing."
   fi
 
-  if [[ "$device_type" != "disk" ]]; then
-    error "Device $selected_device is not a disk. Specify the whole device (for example /dev/sdb)."
+  if ! list_output="$(usb_device_query list)"; then
+    error "Unable to enumerate removable USB drives."
+  fi
+  mapfile -t candidate_lines <<<"$list_output"
+  if (( ${#candidate_lines[@]} == 0 )); then
+    error "No removable USB drives detected. Connect a drive or specify one with --usb."
   fi
 
-  if [[ "$is_system" == "1" ]]; then
-    error "Refusing to write to $selected_device because it appears to host the running system."
+  echo "Available USB drives:"
+  local idx
+  for idx in "${!candidate_lines[@]}"; do
+    local device_line="${candidate_lines[$idx]}"
+    IFS=$'\t' read -r device is_usb is_system device_type summary <<<"$device_line"
+    printf '  [%d] %s - %s\n' "$idx" "$device" "$summary"
+  done
+
+  local choice
+  while true; do
+    read -r -p "Select drive number to write the image to (or 'q' to cancel): " choice
+    if [[ "$choice" == "q" || "$choice" == "Q" ]]; then
+      echo "Skipping USB write."
+      return 2
+    fi
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 0 && choice < ${#candidate_lines[@]} )); then
+      IFS=$'\t' read -r \
+        USB_SELECTED_DEVICE \
+        USB_SELECTED_IS_USB \
+        USB_SELECTED_IS_SYSTEM \
+        USB_SELECTED_TYPE \
+        USB_SELECTED_SUMMARY <<<"${candidate_lines[$choice]}"
+      break
+    fi
+    echo "Invalid selection. Please enter a valid number or 'q'."
+  done
+
+  return 0
+}
+
+usb_confirm_selection() {
+  local auto_confirm="${1:-false}"
+  local auto_reason="${2:-}"
+
+  [[ -n "$USB_SELECTED_DEVICE" ]] || error "No USB device selected for writing."
+
+  if [[ "$USB_SELECTED_TYPE" != "disk" ]]; then
+    error "Device $USB_SELECTED_DEVICE is not a disk. Specify the whole device (for example /dev/sdb)."
   fi
 
-  if [[ "$is_usb" != "1" ]]; then
-    echo "Warning: $selected_device does not appear to be a removable USB disk." >&2
+  if [[ "$USB_SELECTED_IS_SYSTEM" == "1" ]]; then
+    error "Refusing to write to $USB_SELECTED_DEVICE because it appears to host the running system."
+  fi
+
+  if [[ "$USB_SELECTED_IS_USB" != "1" ]]; then
+    echo "Warning: $USB_SELECTED_DEVICE does not appear to be a removable USB disk." >&2
     if [[ "$auto_confirm" != "true" ]]; then
       local proceed_choice
       read -r -p "Proceed anyway? [y/N]: " proceed_choice
       if [[ ! "$proceed_choice" =~ ^[Yy]([Ee][Ss])?$ ]]; then
         echo "Skipping USB write."
-        return 0
+        return 2
       fi
     fi
   fi
 
   if [[ "$auto_confirm" == "true" ]]; then
-    echo "Writing image to $selected_device (auto-confirmed by --usb)."
-    echo "$summary"
+    local message="$auto_reason"
+    if [[ -z "$message" ]]; then
+      message="auto-confirmed"
+    fi
+    echo "Writing image to $USB_SELECTED_DEVICE ($message)."
+    if [[ -n "$USB_SELECTED_SUMMARY" ]]; then
+      echo "$USB_SELECTED_SUMMARY"
+    fi
+    return 0
+  fi
+
+  echo "Selected drive: $USB_SELECTED_DEVICE - $USB_SELECTED_SUMMARY"
+  local confirm
+  read -r -p "All data on this drive will be erased. Proceed? [y/N]: " confirm
+  if [[ ! "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+    echo "Skipping USB write."
+    return 2
+  fi
+
+  return 0
+}
+
+preflight_usb_selection() {
+  if [[ "$WRITE_IMAGE" != true ]]; then
+    return 0
+  fi
+
+  if [[ "$AUTO_CONFIRM_WRITE" == true && -n "$USB_DEVICE" ]]; then
+    return 0
+  fi
+
+  local selection_status=0
+  if usb_device_details_from_lsblk "" true; then
+    selection_status=0
   else
-    echo "Selected drive: $selected_device - $summary"
-    local confirm
-    read -r -p "All data on this drive will be erased. Proceed? [y/N]: " confirm
-    if [[ ! "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]]; then
-      echo "Skipping USB write."
-      return 0
+    selection_status=$?
+  fi
+  if (( selection_status == 2 )); then
+    WRITE_IMAGE=false
+    AUTO_CONFIRM_WRITE=false
+    USB_DEVICE=""
+    USB_AUTO_CONFIRM_MESSAGE=""
+    echo "Continuing without writing the image to USB."
+    return 0
+  elif (( selection_status != 0 )); then
+    return $selection_status
+  fi
+
+  local confirm_status=0
+  if usb_confirm_selection false; then
+    confirm_status=0
+  else
+    confirm_status=$?
+  fi
+  if (( confirm_status == 2 )); then
+    WRITE_IMAGE=false
+    AUTO_CONFIRM_WRITE=false
+    USB_DEVICE=""
+    USB_AUTO_CONFIRM_MESSAGE=""
+    echo "Continuing without writing the image to USB."
+    return 0
+  elif (( confirm_status != 0 )); then
+    return $confirm_status
+  fi
+
+  USB_DEVICE="$USB_SELECTED_DEVICE"
+  AUTO_CONFIRM_WRITE=true
+  USB_AUTO_CONFIRM_MESSAGE="auto-confirmed during preflight"
+  echo "USB drive $USB_DEVICE confirmed for writing after image build."
+}
+
+write_image_to_usb() {
+  local image_path="$1"
+  local requested_device="${2:-}"
+  local auto_confirm="${3:-false}"
+
+  [[ -f "$image_path" ]] || error "Image file '$image_path' not found for USB write."
+
+  local selection_status=0
+  if [[ -n "$requested_device" ]]; then
+    if usb_device_details_from_lsblk "$requested_device"; then
+      selection_status=0
+    else
+      selection_status=$?
+    fi
+  else
+    if usb_device_details_from_lsblk "" true; then
+      selection_status=0
+    else
+      selection_status=$?
     fi
   fi
+
+  if (( selection_status == 2 )); then
+    return 0
+  elif (( selection_status != 0 )); then
+    return $selection_status
+  fi
+
+  local auto_reason=""
+  if [[ "$auto_confirm" == "true" ]]; then
+    auto_reason="$USB_AUTO_CONFIRM_MESSAGE"
+  fi
+
+  local confirm_status=0
+  if usb_confirm_selection "$auto_confirm" "$auto_reason"; then
+    confirm_status=0
+  else
+    confirm_status=$?
+  fi
+  if (( confirm_status == 2 )); then
+    return 0
+  elif (( confirm_status != 0 )); then
+    return $confirm_status
+  fi
+
+  local selected_device="$USB_SELECTED_DEVICE"
 
   echo "Unmounting partitions on $selected_device..."
   local mount_output
@@ -765,6 +903,8 @@ write_image_to_usb() {
 
   echo "Image written to $selected_device successfully."
 }
+
+preflight_usb_selection
 
 if [[ ! -d "$RPI_DIR" ]]; then
   fetch_rpi_image_gen
