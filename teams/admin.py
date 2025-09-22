@@ -1,17 +1,11 @@
 from django.contrib import admin
+from django.contrib.admin.sites import NotRegistered
 
-from core.models import (
-    InviteLead as CoreInviteLead,
-    User as CoreUser,
-    SecurityGroup as CoreSecurityGroup,
-    EmailInbox as CoreEmailInbox,
-    EmailCollector as CoreEmailCollector,
-    ReleaseManager as CoreReleaseManager,
-    OdooProfile as CoreOdooProfile,
-    AssistantProfile as CoreAssistantProfile,
+from django_otp.plugins.otp_totp.models import TOTPDevice as CoreTOTPDevice
+from django_otp.plugins.otp_totp.admin import (
+    TOTPDeviceAdmin as CoreTOTPDeviceAdmin,
 )
 from awg.admin import PowerLeadAdmin as CorePowerLeadAdmin
-from nodes.models import EmailOutbox as CoreEmailOutbox
 from core.admin import (
     InviteLeadAdmin,
     UserAdmin as CoreUserAdmin,
@@ -22,7 +16,18 @@ from core.admin import (
     OdooProfileAdmin,
     AssistantProfileAdmin,
 )
+from core.models import (
+    InviteLead as CoreInviteLead,
+    User as CoreUser,
+    SecurityGroup as CoreSecurityGroup,
+    EmailInbox as CoreEmailInbox,
+    EmailCollector as CoreEmailCollector,
+    ReleaseManager as CoreReleaseManager,
+    OdooProfile as CoreOdooProfile,
+    AssistantProfile as CoreAssistantProfile,
+)
 from nodes.admin import EmailOutboxAdmin
+from nodes.models import EmailOutbox as CoreEmailOutbox
 
 from .models import (
     InviteLead,
@@ -35,6 +40,7 @@ from .models import (
     PowerLead,
     OdooProfile,
     AssistantProfile,
+    TOTPDevice,
 )
 
 
@@ -85,4 +91,15 @@ class OdooProfileAdminProxy(OdooProfileAdmin):
 
 @admin.register(AssistantProfile)
 class AssistantProfileAdminProxy(AssistantProfileAdmin):
+    pass
+
+
+try:
+    admin.site.unregister(CoreTOTPDevice)
+except NotRegistered:
+    pass
+
+
+@admin.register(TOTPDevice)
+class TOTPDeviceAdminProxy(CoreTOTPDeviceAdmin):
     pass
