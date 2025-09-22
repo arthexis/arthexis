@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Review login via local hostname behind proxy",
+      "url": "/login/",
+      "request_details": "Confirm the admin login succeeds when the suite is accessed via a local network hostname behind an HTTPS-terminating proxy."
+    }
+  }
+]
