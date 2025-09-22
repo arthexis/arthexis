@@ -2,7 +2,8 @@
 setlocal enabledelayedexpansion
 
 set "SCRIPT_DIR=%~dp0"
-cd /d "%SCRIPT_DIR%"
+for %%I in ("%SCRIPT_DIR%..") do set "REPO_ROOT=%%~fI"
+cd /d "%REPO_ROOT%"
 
 echo Stopping existing development server (if running)...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'manage.py runserver' } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -ErrorAction Stop } catch { } }" >nul 2>&1
@@ -40,9 +41,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if exist "%SCRIPT_DIR%env-refresh.bat" (
+if exist "%REPO_ROOT%\env-refresh.bat" (
     echo Refreshing environment with env-refresh.bat --latest...
-    call "%SCRIPT_DIR%env-refresh.bat" --latest
+    call "%REPO_ROOT%\env-refresh.bat" --latest
     if errorlevel 1 (
         echo Environment refresh failed.
         exit /b 1
