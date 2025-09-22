@@ -20,6 +20,7 @@ RUN_BUILD_AS_USER=""
 RUN_BUILD_AS_UID=""
 RUN_BUILD_AS_GID=""
 WRITE_IMAGE=false
+NO_BUILD=false
 USB_DEVICE=""
 AUTO_CONFIRM_WRITE=false
 USB_AUTO_CONFIRM_MESSAGE=""
@@ -42,6 +43,7 @@ Options:
   --device LAYER      Target rpi-image-gen device layer alias (default: pi4; resolves canonical names automatically).
   --write             Write the generated image to a USB drive after build completion.
   --usb DEVICE        Preselect DEVICE for writing (implies --write and skips confirmation prompts).
+  --no-build          Skip the build if a matching image is already available.
   -h, --help          Show this help message.
 USAGE
 }
@@ -128,6 +130,9 @@ while [[ $# -gt 0 ]]; do
       USB_AUTO_CONFIRM_MESSAGE="auto-confirmed by --usb"
       shift
       ;;
+    --no-build)
+      NO_BUILD=true
+      ;;
     --hostname)
       [[ $# -ge 2 ]] || error "--hostname requires a value"
       HOSTNAME="${2,,}"
@@ -188,6 +193,22 @@ if [[ ${#PASSWORD} -lt 8 || ${#PASSWORD} -gt 63 ]]; then
   echo "Warning: Wi-Fi passphrase should be 8-63 characters; provided length is ${#PASSWORD}" >&2
 fi
 
+if command -v sha256sum >/dev/null 2>&1; then
+  PASSWORD_DIGEST="$(printf '%s' "$PASSWORD" | sha256sum | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+  PASSWORD_DIGEST="$(printf '%s' "$PASSWORD" | shasum -a 256 | awk '{print $1}')"
+elif command -v python3 >/dev/null 2>&1; then
+  PASSWORD_DIGEST="$(python3 - <<'PY' "$PASSWORD"
+import hashlib
+import sys
+
+print(hashlib.sha256(sys.argv[1].encode()).hexdigest())
+PY
+)"
+else
+  error "Unable to compute password digest: install sha256sum (coreutils) or python3."
+fi
+
 TIMESTAMP="$(date +%Y%m%d%H%M%S)"
 WORK_ROOT="$BASE_DIR/build/rpi-image-gen"
 RUN_DIR="$WORK_ROOT/run-$TIMESTAMP"
@@ -221,6 +242,12 @@ else
   REVISION="000000"
 fi
 
+FINAL_IMAGE_BASE="${ROLE}-${HOSTNAME}-${VERSION}-${REVISION}"
+FINAL_IMAGE_IMG="$OUTPUT_DIR/${FINAL_IMAGE_BASE}.img"
+FINAL_IMAGE_XZ="$FINAL_IMAGE_IMG.xz"
+INVOCATION_METADATA_FILE="$OUTPUT_DIR/${FINAL_IMAGE_BASE}.meta"
+FINAL_IMAGE=""
+
 cleanup() {
   if [[ -n "${PASSWORD_FILE:-}" && -f "$PASSWORD_FILE" ]]; then
     shred -u "$PASSWORD_FILE" >/dev/null 2>&1 || rm -f "$PASSWORD_FILE"
@@ -230,6 +257,8 @@ trap cleanup EXIT
 
 RPI_TARBALL="$WORK_ROOT/rpi-image-gen.tar.gz"
 RESOLVED_DEVICE_ALIAS=""
+MATCHING_IMAGE_PATH=""
+SKIP_BUILD=false
 
 find_device_layer_metadata() {
   local layer_name="$1"
@@ -311,6 +340,106 @@ resolve_device_layer() {
   shopt -u nullglob
 
   return 1
+}
+
+metadata_matches_current_invocation() {
+  local metadata_file="$1"
+  [[ -f "$metadata_file" ]] || return 1
+
+  local meta_role=""
+  local meta_hostname=""
+  local meta_username=""
+  local meta_device_layer=""
+  local meta_alias=""
+  local meta_password_digest=""
+  local meta_image_path=""
+  local meta_version=""
+  local meta_revision=""
+
+  while IFS='=' read -r key value; do
+    [[ -n "$key" ]] || continue
+    case "$key" in
+      \#*)
+        continue
+        ;;
+      role)
+        meta_role="$value"
+        ;;
+      hostname)
+        meta_hostname="$value"
+        ;;
+      username)
+        meta_username="$value"
+        ;;
+      device_layer_canonical)
+        meta_device_layer="$value"
+        ;;
+      device_layer_alias)
+        meta_alias="$value"
+        ;;
+      password_digest)
+        meta_password_digest="$value"
+        ;;
+      image_path)
+        meta_image_path="$value"
+        ;;
+      version)
+        meta_version="$value"
+        ;;
+      revision)
+        meta_revision="$value"
+        ;;
+    esac
+  done < "$metadata_file"
+
+  [[ "$meta_role" == "$ROLE" ]] || return 1
+  [[ "$meta_hostname" == "$HOSTNAME" ]] || return 1
+  [[ "$meta_username" == "$USERNAME" ]] || return 1
+  [[ "$meta_device_layer" == "$DEVICE_LAYER_CANONICAL" ]] || return 1
+  if [[ -n "$meta_alias" && -n "$RESOLVED_DEVICE_ALIAS" && "$meta_alias" != "$RESOLVED_DEVICE_ALIAS" ]]; then
+    return 1
+  fi
+  [[ -n "$meta_password_digest" && "$meta_password_digest" == "$PASSWORD_DIGEST" ]] || return 1
+  [[ "$meta_version" == "$VERSION" ]] || return 1
+  [[ "$meta_revision" == "$REVISION" ]] || return 1
+
+  local candidate_path="$meta_image_path"
+  if [[ -z "$candidate_path" ]]; then
+    return 1
+  fi
+  if [[ "$candidate_path" != /* ]]; then
+    candidate_path="$OUTPUT_DIR/$candidate_path"
+  fi
+  if [[ ! -f "$candidate_path" ]]; then
+    return 1
+  fi
+
+  MATCHING_IMAGE_PATH="$candidate_path"
+  return 0
+}
+
+write_invocation_metadata() {
+  local image_path="$1"
+  local metadata_file="$2"
+
+  local tmp
+  tmp="$(mktemp)"
+  cat > "$tmp" <<META
+role=$ROLE
+hostname=$HOSTNAME
+username=$USERNAME
+device_layer_canonical=$DEVICE_LAYER_CANONICAL
+device_layer_alias=$RESOLVED_DEVICE_ALIAS
+password_digest=$PASSWORD_DIGEST
+image_path=$image_path
+version=$VERSION
+revision=$REVISION
+timestamp=$(date --iso-8601=seconds 2>/dev/null || date)
+META
+
+  mv "$tmp" "$metadata_file"
+  chmod 600 "$metadata_file" 2>/dev/null || true
+  ensure_path_owned_by_build_user "$metadata_file"
 }
 
 fetch_rpi_image_gen() {
@@ -930,6 +1059,17 @@ else
   echo "Using device layer '$DEVICE_LAYER_CANONICAL'."
 fi
 
+if [[ "$NO_BUILD" == true ]]; then
+  MATCHING_IMAGE_PATH=""
+  if metadata_matches_current_invocation "$INVOCATION_METADATA_FILE"; then
+    SKIP_BUILD=true
+    FINAL_IMAGE="$MATCHING_IMAGE_PATH"
+    echo "Skipping build (--no-build): reusing existing image at $FINAL_IMAGE."
+  else
+    echo "No reusable image found for --no-build; continuing with full build."
+  fi
+fi
+
 if [[ "$DEVICE_LAYER_CANONICAL" != "rpi4" ]]; then
   if [[ "$DEVICE_LAYER_REQUEST" != "$DEVICE_LAYER_CANONICAL" ]]; then
     error "Device layer '$DEVICE_LAYER_REQUEST' resolves to unsupported canonical layer '$DEVICE_LAYER_CANONICAL'. This tool only supports the Raspberry Pi 4."
@@ -1441,48 +1581,62 @@ sed -i "s#__ARTHEXIS_FIRSTBOOT_FLAG__#/var/lib/arthexis-image/firstboot.done#g" 
 RPI_BIN="$RPI_DIR/rpi-image-gen"
 [[ -x "$RPI_BIN" ]] || chmod +x "$RPI_BIN"
 
-BUILD_CMD=("$RPI_BIN" build -S "$SOURCE_DIR" -c "$CONFIG_FILE" -B "$BUILD_DIR" -- \
-  "IGconf_device_layer=$DEVICE_LAYER_CANONICAL" \
-  "IGconf_arthexis_username=$USERNAME" \
-  "IGconf_arthexis_password_file=$PASSWORD_FILE" \
-  "IGconf_arthexis_role=$ROLE" \
-  "IGconf_arthexis_hostname=$HOSTNAME" \
-  "IGconf_arthexis_repo_src=$BASE_DIR" \
-  "IGconf_arthexis_wifi_uuid=$AP_UUID" \
-  "IGconf_arthexis_eth_uuid=$ETH_UUID")
+if [[ "$SKIP_BUILD" != true ]]; then
+  BUILD_CMD=("$RPI_BIN" build -S "$SOURCE_DIR" -c "$CONFIG_FILE" -B "$BUILD_DIR" -- \
+    "IGconf_device_layer=$DEVICE_LAYER_CANONICAL" \
+    "IGconf_arthexis_username=$USERNAME" \
+    "IGconf_arthexis_password_file=$PASSWORD_FILE" \
+    "IGconf_arthexis_role=$ROLE" \
+    "IGconf_arthexis_hostname=$HOSTNAME" \
+    "IGconf_arthexis_repo_src=$BASE_DIR" \
+    "IGconf_arthexis_wifi_uuid=$AP_UUID" \
+    "IGconf_arthexis_eth_uuid=$ETH_UUID")
 
-echo "Running rpi-image-gen build..."
-if [[ -n "$RUN_BUILD_AS_USER" ]]; then
-  echo "Executing build steps as $RUN_BUILD_AS_USER to satisfy rootless container requirements."
-  ensure_path_owned_by_build_user "$RUN_DIR"
-  ensure_path_owned_by_build_user "$RPI_DIR"
-  sudo -u "$RUN_BUILD_AS_USER" -- "${BUILD_CMD[@]}"
-else
-  "${BUILD_CMD[@]}"
-fi
-
-OUTPUT_IMAGE_PATH="$BUILD_DIR/image-${IMAGE_NAME}/${IMAGE_NAME}.img"
-if [[ ! -f "$OUTPUT_IMAGE_PATH" ]]; then
-  alt_path="$OUTPUT_IMAGE_PATH.xz"
-  if [[ -f "$alt_path" ]]; then
-    OUTPUT_IMAGE_PATH="$alt_path"
+  echo "Running rpi-image-gen build..."
+  if [[ -n "$RUN_BUILD_AS_USER" ]]; then
+    echo "Executing build steps as $RUN_BUILD_AS_USER to satisfy rootless container requirements."
+    ensure_path_owned_by_build_user "$RUN_DIR"
+    ensure_path_owned_by_build_user "$RPI_DIR"
+    sudo -u "$RUN_BUILD_AS_USER" -- "${BUILD_CMD[@]}"
   else
-    error "Generated image not found at $OUTPUT_IMAGE_PATH"
+    "${BUILD_CMD[@]}"
   fi
-fi
 
-FINAL_IMAGE_BASE="${ROLE}-${HOSTNAME}-${VERSION}-${REVISION}"
-if [[ "$OUTPUT_IMAGE_PATH" =~ \.xz$ ]]; then
-  FINAL_IMAGE="$OUTPUT_DIR/${FINAL_IMAGE_BASE}.img.xz"
+  OUTPUT_IMAGE_PATH="$BUILD_DIR/image-${IMAGE_NAME}/${IMAGE_NAME}.img"
+  if [[ ! -f "$OUTPUT_IMAGE_PATH" ]]; then
+    alt_path="$OUTPUT_IMAGE_PATH.xz"
+    if [[ -f "$alt_path" ]]; then
+      OUTPUT_IMAGE_PATH="$alt_path"
+    else
+      error "Generated image not found at $OUTPUT_IMAGE_PATH"
+    fi
+  fi
+
+  if [[ "$OUTPUT_IMAGE_PATH" =~ \.xz$ ]]; then
+    FINAL_IMAGE="$FINAL_IMAGE_XZ"
+  else
+    FINAL_IMAGE="$FINAL_IMAGE_IMG"
+  fi
+
+  cp "$OUTPUT_IMAGE_PATH" "$FINAL_IMAGE"
+  if [[ -n "$RUN_BUILD_AS_USER" ]]; then
+    chown "$RUN_BUILD_AS_UID:$RUN_BUILD_AS_GID" "$FINAL_IMAGE"
+  fi
+
+  write_invocation_metadata "$FINAL_IMAGE" "$INVOCATION_METADATA_FILE"
+  echo "Image ready: $FINAL_IMAGE"
 else
-  FINAL_IMAGE="$OUTPUT_DIR/${FINAL_IMAGE_BASE}.img"
+  if [[ -z "$FINAL_IMAGE" ]]; then
+    if [[ -f "$FINAL_IMAGE_XZ" ]]; then
+      FINAL_IMAGE="$FINAL_IMAGE_XZ"
+    elif [[ -f "$FINAL_IMAGE_IMG" ]]; then
+      FINAL_IMAGE="$FINAL_IMAGE_IMG"
+    else
+      error "--no-build requested but no existing image found at $FINAL_IMAGE_IMG or $FINAL_IMAGE_XZ"
+    fi
+  fi
+  echo "Reusing previously generated image: $FINAL_IMAGE"
 fi
-
-cp "$OUTPUT_IMAGE_PATH" "$FINAL_IMAGE"
-if [[ -n "$RUN_BUILD_AS_USER" ]]; then
-  chown "$RUN_BUILD_AS_UID:$RUN_BUILD_AS_GID" "$FINAL_IMAGE"
-fi
-echo "Image ready: $FINAL_IMAGE"
 
 if [[ "$WRITE_IMAGE" == true ]]; then
   write_image_to_usb "$FINAL_IMAGE" "$USB_DEVICE" "$AUTO_CONFIRM_WRITE"
