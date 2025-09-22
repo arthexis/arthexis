@@ -112,11 +112,68 @@ def _gather_info() -> dict:
     # Use settings.NODE_ROLE as the single source of truth for the node role.
     info["role"] = getattr(settings, "NODE_ROLE", "Terminal")
 
-    info["features"] = {
-        "celery": (lock_dir / "celery.lck").exists(),
-        "lcd_screen": (lock_dir / "lcd_screen.lck").exists(),
-        "control": (lock_dir / "control.lck").exists(),
-    }
+    features: list[dict[str, object]] = []
+    try:
+        from nodes.models import Node, NodeFeature
+    except Exception:
+        info["features"] = features
+    else:
+        feature_map: dict[str, dict[str, object]] = {}
+
+        def _add_feature(feature: NodeFeature, flag: str) -> None:
+            slug = getattr(feature, "slug", "") or ""
+            if not slug:
+                return
+            display = (getattr(feature, "display", "") or "").strip()
+            normalized = display or slug.replace("-", " ").title()
+            entry = feature_map.setdefault(
+                slug,
+                {
+                    "slug": slug,
+                    "display": normalized,
+                    "expected": False,
+                    "actual": False,
+                },
+            )
+            if display:
+                entry["display"] = display
+            entry[flag] = True
+
+        try:
+            expected_features = (
+                NodeFeature.objects.filter(roles__name=info["role"]).only("slug", "display").distinct()
+            )
+        except Exception:
+            expected_features = []
+        try:
+            for feature in expected_features:
+                _add_feature(feature, "expected")
+        except Exception:
+            pass
+
+        try:
+            local_node = Node.get_local()
+        except Exception:
+            local_node = None
+
+        actual_features = []
+        if local_node:
+            try:
+                actual_features = list(local_node.features.only("slug", "display"))
+            except Exception:
+                actual_features = []
+
+        try:
+            for feature in actual_features:
+                _add_feature(feature, "actual")
+        except Exception:
+            pass
+
+        features = sorted(
+            feature_map.values(),
+            key=lambda item: str(item.get("display", "")).lower(),
+        )
+        info["features"] = features
 
     running = False
     service_status = ""

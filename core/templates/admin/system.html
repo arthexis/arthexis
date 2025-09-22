@@ -20,11 +20,28 @@
       {% endif %}
       <dt>{% trans "Features" %}</dt>
       <dd>
+        {% if info.features %}
         <ul>
-          <li>{% trans "Celery" %}: {{ info.features.celery }}</li>
-          <li>{% trans "LCD screen" %}: {{ info.features.lcd_screen }}</li>
-          <li>{% trans "Control" %}: {{ info.features.control }}</li>
+          {% for feature in info.features %}
+          <li>
+            {{ feature.display }}
+            {% if feature.expected or feature.actual %}
+              (
+              {% if feature.expected and feature.actual %}
+                {% trans "expected and actual" %}
+              {% elif feature.expected %}
+                {% trans "expected" %}
+              {% else %}
+                {% trans "actual" %}
+              {% endif %}
+              )
+            {% endif %}
+          </li>
+          {% endfor %}
         </ul>
+        {% else %}
+        <em>{% trans "No features detected" %}</em>
+        {% endif %}
       </dd>
       <dt>{% trans "Running" %}</dt>
       <dd>{{ info.running }}</dd>

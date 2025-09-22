@@ -3,6 +3,7 @@ from pathlib import Path
 from subprocess import CompletedProcess
 from unittest.mock import patch
 
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 import django
@@ -10,7 +11,8 @@ import django
 django.setup()
 
 from django.conf import settings
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
+from nodes.models import Node, NodeFeature, NodeRole
 from core.system import _gather_info
 
 
@@ -66,3 +68,4 @@ class SystemInfoRunserverDetectionTests(SimpleTestCase):
 
         self.assertTrue(info["running"])
         self.assertEqual(info["port"], 8000)
+
