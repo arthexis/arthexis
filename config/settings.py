@@ -188,6 +188,7 @@ for host in _iter_local_hostnames(_local_hostname, _local_fqdn):
 
 # Allow CSRF origin verification for hosts within allowed subnets.
 _original_origin_verified = CsrfViewMiddleware._origin_verified
+_original_check_referer = CsrfViewMiddleware._check_referer
 
 
 def _host_is_allowed(host: str, allowed_hosts: list[str]) -> bool:
@@ -264,6 +265,45 @@ def _normalized_request_origin(origin: str) -> tuple[str, str, str | None] | Non
     return scheme, host, port
 
 
+def _candidate_origin_tuples(request, allowed_hosts: list[str]) -> list[tuple[str, str, str | None]]:
+    default_scheme = _get_request_scheme(request)
+    candidates: list[tuple[str, str, str | None]] = []
+    seen: set[tuple[str, str, str | None]] = set()
+
+    def _append_candidate(scheme: str | None, host: str) -> None:
+        if not scheme or not host:
+            return
+        normalized = _normalize_origin_tuple(scheme, host)
+        if normalized is None:
+            return
+        if not _host_is_allowed(host, allowed_hosts):
+            return
+        if normalized in seen:
+            return
+        candidates.append(normalized)
+        seen.add(normalized)
+
+    forwarded_header = request.META.get("HTTP_FORWARDED", "")
+    for forwarded_entry in _parse_forwarded_header(forwarded_header):
+        host = forwarded_entry.get("host", "").strip()
+        scheme = _get_request_scheme(request, forwarded_entry)
+        _append_candidate(scheme, host)
+
+    forwarded_host = request.META.get("HTTP_X_FORWARDED_HOST", "")
+    if forwarded_host:
+        host = forwarded_host.split(",")[0].strip()
+        _append_candidate(default_scheme, host)
+
+    try:
+        good_host = request.get_host()
+    except DisallowedHost:
+        good_host = ""
+    if good_host:
+        _append_candidate(default_scheme, good_host)
+
+    return candidates
+
+
 def _origin_verified_with_subnets(self, request):
     request_origin = request.META["HTTP_ORIGIN"]
     allowed_hosts = _get_allowed_hosts()
@@ -271,49 +311,13 @@ def _origin_verified_with_subnets(self, request):
     if normalized_origin is None:
         return _original_origin_verified(self, request)
 
-    default_scheme = _get_request_scheme(request)
-    candidates: list[tuple[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-
-    forwarded_header = request.META.get("HTTP_FORWARDED", "")
-    for forwarded_entry in _parse_forwarded_header(forwarded_header):
-        host = forwarded_entry.get("host", "").strip()
-        scheme = _get_request_scheme(request, forwarded_entry)
-        if host and _host_is_allowed(host, allowed_hosts):
-            key = (scheme, host)
-            if key not in seen:
-                candidates.append(key)
-                seen.add(key)
-
-    forwarded_host = request.META.get("HTTP_X_FORWARDED_HOST", "")
-    if forwarded_host:
-        host = forwarded_host.split(",")[0].strip()
-        if host and _host_is_allowed(host, allowed_hosts):
-            key = (default_scheme, host)
-            if key not in seen:
-                candidates.append(key)
-                seen.add(key)
-
-    try:
-        good_host = request.get_host()
-    except DisallowedHost:
-        good_host = ""
-    if good_host:
-        key = (default_scheme, good_host)
-        if key not in seen:
-            candidates.append(key)
-            seen.add(key)
-
     origin_ip = _extract_ip_from_host(normalized_origin[1])
 
-    for scheme, host in candidates:
-        normalized_candidate = _normalize_origin_tuple(scheme, host)
-        if normalized_candidate is None:
-            continue
-        if normalized_candidate == normalized_origin:
+    for candidate in _candidate_origin_tuples(request, allowed_hosts):
+        if candidate == normalized_origin:
             return True
 
-        candidate_ip = _extract_ip_from_host(normalized_candidate[1])
+        candidate_ip = _extract_ip_from_host(candidate[1])
         if origin_ip and candidate_ip:
             for pattern in allowed_hosts:
                 try:
@@ -326,6 +330,49 @@ def _origin_verified_with_subnets(self, request):
 
 
 CsrfViewMiddleware._origin_verified = _origin_verified_with_subnets
+
+
+def _check_referer_with_forwarded(self, request):
+    referer = request.META.get("HTTP_REFERER")
+    if referer is None:
+        return _original_check_referer(self, request)
+
+    try:
+        parsed = urlsplit(referer)
+    except ValueError:
+        return _original_check_referer(self, request)
+
+    if "" in (parsed.scheme, parsed.netloc):
+        return _original_check_referer(self, request)
+
+    if parsed.scheme.lower() != "https":
+        return _original_check_referer(self, request)
+
+    normalized_referer = _normalize_origin_tuple(parsed.scheme.lower(), parsed.netloc)
+    if normalized_referer is None:
+        return _original_check_referer(self, request)
+
+    allowed_hosts = _get_allowed_hosts()
+    referer_ip = _extract_ip_from_host(normalized_referer[1])
+
+    for candidate in _candidate_origin_tuples(request, allowed_hosts):
+        if candidate == normalized_referer:
+            return
+
+        candidate_ip = _extract_ip_from_host(candidate[1])
+        if referer_ip and candidate_ip:
+            for pattern in allowed_hosts:
+                try:
+                    network = ipaddress.ip_network(pattern)
+                except ValueError:
+                    continue
+                if referer_ip in network and candidate_ip in network:
+                    return
+
+    return _original_check_referer(self, request)
+
+
+CsrfViewMiddleware._check_referer = _check_referer_with_forwarded
 
 
 # Application definition
