@@ -9,6 +9,9 @@ from core.models import (
     AssistantProfile as CoreAssistantProfile,
 )
 from awg.models import PowerLead as CorePowerLead
+from django_otp.plugins.otp_totp.models import (
+    TOTPDevice as CoreTOTPDevice,
+)
 from nodes.models import EmailOutbox as CoreEmailOutbox
 
 
@@ -90,3 +93,11 @@ class AssistantProfile(CoreAssistantProfile):
         app_label = "teams"
         verbose_name = CoreAssistantProfile._meta.verbose_name
         verbose_name_plural = CoreAssistantProfile._meta.verbose_name_plural
+
+
+class TOTPDevice(CoreTOTPDevice):
+    class Meta:
+        proxy = True
+        app_label = "teams"
+        verbose_name = CoreTOTPDevice._meta.verbose_name
+        verbose_name_plural = CoreTOTPDevice._meta.verbose_name_plural
