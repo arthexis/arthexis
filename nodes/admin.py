@@ -431,7 +431,14 @@ class ContentSampleAdmin(EntityModelAdmin):
 
 @admin.register(NetMessage)
 class NetMessageAdmin(EntityModelAdmin):
-    list_display = ("subject", "body", "reach", "created", "complete")
+    list_display = (
+        "subject",
+        "body",
+        "reach",
+        "node_origin",
+        "created",
+        "complete",
+    )
     search_fields = ("subject", "body")
     list_filter = ("complete", "reach")
     ordering = ("-created",)

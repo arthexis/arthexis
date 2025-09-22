@@ -396,11 +396,22 @@ def net_message(request):
     if reach_name:
         reach_role = NodeRole.objects.filter(name=reach_name).first()
     seen = data.get("seen", [])
+    origin_id = data.get("origin")
+    origin_node = None
+    if origin_id:
+        origin_node = Node.objects.filter(uuid=origin_id).first()
+    if not origin_node:
+        origin_node = node
     if not msg_uuid:
         return JsonResponse({"detail": "uuid required"}, status=400)
     msg, created = NetMessage.objects.get_or_create(
         uuid=msg_uuid,
-        defaults={"subject": subject[:64], "body": body[:256], "reach": reach_role},
+        defaults={
+            "subject": subject[:64],
+            "body": body[:256],
+            "reach": reach_role,
+            "node_origin": origin_node,
+        },
     )
     if not created:
         msg.subject = subject[:64]
@@ -409,6 +420,9 @@ def net_message(request):
         if reach_role and msg.reach_id != reach_role.id:
             msg.reach = reach_role
             update_fields.append("reach")
+        if msg.node_origin_id is None and origin_node:
+            msg.node_origin = origin_node
+            update_fields.append("node_origin")
         msg.save(update_fields=update_fields)
     msg.propagate(seen=seen)
     return JsonResponse({"status": "propagated", "complete": msg.complete})

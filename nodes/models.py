@@ -813,6 +813,13 @@ class NetMessage(Entity):
         editable=False,
         verbose_name="UUID",
     )
+    node_origin = models.ForeignKey(
+        "Node",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="originated_net_messages",
+    )
     subject = models.CharField(max_length=64, blank=True)
     body = models.CharField(max_length=256, blank=True)
     reach = models.ForeignKey(
@@ -847,10 +854,12 @@ class NetMessage(Entity):
                 role = reach
             else:
                 role = NodeRole.objects.filter(name=reach).first()
+        origin = Node.get_local()
         msg = cls.objects.create(
             subject=subject[:64],
             body=body[:256],
             reach=role or get_terminal_role(),
+            node_origin=origin,
         )
         msg.propagate(seen=seen or [])
         return msg
@@ -862,6 +871,14 @@ class NetMessage(Entity):
 
         notify(self.subject, self.body)
         local = Node.get_local()
+        if local and not self.node_origin_id:
+            self.node_origin = local
+            self.save(update_fields=["node_origin"])
+        origin_uuid = None
+        if self.node_origin_id:
+            origin_uuid = str(self.node_origin.uuid)
+        elif local:
+            origin_uuid = str(local.uuid)
         private_key = None
         seen = list(seen or [])
         local_id = None
@@ -936,6 +953,7 @@ class NetMessage(Entity):
                 "seen": payload_seen,
                 "reach": reach_name,
                 "sender": local_id,
+                "origin": origin_uuid,
             }
             payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
             headers = {"Content-Type": "application/json"}
