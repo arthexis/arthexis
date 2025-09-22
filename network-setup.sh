@@ -152,6 +152,43 @@ slugify() {
     echo "$input" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
 }
 
+# Find an existing access point connection that should be reused when
+# --ap is not explicitly provided. Preference order:
+#   1. An active wlan0 connection whose name contains "-ap".
+#   2. Any stored wifi connection whose name contains "-ap", preferring
+#      non-default names.
+find_existing_ap_connection() {
+    local active_ap
+    active_ap=$(nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null |
+        awk -F: '$2=="wlan0" && $1 ~ /-ap/ {print $1; exit}' || true)
+    if [[ -n "$active_ap" ]]; then
+        printf '%s' "$active_ap"
+        return 0
+    fi
+
+    local candidates
+    candidates=$(nmcli -t -f NAME,TYPE connection show 2>/dev/null |
+        awk -F: '$2=="802-11-wireless" && $1 ~ /-ap/ {print $1}' || true)
+    if [[ -z "$candidates" ]]; then
+        return 0
+    fi
+
+    local candidate
+    while IFS= read -r candidate; do
+        [[ -z "$candidate" ]] && continue
+        if [[ "$candidate" != "$DEFAULT_AP_NAME" ]]; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done <<< "$candidates"
+
+    candidate=$(printf '%s\n' "$candidates" | head -n1)
+    if [[ -n "$candidate" ]]; then
+        printf '%s' "$candidate"
+    fi
+    return 0
+}
+
 # Check initial internet connectivity (non-fatal)
 check_connectivity() {
     ping -c1 -W2 8.8.8.8 >/dev/null 2>&1
@@ -218,6 +255,16 @@ if [[ $SKIP_VNC == true ]]; then
     echo "Skipping VNC requirement as requested."
 else
     require_vnc_enabled
+fi
+
+if [[ $AP_SPECIFIED == false ]]; then
+    AUTO_AP_NAME="$(find_existing_ap_connection)"
+    if [[ -n "$AUTO_AP_NAME" ]]; then
+        if [[ "$AUTO_AP_NAME" != "$AP_NAME" ]]; then
+            echo "Using existing access point connection '$AUTO_AP_NAME'."
+        fi
+        AP_NAME="$AUTO_AP_NAME"
+    fi
 fi
 
 # Detect the active internet connection and back it up
