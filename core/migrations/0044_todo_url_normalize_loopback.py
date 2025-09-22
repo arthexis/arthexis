@@ -9,7 +9,7 @@ from django.db import migrations
 LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
 
 
-def _collect_allowed_hosts(site_model) -> set[str]:
+def _collect_allowed_hosts(site_model, *, using: str) -> set[str]:
     hosts: set[str] = set()
     hosts.update(LOOPBACK_HOSTS)
 
@@ -22,7 +22,7 @@ def _collect_allowed_hosts(site_model) -> set[str]:
         hosts.add(normalized)
         hosts.add(normalized.split(":", 1)[0])
 
-    for site in site_model.objects.all().only("domain"):
+    for site in site_model.objects.using(using).all().only("domain"):
         domain = (site.domain or "").strip().lower()
         if not domain:
             continue
@@ -37,9 +37,11 @@ def normalize_todo_urls(apps, schema_editor):
     Todo = apps.get_model("core", "Todo")
     Site = apps.get_model("sites", "Site")
 
-    allowed_hosts = _collect_allowed_hosts(Site)
+    database_alias = schema_editor.connection.alias
 
-    queryset = Todo.objects.exclude(url__exact="").iterator()
+    allowed_hosts = _collect_allowed_hosts(Site, using=database_alias)
+
+    queryset = Todo.objects.using(database_alias).exclude(url__exact="").iterator()
     for todo in queryset:
         raw_url = (todo.url or "").strip()
         if not raw_url:
@@ -63,7 +65,7 @@ def normalize_todo_urls(apps, schema_editor):
         normalized = urlunsplit(("", "", path, parsed.query, parsed.fragment)) or "/"
 
         if normalized != raw_url:
-            Todo.objects.filter(pk=todo.pk).update(url=normalized)
+            Todo.objects.using(database_alias).filter(pk=todo.pk).update(url=normalized)
 
 
 class Migration(migrations.Migration):
