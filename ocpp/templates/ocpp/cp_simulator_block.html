@@ -67,6 +67,18 @@
         </div>
         <div class="col-sm-6 col-md-4">
           <div class="mb-2">
+            <label class="form-label" for="temperature{{ idx }}">Temperature (°C)</label>
+            <input id="temperature{{ idx }}" name="temperature" value="{{ cp.params.temperature|default:default_temperature }}" class="form-control form-control-sm">
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+          <div class="mb-2">
+            <label class="form-label" for="temperature_variation{{ idx }}">Variation (±°C)</label>
+            <input id="temperature_variation{{ idx }}" name="temperature_variation" value="{{ cp.params.temperature_variation|default:default_temperature_variation }}" class="form-control form-control-sm">
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-4">
+          <div class="mb-2">
             <label class="form-label" for="kw_min{{ idx }}">Energy Min (kW)</label>
             <input id="kw_min{{ idx }}" name="kw_min" value="{{ cp.params.kw_min|default:30 }}" class="form-control form-control-sm">
           </div>

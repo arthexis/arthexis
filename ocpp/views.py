@@ -282,13 +282,12 @@ def charger_list(request):
             charger,
             tx_obj if charger.connector_id is not None else (sessions if sessions else None),
         )
-        data.append(
-            {
-                "charger_id": cid,
-                "name": charger.name,
-                "connector_id": charger.connector_id,
-                "connector_slug": charger.connector_slug,
-                "connector_label": charger.connector_label,
+        entry = {
+            "charger_id": cid,
+            "name": charger.name,
+            "connector_id": charger.connector_id,
+            "connector_slug": charger.connector_slug,
+            "connector_label": charger.connector_label,
                 "require_rfid": charger.require_rfid,
                 "transaction": tx_data,
                 "activeTransactions": active_transactions,
@@ -314,10 +313,11 @@ def charger_list(request):
                     else None
                 ),
                 "lastStatusVendorInfo": charger.last_status_vendor_info,
-                "status": state,
-                "statusColor": color,
-            }
-        )
+            "status": state,
+            "statusColor": color,
+        }
+        entry.update(_diagnostics_payload(charger))
+        data.append(entry)
     return JsonResponse({"chargers": data})
 
 
@@ -378,8 +378,7 @@ def charger_detail(request, cid, connector=None):
         charger,
         tx_obj if charger.connector_id is not None else (sessions if sessions else None),
     )
-    return JsonResponse(
-        {
+    payload = {
             "charger_id": cid,
             "connector_id": charger.connector_id,
             "connector_slug": connector_slug,
@@ -409,8 +408,9 @@ def charger_detail(request, cid, connector=None):
             "lastStatusVendorInfo": charger.last_status_vendor_info,
             "status": state,
             "statusColor": color,
-        }
-    )
+    }
+    payload.update(_diagnostics_payload(charger))
+    return JsonResponse(payload)
 
 
 @landing("Dashboard")
@@ -462,6 +462,8 @@ def cp_simulator(request):
     default_connector_id = 1
     default_rfid = "FFFFFFFF"
     default_vins = ["WP0ZZZ00000000000", "WAUZZZ00000000000"]
+    default_temperature = 40.0
+    default_temperature_variation = 5.0
 
     message = ""
     if request.method == "POST":
@@ -495,6 +497,13 @@ def cp_simulator(request):
                 daemon=True,
                 username=request.POST.get("username") or None,
                 password=request.POST.get("password") or None,
+                temperature=float(
+                    request.POST.get("temperature") or default_temperature
+                ),
+                temperature_variation=float(
+                    request.POST.get("temperature_variation")
+                    or default_temperature_variation
+                ),
             )
             try:
                 started, status, log_file = _start_simulator(sim_params, cp=cp_idx)
@@ -534,6 +543,8 @@ def cp_simulator(request):
         "default_connector_id": default_connector_id,
         "default_rfid": default_rfid,
         "default_vins": default_vins,
+        "default_temperature": default_temperature,
+        "default_temperature_variation": default_temperature_variation,
         "params_jsons": params_jsons,
         "state_jsons": state_jsons,
     }

@@ -276,6 +276,7 @@ class SimulatorAdmin(LogViewAdminMixin, EntityModelAdmin):
         ("host", "ws_port"),
         "rfid",
         ("duration", "interval", "pre_charge_delay"),
+        ("temperature", "temperature_variation"),
         "kw_max",
         "repeat",
         ("username", "password"),

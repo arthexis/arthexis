@@ -186,6 +186,8 @@ async def simulate_cp(
     interval: float = 5.0,
     username: Optional[str] = None,
     password: Optional[str] = None,
+    temperature: float = 40.0,
+    temperature_variation: float = 5.0,
 ) -> None:
     """Simulate one charge point session.
 
@@ -209,6 +211,40 @@ async def simulate_cp(
     state = _simulators.get(cp_idx + 1, _simulators[1])
 
     loop_count = 0
+
+    def _temperature_sample() -> tuple[float, float]:
+        variation_range = max(temperature_variation, 0.0)
+        if variation_range:
+            variation = random.uniform(-variation_range, variation_range)
+        else:
+            variation = 0.0
+        measured = temperature + variation
+        return measured, variation
+
+    def _heartbeat_payload(measured: float, variation: float) -> dict[str, str]:
+        return {
+            "temperature": f"{measured:.1f}",
+            "temperatureUnit": "Celsius",
+            "temperatureVariation": f"{variation:.1f}",
+            "temperatureVariationUnit": "Celsius",
+        }
+
+    def _temperature_sampled_values(
+        measured: float, variation: float
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "value": f"{measured:.1f}",
+                "measurand": "Temperature",
+                "unit": "Celsius",
+            },
+            {
+                "value": f"{variation:.1f}",
+                "measurand": "Temperature.Delta",
+                "unit": "Celsius",
+            },
+        ]
+
     while loop_count < session_count and state.running:
         ws = None
         reset_event: asyncio.Event | None = None
@@ -302,7 +338,15 @@ async def simulate_cp(
                     next_meter = meter_start
                     last_mv = time.monotonic()
                     while time.monotonic() - start_delay < pre_charge_delay:
-                        await _send([2, "hb", "Heartbeat", {}])
+                        measured_hb, variation_hb = _temperature_sample()
+                        await _send(
+                            [
+                                2,
+                                "hb",
+                                "Heartbeat",
+                                _heartbeat_payload(measured_hb, variation_hb),
+                            ]
+                        )
                         state.last_message = "Heartbeat"
                         await _recv()
                         await asyncio.sleep(5)
@@ -310,6 +354,20 @@ async def simulate_cp(
                             idle_step = max(2, int(step_max / 100))
                             next_meter += random.randint(0, idle_step)
                             next_kw = next_meter / 1000.0
+                            measured_mv, variation_mv = _temperature_sample()
+                            sampled_values = [
+                                {
+                                    "value": f"{next_kw:.3f}",
+                                    "measurand": "Energy.Active.Import.Register",
+                                    "unit": "kW",
+                                    "context": "Sample.Clock",
+                                }
+                            ]
+                            sampled_values.extend(
+                                _temperature_sampled_values(
+                                    measured_mv, variation_mv
+                                )
+                            )
                             await _send(
                                 [
                                     2,
@@ -323,14 +381,7 @@ async def simulate_cp(
                                                     "%Y-%m-%dT%H:%M:%S"
                                                 )
                                                 + "Z",
-                                                "sampledValue": [
-                                                    {
-                                                        "value": f"{next_kw:.3f}",
-                                                        "measurand": "Energy.Active.Import.Register",
-                                                        "unit": "kW",
-                                                        "context": "Sample.Clock",
-                                                    }
-                                                ],
+                                                "sampledValue": sampled_values,
                                             }
                                         ],
                                     },
@@ -380,6 +431,18 @@ async def simulate_cp(
             state.last_message = "Authorize"
             await _recv()
 
+            measured_hb, variation_hb = _temperature_sample()
+            await _send(
+                [
+                    2,
+                    "hb",
+                    "Heartbeat",
+                    _heartbeat_payload(measured_hb, variation_hb),
+                ]
+            )
+            state.last_message = "Heartbeat"
+            await _recv()
+
             state.phase = "Available"
 
             meter_start = random.randint(1000, 2000)
@@ -394,7 +457,15 @@ async def simulate_cp(
                 next_meter = meter_start
                 last_mv = time.monotonic()
                 while time.monotonic() - start_delay < pre_charge_delay:
-                    await _send([2, "hb", "Heartbeat", {}])
+                    measured_hb, variation_hb = _temperature_sample()
+                    await _send(
+                        [
+                            2,
+                            "hb",
+                            "Heartbeat",
+                            _heartbeat_payload(measured_hb, variation_hb),
+                        ]
+                    )
                     state.last_message = "Heartbeat"
                     await _recv()
                     await asyncio.sleep(5)
@@ -402,6 +473,18 @@ async def simulate_cp(
                         idle_step = max(2, int(step_max / 100))
                         next_meter += random.randint(0, idle_step)
                         next_kw = next_meter / 1000.0
+                        measured_mv, variation_mv = _temperature_sample()
+                        sampled_values = [
+                            {
+                                "value": f"{next_kw:.3f}",
+                                "measurand": "Energy.Active.Import.Register",
+                                "unit": "kW",
+                                "context": "Sample.Clock",
+                            }
+                        ]
+                        sampled_values.extend(
+                            _temperature_sampled_values(measured_mv, variation_mv)
+                        )
                         await _send(
                             [
                                 2,
@@ -415,14 +498,7 @@ async def simulate_cp(
                                                 "%Y-%m-%dT%H:%M:%S"
                                             )
                                             + "Z",
-                                            "sampledValue": [
-                                                {
-                                                    "value": f"{next_kw:.3f}",
-                                                    "measurand": "Energy.Active.Import.Register",
-                                                    "unit": "kW",
-                                                    "context": "Sample.Clock",
-                                                }
-                                            ],
+                                            "sampledValue": sampled_values,
                                         }
                                     ],
                                 },
@@ -460,6 +536,18 @@ async def simulate_cp(
                     break
                 meter += random.randint(step_min, step_max)
                 meter_kw = meter / 1000.0
+                measured_mv, variation_mv = _temperature_sample()
+                sampled_values = [
+                    {
+                        "value": f"{meter_kw:.3f}",
+                        "measurand": "Energy.Active.Import.Register",
+                        "unit": "kW",
+                        "context": "Sample.Periodic",
+                    }
+                ]
+                sampled_values.extend(
+                    _temperature_sampled_values(measured_mv, variation_mv)
+                )
                 await _send(
                     [
                         2,
@@ -469,22 +557,15 @@ async def simulate_cp(
                             "connectorId": connector_id,
                             "transactionId": tx_id,
                             "meterValue": [
-                                {
-                                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
-                                    + "Z",
-                                    "sampledValue": [
-                                        {
-                                            "value": f"{meter_kw:.3f}",
-                                            "measurand": "Energy.Active.Import.Register",
-                                            "unit": "kW",
-                                            "context": "Sample.Periodic",
-                                        }
-                                    ],
-                                }
-                            ],
-                        },
-                    ]
-                )
+                                    {
+                                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
+                                        + "Z",
+                                        "sampledValue": sampled_values,
+                                    }
+                                ],
+                            },
+                        ]
+                    )
                 state.last_message = "MeterValues"
                 await asyncio.sleep(interval)
 
@@ -516,13 +597,33 @@ async def simulate_cp(
             last_mv = time.monotonic()
             start_idle = time.monotonic()
             while time.monotonic() - start_idle < idle_time and not stop_event.is_set():
-                await _send([2, "hb", "Heartbeat", {}])
+                measured_hb, variation_hb = _temperature_sample()
+                await _send(
+                    [
+                        2,
+                        "hb",
+                        "Heartbeat",
+                        _heartbeat_payload(measured_hb, variation_hb),
+                    ]
+                )
                 state.last_message = "Heartbeat"
                 await asyncio.sleep(5)
                 if time.monotonic() - last_mv >= 30:
                     idle_step = max(2, int(step_max / 100))
                     next_meter += random.randint(0, idle_step)
                     next_kw = next_meter / 1000.0
+                    measured_mv, variation_mv = _temperature_sample()
+                    sampled_values = [
+                        {
+                            "value": f"{next_kw:.3f}",
+                            "measurand": "Energy.Active.Import.Register",
+                            "unit": "kW",
+                            "context": "Sample.Clock",
+                        }
+                    ]
+                    sampled_values.extend(
+                        _temperature_sampled_values(measured_mv, variation_mv)
+                    )
                     await _send(
                         [
                             2,
@@ -534,14 +635,7 @@ async def simulate_cp(
                                     {
                                         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
                                         + "Z",
-                                        "sampledValue": [
-                                            {
-                                                "value": f"{next_kw:.3f}",
-                                                "measurand": "Energy.Active.Import.Register",
-                                                "unit": "kW",
-                                                "context": "Sample.Clock",
-                                            }
-                                        ],
+                                        "sampledValue": sampled_values,
                                     }
                                 ],
                             },
@@ -601,6 +695,8 @@ def simulate(
     interval: float = 5.0,
     username: Optional[str] = None,
     password: Optional[str] = None,
+    temperature: float = 40.0,
+    temperature_variation: float = 5.0,
     cp: int = 1,
 ):
     """Entry point used by the admin interface.
@@ -635,6 +731,8 @@ def simulate(
         "interval": interval,
         "username": username,
         "password": password,
+        "temperature": temperature,
+        "temperature_variation": temperature_variation,
     }
     state.start_time = time.strftime("%Y-%m-%d %H:%M:%S")
     state.stop_time = None
@@ -663,6 +761,8 @@ def simulate(
                 interval,
                 username,
                 password,
+                temperature,
+                temperature_variation,
             )
 
         def run_thread(idx: int) -> None:
@@ -685,6 +785,8 @@ def simulate(
                     interval,
                     username,
                     password,
+                    temperature,
+                    temperature_variation,
                 )
             )
 
@@ -737,6 +839,8 @@ def simulate(
                 interval,
                 username,
                 password,
+                temperature,
+                temperature_variation,
             )
         )
     else:
@@ -763,6 +867,8 @@ def simulate(
                     interval,
                     username,
                     password,
+                    temperature,
+                    temperature_variation,
                 ),
                 daemon=True,
             )

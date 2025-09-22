@@ -1679,6 +1679,10 @@ class ChargePointSimulatorTests(TransactionTestCase):
                             ]
                         )
                     )
+                elif action == "Heartbeat":
+                    await ws.send(json.dumps([3, data[1], {}]))
+                elif action == "StatusNotification":
+                    await ws.send(json.dumps([3, data[1], {}]))
                 elif action == "MeterValues":
                     await ws.send(json.dumps([3, data[1], {}]))
                 elif action == "StopTransaction":
@@ -1726,6 +1730,35 @@ class ChargePointSimulatorTests(TransactionTestCase):
         start_msg = next(msg for msg in received if msg[2] == "StartTransaction")
         self.assertEqual(start_msg[3].get("vin"), "WP0ZZZ12345678901")
         self.assertEqual(start_msg[3].get("connectorId"), 7)
+        heartbeat_msg = next(msg for msg in received if msg[2] == "Heartbeat")
+        hb_payload = heartbeat_msg[3]
+        self.assertEqual(hb_payload.get("temperatureUnit"), "Celsius")
+        self.assertEqual(hb_payload.get("temperatureVariationUnit"), "Celsius")
+        heartbeat_temp = float(hb_payload.get("temperature"))
+        heartbeat_variation = float(hb_payload.get("temperatureVariation"))
+        self.assertGreaterEqual(
+            heartbeat_temp, cfg.temperature - cfg.temperature_variation - 0.1
+        )
+        self.assertLessEqual(
+            heartbeat_temp, cfg.temperature + cfg.temperature_variation + 0.1
+        )
+        self.assertLessEqual(
+            abs(heartbeat_variation), cfg.temperature_variation + 0.1
+        )
+        meter_msg = next(msg for msg in received if msg[2] == "MeterValues")
+        sampled_values = meter_msg[3]["meterValue"][0]["sampledValue"]
+        temp_entry = next(
+            item for item in sampled_values if item.get("measurand") == "Temperature"
+        )
+        delta_entry = next(
+            item
+            for item in sampled_values
+            if item.get("measurand") == "Temperature.Delta"
+        )
+        self.assertEqual(temp_entry.get("unit"), "Celsius")
+        self.assertEqual(delta_entry.get("unit"), "Celsius")
+        float(temp_entry.get("value"))
+        float(delta_entry.get("value"))
 
     async def test_start_returns_status_and_log(self):
         async def handler(ws):
@@ -1905,6 +1938,23 @@ class ChargePointSimulatorTests(TransactionTestCase):
         pre_actions = actions[:start_idx]
         self.assertIn("Heartbeat", pre_actions)
         self.assertIn("MeterValues", pre_actions)
+        heartbeat_msg = next(msg for msg in received if msg[2] == "Heartbeat")
+        hb_payload = heartbeat_msg[3]
+        self.assertIn("temperature", hb_payload)
+        self.assertIn("temperatureVariation", hb_payload)
+        hb_temp = float(hb_payload["temperature"])
+        hb_delta = float(hb_payload["temperatureVariation"])
+        self.assertGreaterEqual(hb_temp, cfg.temperature - cfg.temperature_variation - 0.1)
+        self.assertLessEqual(hb_temp, cfg.temperature + cfg.temperature_variation + 0.1)
+        self.assertLessEqual(abs(hb_delta), cfg.temperature_variation + 0.1)
+        pre_meter_msg = next(msg for msg in received if msg[2] == "MeterValues")
+        sampled = pre_meter_msg[3]["meterValue"][0]["sampledValue"]
+        self.assertTrue(
+            any(item.get("measurand") == "Temperature" for item in sampled)
+        )
+        self.assertTrue(
+            any(item.get("measurand") == "Temperature.Delta" for item in sampled)
+        )
 
     async def test_simulator_times_out_without_response(self):
         async def handler(ws):

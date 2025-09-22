@@ -33,6 +33,8 @@ class SimulatorConfig:
     password: Optional[str] = None
     serial_number: str = ""
     connector_id: int = 1
+    temperature: float = 40.0
+    temperature_variation: float = 5.0
 
 
 class ChargePointSimulator:
@@ -45,6 +47,42 @@ class ChargePointSimulator:
         self.status = "stopped"
         self._connected = threading.Event()
         self._connect_error = ""
+
+    def _temperature_measurement(self) -> tuple[float, float]:
+        cfg = self.config
+        variation_range = max(cfg.temperature_variation, 0.0)
+        if variation_range:
+            variation = random.uniform(-variation_range, variation_range)
+        else:
+            variation = 0.0
+        temperature = cfg.temperature + variation
+        return temperature, variation
+
+    @staticmethod
+    def _heartbeat_payload(temperature: float, variation: float) -> dict[str, str]:
+        return {
+            "temperature": f"{temperature:.1f}",
+            "temperatureUnit": "Celsius",
+            "temperatureVariation": f"{variation:.1f}",
+            "temperatureVariationUnit": "Celsius",
+        }
+
+    @staticmethod
+    def _temperature_sampled_values(
+        temperature: float, variation: float
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "value": f"{temperature:.1f}",
+                "measurand": "Temperature",
+                "unit": "Celsius",
+            },
+            {
+                "value": f"{variation:.1f}",
+                "measurand": "Temperature.Delta",
+                "unit": "Celsius",
+            },
+        ]
 
     @requires_network
     async def _run_session(self) -> None:
@@ -141,6 +179,18 @@ class ChargePointSimulator:
                 self.status = "running"
                 self._connect_error = "accepted"
                 self._connected.set()
+            temperature, variation = self._temperature_measurement()
+            await send(
+                json.dumps(
+                    [
+                        2,
+                        "hb",
+                        "Heartbeat",
+                        self._heartbeat_payload(temperature, variation),
+                    ]
+                )
+            )
+            await recv()
             if cfg.pre_charge_delay > 0:
                 idle_start = time.monotonic()
                 while time.monotonic() - idle_start < cfg.pre_charge_delay:
@@ -159,8 +209,28 @@ class ChargePointSimulator:
                         )
                     )
                     await recv()
-                    await send(json.dumps([2, "hb", "Heartbeat", {}]))
+                    temperature, variation = self._temperature_measurement()
+                    await send(
+                        json.dumps(
+                            [
+                                2,
+                                "hb",
+                                "Heartbeat",
+                                self._heartbeat_payload(temperature, variation),
+                            ]
+                        )
+                    )
                     await recv()
+                    sampled_values = [
+                        {
+                            "value": "0",
+                            "measurand": "Energy.Active.Import.Register",
+                            "unit": "kW",
+                        }
+                    ]
+                    sampled_values.extend(
+                        self._temperature_sampled_values(temperature, variation)
+                    )
                     await send(
                         json.dumps(
                             [
@@ -174,13 +244,7 @@ class ChargePointSimulator:
                                             "timestamp": time.strftime(
                                                 "%Y-%m-%dT%H:%M:%SZ"
                                             ),
-                                            "sampledValue": [
-                                                {
-                                                    "value": "0",
-                                                    "measurand": "Energy.Active.Import.Register",
-                                                    "unit": "kW",
-                                                }
-                                            ],
+                                            "sampledValue": sampled_values,
                                         }
                                     ],
                                 },
@@ -225,6 +289,17 @@ class ChargePointSimulator:
                 inc = random.gauss(step_avg, step_avg * 0.05)
                 meter += max(1, int(inc))
                 meter_kw = meter / 1000.0
+                temperature, variation = self._temperature_measurement()
+                sampled_values = [
+                    {
+                        "value": f"{meter_kw:.3f}",
+                        "measurand": "Energy.Active.Import.Register",
+                        "unit": "kW",
+                    }
+                ]
+                sampled_values.extend(
+                    self._temperature_sampled_values(temperature, variation)
+                )
                 await send(
                     json.dumps(
                         [
@@ -235,22 +310,16 @@ class ChargePointSimulator:
                                 "connectorId": cfg.connector_id,
                                 "transactionId": tx_id,
                                 "meterValue": [
-                                    {
-                                        "timestamp": time.strftime(
-                                            "%Y-%m-%dT%H:%M:%SZ"
-                                        ),
-                                        "sampledValue": [
-                                            {
-                                                "value": f"{meter_kw:.3f}",
-                                                "measurand": "Energy.Active.Import.Register",
-                                                "unit": "kW",
-                                            }
-                                        ],
-                                    }
-                                ],
-                            },
-                        ]
-                    )
+                                        {
+                                            "timestamp": time.strftime(
+                                                "%Y-%m-%dT%H:%M:%SZ"
+                                            ),
+                                            "sampledValue": sampled_values,
+                                        }
+                                    ],
+                                },
+                            ]
+                        )
                 )
                 await recv()
                 await asyncio.sleep(cfg.interval)

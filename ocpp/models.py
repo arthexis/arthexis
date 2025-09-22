@@ -579,6 +579,10 @@ class Simulator(Entity):
     repeat = models.BooleanField(default=False)
     username = models.CharField(max_length=100, blank=True)
     password = models.CharField(max_length=100, blank=True)
+    temperature = models.FloatField(_("Temperature (°C)"), default=40.0)
+    temperature_variation = models.FloatField(
+        _("Temperature variation (±°C)"), default=5.0
+    )
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
@@ -605,6 +609,8 @@ class Simulator(Entity):
             repeat=self.repeat,
             username=self.username or None,
             password=self.password or None,
+            temperature=self.temperature,
+            temperature_variation=self.temperature_variation,
         )
 
     @property
