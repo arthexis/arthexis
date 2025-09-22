@@ -49,8 +49,11 @@ def nav_links(request):
                 continue
             landings.append(landing)
         if landings:
-            if getattr(module.application, "name", "").lower() == "awg":
-                module.menu = "Power"
+            app_name = getattr(module.application, "name", "").lower()
+            if app_name == "awg":
+                module.menu = "Calculate"
+            elif app_name == "man":
+                module.menu = "Manuals"
             module.enabled_landings = landings
             valid_modules.append(module)
             if request.path.startswith(module.path):

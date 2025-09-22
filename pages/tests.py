@@ -1029,11 +1029,16 @@ class PowerNavTests(TestCase):
         Site.objects.update_or_create(
             id=1, defaults={"domain": "testserver", "name": ""}
         )
-        app, _ = Application.objects.get_or_create(name="awg")
-        module, _ = Module.objects.get_or_create(
-            node_role=role, application=app, path="/awg/"
+        awg_app, _ = Application.objects.get_or_create(name="awg")
+        awg_module, _ = Module.objects.get_or_create(
+            node_role=role, application=awg_app, path="/awg/"
         )
-        module.create_landings()
+        awg_module.create_landings()
+        man_app, _ = Application.objects.get_or_create(name="man")
+        man_module, _ = Module.objects.get_or_create(
+            node_role=role, application=man_app, path="/man/"
+        )
+        man_module.create_landings()
         User = get_user_model()
         self.user = User.objects.create_user("user", password="pw")
 
@@ -1045,10 +1050,21 @@ class PowerNavTests(TestCase):
                 power_module = module
                 break
         self.assertIsNotNone(power_module)
-        self.assertEqual(power_module.menu_label.upper(), "POWER")
+        self.assertEqual(power_module.menu_label.upper(), "CALCULATE")
         landing_labels = {landing.label for landing in power_module.enabled_landings}
         self.assertIn("AWG Calculator", landing_labels)
-        self.assertNotIn("Energy Tariff Calculator", landing_labels)
+
+    def test_manual_pill_label(self):
+        resp = self.client.get(reverse("pages:index"))
+        manuals_module = None
+        for module in resp.context["nav_modules"]:
+            if module.path == "/man/":
+                manuals_module = module
+                break
+        self.assertIsNotNone(manuals_module)
+        self.assertEqual(manuals_module.menu_label.upper(), "MANUALS")
+        landing_labels = {landing.label for landing in manuals_module.enabled_landings}
+        self.assertIn("Manuals", landing_labels)
 
     def test_energy_tariff_visible_when_logged_in(self):
         self.client.force_login(self.user)
