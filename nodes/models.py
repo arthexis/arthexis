@@ -882,6 +882,8 @@ class NetMessage(Entity):
                 )
             else:
                 prune_qs = prune_qs.filter(node_origin__isnull=True)
+            if self.pk:
+                prune_qs = prune_qs.exclude(pk=self.pk)
             prune_qs.delete()
         if local and not self.node_origin_id:
             self.node_origin = local
