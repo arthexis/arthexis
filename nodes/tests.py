@@ -45,7 +45,7 @@ from .backends import OutboxEmailBackend
 from .tasks import capture_node_screenshot, sample_clipboard
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
-from core.models import PackageRelease
+from core.models import PackageRelease, SecurityGroup
 
 
 class NodeTests(TestCase):
@@ -1378,6 +1378,29 @@ class EmailOutboxTests(TestCase):
         email = mail.outbox[0]
         self.assertEqual(email.subject, "sub")
         self.assertEqual(email.to, ["to@example.com"])
+
+    def test_string_representation_prefers_from_email(self):
+        outbox = EmailOutbox.objects.create(
+            host="smtp.example.com",
+            port=587,
+            username="mailer",
+            password="secret",
+            from_email="noreply@example.com",
+        )
+
+        self.assertEqual(str(outbox), "noreply@example.com")
+
+    def test_string_representation_prefers_username_over_owner(self):
+        group = SecurityGroup.objects.create(name="Operators")
+        outbox = EmailOutbox.objects.create(
+            group=group,
+            host="smtp.example.com",
+            port=587,
+            username="mailer",
+            password="secret",
+        )
+
+        self.assertEqual(str(outbox), "mailer@smtp.example.com")
 
 
 class ClipboardTaskTests(TestCase):

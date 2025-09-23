@@ -770,6 +770,26 @@ class EmailOutbox(Profile):
         verbose_name = "Email Outbox"
         verbose_name_plural = "Email Outboxes"
 
+    def __str__(self) -> str:
+        address = (self.from_email or "").strip()
+        if address:
+            return address
+
+        username = (self.username or "").strip()
+        host = (self.host or "").strip()
+        if username and host:
+            return f"{username}@{host}"
+        if username:
+            return username
+        if host:
+            return host
+
+        owner = self.owner_display()
+        if owner:
+            return owner
+
+        return super().__str__()
+
     def clean(self):
         if self.user_id or self.group_id:
             super().clean()
