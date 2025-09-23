@@ -146,19 +146,48 @@ if [[ "${SET_OUTBOX,,}" == "y" ]]; then
     read -rp "From email (leave blank to use default): " FROM_EMAIL
 
     "$PYTHON" manage.py shell <<PYTHON
-from nodes.models import EmailOutbox
-outbox, _ = EmailOutbox.objects.update_or_create(
-    id=1,
-    defaults={
-        "host": "$HOST",
-        "port": int("$PORT"),
-        "username": "$USERNAME",
-        "password": "$PASSWORD",
-        "use_tls": "$USE_TLS".lower() == "y",
-        "use_ssl": "$USE_SSL".lower() == "y",
-        "from_email": "$FROM_EMAIL",
-    },
-)
+from nodes.models import EmailOutbox, Node
+
+
+defaults = {
+    "host": "$HOST",
+    "port": int("$PORT"),
+    "username": "$USERNAME",
+    "password": "$PASSWORD",
+    "use_tls": "$USE_TLS".lower() == "y",
+    "use_ssl": "$USE_SSL".lower() == "y",
+    "from_email": "$FROM_EMAIL",
+}
+
+node = Node.get_local()
+if node:
+    outbox = EmailOutbox.objects.filter(node=node).first()
+    if outbox is None:
+        outbox = (
+            EmailOutbox.objects.filter(node__isnull=True)
+            .order_by("pk")
+            .first()
+        )
+    if outbox is None:
+        outbox = EmailOutbox(node=node)
+    needs_node_update = outbox.node_id != getattr(node, "id", None)
+    for field, value in defaults.items():
+        setattr(outbox, field, value)
+    if needs_node_update:
+        outbox.node = node
+    if outbox.pk is None:
+        outbox.save()
+    else:
+        update_fields = list(defaults.keys())
+        if needs_node_update:
+            update_fields.append("node")
+        outbox.save(update_fields=update_fields)
+else:
+    EmailOutbox.objects.update_or_create(
+        id=1,
+        defaults=defaults,
+    )
+
 print("Configured outbox")
 PYTHON
 
@@ -169,8 +198,28 @@ PYTHON
 from django.contrib.auth import get_user_model
 from core.user_data import dump_user_fixture
 from nodes.models import Node, EmailOutbox
+
+
+def _select_outbox(node):
+    if node:
+        outbox = EmailOutbox.objects.filter(node=node).first()
+        if outbox:
+            return outbox
+        ownerless = EmailOutbox.objects.filter(node__isnull=True).order_by("pk").first()
+        if ownerless:
+            ownerless.node = node
+            ownerless.save(update_fields=["node"])
+            return ownerless
+        return None
+    return EmailOutbox.objects.order_by("pk").first()
+
+
 node = Node.get_local()
-outbox = EmailOutbox.objects.get(node=node)
+outbox = _select_outbox(node)
+if outbox is None:
+    print("No EmailOutbox is configured for this installation.")
+    raise SystemExit(1)
+
 User = get_user_model()
 user = User.objects.get(username="$UD_USER")
 outbox.is_user_data = True

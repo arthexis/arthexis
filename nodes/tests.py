@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch, call, MagicMock
 from django.core import mail
+from django.core.mail import EmailMessage
 from django.core.management import call_command
 import socket
 import base64
