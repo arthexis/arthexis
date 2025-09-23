@@ -26,42 +26,28 @@ Costellazione Arthexis è distribuita in quattro ruoli di nodo pensati per diver
   <thead>
     <tr>
       <th align="left">Ruolo</th>
-      <th align="left">Descrizione</th>
-      <th align="left">Funzionalità comuni</th>
+      <th align="left">Descrizione e funzionalità comuni</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td valign="top"><strong>Terminal</strong></td>
-      <td valign="top"><strong>Ricerca e sviluppo per singolo utente</strong></td>
-      <td valign="top">GUI Toast</td>
+      <td valign="top"><strong>Ricerca e sviluppo per singolo utente</strong><br />Funzionalità: GUI Toast</td>
     </tr>
     <tr>
       <td valign="top"><strong>Control</strong></td>
-      <td valign="top"><strong>Test di dispositivi singoli e appliance per compiti speciali</strong></td>
-      <td valign="top">AP Public Wi-Fi<br />Celery Queue<br />GUI Toast<br />LCD Screen<br />NGINX Server<br />RFID Scanner</td>
+      <td valign="top"><strong>Test di dispositivi singoli e appliance per compiti speciali</strong><br />Funzionalità: AP Public Wi-Fi, Celery Queue, GUI Toast, LCD Screen, NGINX Server, RFID Scanner</td>
     </tr>
     <tr>
       <td valign="top"><strong>Satellite</strong></td>
-      <td valign="top"><strong>Periferia multi-dispositivo, rete e acquisizione dati</strong></td>
-      <td valign="top">AP Router<br />Celery Queue<br />NGINX Server<br />RFID Scanner</td>
+      <td valign="top"><strong>Periferia multi-dispositivo, rete e acquisizione dati</strong><br />Funzionalità: AP Router, Celery Queue, NGINX Server, RFID Scanner</td>
     </tr>
     <tr>
       <td valign="top"><strong>Constellation</strong></td>
-      <td valign="top"><strong>Cloud multiutente e orchestrazione</strong></td>
-      <td valign="top">Celery Queue<br />NGINX Server</td>
+      <td valign="top"><strong>Cloud multiutente e orchestrazione</strong><br />Funzionalità: Celery Queue, NGINX Server</td>
     </tr>
   </tbody>
 </table>
-
-## Lingue
-
-Costellazione Arthexis è disponibile in:
-
-- Spagnolo (Español)
-- Inglese (English)
-- Italiano (Italiano)
-- Tedesco (Deutsch)
 
 ## Guida rapida
 

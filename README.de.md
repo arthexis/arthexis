@@ -26,42 +26,28 @@ Die Arthexis-Konstellation wird in vier Node-Rollen ausgeliefert, die auf unters
   <thead>
     <tr>
       <th align="left">Rolle</th>
-      <th align="left">Beschreibung</th>
-      <th align="left">Gemeinsame Funktionen</th>
+      <th align="left">Beschreibung &amp; gemeinsame Funktionen</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td valign="top"><strong>Terminal</strong></td>
-      <td valign="top"><strong>Einzelanwender-Forschung und -Entwicklung</strong></td>
-      <td valign="top">GUI Toast</td>
+      <td valign="top"><strong>Einzelanwender-Forschung und -Entwicklung</strong><br />Funktionen: GUI Toast</td>
     </tr>
     <tr>
       <td valign="top"><strong>Control</strong></td>
-      <td valign="top"><strong>Tests einzelner Geräte und Spezialgeräte</strong></td>
-      <td valign="top">AP Public Wi-Fi<br />Celery Queue<br />GUI Toast<br />LCD Screen<br />NGINX Server<br />RFID Scanner</td>
+      <td valign="top"><strong>Tests einzelner Geräte und Spezialgeräte</strong><br />Funktionen: AP Public Wi-Fi, Celery Queue, GUI Toast, LCD Screen, NGINX Server, RFID Scanner</td>
     </tr>
     <tr>
       <td valign="top"><strong>Satellite</strong></td>
-      <td valign="top"><strong>Edge-Betrieb mit mehreren Geräten, Netzwerk und Datenerfassung</strong></td>
-      <td valign="top">AP Router<br />Celery Queue<br />NGINX Server<br />RFID Scanner</td>
+      <td valign="top"><strong>Edge-Betrieb mit mehreren Geräten, Netzwerk und Datenerfassung</strong><br />Funktionen: AP Router, Celery Queue, NGINX Server, RFID Scanner</td>
     </tr>
     <tr>
       <td valign="top"><strong>Constellation</strong></td>
-      <td valign="top"><strong>Cloud-Orchestrierung für mehrere Nutzer</strong></td>
-      <td valign="top">Celery Queue<br />NGINX Server</td>
+      <td valign="top"><strong>Cloud-Orchestrierung für mehrere Nutzer</strong><br />Funktionen: Celery Queue, NGINX Server</td>
     </tr>
   </tbody>
 </table>
-
-## Sprachen
-
-Die Arthexis-Konstellation ist verfügbar auf:
-
-- Spanisch (Español)
-- Englisch (English)
-- Italienisch (Italiano)
-- Deutsch (Deutsch)
 
 ## Kurzanleitung
 
