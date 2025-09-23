@@ -1272,6 +1272,7 @@ class TodoFocusViewTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, todo.request)
+        self.assertEqual(resp["X-Frame-Options"], "SAMEORIGIN")
         self.assertContains(resp, f'src="{todo.url}"')
         self.assertContains(resp, "Done")
         self.assertContains(resp, "Back")
