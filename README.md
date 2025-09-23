@@ -51,15 +51,6 @@ Arthexis Constellation ships in four node roles tailored to different deployment
   </tbody>
 </table>
 
-## Languages
-
-Arthexis Constellation is available in:
-
-- Spanish (Español)
-- English
-- Italian (Italiano)
-- German (Deutsch)
-
 ## Quick Guide
 
 ### 1. Clone

@@ -26,42 +26,28 @@ Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plat
   <thead>
     <tr>
       <th align="left">Rol</th>
-      <th align="left">Descripción</th>
-      <th align="left">Funciones comunes</th>
+      <th align="left">Descripción y funciones comunes</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td valign="top"><strong>Terminal</strong></td>
-      <td valign="top"><strong>Investigación y desarrollo de un solo usuario</strong></td>
-      <td valign="top">GUI Toast</td>
+      <td valign="top"><strong>Investigación y desarrollo de un solo usuario</strong><br />Funciones: GUI Toast</td>
     </tr>
     <tr>
       <td valign="top"><strong>Control</strong></td>
-      <td valign="top"><strong>Pruebas de un solo dispositivo y equipos para tareas especiales</strong></td>
-      <td valign="top">AP Public Wi-Fi<br />Celery Queue<br />GUI Toast<br />LCD Screen<br />NGINX Server<br />RFID Scanner</td>
+      <td valign="top"><strong>Pruebas de un solo dispositivo y equipos para tareas especiales</strong><br />Funciones: AP Public Wi-Fi, Celery Queue, GUI Toast, LCD Screen, NGINX Server, RFID Scanner</td>
     </tr>
     <tr>
       <td valign="top"><strong>Satélite</strong></td>
-      <td valign="top"><strong>Periferia multidispositivo, redes y adquisición de datos</strong></td>
-      <td valign="top">AP Router<br />Celery Queue<br />NGINX Server<br />RFID Scanner</td>
+      <td valign="top"><strong>Periferia multidispositivo, redes y adquisición de datos</strong><br />Funciones: AP Router, Celery Queue, NGINX Server, RFID Scanner</td>
     </tr>
     <tr>
       <td valign="top"><strong>Constelación</strong></td>
-      <td valign="top"><strong>Nube multiusuario y orquestación</strong></td>
-      <td valign="top">Celery Queue<br />NGINX Server</td>
+      <td valign="top"><strong>Nube multiusuario y orquestación</strong><br />Funciones: Celery Queue, NGINX Server</td>
     </tr>
   </tbody>
 </table>
-
-## Idiomas
-
-Constelación Arthexis está disponible en:
-
-- Español
-- Inglés
-- Italiano
-- Alemán
 
 ## Quick Guide
 
