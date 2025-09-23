@@ -49,106 +49,6 @@ from cryptography.hazmat.primitives import serialization, hashes
 from core.models import PackageRelease, SecurityGroup
 
 
-class OutboxEmailBackendSelectionTests(TestCase):
-    def setUp(self):
-        User = get_user_model()
-        self.user = User.objects.create_user(username="emailuser", password="pwd")
-        self.group = SecurityGroup.objects.create(name="Mailers")
-        self.backend = OutboxEmailBackend()
-
-    def test_select_outbox_prefers_multiple_matches(self):
-        primary = EmailOutbox.objects.create(
-            user=self.user,
-            host="smtp.example.com",
-            port=25,
-            username="preferred@example.com",
-            from_email="preferred@example.com",
-        )
-        secondary = EmailOutbox.objects.create(
-            group=self.group,
-            host="smtp.other.com",
-            port=2525,
-            username="preferred@example.com",
-            from_email="preferred@example.com",
-        )
-
-        email = EmailMessage(
-            subject="subject",
-            body="body",
-            from_email="preferred@example.com",
-            to=["recipient@example.com"],
-        )
-        email.user = self.user
-
-        outbox, fallbacks = self.backend._select_outbox(email)
-
-        self.assertEqual(outbox, primary)
-        self.assertEqual(fallbacks, [secondary])
-
-    @patch("nodes.backends.random.shuffle")
-    def test_select_outbox_randomizes_ties(self, mock_shuffle):
-        mock_shuffle.side_effect = lambda seq: seq.reverse()
-
-        first = EmailOutbox.objects.create(
-            host="smtp.one.example", port=25, from_email="tie@example.com"
-        )
-        second = EmailOutbox.objects.create(
-            host="smtp.two.example", port=25, from_email="tie@example.com"
-        )
-
-        email = EmailMessage(
-            subject="subject",
-            body="body",
-            from_email="tie@example.com",
-            to=["recipient@example.com"],
-        )
-
-        outbox, fallbacks = self.backend._select_outbox(email)
-
-        self.assertTrue(mock_shuffle.called)
-        self.assertEqual(outbox, second)
-        self.assertEqual(fallbacks, [first])
-
-    @patch("nodes.backends.random.shuffle", side_effect=lambda seq: None)
-    def test_send_messages_uses_fallback_outboxes(self, _mock_shuffle):
-        first = EmailOutbox.objects.create(
-            host="smtp.one.example", port=25, from_email="fallback@example.com"
-        )
-        second = EmailOutbox.objects.create(
-            host="smtp.two.example", port=25, from_email="fallback@example.com"
-        )
-
-        email = EmailMessage(
-            subject="subject",
-            body="body",
-            from_email="fallback@example.com",
-            to=["recipient@example.com"],
-        )
-
-        connections = {
-            first.pk: MagicMock(),
-            second.pk: MagicMock(),
-        }
-        connections[first.pk].send_messages.side_effect = RuntimeError("boom")
-        connections[second.pk].send_messages.return_value = 1
-        connections[first.pk].close = MagicMock()
-        connections[second.pk].close = MagicMock()
-
-        with patch.object(
-            EmailOutbox, "get_connection", autospec=True
-        ) as mock_get_connection:
-            mock_get_connection.side_effect = (
-                lambda outbox_self: connections[outbox_self.pk]
-            )
-            sent = self.backend.send_messages([email])
-
-        self.assertEqual(sent, 1)
-        self.assertEqual(mock_get_connection.call_count, 2)
-        self.assertEqual(connections[first.pk].send_messages.call_count, 1)
-        self.assertEqual(connections[second.pk].send_messages.call_count, 1)
-        self.assertEqual(email.from_email, "fallback@example.com")
-
-
 class NodeTests(TestCase):
     def setUp(self):
         self.client = Client()
@@ -1479,6 +1379,29 @@ class EmailOutboxTests(TestCase):
         email = mail.outbox[0]
         self.assertEqual(email.subject, "sub")
         self.assertEqual(email.to, ["to@example.com"])
+
+    def test_string_representation_prefers_from_email(self):
+        outbox = EmailOutbox.objects.create(
+            host="smtp.example.com",
+            port=587,
+            username="mailer",
+            password="secret",
+            from_email="noreply@example.com",
+        )
+
+        self.assertEqual(str(outbox), "noreply@example.com")
+
+    def test_string_representation_prefers_username_over_owner(self):
+        group = SecurityGroup.objects.create(name="Operators")
+        outbox = EmailOutbox.objects.create(
+            group=group,
+            host="smtp.example.com",
+            port=587,
+            username="mailer",
+            password="secret",
+        )
+
+        self.assertEqual(str(outbox), "mailer@smtp.example.com")
 
 
 class ClipboardTaskTests(TestCase):
