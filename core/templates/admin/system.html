@@ -8,6 +8,8 @@
     <dl>
       <dt>{% trans "Suite installed" %}</dt>
       <dd>{{ info.installed }}</dd>
+      <dt>{% trans "Revision" %}</dt>
+      <dd>{{ info.revision }}</dd>
       <dt>{% trans "Service" %}</dt>
       <dd>{% if info.service %}{{ info.service }}{% else %}{% trans "not installed" %}{% endif %}</dd>
       <dt>{% trans "Nginx mode" %}</dt>

@@ -13,6 +13,8 @@ from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils.translation import gettext_lazy as _
 
+from utils import revision
+
 
 _RUNSERVER_PORT_PATTERN = re.compile(r":(\d{2,5})(?:\D|$)")
 _RUNSERVER_PORT_FLAG_PATTERN = re.compile(r"--port(?:=|\s+)(\d{2,5})", re.IGNORECASE)
@@ -94,6 +96,7 @@ def _gather_info() -> dict:
     info: dict[str, object] = {}
 
     info["installed"] = (base_dir / ".venv").exists()
+    info["revision"] = revision.get_revision()
 
     service_file = lock_dir / "service.lck"
     info["service"] = service_file.read_text().strip() if service_file.exists() else ""

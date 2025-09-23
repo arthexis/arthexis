@@ -19,6 +19,37 @@ fi
 
 echo "Application installed: $INSTALLED"
 
+REVISION=""
+if command -v python3 >/dev/null 2>&1; then
+  REVISION="$(
+    PYTHONPATH="$BASE_DIR" BASE_DIR="$BASE_DIR" python3 - <<'PY' 2>/dev/null || true
+import os
+import sys
+
+base_dir = os.environ.get("BASE_DIR", "")
+if base_dir:
+    sys.path.insert(0, base_dir)
+
+try:
+    from utils import revision
+except Exception:
+    print("")
+else:
+    print(revision.get_revision())
+PY
+  )"
+fi
+
+if [ -z "$REVISION" ] && command -v git >/dev/null 2>&1; then
+  REVISION="$(git -C "$BASE_DIR" rev-parse HEAD 2>/dev/null || true)"
+fi
+
+if [ -z "$REVISION" ] && [ -f "$BASE_DIR/.revision" ]; then
+  REVISION="$(cat "$BASE_DIR/.revision")"
+fi
+
+echo "Revision: $REVISION"
+
 SERVICE=""
 if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE="$(cat "$LOCK_DIR/service.lck")"
