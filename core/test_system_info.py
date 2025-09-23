@@ -47,6 +47,14 @@ class SystemInfoScreenModeTests(SimpleTestCase):
                 lock_dir.rmdir()
 
 
+class SystemInfoRevisionTests(SimpleTestCase):
+    @patch("core.system.revision.get_revision", return_value="abcdef1234567890")
+    def test_includes_full_revision(self, mock_revision):
+        info = _gather_info()
+        self.assertEqual(info["revision"], "abcdef1234567890")
+        mock_revision.assert_called_once()
+
+
 class SystemInfoRunserverDetectionTests(SimpleTestCase):
     @patch("core.system.subprocess.run")
     def test_detects_runserver_process_port(self, mock_run):
