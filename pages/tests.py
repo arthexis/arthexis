@@ -295,6 +295,14 @@ class AuthenticatorSetupTests(TestCase):
         self.assertFalse(device.confirmed)
         self.assertEqual(device.name, TOTP_DEVICE_NAME)
 
+    def test_device_config_url_includes_issuer_prefix(self):
+        self.client.post(reverse("pages:authenticator-setup"), {"action": "generate"})
+        device = TOTPDevice.objects.get(user=self.staff)
+        config_url = device.config_url
+        label = quote(f"{settings.OTP_TOTP_ISSUER}:{self.staff.username}")
+        self.assertIn(label, config_url)
+        self.assertIn(f"issuer={quote(settings.OTP_TOTP_ISSUER)}", config_url)
+
     def test_pending_device_context_includes_qr(self):
         self.client.post(reverse("pages:authenticator-setup"), {"action": "generate"})
         resp = self.client.get(reverse("pages:authenticator-setup"))

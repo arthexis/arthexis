@@ -521,6 +521,9 @@ AUTHENTICATION_BACKENDS = [
     "core.backends.RFIDBackend",
 ]
 
+# Issuer name used when generating otpauth URLs for authenticator apps.
+OTP_TOTP_ISSUER = os.environ.get("OTP_TOTP_ISSUER", "Arthexis")
+
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
