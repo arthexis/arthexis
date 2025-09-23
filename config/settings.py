@@ -459,6 +459,9 @@ if DEBUG:
 
 CSRF_FAILURE_VIEW = "pages.views.csrf_failure"
 
+# Allow staff TODO pages to embed internal admin views inside iframes.
+X_FRAME_OPTIONS = "SAMEORIGIN"
+
 ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
