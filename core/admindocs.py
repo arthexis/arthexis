@@ -61,6 +61,7 @@ class OrderedModelIndexView(BaseAdminDocsView):
         "core.rfid": "ocpp",
         "core.package": "teams",
         "core.packagerelease": "teams",
+        "core.todo": "nodes",
     }
 
     def _get_docs_app_config(self, meta):

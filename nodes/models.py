@@ -3,7 +3,7 @@ from django.db import models
 from django.db.models.signals import post_delete
 from django.dispatch import Signal, receiver
 from core.entity import Entity
-from core.models import Profile
+from core.models import Profile, Todo
 from core.fields import SigilShortAutoField
 import re
 import json
@@ -1051,3 +1051,11 @@ class User(UserModel):
         app_label = "nodes"
         verbose_name = UserModel._meta.verbose_name
         verbose_name_plural = UserModel._meta.verbose_name_plural
+
+
+class InfrastructureTodo(Todo):
+    class Meta:
+        proxy = True
+        app_label = "nodes"
+        verbose_name = Todo._meta.verbose_name
+        verbose_name_plural = Todo._meta.verbose_name_plural

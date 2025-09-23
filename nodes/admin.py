@@ -26,8 +26,10 @@ from .models import (
     NodeFeatureAssignment,
     ContentSample,
     NetMessage,
+    InfrastructureTodo,
 )
 from core.user_data import EntityModelAdmin
+from core.admin import BaseTodoAdmin
 
 
 class NodeAdminForm(forms.ModelForm):
@@ -451,3 +453,8 @@ class NetMessageAdmin(EntityModelAdmin):
         self.message_user(request, f"{queryset.count()} messages sent")
 
     send_messages.short_description = "Send selected messages"
+
+
+@admin.register(InfrastructureTodo)
+class InfrastructureTodoAdmin(BaseTodoAdmin):
+    pass

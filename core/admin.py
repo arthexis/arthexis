@@ -2410,15 +2410,11 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         return self._boolean_icon(obj.is_current)
 
 
-@admin.register(Todo)
-class TodoAdmin(EntityModelAdmin):
+class BaseTodoAdmin(EntityModelAdmin):
     list_display = ("request", "url")
 
     def has_add_permission(self, request, obj=None):
         return False
-
-    def get_model_perms(self, request):
-        return {}
 
     def render_change_form(
         self, request, context, add=False, change=False, form_url="", obj=None
@@ -2430,3 +2426,9 @@ class TodoAdmin(EntityModelAdmin):
         context["show_seed_datum"] = False
         context["show_save_as_copy"] = False
         return context
+
+
+@admin.register(Todo)
+class TodoAdmin(BaseTodoAdmin):
+    def get_model_perms(self, request):
+        return {}

@@ -615,6 +615,22 @@ class AdminDashboardAppListTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "5. Horologia MODELS")
 
+    def test_todo_listed_under_infrastructure_group(self):
+        response = self.client.get(reverse("admin:index"))
+        self.assertEqual(response.status_code, 200)
+        infra_url = reverse("admin:nodes_infrastructuretodo_changelist")
+        self.assertContains(response, infra_url)
+        content = response.content.decode()
+        start = content.find('<div class="app-nodes module')
+        self.assertNotEqual(start, -1)
+        end = content.find("</div>", start)
+        self.assertNotEqual(end, -1)
+        nodes_section = content[start:end]
+        self.assertIn(infra_url, nodes_section)
+        self.assertNotContains(
+            response, reverse("admin:core_todo_changelist"), status_code=200
+        )
+
 
 class AdminSidebarTests(TestCase):
     def setUp(self):
