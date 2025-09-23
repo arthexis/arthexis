@@ -1,5 +1,7 @@
 # Costellazione Arthexis
 
+[![Copertura](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml)
+
 ## Scopo
 
 Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Suite_informatiche) [guidata dalla narrazione](https://it.wikipedia.org/wiki/Narrazione) basata su [Django](https://www.djangoproject.com/) che centralizza gli strumenti per gestire l'[infrastruttura di ricarica dei veicoli elettrici](https://it.wikipedia.org/wiki/Stazione_di_ricarica) e orchestrare [prodotti](https://it.wikipedia.org/wiki/Prodotto_(economia)) e [servizi](https://it.wikipedia.org/wiki/Servizio_(economia)) legati all'[energia](https://it.wikipedia.org/wiki/Energia).
