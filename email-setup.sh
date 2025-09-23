@@ -2,6 +2,37 @@
 set -e
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [--status]
+
+Options:
+  --status    Display current email configuration without making changes.
+  -h, --help  Show this help message and exit.
+EOF
+}
+
+SHOW_STATUS=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --status)
+      SHOW_STATUS=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
@@ -13,6 +44,91 @@ PYTHON="$BASE_DIR/.venv/bin/python"
 if [ ! -f "$PYTHON" ]; then
   echo "Virtual environment not found. Run ./install.sh first." >&2
   exit 1
+fi
+
+if [ "$SHOW_STATUS" = true ]; then
+  "$PYTHON" manage.py shell <<'PYTHON'
+from django.conf import settings
+from core.models import EmailInbox
+from nodes.models import EmailOutbox
+
+
+def heading(title):
+    print(f"\n{title}")
+    print("-" * len(title))
+
+
+def bool_text(value):
+    return "yes" if value else "no"
+
+
+def display_setting(value, default="(not set)"):
+    return default if value in (None, "", []) else value
+
+
+def display_bool_setting(name):
+    value = getattr(settings, name, None)
+    return "(not set)" if value in (None, "") else bool_text(value)
+
+
+heading("Default Django email backend")
+print(
+    f"Backend: {display_setting(getattr(settings, 'EMAIL_BACKEND', None), 'django.core.mail.backends.smtp.EmailBackend')}"
+)
+print(
+    f"Default from email: {display_setting(getattr(settings, 'DEFAULT_FROM_EMAIL', None))}"
+)
+print(f"EMAIL_HOST: {display_setting(getattr(settings, 'EMAIL_HOST', None))}")
+print(f"EMAIL_PORT: {display_setting(getattr(settings, 'EMAIL_PORT', None))}")
+print(f"EMAIL_HOST_USER: {display_setting(getattr(settings, 'EMAIL_HOST_USER', None))}")
+password = getattr(settings, 'EMAIL_HOST_PASSWORD', None)
+print(f"EMAIL_HOST_PASSWORD: {'set' if password else '(not set)'}")
+print(f"EMAIL_USE_TLS: {display_bool_setting('EMAIL_USE_TLS')}")
+print(f"EMAIL_USE_SSL: {display_bool_setting('EMAIL_USE_SSL')}")
+
+heading("Configured Email Outboxes")
+outboxes = list(
+    EmailOutbox.objects.select_related("node", "user", "group").order_by("pk")
+)
+if not outboxes:
+    print("(none)")
+else:
+    for outbox in outboxes:
+        owners = []
+        if outbox.node_id:
+            owners.append(f"node='{outbox.node}'")
+        if outbox.user_id:
+            owners.append(f"user='{outbox.user}'")
+        if outbox.group_id:
+            owners.append(f"group='{outbox.group}'")
+        owner = ", ".join(owners) if owners else "unattached"
+        print(f"- Outbox #{outbox.pk} ({owner})")
+        print(f"    host: {outbox.host or '(not set)'}")
+        print(f"    port: {outbox.port}")
+        username = outbox.username or '(not set)'
+        print(f"    username: {username}")
+        from_email = outbox.from_email or '(default sender)'
+        print(f"    from email: {from_email}")
+        print(f"    use_tls: {bool_text(outbox.use_tls)}")
+        print(f"    use_ssl: {bool_text(outbox.use_ssl)}")
+        print(f"    password stored: {'yes' if outbox.password else 'no'}")
+
+heading("Configured Email Inboxes")
+inboxes = list(EmailInbox.objects.select_related("user").order_by("pk"))
+if not inboxes:
+    print("(none)")
+else:
+    for inbox in inboxes:
+        user_display = str(inbox.user) if inbox.user_id else "(no user)"
+        print(f"- Inbox #{inbox.pk} (user='{user_display}')")
+        print(f"    username: {inbox.username}")
+        print(f"    host: {inbox.host}")
+        print(f"    port: {inbox.port}")
+        print(f"    protocol: {inbox.protocol}")
+        print(f"    use_ssl: {bool_text(inbox.use_ssl)}")
+        print(f"    password stored: {'yes' if inbox.password else 'no'}")
+PYTHON
+  exit 0
 fi
 
 read -rp "Configure Email Outbox? [y/N]: " SET_OUTBOX
