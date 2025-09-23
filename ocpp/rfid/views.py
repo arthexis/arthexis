@@ -39,7 +39,7 @@ def scan_deep(_request):
     return JsonResponse(result, status=status)
 
 
-@landing("RFID Scanner")
+@landing("RFID Tag Validator")
 def reader(request):
     """Public page to scan RFID tags."""
     context = {

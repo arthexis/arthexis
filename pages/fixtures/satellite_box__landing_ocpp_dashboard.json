@@ -7,7 +7,7 @@
       "is_deleted": false,
       "module": ["Satellite", "/ocpp/"],
       "path": "/ocpp/",
-      "label": "Dashboard",
+      "label": "OCPP CSMS Dashboard",
       "enabled": true,
       "description": ""
     }

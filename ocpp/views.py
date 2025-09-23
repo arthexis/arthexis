@@ -413,7 +413,7 @@ def charger_detail(request, cid, connector=None):
     return JsonResponse(payload)
 
 
-@landing("Dashboard")
+@landing("OCPP CSMS Dashboard")
 @live_update()
 def dashboard(request):
     """Landing page listing all known chargers and their status."""
@@ -448,7 +448,7 @@ def dashboard(request):
 
 
 @login_required
-@landing("CP Simulator")
+@landing("Charge Point Simulator")
 @live_update()
 def cp_simulator(request):
     """Public landing page to control the OCPP charge point simulator."""
