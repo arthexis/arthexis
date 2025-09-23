@@ -7,7 +7,7 @@
       "is_deleted": false,
       "module": ["Constellation", "/ocpp/"],
       "path": "/ocpp/simulator/",
-      "label": "CP Simulator",
+      "label": "Charge Point Simulator",
       "enabled": true,
       "description": ""
     }

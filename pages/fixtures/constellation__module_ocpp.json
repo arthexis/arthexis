@@ -7,7 +7,7 @@
       "node_role": ["Constellation"],
       "application": ["ocpp"],
       "path": "/ocpp/",
-      "menu": "",
+      "menu": "Chargers",
       "is_default": false,
       "favicon": ""
     }

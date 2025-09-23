@@ -7,7 +7,7 @@
       "is_deleted": false,
       "module": ["Constellation", "/ocpp/"],
       "path": "/ocpp/",
-      "label": "Dashboard",
+      "label": "OCPP CSMS Dashboard",
       "enabled": true,
       "description": ""
     }

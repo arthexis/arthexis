@@ -981,10 +981,10 @@ class ConstellationNavTests(TestCase):
         ocpp_module = next(
             module
             for module in resp.context["nav_modules"]
-            if module.menu_label.upper() == "OCPP"
+            if module.menu_label.upper() == "CHARGERS"
         )
         landing_labels = [landing.label for landing in ocpp_module.enabled_landings]
-        self.assertIn("RFID Scanner", landing_labels)
+        self.assertIn("RFID Tag Validator", landing_labels)
 
     def test_ocpp_dashboard_visible(self):
         resp = self.client.get(reverse("pages:index"))
