@@ -3,14 +3,14 @@
   <div class="row row-cols-2 row-cols-md-6">
     {% for ref in footer_refs %}
       <div class="col mb-2">
-        <a href="{{ ref.value }}">{{ ref.alt_text|default:ref.value }}</a>
+        <a href="{{ ref.value }}" target="_blank" rel="noopener noreferrer">{{ ref.alt_text|default:ref.value }}</a>
       </div>
     {% endfor %}
   </div>
   <div class="text-center border-top mt-3 pt-4 pb-2">
     <div class="text-muted fs-6">
       {% if request.user.is_staff and release_url %}
-        <a href="{{ release_url }}">{{ release_name }}</a>
+        <a href="{{ release_url }}" target="_blank" rel="noopener noreferrer">{{ release_name }}</a>
       {% else %}
         {{ release_name }}
       {% endif %}
