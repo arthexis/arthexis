@@ -47,6 +47,30 @@ except ImportError:  # pragma: no cover - handled gracefully in views
     CalledProcessError = ExecutableNotFound = None
 
 import markdown
+
+
+MARKDOWN_EXTENSIONS = ["toc", "tables", "mdx_truly_sane_lists"]
+
+
+def _render_markdown_with_toc(text: str) -> tuple[str, str]:
+    """Render ``text`` to HTML and return the HTML and stripped TOC."""
+
+    md = markdown.Markdown(extensions=MARKDOWN_EXTENSIONS)
+    html = md.convert(text)
+    toc_html = md.toc
+    toc_html = _strip_toc_wrapper(toc_html)
+    return html, toc_html
+
+
+def _strip_toc_wrapper(toc_html: str) -> str:
+    """Normalize ``markdown``'s TOC output by removing the wrapper ``div``."""
+
+    toc_html = toc_html.strip()
+    if toc_html.startswith('<div class="toc">'):
+        toc_html = toc_html[len('<div class="toc">') :]
+        if toc_html.endswith("</div>"):
+            toc_html = toc_html[: -len("</div>")]
+    return toc_html.strip()
 from pages.utils import landing
 from core.liveupdate import live_update
 from django_otp import login as otp_login
@@ -407,14 +431,7 @@ def index(request):
         candidates.append(root_base / "README.md")
     readme_file = next((p for p in candidates if p.exists()), root_base / "README.md")
     text = readme_file.read_text(encoding="utf-8")
-    md = markdown.Markdown(extensions=["toc", "tables"])
-    html = md.convert(text)
-    toc_html = md.toc
-    if toc_html.strip().startswith('<div class="toc">'):
-        toc_html = toc_html.strip()[len('<div class="toc">') :]
-        if toc_html.endswith("</div>"):
-            toc_html = toc_html[: -len("</div>")]
-        toc_html = toc_html.strip()
+    html, toc_html = _render_markdown_with_toc(text)
     title = "README" if readme_file.name.startswith("README") else readme_file.stem
     context = {"content": html, "title": title, "toc": toc_html}
     response = render(request, "pages/readme.html", context)
@@ -447,14 +464,7 @@ def release_checklist(request):
     if not file_path.exists():
         raise Http404("Release checklist not found")
     text = file_path.read_text(encoding="utf-8")
-    md = markdown.Markdown(extensions=["toc", "tables"])
-    html = md.convert(text)
-    toc_html = md.toc
-    if toc_html.strip().startswith('<div class="toc">'):
-        toc_html = toc_html.strip()[len('<div class="toc">') :]
-        if toc_html.endswith("</div>"):
-            toc_html = toc_html[: -len("</div>")]
-        toc_html = toc_html.strip()
+    html, toc_html = _render_markdown_with_toc(text)
     context = {"content": html, "title": "Release Checklist", "toc": toc_html}
     response = render(request, "pages/readme.html", context)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])
