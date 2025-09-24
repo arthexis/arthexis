@@ -9,9 +9,18 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 ## Features
 
 - Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) central system, handling:
-  - Lifecycle & sessions: BootNotification, Heartbeat, StatusNotification, StartTransaction, StopTransaction
-  - Access & metering: Authorize, MeterValues
-  - Maintenance & firmware: DiagnosticsStatusNotification, FirmwareStatusNotification
+  - Lifecycle & sessions
+    - `BootNotification`
+    - `Heartbeat`
+    - `StatusNotification`
+    - `StartTransaction`
+    - `StopTransaction`
+  - Access & metering
+    - `Authorize`
+    - `MeterValues`
+  - Maintenance & firmware
+    - `DiagnosticsStatusNotification`
+    - `FirmwareStatusNotification`
 - [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/), syncing:
   - Employee credentials via `res.users`
   - Product catalog lookups via `product.product`

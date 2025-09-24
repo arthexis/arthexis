@@ -9,9 +9,18 @@ Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Sui
 ## Caratteristiche
 
 - Compatibile con il [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) come sistema centrale, gestendo:
-  - Ciclo di vita e sessioni: BootNotification, Heartbeat, StatusNotification, StartTransaction, StopTransaction
-  - Accesso e misurazione: Authorize, MeterValues
-  - Manutenzione e firmware: DiagnosticsStatusNotification, FirmwareStatusNotification
+  - Ciclo di vita e sessioni
+    - `BootNotification`
+    - `Heartbeat`
+    - `StatusNotification`
+    - `StartTransaction`
+    - `StopTransaction`
+  - Accesso e misurazione
+    - `Authorize`
+    - `MeterValues`
+  - Manutenzione e firmware
+    - `DiagnosticsStatusNotification`
+    - `FirmwareStatusNotification`
 - Integrazione [API](https://it.wikipedia.org/wiki/Application_programming_interface) con [Odoo](https://www.odoo.com/) per:
   - Sincronizzare le credenziali dei dipendenti tramite `res.users`
   - Consultare il catalogo prodotti tramite `product.product`
