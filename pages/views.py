@@ -709,11 +709,14 @@ def request_invite(request):
                 try:
                     node_error = None
                     node = Node.get_local()
+                    outbox = getattr(node, "email_outbox", None) if node else None
                     if node:
                         try:
                             result = node.send_mail(subject, body, [email])
+                            lead.sent_via_outbox = outbox
                         except Exception as exc:
                             node_error = exc
+                            lead.sent_via_outbox = None
                             logger.exception(
                                 "Node send_mail failed, falling back to default backend"
                             )
@@ -724,6 +727,7 @@ def request_invite(request):
                         result = mailer.send(
                             subject, body, [email], settings.DEFAULT_FROM_EMAIL
                         )
+                        lead.sent_via_outbox = None
                     lead.sent_on = timezone.now()
                     if node_error:
                         lead.error = (
@@ -738,9 +742,10 @@ def request_invite(request):
                     )
                 except Exception as exc:
                     lead.error = f"{exc}. Ensure the email service is reachable and settings are correct."
+                    lead.sent_via_outbox = None
                     logger.exception("Failed to send invitation email to %s", email)
             if lead.sent_on or lead.error:
-                lead.save(update_fields=["sent_on", "error"])
+                lead.save(update_fields=["sent_on", "error", "sent_via_outbox"])
             sent = True
     return render(request, "pages/request_invite.html", {"form": form, "sent": sent})
 

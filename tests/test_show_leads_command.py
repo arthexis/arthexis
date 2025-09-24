@@ -13,6 +13,7 @@ django.setup()
 from django.core.management import call_command
 from django.utils import timezone
 from core.models import InviteLead
+from nodes.models import EmailOutbox
 from awg.models import PowerLead
 
 
@@ -25,14 +26,19 @@ def test_show_leads_lists_recent_leads():
     old_invite.created_on = now - timedelta(days=1)
     old_invite.save(update_fields=["created_on"])
     power = PowerLead.objects.create(values={"meters": "1"})
+    outbox = EmailOutbox.objects.create(
+        host="smtp.example.com", username="noreply", port=587
+    )
     new_invite = InviteLead.objects.create(email="new@example.com")
     new_invite.sent_on = now
-    new_invite.save(update_fields=["sent_on"])
+    new_invite.sent_via_outbox = outbox
+    new_invite.save(update_fields=["sent_on", "sent_via_outbox"])
 
     out = StringIO()
     call_command("show_leads", 2, stdout=out)
     output = out.getvalue()
     assert "InviteLead: new@example.com [SENT" in output
+    assert f"via {outbox}" in output
     assert "PowerLead" in output
     assert "old@example.com" not in output
 
