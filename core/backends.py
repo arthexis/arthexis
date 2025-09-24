@@ -12,6 +12,7 @@ from django.http.request import split_domain_port
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from .models import EnergyAccount
+from . import temp_passwords
 
 
 TOTP_DEVICE_NAME = "authenticator"
@@ -195,4 +196,42 @@ class LocalhostAdminBackend(ModelBackend):
         try:
             return User.all_objects.get(pk=user_id)
         except User.DoesNotExist:
+            return None
+
+
+class TempPasswordBackend(ModelBackend):
+    """Authenticate using a temporary password stored in a lockfile."""
+
+    def authenticate(self, request, username=None, password=None, **kwargs):
+        if not username or not password:
+            return None
+
+        UserModel = get_user_model()
+        manager = getattr(UserModel, "all_objects", UserModel._default_manager)
+        try:
+            user = manager.get_by_natural_key(username)
+        except UserModel.DoesNotExist:
+            return None
+
+        entry = temp_passwords.load_temp_password(user.username)
+        if entry is None:
+            return None
+        if entry.is_expired:
+            temp_passwords.discard_temp_password(user.username)
+            return None
+        if not entry.check_password(password):
+            return None
+
+        temp_passwords.discard_temp_password(user.username)
+        if not user.is_active:
+            user.is_active = True
+            user.save(update_fields=["is_active"])
+        return user
+
+    def get_user(self, user_id):
+        UserModel = get_user_model()
+        manager = getattr(UserModel, "all_objects", UserModel._default_manager)
+        try:
+            return manager.get(pk=user_id)
+        except UserModel.DoesNotExist:
             return None
