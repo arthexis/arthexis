@@ -687,7 +687,8 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertEqual(NetMessage.objects.count(), pre_count + 1)
         msg = NetMessage.objects.order_by("-created").first()
         self.assertEqual(msg.body, "hello")
-        self.assertEqual(msg.reach.name, "Terminal")
+        self.assertIsNone(msg.reach)
+        self.assertEqual(msg.directionality, NetMessage.Directionality.BROADCAST)
 
     def test_public_api_disabled(self):
         node = Node.objects.create(
@@ -1140,6 +1141,35 @@ class NetMessagePropagationTests(TestCase):
         self.assertFalse(NetMessage.objects.filter(pk=old_local.pk).exists())
         self.assertTrue(NetMessage.objects.filter(pk=old_remote.pk).exists())
         self.assertTrue(NetMessage.objects.filter(pk=msg.pk).exists())
+
+    @patch("requests.post")
+    def test_directionality_upstream_limits_targets(self, mock_post):
+        relations = [
+            Node.Relation.UPSTREAM,
+            Node.Relation.UPSTREAM,
+            Node.Relation.DOWNSTREAM,
+            Node.Relation.PEER,
+        ]
+        for node, relation in zip(self.remotes, relations):
+            node.current_relation = relation
+            node.save(update_fields=["current_relation"])
+
+        msg = NetMessage.objects.create(
+            subject="dir", body="b", directionality=NetMessage.Directionality.UPSTREAM
+        )
+        with patch.object(Node, "get_local", return_value=self.local):
+            msg.propagate()
+
+        self.assertEqual(mock_post.call_count, 2)
+        targets = {
+            call.args[0].split("//")[1].split("/")[0]
+            for call in mock_post.call_args_list
+        }
+        upstream_addresses = {
+            f"{node.address}:{node.port}" for node in self.remotes[:2]
+        }
+        self.assertEqual(targets, upstream_addresses)
+        self.assertTrue(msg.complete)
 
 
 class NodeActionTests(TestCase):

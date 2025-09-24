@@ -865,6 +865,12 @@ class EmailOutbox(Profile):
 class NetMessage(Entity):
     """Message propagated across nodes."""
 
+    class Directionality(models.TextChoices):
+        BROADCAST = "BROADCAST", "Broadcast"
+        UPSTREAM = "UPSTREAM", "Upstream"
+        DOWNSTREAM = "DOWNSTREAM", "Downstream"
+        PEERS = "PEERS", "Peers"
+
     uuid = models.UUIDField(
         default=uuid.uuid4,
         unique=True,
@@ -885,7 +891,11 @@ class NetMessage(Entity):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        default=get_terminal_role,
+    )
+    directionality = models.CharField(
+        max_length=12,
+        choices=Directionality.choices,
+        default=Directionality.BROADCAST,
     )
     propagated_to = models.ManyToManyField(
         Node, blank=True, related_name="received_net_messages"
@@ -904,6 +914,7 @@ class NetMessage(Entity):
         subject: str,
         body: str,
         reach: NodeRole | str | None = None,
+        directionality: Directionality | str | None = None,
         seen: list[str] | None = None,
     ):
         role = None
@@ -912,15 +923,39 @@ class NetMessage(Entity):
                 role = reach
             else:
                 role = NodeRole.objects.filter(name=reach).first()
+        direction = cls.normalize_directionality(directionality)
         origin = Node.get_local()
         msg = cls.objects.create(
             subject=subject[:64],
             body=body[:256],
-            reach=role or get_terminal_role(),
+            reach=role,
+            directionality=direction,
             node_origin=origin,
         )
         msg.propagate(seen=seen or [])
         return msg
+
+    @classmethod
+    def normalize_directionality(
+        cls, value: Directionality | str | None
+    ) -> Directionality:
+        """Return a valid :class:`Directionality` value."""
+
+        if isinstance(value, cls.Directionality):
+            return value
+        if value is None:
+            return cls.Directionality.BROADCAST
+        text = str(value).strip()
+        if not text:
+            return cls.Directionality.BROADCAST
+        for choice in cls.Directionality:
+            if text.upper() == choice.value.upper():
+                return choice
+            if text.upper() == choice.name.upper():
+                return choice
+            if text.lower() == choice.label.lower():
+                return choice
+        return cls.Directionality.BROADCAST
 
     def propagate(self, seen: list[str] | None = None):
         from core.notifications import notify
@@ -972,14 +1007,33 @@ class NetMessage(Entity):
             if node and (not local or node.pk != local.pk):
                 self.propagated_to.add(node)
 
-        all_nodes = Node.objects.all()
+        all_nodes_qs = Node.objects.all()
         if local:
-            all_nodes = all_nodes.exclude(pk=local.pk)
-        total_known = all_nodes.count()
+            all_nodes_qs = all_nodes_qs.exclude(pk=local.pk)
 
-        remaining = list(
-            all_nodes.exclude(pk__in=self.propagated_to.values_list("pk", flat=True))
+        direction_choice = type(self).normalize_directionality(self.directionality)
+        relation_map = {
+            type(self).Directionality.UPSTREAM: Node.Relation.UPSTREAM,
+            type(self).Directionality.DOWNSTREAM: Node.Relation.DOWNSTREAM,
+            type(self).Directionality.PEERS: Node.Relation.PEER,
+        }
+        relation_value = relation_map.get(direction_choice)
+        if relation_value:
+            all_nodes_qs = all_nodes_qs.filter(current_relation=relation_value)
+
+        all_nodes = list(all_nodes_qs)
+        total_known = len(all_nodes)
+
+        if total_known == 0:
+            self.complete = True
+            self.save(update_fields=["complete"])
+            return
+
+        delivered_ids = set(
+            self.propagated_to.filter(pk__in=[n.pk for n in all_nodes])
+            .values_list("pk", flat=True)
         )
+        remaining = [n for n in all_nodes if n.pk not in delivered_ids]
         if not remaining:
             self.complete = True
             self.save(update_fields=["complete"])
@@ -987,7 +1041,7 @@ class NetMessage(Entity):
 
         target_limit = min(3, len(remaining))
 
-        reach_name = self.reach.name if self.reach else "Terminal"
+        reach_name = self.reach.name if self.reach else "Any"
         role_map = {
             "Terminal": ["Terminal"],
             "Control": ["Control", "Terminal"],
@@ -999,18 +1053,23 @@ class NetMessage(Entity):
                 "Terminal",
             ],
         }
-        role_order = role_map.get(reach_name, ["Terminal"])
         selected: list[Node] = []
-        for role_name in role_order:
-            role_nodes = [n for n in remaining if n.role and n.role.name == role_name]
-            random.shuffle(role_nodes)
-            for n in role_nodes:
-                selected.append(n)
-                remaining.remove(n)
+        pool = remaining.copy()
+        if self.reach:
+            role_order = role_map.get(reach_name, [self.reach.name])
+            for role_name in role_order:
+                role_nodes = [n for n in pool if n.role and n.role.name == role_name]
+                random.shuffle(role_nodes)
+                for n in role_nodes:
+                    selected.append(n)
+                    pool.remove(n)
+                    if len(selected) >= target_limit:
+                        break
                 if len(selected) >= target_limit:
                     break
-            if len(selected) >= target_limit:
-                break
+        else:
+            random.shuffle(pool)
+            selected = pool[:target_limit]
 
         seen_list = seen.copy()
         selected_ids = [str(n.uuid) for n in selected]
@@ -1022,6 +1081,7 @@ class NetMessage(Entity):
                 "body": self.body,
                 "seen": payload_seen,
                 "reach": reach_name,
+                "directionality": direction_choice.value,
                 "sender": local_id,
                 "origin": origin_uuid,
             }
@@ -1048,7 +1108,10 @@ class NetMessage(Entity):
                 pass
             self.propagated_to.add(node)
 
-        if total_known and self.propagated_to.count() >= total_known:
+        delivered_count = self.propagated_to.filter(
+            pk__in=[n.pk for n in all_nodes]
+        ).count()
+        if total_known and delivered_count >= total_known:
             self.complete = True
         self.save(update_fields=["complete"] if self.complete else [])
 

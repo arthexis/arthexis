@@ -407,7 +407,7 @@ def net_message(request):
     body = data.get("body", "")
     reach_name = data.get("reach")
     reach_role = None
-    if reach_name:
+    if reach_name and reach_name != "Any":
         reach_role = NodeRole.objects.filter(name=reach_name).first()
     seen = data.get("seen", [])
     origin_id = data.get("origin")
@@ -416,6 +416,7 @@ def net_message(request):
         origin_node = Node.objects.filter(uuid=origin_id).first()
     if not origin_node:
         origin_node = node
+    direction_value = NetMessage.normalize_directionality(data.get("directionality"))
     if not msg_uuid:
         return JsonResponse({"detail": "uuid required"}, status=400)
     msg, created = NetMessage.objects.get_or_create(
@@ -424,6 +425,7 @@ def net_message(request):
             "subject": subject[:64],
             "body": body[:256],
             "reach": reach_role,
+            "directionality": direction_value,
             "node_origin": origin_node,
         },
     )
@@ -431,12 +433,16 @@ def net_message(request):
         msg.subject = subject[:64]
         msg.body = body[:256]
         update_fields = ["subject", "body"]
-        if reach_role and msg.reach_id != reach_role.id:
+        new_reach_id = reach_role.id if reach_role else None
+        if msg.reach_id != new_reach_id:
             msg.reach = reach_role
             update_fields.append("reach")
         if msg.node_origin_id is None and origin_node:
             msg.node_origin = origin_node
             update_fields.append("node_origin")
+        if msg.directionality != direction_value:
+            msg.directionality = direction_value
+            update_fields.append("directionality")
         msg.save(update_fields=update_fields)
     msg.propagate(seen=seen)
     return JsonResponse({"status": "propagated", "complete": msg.complete})

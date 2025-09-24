@@ -26,6 +26,12 @@ class Command(BaseCommand):
             help="Optional node role name that limits propagation",
         )
         parser.add_argument(
+            "--directionality",
+            dest="directionality",
+            choices=[choice.value for choice in NetMessage.Directionality],
+            help="Restrict propagation to upstream, downstream, peers, or broadcast",
+        )
+        parser.add_argument(
             "--seen",
             nargs="+",
             dest="seen",
@@ -36,7 +42,14 @@ class Command(BaseCommand):
         subject: str = options["subject"]
         body: str = options["body"]
         reach: str | None = options.get("reach")
+        directionality: str | None = options.get("directionality")
         seen: list[str] | None = options.get("seen")
 
-        NetMessage.broadcast(subject=subject, body=body, reach=reach, seen=seen)
+        NetMessage.broadcast(
+            subject=subject,
+            body=body,
+            reach=reach,
+            directionality=directionality,
+            seen=seen,
+        )
         self.stdout.write(self.style.SUCCESS("Net message broadcast"))
