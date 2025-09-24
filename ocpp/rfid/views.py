@@ -15,6 +15,8 @@ def scan_next(request):
     """Return the next scanned RFID tag or validate a client-provided value."""
 
     if request.method == "POST":
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Authentication required"}, status=401)
         try:
             payload = json.loads(request.body.decode("utf-8") or "{}")
         except (json.JSONDecodeError, UnicodeDecodeError):

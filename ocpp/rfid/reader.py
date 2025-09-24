@@ -160,8 +160,13 @@ def read_rfid(
                 pass
 
 
-def validate_rfid_value(value: str, *, kind: str | None = None) -> dict:
+def validate_rfid_value(value: object, *, kind: str | None = None) -> dict:
     """Validate ``value`` against the database and return scanner payload data."""
+
+    if not isinstance(value, str):
+        if value is None:
+            return {"error": "RFID value is required"}
+        return {"error": "RFID must be a string"}
 
     if not value:
         return {"error": "RFID value is required"}
