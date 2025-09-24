@@ -6,7 +6,7 @@
 
 Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Suite_informatiche) [guidata dalla narrazione](https://it.wikipedia.org/wiki/Narrazione) basata su [Django](https://www.djangoproject.com/) che centralizza gli strumenti per gestire l'[infrastruttura di ricarica dei veicoli elettrici](https://it.wikipedia.org/wiki/Stazione_di_ricarica) e orchestrare [prodotti](https://it.wikipedia.org/wiki/Prodotto_(economia)) e [servizi](https://it.wikipedia.org/wiki/Servizio_(economia)) legati all'[energia](https://it.wikipedia.org/wiki/Energia).
 
-## Caratteristiche
+## Caratteristiche attuali
 
 - Compatibile con il [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) come sistema centrale, gestendo:
   - Ciclo di vita e sessioni

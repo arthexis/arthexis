@@ -6,7 +6,7 @@
 
 Die Arthexis-Konstellation ist eine [narrativ orientierte](https://de.wikipedia.org/wiki/Narration) auf [Django](https://www.djangoproject.com/) basierende [Softwaresuite](https://de.wikipedia.org/wiki/Softwarepaket), die Werkzeuge zur Verwaltung der [Ladeinfrastruktur für Elektrofahrzeuge](https://de.wikipedia.org/wiki/Lades%C3%A4ule) sowie zur Orchestrierung von [energiebezogenen Produkten](https://de.wikipedia.org/wiki/Produkt) und [Dienstleistungen](https://de.wikipedia.org/wiki/Dienstleistung) zentralisiert.
 
-## Funktionen
+## Aktuelle Funktionen
 
 - Kompatibel mit dem [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) als zentrales System und unterstützt:
   - Lebenszyklus und Sitzungen
