@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import sys
 import types
@@ -17,12 +18,13 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
+from django.utils import timezone
 
 from pages.models import Application, Module
 from nodes.models import Node, NodeRole
 
 from core.models import RFID
-from ocpp.rfid.reader import read_rfid, enable_deep_read
+from ocpp.rfid.reader import read_rfid, enable_deep_read, validate_rfid_value
 from ocpp.rfid.detect import detect_scanner, main as detect_main
 from ocpp.rfid import background_reader
 from ocpp.rfid.constants import (
@@ -103,6 +105,35 @@ class ScanNextViewTests(TestCase):
         self.assertEqual(resp.status_code, 500)
         self.assertEqual(resp.json(), {"error": "boom"})
 
+    @patch("config.middleware.Node.get_local", return_value=None)
+    @patch("config.middleware.get_site")
+    @patch(
+        "ocpp.rfid.views.validate_rfid_value",
+        return_value={"rfid": "ABCD1234", "label_id": 1, "created": False},
+    )
+    def test_scan_next_post_validates(self, mock_validate, mock_site, mock_node):
+        resp = self.client.post(
+            reverse("rfid-scan-next"),
+            data=json.dumps({"rfid": "ABCD1234"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp.json(), {"rfid": "ABCD1234", "label_id": 1, "created": False}
+        )
+        mock_validate.assert_called_once_with("ABCD1234", kind=None)
+
+    @patch("config.middleware.Node.get_local", return_value=None)
+    @patch("config.middleware.get_site")
+    def test_scan_next_post_invalid_json(self, mock_site, mock_node):
+        resp = self.client.post(
+            reverse("rfid-scan-next"),
+            data="{",
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"error": "Invalid JSON payload"})
+
 
 class ReaderNotificationTests(TestCase):
     def _mock_reader(self):
@@ -169,6 +200,66 @@ class ReaderNotificationTests(TestCase):
         mock_notify.assert_has_calls([call("RFID 2 BAD", f"{result['rfid']} B")])
         self.assertTrue(getattr(reader, "select_called", False))
         self.assertTrue(getattr(reader, "stop_called", False))
+
+
+class ValidateRfidValueTests(SimpleTestCase):
+    @patch("ocpp.rfid.reader.timezone.now")
+    @patch("ocpp.rfid.reader.notify_async")
+    @patch("ocpp.rfid.reader.RFID.objects.get_or_create")
+    def test_creates_new_tag(self, mock_get, mock_notify, mock_now):
+        fake_now = object()
+        mock_now.return_value = fake_now
+        tag = MagicMock()
+        tag.pk = 1
+        tag.label_id = 1
+        tag.allowed = True
+        tag.color = "B"
+        tag.released = False
+        tag.reference = None
+        tag.kind = RFID.CLASSIC
+        mock_get.return_value = (tag, True)
+
+        result = validate_rfid_value("abcd1234")
+
+        mock_get.assert_called_once_with(rfid="ABCD1234", defaults={})
+        tag.save.assert_called_once_with(update_fields=["last_seen_on"])
+        self.assertIs(tag.last_seen_on, fake_now)
+        mock_notify.assert_called_once_with("RFID 1 OK", "ABCD1234 B")
+        self.assertTrue(result["created"])
+        self.assertEqual(result["rfid"], "ABCD1234")
+
+    @patch("ocpp.rfid.reader.timezone.now")
+    @patch("ocpp.rfid.reader.notify_async")
+    @patch("ocpp.rfid.reader.RFID.objects.get_or_create")
+    def test_updates_existing_tag_kind(self, mock_get, mock_notify, mock_now):
+        fake_now = object()
+        mock_now.return_value = fake_now
+        tag = MagicMock()
+        tag.pk = 5
+        tag.label_id = 5
+        tag.allowed = False
+        tag.color = "G"
+        tag.released = True
+        tag.reference = None
+        tag.kind = RFID.CLASSIC
+        mock_get.return_value = (tag, False)
+
+        result = validate_rfid_value("abcd", kind=RFID.NTAG215)
+
+        mock_get.assert_called_once_with(
+            rfid="ABCD", defaults={"kind": RFID.NTAG215}
+        )
+        tag.save.assert_called_once_with(update_fields=["kind", "last_seen_on"])
+        self.assertIs(tag.last_seen_on, fake_now)
+        self.assertEqual(tag.kind, RFID.NTAG215)
+        mock_notify.assert_called_once_with("RFID 5 BAD", "ABCD G")
+        self.assertFalse(result["allowed"])
+        self.assertFalse(result["created"])
+        self.assertEqual(result["kind"], RFID.NTAG215)
+
+    def test_rejects_invalid_value(self):
+        result = validate_rfid_value("invalid!")
+        self.assertEqual(result, {"error": "RFID must be hexadecimal digits"})
 
 
 class CardTypeDetectionTests(TestCase):
