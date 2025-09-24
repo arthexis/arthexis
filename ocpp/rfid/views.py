@@ -4,6 +4,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
+from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
 from pages.utils import landing
 
@@ -11,6 +12,7 @@ from .scanner import scan_sources, restart_sources, test_sources, enable_deep_re
 from .reader import validate_rfid_value
 
 
+@login_required(login_url="pages:login")
 def scan_next(request):
     """Return the next scanned RFID tag or validate a client-provided value."""
 
@@ -30,6 +32,7 @@ def scan_next(request):
     return JsonResponse(result, status=status)
 
 
+@login_required(login_url="pages:login")
 @require_POST
 def scan_restart(_request):
     """Restart the RFID scanner."""
@@ -38,6 +41,7 @@ def scan_restart(_request):
     return JsonResponse(result, status=status)
 
 
+@login_required(login_url="pages:login")
 def scan_test(_request):
     """Report wiring information for the local RFID scanner."""
     result = test_sources()
@@ -55,6 +59,7 @@ def scan_deep(_request):
 
 
 @landing("RFID Tag Validator")
+@login_required(login_url="pages:login")
 def reader(request):
     """Public page to scan RFID tags."""
     context = {

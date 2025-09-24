@@ -1231,8 +1231,16 @@ class RFIDPageTests(TestCase):
         Site.objects.update_or_create(
             id=1, defaults={"domain": "testserver", "name": "pages"}
         )
+        User = get_user_model()
+        self.user = User.objects.create_user("rfid-user", password="pwd")
 
-    def test_page_renders(self):
+    def test_page_redirects_when_anonymous(self):
+        resp = self.client.get(reverse("rfid-reader"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(reverse("pages:login"), resp.url)
+
+    def test_page_renders_for_authenticated_user(self):
+        self.client.force_login(self.user)
         resp = self.client.get(reverse("rfid-reader"))
         self.assertContains(resp, "Scanner ready")
 
