@@ -22,6 +22,11 @@
       .toolbar svg {
         fill: currentColor;
       }
+      .external-link-icon {
+        width: 0.875em;
+        height: 0.875em;
+        flex-shrink: 0;
+      }
       nav.toc {
         position: sticky;
         top: 1rem;
@@ -205,7 +210,7 @@
                       <li>
                         <a class="dropdown-item d-flex align-items-center justify-content-between gap-2" href="{{ reference.value }}" target="_blank" rel="noopener noreferrer">
                           <span>{{ reference.alt_text }}</span>
-                          <svg aria-hidden="true" class="opacity-75" width="1rem" height="1rem">
+                          <svg aria-hidden="true" class="opacity-75 external-link-icon">
                             <use href="#icon-external"></use>
                           </svg>
                           <span class="visually-hidden">{% trans "Opens in a new tab" %}</span>
