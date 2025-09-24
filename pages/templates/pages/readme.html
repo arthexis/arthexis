@@ -12,7 +12,9 @@
   </div>
   {% endif %}
   <div class="{% if toc %}col-lg-9{% else %}col-12{% endif %}">
-    {{ content|safe }}
+    <div class="markdown-body">
+      {{ content|safe }}
+    </div>
   </div>
 </div>
 <script>

@@ -22,6 +22,11 @@
       .toolbar svg {
         fill: currentColor;
       }
+      .external-link-icon {
+        width: 0.875em;
+        height: 0.875em;
+        flex-shrink: 0;
+      }
       nav.toc {
         position: sticky;
         top: 1rem;
@@ -97,6 +102,63 @@
         background-color: var(--bs-body-bg);
         color: var(--bs-body-color);
       }
+      .markdown-body {
+        font-size: 1rem;
+        line-height: 1.7;
+      }
+      .markdown-body > *:first-child {
+        margin-top: 0;
+      }
+      .markdown-body ul,
+      .markdown-body ol {
+        padding-left: 1.5rem;
+        margin-bottom: 1rem;
+      }
+      .markdown-body li + li {
+        margin-top: 0.25rem;
+      }
+      .markdown-body ul ul,
+      .markdown-body ol ul,
+      .markdown-body ul ol,
+      .markdown-body ol ol {
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+        margin-left: 0.5rem;
+        padding-left: 1.25rem;
+        border-left: 1px solid var(--bs-border-color-translucent, rgba(108, 117, 125, 0.35));
+      }
+      .markdown-body ul ul {
+        list-style-type: circle;
+      }
+      .markdown-body ul ul ul {
+        list-style-type: square;
+      }
+      .markdown-body ol ol {
+        list-style-type: lower-alpha;
+      }
+      .markdown-body ol ol ol {
+        list-style-type: lower-roman;
+      }
+      .markdown-body table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1.5rem;
+      }
+      .markdown-body th,
+      .markdown-body td {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--bs-border-color-translucent, rgba(108, 117, 125, 0.3));
+      }
+      html[data-bs-theme='light'] .markdown-body th {
+        background-color: rgba(0, 0, 0, 0.02);
+      }
+      html[data-bs-theme='dark'] .markdown-body th {
+        background-color: rgba(255, 255, 255, 0.04);
+      }
+      html[data-bs-theme='dark'] .markdown-body th,
+      html[data-bs-theme='dark'] .markdown-body td {
+        border-color: rgba(255, 255, 255, 0.12);
+      }
     </style>
   </head>
   <body class="p-3 pb-0 d-flex flex-column min-vh-100">
@@ -148,7 +210,7 @@
                       <li>
                         <a class="dropdown-item d-flex align-items-center justify-content-between gap-2" href="{{ reference.value }}" target="_blank" rel="noopener noreferrer">
                           <span>{{ reference.alt_text }}</span>
-                          <svg aria-hidden="true" class="opacity-75" width="1rem" height="1rem">
+                          <svg aria-hidden="true" class="opacity-75 external-link-icon">
                             <use href="#icon-external"></use>
                           </svg>
                           <span class="visually-hidden">{% trans "Opens in a new tab" %}</span>
