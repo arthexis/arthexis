@@ -73,6 +73,11 @@ class BackgroundReaderConfigurationTests(SimpleTestCase):
 
 
 class ScanNextViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user("rfid-user", password="pwd")
+        self.client.force_login(self.user)
+
     @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")
     @patch(
@@ -133,6 +138,12 @@ class ScanNextViewTests(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.json(), {"error": "Invalid JSON payload"})
+
+    def test_scan_next_requires_authentication(self):
+        self.client.logout()
+        resp = self.client.get(reverse("rfid-scan-next"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(reverse("pages:login"), resp.url)
 
 
 class ReaderNotificationTests(TestCase):
@@ -392,7 +403,12 @@ class RFIDDetectionScriptTests(SimpleTestCase):
         mock_detect.assert_called_once()
 
 
-class RestartViewTests(SimpleTestCase):
+class RestartViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user("restart-user", password="pwd")
+        self.client.force_login(self.user)
+
     @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")
     @patch("ocpp.rfid.views.restart_sources", return_value={"status": "restarted"})
@@ -402,8 +418,19 @@ class RestartViewTests(SimpleTestCase):
         self.assertEqual(resp.json(), {"status": "restarted"})
         mock_restart.assert_called_once()
 
+    def test_restart_requires_authentication(self):
+        self.client.logout()
+        resp = self.client.post(reverse("rfid-scan-restart"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(reverse("pages:login"), resp.url)
 
-class ScanTestViewTests(SimpleTestCase):
+
+class ScanTestViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user("scan-test-user", password="pwd")
+        self.client.force_login(self.user)
+
     @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")
     @patch("ocpp.rfid.views.test_sources", return_value={"irq_pin": 7})
@@ -422,6 +449,12 @@ class ScanTestViewTests(SimpleTestCase):
         resp = self.client.get(reverse("rfid-scan-test"))
         self.assertEqual(resp.status_code, 500)
         self.assertEqual(resp.json(), {"error": "no scanner detected"})
+
+    def test_scan_test_requires_authentication(self):
+        self.client.logout()
+        resp = self.client.get(reverse("rfid-scan-test"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(reverse("pages:login"), resp.url)
 
 
 class RFIDLandingTests(TestCase):
@@ -443,6 +476,8 @@ class RFIDLandingTests(TestCase):
 class ScannerTemplateTests(TestCase):
     def setUp(self):
         self.url = reverse("rfid-reader")
+        User = get_user_model()
+        self.user = User.objects.create_user("scanner-user", password="pwd")
 
     def test_configure_link_for_staff(self):
         User = get_user_model()
@@ -451,9 +486,11 @@ class ScannerTemplateTests(TestCase):
         resp = self.client.get(self.url)
         self.assertContains(resp, 'id="rfid-configure"')
 
-    def test_no_link_for_anonymous(self):
+    def test_redirect_for_anonymous(self):
+        self.client.logout()
         resp = self.client.get(self.url)
-        self.assertNotContains(resp, 'id="rfid-configure"')
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(reverse("pages:login"), resp.url)
 
     def test_advanced_fields_for_staff(self):
         User = get_user_model()
@@ -465,7 +502,9 @@ class ScannerTemplateTests(TestCase):
         self.assertContains(resp, 'id="rfid-released"')
         self.assertContains(resp, 'id="rfid-reference"')
 
-    def test_basic_fields_for_public(self):
+    def test_basic_fields_for_authenticated_user(self):
+        self.client.logout()
+        self.client.force_login(self.user)
         resp = self.client.get(self.url)
         self.assertContains(resp, 'id="rfid-kind"')
         self.assertNotContains(resp, 'id="rfid-rfid"')
@@ -479,7 +518,9 @@ class ScannerTemplateTests(TestCase):
         resp = self.client.get(self.url)
         self.assertContains(resp, 'id="rfid-deep-read"')
 
-    def test_no_deep_read_button_for_public(self):
+    def test_no_deep_read_button_for_authenticated_user(self):
+        self.client.logout()
+        self.client.force_login(self.user)
         resp = self.client.get(self.url)
         self.assertNotContains(resp, 'id="rfid-deep-read"')
 
