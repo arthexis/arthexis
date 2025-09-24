@@ -2,6 +2,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 # shellcheck source=scripts/helpers/logging.sh
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
 if [ -z "$SCRIPT_DIR" ] || [ "$SCRIPT_DIR" = "/" ]; then
@@ -117,6 +118,14 @@ if ! "$PYTHON" -m pip --version >/dev/null 2>&1; then
   fi
 fi
 
+pip_install_with_helper() {
+  if [ -f "$PIP_INSTALL_HELPER" ]; then
+    "$PYTHON" "$PIP_INSTALL_HELPER" "$@"
+  else
+    "$PYTHON" -m pip install "$@"
+  fi
+}
+
 
 if [ "$CLEAN" -eq 1 ]; then
   find "$SCRIPT_DIR" -maxdepth 1 -name 'db*.sqlite3' -delete
@@ -150,7 +159,7 @@ PY
     if [ "$USE_SYSTEM_PYTHON" -eq 1 ]; then
       pip_args+=(--user)
     fi
-    "$PYTHON" -m pip install "${pip_args[@]}" -r "$REQ_FILE"
+    pip_install_with_helper "${pip_args[@]}" -r "$REQ_FILE"
     echo "$NEW_HASH" > "$MD5_FILE"
   fi
 elif [ -f "$REQ_FILE" ]; then
@@ -159,7 +168,7 @@ elif [ -f "$REQ_FILE" ]; then
   STORED_HASH=""
   [ -f "$MD5_FILE" ] && STORED_HASH=$(cat "$MD5_FILE")
   if [ "$NEW_HASH" != "$STORED_HASH" ]; then
-    if "$PYTHON" -m pip install -r "$REQ_FILE"; then
+    if pip_install_with_helper -r "$REQ_FILE"; then
       echo "$NEW_HASH" > "$MD5_FILE"
     else
       echo "Failed to install project requirements with system Python. Run ./install.sh." >&2

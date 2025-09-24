@@ -1,6 +1,7 @@
 @echo off
 setlocal
 set "BASE_DIR=%~dp0"
+set "PIP_HELPER=%BASE_DIR%scripts\helpers\pip_install.py"
 set "BACKUP_DIR=%BASE_DIR%backups"
 cd /d "%BASE_DIR%"
 
@@ -43,7 +44,11 @@ if exist %MD5% (
     set /p STORED_HASH=<%MD5%
 )
 if /I not "%NEW_HASH%"=="%STORED_HASH%" (
-    %VENV%\Scripts\python.exe -m pip install -r %REQ%
+    if exist "%PIP_HELPER%" (
+        %VENV%\Scripts\python.exe "%PIP_HELPER%" -r %REQ%
+    ) else (
+        %VENV%\Scripts\python.exe -m pip install -r %REQ%
+    )
     echo %NEW_HASH%>%MD5%
 ) else (
     echo Requirements unchanged. Skipping installation.

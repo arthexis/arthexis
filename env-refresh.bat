@@ -1,6 +1,7 @@
 @echo off
 setlocal EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
+set "PIP_HELPER=%SCRIPT_DIR%scripts\helpers\pip_install.py"
 set "BACKUP_DIR=%SCRIPT_DIR%backups"
 if /I "%SCRIPT_DIR%"=="%SYSTEMDRIVE%\\" (
     echo Refusing to run from drive root.
@@ -60,7 +61,11 @@ if exist "%SCRIPT_DIR%\requirements.txt" (
         set /p STORED_HASH=<"%SCRIPT_DIR%\requirements.md5"
     )
     if /I not "%REQ_HASH%"=="%STORED_HASH%" (
-        "%VENV%\Scripts\python.exe" -m pip install -r "%SCRIPT_DIR%\requirements.txt"
+        if exist "%PIP_HELPER%" (
+            "%VENV%\Scripts\python.exe" "%PIP_HELPER%" -r "%SCRIPT_DIR%\requirements.txt"
+        ) else (
+            "%VENV%\Scripts\python.exe" -m pip install -r "%SCRIPT_DIR%\requirements.txt"
+        )
         echo %REQ_HASH%>"%SCRIPT_DIR%\requirements.md5"
     )
 )
