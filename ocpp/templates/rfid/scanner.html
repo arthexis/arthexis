@@ -2,7 +2,9 @@
   <div id="{{ prefix }}-scanner">
   <p id="{{ prefix }}-status">Scanner ready</p>
   <p>
-    <button id="{{ prefix }}-connect-local">Connect Local Scanner</button>
+    {% if request.user.is_authenticated %}
+      <button id="{{ prefix }}-connect-local">Connect Local Scanner</button>
+    {% endif %}
     <button id="{{ prefix }}-restart-test">Restart &amp; Test Scanner</button>
     {% if request.user.is_staff %}
       <button id="{{ prefix }}-deep-read">Enable Deep Read</button>

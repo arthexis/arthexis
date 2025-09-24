@@ -112,6 +112,9 @@ class ScanNextViewTests(TestCase):
         return_value={"rfid": "ABCD1234", "label_id": 1, "created": False},
     )
     def test_scan_next_post_validates(self, mock_validate, mock_site, mock_node):
+        User = get_user_model()
+        user = User.objects.create_user("scanner", password="pwd")
+        self.client.force_login(user)
         resp = self.client.post(
             reverse("rfid-scan-next"),
             data=json.dumps({"rfid": "ABCD1234"}),
@@ -125,7 +128,25 @@ class ScanNextViewTests(TestCase):
 
     @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")
+    @patch("ocpp.rfid.views.validate_rfid_value")
+    def test_scan_next_post_requires_authentication(
+        self, mock_validate, mock_site, mock_node
+    ):
+        resp = self.client.post(
+            reverse("rfid-scan-next"),
+            data=json.dumps({"rfid": "ABCD1234"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 401)
+        self.assertEqual(resp.json(), {"error": "Authentication required"})
+        mock_validate.assert_not_called()
+
+    @patch("config.middleware.Node.get_local", return_value=None)
+    @patch("config.middleware.get_site")
     def test_scan_next_post_invalid_json(self, mock_site, mock_node):
+        User = get_user_model()
+        user = User.objects.create_user("invalid-json", password="pwd")
+        self.client.force_login(user)
         resp = self.client.post(
             reverse("rfid-scan-next"),
             data="{",
@@ -260,6 +281,14 @@ class ValidateRfidValueTests(SimpleTestCase):
     def test_rejects_invalid_value(self):
         result = validate_rfid_value("invalid!")
         self.assertEqual(result, {"error": "RFID must be hexadecimal digits"})
+
+    def test_rejects_non_string_values(self):
+        result = validate_rfid_value(12345)
+        self.assertEqual(result, {"error": "RFID must be a string"})
+
+    def test_rejects_missing_value(self):
+        result = validate_rfid_value(None)
+        self.assertEqual(result, {"error": "RFID value is required"})
 
 
 class CardTypeDetectionTests(TestCase):
@@ -451,6 +480,13 @@ class ScannerTemplateTests(TestCase):
         resp = self.client.get(self.url)
         self.assertContains(resp, 'id="rfid-configure"')
 
+    def test_connect_button_for_authenticated_user(self):
+        User = get_user_model()
+        user = User.objects.create_user("member", password="pwd")
+        self.client.force_login(user)
+        resp = self.client.get(self.url)
+        self.assertContains(resp, 'id="rfid-connect-local"')
+
     def test_no_link_for_anonymous(self):
         resp = self.client.get(self.url)
         self.assertNotContains(resp, 'id="rfid-configure"')
@@ -468,6 +504,7 @@ class ScannerTemplateTests(TestCase):
     def test_basic_fields_for_public(self):
         resp = self.client.get(self.url)
         self.assertContains(resp, 'id="rfid-kind"')
+        self.assertNotContains(resp, 'id="rfid-connect-local"')
         self.assertNotContains(resp, 'id="rfid-rfid"')
         self.assertNotContains(resp, 'id="rfid-released"')
         self.assertNotContains(resp, 'id="rfid-reference"')
