@@ -2,7 +2,7 @@ import os
 from unittest import mock
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.contrib.contenttypes.models import ContentType
 
 from core.models import (
@@ -70,6 +70,13 @@ class SigilResolutionTests(TestCase):
                 "content_type": ct_user,
             },
         )
+        SigilRoot.objects.update_or_create(
+            prefix="CONF",
+            defaults={
+                "context_type": SigilRoot.Context.CONFIG,
+                "content_type": None,
+            },
+        )
 
     def test_unknown_root_sigil_left_intact(self):
         profile = OdooProfile.objects.create(
@@ -108,6 +115,18 @@ class SigilResolutionTests(TestCase):
         tmpl = Template("{{ profile.host }}")
         rendered = tmpl.render(Context({"profile": profile}))
         self.assertEqual(rendered, "user=odoo")
+
+    @override_settings(LEGACY_SIGIL_VALUE="legacy")
+    def test_legacy_sys_sigil_alias(self):
+        SigilRoot.objects.update_or_create(
+            prefix="CONF",
+            defaults={
+                "context_type": SigilRoot.Context.CONFIG,
+                "content_type": None,
+            },
+        )
+        resolved = sigil_resolver._resolve_token("SYS.LEGACY_SIGIL_VALUE")
+        self.assertEqual(resolved, "legacy")
 
     def test_entity_sigil_hyphen_field(self):
         ct = ContentType.objects.get_for_model(OdooProfile)
