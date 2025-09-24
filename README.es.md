@@ -9,9 +9,18 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
 ## Características
 
 - Compatible con el [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) como sistema central, gestionando:
-  - Ciclo de vida y sesiones: BootNotification, Heartbeat, StatusNotification, StartTransaction, StopTransaction
-  - Acceso y medición: Authorize, MeterValues
-  - Mantenimiento y firmware: DiagnosticsStatusNotification, FirmwareStatusNotification
+  - Ciclo de vida y sesiones
+    - `BootNotification`
+    - `Heartbeat`
+    - `StatusNotification`
+    - `StartTransaction`
+    - `StopTransaction`
+  - Acceso y medición
+    - `Authorize`
+    - `MeterValues`
+  - Mantenimiento y firmware
+    - `DiagnosticsStatusNotification`
+    - `FirmwareStatusNotification`
 - Integración de [API](https://es.wikipedia.org/wiki/Interfaz_de_programaci%C3%B3n_de_aplicaciones) con [Odoo](https://www.odoo.com/) para:
   - Sincronizar credenciales de empleados mediante `res.users`
   - Consultar el catálogo de productos mediante `product.product`

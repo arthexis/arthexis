@@ -9,9 +9,18 @@ Die Arthexis-Konstellation ist eine [narrativ orientierte](https://de.wikipedia.
 ## Funktionen
 
 - Kompatibel mit dem [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) als zentrales System und unterstützt:
-  - Lebenszyklus und Sitzungen: BootNotification, Heartbeat, StatusNotification, StartTransaction, StopTransaction
-  - Zugriff und Messung: Authorize, MeterValues
-  - Wartung und Firmware: DiagnosticsStatusNotification, FirmwareStatusNotification
+  - Lebenszyklus und Sitzungen
+    - `BootNotification`
+    - `Heartbeat`
+    - `StatusNotification`
+    - `StartTransaction`
+    - `StopTransaction`
+  - Zugriff und Messung
+    - `Authorize`
+    - `MeterValues`
+  - Wartung und Firmware
+    - `DiagnosticsStatusNotification`
+    - `FirmwareStatusNotification`
 - [API](https://de.wikipedia.org/wiki/Programmierschnittstelle)-Integration mit [Odoo](https://www.odoo.com/), um:
   - Mitarbeiterzugänge über `res.users` zu synchronisieren
   - Den Produktkatalog über `product.product` abzufragen
