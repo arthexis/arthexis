@@ -14,6 +14,7 @@ from django.core.exceptions import ValidationError
 from django.apps import apps
 from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
+from django.views.decorators.debug import sensitive_variables
 from datetime import time as datetime_time, timedelta
 from django.contrib.contenttypes.models import ContentType
 import hashlib
@@ -38,6 +39,7 @@ xmlrpc_client = defused_xmlrpc.xmlrpc_client
 
 from .entity import Entity, EntityUserManager, EntityManager
 from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
+from . import temp_passwords
 from . import user_data  # noqa: F401 - ensure signal registration
 from .fields import (
     SigilShortAutoField,
@@ -309,6 +311,26 @@ class User(Entity, AbstractUser):
     @classmethod
     def is_system_username(cls, username):
         return bool(username) and username == cls.SYSTEM_USERNAME
+
+    @sensitive_variables("raw_password")
+    def set_password(self, raw_password):
+        result = super().set_password(raw_password)
+        temp_passwords.discard_temp_password(self.username)
+        return result
+
+    @sensitive_variables("raw_password")
+    def check_password(self, raw_password):
+        if super().check_password(raw_password):
+            return True
+        if raw_password is None:
+            return False
+        entry = temp_passwords.load_temp_password(self.username)
+        if entry is None:
+            return False
+        if entry.is_expired:
+            temp_passwords.discard_temp_password(self.username)
+            return False
+        return entry.check_password(raw_password)
 
     @classmethod
     def is_profile_restricted_username(cls, username):

@@ -59,7 +59,8 @@ def test_temp_password_backend_authenticates_and_activates(tmp_path, monkeypatch
     assert authenticated.pk == user.pk
     authenticated.refresh_from_db()
     assert authenticated.is_active
-    assert not list(tmp_path.iterdir())
+    files = list(tmp_path.iterdir())
+    assert len(files) == 1
 
 
 def test_temp_password_backend_rejects_expired(tmp_path, monkeypatch):
@@ -77,3 +78,35 @@ def test_temp_password_backend_rejects_expired(tmp_path, monkeypatch):
 
     assert result is None
     assert not entry.path.exists()
+
+
+def test_user_check_password_accepts_temp_password(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "TEMP_PASSWORD_LOCK_DIR", str(tmp_path), raising=False)
+
+    User = get_user_model()
+    user = User.objects.create_user(username="dave", password="old-password")
+
+    password = "TempPass123"
+    expires_at = timezone.now() + timedelta(minutes=10)
+    temp_passwords.store_temp_password(user.username, password, expires_at)
+
+    assert user.check_password("old-password")
+    assert user.check_password(password)
+
+
+def test_user_set_password_discards_temp_password(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "TEMP_PASSWORD_LOCK_DIR", str(tmp_path), raising=False)
+
+    User = get_user_model()
+    user = User.objects.create_user(username="erin", password="old-password")
+
+    password = "TempPass123"
+    expires_at = timezone.now() + timedelta(minutes=10)
+    entry = temp_passwords.store_temp_password(user.username, password, expires_at)
+
+    assert entry.path.exists()
+    user.set_password("new-password")
+    user.save(update_fields=["password"])
+
+    assert not entry.path.exists()
+    assert not user.check_password(password)
