@@ -38,11 +38,12 @@ class OutboxEmailBackend(BaseEmailBackend):
         user_id = self._resolve_identifier(message, "user")
         group_id = self._resolve_identifier(message, "group")
 
+        enabled_outboxes = EmailOutbox.objects.filter(is_enabled=True)
         match_sets: list[tuple[str, list[EmailOutbox]]] = []
 
         if from_email:
             email_matches = list(
-                EmailOutbox.objects.filter(
+                enabled_outboxes.filter(
                     Q(from_email__iexact=from_email) | Q(username__iexact=from_email)
                 )
             )
@@ -50,22 +51,25 @@ class OutboxEmailBackend(BaseEmailBackend):
                 match_sets.append(("from_email", email_matches))
 
         if node_id:
-            node_matches = list(EmailOutbox.objects.filter(node_id=node_id))
+            node_matches = list(enabled_outboxes.filter(node_id=node_id))
             if node_matches:
                 match_sets.append(("node", node_matches))
 
         if user_id:
-            user_matches = list(EmailOutbox.objects.filter(user_id=user_id))
+            user_matches = list(enabled_outboxes.filter(user_id=user_id))
             if user_matches:
                 match_sets.append(("user", user_matches))
 
         if group_id:
-            group_matches = list(EmailOutbox.objects.filter(group_id=group_id))
+            group_matches = list(enabled_outboxes.filter(group_id=group_id))
             if group_matches:
                 match_sets.append(("group", group_matches))
 
         if not match_sets:
-            return EmailOutbox.objects.first(), []
+            fallback = self._fallback_outbox(enabled_outboxes)
+            if fallback:
+                return fallback, []
+            return None, []
 
         candidates: dict[int, EmailOutbox] = {}
         scores: defaultdict[int, int] = defaultdict(int)
@@ -76,7 +80,10 @@ class OutboxEmailBackend(BaseEmailBackend):
                 scores[outbox.pk] += 1
 
         if not candidates:
-            return EmailOutbox.objects.first(), []
+            fallback = self._fallback_outbox(enabled_outboxes)
+            if fallback:
+                return fallback, []
+            return None, []
 
         selected: EmailOutbox | None = None
         fallbacks: list[EmailOutbox] = []
@@ -92,6 +99,14 @@ class OutboxEmailBackend(BaseEmailBackend):
                 fallbacks.extend(group)
 
         return selected, fallbacks
+
+    def _fallback_outbox(self, queryset):
+        ownerless = queryset.filter(
+            node__isnull=True, user__isnull=True, group__isnull=True
+        ).order_by("pk").first()
+        if ownerless:
+            return ownerless
+        return queryset.order_by("pk").first()
 
     def send_messages(self, email_messages):
         sent = 0

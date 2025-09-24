@@ -1403,6 +1403,58 @@ class EmailOutboxTests(TestCase):
 
         self.assertEqual(str(outbox), "mailer@smtp.example.com")
 
+    def test_unattached_outbox_used_as_fallback(self):
+        EmailOutbox.objects.create(
+            group=SecurityGroup.objects.create(name="Attached"),
+            host="smtp.attached.example.com",
+            port=587,
+            username="attached",
+            password="secret",
+        )
+        fallback = EmailOutbox.objects.create(
+            host="smtp.fallback.example.com",
+            port=587,
+            username="fallback",
+            password="secret",
+        )
+
+        backend = OutboxEmailBackend()
+        message = EmailMessage("subject", "body", to=["to@example.com"])
+
+        selected, fallbacks = backend._select_outbox(message)
+
+        self.assertEqual(selected, fallback)
+        self.assertEqual(fallbacks, [])
+
+    def test_disabled_outbox_excluded_from_selection(self):
+        EmailOutbox.objects.create(
+            host="smtp.disabled.example.com",
+            port=587,
+            username="disabled@example.com",
+            password="secret",
+            from_email="disabled@example.com",
+            is_enabled=False,
+        )
+        enabled = EmailOutbox.objects.create(
+            host="smtp.enabled.example.com",
+            port=587,
+            username="enabled@example.com",
+            password="secret",
+        )
+
+        backend = OutboxEmailBackend()
+        message = EmailMessage(
+            "subject",
+            "body",
+            from_email="disabled@example.com",
+            to=["to@example.com"],
+        )
+
+        selected, fallbacks = backend._select_outbox(message)
+
+        self.assertEqual(selected, enabled)
+        self.assertEqual(fallbacks, [])
+
 
 class ClipboardTaskTests(TestCase):
     @patch("nodes.tasks.pyperclip.paste")

@@ -232,7 +232,15 @@ class NodeAdmin(EntityModelAdmin):
 
 @admin.register(EmailOutbox)
 class EmailOutboxAdmin(EntityModelAdmin):
-    list_display = ("owner_label", "host", "port", "username", "use_tls", "use_ssl")
+    list_display = (
+        "owner_label",
+        "host",
+        "port",
+        "username",
+        "use_tls",
+        "use_ssl",
+        "is_enabled",
+    )
     change_form_template = "admin/nodes/emailoutbox/change_form.html"
     fieldsets = (
         ("Owner", {"fields": ("user", "group", "node")}),
@@ -247,6 +255,7 @@ class EmailOutboxAdmin(EntityModelAdmin):
                     "use_tls",
                     "use_ssl",
                     "from_email",
+                    "is_enabled",
                 )
             },
         ),

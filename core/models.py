@@ -375,12 +375,16 @@ class User(Entity, AbstractUser):
         )
 
     def _profile_for(self, profile_cls: Type[Profile], user: "User"):
-        profile = profile_cls.objects.filter(user=user).first()
+        queryset = profile_cls.objects.all()
+        if hasattr(profile_cls, "is_enabled"):
+            queryset = queryset.filter(is_enabled=True)
+
+        profile = queryset.filter(user=user).first()
         if profile:
             return profile
         group_ids = list(user.groups.values_list("id", flat=True))
         if group_ids:
-            return profile_cls.objects.filter(group_id__in=group_ids).first()
+            return queryset.filter(group_id__in=group_ids).first()
         return None
 
     def get_profile(self, profile_cls: Type[Profile]):

@@ -765,6 +765,10 @@ class EmailOutbox(Profile):
         max_length=254,
         help_text="Default From address; usually the same as username",
     )
+    is_enabled = models.BooleanField(
+        default=True,
+        help_text="Disable to remove this outbox from automatic selection.",
+    )
 
     class Meta:
         verbose_name = "Email Outbox"
