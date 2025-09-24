@@ -519,6 +519,7 @@ AUTH_USER_MODEL = "core.User"
 
 # Enable RFID authentication backend and restrict default admin login to localhost
 AUTHENTICATION_BACKENDS = [
+    "core.backends.TempPasswordBackend",
     "core.backends.LocalhostAdminBackend",
     "core.backends.TOTPBackend",
     "core.backends.RFIDBackend",
