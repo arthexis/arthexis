@@ -58,6 +58,8 @@ class NodeTests(TestCase):
         NodeRole.objects.get_or_create(name="Terminal")
 
     def test_register_current_does_not_create_release(self):
+        node = None
+        created = False
         with TemporaryDirectory() as tmp:
             base = Path(tmp)
             with override_settings(BASE_DIR=base):
@@ -73,8 +75,11 @@ class NodeTests(TestCase):
                     patch("nodes.models.revision.get_revision", return_value="rev"),
                     patch.object(Node, "ensure_keys"),
                 ):
-                    Node.register_current()
+                    node, created = Node.register_current()
         self.assertEqual(PackageRelease.objects.count(), 0)
+        self.assertIsNotNone(node)
+        self.assertTrue(created)
+        self.assertEqual(node.current_relation, Node.Relation.SELF)
 
     def test_register_and_list_node(self):
         response = self.client.post(
@@ -89,6 +94,8 @@ class NodeTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Node.objects.count(), 1)
+        node = Node.objects.get(mac_address="00:11:22:33:44:55")
+        self.assertEqual(node.current_relation, Node.Relation.PEER)
 
         # allow same IP with different MAC
         self.client.post(
@@ -370,6 +377,48 @@ class NodeTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertTrue(Node.objects.filter(mac_address="aa:bb:cc:dd:ee:ff").exists())
+
+    def test_register_node_respects_relation_payload(self):
+        payload = {
+            "hostname": "relation",
+            "address": "127.0.0.2",
+            "port": 8100,
+            "mac_address": "11:22:33:44:55:66",
+            "current_relation": "Downstream",
+        }
+        response = self.client.post(
+            reverse("register-node"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        node = Node.objects.get(mac_address="11:22:33:44:55:66")
+        self.assertEqual(node.current_relation, Node.Relation.DOWNSTREAM)
+
+        update_payload = {
+            **payload,
+            "hostname": "relation-updated",
+            "current_relation": "Upstream",
+        }
+        second = self.client.post(
+            reverse("register-node"),
+            data=json.dumps(update_payload),
+            content_type="application/json",
+        )
+        self.assertEqual(second.status_code, 200)
+        node.refresh_from_db()
+        self.assertEqual(node.current_relation, Node.Relation.UPSTREAM)
+
+        final_payload = {**update_payload, "hostname": "relation-final"}
+        final_payload.pop("current_relation")
+        third = self.client.post(
+            reverse("register-node"),
+            data=json.dumps(final_payload),
+            content_type="application/json",
+        )
+        self.assertEqual(third.status_code, 200)
+        node.refresh_from_db()
+        self.assertEqual(node.current_relation, Node.Relation.UPSTREAM)
 
 
 class NodeRegisterCurrentTests(TestCase):
