@@ -13,7 +13,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
-from unittest.mock import patch
+from unittest.mock import patch, PropertyMock
 
 from core.models import Reference
 from core.release import DEFAULT_PACKAGE
@@ -160,3 +160,74 @@ class FooterRenderTests(TestCase):
         self.assertContains(response, "Role Only")
         self.assertContains(response, "Feature Only")
         self.assertNotContains(response, "Site Only")
+
+    def test_footer_feature_requires_active_assignment(self):
+        feature = NodeFeature.objects.create(
+            slug="feature-guarded",
+            display="Feature Guarded",
+        )
+        role = NodeRole.objects.create(name="Feature Role")
+        with (
+            patch("nodes.models.Node.refresh_features"),
+            patch("nodes.models.Node.sync_feature_tasks"),
+        ):
+            node = Node.objects.create(
+                hostname="node-guarded",
+                address="127.0.0.1",
+                mac_address=None,
+                public_endpoint="node-guarded",
+                role=role,
+            )
+            assignment = NodeFeatureAssignment.objects.create(
+                node=node, feature=feature
+            )
+
+        guarded = Reference.objects.create(
+            alt_text="Guarded Link",
+            value="https://guarded.example.com",
+            include_in_footer=True,
+        )
+        guarded.features.add(feature)
+
+        with patch("nodes.models.Node.get_local", return_value=node):
+            response = self.client.get(reverse("pages:index"))
+        self.assertContains(response, "Guarded Link")
+
+        assignment.is_deleted = True
+        assignment.save(update_fields=["is_deleted"])
+
+        with patch("nodes.models.Node.get_local", return_value=node):
+            response = self.client.get(reverse("pages:index"))
+        self.assertNotContains(response, "Guarded Link")
+
+    def test_footer_feature_requires_active_state(self):
+        feature = NodeFeature.objects.create(
+            slug="feature-inactive",
+            display="Feature Inactive",
+        )
+        role = NodeRole.objects.create(name="Inactive Role")
+        with (
+            patch("nodes.models.Node.refresh_features"),
+            patch("nodes.models.Node.sync_feature_tasks"),
+        ):
+            node = Node.objects.create(
+                hostname="node-inactive",
+                address="127.0.0.1",
+                mac_address=None,
+                public_endpoint="node-inactive",
+                role=role,
+            )
+            NodeFeatureAssignment.objects.create(node=node, feature=feature)
+
+        inactive_ref = Reference.objects.create(
+            alt_text="Inactive Link",
+            value="https://inactive.example.com",
+            include_in_footer=True,
+        )
+        inactive_ref.features.add(feature)
+
+        with patch.object(NodeFeature, "is_enabled", new_callable=PropertyMock) as mock:
+            mock.return_value = False
+            with patch("nodes.models.Node.get_local", return_value=node):
+                response = self.client.get(reverse("pages:index"))
+        self.assertNotContains(response, "Inactive Link")

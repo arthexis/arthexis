@@ -41,16 +41,27 @@ def filter_visible_references(
             node = None
 
     node_role_id = getattr(node, "role_id", None)
-    node_feature_ids: set[int] = set()
+    node_active_feature_ids: set[int] = set()
     if node is not None:
-        features_manager = getattr(node, "features", None)
-        if features_manager is not None:
+        assignments_manager = getattr(node, "feature_assignments", None)
+        if assignments_manager is not None:
             try:
-                node_feature_ids = set(
-                    features_manager.values_list("pk", flat=True)
+                assignments = list(
+                    assignments_manager.filter(is_deleted=False).select_related(
+                        "feature"
+                    )
                 )
             except Exception:
-                node_feature_ids = set()
+                assignments = []
+            for assignment in assignments:
+                feature = getattr(assignment, "feature", None)
+                if feature is None or getattr(feature, "is_deleted", False):
+                    continue
+                try:
+                    if feature.is_enabled:
+                        node_active_feature_ids.add(feature.pk)
+                except Exception:
+                    continue
 
     visible_refs: list["Reference"] = []
     for ref in refs:
@@ -64,8 +75,8 @@ def filter_visible_references(
                 allowed = True
             elif (
                 required_features
-                and node_feature_ids
-                and node_feature_ids.intersection(required_features)
+                and node_active_feature_ids
+                and node_active_feature_ids.intersection(required_features)
             ):
                 allowed = True
             elif required_sites and site_id and site_id in required_sites:
