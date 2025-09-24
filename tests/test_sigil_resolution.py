@@ -77,6 +77,13 @@ class SigilResolutionTests(TestCase):
                 "content_type": None,
             },
         )
+        SigilRoot.objects.update_or_create(
+            prefix="SYS",
+            defaults={
+                "context_type": SigilRoot.Context.CONFIG,
+                "content_type": None,
+            },
+        )
 
     def test_unknown_root_sigil_left_intact(self):
         profile = OdooProfile.objects.create(
@@ -127,6 +134,22 @@ class SigilResolutionTests(TestCase):
         )
         resolved = sigil_resolver._resolve_token("CONF.LEGACY_SIGIL_VALUE")
         self.assertEqual(resolved, "legacy")
+
+    def test_sys_sigil_resolution(self):
+        with mock.patch(
+            "core.sigil_resolver.get_system_sigil_values",
+            return_value={"REVISION": "123456"},
+        ):
+            resolved = sigil_resolver._resolve_token("SYS.REVISION")
+        self.assertEqual(resolved, "123456")
+
+    def test_sys_sigil_case_insensitive(self):
+        with mock.patch(
+            "core.sigil_resolver.get_system_sigil_values",
+            return_value={"RUNNING": "True"},
+        ):
+            resolved = resolve_sigils_in_text("[sys.running]")
+        self.assertEqual(resolved, "True")
 
     def test_entity_sigil_hyphen_field(self):
         ct = ContentType.objects.get_for_model(OdooProfile)

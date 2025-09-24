@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
+import json
 import re
 import socket
 import subprocess
 import shutil
+from typing import Iterable
 
 from django.conf import settings
 from django.contrib import admin
@@ -16,8 +19,113 @@ from django.utils.translation import gettext_lazy as _
 from utils import revision
 
 
+@dataclass(frozen=True)
+class SystemField:
+    """Metadata describing a single entry on the system admin page."""
+
+    label: str
+    sigil_key: str
+    value: object
+    field_type: str = "text"
+
+    @property
+    def sigil(self) -> str:
+        return f"SYS.{self.sigil_key}"
+
+
 _RUNSERVER_PORT_PATTERN = re.compile(r":(\d{2,5})(?:\D|$)")
 _RUNSERVER_PORT_FLAG_PATTERN = re.compile(r"--port(?:=|\s+)(\d{2,5})", re.IGNORECASE)
+
+
+def _database_configurations() -> list[dict[str, str]]:
+    """Return a normalized list of configured database connections."""
+
+    databases: list[dict[str, str]] = []
+    for alias, config in settings.DATABASES.items():
+        engine = config.get("ENGINE", "")
+        name = config.get("NAME", "")
+        databases.append({
+            "alias": alias,
+            "engine": engine,
+            "name": name,
+        })
+    databases.sort(key=lambda entry: entry["alias"].lower())
+    return databases
+
+
+def _build_system_fields(info: dict[str, object]) -> list[SystemField]:
+    """Convert gathered system information into renderable rows."""
+
+    fields: list[SystemField] = []
+
+    def add_field(label: str, key: str, value: object, *, field_type: str = "text", visible: bool = True) -> None:
+        if not visible:
+            return
+        fields.append(SystemField(label=label, sigil_key=key, value=value, field_type=field_type))
+
+    add_field(_("Suite installed"), "INSTALLED", info.get("installed", False), field_type="boolean")
+    add_field(_("Revision"), "REVISION", info.get("revision", ""))
+
+    service_value = info.get("service") or _("not installed")
+    add_field(_("Service"), "SERVICE", service_value)
+
+    nginx_mode = info.get("mode", "")
+    port = info.get("port", "")
+    nginx_display = f"{nginx_mode} ({port})" if port else nginx_mode
+    add_field(_("Nginx mode"), "NGINX_MODE", nginx_display)
+
+    add_field(_("Node role"), "NODE_ROLE", info.get("role", ""))
+    add_field(
+        _("Display mode"),
+        "DISPLAY_MODE",
+        info.get("screen_mode", ""),
+        visible=bool(info.get("screen_mode")),
+    )
+
+    add_field(_("Features"), "FEATURES", info.get("features", []), field_type="features")
+    add_field(_("Running"), "RUNNING", info.get("running", False), field_type="boolean")
+    add_field(
+        _("Service status"),
+        "SERVICE_STATUS",
+        info.get("service_status", ""),
+        visible=bool(info.get("service")),
+    )
+
+    add_field(_("Hostname"), "HOSTNAME", info.get("hostname", ""))
+
+    ip_addresses: Iterable[str] = info.get("ip_addresses", [])  # type: ignore[assignment]
+    add_field(_("IP addresses"), "IP_ADDRESSES", " ".join(ip_addresses))
+
+    add_field(
+        _("Databases"),
+        "DATABASES",
+        info.get("databases", []),
+        field_type="databases",
+    )
+
+    return fields
+
+
+def _export_field_value(field: SystemField) -> str:
+    """Serialize a ``SystemField`` value for sigil resolution."""
+
+    if field.field_type in {"features", "databases"}:
+        return json.dumps(field.value)
+    if field.field_type == "boolean":
+        return "True" if field.value else "False"
+    if field.value is None:
+        return ""
+    return str(field.value)
+
+
+def get_system_sigil_values() -> dict[str, str]:
+    """Expose system information in a format suitable for sigil lookups."""
+
+    info = _gather_info()
+    values: dict[str, str] = {}
+    for field in _build_system_fields(info):
+        values[field.sigil_key] = _export_field_value(field)
+    return values
 
 
 def _parse_runserver_port(command_line: str) -> int | None:
@@ -219,6 +327,8 @@ def _gather_info() -> dict:
     info["hostname"] = hostname
     info["ip_addresses"] = ip_list
 
+    info["databases"] = _database_configurations()
+
     return info
 
 
@@ -226,7 +336,13 @@ def _system_view(request):
     info = _gather_info()
 
     context = admin.site.each_context(request)
-    context.update({"title": _("System"), "info": info})
+    context.update(
+        {
+            "title": _("System"),
+            "info": info,
+            "system_fields": _build_system_fields(info),
+        }
+    )
     return TemplateResponse(request, "admin/system.html", context)
 
 
