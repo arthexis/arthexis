@@ -2,6 +2,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 # shellcheck source=scripts/helpers/logging.sh
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
@@ -421,14 +422,22 @@ NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
 STORED_HASH=""
 [ -f "$MD5_FILE" ] && STORED_HASH=$(cat "$MD5_FILE")
 if [ "$NEW_HASH" != "$STORED_HASH" ]; then
-    pip install -r "$REQ_FILE"
+    if [ -f "$PIP_INSTALL_HELPER" ] && command -v python >/dev/null 2>&1; then
+        python "$PIP_INSTALL_HELPER" -r "$REQ_FILE"
+    else
+        pip install -r "$REQ_FILE"
+    fi
     echo "$NEW_HASH" > "$MD5_FILE"
 else
     echo "Requirements unchanged. Skipping installation."
 fi
 
 if [ "$ENABLE_DATASETTE" = true ]; then
-    pip install datasette
+    if [ -f "$PIP_INSTALL_HELPER" ] && command -v python >/dev/null 2>&1; then
+        python "$PIP_INSTALL_HELPER" datasette
+    else
+        pip install datasette
+    fi
 fi
 
 if [ "$ENABLE_CONTROL" = true ]; then
