@@ -335,17 +335,17 @@ class SigilResolutionTests(TestCase):
         finally:
             del os.environ["sigil_test_var"]
 
-    def test_sys_sigil(self):
+    def test_conf_sigil(self):
         with self.settings(SIGIL_TEST_SETTING="sys-val"):
             self.assertEqual(
-                resolve_sigils_in_text("[SYS.SIGIL_TEST_SETTING]"),
+                resolve_sigils_in_text("[CONF.SIGIL_TEST_SETTING]"),
                 "sys-val",
             )
 
-    def test_sys_sigil_case_insensitive(self):
+    def test_conf_sigil_case_insensitive(self):
         with self.settings(sigil_case_setting="sys-lower"):
             self.assertEqual(
-                resolve_sigils_in_text("[SYS.sigil_case_setting]"),
+                resolve_sigils_in_text("[CONF.sigil_case_setting]"),
                 "sys-lower",
             )
 

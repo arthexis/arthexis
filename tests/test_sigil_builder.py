@@ -17,13 +17,13 @@ class SigilBuilderTests(TestCase):
         self.client.force_login(self.user)
 
     def test_resolve_multiple_sigils_in_text(self):
-        text = "Lang: [SYS.LANGUAGE-CODE], Debug: [SYS.DEBUG]"
+        text = "Lang: [CONF.LANGUAGE-CODE], Debug: [CONF.DEBUG]"
         resolved = resolve_sigils_in_text(text)
         expected = f"Lang: {settings.LANGUAGE_CODE}, Debug: {settings.DEBUG}"
         self.assertEqual(resolved, expected)
 
     def test_file_upload_resolves_sigils(self):
-        content = "[SYS.LANGUAGE-CODE]"
+        content = "[CONF.LANGUAGE-CODE]"
         upload = BytesIO(content.encode("utf-8"))
         upload.name = "sigils.txt"
         response = self.client.post(

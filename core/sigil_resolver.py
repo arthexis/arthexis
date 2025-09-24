@@ -176,7 +176,7 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                     key_upper or normalized_key or raw_key or "",
                 )
                 return _failed_resolution(original_token)
-            if root.prefix.upper() == "SYS":
+            if root.prefix.upper() == "CONF":
                 for candidate in [normalized_key, key_upper, key_lower]:
                     if not candidate:
                         continue
