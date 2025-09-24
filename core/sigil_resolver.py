@@ -150,6 +150,18 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
     SigilRoot = apps.get_model("core", "SigilRoot")
     try:
         root = SigilRoot.objects.get(prefix__iexact=lookup_root)
+    except SigilRoot.DoesNotExist:
+        logger.warning("Unknown sigil root [%s]", lookup_root)
+        return _failed_resolution(original_token)
+    except Exception:
+        logger.exception(
+            "Error resolving sigil [%s.%s]",
+            lookup_root,
+            key_upper or normalized_key or raw_key,
+        )
+        return _failed_resolution(original_token)
+
+    try:
         if root.context_type == SigilRoot.Context.CONFIG:
             if not normalized_key:
                 return ""
@@ -176,7 +188,7 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                     key_upper or normalized_key or raw_key or "",
                 )
                 return _failed_resolution(original_token)
-            if root.prefix.upper() == "SYS":
+            if root.prefix.upper() == "CONF":
                 for candidate in [normalized_key, key_upper, key_lower]:
                     if not candidate:
                         continue
@@ -243,15 +255,13 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                     return _failed_resolution(original_token)
                 return serializers.serialize("json", [instance])
         return _failed_resolution(original_token)
-    except SigilRoot.DoesNotExist:
-        logger.warning("Unknown sigil root [%s]", lookup_root)
     except Exception:
         logger.exception(
             "Error resolving sigil [%s.%s]",
             lookup_root,
             key_upper or normalized_key or raw_key,
         )
-    return _failed_resolution(original_token)
+        return _failed_resolution(original_token)
 
 
 def resolve_sigils(text: str, current: Optional[models.Model] = None) -> str:
