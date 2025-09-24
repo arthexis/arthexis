@@ -20,6 +20,9 @@ def _iter_pip_output(cmd: Iterable[str]) -> int:
         for raw_line in process.stdout:
             line = raw_line.rstrip("\r\n")
             if "Requirement already satisfied" in line:
+                if not printed_dot:
+                    sys.stdout.write("Skipping requirements without updates\n")
+                    sys.stdout.flush()
                 sys.stdout.write(".")
                 sys.stdout.flush()
                 printed_dot = True
