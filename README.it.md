@@ -67,28 +67,28 @@ Costellazione Arthexis è distribuita in quattro ruoli di nodo pensati per diver
 ### 2. Avvio e arresto
 I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza installazione; i ruoli Control, Satellite e Constellation richiedono prima l'installazione. Entrambi i metodi ascoltano su [`http://localhost:8000/`](http://localhost:8000/) per impostazione predefinita.
 
-**[VS Code](https://code.visualstudio.com/)**
-- Apri la cartella e vai al pannello **Run and Debug** (`Ctrl+Shift+D`).
-- Seleziona la configurazione **Run Server** (o **Debug Server**).
-- Premi il pulsante verde di avvio. Arresta il server con il quadrato rosso (`Shift+F5`).
+- **[VS Code](https://code.visualstudio.com/)**
+   - Apri la cartella e vai al pannello **Run and Debug** (`Ctrl+Shift+D`).
+   - Seleziona la configurazione **Run Server** (o **Debug Server**).
+   - Premi il pulsante verde di avvio. Arresta il server con il quadrato rosso (`Shift+F5`).
 
-**[Shell](https://it.wikipedia.org/wiki/Shell_(informatica))**
-- Linux: esegui [`./start.sh`](start.sh) e arresta con [`./stop.sh`](stop.sh).
-- Windows: esegui [`start.bat`](start.bat) e interrompi con `Ctrl+C`.
+- **[Shell](https://it.wikipedia.org/wiki/Shell_(informatica))**
+   - Linux: esegui [`./start.sh`](start.sh) e arresta con [`./stop.sh`](stop.sh).
+   - Windows: esegui [`start.bat`](start.bat) e interrompi con `Ctrl+C`.
 
 ### 3. Installare e aggiornare
-**Linux:** esegui [`./install.sh`](install.sh) con un flag per il ruolo del nodo:
-- `--terminal` – impostazione predefinita se non specificato e consigliato se non sei sicuro. I nodi Terminal possono anche utilizzare gli script sopra per avviare/arrestare senza installazione.
-- `--control` – prepara l'appliance di test per singolo dispositivo.
-- `--satellite` – configura il nodo perimetrale di acquisizione dati.
-- `--constellation` – abilita lo stack di orchestrazione multiutente.
-Usa `./install.sh --help` per elencare tutte le opzioni disponibili se hai bisogno di personalizzare il nodo oltre le impostazioni del ruolo.
+- **Linux:**
+   - Esegui [`./install.sh`](install.sh) con un flag per il ruolo del nodo:
+     - `--terminal` – impostazione predefinita se non specificato e consigliato se non sei sicuro. I nodi Terminal possono anche utilizzare gli script sopra per avviare/arrestare senza installazione.
+     - `--control` – prepara l'appliance di test per singolo dispositivo.
+     - `--satellite` – configura il nodo perimetrale di acquisizione dati.
+     - `--constellation` – abilita lo stack di orchestrazione multiutente.
+   - Usa `./install.sh --help` per elencare tutte le opzioni disponibili se hai bisogno di personalizzare il nodo oltre le impostazioni del ruolo.
+   - Aggiorna con [`./upgrade.sh`](upgrade.sh).
 
-Aggiorna con [`./upgrade.sh`](upgrade.sh).
-
-**Windows:**
-- Esegui [`install.bat`](install.bat) per installare (ruolo Terminal) e [`upgrade.bat`](upgrade.bat) per aggiornare.
-- Non è necessario installare per avviare in modalità Terminal (predefinita).
+- **Windows:**
+   - Esegui [`install.bat`](install.bat) per installare (ruolo Terminal) e [`upgrade.bat`](upgrade.bat) per aggiornare.
+   - Non è necessario installare per avviare in modalità Terminal (predefinita).
 
 ### 4. Amministrazione
 Visita [`http://localhost:8000/admin/`](http://localhost:8000/admin/) per il [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) e [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) per gli [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa.

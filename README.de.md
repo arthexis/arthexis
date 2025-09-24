@@ -67,28 +67,28 @@ Die Arthexis-Konstellation wird in vier Node-Rollen ausgeliefert, die auf unters
 ### 2. Starten und Stoppen
 Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation gestartet werden; die Rollen Control, Satellite und Constellation müssen vorher installiert werden. Beide Ansätze lauschen standardmäßig auf [`http://localhost:8000/`](http://localhost:8000/).
 
-**[VS Code](https://code.visualstudio.com/)**
-- Ordner öffnen und zum Bereich **Run and Debug** (`Ctrl+Shift+D`) wechseln.
-- Die Konfiguration **Run Server** (oder **Debug Server**) auswählen.
-- Auf den grünen Startknopf klicken. Den Server mit dem roten Quadrat (`Shift+F5`) anhalten.
+- **[VS Code](https://code.visualstudio.com/)**
+   - Ordner öffnen und zum Bereich **Run and Debug** (`Ctrl+Shift+D`) wechseln.
+   - Die Konfiguration **Run Server** (oder **Debug Server**) auswählen.
+   - Auf den grünen Startknopf klicken. Den Server mit dem roten Quadrat (`Shift+F5`) anhalten.
 
-**[Shell](https://de.wikipedia.org/wiki/Shell_(Informatik))**
-- Linux: [`./start.sh`](start.sh) ausführen und mit [`./stop.sh`](stop.sh) anhalten.
-- Windows: [`start.bat`](start.bat) ausführen und mit `Ctrl+C` beenden.
+- **[Shell](https://de.wikipedia.org/wiki/Shell_(Informatik))**
+   - Linux: [`./start.sh`](start.sh) ausführen und mit [`./stop.sh`](stop.sh) anhalten.
+   - Windows: [`start.bat`](start.bat) ausführen und mit `Ctrl+C` beenden.
 
 ### 3. Installieren und Aktualisieren
-**Linux:** [`./install.sh`](install.sh) mit einem Flag für die Node-Rolle ausführen:
-- `--terminal` – Standard, wenn nicht angegeben, und empfohlen, wenn du unsicher bist. Terminal-Knoten können auch ohne Installation über die obigen Skripte gestartet/gestoppt werden.
-- `--control` – Bereitet das Einzelgerätetest-System vor.
-- `--satellite` – Konfiguriert den Edge-Knoten zur Datenerfassung.
-- `--constellation` – Aktiviert den Multiuser-Orchestrierungsstack.
-`./install.sh --help` zeigt alle verfügbaren Optionen, falls du die Konfiguration über die Rollenvorgaben hinaus anpassen möchtest.
+- **Linux:**
+   - [`./install.sh`](install.sh) mit einem Flag für die Node-Rolle ausführen:
+     - `--terminal` – Standard, wenn nicht angegeben, und empfohlen, wenn du unsicher bist. Terminal-Knoten können auch ohne Installation über die obigen Skripte gestartet/gestoppt werden.
+     - `--control` – Bereitet das Einzelgerätetest-System vor.
+     - `--satellite` – Konfiguriert den Edge-Knoten zur Datenerfassung.
+     - `--constellation` – Aktiviert den Multiuser-Orchestrierungsstack.
+   - `./install.sh --help` zeigt alle verfügbaren Optionen, falls du die Konfiguration über die Rollenvorgaben hinaus anpassen möchtest.
+   - Aktualisieren mit [`./upgrade.sh`](upgrade.sh).
 
-Aktualisieren mit [`./upgrade.sh`](upgrade.sh).
-
-**Windows:**
-- [`install.bat`](install.bat) zur Installation (Terminal-Rolle) und [`upgrade.bat`](upgrade.bat) zum Aktualisieren ausführen.
-- Für den Start im Terminalmodus (Standard) ist keine Installation erforderlich.
+- **Windows:**
+   - [`install.bat`](install.bat) zur Installation (Terminal-Rolle) und [`upgrade.bat`](upgrade.bat) zum Aktualisieren ausführen.
+   - Für den Start im Terminalmodus (Standard) ist keine Installation erforderlich.
 
 ### 4. Administration
 [`http://localhost:8000/admin/`](http://localhost:8000/admin/) für den [Django-Admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) und [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) für die [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) aufrufen. Verwende `--port` mit den Startskripten oder dem Installer, wenn ein anderer Port benötigt wird.

@@ -69,28 +69,28 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 ### 2. Start and stop
 Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Constellation roles require installation first. Both approaches listen on [`http://localhost:8000/`](http://localhost:8000/) by default.
 
-**[VS Code](https://code.visualstudio.com/)**
-- Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
-- Select the **Run Server** (or **Debug Server**) configuration.
-- Press the green start button. Stop the server with the red square button (`Shift+F5`).
+- **[VS Code](https://code.visualstudio.com/)**
+   - Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
+   - Select the **Run Server** (or **Debug Server**) configuration.
+   - Press the green start button. Stop the server with the red square button (`Shift+F5`).
 
-**[Shell](https://en.wikipedia.org/wiki/Shell_(computing))**
-- Linux: run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh).
-- Windows: run [`start.bat`](start.bat) and stop with `Ctrl+C`.
+- **[Shell](https://en.wikipedia.org/wiki/Shell_(computing))**
+   - Linux: run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh).
+   - Windows: run [`start.bat`](start.bat) and stop with `Ctrl+C`.
 
 ### 3. Install and upgrade
-**Linux:** run [`./install.sh`](install.sh) with a node role flag:
-- `--terminal` – default when unspecified and recommended if you're unsure. Terminal nodes can also use the start/stop scripts above without installing.
-- `--control` – prepares the single-device testing appliance.
-- `--satellite` – configures the edge data acquisition node.
-- `--constellation` – enables the multi-user orchestration stack.
-Use `./install.sh --help` to list every available flag if you need to customize the node beyond the role defaults.
+- **Linux:**
+   - Run [`./install.sh`](install.sh) with a node role flag:
+     - `--terminal` – default when unspecified and recommended if you're unsure. Terminal nodes can also use the start/stop scripts above without installing.
+     - `--control` – prepares the single-device testing appliance.
+     - `--satellite` – configures the edge data acquisition node.
+     - `--constellation` – enables the multi-user orchestration stack.
+   - Use `./install.sh --help` to list every available flag if you need to customize the node beyond the role defaults.
+   - Upgrade with [`./upgrade.sh`](upgrade.sh).
 
-Upgrade with [`./upgrade.sh`](upgrade.sh).
-
-**Windows:**
-- Run [`install.bat`](install.bat) to install (Terminal role) and [`upgrade.bat`](upgrade.bat) to upgrade.
-- Installation is not required to start in Terminal mode (the default).
+- **Windows:**
+   - Run [`install.bat`](install.bat) to install (Terminal role) and [`upgrade.bat`](upgrade.bat) to upgrade.
+   - Installation is not required to start in Terminal mode (the default).
 
 ### 4. Administration
 Visit [`http://localhost:8000/admin/`](http://localhost:8000/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use `--port` with the start scripts or installer when you need to expose a different port.
