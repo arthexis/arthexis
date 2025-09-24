@@ -96,9 +96,17 @@ class ReleaseProgressViewTests(TestCase):
     @mock.patch("core.views.release_utils.network_available", return_value=False)
     def test_dirty_fixtures_committed(self, net, git_clean):
         fixture_path = Path("core/fixtures/releases__packagerelease_0_1_3.json")
-        original = fixture_path.read_text(encoding="utf-8")
+        if fixture_path.exists():
+            original = fixture_path.read_text(encoding="utf-8")
+            self.addCleanup(
+                lambda original=original: fixture_path.write_text(
+                    original, encoding="utf-8"
+                )
+            )
+        else:
+            fixture_path.write_text("[]", encoding="utf-8")
+            self.addCleanup(lambda: fixture_path.unlink(missing_ok=True))
         fixture_path.write_text("[]", encoding="utf-8")
-        self.addCleanup(lambda: fixture_path.write_text(original, encoding="utf-8"))
 
         def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
             if cmd[:3] == ["git", "status", "--porcelain"]:
@@ -301,7 +309,15 @@ class ReleaseProgressViewTests(TestCase):
             Path("VERSION").read_text(encoding="utf-8").strip(),
             self.release.version,
         )
-        self.assertIn("Execute pre-release actions", response.context["log_content"])
+        log_content = response.context["log_content"]
+        self.assertIn("Execute pre-release actions", log_content)
+        self.assertIn(
+            f"Updated VERSION file to {self.release.version}", log_content
+        )
+        self.assertIn("Staged VERSION for commit", log_content)
+        self.assertIn("No changes detected for VERSION; skipping commit", log_content)
+        self.assertIn("Unstaged VERSION file", log_content)
+        self.assertIn("Pre-release actions complete", log_content)
 
     def test_todo_done_marks_timestamp(self):
         todo = Todo.objects.create(request="Task")

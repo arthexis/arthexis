@@ -266,6 +266,7 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
         )
         subprocess.run(["git", "add", *fixture_files], check=True)
         subprocess.run(["git", "commit", "-m", "chore: update fixtures"], check=True)
+        _append_log(log_path, "Fixture changes committed")
 
     version_path = Path("VERSION")
     if version_path.exists():
@@ -286,23 +287,32 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
             if "already on PyPI" in str(exc):
                 raise
             _append_log(log_path, f"PyPI check failed: {exc}")
+        else:
+            _append_log(
+                log_path,
+                f"Version {release.version} not published on PyPI",
+            )
     else:
         _append_log(log_path, "Network unavailable, skipping PyPI check")
 
 
 def _step_handle_migrations(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Freeze, squash and approve migrations")
+    _append_log(log_path, "Migration review acknowledged (manual step)")
 
 
 def _step_changelog_docs(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Compose CHANGELOG and documentation")
+    _append_log(log_path, "CHANGELOG and documentation review recorded")
 
 
 def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Execute pre-release actions")
     version_path = Path("VERSION")
     version_path.write_text(f"{release.version}\n", encoding="utf-8")
+    _append_log(log_path, f"Updated VERSION file to {release.version}")
     subprocess.run(["git", "add", "VERSION"], check=True)
+    _append_log(log_path, "Staged VERSION for commit")
     diff = subprocess.run(
         ["git", "diff", "--cached", "--quiet", "--", "VERSION"],
         check=False,
@@ -312,13 +322,17 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
             ["git", "commit", "-m", f"pre-release commit {release.version}"],
             check=True,
         )
+        _append_log(log_path, f"Committed VERSION update for {release.version}")
     else:
         _append_log(log_path, "No changes detected for VERSION; skipping commit")
         subprocess.run(["git", "reset", "HEAD", "VERSION"], check=False)
+        _append_log(log_path, "Unstaged VERSION file")
+    _append_log(log_path, "Pre-release actions complete")
 
 
 def _step_run_tests(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Complete test suite with --all flag")
+    _append_log(log_path, "Test suite completion acknowledged")
 
 
 def _step_promote_build(release, ctx, log_path: Path) -> None:
@@ -328,14 +342,21 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
     try:
         try:
             subprocess.run(["git", "fetch", "origin", "main"], check=True)
+            _append_log(log_path, "Fetched latest changes from origin/main")
             subprocess.run(["git", "rebase", "origin/main"], check=True)
+            _append_log(log_path, "Rebased current branch onto origin/main")
         except subprocess.CalledProcessError as exc:
             subprocess.run(["git", "rebase", "--abort"], check=False)
+            _append_log(log_path, "Rebase onto origin/main failed; aborted rebase")
             raise Exception("Rebase onto main failed") from exc
         release_utils.promote(
             package=release.to_package(),
             version=release.version,
             creds=release.to_credentials(),
+        )
+        _append_log(
+            log_path,
+            f"Generated release artifacts for v{release.version}",
         )
         from glob import glob
 
@@ -347,6 +368,7 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
         )
         if diff.stdout.strip():
             subprocess.run(["git", "add", *paths], check=True)
+            _append_log(log_path, "Staged release metadata updates")
             subprocess.run(
                 [
                     "git",
@@ -356,8 +378,14 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
                 ],
                 check=True,
             )
+            _append_log(
+                log_path,
+                f"Committed release metadata for v{release.version}",
+            )
         subprocess.run(["git", "push"], check=True)
+        _append_log(log_path, "Pushed release changes to origin")
         PackageRelease.dump_fixture()
+        _append_log(log_path, "Updated release fixtures")
     except Exception:
         _clean_repo()
         raise
@@ -417,6 +445,7 @@ def _step_publish(release, ctx, log_path: Path) -> None:
     )
     release.save(update_fields=["pypi_url"])
     PackageRelease.dump_fixture()
+    _append_log(log_path, f"Recorded PyPI URL: {release.pypi_url}")
     _append_log(log_path, "Upload complete")
 
 
@@ -644,6 +673,8 @@ def release_progress(request, pk: int, action: str):
                 f"{release.package.name}-{previous_version}*.log"
             ):
                 log_file.unlink()
+        if not release.is_current:
+            raise Http404("Release is not current")
 
     if request.GET.get("restart"):
         count = 0
