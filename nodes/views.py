@@ -204,6 +204,15 @@ def register_node(request):
     signature = data.get("signature")
     installed_version = data.get("installed_version")
     installed_revision = data.get("installed_revision")
+    relation_present = False
+    if hasattr(data, "getlist"):
+        relation_present = "current_relation" in data
+    else:
+        relation_present = "current_relation" in data
+    raw_relation = data.get("current_relation")
+    relation_value = (
+        Node.normalize_relation(raw_relation) if relation_present else None
+    )
 
     if not hostname or not address or not mac_address:
         response = JsonResponse(
@@ -242,6 +251,8 @@ def register_node(request):
         defaults["installed_version"] = str(installed_version)[:20]
     if installed_revision is not None:
         defaults["installed_revision"] = str(installed_revision)[:40]
+    if relation_value is not None:
+        defaults["current_relation"] = relation_value
 
     node, created = Node.objects.get_or_create(
         mac_address=mac_address,
@@ -265,6 +276,9 @@ def register_node(request):
             node.installed_revision = str(installed_revision)[:40]
             if "installed_revision" not in update_fields:
                 update_fields.append("installed_revision")
+        if relation_value is not None and node.current_relation != relation_value:
+            node.current_relation = relation_value
+            update_fields.append("current_relation")
         node.save(update_fields=update_fields)
         current_version = (node.installed_version or "").strip()
         current_revision = (node.installed_revision or "").strip()

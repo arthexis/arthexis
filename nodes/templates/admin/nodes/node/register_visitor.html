@@ -122,8 +122,8 @@
         return message || messages.partial;
     }
 
-    function buildPayload(info) {
-        return {
+    function buildPayload(info, relation) {
+        const payload = {
             hostname: info.hostname,
             address: info.address,
             port: info.port,
@@ -131,6 +131,11 @@
             public_key: info.public_key,
             features: info.features || [],
         };
+        const relationValue = relation || info.current_relation;
+        if (relationValue) {
+            payload.current_relation = relationValue;
+        }
+        return payload;
     }
 
     function addSignature(payload, info) {
@@ -157,7 +162,7 @@
                 throw new Error(messages.hostInfoError);
             }
 
-            const hostPayload = buildPayload(visitorInfo);
+            const hostPayload = buildPayload(visitorInfo, "Downstream");
             addSignature(hostPayload, visitorInfo);
             try {
                 const result = await loadJson(hostRegisterUrl, {
@@ -175,7 +180,7 @@
                 setStatus(hostResult, formatError(error), true);
             }
 
-            const visitorPayload = buildPayload(hostInfo);
+            const visitorPayload = buildPayload(hostInfo, "Upstream");
             addSignature(visitorPayload, hostInfo);
             try {
                 const visitorRegisterTargets = buildUrlVariants(visitorRegisterUrl);

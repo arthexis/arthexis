@@ -122,12 +122,23 @@ def get_terminal_role():
 class Node(Entity):
     """Information about a running node in the network."""
 
+    class Relation(models.TextChoices):
+        UPSTREAM = "UPSTREAM", "Upstream"
+        DOWNSTREAM = "DOWNSTREAM", "Downstream"
+        PEER = "PEER", "Peer"
+        SELF = "SELF", "Self"
+
     hostname = models.CharField(max_length=100)
     address = models.GenericIPAddressField()
     mac_address = models.CharField(max_length=17, unique=True, null=True, blank=True)
     port = models.PositiveIntegerField(default=8000)
     badge_color = models.CharField(max_length=7, default="#28a745")
     role = models.ForeignKey(NodeRole, on_delete=models.SET_NULL, null=True, blank=True)
+    current_relation = models.CharField(
+        max_length=10,
+        choices=Relation.choices,
+        default=Relation.PEER,
+    )
     last_seen = models.DateTimeField(auto_now=True)
     enable_public_api = models.BooleanField(
         default=False,
@@ -179,6 +190,26 @@ class Node(Entity):
         return ":".join(re.findall("..", f"{uuid.getnode():012x}"))
 
     @classmethod
+    def normalize_relation(cls, value):
+        """Normalize ``value`` to a valid :class:`Relation`."""
+
+        if isinstance(value, cls.Relation):
+            return value
+        if value is None:
+            return cls.Relation.PEER
+        text = str(value).strip()
+        if not text:
+            return cls.Relation.PEER
+        for relation in cls.Relation:
+            if text.lower() == relation.label.lower():
+                return relation
+            if text.upper() == relation.name:
+                return relation
+            if text.lower() == relation.value.lower():
+                return relation
+        return cls.Relation.PEER
+
+    @classmethod
     def get_local(cls):
         """Return the node representing the current host if it exists."""
         mac = cls.get_current_mac()
@@ -212,6 +243,7 @@ class Node(Entity):
             "installed_revision": installed_revision,
             "public_endpoint": slug,
             "mac_address": mac,
+            "current_relation": cls.Relation.SELF,
         }
         if node:
             for field, value in defaults.items():
