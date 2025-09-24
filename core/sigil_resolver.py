@@ -15,10 +15,6 @@ from .sigil_context import get_context
 logger = logging.getLogger("core.entity")
 
 
-LEGACY_SIGIL_ROOT_ALIASES: dict[str, str] = {
-    "SYS": "CONF",
-}
-
 def _is_wizard_mode() -> bool:
     """Return ``True`` when the application is running in wizard mode."""
 
@@ -152,19 +148,11 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
     if instance_id:
         instance_id = resolve_sigils(instance_id, current)
     SigilRoot = apps.get_model("core", "SigilRoot")
-    lookup_alias = LEGACY_SIGIL_ROOT_ALIASES.get(lookup_root)
     try:
         root = SigilRoot.objects.get(prefix__iexact=lookup_root)
     except SigilRoot.DoesNotExist:
-        if lookup_alias:
-            try:
-                root = SigilRoot.objects.get(prefix__iexact=lookup_alias)
-            except SigilRoot.DoesNotExist:
-                logger.warning("Unknown sigil root [%s]", lookup_root)
-                return _failed_resolution(original_token)
-        else:
-            logger.warning("Unknown sigil root [%s]", lookup_root)
-            return _failed_resolution(original_token)
+        logger.warning("Unknown sigil root [%s]", lookup_root)
+        return _failed_resolution(original_token)
     except Exception:
         logger.exception(
             "Error resolving sigil [%s.%s]",

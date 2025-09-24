@@ -117,7 +117,7 @@ class SigilResolutionTests(TestCase):
         self.assertEqual(rendered, "user=odoo")
 
     @override_settings(LEGACY_SIGIL_VALUE="legacy")
-    def test_legacy_sys_sigil_alias(self):
+    def test_conf_sigil_resolution(self):
         SigilRoot.objects.update_or_create(
             prefix="CONF",
             defaults={
@@ -125,7 +125,7 @@ class SigilResolutionTests(TestCase):
                 "content_type": None,
             },
         )
-        resolved = sigil_resolver._resolve_token("SYS.LEGACY_SIGIL_VALUE")
+        resolved = sigil_resolver._resolve_token("CONF.LEGACY_SIGIL_VALUE")
         self.assertEqual(resolved, "legacy")
 
     def test_entity_sigil_hyphen_field(self):
