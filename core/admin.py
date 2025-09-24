@@ -869,6 +869,7 @@ class EmailOutboxInlineForm(ProfileFormMixin, forms.ModelForm):
             "use_tls",
             "use_ssl",
             "from_email",
+            "is_enabled",
         )
 
     def __init__(self, *args, **kwargs):
