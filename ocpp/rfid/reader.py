@@ -1,5 +1,8 @@
+import re
 import time
 from django.utils import timezone
+from django.core.exceptions import ValidationError
+
 from core.models import RFID
 from core.notifications import notify_async
 
@@ -12,6 +15,35 @@ from .constants import (
 
 
 _deep_read_until: float = 0.0
+
+_HEX_RE = re.compile(r"^[0-9A-F]+$")
+
+
+def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = None) -> dict:
+    """Update metadata and build the standard RFID response payload."""
+
+    updates = set()
+    if kind and tag.kind != kind:
+        tag.kind = kind
+        updates.add("kind")
+    tag.last_seen_on = timezone.now()
+    updates.add("last_seen_on")
+    if updates:
+        tag.save(update_fields=sorted(updates))
+    result = {
+        "rfid": rfid,
+        "label_id": tag.pk,
+        "created": created,
+        "color": tag.color,
+        "allowed": tag.allowed,
+        "released": tag.released,
+        "reference": tag.reference.value if tag.reference else None,
+        "kind": tag.kind,
+    }
+    status_text = "OK" if tag.allowed else "BAD"
+    color_word = (tag.color or "").upper()
+    notify_async(f"RFID {tag.label_id} {status_text}".strip(), f"{rfid} {color_word}".strip())
+    return result
 
 
 def enable_deep_read(duration: float = 60) -> None:
@@ -78,21 +110,12 @@ def read_rfid(
                     tag, created = RFID.objects.get_or_create(
                         rfid=rfid, defaults=defaults
                     )
-                    if tag.kind != kind:
-                        tag.kind = kind
-                        tag.save(update_fields=["kind"])
-                    tag.last_seen_on = timezone.now()
-                    tag.save(update_fields=["last_seen_on"])
-                    result = {
-                        "rfid": rfid,
-                        "label_id": tag.pk,
-                        "created": created,
-                        "color": tag.color,
-                        "allowed": tag.allowed,
-                        "released": tag.released,
-                        "reference": tag.reference.value if tag.reference else None,
-                        "kind": tag.kind,
-                    }
+                    result = _build_tag_response(
+                        tag,
+                        rfid,
+                        created=created,
+                        kind=kind,
+                    )
                     if tag.kind == RFID.CLASSIC and time.time() < _deep_read_until:
                         dump = []
                         default_key = [0xFF] * 6
@@ -116,11 +139,6 @@ def read_rfid(
                             except Exception:
                                 continue
                         result["dump"] = dump
-                    status_text = "OK" if tag.allowed else "BAD"
-                    color_word = (tag.color or "").upper()
-                    subject = f"RFID {tag.label_id} {status_text}".strip()
-                    body = f"{rfid} {color_word}".strip()
-                    notify_async(subject, body)
                     return result
             if not use_irq and poll_interval:
                 time.sleep(poll_interval)
@@ -140,3 +158,35 @@ def read_rfid(
                 GPIO.cleanup()
             except Exception:
                 pass
+
+
+def validate_rfid_value(value: str, *, kind: str | None = None) -> dict:
+    """Validate ``value`` against the database and return scanner payload data."""
+
+    if not value:
+        return {"error": "RFID value is required"}
+
+    normalized = value.strip().upper()
+    if not normalized:
+        return {"error": "RFID value is required"}
+    if not _HEX_RE.fullmatch(normalized):
+        return {"error": "RFID must be hexadecimal digits"}
+
+    normalized_kind = None
+    if isinstance(kind, str):
+        candidate = kind.strip().upper()
+        if candidate in {choice[0] for choice in RFID.KIND_CHOICES}:
+            normalized_kind = candidate
+
+    defaults = {"kind": normalized_kind} if normalized_kind else {}
+
+    try:
+        tag, created = RFID.objects.get_or_create(
+            rfid=normalized, defaults=defaults
+        )
+    except ValidationError as exc:
+        return {"error": "; ".join(exc.messages)}
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        return {"error": str(exc)}
+
+    return _build_tag_response(tag, normalized, created=created, kind=normalized_kind)

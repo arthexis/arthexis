@@ -2,6 +2,7 @@
   <div id="{{ prefix }}-scanner">
   <p id="{{ prefix }}-status">Scanner ready</p>
   <p>
+    <button id="{{ prefix }}-connect-local">Connect Local Scanner</button>
     <button id="{{ prefix }}-restart-test">Restart &amp; Test Scanner</button>
     {% if request.user.is_staff %}
       <button id="{{ prefix }}-deep-read">Enable Deep Read</button>
@@ -46,14 +47,58 @@
   const rfidEl = document.getElementById('{{ prefix }}-rfid');
   const releasedEl = document.getElementById('{{ prefix }}-released');
   const referenceEl = document.getElementById('{{ prefix }}-reference');
+  const connectBtn = document.getElementById('{{ prefix }}-connect-local');
   const restartTestBtn = document.getElementById('{{ prefix }}-restart-test');
   const deepBtn = document.getElementById('{{ prefix }}-deep-read');
   const configureEl = document.getElementById('{{ prefix }}-configure');
   const adminTemplate = '{{ admin_change_url_template|default:""|escapejs }}';
 
+  let localPort = null;
+  let localReader = null;
+  let localConnected = false;
+  let lastLocalValue = null;
+  let lastLocalAt = 0;
+
   function showError(message){
     console.error(message);
-    statusEl.textContent = 'RFID reader not detected. Please connect the reader and press Restart & Test Scanner.';
+    const defaultMsg = 'RFID reader not detected. Please connect the reader and press Restart & Test Scanner.';
+    if(typeof message === 'string' && message){
+      statusEl.textContent = message;
+    } else {
+      statusEl.textContent = defaultMsg;
+    }
+  }
+
+  function updateFromData(data){
+    if(!data || data.error){
+      if(data && data.error){
+        showError(data.error);
+      }
+      return;
+    }
+    if(!data.rfid){
+      return;
+    }
+    const labelValue = data.label_id === undefined || data.label_id === null ? '' : data.label_id;
+    labelEl.textContent = labelValue;
+    if(kindEl){ kindEl.textContent = data.kind || ''; }
+    if(rfidEl){ rfidEl.textContent = data.rfid || ''; }
+    colorEl.textContent = data.color || '';
+    allowedEl.textContent = data.allowed === undefined ? '' : (data.allowed ? 'Yes' : 'No');
+    if(releasedEl){ releasedEl.textContent = data.released === undefined ? '' : (data.released ? 'Yes' : 'No'); }
+    if(referenceEl){ referenceEl.textContent = data.reference || ''; }
+    if(referenceEl && data.reference && /^https?:\/\//i.test(data.reference)){
+      const w = window.open(data.reference, '_blank');
+      if(w){ w.focus(); }
+    }
+    if(configureEl){
+      configureEl.textContent = `Configure RFID ${labelValue}`;
+      configureEl.href = adminTemplate ? adminTemplate.replace('0', labelValue) : '#';
+      configureEl.style.display = 'inline';
+    }
+    const okText = data.allowed === undefined ? '' : (data.allowed ? 'OK' : 'BAD');
+    const statusMsg = okText ? `RFID ${labelValue} ${okText}` : `RFID ${labelValue}`;
+    statusEl.textContent = data.created ? `Created ${statusMsg}` : statusMsg;
   }
 
   async function poll(){
@@ -62,34 +107,178 @@
       const data = await resp.json();
       if(data.error){
         showError(data.error);
-        return;
-      } else if(data.rfid){
-        labelEl.textContent = data.label_id;
-        if(kindEl){ kindEl.textContent = data.kind || ''; }
-        if(rfidEl){ rfidEl.textContent = data.rfid || ''; }
-        colorEl.textContent = data.color || '';
-        allowedEl.textContent = data.allowed === undefined ? '' : (data.allowed ? 'Yes' : 'No');
-        if(releasedEl){ releasedEl.textContent = data.released === undefined ? '' : (data.released ? 'Yes' : 'No'); }
-        if(referenceEl){ referenceEl.textContent = data.reference || ''; }
-        if(referenceEl && data.reference && /^https?:\/\//i.test(data.reference)){
-          const w = window.open(data.reference, '_blank');
-          if(w){ w.focus(); }
-        }
-        if(configureEl){
-          configureEl.textContent = `Configure RFID ${data.label_id}`;
-          configureEl.href = adminTemplate ? adminTemplate.replace('0', data.label_id) : '#';
-          configureEl.style.display = 'inline';
-        }
-        const okText = data.allowed === undefined ? '' : (data.allowed ? 'OK' : 'BAD');
-        const statusMsg = okText ? `RFID ${data.label_id} ${okText}` : `RFID ${data.label_id}`;
-        statusEl.textContent = data.created ? `Created ${statusMsg}` : statusMsg;
+      } else {
+        updateFromData(data);
       }
     } catch(err){
       showError(err);
+    } finally {
+      setTimeout(poll, 200);
+    }
+  }
+
+  function getCookie(name){
+    const cookies = document.cookie ? document.cookie.split('; ') : [];
+    for(let i = 0; i < cookies.length; i += 1){
+      const parts = cookies[i].split('=');
+      const key = parts.shift();
+      if(key === name){
+        return decodeURIComponent(parts.join('='));
+      }
+    }
+    return null;
+  }
+
+  async function sendLocalScan(rfidValue){
+    const headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    const csrf = getCookie('csrftoken');
+    if(csrf){
+      headers['X-CSRFToken'] = csrf;
+    }
+    try {
+      const resp = await fetch('{{ scan_url }}', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers,
+        body: JSON.stringify({rfid: rfidValue})
+      });
+      const data = await resp.json();
+      if(!resp.ok || data.error){
+        showError(data.error || 'Unable to validate RFID');
+        return;
+      }
+      updateFromData(data);
+    } catch(err){
+      showError('Local scanner validation failed');
+    }
+  }
+
+  function handleLocalScan(rawValue){
+    if(!rawValue){
       return;
     }
-    setTimeout(poll, 200);
+    const cleaned = rawValue.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+    if(!cleaned){
+      return;
+    }
+    const now = Date.now();
+    if(lastLocalValue === cleaned && now - lastLocalAt < 300){
+      return;
+    }
+    lastLocalValue = cleaned;
+    lastLocalAt = now;
+    sendLocalScan(cleaned);
   }
+
+  async function readFromLocalPort(){
+    if(!localPort || !localPort.readable){
+      throw new Error('Local scanner is not readable');
+    }
+    localReader = localPort.readable.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      while(true){
+        const {value, done} = await localReader.read();
+        if(done){
+          break;
+        }
+        if(value){
+          buffer += decoder.decode(value, {stream: true});
+          const parts = buffer.split(/[\r\n]+/);
+          buffer = parts.pop() || '';
+          for(let i = 0; i < parts.length; i += 1){
+            handleLocalScan(parts[i].trim());
+          }
+        }
+      }
+      buffer += decoder.decode();
+      if(buffer.trim()){
+        handleLocalScan(buffer.trim());
+      }
+    } finally {
+      if(localReader){
+        try { localReader.releaseLock(); } catch(err) { /* ignore */ }
+        localReader = null;
+      }
+    }
+  }
+
+  async function connectLocalScanner(){
+    if(!('serial' in navigator)){
+      showError('This browser does not support connecting to local scanners.');
+      return;
+    }
+    try {
+      statusEl.textContent = 'Select a local scanner to connect.';
+      const port = await navigator.serial.requestPort();
+      await port.open({baudRate: 9600});
+      localPort = port;
+      localConnected = true;
+      if(connectBtn){
+        connectBtn.disabled = true;
+        connectBtn.textContent = 'Scanner Connected';
+      }
+      statusEl.textContent = 'Local scanner connected. Awaiting RFID...';
+      await readFromLocalPort();
+    } catch(err){
+      if(err && err.name === 'NotFoundError'){
+        statusEl.textContent = 'Scanner ready';
+      } else if(localConnected){
+        showError('Local scanner disconnected');
+      } else {
+        showError('Failed to connect to local scanner');
+      }
+    } finally {
+      if(localReader){
+        try { await localReader.cancel(); } catch(err) { /* ignore */ }
+      }
+      if(localPort){
+        try { await localPort.close(); } catch(err) { /* ignore */ }
+        localPort = null;
+      }
+      if(connectBtn){
+        connectBtn.disabled = false;
+        connectBtn.textContent = 'Connect Local Scanner';
+      }
+      if(localConnected){
+        statusEl.textContent = 'Local scanner disconnected';
+      }
+      localConnected = false;
+      localReader = null;
+    }
+  }
+
+  function setupLocalScanner(){
+    if(!connectBtn){
+      return;
+    }
+    if(!('serial' in navigator)){
+      connectBtn.disabled = true;
+      connectBtn.title = 'Web Serial API is not supported in this browser.';
+      return;
+    }
+    connectBtn.addEventListener('click', () => {
+      connectLocalScanner();
+    });
+    if(navigator.serial.addEventListener){
+      navigator.serial.addEventListener('disconnect', (event) => {
+        if(localPort && event.target === localPort){
+          localPort = null;
+          localConnected = false;
+          if(connectBtn){
+            connectBtn.disabled = false;
+            connectBtn.textContent = 'Connect Local Scanner';
+          }
+          showError('Local scanner disconnected');
+        }
+      });
+    }
+  }
+
   restartTestBtn.addEventListener('click', async () => {
     try {
       await fetch('{{ restart_url }}', {method: 'POST'});
@@ -117,6 +306,7 @@
       }
     });
   }
+  setupLocalScanner();
   poll();
 })();
 </script>

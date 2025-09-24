@@ -1,3 +1,5 @@
+import json
+
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -6,11 +8,22 @@ from django.contrib.admin.views.decorators import staff_member_required
 from pages.utils import landing
 
 from .scanner import scan_sources, restart_sources, test_sources, enable_deep_read_mode
+from .reader import validate_rfid_value
 
 
 def scan_next(request):
-    """Return the next scanned RFID tag."""
-    result = scan_sources(request)
+    """Return the next scanned RFID tag or validate a client-provided value."""
+
+    if request.method == "POST":
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+        rfid = payload.get("rfid") or payload.get("value")
+        kind = payload.get("kind")
+        result = validate_rfid_value(rfid, kind=kind)
+    else:
+        result = scan_sources(request)
     status = 500 if result.get("error") else 200
     return JsonResponse(result, status=status)
 
