@@ -35,12 +35,13 @@ class Command(BaseCommand):
         show_invites = options["invites"]
         show_power = options["power"]
 
+        invite_leads = InviteLead.objects.select_related("sent_via_outbox")
         if show_invites:
-            leads = list(InviteLead.objects.order_by("-created_on")[:limit])
+            leads = list(invite_leads.order_by("-created_on")[:limit])
         elif show_power:
             leads = list(PowerLead.objects.order_by("-created_on")[:limit])
         else:
-            invites = list(InviteLead.objects.order_by("-created_on")[:limit])
+            invites = list(invite_leads.order_by("-created_on")[:limit])
             powers = list(PowerLead.objects.order_by("-created_on")[:limit])
             leads = sorted(invites + powers, key=lambda l: l.created_on, reverse=True)[
                 :limit
@@ -58,6 +59,8 @@ class Command(BaseCommand):
                 if lead.sent_on:
                     sent_on = _normalize_timestamp(lead.sent_on)
                     status = f" [SENT {sent_on:%Y-%m-%d %H:%M:%S}]"
+                    if lead.sent_via_outbox_id:
+                        status += f" via {lead.sent_via_outbox}"
                 else:
                     status = " [NOT SENT]"
             else:

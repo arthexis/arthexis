@@ -28,6 +28,8 @@ class Command(BaseCommand):
             raise CommandError(f"No user found with email {email}")
 
         node = Node.get_local()
+        outbox = getattr(node, "email_outbox", None) if node else None
+        used_outbox = None
 
         for user in users:
             uid = urlsafe_base64_encode(force_bytes(user.pk))
@@ -43,6 +45,8 @@ class Command(BaseCommand):
             try:
                 if node:
                     node.send_mail(subject, body, [email])
+                    if outbox:
+                        used_outbox = outbox
                 else:
                     mailer.send(subject, body, [email], settings.DEFAULT_FROM_EMAIL)
             except Exception as exc:  # pragma: no cover - log failures
@@ -51,6 +55,7 @@ class Command(BaseCommand):
             self.stdout.write(link)
 
         InviteLead.objects.filter(email__iexact=email, sent_on__isnull=True).update(
-            sent_on=timezone.now()
+            sent_on=timezone.now(),
+            sent_via_outbox=used_outbox,
         )
         self.stdout.write(self.style.SUCCESS("Invitation sent"))

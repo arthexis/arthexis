@@ -532,7 +532,14 @@ class SecurityGroupAdmin(DjangoGroupAdmin):
 
 
 class InviteLeadAdmin(EntityModelAdmin):
-    list_display = ("email", "mac_address", "created_on", "sent_on", "short_error")
+    list_display = (
+        "email",
+        "mac_address",
+        "created_on",
+        "sent_on",
+        "sent_via_outbox",
+        "short_error",
+    )
     search_fields = ("email", "comment")
     readonly_fields = (
         "created_on",
@@ -543,6 +550,7 @@ class InviteLeadAdmin(EntityModelAdmin):
         "ip_address",
         "mac_address",
         "sent_on",
+        "sent_via_outbox",
         "error",
     )
 
