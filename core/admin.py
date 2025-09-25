@@ -261,6 +261,7 @@ class ReferenceAdmin(EntityModelAdmin):
     list_display = (
         "alt_text",
         "content_type",
+        "link",
         "header",
         "footer",
         "visibility",
@@ -304,6 +305,15 @@ class ReferenceAdmin(EntityModelAdmin):
     @admin.display(description="Visibility", ordering="footer_visibility")
     def visibility(self, obj):
         return obj.get_footer_visibility_display()
+
+    @admin.display(description="LINK")
+    def link(self, obj):
+        if obj.value:
+            return format_html(
+                '<a href="{}" target="_blank" rel="noopener noreferrer">open</a>',
+                obj.value,
+            )
+        return ""
 
     def get_urls(self):
         urls = super().get_urls()
