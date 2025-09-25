@@ -11,6 +11,7 @@ from django.contrib.sites.models import Site
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.utils import timezone
+from django.utils.text import slugify
 from django.utils.translation import gettext as _
 from django.urls import NoReverseMatch, reverse
 from django.views.decorators.csrf import csrf_exempt
@@ -79,6 +80,74 @@ def _clean_repo() -> None:
     """Return the git repository to a clean state."""
     subprocess.run(["git", "reset", "--hard"], check=False)
     subprocess.run(["git", "clean", "-fd"], check=False)
+
+
+def _format_path(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(Path.cwd()))
+    except ValueError:
+        return str(path)
+
+
+def _next_patch_version(version: str) -> str:
+    from packaging.version import InvalidVersion, Version
+
+    try:
+        parsed = Version(version)
+    except InvalidVersion:
+        parts = version.split(".")
+        for index in range(len(parts) - 1, -1, -1):
+            segment = parts[index]
+            if segment.isdigit():
+                parts[index] = str(int(segment) + 1)
+                return ".".join(parts)
+        return version
+    return f"{parsed.major}.{parsed.minor}.{parsed.micro + 1}"
+
+
+def _write_todo_fixture(todo: Todo) -> Path:
+    safe_request = todo.request.replace(".", " ")
+    slug = slugify(safe_request).replace("-", "_")
+    if not slug:
+        slug = "todo"
+    path = TODO_FIXTURE_DIR / f"todos__{slug}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = [
+        {
+            "model": "core.todo",
+            "fields": {
+                "request": todo.request,
+                "url": todo.url,
+                "request_details": todo.request_details,
+            },
+        }
+    ]
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def _ensure_release_todo(release) -> tuple[Todo, Path]:
+    target_version = _next_patch_version(release.version)
+    request = f"Create release {release.package.name} {target_version}"
+    try:
+        url = reverse("admin:core_packagerelease_changelist")
+    except NoReverseMatch:
+        url = ""
+    todo, _ = Todo.all_objects.update_or_create(
+        request__iexact=request,
+        defaults={
+            "request": request,
+            "url": url,
+            "request_details": "",
+            "is_seed_data": True,
+            "is_deleted": False,
+            "is_user_data": False,
+            "done_on": None,
+            "on_done_condition": "",
+        },
+    )
+    fixture_path = _write_todo_fixture(todo)
+    return todo, fixture_path
 
 
 def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
@@ -342,6 +411,12 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
         _append_log(log_path, "No changes detected for VERSION; skipping commit")
         subprocess.run(["git", "reset", "HEAD", "VERSION"], check=False)
         _append_log(log_path, "Unstaged VERSION file")
+    todo, fixture_path = _ensure_release_todo(release)
+    fixture_display = _format_path(fixture_path)
+    _append_log(log_path, f"Added TODO: {todo.request}")
+    _append_log(log_path, f"Wrote TODO fixture {fixture_display}")
+    subprocess.run(["git", "add", str(fixture_path)], check=True)
+    _append_log(log_path, f"Staged TODO fixture {fixture_display}")
     _append_log(log_path, "Pre-release actions complete")
 
 
