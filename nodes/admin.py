@@ -245,7 +245,7 @@ class EmailOutboxAdmin(EntityModelAdmin):
     fieldsets = (
         ("Owner", {"fields": ("user", "group", "node")}),
         (
-            None,
+            "Configuration",
             {
                 "fields": (
                     "host",
