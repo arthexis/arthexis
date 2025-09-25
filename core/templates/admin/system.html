@@ -5,57 +5,75 @@
 <div id="content-main">
   <div>
     <h1>{{ title }}</h1>
-    <dl>
-      <dt>{% trans "Suite installed" %}</dt>
-      <dd>{{ info.installed }}</dd>
-      <dt>{% trans "Revision" %}</dt>
-      <dd>{{ info.revision }}</dd>
-      <dt>{% trans "Service" %}</dt>
-      <dd>{% if info.service %}{{ info.service }}{% else %}{% trans "not installed" %}{% endif %}</dd>
-      <dt>{% trans "Nginx mode" %}</dt>
-      <dd>{{ info.mode }} ({{ info.port }})</dd>
-      <dt>{% trans "Node role" %}</dt>
-      <dd>{{ info.role }}</dd>
-      {% if info.screen_mode %}
-      <dt>{% trans "Display mode" %}</dt>
-      <dd>{{ info.screen_mode }}</dd>
-      {% endif %}
-      <dt>{% trans "Features" %}</dt>
-      <dd>
-        {% if info.features %}
-        <ul>
-          {% for feature in info.features %}
-          <li>
-            {{ feature.display }}
-            {% if feature.expected or feature.actual %}
-              (
-              {% if feature.expected and feature.actual %}
-                {% trans "expected and actual" %}
-              {% elif feature.expected %}
-                {% trans "expected" %}
+    <table class="system-info-table table table-striped">
+      <thead>
+        <tr>
+          <th scope="col">{% trans "System field" %}</th>
+          <th scope="col">{% trans "Sigil" %}</th>
+          <th scope="col">{% trans "Current values" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for field in system_fields %}
+        <tr>
+          <th scope="row">{{ field.label }}</th>
+          <td><code>{{ field.sigil }}</code></td>
+          <td>
+            {% if field.field_type == "boolean" %}
+              {% if field.value %}
+                {% trans "Yes" %}
               {% else %}
-                {% trans "actual" %}
+                {% trans "No" %}
               {% endif %}
-              )
+            {% elif field.field_type == "features" %}
+              {% if field.value %}
+              <ul>
+                {% for feature in field.value %}
+                <li>
+                  {{ feature.display }}
+                  {% if feature.expected or feature.actual %}
+                    (
+                    {% if feature.expected and feature.actual %}
+                      {% trans "expected and actual" %}
+                    {% elif feature.expected %}
+                      {% trans "expected" %}
+                    {% else %}
+                      {% trans "actual" %}
+                    {% endif %}
+                    )
+                  {% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+              {% else %}
+              <em>{% trans "No features detected" %}</em>
+              {% endif %}
+            {% elif field.field_type == "databases" %}
+              {% if field.value %}
+              <ul>
+                {% for database in field.value %}
+                <li>
+                  <strong>{{ database.alias }}</strong>
+                  {% if database.engine %}
+                    — {{ database.engine }}
+                  {% endif %}
+                  {% if database.name %}
+                    ({{ database.name }})
+                  {% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+              {% else %}
+              <em>{% trans "No databases configured" %}</em>
+              {% endif %}
+            {% else %}
+              {{ field.value|default_if_none:"" }}
             {% endif %}
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <em>{% trans "No features detected" %}</em>
-        {% endif %}
-      </dd>
-      <dt>{% trans "Running" %}</dt>
-      <dd>{{ info.running }}</dd>
-      {% if info.service %}
-      <dt>{% trans "Service status" %}</dt>
-      <dd>{{ info.service_status }}</dd>
-      {% endif %}
-      <dt>{% trans "Hostname" %}</dt>
-      <dd>{{ info.hostname }}</dd>
-      <dt>{% trans "IP addresses" %}</dt>
-      <dd>{{ info.ip_addresses|join:" " }}</dd>
-    </dl>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
 {% endblock %}

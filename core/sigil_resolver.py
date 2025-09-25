@@ -11,6 +11,7 @@ from django.core import serializers
 from django.db import models
 
 from .sigil_context import get_context
+from .system import get_system_sigil_values
 
 logger = logging.getLogger("core.entity")
 
@@ -200,6 +201,19 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                 if fallback is not None:
                     return fallback
                 return ""
+            if root.prefix.upper() == "SYS":
+                values = get_system_sigil_values()
+                candidates = [key_upper, normalized_key.upper() if normalized_key else None]
+                for candidate in candidates:
+                    if not candidate:
+                        continue
+                    if candidate in values:
+                        return values[candidate]
+                logger.warning(
+                    "Missing system information for sigil [SYS.%s]",
+                    key_upper or normalized_key or raw_key or "",
+                )
+                return _failed_resolution(original_token)
         elif root.context_type == SigilRoot.Context.ENTITY:
             model = root.content_type.model_class() if root.content_type else None
             instance = None

@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 from subprocess import CompletedProcess
@@ -11,9 +12,9 @@ import django
 django.setup()
 
 from django.conf import settings
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import SimpleTestCase, override_settings
 from nodes.models import Node, NodeFeature, NodeRole
-from core.system import _gather_info
+from core.system import _gather_info, get_system_sigil_values
 
 
 class SystemInfoRoleTests(SimpleTestCase):
@@ -55,6 +56,27 @@ class SystemInfoRevisionTests(SimpleTestCase):
         mock_revision.assert_called_once()
 
 
+class SystemInfoDatabaseTests(SimpleTestCase):
+    def test_collects_database_definitions(self):
+        info = _gather_info()
+        self.assertIn("databases", info)
+        aliases = {entry["alias"] for entry in info["databases"]}
+        self.assertIn("default", aliases)
+
+    @override_settings(
+        DATABASES={
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": Path("/tmp/db.sqlite3"),
+            }
+        }
+    )
+    def test_serializes_path_database_names(self):
+        info = _gather_info()
+        databases = info["databases"]
+        self.assertEqual(databases[0]["name"], "/tmp/db.sqlite3")
+
+
 class SystemInfoRunserverDetectionTests(SimpleTestCase):
     @patch("core.system.subprocess.run")
     def test_detects_runserver_process_port(self, mock_run):
@@ -76,4 +98,42 @@ class SystemInfoRunserverDetectionTests(SimpleTestCase):
 
         self.assertTrue(info["running"])
         self.assertEqual(info["port"], 8000)
+
+
+class SystemSigilValueTests(SimpleTestCase):
+    def test_exports_values_for_sigil_resolution(self):
+        sample_info = {
+            "installed": True,
+            "revision": "abcdef",
+            "service": "gunicorn",
+            "mode": "internal",
+            "port": 8888,
+            "role": "Terminal",
+            "screen_mode": "",
+            "features": [
+                {"display": "Feature", "expected": True, "actual": False, "slug": "feature"}
+            ],
+            "running": True,
+            "service_status": "active",
+            "hostname": "example.local",
+            "ip_addresses": ["127.0.0.1"],
+            "databases": [
+                {
+                    "alias": "default",
+                    "engine": "django.db.backends.sqlite3",
+                    "name": "db.sqlite3",
+                }
+            ],
+        }
+        with patch("core.system._gather_info", return_value=sample_info):
+            values = get_system_sigil_values()
+
+        self.assertEqual(values["REVISION"], "abcdef")
+        self.assertEqual(values["RUNNING"], "True")
+        self.assertEqual(values["NGINX_MODE"], "internal (8888)")
+        self.assertEqual(values["IP_ADDRESSES"], "127.0.0.1")
+        features = json.loads(values["FEATURES"])
+        self.assertEqual(features[0]["display"], "Feature")
+        databases = json.loads(values["DATABASES"])
+        self.assertEqual(databases[0]["alias"], "default")
 

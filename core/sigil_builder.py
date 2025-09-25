@@ -17,7 +17,7 @@ from .sigil_resolver import (
 def generate_model_sigils(**kwargs) -> None:
     """Ensure built-in configuration SigilRoot entries exist."""
     SigilRoot = apps.get_model("core", "SigilRoot")
-    for prefix in ["ENV", "CONF"]:
+    for prefix in ["ENV", "CONF", "SYS"]:
         # Ensure built-in configuration roots exist without violating the
         # unique ``prefix`` constraint, even if older databases already have
         # entries with a different ``context_type``.
@@ -46,6 +46,11 @@ def _sigil_builder_view(request):
             "prefix": "CONF",
             "url": reverse("admin:system"),
             "label": _("Configuration"),
+        },
+        {
+            "prefix": "SYS",
+            "url": reverse("admin:system"),
+            "label": _("System"),
         },
     ]
     for root in SigilRoot.objects.filter(
