@@ -3,7 +3,6 @@
 
 {% block content %}
 <div id="content-main">
-  <h1>{{ title }}</h1>
   <form method="post" enctype="multipart/form-data" style="margin-bottom:1em;">
     {% csrf_token %}
     {% if show_sigils_input %}
