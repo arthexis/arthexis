@@ -63,6 +63,19 @@ class SystemInfoDatabaseTests(SimpleTestCase):
         aliases = {entry["alias"] for entry in info["databases"]}
         self.assertIn("default", aliases)
 
+    @override_settings(
+        DATABASES={
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": Path("/tmp/db.sqlite3"),
+            }
+        }
+    )
+    def test_serializes_path_database_names(self):
+        info = _gather_info()
+        databases = info["databases"]
+        self.assertEqual(databases[0]["name"], "/tmp/db.sqlite3")
+
 
 class SystemInfoRunserverDetectionTests(SimpleTestCase):
     @patch("core.system.subprocess.run")

@@ -44,10 +44,14 @@ def _database_configurations() -> list[dict[str, str]]:
     for alias, config in settings.DATABASES.items():
         engine = config.get("ENGINE", "")
         name = config.get("NAME", "")
+        if engine is None:
+            engine = ""
+        if name is None:
+            name = ""
         databases.append({
             "alias": alias,
-            "engine": engine,
-            "name": name,
+            "engine": str(engine),
+            "name": str(name),
         })
     databases.sort(key=lambda entry: entry["alias"].lower())
     return databases
