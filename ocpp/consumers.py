@@ -17,6 +17,7 @@ from . import store
 from decimal import Decimal
 from django.utils.dateparse import parse_datetime
 from .models import Transaction, Charger, MeterValue
+from .reference_utils import host_is_local_loopback
 
 FORWARDED_PAIR_RE = re.compile(r"for=(?:\"?)(?P<value>[^;,\"\s]+)(?:\"?)", re.IGNORECASE)
 
@@ -287,19 +288,21 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         serial = (self.charger_id or "").strip()
         if not ip or not serial:
             return
+        if host_is_local_loopback(ip):
+            return
         host = ip
         if ":" in host and not host.startswith("["):
             host = f"[{host}]"
         url = f"http://{host}:8900"
         alt_text = f"{serial} Console"
-        reference, _ = Reference.objects.get_or_create(
-            alt_text=alt_text,
-            defaults={
-                "value": url,
-                "show_in_header": True,
-                "method": "link",
-            },
-        )
+        reference = Reference.objects.filter(alt_text=alt_text).order_by("id").first()
+        if reference is None:
+            reference = Reference.objects.create(
+                alt_text=alt_text,
+                value=url,
+                show_in_header=True,
+                method="link",
+            )
         updated_fields: list[str] = []
         if reference.value != url:
             reference.value = url

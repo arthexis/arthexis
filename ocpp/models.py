@@ -18,6 +18,7 @@ from core.models import (
     Brand as CoreBrand,
     EVModel as CoreEVModel,
 )
+from .reference_utils import url_targets_local_loopback
 
 
 class Location(Entity):
@@ -279,6 +280,8 @@ class Charger(Entity):
             kwargs["update_fields"] = update_list
         super().save(*args, **kwargs)
         ref_value = self._full_url()
+        if url_targets_local_loopback(ref_value):
+            return
         if not self.reference or self.reference.value != ref_value:
             self.reference = Reference.objects.create(
                 value=ref_value, alt_text=self.charger_id

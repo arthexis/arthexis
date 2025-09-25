@@ -141,6 +141,17 @@ class ChargerUrlFallbackTests(TestCase):
         self.assertTrue(charger.reference.value.startswith("http://fallback.example"))
         self.assertTrue(charger.reference.value.endswith("/c/NO_SITE/"))
 
+    def test_reference_not_created_for_loopback_domain(self):
+        site = Site.objects.get_current()
+        site.domain = "127.0.0.1"
+        site.save()
+        Site.objects.clear_cache()
+
+        charger = Charger.objects.create(charger_id="LOCAL_LOOP")
+        charger.refresh_from_db()
+
+        self.assertIsNone(charger.reference)
+
 
 class SinkConsumerTests(TransactionTestCase):
     async def test_sink_replies(self):
@@ -664,6 +675,25 @@ class CSMSConsumerTests(TransactionTestCase):
             lambda: Reference.objects.get(alt_text="FORWARDED Console")
         )()
         self.assertEqual(reference.value, "http://198.51.100.75:8900")
+
+        await communicator.disconnect()
+
+    async def test_console_reference_skips_loopback_ip(self):
+        communicator = ClientWebsocketCommunicator(
+            application,
+            "/LOCAL/",
+            client=("127.0.0.1", 34567),
+        )
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to([2, "1", "BootNotification", {}])
+        await communicator.receive_json_from()
+
+        exists = await database_sync_to_async(
+            lambda: Reference.objects.filter(alt_text="LOCAL Console").exists()
+        )()
+        self.assertFalse(exists)
 
         await communicator.disconnect()
 
