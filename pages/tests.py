@@ -1163,6 +1163,13 @@ class ApplicationAdminDisplayTests(TestCase):
         config = django_apps.get_app_config("ocpp")
         self.assertContains(resp, config.verbose_name)
 
+    def test_changelist_shows_description(self):
+        Application.objects.create(
+            name="awg", description="Power, Energy and Cost calculations."
+        )
+        resp = self.client.get(reverse("admin:pages_application_changelist"))
+        self.assertContains(resp, "Power, Energy and Cost calculations.")
+
 
 class LandingCreationTests(TestCase):
     def setUp(self):
