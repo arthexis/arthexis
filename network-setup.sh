@@ -30,7 +30,7 @@ Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--inte
   --no-watchdog   Skip installing the WiFi watchdog service.
   --vnc           Require validating that a VNC service is enabled.
   --no-vnc        Skip validating that a VNC service is enabled (default).
-  --subnet N      Configure eth0 on the 192.168.N.0/24 subnet (default: 129).
+  --subnet N      Configure eth0 on the 192.168.N.0/16 subnet (default: 129).
 USAGE
 }
 
@@ -645,7 +645,7 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
             while read -r con; do
                 nmcli connection delete "$con"
             done
-        eth0_ip="192.168.${ETH0_SUBNET}.10/24"
+        eth0_ip="192.168.${ETH0_SUBNET}.10/16"
         if nmcli -t -f NAME connection show | grep -Fxq "eth0-shared"; then
             nmcli connection modify eth0-shared \
                 connection.interface-name eth0 \
