@@ -1,6 +1,6 @@
 # Costellazione Arthexis
 
-[![Copertura](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml)
+[![Copertura](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![Copertura OCPP 1.6](./ocpp_coverage.svg)](./ocpp_coverage.svg)
 
 ## Scopo
 
