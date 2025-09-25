@@ -162,6 +162,25 @@ class Profile(Entity):
         return str(owner)
 
 
+_SOCIAL_DOMAIN_PATTERN = re.compile(
+    r"^(?=.{1,253}\Z)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$"
+)
+
+
+social_domain_validator = RegexValidator(
+    regex=_SOCIAL_DOMAIN_PATTERN,
+    message=_("Enter a valid domain name such as example.com."),
+    code="invalid",
+)
+
+
+social_did_validator = RegexValidator(
+    regex=r"^(|did:[a-z0-9]+:[A-Za-z0-9.\-_:]+)$",
+    message=_("Enter a valid DID such as did:plc:1234abcd."),
+    code="invalid",
+)
+
+
 class SigilRootManager(EntityManager):
     def get_by_natural_key(self, prefix: str):
         return self.get(prefix=prefix)
@@ -470,6 +489,10 @@ class User(Entity, AbstractUser):
         return self._direct_profile("AssistantProfile")
 
     @property
+    def social_profile(self):
+        return self._direct_profile("SocialProfile")
+
+    @property
     def chat_profile(self):
         return self.assistant_profile
 
@@ -762,6 +785,89 @@ class EmailInbox(Profile):
 
     def __str__(self):  # pragma: no cover - simple representation
         return f"{self.username}@{self.host}"
+
+
+class SocialProfile(Profile):
+    """Store configuration required to link social accounts such as Bluesky."""
+
+    class Network(models.TextChoices):
+        BLUESKY = "bluesky", _("Bluesky")
+
+    profile_fields = ("handle", "domain", "did")
+
+    network = models.CharField(
+        max_length=32,
+        choices=Network.choices,
+        default=Network.BLUESKY,
+        help_text=_(
+            "Select the social network you want to connect. Only Bluesky is supported at the moment."
+        ),
+    )
+    handle = models.CharField(
+        max_length=253,
+        help_text=_(
+            "Bluesky handle that should resolve to Arthexis. Use the verified domain (for example arthexis.com)."
+        ),
+        validators=[social_domain_validator],
+    )
+    domain = models.CharField(
+        max_length=253,
+        help_text=_(
+            "Domain that hosts the Bluesky verification. Publish a _atproto TXT record or a /.well-known/atproto-did file with the DID below."
+        ),
+        validators=[social_domain_validator],
+    )
+    did = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_(
+            "Optional DID that Bluesky assigns once the domain is linked (for example did:plc:1234abcd)."
+        ),
+        validators=[social_did_validator],
+    )
+
+    def clean(self):
+        super().clean()
+        if self.network == self.Network.BLUESKY:
+            errors = {}
+            if not self.handle:
+                errors["handle"] = _("Provide the handle that should point to this domain.")
+            if not self.domain:
+                errors["domain"] = _("A verified domain is required for Bluesky handles.")
+            if errors:
+                raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.handle:
+            self.handle = self.handle.strip().lower()
+        if self.domain:
+            self.domain = self.domain.strip().lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):  # pragma: no cover - simple representation
+        handle = self.handle or self.domain
+        label = f"{self.get_network_display()} ({handle})" if handle else self.get_network_display()
+        owner = self.owner_display()
+        return f"{owner} – {label}" if owner else label
+
+    class Meta:
+        verbose_name = _("Social Profile")
+        verbose_name_plural = _("Social Profiles")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["network", "handle"], name="socialprofile_network_handle"
+            ),
+            models.UniqueConstraint(
+                fields=["network", "domain"], name="socialprofile_network_domain"
+            ),
+            models.CheckConstraint(
+                check=(
+                    (Q(user__isnull=False) & Q(group__isnull=True))
+                    | (Q(user__isnull=True) & Q(group__isnull=False))
+                ),
+                name="socialprofile_requires_owner",
+            ),
+        ]
 
 
 class EmailCollector(Entity):
