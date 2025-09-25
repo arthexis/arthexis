@@ -51,6 +51,7 @@ from .models import (
     Reference,
     OdooProfile,
     EmailInbox,
+    SocialProfile,
     EmailCollector,
     Package,
     PackageRelease,
@@ -859,6 +860,14 @@ class EmailInboxInlineForm(ProfileFormMixin, EmailInboxAdminForm):
         exclude = ("user", "group")
 
 
+class SocialProfileInlineForm(ProfileFormMixin, forms.ModelForm):
+    profile_fields = SocialProfile.profile_fields
+
+    class Meta:
+        model = SocialProfile
+        fields = ("network", "handle", "domain", "did")
+
+
 class EmailOutboxInlineForm(ProfileFormMixin, forms.ModelForm):
     profile_fields = EmailOutbox.profile_fields
     password = forms.CharField(
@@ -1007,6 +1016,22 @@ PROFILE_INLINE_CONFIG = {
             "from_email",
         ),
     },
+    SocialProfile: {
+        "form": SocialProfileInlineForm,
+        "fieldsets": (
+            (
+                _("Configuration: Bluesky"),
+                {
+                    "fields": ("network", "handle", "domain", "did"),
+                    "description": _(
+                        "1. Set your Bluesky handle to the domain managed by Arthexis. "
+                        "2. Publish a _atproto TXT record or /.well-known/atproto-did file pointing to the DID below. "
+                        "3. Save once Bluesky confirms the domain matches the DID."
+                    ),
+                },
+            ),
+        ),
+    },
     ReleaseManager: {
         "form": ReleaseManagerInlineForm,
         "fields": (
@@ -1065,6 +1090,7 @@ PROFILE_MODELS = (
     OdooProfile,
     EmailInbox,
     EmailOutbox,
+    SocialProfile,
     ReleaseManager,
     AssistantProfile,
 )
@@ -1213,6 +1239,34 @@ class EmailCollectorInline(admin.TabularInline):
 class EmailCollectorAdmin(EntityModelAdmin):
     list_display = ("inbox", "subject", "sender", "body", "fragment")
     search_fields = ("subject", "sender", "body", "fragment")
+
+
+class SocialProfileAdmin(
+    ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
+):
+    list_display = ("owner", "network", "handle", "domain")
+    list_filter = ("network",)
+    search_fields = ("handle", "domain", "did")
+    changelist_actions = ["my_profile"]
+    change_actions = ["my_profile_action"]
+    fieldsets = (
+        (_("Owner"), {"fields": ("user", "group")}),
+        (
+            _("Configuration: Bluesky"),
+            {
+                "fields": ("network", "handle", "domain", "did"),
+                "description": _(
+                    "Link Arthexis to Bluesky by using a verified domain handle. "
+                    "Publish a _atproto TXT record or /.well-known/atproto-did file "
+                    "that returns the DID stored here before saving."
+                ),
+            },
+        ),
+    )
+
+    @admin.display(description=_("Owner"))
+    def owner(self, obj):
+        return obj.owner_display()
 
 
 @admin.register(OdooProfile)

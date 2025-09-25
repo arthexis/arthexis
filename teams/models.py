@@ -7,6 +7,7 @@ from core.models import (
     ReleaseManager as CoreReleaseManager,
     OdooProfile as CoreOdooProfile,
     AssistantProfile as CoreAssistantProfile,
+    SocialProfile as CoreSocialProfile,
 )
 from awg.models import PowerLead as CorePowerLead
 from django_otp.plugins.otp_totp.models import (
@@ -93,6 +94,14 @@ class AssistantProfile(CoreAssistantProfile):
         app_label = "teams"
         verbose_name = CoreAssistantProfile._meta.verbose_name
         verbose_name_plural = CoreAssistantProfile._meta.verbose_name_plural
+
+
+class SocialProfile(CoreSocialProfile):
+    class Meta:
+        proxy = True
+        app_label = "teams"
+        verbose_name = CoreSocialProfile._meta.verbose_name
+        verbose_name_plural = CoreSocialProfile._meta.verbose_name_plural
 
 
 class TOTPDevice(CoreTOTPDevice):

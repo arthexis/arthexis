@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.socialprofile",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "user": ["arthexis"],
+      "network": "bluesky",
+      "handle": "arthexis.com",
+      "domain": "arthexis.com",
+      "did": ""
+    }
+  }
+]

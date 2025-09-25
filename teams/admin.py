@@ -15,6 +15,7 @@ from core.admin import (
     ReleaseManagerAdmin,
     OdooProfileAdmin,
     AssistantProfileAdmin,
+    SocialProfileAdmin,
 )
 from core.models import (
     InviteLead as CoreInviteLead,
@@ -40,6 +41,7 @@ from .models import (
     PowerLead,
     OdooProfile,
     AssistantProfile,
+    SocialProfile,
     TOTPDevice,
 )
 
@@ -91,6 +93,11 @@ class OdooProfileAdminProxy(OdooProfileAdmin):
 
 @admin.register(AssistantProfile)
 class AssistantProfileAdminProxy(AssistantProfileAdmin):
+    pass
+
+
+@admin.register(SocialProfile)
+class SocialProfileAdminProxy(SocialProfileAdmin):
     pass
 
 
