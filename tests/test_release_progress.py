@@ -84,13 +84,35 @@ class ReleaseProgressViewTests(TestCase):
 
         self.assertEqual(response.context["log_content"], "")
 
-    def test_non_current_release_returns_404(self):
+    def test_non_current_release_becomes_current(self):
         other = PackageRelease.objects.create(
             package=self.package, version="2.0", revision=""
         )
         url = reverse("release-progress", args=[other.pk, "publish"])
         response = self.client.get(url)
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
+        other.refresh_from_db()
+        self.assertEqual(
+            self.version_path.read_text(encoding="utf-8").strip(), other.version
+        )
+
+    def test_release_sync_updates_version_file_and_package(self):
+        self.package.is_active = False
+        self.package.save(update_fields=["is_active"])
+        self.release.version = "1.1"
+        self.release.save(update_fields=["version"])
+        self.version_path.write_text("1.0", encoding="utf-8")
+
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self.version_path.read_text(encoding="utf-8").strip(),
+            self.release.version,
+        )
+        self.release.refresh_from_db()
+        self.assertTrue(self.release.package.is_active)
 
     @mock.patch("core.views.release_utils._git_clean", return_value=False)
     @mock.patch("core.views.release_utils.network_available", return_value=False)

@@ -125,7 +125,22 @@ def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
         release.save(update_fields=list(updated_fields))
         PackageRelease.dump_fixture()
 
-    return bool(updated_fields), previous_version
+    package_updated = False
+    if release.package_id and not release.package.is_active:
+        release.package.is_active = True
+        release.package.save(update_fields=["is_active"])
+        package_updated = True
+
+    version_updated = False
+    if release.version:
+        current = ""
+        if version_path.exists():
+            current = version_path.read_text(encoding="utf-8").strip()
+        if current != release.version:
+            version_path.write_text(f"{release.version}\n", encoding="utf-8")
+            version_updated = True
+
+    return bool(updated_fields or version_updated or package_updated), previous_version
 
 
 def _changelog_notes(version: str) -> str:
