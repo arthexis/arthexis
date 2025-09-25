@@ -16,6 +16,7 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from pages.models import Application, Module
+from pages.defaults import DEFAULT_APPLICATION_DESCRIPTIONS
 from nodes.models import Node, NodeRole
 
 
@@ -45,6 +46,11 @@ class RegisterSiteAppsCommandTests(TestCase):
                 continue
             self.assertTrue(Application.objects.filter(name=config.label).exists())
             app = Application.objects.get(name=config.label)
+            expected_description = DEFAULT_APPLICATION_DESCRIPTIONS.get(
+                config.label, ""
+            )
+            if expected_description:
+                self.assertEqual(app.description, expected_description)
             self.assertTrue(
                 Module.objects.filter(node_role=role, application=app).exists()
             )

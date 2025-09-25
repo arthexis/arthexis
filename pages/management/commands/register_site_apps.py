@@ -6,6 +6,7 @@ from django.utils.text import slugify
 import socket
 
 from pages.models import Application, Module
+from pages.defaults import DEFAULT_APPLICATION_DESCRIPTIONS
 from nodes.models import Node, NodeRole
 
 
@@ -38,7 +39,13 @@ class Command(BaseCommand):
                 config = django_apps.get_app_config(app_label)
             except LookupError:
                 continue
-            app, _ = Application.objects.get_or_create(name=config.label)
+            description = DEFAULT_APPLICATION_DESCRIPTIONS.get(config.label, "")
+            app, created = Application.objects.get_or_create(
+                name=config.label, defaults={"description": description}
+            )
+            if not created and description and app.description != description:
+                app.description = description
+                app.save(update_fields=["description"])
             path = f"/{slugify(app.name)}/"
             module, created = Module.objects.update_or_create(
                 node_role=role, path=path, defaults={"application": app}

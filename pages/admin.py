@@ -153,7 +153,7 @@ class ApplicationModuleInline(admin.TabularInline):
 @admin.register(Application)
 class ApplicationAdmin(EntityModelAdmin):
     form = ApplicationForm
-    list_display = ("name", "app_verbose_name", "installed")
+    list_display = ("name", "app_verbose_name", "description", "installed")
     readonly_fields = ("installed",)
     inlines = [ApplicationModuleInline]
 
