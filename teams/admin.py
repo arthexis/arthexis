@@ -44,6 +44,12 @@ from .models import (
 )
 
 
+try:
+    admin.site.unregister(CoreReleaseManager)
+except NotRegistered:
+    pass
+
+
 @admin.register(InviteLead)
 class InviteLeadAdminProxy(InviteLeadAdmin):
     pass
