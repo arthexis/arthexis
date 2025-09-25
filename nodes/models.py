@@ -814,6 +814,8 @@ class EmailOutbox(Profile):
         username = (self.username or "").strip()
         host = (self.host or "").strip()
         if username and host:
+            if "@" in username:
+                return username
             return f"{username}@{host}"
         if username:
             return username
