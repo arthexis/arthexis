@@ -633,13 +633,30 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
     elif ! nmcli -t -f DEVICE device status | grep -Fxq "eth0"; then
         echo "Warning: device eth0 not found; skipping eth0 configuration." >&2
     else
-        nmcli -t -f NAME,DEVICE connection show | awk -F: -v protect="$PROTECTED_CONN" '$2=="eth0" && $1!=protect {print $1}' | while read -r con; do
-            nmcli connection delete "$con"
-        done
+        nmcli device disconnect eth0 >/dev/null 2>&1 || true
+        nmcli -t -f NAME,DEVICE connection show | awk -F: -v protect="$PROTECTED_CONN" '$2=="eth0" && $1!=protect {print $1}' |
+            while read -r con; do
+                nmcli connection delete "$con"
+            done
         eth0_ip="192.168.${ETH0_SUBNET}.10/24"
-        nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect yes \
-            ipv4.method shared ipv4.addresses "$eth0_ip" ipv4.never-default yes \
-            ipv4.route-metric 10000 ipv6.method ignore ipv6.never-default yes
+        if nmcli -t -f NAME connection show | grep -Fxq "eth0-shared"; then
+            nmcli connection modify eth0-shared \
+                connection.interface-name eth0 \
+                ipv4.method shared \
+                ipv4.addresses "$eth0_ip" \
+                ipv4.never-default yes \
+                ipv4.route-metric 10000 \
+                ipv6.method ignore \
+                ipv6.never-default yes \
+                connection.autoconnect yes \
+                connection.autoconnect-priority 0
+        else
+            nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect yes \
+                ipv4.method shared ipv4.addresses "$eth0_ip" ipv4.never-default yes \
+                ipv4.route-metric 10000 ipv6.method ignore ipv6-never-default yes \
+                connection.autoconnect-priority 0
+        fi
+        nmcli connection up eth0-shared >/dev/null 2>&1 || true
     fi
 
     if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
