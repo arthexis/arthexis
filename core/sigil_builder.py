@@ -40,12 +40,12 @@ def _sigil_builder_view(request):
         {
             "prefix": "ENV",
             "url": reverse("admin:environment"),
-            "label": _("Environment"),
+            "label": _("Environ"),
         },
         {
             "prefix": "CONF",
-            "url": reverse("admin:system"),
-            "label": _("Configuration"),
+            "url": reverse("admin:config"),
+            "label": _("Config"),
         },
         {
             "prefix": "SYS",
