@@ -851,8 +851,8 @@ class SocialProfile(Profile):
         return f"{owner} – {label}" if owner else label
 
     class Meta:
-        verbose_name = _("Social Profile")
-        verbose_name_plural = _("Social Profiles")
+        verbose_name = _("Social Identity")
+        verbose_name_plural = _("Social Identities")
         constraints = [
             models.UniqueConstraint(
                 fields=["network", "handle"], name="socialprofile_network_handle"
