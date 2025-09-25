@@ -222,7 +222,6 @@ class TempPasswordBackend(ModelBackend):
         if not entry.check_password(password):
             return None
 
-        temp_passwords.discard_temp_password(user.username)
         if not user.is_active:
             user.is_active = True
             user.save(update_fields=["is_active"])
