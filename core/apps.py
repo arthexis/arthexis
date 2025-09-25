@@ -108,6 +108,7 @@ class CoreConfig(AppConfig):
 
         if lock.exists():
             from .auto_upgrade import ensure_auto_upgrade_periodic_task
+            from django.db import DEFAULT_DB_ALIAS, connections
 
             def ensure_email_collector_task(**kwargs):
                 try:  # pragma: no cover - optional dependency
@@ -156,6 +157,10 @@ class CoreConfig(AppConfig):
                 dispatch_uid=auto_upgrade_dispatch_uid,
                 weak=False,
             )
+
+            default_connection = connections[DEFAULT_DB_ALIAS]
+            if default_connection.connection is not None:
+                ensure_auto_upgrade_on_connection(connection=default_connection)
 
         def enable_sqlite_wal(**kwargs):
             connection = kwargs.get("connection")
