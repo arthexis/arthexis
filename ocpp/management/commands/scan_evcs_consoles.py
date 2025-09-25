@@ -11,6 +11,7 @@ from typing import Iterator, Sequence
 from django.core.management.base import BaseCommand, CommandError
 
 from core.models import Reference
+from ocpp.reference_utils import host_is_local_loopback
 
 
 class Command(BaseCommand):
@@ -122,7 +123,15 @@ class Command(BaseCommand):
         created = 0
         updated = 0
         for serial, host in sorted(discoveries.items()):
-            ref, was_created = self._ensure_reference(serial, host)
+            ensured = self._ensure_reference(serial, host)
+            if ensured is None:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Skipped top link for {serial} at http://{host}:{self.PORT} (loopback)",
+                    )
+                )
+                continue
+            ref, was_created = ensured
             if was_created:
                 created += 1
                 action = "Created"
@@ -290,13 +299,21 @@ class Command(BaseCommand):
                     return candidate
         return None
 
-    def _ensure_reference(self, serial: str, host: str) -> tuple[Reference, bool]:
+    def _ensure_reference(self, serial: str, host: str) -> tuple[Reference, bool] | None:
+        if host_is_local_loopback(host):
+            return None
         alt_text = f"{serial} Console"
         url = f"http://{host}:{self.PORT}"
-        reference, created = Reference.objects.get_or_create(
-            alt_text=alt_text,
-            defaults={"value": url, "show_in_header": True, "method": "link"},
-        )
+        reference = Reference.objects.filter(alt_text=alt_text).order_by("id").first()
+        created = False
+        if reference is None:
+            reference = Reference.objects.create(
+                alt_text=alt_text,
+                value=url,
+                show_in_header=True,
+                method="link",
+            )
+            created = True
         updates: list[str] = []
         if reference.value != url:
             reference.value = url

@@ -11,6 +11,7 @@ from ocpp.management.commands.scan_evcs_consoles import Command
 
 @pytest.mark.django_db
 def test_scan_command_creates_references(monkeypatch):
+    Reference.objects.all().delete()
     command = Command()
 
     def fake_discover(self, hosts, timeout, workers):
@@ -32,7 +33,23 @@ def test_scan_command_creates_references(monkeypatch):
 
 
 @pytest.mark.django_db
+def test_scan_command_skips_loopback_hosts(monkeypatch):
+    Reference.objects.all().delete()
+    command = Command()
+
+    def fake_discover(self, hosts, timeout, workers):
+        return {"LOOP": "127.0.0.1"}
+
+    monkeypatch.setattr(Command, "_discover", fake_discover)
+
+    call_command("scan_evcs_consoles", "--network", "127.0.0.0/30")
+
+    assert not Reference.objects.filter(alt_text="LOOP Console").exists()
+
+
+@pytest.mark.django_db
 def test_existing_reference_is_updated(monkeypatch):
+    Reference.objects.all().delete()
     Reference.objects.create(
         alt_text="CONREF Console",
         value="http://old-host:8900",
