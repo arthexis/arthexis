@@ -2264,6 +2264,7 @@ class PackageRelease(Entity):
         max_length=40, blank=True, default=revision_utils.get_revision, editable=False
     )
     pypi_url = models.URLField("PyPI URL", blank=True, editable=False)
+    release_on = models.DateTimeField(blank=True, null=True, editable=False)
 
     class Meta:
         verbose_name = "Package Release"

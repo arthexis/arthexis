@@ -21,6 +21,8 @@ from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
 from django.contrib.auth.models import Group
 from django.templatetags.static import static
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 from django.forms.models import BaseInlineFormSet
@@ -2339,6 +2341,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "package_link",
         "is_current",
         "pypi_url",
+        "release_on",
         "revision_short",
         "published_status",
     )
@@ -2346,7 +2349,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     actions = ["publish_release", "validate_releases"]
     change_actions = ["publish_release_action"]
     changelist_actions = ["refresh_from_pypi", "prepare_next_release"]
-    readonly_fields = ("pypi_url", "is_current", "revision")
+    readonly_fields = ("pypi_url", "release_on", "is_current", "revision")
     fields = (
         "package",
         "release_manager",
@@ -2354,6 +2357,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "revision",
         "is_current",
         "pypi_url",
+        "release_on",
     )
 
     @admin.display(description="package", ordering="package")
@@ -2381,31 +2385,66 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             return
         releases = resp.json().get("releases", {})
         created = 0
-        for version in releases:
-            exists = PackageRelease.all_objects.filter(
+        updated = 0
+
+        for version, files in releases.items():
+            release_on = self._release_on_from_files(files)
+            release = PackageRelease.all_objects.filter(
                 package=package, version=version
-            ).exists()
-            if not exists:
-                PackageRelease.objects.create(
-                    package=package,
-                    release_manager=package.release_manager,
-                    version=version,
-                    revision="",
-                    pypi_url=f"https://pypi.org/project/{package.name}/{version}/",
-                )
-                created += 1
-        if created:
-            PackageRelease.dump_fixture()
-            self.message_user(
-                request,
-                f"Created {created} release{'s' if created != 1 else ''} from PyPI",
-                messages.SUCCESS,
+            ).first()
+            if release:
+                if release_on and release.release_on != release_on:
+                    release.release_on = release_on
+                    release.save(update_fields=["release_on"])
+                    updated += 1
+                continue
+            PackageRelease.objects.create(
+                package=package,
+                release_manager=package.release_manager,
+                version=version,
+                revision="",
+                pypi_url=f"https://pypi.org/project/{package.name}/{version}/",
+                release_on=release_on,
             )
+            created += 1
+
+        if created or updated:
+            PackageRelease.dump_fixture()
+            message_parts = []
+            if created:
+                message_parts.append(
+                    f"Created {created} release{'s' if created != 1 else ''} from PyPI"
+                )
+            if updated:
+                message_parts.append(
+                    f"Updated release date for {updated} release"
+                    f"{'s' if updated != 1 else ''}"
+                )
+            self.message_user(request, "; ".join(message_parts), messages.SUCCESS)
         else:
             self.message_user(request, "No new releases found", messages.INFO)
 
     refresh_from_pypi.label = "Refresh from PyPI"
     refresh_from_pypi.short_description = "Refresh from PyPI"
+
+    @staticmethod
+    def _release_on_from_files(files):
+        if not files:
+            return None
+        candidates = []
+        for item in files:
+            stamp = item.get("upload_time_iso_8601") or item.get("upload_time")
+            if not stamp:
+                continue
+            when = parse_datetime(stamp)
+            if when is None:
+                continue
+            if timezone.is_naive(when):
+                when = timezone.make_aware(when, timezone.utc)
+            candidates.append(when.astimezone(timezone.utc))
+        if not candidates:
+            return None
+        return min(candidates)
 
     def prepare_next_release(self, request, queryset):
         package = Package.objects.filter(is_active=True).first()
