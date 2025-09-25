@@ -2386,6 +2386,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         releases = resp.json().get("releases", {})
         created = 0
         updated = 0
+        restored = 0
 
         for version, files in releases.items():
             release_on = self._release_on_from_files(files)
@@ -2393,10 +2394,22 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 package=package, version=version
             ).first()
             if release:
+                update_fields = []
+                if release.is_deleted:
+                    release.is_deleted = False
+                    update_fields.append("is_deleted")
+                    restored += 1
+                if not release.pypi_url:
+                    release.pypi_url = (
+                        f"https://pypi.org/project/{package.name}/{version}/"
+                    )
+                    update_fields.append("pypi_url")
                 if release_on and release.release_on != release_on:
                     release.release_on = release_on
-                    release.save(update_fields=["release_on"])
+                    update_fields.append("release_on")
                     updated += 1
+                if update_fields:
+                    release.save(update_fields=update_fields)
                 continue
             PackageRelease.objects.create(
                 package=package,
@@ -2408,7 +2421,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             )
             created += 1
 
-        if created or updated:
+        if created or updated or restored:
             PackageRelease.dump_fixture()
             message_parts = []
             if created:
@@ -2419,6 +2432,10 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 message_parts.append(
                     f"Updated release date for {updated} release"
                     f"{'s' if updated != 1 else ''}"
+                )
+            if restored:
+                message_parts.append(
+                    f"Restored {restored} release{'s' if restored != 1 else ''}"
                 )
             self.message_user(request, "; ".join(message_parts), messages.SUCCESS)
         else:
@@ -2440,8 +2457,8 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             if when is None:
                 continue
             if timezone.is_naive(when):
-                when = timezone.make_aware(when, timezone.utc)
-            candidates.append(when.astimezone(timezone.utc))
+                when = timezone.make_aware(when, datetime.timezone.utc)
+            candidates.append(when.astimezone(datetime.timezone.utc))
         if not candidates:
             return None
         return min(candidates)
