@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Config admin",
+      "url": "/admin/config/",
+      "request_details": "Confirm configuration settings display correctly after split."
+    }
+  }
+]

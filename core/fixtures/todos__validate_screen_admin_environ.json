@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Environ admin",
+      "url": "/admin/environment/",
+      "request_details": "Verify environment variables view after rename to Environ."
+    }
+  }
+]

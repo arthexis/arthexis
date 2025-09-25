@@ -9,20 +9,33 @@ from django.urls import path
 from django.utils.translation import gettext_lazy as _
 
 
-def _environment_view(request):
-    env_vars = sorted(os.environ.items())
-    django_settings = sorted(
+def _get_django_settings():
+    return sorted(
         [(name, getattr(settings, name)) for name in dir(settings) if name.isupper()]
     )
+
+
+def _environment_view(request):
+    env_vars = sorted(os.environ.items())
     context = admin.site.each_context(request)
     context.update(
         {
-            "title": _("Environment"),
+            "title": _("Environ"),
             "env_vars": env_vars,
-            "django_settings": django_settings,
         }
     )
     return TemplateResponse(request, "admin/environment.html", context)
+
+
+def _config_view(request):
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "title": _("Config"),
+            "django_settings": _get_django_settings(),
+        }
+    )
+    return TemplateResponse(request, "admin/config.html", context)
 
 
 def patch_admin_environment_view() -> None:
@@ -36,6 +49,11 @@ def patch_admin_environment_view() -> None:
                 "environment/",
                 admin.site.admin_view(_environment_view),
                 name="environment",
+            ),
+            path(
+                "config/",
+                admin.site.admin_view(_config_view),
+                name="config",
             ),
         ]
         return custom + urls
