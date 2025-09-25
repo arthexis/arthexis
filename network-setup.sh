@@ -20,7 +20,7 @@ mkdir -p "$LOCK_DIR"
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet N]
+Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet N[/P]]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --no-firewall   Skip firewall port validation.
@@ -30,7 +30,8 @@ Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--inte
   --no-watchdog   Skip installing the WiFi watchdog service.
   --vnc           Require validating that a VNC service is enabled.
   --no-vnc        Skip validating that a VNC service is enabled (default).
-  --subnet N      Configure eth0 on the 192.168.N.0/16 subnet (default: 129).
+  --subnet N[/P]  Configure eth0 on the 192.168.N.0/24 subnet (default: 129/24).
+                  Accepts prefix lengths of 16 or 24.
 USAGE
 }
 
@@ -48,7 +49,8 @@ AP_SPECIFIED=false
 AP_NAME_LOWER=""
 SKIP_AP=false
 ETH0_SUBNET=129
-validate_subnet() {
+ETH0_PREFIX=24
+validate_subnet_value() {
     local value="$1"
     if [[ ! "$value" =~ ^[0-9]+$ ]]; then
         echo "Error: --subnet requires an integer between 0 and 254." >&2
@@ -58,6 +60,34 @@ validate_subnet() {
         echo "Error: --subnet requires an integer between 0 and 254." >&2
         exit 1
     fi
+}
+validate_prefix_value() {
+    local value="$1"
+    if [[ ! "$value" =~ ^[0-9]+$ ]]; then
+        echo "Error: --subnet prefix must be 16 or 24." >&2
+        exit 1
+    fi
+    if [[ "$value" != "16" && "$value" != "24" ]]; then
+        echo "Error: --subnet prefix must be 16 or 24." >&2
+        exit 1
+    fi
+}
+set_subnet_and_prefix() {
+    local value="$1"
+    local prefix="$ETH0_PREFIX"
+    local subnet="$value"
+    if [[ "$value" == */* ]]; then
+        subnet="${value%%/*}"
+        prefix="${value##*/}"
+        if [[ -z "$subnet" || -z "$prefix" ]]; then
+            echo "Error: --subnet requires a value in the form N or N/P." >&2
+            exit 1
+        fi
+    fi
+    validate_subnet_value "$subnet"
+    validate_prefix_value "$prefix"
+    ETH0_SUBNET="$subnet"
+    ETH0_PREFIX="$prefix"
 }
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -90,14 +120,12 @@ while [[ $# -gt 0 ]]; do
                 echo "Error: --subnet requires a value." >&2
                 exit 1
             fi
-            validate_subnet "$2"
-            ETH0_SUBNET="$2"
+            set_subnet_and_prefix "$2"
             shift
             ;;
         --subnet=*)
             subnet_value="${1#--subnet=}"
-            validate_subnet "$subnet_value"
-            ETH0_SUBNET="$subnet_value"
+            set_subnet_and_prefix "$subnet_value"
             ;;
         --no-firewall)
             SKIP_FIREWALL=true
@@ -645,7 +673,7 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
             while read -r con; do
                 nmcli connection delete "$con"
             done
-        eth0_ip="192.168.${ETH0_SUBNET}.10/16"
+        eth0_ip="192.168.${ETH0_SUBNET}.10/${ETH0_PREFIX}"
         if nmcli -t -f NAME connection show | grep -Fxq "eth0-shared"; then
             nmcli connection modify eth0-shared \
                 connection.interface-name eth0 \
