@@ -417,6 +417,19 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     _append_log(log_path, f"Wrote TODO fixture {fixture_display}")
     subprocess.run(["git", "add", str(fixture_path)], check=True)
     _append_log(log_path, f"Staged TODO fixture {fixture_display}")
+    fixture_diff = subprocess.run(
+        ["git", "diff", "--cached", "--quiet", "--", str(fixture_path)],
+        check=False,
+    )
+    if fixture_diff.returncode != 0:
+        commit_message = f"chore: add release TODO for {release.package.name}"
+        subprocess.run(["git", "commit", "-m", commit_message], check=True)
+        _append_log(log_path, f"Committed TODO fixture {fixture_display}")
+    else:
+        _append_log(
+            log_path,
+            f"No changes detected for TODO fixture {fixture_display}; skipping commit",
+        )
     _append_log(log_path, "Pre-release actions complete")
 
 
