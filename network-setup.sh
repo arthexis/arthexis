@@ -20,7 +20,7 @@ mkdir -p "$LOCK_DIR"
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--interactive|-i] [--no-watchdog] [--no-vnc]
+Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--interactive|-i] [--no-watchdog] [--no-vnc] [--subnet N]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --no-firewall   Skip firewall port validation.
@@ -29,6 +29,7 @@ Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--inte
   --interactive, -i  Collect user decisions for each step before executing.
   --no-watchdog   Skip installing the WiFi watchdog service.
   --no-vnc        Skip validating that a VNC service is enabled.
+  --subnet N      Configure eth0 on the 192.168.N.0/24 subnet (default: 129).
 USAGE
 }
 
@@ -44,6 +45,18 @@ AP_NAME="$DEFAULT_AP_NAME"
 AP_SPECIFIED=false
 AP_NAME_LOWER=""
 SKIP_AP=false
+ETH0_SUBNET=129
+validate_subnet() {
+    local value="$1"
+    if [[ ! "$value" =~ ^[0-9]+$ ]]; then
+        echo "Error: --subnet requires an integer between 1 and 254." >&2
+        exit 1
+    fi
+    if (( value < 1 || value > 254 )); then
+        echo "Error: --subnet requires an integer between 1 and 254." >&2
+        exit 1
+    fi
+}
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --password)
@@ -69,6 +82,20 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             AP_SPECIFIED=true
+            ;;
+        --subnet)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --subnet requires a value." >&2
+                exit 1
+            fi
+            validate_subnet "$2"
+            ETH0_SUBNET="$2"
+            shift
+            ;;
+        --subnet=*)
+            subnet_value="${1#--subnet=}"
+            validate_subnet "$subnet_value"
+            ETH0_SUBNET="$subnet_value"
             ;;
         --no-firewall)
             SKIP_FIREWALL=true
@@ -609,8 +636,9 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
         nmcli -t -f NAME,DEVICE connection show | awk -F: -v protect="$PROTECTED_CONN" '$2=="eth0" && $1!=protect {print $1}' | while read -r con; do
             nmcli connection delete "$con"
         done
+        eth0_ip="192.168.${ETH0_SUBNET}.10/24"
         nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect yes \
-            ipv4.method shared ipv4.addresses 192.168.129.10/16 ipv4.never-default yes \
+            ipv4.method shared ipv4.addresses "$eth0_ip" ipv4.never-default yes \
             ipv4.route-metric 10000 ipv6.method ignore ipv6.never-default yes
     fi
 
