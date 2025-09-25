@@ -111,6 +111,7 @@ class Module(Entity):
                 return
         patterns = getattr(urlconf, "urlpatterns", [])
         created = False
+        normalized_module = self.path.strip("/")
 
         def _walk(patterns, prefix=""):
             nonlocal created
@@ -118,17 +119,34 @@ class Module(Entity):
                 if isinstance(pattern, URLPattern):
                     callback = pattern.callback
                     if getattr(callback, "landing", False):
-                        Landing.objects.get_or_create(
-                            module=self,
-                            path=f"{self.path}{prefix}{str(pattern.pattern)}",
-                            defaults={
-                                "label": getattr(
-                                    callback,
-                                    "landing_label",
-                                    callback.__name__.replace("_", " ").title(),
-                                )
-                            },
-                        )
+                        pattern_path = str(pattern.pattern)
+                        relative = f"{prefix}{pattern_path}"
+                        if normalized_module and relative.startswith(normalized_module):
+                            full_path = f"/{relative}"
+                            Landing.objects.update_or_create(
+                                module=self,
+                                path=full_path,
+                                defaults={
+                                    "label": getattr(
+                                        callback,
+                                        "landing_label",
+                                        callback.__name__.replace("_", " ").title(),
+                                    )
+                                },
+                            )
+                        else:
+                            full_path = f"{self.path}{relative}"
+                            Landing.objects.get_or_create(
+                                module=self,
+                                path=full_path,
+                                defaults={
+                                    "label": getattr(
+                                        callback,
+                                        "landing_label",
+                                        callback.__name__.replace("_", " ").title(),
+                                    )
+                                },
+                            )
                         created = True
                 else:
                     _walk(
@@ -192,6 +210,7 @@ class Landing(Entity):
         return f"{self.label} ({self.path})"
 
     def save(self, *args, **kwargs):
+        existing = None
         if not self.pk:
             existing = (
                 type(self).objects.filter(module=self.module, path=self.path).first()
@@ -200,10 +219,30 @@ class Landing(Entity):
             self.pk = existing.pk
         super().save(*args, **kwargs)
 
-    def natural_key(self):  # pragma: no cover - simple representation
-        return (self.module.node_role.name, self.module.path, self.path)
 
-    natural_key.dependencies = ["nodes.NodeRole", "pages.Module"]
+class UserManual(Entity):
+    slug = models.SlugField(unique=True)
+    title = models.CharField(max_length=200)
+    description = models.CharField(max_length=200)
+    languages = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="Comma-separated 2-letter language codes",
+    )
+    content_html = models.TextField()
+    content_pdf = models.TextField(help_text="Base64 encoded PDF")
+
+    class Meta:
+        db_table = "man_usermanual"
+        verbose_name = "User Manual"
+        verbose_name_plural = "User Manuals"
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return self.title
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        return (self.slug,)
 
 
 class ViewHistory(Entity):

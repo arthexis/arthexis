@@ -39,12 +39,12 @@ def nav_links(request):
             except Resolver404:
                 continue
             view_func = match.func
-            requires_login = getattr(view_func, "login_required", False) or hasattr(
-                view_func, "login_url"
-            )
+            requires_login = bool(getattr(view_func, "login_required", False))
+            if not requires_login and hasattr(view_func, "login_url"):
+                requires_login = True
             staff_only = getattr(view_func, "staff_required", False)
             if requires_login and not request.user.is_authenticated:
-                continue
+                setattr(landing, "requires_login", True)
             if staff_only and not request.user.is_staff:
                 continue
             landings.append(landing)
@@ -52,8 +52,8 @@ def nav_links(request):
             app_name = getattr(module.application, "name", "").lower()
             if app_name == "awg":
                 module.menu = "Calculate"
-            elif app_name == "man":
-                module.menu = "Manuals"
+            elif module.path.rstrip("/").lower() == "/man":
+                module.menu = "Manual"
             module.enabled_landings = landings
             valid_modules.append(module)
             if request.path.startswith(module.path):

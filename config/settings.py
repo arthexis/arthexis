@@ -383,7 +383,6 @@ LOCAL_APPS = [
     "ocpp",
     "awg",
     "pages",
-    "man",
     "teams",
 ]
 

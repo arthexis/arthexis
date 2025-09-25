@@ -1042,9 +1042,9 @@ class PowerNavTests(TestCase):
             node_role=role, application=awg_app, path="/awg/"
         )
         awg_module.create_landings()
-        man_app, _ = Application.objects.get_or_create(name="man")
+        manuals_app, _ = Application.objects.get_or_create(name="pages")
         man_module, _ = Module.objects.get_or_create(
-            node_role=role, application=man_app, path="/man/"
+            node_role=role, application=manuals_app, path="/man/"
         )
         man_module.create_landings()
         User = get_user_model()
@@ -1070,7 +1070,7 @@ class PowerNavTests(TestCase):
                 manuals_module = module
                 break
         self.assertIsNotNone(manuals_module)
-        self.assertEqual(manuals_module.menu_label.upper(), "MANUALS")
+        self.assertEqual(manuals_module.menu_label.upper(), "MANUAL")
         landing_labels = {landing.label for landing in manuals_module.enabled_landings}
         self.assertIn("Manuals", landing_labels)
 
