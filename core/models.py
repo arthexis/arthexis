@@ -330,6 +330,8 @@ class User(Entity, AbstractUser):
         if entry.is_expired:
             temp_passwords.discard_temp_password(self.username)
             return False
+        if not entry.allow_change:
+            return False
         return entry.check_password(raw_password)
 
     @classmethod

@@ -83,6 +83,7 @@ class TempPasswordEntry:
     expires_at: datetime
     created_at: datetime
     path: Path
+    allow_change: bool = False
 
     @property
     def is_expired(self) -> bool:
@@ -107,6 +108,8 @@ def store_temp_password(
     username: str,
     raw_password: str,
     expires_at: Optional[datetime] = None,
+    *,
+    allow_change: bool = False,
 ) -> TempPasswordEntry:
     """Persist a temporary password for ``username`` and return the entry."""
 
@@ -121,6 +124,7 @@ def store_temp_password(
         "password_hash": make_password(raw_password),
         "expires_at": expires_at.isoformat(),
         "created_at": created_at.isoformat(),
+        "allow_change": allow_change,
     }
     path.write_text(json.dumps(data, indent=2, sort_keys=True))
     return TempPasswordEntry(
@@ -129,6 +133,7 @@ def store_temp_password(
         expires_at=expires_at,
         created_at=created_at,
         path=path,
+        allow_change=allow_change,
     )
 
 
@@ -152,12 +157,19 @@ def load_temp_password(username: str) -> Optional[TempPasswordEntry]:
         return None
 
     username = data.get("username") or username
+    allow_change_value = data.get("allow_change", False)
+    if isinstance(allow_change_value, str):
+        allow_change = allow_change_value.lower() in {"1", "true", "yes", "on"}
+    else:
+        allow_change = bool(allow_change_value)
+
     return TempPasswordEntry(
         username=username,
         password_hash=password_hash,
         expires_at=expires_at,
         created_at=created_at,
         path=path,
+        allow_change=allow_change,
     )
 
 

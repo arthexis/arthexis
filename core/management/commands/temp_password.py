@@ -29,12 +29,21 @@ class Command(BaseCommand):
                 "Defaults to 3600 (1 hour)."
             ),
         )
+        parser.add_argument(
+            "--allow-change",
+            action="store_true",
+            help=(
+                "Allow the generated temporary password to be used as the old "
+                "password when changing the permanent password."
+            ),
+        )
 
     def handle(self, *args, **options):
         identifier = options["identifier"]
         expires_in = int(options["expires_in"])
         if expires_in <= 0:
             raise CommandError("Expiration must be a positive number of seconds.")
+        allow_change = bool(options.get("allow_change"))
 
         User = get_user_model()
         manager = getattr(User, "all_objects", User._default_manager)
@@ -52,13 +61,23 @@ class Command(BaseCommand):
         user = users[0]
         password = temp_passwords.generate_password()
         expires_at = timezone.now() + timedelta(seconds=expires_in)
-        entry = temp_passwords.store_temp_password(user.username, password, expires_at)
+        entry = temp_passwords.store_temp_password(
+            user.username,
+            password,
+            expires_at,
+            allow_change=allow_change,
+        )
 
         buffer = io.StringIO()
         buffer.write(f"Temporary password for {user.username}: {password}\n")
         buffer.write(f"Expires at: {entry.expires_at.isoformat()}\n")
         if not user.is_active:
             buffer.write("The account will be activated on first use.\n")
+        if allow_change:
+            buffer.write(
+                "This password can be used to satisfy the old password "
+                "requirement when changing the account password.\n"
+            )
         self.stdout.write(buffer.getvalue())
         self.stdout.write(self.style.SUCCESS("Temporary password created."))
 
