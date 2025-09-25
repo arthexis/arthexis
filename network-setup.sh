@@ -30,7 +30,7 @@ Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--inte
   --no-watchdog   Skip installing the WiFi watchdog service.
   --vnc           Require validating that a VNC service is enabled.
   --no-vnc        Skip validating that a VNC service is enabled (default).
-  --subnet N[/P]  Configure eth0 on the 192.168.N.0/24 subnet (default: 129/24).
+  --subnet N[/P]  Configure eth0 on the 192.168.N.0/P subnet (default: 129/16).
                   Accepts prefix lengths of 16 or 24.
 USAGE
 }
@@ -49,7 +49,7 @@ AP_SPECIFIED=false
 AP_NAME_LOWER=""
 SKIP_AP=false
 ETH0_SUBNET=129
-ETH0_PREFIX=24
+ETH0_PREFIX=16
 validate_subnet_value() {
     local value="$1"
     if [[ ! "$value" =~ ^[0-9]+$ ]]; then
