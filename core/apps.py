@@ -104,6 +104,8 @@ class CoreConfig(AppConfig):
 
         lock = Path(settings.BASE_DIR) / "locks" / "celery.lck"
 
+        from django.db.backends.signals import connection_created
+
         if lock.exists():
             from .auto_upgrade import ensure_auto_upgrade_periodic_task
 
@@ -133,9 +135,27 @@ class CoreConfig(AppConfig):
 
             post_migrate.connect(ensure_email_collector_task, sender=self)
             post_migrate.connect(ensure_auto_upgrade_periodic_task, sender=self)
-            ensure_auto_upgrade_periodic_task()
 
-        from django.db.backends.signals import connection_created
+            auto_upgrade_dispatch_uid = "core.apps.ensure_auto_upgrade_periodic_task"
+
+            def ensure_auto_upgrade_on_connection(**kwargs):
+                connection = kwargs.get("connection")
+                if connection is not None and connection.alias != "default":
+                    return
+
+                try:
+                    ensure_auto_upgrade_periodic_task()
+                finally:
+                    connection_created.disconnect(
+                        receiver=ensure_auto_upgrade_on_connection,
+                        dispatch_uid=auto_upgrade_dispatch_uid,
+                    )
+
+            connection_created.connect(
+                ensure_auto_upgrade_on_connection,
+                dispatch_uid=auto_upgrade_dispatch_uid,
+                weak=False,
+            )
 
         def enable_sqlite_wal(**kwargs):
             connection = kwargs.get("connection")
