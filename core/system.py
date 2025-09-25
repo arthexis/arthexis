@@ -2,20 +2,24 @@ from __future__ import annotations
 
 from contextlib import closing
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 import json
 import re
 import socket
 import subprocess
 import shutil
-from typing import Iterable
+from typing import Callable, Iterable, Optional
 
 from django.conf import settings
 from django.contrib import admin
 from django.template.response import TemplateResponse
 from django.urls import path
+from django.utils import timezone
+from django.utils.formats import date_format
 from django.utils.translation import gettext_lazy as _
 
+from core.auto_upgrade import AUTO_UPGRADE_TASK_NAME
 from utils import revision
 
 
@@ -35,6 +39,112 @@ class SystemField:
 
 _RUNSERVER_PORT_PATTERN = re.compile(r":(\d{2,5})(?:\D|$)")
 _RUNSERVER_PORT_FLAG_PATTERN = re.compile(r"--port(?:=|\s+)(\d{2,5})", re.IGNORECASE)
+
+
+def _format_timestamp(dt: datetime | None) -> str:
+    """Return ``dt`` formatted using the active ``DATETIME_FORMAT``."""
+
+    if dt is None:
+        return ""
+    try:
+        localized = timezone.localtime(dt)
+    except Exception:
+        localized = dt
+    return date_format(localized, "DATETIME_FORMAT")
+
+
+def _auto_upgrade_next_check() -> str:
+    """Return the human-readable timestamp for the next auto-upgrade check."""
+
+    try:  # pragma: no cover - optional dependency failures
+        from django_celery_beat.models import PeriodicTask
+    except Exception:
+        return ""
+
+    try:
+        task = (
+            PeriodicTask.objects.select_related(
+                "interval", "crontab", "solar", "clocked"
+            )
+            .only("enabled", "last_run_at", "start_time", "name")
+            .get(name=AUTO_UPGRADE_TASK_NAME)
+        )
+    except PeriodicTask.DoesNotExist:
+        return ""
+    except Exception:  # pragma: no cover - database unavailable
+        return ""
+
+    if not task.enabled:
+        return str(_("Disabled"))
+
+    schedule = task.schedule
+    if schedule is None:
+        return ""
+
+    now = schedule.maybe_make_aware(schedule.now())
+
+    start_time = task.start_time
+    if start_time is not None:
+        try:
+            candidate_start = schedule.maybe_make_aware(start_time)
+        except Exception:
+            candidate_start = (
+                timezone.make_aware(start_time)
+                if timezone.is_naive(start_time)
+                else start_time
+            )
+        if candidate_start and candidate_start > now:
+            return _format_timestamp(candidate_start)
+
+    last_run_at = task.last_run_at
+    if last_run_at is not None:
+        try:
+            reference = schedule.maybe_make_aware(last_run_at)
+        except Exception:
+            reference = (
+                timezone.make_aware(last_run_at)
+                if timezone.is_naive(last_run_at)
+                else last_run_at
+            )
+    else:
+        reference = now
+
+    try:
+        remaining = schedule.remaining_estimate(reference)
+    except Exception:
+        return ""
+
+    next_run = now + remaining
+    return _format_timestamp(next_run)
+
+
+def _resolve_auto_upgrade_namespace(key: str) -> str | None:
+    """Resolve sigils within the ``AUTO-UPGRADE`` namespace."""
+
+    normalized = key.replace("-", "_").upper()
+    if normalized == "NEXT_CHECK":
+        return _auto_upgrade_next_check()
+    return None
+
+
+_SYSTEM_SIGIL_NAMESPACES: dict[str, Callable[[str], Optional[str]]] = {
+    "AUTO_UPGRADE": _resolve_auto_upgrade_namespace,
+}
+
+
+def resolve_system_namespace_value(key: str) -> str | None:
+    """Resolve dot-notation sigils mapped to dynamic ``SYS`` namespaces."""
+
+    if not key:
+        return None
+    namespace, _, remainder = key.partition(".")
+    if not remainder:
+        return None
+    normalized = namespace.replace("-", "_").upper()
+    handler = _SYSTEM_SIGIL_NAMESPACES.get(normalized)
+    if not handler:
+        return None
+    return handler(remainder)
 
 
 def _database_configurations() -> list[dict[str, str]]:
@@ -107,6 +217,12 @@ def _build_system_fields(info: dict[str, object]) -> list[SystemField]:
         field_type="databases",
     )
 
+    add_field(
+        _("Next auto-upgrade check"),
+        "AUTO-UPGRADE.NEXT-CHECK",
+        info.get("auto_upgrade_next_check", ""),
+    )
+
     return fields
 
 
@@ -128,7 +244,16 @@ def get_system_sigil_values() -> dict[str, str]:
     info = _gather_info()
     values: dict[str, str] = {}
     for field in _build_system_fields(info):
-        values[field.sigil_key] = _export_field_value(field)
+        exported = _export_field_value(field)
+        raw_key = (field.sigil_key or "").strip()
+        if not raw_key:
+            continue
+        variants = {
+            raw_key.upper(),
+            raw_key.replace("-", "_").upper(),
+        }
+        for variant in variants:
+            values[variant] = exported
     return values
 
 
@@ -332,6 +457,7 @@ def _gather_info() -> dict:
     info["ip_addresses"] = ip_list
 
     info["databases"] = _database_configurations()
+    info["auto_upgrade_next_check"] = _auto_upgrade_next_check()
 
     return info
 

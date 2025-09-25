@@ -19,7 +19,7 @@ from core.sigil_builder import (
     resolve_sigils_in_text,
 )
 from core.sigil_context import set_context, clear_context
-from core import sigil_resolver
+from core import sigil_resolver, system
 
 
 class SigilResolutionTests(TestCase):
@@ -150,6 +150,27 @@ class SigilResolutionTests(TestCase):
         ):
             resolved = resolve_sigils_in_text("[sys.running]")
         self.assertEqual(resolved, "True")
+
+    def test_sys_namespace_resolution(self):
+        with mock.patch(
+            "core.sigil_resolver.get_system_sigil_values",
+            return_value={},
+        ):
+            with mock.patch(
+                "core.sigil_resolver.resolve_system_namespace_value",
+                return_value="soon",
+            ):
+                resolved = sigil_resolver._resolve_token(
+                    "SYS.AUTO-UPGRADE.NEXT-CHECK"
+                )
+        self.assertEqual(resolved, "soon")
+
+    def test_system_namespace_value_normalizes_hyphen(self):
+        with mock.patch("core.system._auto_upgrade_next_check", return_value="later"):
+            result = system.resolve_system_namespace_value(
+                "auto-upgrade.next-check"
+            )
+        self.assertEqual(result, "later")
 
     def test_entity_sigil_hyphen_field(self):
         ct = ContentType.objects.get_for_model(OdooProfile)
