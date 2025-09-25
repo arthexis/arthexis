@@ -20,7 +20,7 @@ mkdir -p "$LOCK_DIR"
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--interactive|-i] [--no-watchdog] [--no-vnc] [--subnet N]
+Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet N]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --no-firewall   Skip firewall port validation.
@@ -28,7 +28,8 @@ Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--inte
   --public        Configure an open access point without internet sharing.
   --interactive, -i  Collect user decisions for each step before executing.
   --no-watchdog   Skip installing the WiFi watchdog service.
-  --no-vnc        Skip validating that a VNC service is enabled.
+  --vnc           Require validating that a VNC service is enabled.
+  --no-vnc        Skip validating that a VNC service is enabled (default).
   --subnet N      Configure eth0 on the 192.168.N.0/24 subnet (default: 129).
 USAGE
 }
@@ -39,7 +40,8 @@ INTERACTIVE=false
 UNSAFE=false
 PUBLIC_MODE=false
 INSTALL_WATCHDOG=true
-SKIP_VNC=false
+REQUIRE_VNC=false
+VNC_OPTION_SET=false
 DEFAULT_AP_NAME="gelectriic-ap"
 AP_NAME="$DEFAULT_AP_NAME"
 AP_SPECIFIED=false
@@ -115,8 +117,13 @@ while [[ $# -gt 0 ]]; do
         --no-watchdog)
             INSTALL_WATCHDOG=false
             ;;
+        --vnc)
+            REQUIRE_VNC=true
+            VNC_OPTION_SET=true
+            ;;
         --no-vnc)
-            SKIP_VNC=true
+            REQUIRE_VNC=false
+            VNC_OPTION_SET=true
             ;;
         -h|--help)
             usage
@@ -278,10 +285,10 @@ command -v nmcli >/dev/null 2>&1 || {
 }
 
 require_ssh_password
-if [[ $SKIP_VNC == true ]]; then
-    echo "Skipping VNC requirement as requested."
-else
+if [[ $REQUIRE_VNC == true ]]; then
     require_vnc_enabled
+elif [[ $VNC_OPTION_SET == true ]]; then
+    echo "Skipping VNC requirement as requested."
 fi
 
 if [[ $AP_SPECIFIED == false ]]; then
