@@ -7,6 +7,7 @@ django.setup()
 
 from pathlib import Path
 from types import SimpleNamespace
+import unittest.mock as mock
 from unittest.mock import patch, call, MagicMock
 from django.core import mail
 from django.core.mail import EmailMessage
@@ -29,7 +30,9 @@ from django.contrib.sites.models import Site
 from django_celery_beat.models import PeriodicTask
 from django.conf import settings
 from django.utils import timezone
+from dns import resolver as dns_resolver
 from .actions import NodeAction
+from . import dns as dns_utils
 from selenium.common.exceptions import WebDriverException
 from .utils import capture_screenshot
 
@@ -41,6 +44,8 @@ from .models import (
     NodeFeature,
     NodeFeatureAssignment,
     NetMessage,
+    NodeManager,
+    DNSRecord,
 )
 from .backends import OutboxEmailBackend
 from .tasks import capture_node_screenshot, sample_clipboard
@@ -1967,3 +1972,170 @@ class NodeRpiCameraDetectionTests(TestCase):
         self.assertFalse(Node._has_rpi_camera())
         missing_index = Node.RPI_CAMERA_BINARIES.index(Node.RPI_CAMERA_BINARIES[-1])
         self.assertEqual(mock_run.call_count, missing_index)
+
+
+class DNSIntegrationTests(TestCase):
+    def setUp(self):
+        self.group = SecurityGroup.objects.create(name="Infra")
+
+    def test_deploy_records_success(self):
+        manager = NodeManager.objects.create(
+            group=self.group,
+            api_key="test-key",
+            api_secret="test-secret",
+        )
+        record_a = DNSRecord.objects.create(
+            domain="example.com",
+            name="@",
+            record_type=DNSRecord.Type.A,
+            data="1.2.3.4",
+            ttl=600,
+        )
+        record_b = DNSRecord.objects.create(
+            domain="example.com",
+            name="@",
+            record_type=DNSRecord.Type.A,
+            data="5.6.7.8",
+            ttl=600,
+        )
+
+        calls = []
+
+        class DummyResponse:
+            status_code = 200
+            reason = "OK"
+
+            def json(self):
+                return {}
+
+        class DummySession:
+            def __init__(self):
+                self.headers = {}
+
+            def put(self, url, json, timeout):
+                calls.append((url, json, timeout, dict(self.headers)))
+                return DummyResponse()
+
+        with mock.patch.object(dns_utils.requests, "Session", DummySession):
+            result = manager.publish_dns_records([record_a, record_b])
+
+        self.assertEqual(len(result.deployed), 2)
+        self.assertFalse(result.failures)
+        self.assertFalse(result.skipped)
+        self.assertTrue(calls)
+        url, payload, timeout, headers = calls[0]
+        self.assertTrue(url.endswith("/v1/domains/example.com/records/A/@"))
+        self.assertEqual(len(payload), 2)
+        self.assertEqual(headers["Authorization"], "sso-key test-key:test-secret")
+
+        record_a.refresh_from_db()
+        record_b.refresh_from_db()
+        self.assertIsNotNone(record_a.last_synced_at)
+        self.assertIsNotNone(record_b.last_synced_at)
+        self.assertEqual(record_a.node_manager_id, manager.pk)
+        self.assertEqual(record_b.node_manager_id, manager.pk)
+
+    def test_deploy_records_handles_error(self):
+        manager = NodeManager.objects.create(
+            group=self.group,
+            api_key="test-key",
+            api_secret="test-secret",
+        )
+        record = DNSRecord.objects.create(
+            domain="example.com",
+            name="www",
+            record_type=DNSRecord.Type.CNAME,
+            data="target.example.com",
+        )
+
+        class DummyResponse:
+            status_code = 400
+            reason = "Bad Request"
+
+            def json(self):
+                return {"message": "Invalid data"}
+
+        class DummySession:
+            def __init__(self):
+                self.headers = {}
+
+            def put(self, url, json, timeout):
+                return DummyResponse()
+
+        with mock.patch.object(dns_utils.requests, "Session", DummySession):
+            result = manager.publish_dns_records([record])
+
+        self.assertFalse(result.deployed)
+        self.assertIn(record, result.failures)
+        record.refresh_from_db()
+        self.assertEqual(record.last_error, "Invalid data")
+        self.assertIsNone(record.last_synced_at)
+
+    def test_validate_record_success(self):
+        record = DNSRecord.objects.create(
+            domain="example.com",
+            name="www",
+            record_type=DNSRecord.Type.A,
+            data="1.2.3.4",
+        )
+
+        class DummyRdata:
+            address = "1.2.3.4"
+
+        class DummyResolver:
+            def resolve(self, name, rtype):
+                self_calls.append((name, rtype))
+                return [DummyRdata()]
+
+        self_calls = []
+        ok, message = dns_utils.validate_record(record, resolver=DummyResolver())
+
+        self.assertTrue(ok)
+        self.assertEqual(message, "")
+        record.refresh_from_db()
+        self.assertIsNotNone(record.last_verified_at)
+        self.assertEqual(record.last_error, "")
+        self.assertEqual(self_calls, [("www.example.com", "A")])
+
+    def test_validate_record_mismatch(self):
+        record = DNSRecord.objects.create(
+            domain="example.com",
+            name="www",
+            record_type=DNSRecord.Type.A,
+            data="1.2.3.4",
+        )
+
+        class DummyRdata:
+            address = "5.6.7.8"
+
+        class DummyResolver:
+            def resolve(self, name, rtype):
+                return [DummyRdata()]
+
+        ok, message = dns_utils.validate_record(record, resolver=DummyResolver())
+
+        self.assertFalse(ok)
+        self.assertEqual(message, "DNS record does not match expected value")
+        record.refresh_from_db()
+        self.assertEqual(record.last_error, message)
+        self.assertIsNone(record.last_verified_at)
+
+    def test_validate_record_handles_exception(self):
+        record = DNSRecord.objects.create(
+            domain="example.com",
+            name="www",
+            record_type=DNSRecord.Type.A,
+            data="1.2.3.4",
+        )
+
+        class DummyResolver:
+            def resolve(self, name, rtype):
+                raise dns_resolver.NXDOMAIN()
+
+        ok, message = dns_utils.validate_record(record, resolver=DummyResolver())
+
+        self.assertFalse(ok)
+        self.assertEqual(message, "The DNS query name does not exist.")
+        record.refresh_from_db()
+        self.assertEqual(record.last_error, message)
+        self.assertIsNone(record.last_verified_at)
