@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -311,8 +312,21 @@ class ReleaseProgressViewTests(TestCase):
         original = Path("VERSION").read_text(encoding="utf-8")
         self.addCleanup(lambda: Path("VERSION").write_text(original, encoding="utf-8"))
 
+        commands: list[list[str]] = []
+        fixture_filename = "todos__create_release_pkg_1_0_1.json"
+
         def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
+            commands.append(cmd)
+            if (
+                cmd[:4] == ["git", "diff", "--cached", "--quiet"]
+                and any(part.endswith(fixture_filename) for part in cmd)
+            ):
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        tmp_dir = Path("tmp_todos_pre_release")
+        tmp_dir.mkdir(exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(tmp_dir, ignore_errors=True))
 
         session = self.client.session
         session_key = f"release_publish_{self.release.pk}"
@@ -323,15 +337,38 @@ class ReleaseProgressViewTests(TestCase):
         }
         session.save()
 
-        with mock.patch("core.views.subprocess.run", side_effect=fake_run):
-            url = reverse("release-progress", args=[self.release.pk, "publish"])
-            response = self.client.get(f"{url}?step=4")
+        with mock.patch("core.views.TODO_FIXTURE_DIR", tmp_dir):
+            with mock.patch("core.views.subprocess.run", side_effect=fake_run):
+                url = reverse("release-progress", args=[self.release.pk, "publish"])
+                response = self.client.get(f"{url}?step=4")
 
+        expected_request = "Create release pkg 1.0.1"
+        todo = Todo.objects.get(request=expected_request)
+        self.assertTrue(todo.is_seed_data)
+        self.assertEqual(todo.url, reverse("admin:core_packagerelease_changelist"))
+        self.assertIsNone(todo.done_on)
+        fixture_path = tmp_dir / fixture_filename
+        self.assertTrue(fixture_path.exists())
+        data = json.loads(fixture_path.read_text(encoding="utf-8"))
+        self.assertEqual(data[0]["fields"]["request"], expected_request)
+        self.assertEqual(
+            data[0]["fields"]["url"], reverse("admin:core_packagerelease_changelist")
+        )
+
+        log_content = response.context["log_content"]
+        self.assertIn(f"Added TODO: {expected_request}", log_content)
+        self.assertIn(
+            "Staged TODO fixture tmp_todos_pre_release/todos__create_release_pkg_1_0_1.json",
+            log_content,
+        )
+        self.assertIn(
+            "Committed TODO fixture tmp_todos_pre_release/todos__create_release_pkg_1_0_1.json",
+            log_content,
+        )
         self.assertEqual(
             Path("VERSION").read_text(encoding="utf-8").strip(),
             self.release.version,
         )
-        log_content = response.context["log_content"]
         self.assertIn("Execute pre-release actions", log_content)
         self.assertIn(
             f"Updated VERSION file to {self.release.version}", log_content
@@ -340,6 +377,9 @@ class ReleaseProgressViewTests(TestCase):
         self.assertIn("No changes detected for VERSION; skipping commit", log_content)
         self.assertIn("Unstaged VERSION file", log_content)
         self.assertIn("Pre-release actions complete", log_content)
+        self.assertIn(
+            ["git", "commit", "-m", "chore: add release TODO for pkg"], commands
+        )
 
     def test_todo_done_marks_timestamp(self):
         todo = Todo.objects.create(request="Task")
