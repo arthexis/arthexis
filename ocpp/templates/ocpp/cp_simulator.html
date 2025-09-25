@@ -9,7 +9,14 @@
 
 {% block content %}
 <h1>OCPP Charge Point Simulator</h1>
-{% if message %}<div class="sim-msg">{{ message }}</div>{% endif %}
+{% if message %}
+<div class="sim-msg">
+  <div>{{ message }}</div>
+  {% if dashboard_link %}
+  <div>If CSMS Dashboard is running on the target, view it here: <a href="{{ dashboard_link }}">{{ dashboard_link }}</a></div>
+  {% endif %}
+</div>
+{% endif %}
 <ul class="nav nav-tabs mb-3" id="cpSimTabs" role="tablist">
   <li class="nav-item" role="presentation">
     <button class="nav-link active" id="cp1-tab" data-bs-toggle="tab" data-bs-target="#cp1" type="button" role="tab" aria-controls="cp1" aria-selected="true">Primary CP</button>

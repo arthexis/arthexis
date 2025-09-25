@@ -464,6 +464,7 @@ def cp_simulator(request):
     default_vins = ["WP0ZZZ00000000000", "WAUZZZ00000000000"]
 
     message = ""
+    dashboard_link: str | None = None
     if request.method == "POST":
         cp_idx = int(request.POST.get("cp") or 1)
         action = request.POST.get("action")
@@ -500,6 +501,12 @@ def cp_simulator(request):
                 started, status, log_file = _start_simulator(sim_params, cp=cp_idx)
                 if started:
                     message = f"CP{cp_idx} started: {status}. Logs: {log_file}"
+                    try:
+                        dashboard_link = reverse(
+                            "charger-status", args=[sim_params["cp_path"]]
+                        )
+                    except NoReverseMatch:  # pragma: no cover - defensive
+                        dashboard_link = None
                 else:
                     message = f"CP{cp_idx} {status}. Logs: {log_file}"
             except Exception as exc:  # pragma: no cover - unexpected
@@ -526,6 +533,7 @@ def cp_simulator(request):
 
     context = {
         "message": message,
+        "dashboard_link": dashboard_link,
         "states": state_list,
         "default_host": default_host,
         "default_ws_port": default_ws_port,
