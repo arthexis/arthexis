@@ -3,6 +3,7 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import re
+import subprocess
 from contextlib import suppress
 from http.client import HTTPConnection
 from ipaddress import IPv4Address, IPv4Interface, IPv4Network, ip_address, ip_network
@@ -23,7 +24,9 @@ class Command(BaseCommand):
     )
 
     PORT = 8900
-    DEFAULT_INTERFACE = IPv4Interface("192.168.129.10/16")
+    DEFAULT_INTERFACE = IPv4Interface("192.168.129.10/24")
+    DEFAULT_CONNECTION_NAME = "eth0-shared"
+    DEFAULT_DEVICE_NAME = "eth0"
     DEFAULT_TIMEOUT = 1.0
     DEFAULT_WORKERS = 32
     MAX_BODY_BYTES = 8192
@@ -54,6 +57,10 @@ class Command(BaseCommand):
         re.compile(r"data-serial=\"([A-Za-z0-9._-]+)\"", re.I),
         re.compile(r"Serial(?:\s*Number)?[:\s]+([A-Za-z0-9._-]+)", re.I),
     ]
+
+    def __init__(self):
+        super().__init__()
+        self._default_interface = self._resolve_default_interface()
 
     def add_arguments(self, parser) -> None:
         parser.add_argument(
@@ -154,7 +161,7 @@ class Command(BaseCommand):
         if value:
             network = ip_network(value, strict=False)
         else:
-            network = self.DEFAULT_INTERFACE.network
+            network = self._default_interface.network
         if not isinstance(network, IPv4Network):  # pragma: no cover - defensive programming
             raise CommandError("Only IPv4 networks are supported")
         return network
@@ -176,7 +183,7 @@ class Command(BaseCommand):
         include_self: bool = False,
     ) -> Iterator[IPv4Address]:
         skip = set()
-        controller_ip = self.DEFAULT_INTERFACE.ip
+        controller_ip = self._default_interface.ip
         if not include_self and controller_ip in network:
             skip.add(controller_ip)
 
@@ -188,6 +195,44 @@ class Command(BaseCommand):
             if host in skip:
                 continue
             yield host
+
+    def _resolve_default_interface(self) -> IPv4Interface:
+        """Detect the configured eth0 shared subnet.
+
+        This inspects NetworkManager for the eth0 shared connection and
+        gracefully falls back to the baked-in default if discovery fails.
+        """
+
+        # Prefer inspecting the dedicated connection profile so we honour the
+        # subnet selected by ``network-setup.sh`` when ``--subnet`` is used.
+        for args in (
+            ("connection", "show", self.DEFAULT_CONNECTION_NAME),
+            ("device", "show", self.DEFAULT_DEVICE_NAME),
+        ):
+            try:
+                proc = subprocess.run(
+                    ["nmcli", "-g", "IP4.ADDRESS", *args],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+            except FileNotFoundError:
+                break
+            except (OSError, subprocess.SubprocessError):
+                continue
+
+            if proc.returncode != 0:
+                continue
+
+            for line in proc.stdout.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                with suppress(ValueError):
+                    return IPv4Interface(line)
+
+        return self.DEFAULT_INTERFACE
 
     def _discover(
         self,
