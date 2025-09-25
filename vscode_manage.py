@@ -17,6 +17,10 @@ def main(argv=None):
         argv.remove("--no-celery")
 
     worker = beat = None
+    is_runserver = bool(argv) and argv[0] == "runserver"
+    is_debug_session = "DEBUGPY_LAUNCHER_PORT" in os.environ
+    if is_runserver:
+        os.environ["DEBUG"] = "1" if is_debug_session else "0"
     try:
         if celery_enabled:
             worker = subprocess.Popen(

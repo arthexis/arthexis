@@ -122,13 +122,27 @@ SECRET_KEY = _load_secret_key()
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
-# Enable DEBUG and related tooling when running in Terminal mode.
+# Determine the current node role for role-specific settings while leaving
+# DEBUG control to the environment.
 NODE_ROLE = os.environ.get("NODE_ROLE")
 if NODE_ROLE is None:
     role_lock = BASE_DIR / "locks" / "role.lck"
     NODE_ROLE = role_lock.read_text().strip() if role_lock.exists() else "Terminal"
 
-DEBUG = NODE_ROLE == "Terminal"
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+DEBUG = _env_bool("DEBUG", False)
 
 ALLOWED_HOSTS = [
     "localhost",
