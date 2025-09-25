@@ -49,11 +49,11 @@ ETH0_SUBNET=129
 validate_subnet() {
     local value="$1"
     if [[ ! "$value" =~ ^[0-9]+$ ]]; then
-        echo "Error: --subnet requires an integer between 1 and 254." >&2
+        echo "Error: --subnet requires an integer between 0 and 254." >&2
         exit 1
     fi
-    if (( value < 1 || value > 254 )); then
-        echo "Error: --subnet requires an integer between 1 and 254." >&2
+    if (( value < 0 || value > 254 )); then
+        echo "Error: --subnet requires an integer between 0 and 254." >&2
         exit 1
     fi
 }
