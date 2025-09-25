@@ -200,17 +200,28 @@ class Command(BaseCommand):
         if not hosts:
             return results
 
+        total_hosts = len(hosts)
+        report_interval = max(1, total_hosts // 10)
+        completed = 0
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
                 executor.submit(self._probe_host, host, timeout=timeout): host for host in hosts
             }
             for future in concurrent.futures.as_completed(futures):
+                host = futures[future]
                 try:
                     result = future.result()
                 except Exception as exc:  # pragma: no cover - defensive programming
-                    host = futures[future]
                     self.stderr.write(f"Error probing {host}: {exc}")
-                    continue
+                    result = None
+                finally:
+                    completed += 1
+                    if completed % report_interval == 0 or completed == total_hosts:
+                        percent = int((completed / total_hosts) * 100)
+                        self.stdout.write(
+                            f"Scan progress: {completed}/{total_hosts} host(s) checked ({percent}% complete)"
+                        )
                 if not result:
                     continue
                 serial, host_ip = result
