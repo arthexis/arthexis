@@ -1,6 +1,7 @@
 import base64
 import logging
 from pathlib import Path
+from types import SimpleNamespace
 import datetime
 import calendar
 import io
@@ -19,9 +20,10 @@ from django import forms
 from django.apps import apps as django_apps
 from utils.sites import get_site
 from django.http import Http404, HttpResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from nodes.models import Node
 from django.template.response import TemplateResponse
+from django.test import RequestFactory
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
@@ -77,7 +79,7 @@ from django_otp import login as otp_login
 from django_otp.plugins.otp_totp.models import TOTPDevice
 import qrcode
 from .forms import AuthenticatorEnrollmentForm, AuthenticatorLoginForm
-from .models import Module
+from .models import Module, UserManual
 
 
 logger = logging.getLogger(__name__)
@@ -1017,3 +1019,53 @@ def csrf_failure(request, reason=""):
     """Custom CSRF failure view with a friendly message."""
     logger.warning("CSRF failure on %s: %s", request.path, reason)
     return render(request, "pages/csrf_failure.html", status=403)
+
+
+def _admin_context(request):
+    context = admin.site.each_context(request)
+    if not context.get("has_permission"):
+        rf = RequestFactory()
+        mock_request = rf.get(request.path)
+        mock_request.user = SimpleNamespace(
+            is_active=True,
+            is_staff=True,
+            is_superuser=True,
+            has_perm=lambda perm, obj=None: True,
+            has_module_perms=lambda app_label: True,
+        )
+        context["available_apps"] = admin.site.get_app_list(mock_request)
+        context["has_permission"] = True
+    return context
+
+
+def admin_manual_list(request):
+    manuals = UserManual.objects.order_by("title")
+    context = _admin_context(request)
+    context["manuals"] = manuals
+    return render(request, "admin_doc/manuals.html", context)
+
+
+def admin_manual_detail(request, slug):
+    manual = get_object_or_404(UserManual, slug=slug)
+    context = _admin_context(request)
+    context["manual"] = manual
+    return render(request, "admin_doc/manual_detail.html", context)
+
+
+def manual_pdf(request, slug):
+    manual = get_object_or_404(UserManual, slug=slug)
+    pdf_data = base64.b64decode(manual.content_pdf)
+    response = HttpResponse(pdf_data, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{manual.slug}.pdf"'
+    return response
+
+
+@landing(_("Manuals"))
+def manual_list(request):
+    manuals = UserManual.objects.order_by("title")
+    return render(request, "pages/manual_list.html", {"manuals": manuals})
+
+
+def manual_detail(request, slug):
+    manual = get_object_or_404(UserManual, slug=slug)
+    return render(request, "pages/manual_detail.html", {"manual": manual})

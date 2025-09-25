@@ -11,12 +11,11 @@ django.setup()
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
-from man.models import UserManual
 from nodes.models import Node, NodeRole
-from pages.models import Application, Module
+from pages.models import Application, Module, UserManual
 
 
-class ManTests(TestCase):
+class ManualTests(TestCase):
     def setUp(self):
         UserManual.objects.create(
             slug="test-manual",
@@ -35,8 +34,10 @@ class ManTests(TestCase):
                 "role": role,
             },
         )
-        app, _ = Application.objects.get_or_create(name="man")
-        module = Module.objects.create(node_role=role, application=app, path="/man/")
+        app, _ = Application.objects.get_or_create(name="pages")
+        module, _ = Module.objects.get_or_create(
+            node_role=role, application=app, path="/man/"
+        )
         module.create_landings()
 
     def test_manuals_link_in_docs(self):
@@ -53,11 +54,12 @@ class ManTests(TestCase):
         self.assertContains(response, reverse("django-admindocs-docroot"))
         self.assertContains(response, "Test Manual")
         self.assertContains(response, "Test description")
-        self.assertContains(response, "Languages: en,fr")
+        self.assertContains(response, "Languages")
+        self.assertContains(response, "en,fr")
         self.assertContains(
             response, reverse("django-admindocs-manual-pdf", args=["test-manual"])
         )
-        self.assertContains(response, "download")
+        self.assertContains(response, "Download PDF")
         self.assertContains(response, 'id="nav-sidebar"')
         self.assertContains(response, 'id="nav-filter"')
         self.assertNotContains(
@@ -73,7 +75,7 @@ class ManTests(TestCase):
         self.assertContains(
             response, reverse("django-admindocs-manual-pdf", args=["test-manual"])
         )
-        self.assertContains(response, "download")
+        self.assertContains(response, "Download PDF")
         self.assertContains(response, 'id="nav-sidebar"')
         self.assertContains(response, 'id="nav-filter"')
         self.assertNotContains(
@@ -81,23 +83,28 @@ class ManTests(TestCase):
         )
 
     def test_public_manual_list(self):
-        response = self.client.get(reverse("man:list"))
+        response = self.client.get(reverse("pages:manual-list"))
         self.assertContains(response, "Test Manual")
         self.assertContains(response, "Test description")
-        self.assertContains(response, "Languages: en,fr")
-        self.assertContains(response, reverse("man:manual-pdf", args=["test-manual"]))
-        self.assertContains(response, "download")
+        self.assertContains(response, "Languages")
+        self.assertContains(response, "en,fr")
+        self.assertContains(
+            response, reverse("pages:manual-pdf", args=["test-manual"])
+        )
+        self.assertContains(response, "Download PDF")
         self.assertNotContains(response, 'id="nav-sidebar"')
 
     def test_public_manual_detail(self):
-        response = self.client.get(reverse("man:manual-html", args=["test-manual"]))
+        response = self.client.get(reverse("pages:manual-detail", args=["test-manual"]))
         self.assertContains(response, "hi")
-        self.assertContains(response, reverse("man:manual-pdf", args=["test-manual"]))
-        self.assertContains(response, "download")
+        self.assertContains(
+            response, reverse("pages:manual-pdf", args=["test-manual"])
+        )
+        self.assertContains(response, "Download PDF")
         self.assertNotContains(response, 'id="nav-sidebar"')
 
     def test_manual_pdf_download(self):
-        response = self.client.get(reverse("man:manual-pdf", args=["test-manual"]))
+        response = self.client.get(reverse("pages:manual-pdf", args=["test-manual"]))
         self.assertEqual(response["Content-Type"], "application/pdf")
         self.assertEqual(
             response["Content-Disposition"],

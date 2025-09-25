@@ -28,6 +28,7 @@ from .models import (
     Landing,
     Favorite,
     ViewHistory,
+    UserManual,
 )
 from django.contrib.contenttypes.models import ContentType
 from core.user_data import EntityModelAdmin
@@ -178,6 +179,13 @@ class ModuleAdmin(EntityModelAdmin):
     list_filter = ("node_role", "application")
     fields = ("node_role", "application", "path", "menu", "is_default", "favicon")
     inlines = [LandingInline]
+
+
+@admin.register(UserManual)
+class UserManualAdmin(EntityModelAdmin):
+    list_display = ("title", "slug", "languages", "is_seed_data", "is_user_data")
+    search_fields = ("title", "slug", "description")
+    list_filter = ("is_seed_data", "is_user_data")
 
 
 @admin.register(ViewHistory)

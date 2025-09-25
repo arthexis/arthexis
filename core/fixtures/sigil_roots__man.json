@@ -7,7 +7,7 @@
       "prefix": "MAN",
       "context_type": "entity",
       "content_type": [
-        "man",
+        "pages",
         "usermanual"
       ]
     }

@@ -25,7 +25,6 @@ from core.admindocs import (
     ModelGraphIndexView,
     OrderedModelIndexView,
 )
-from man import views as man_views
 from pages import views as pages_views
 
 admin.site.site_header = _("Constellation")
@@ -72,17 +71,17 @@ def autodiscovered_urlpatterns():
 urlpatterns = [
     path(
         "admin/doc/manuals/",
-        man_views.admin_manual_list,
+        pages_views.admin_manual_list,
         name="django-admindocs-manuals",
     ),
     path(
         "admin/doc/manuals/<slug:slug>/",
-        man_views.admin_manual_detail,
+        pages_views.admin_manual_detail,
         name="django-admindocs-manual-detail",
     ),
     path(
         "admin/doc/manuals/<slug:slug>/pdf/",
-        man_views.manual_pdf,
+        pages_views.manual_pdf,
         name="django-admindocs-manual-pdf",
     ),
     path(
