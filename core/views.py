@@ -546,7 +546,8 @@ def _step_publish(release, ctx, log_path: Path) -> None:
     release.pypi_url = (
         f"https://pypi.org/project/{release.package.name}/{release.version}/"
     )
-    release.save(update_fields=["pypi_url"])
+    release.release_on = timezone.now()
+    release.save(update_fields=["pypi_url", "release_on"])
     PackageRelease.dump_fixture()
     _append_log(log_path, f"Recorded PyPI URL: {release.pypi_url}")
     _append_log(log_path, "Upload complete")
@@ -790,7 +791,8 @@ def release_progress(request, pk: int, action: str):
         restart_path.write_text(str(count + 1), encoding="utf-8")
         _clean_repo()
         release.pypi_url = ""
-        release.save(update_fields=["pypi_url"])
+        release.release_on = None
+        release.save(update_fields=["pypi_url", "release_on"])
         request.session.pop(session_key, None)
         if lock_path.exists():
             lock_path.unlink()

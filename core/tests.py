@@ -15,7 +15,7 @@ from unittest.mock import patch
 from pathlib import Path
 import subprocess
 from glob import glob
-from datetime import timedelta
+from datetime import datetime, timedelta
 import tempfile
 from urllib.parse import quote
 
@@ -831,14 +831,20 @@ class ReleaseProcessTests(TestCase):
         )
         version_path.write_text(original, encoding="utf-8")
 
+    @mock.patch("core.views.timezone.now")
     @mock.patch("core.views.PackageRelease.dump_fixture")
     @mock.patch("core.views.release_utils.publish")
-    def test_publish_sets_pypi_url(self, publish, dump_fixture):
+    def test_publish_sets_pypi_url(self, publish, dump_fixture, now):
+        now.return_value = datetime(2025, 3, 4, 5, 6, tzinfo=timezone.utc)
         _step_publish(self.release, {}, Path("rel.log"))
         self.release.refresh_from_db()
         self.assertEqual(
             self.release.pypi_url,
             f"https://pypi.org/project/{self.package.name}/{self.release.version}/",
+        )
+        self.assertEqual(
+            self.release.release_on,
+            datetime(2025, 3, 4, 5, 6, tzinfo=timezone.utc),
         )
         dump_fixture.assert_called_once()
 
@@ -849,6 +855,7 @@ class ReleaseProcessTests(TestCase):
             _step_publish(self.release, {}, Path("rel.log"))
         self.release.refresh_from_db()
         self.assertEqual(self.release.pypi_url, "")
+        self.assertIsNone(self.release.release_on)
         dump_fixture.assert_not_called()
 
     def test_release_progress_uses_lockfile(self):
@@ -1072,11 +1079,43 @@ class PackageReleaseAdminActionTests(TestCase):
     def test_refresh_from_pypi_creates_releases(self, mock_get, dump):
         mock_get.return_value.raise_for_status.return_value = None
         mock_get.return_value.json.return_value = {
-            "releases": {"1.0.0": [], "1.1.0": []}
+            "releases": {
+                "1.0.0": [
+                    {"upload_time_iso_8601": "2024-01-01T12:30:00.000000Z"}
+                ],
+                "1.1.0": [
+                    {"upload_time_iso_8601": "2024-02-02T15:45:00.000000Z"}
+                ],
+            }
         }
         self.admin.refresh_from_pypi(self.request, PackageRelease.objects.none())
         new_release = PackageRelease.objects.get(version="1.1.0")
         self.assertEqual(new_release.revision, "")
+        self.assertEqual(
+            new_release.release_on,
+            datetime(2024, 2, 2, 15, 45, tzinfo=timezone.utc),
+        )
+        dump.assert_called_once()
+
+    @mock.patch("core.admin.PackageRelease.dump_fixture")
+    @mock.patch("core.admin.requests.get")
+    def test_refresh_from_pypi_updates_release_date(self, mock_get, dump):
+        self.release.release_on = None
+        self.release.save(update_fields=["release_on"])
+        mock_get.return_value.raise_for_status.return_value = None
+        mock_get.return_value.json.return_value = {
+            "releases": {
+                "1.0.0": [
+                    {"upload_time_iso_8601": "2024-01-01T12:30:00.000000Z"}
+                ]
+            }
+        }
+        self.admin.refresh_from_pypi(self.request, PackageRelease.objects.none())
+        self.release.refresh_from_db()
+        self.assertEqual(
+            self.release.release_on,
+            datetime(2024, 1, 1, 12, 30, tzinfo=timezone.utc),
+        )
         dump.assert_called_once()
 
 
