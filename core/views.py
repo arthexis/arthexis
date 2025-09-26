@@ -19,6 +19,7 @@ from django.views.decorators.http import require_GET, require_POST
 from django.utils.http import url_has_allowed_host_and_scheme
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
+import errno
 import subprocess
 
 from utils import revision
@@ -124,6 +125,58 @@ def _write_todo_fixture(todo: Todo) -> Path:
     ]
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return path
+
+
+def _should_use_python_changelog(exc: OSError) -> bool:
+    winerror = getattr(exc, "winerror", None)
+    if winerror in {193}:
+        return True
+    return exc.errno in {errno.ENOEXEC, errno.EACCES, errno.ENOENT}
+
+
+def _generate_changelog_with_python(log_path: Path) -> None:
+    _append_log(log_path, "Falling back to Python changelog generator")
+    describe = subprocess.run(
+        ["git", "describe", "--tags", "--abbrev=0"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    start_tag = describe.stdout.strip() if describe.returncode == 0 else ""
+    range_spec = f"{start_tag}..HEAD" if start_tag else "HEAD"
+    log_proc = subprocess.run(
+        ["git", "log", range_spec, "--no-merges", "--pretty=format:- %h %s"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    entries = [line for line in log_proc.stdout.splitlines() if line]
+    changelog_path = Path("CHANGELOG.rst")
+    previous_lines: list[str] = []
+    if changelog_path.exists():
+        previous_lines = changelog_path.read_text(encoding="utf-8").splitlines()
+        if len(previous_lines) > 6:
+            previous_lines = previous_lines[6:]
+        else:
+            previous_lines = []
+    lines = [
+        "Changelog",
+        "=========",
+        "",
+        "Unreleased",
+        "----------",
+        "",
+    ]
+    if entries:
+        lines.extend(entries)
+    if previous_lines:
+        lines.append("")
+        lines.extend(previous_lines)
+    content = "\n".join(lines)
+    if not content.endswith("\n"):
+        content += "\n"
+    changelog_path.write_text(content, encoding="utf-8")
+    _append_log(log_path, "Regenerated CHANGELOG.rst using Python fallback")
 
 
 def _ensure_release_todo(release) -> tuple[Todo, Path]:
@@ -392,10 +445,21 @@ def _step_changelog_docs(release, ctx, log_path: Path) -> None:
 
 def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Execute pre-release actions")
-    subprocess.run(["scripts/generate-changelog.sh"], check=True)
-    _append_log(
-        log_path, "Regenerated CHANGELOG.rst using scripts/generate-changelog.sh"
-    )
+    try:
+        subprocess.run(["scripts/generate-changelog.sh"], check=True)
+    except OSError as exc:
+        if _should_use_python_changelog(exc):
+            _append_log(
+                log_path,
+                f"scripts/generate-changelog.sh failed: {exc}",
+            )
+            _generate_changelog_with_python(log_path)
+        else:  # pragma: no cover - unexpected OSError
+            raise
+    else:
+        _append_log(
+            log_path, "Regenerated CHANGELOG.rst using scripts/generate-changelog.sh"
+        )
     subprocess.run(["git", "add", "CHANGELOG.rst"], check=True)
     _append_log(log_path, "Staged CHANGELOG.rst for commit")
     version_path = Path("VERSION")
