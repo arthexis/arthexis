@@ -6,13 +6,69 @@
 {% block content %}
 <h1>{% trans "Charge Points" %}</h1>
 {% if show_demo_notice %}
-<div class="alert alert-info" role="alert">
+<div id="demo-notice" class="alert alert-info position-relative" role="alert" data-session-key="ocppDemoNoticeDismissed">
+  <button
+    type="button"
+    class="btn-close btn-close-white position-absolute top-0 end-0 mt-2 me-2"
+    data-demo-notice-dismiss
+    aria-label="{% trans "Dismiss demo notice" %}"
+  ></button>
   <h2 class="h5 mb-2">{% trans "Demo OCPP 1.6 CSMS" %}</h2>
   <p class="mb-1">{% trans "Everyone is welcome to use this demo to test their charge points." %}</p>
   <p class="mb-1">{% blocktrans with limit=ws_rate_limit %}Rate limiting applies (maximum {{ limit }} simultaneous connections per IP).{% endblocktrans %}</p>
   <p class="mb-0">{% blocktrans %}Use the following WebSocket URL format, replacing &lt;CHARGE_POINT_ID&gt; with your charge point identifier:{% endblocktrans %}</p>
   <pre class="mb-0"><code>{{ demo_ws_url }}</code></pre>
 </div>
+<script>
+  (function () {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const notice = document.getElementById('demo-notice');
+    if (!notice) {
+      return;
+    }
+
+    const dismissButton = notice.querySelector('[data-demo-notice-dismiss]');
+    if (!dismissButton) {
+      return;
+    }
+
+    const storage = (() => {
+      try {
+        if (!('sessionStorage' in window)) {
+          return null;
+        }
+        const testKey = '__ocppDemoNoticeTest__';
+        window.sessionStorage.setItem(testKey, '1');
+        window.sessionStorage.removeItem(testKey);
+        return window.sessionStorage;
+      } catch (error) {
+        return null;
+      }
+    })();
+
+    const storageKey = notice.dataset.sessionKey || 'ocppDemoNoticeDismissed';
+    const dismissed = storage ? storage.getItem(storageKey) === '1' : false;
+    if (dismissed) {
+      notice.classList.add('d-none');
+      return;
+    }
+
+    dismissButton.addEventListener('click', () => {
+      notice.classList.add('d-none');
+      if (!storage) {
+        return;
+      }
+      try {
+        storage.setItem(storageKey, '1');
+      } catch (error) {
+        // Ignore storage errors (e.g., disabled cookies)
+      }
+    });
+  })();
+</script>
 {% endif %}
 <table class="table">
   <thead>
