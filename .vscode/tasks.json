@@ -61,19 +61,6 @@
             "detail": "Stop Django development server processes"
         },
         {
-            "label": "Dev: prepare live server",
-            "type": "shell",
-            "command": "${workspaceFolder}/scripts/live-server-update.sh",
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "windows": {
-                "command": "${workspaceFolder}\\scripts\\live-server-update.bat"
-            },
-            "problemMatcher": [],
-            "detail": "Stop the development server, sync with the upstream remote, and refresh the environment before launch"
-        },
-        {
             "label": "Dev: manage",
             "type": "shell",
             "command": "${workspaceFolder}/manage.sh",
