@@ -392,13 +392,27 @@ def _step_changelog_docs(release, ctx, log_path: Path) -> None:
 
 def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Execute pre-release actions")
+    subprocess.run(["scripts/generate-changelog.sh"], check=True)
+    _append_log(
+        log_path, "Regenerated CHANGELOG.rst using scripts/generate-changelog.sh"
+    )
+    subprocess.run(["git", "add", "CHANGELOG.rst"], check=True)
+    _append_log(log_path, "Staged CHANGELOG.rst for commit")
     version_path = Path("VERSION")
     version_path.write_text(f"{release.version}\n", encoding="utf-8")
     _append_log(log_path, f"Updated VERSION file to {release.version}")
     subprocess.run(["git", "add", "VERSION"], check=True)
     _append_log(log_path, "Staged VERSION for commit")
     diff = subprocess.run(
-        ["git", "diff", "--cached", "--quiet", "--", "VERSION"],
+        [
+            "git",
+            "diff",
+            "--cached",
+            "--quiet",
+            "--",
+            "CHANGELOG.rst",
+            "VERSION",
+        ],
         check=False,
     )
     if diff.returncode != 0:
@@ -408,7 +422,11 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
         )
         _append_log(log_path, f"Committed VERSION update for {release.version}")
     else:
-        _append_log(log_path, "No changes detected for VERSION; skipping commit")
+        _append_log(
+            log_path, "No changes detected for VERSION or CHANGELOG; skipping commit"
+        )
+        subprocess.run(["git", "reset", "HEAD", "CHANGELOG.rst"], check=False)
+        _append_log(log_path, "Unstaged CHANGELOG.rst")
         subprocess.run(["git", "reset", "HEAD", "VERSION"], check=False)
         _append_log(log_path, "Unstaged VERSION file")
     todo, fixture_path = _ensure_release_todo(release)

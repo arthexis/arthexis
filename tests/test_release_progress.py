@@ -342,6 +342,7 @@ class ReleaseProgressViewTests(TestCase):
                 url = reverse("release-progress", args=[self.release.pk, "publish"])
                 response = self.client.get(f"{url}?step=4")
 
+        self.assertIn(["scripts/generate-changelog.sh"], commands)
         expected_request = "Create release pkg 1.0.1"
         todo = Todo.objects.get(request=expected_request)
         self.assertTrue(todo.is_seed_data)
@@ -356,6 +357,11 @@ class ReleaseProgressViewTests(TestCase):
         )
 
         log_content = response.context["log_content"]
+        self.assertIn(
+            "Regenerated CHANGELOG.rst using scripts/generate-changelog.sh",
+            log_content,
+        )
+        self.assertIn("Staged CHANGELOG.rst for commit", log_content)
         self.assertIn(f"Added TODO: {expected_request}", log_content)
         self.assertIn(
             "Staged TODO fixture tmp_todos_pre_release/todos__create_release_pkg_1_0_1.json",
@@ -374,7 +380,11 @@ class ReleaseProgressViewTests(TestCase):
             f"Updated VERSION file to {self.release.version}", log_content
         )
         self.assertIn("Staged VERSION for commit", log_content)
-        self.assertIn("No changes detected for VERSION; skipping commit", log_content)
+        self.assertIn(
+            "No changes detected for VERSION or CHANGELOG; skipping commit",
+            log_content,
+        )
+        self.assertIn("Unstaged CHANGELOG.rst", log_content)
         self.assertIn("Unstaged VERSION file", log_content)
         self.assertIn("Pre-release actions complete", log_content)
         self.assertIn(
