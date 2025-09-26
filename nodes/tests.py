@@ -101,6 +101,54 @@ class NodeGetLocalTests(TestCase):
         self.assertTrue(created)
         self.assertEqual(node.current_relation, Node.Relation.SELF)
 
+    def test_register_current_updates_role_from_lock_file(self):
+        NodeRole.objects.get_or_create(name="Terminal")
+        NodeRole.objects.get_or_create(name="Constellation")
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            lock_dir = base / "locks"
+            lock_dir.mkdir(parents=True, exist_ok=True)
+            role_file = lock_dir / "role.lck"
+            role_file.write_text("Terminal")
+            with override_settings(BASE_DIR=base):
+                with (
+                    patch(
+                        "nodes.models.Node.get_current_mac",
+                        return_value="00:aa:bb:cc:dd:ee",
+                    ),
+                    patch("nodes.models.socket.gethostname", return_value="role-host"),
+                    patch(
+                        "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
+                    ),
+                    patch("nodes.models.revision.get_revision", return_value="rev"),
+                    patch.object(Node, "ensure_keys"),
+                    patch.object(Node, "notify_peers_of_update"),
+                ):
+                    node, created = Node.register_current()
+            self.assertTrue(created)
+            self.assertEqual(node.role.name, "Terminal")
+
+            role_file.write_text("Constellation")
+            with override_settings(BASE_DIR=base):
+                with (
+                    patch(
+                        "nodes.models.Node.get_current_mac",
+                        return_value="00:aa:bb:cc:dd:ee",
+                    ),
+                    patch("nodes.models.socket.gethostname", return_value="role-host"),
+                    patch(
+                        "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
+                    ),
+                    patch("nodes.models.revision.get_revision", return_value="rev"),
+                    patch.object(Node, "ensure_keys"),
+                    patch.object(Node, "notify_peers_of_update"),
+                ):
+                    _, created_again = Node.register_current()
+
+            self.assertFalse(created_again)
+            node.refresh_from_db()
+            self.assertEqual(node.role.name, "Constellation")
+
     def test_register_and_list_node(self):
         response = self.client.post(
             reverse("register-node"),
@@ -1493,6 +1541,16 @@ class EmailOutboxTests(TestCase):
         )
 
         self.assertEqual(str(outbox), "mailer@example.com")
+
+    def test_string_representation_trims_trailing_at_symbol(self):
+        outbox = EmailOutbox.objects.create(
+            host="smtp.example.com",
+            port=587,
+            username="mailer@",
+            password="secret",
+        )
+
+        self.assertEqual(str(outbox), "mailer@smtp.example.com")
 
     def test_unattached_outbox_used_as_fallback(self):
         EmailOutbox.objects.create(

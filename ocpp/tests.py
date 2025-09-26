@@ -315,6 +315,92 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertTrue(message_mock.save.called)
         self.assertTrue(message_mock.propagate.called)
 
+    async def test_change_availability_result_updates_model(self):
+        store.pending_calls.clear()
+        communicator = WebsocketCommunicator(application, "/AVAILRES/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [
+                2,
+                "boot",
+                "BootNotification",
+                {"chargePointVendor": "Test", "chargePointModel": "Model"},
+            ]
+        )
+        await communicator.receive_json_from()
+
+        message_id = "ca-result"
+        requested_at = timezone.now()
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "ChangeAvailability",
+                "charger_id": "AVAILRES",
+                "connector_id": None,
+                "availability_type": "Inoperative",
+                "requested_at": requested_at,
+            },
+        )
+        await communicator.send_json_to([3, message_id, {"status": "Accepted"}])
+        await asyncio.sleep(0.05)
+
+        charger = await database_sync_to_async(Charger.objects.get)(
+            charger_id="AVAILRES", connector_id=None
+        )
+        self.assertEqual(charger.availability_state, "Inoperative")
+        self.assertEqual(charger.availability_request_status, "Accepted")
+        self.assertEqual(charger.availability_requested_state, "Inoperative")
+        await communicator.disconnect()
+
+    async def test_status_notification_updates_availability_state(self):
+        store.pending_calls.clear()
+        communicator = WebsocketCommunicator(application, "/STATAVAIL/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [
+                2,
+                "boot",
+                "BootNotification",
+                {"chargePointVendor": "Test", "chargePointModel": "Model"},
+            ]
+        )
+        await communicator.receive_json_from()
+
+        await communicator.send_json_to(
+            [
+                2,
+                "stat1",
+                "StatusNotification",
+                {"connectorId": 1, "errorCode": "NoError", "status": "Unavailable"},
+            ]
+        )
+        await communicator.receive_json_from()
+
+        charger = await database_sync_to_async(Charger.objects.get)(
+            charger_id="STATAVAIL", connector_id=1
+        )
+        self.assertEqual(charger.availability_state, "Inoperative")
+
+        await communicator.send_json_to(
+            [
+                2,
+                "stat2",
+                "StatusNotification",
+                {"connectorId": 1, "errorCode": "NoError", "status": "Available"},
+            ]
+        )
+        await communicator.receive_json_from()
+
+        charger = await database_sync_to_async(Charger.objects.get)(
+            charger_id="STATAVAIL", connector_id=1
+        )
+        self.assertEqual(charger.availability_state, "Operative")
+        await communicator.disconnect()
+
     async def test_consumption_message_final_update_on_disconnect(self):
         await database_sync_to_async(Charger.objects.create)(charger_id="FINALMSG")
         communicator = WebsocketCommunicator(application, "/FINALMSG/")
@@ -1306,6 +1392,12 @@ class SimulatorLandingTests(TestCase):
         self.assertContains(resp, "/ocpp/")
         self.assertContains(resp, "/ocpp/simulator/")
 
+    def test_cp_simulator_redirects_to_login(self):
+        response = self.client.get(reverse("cp-simulator"))
+        login_url = reverse("pages:login")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(login_url, response.url)
+
 
 class ChargerAdminTests(TestCase):
     def setUp(self):
@@ -1373,6 +1465,35 @@ class ChargerAdminTests(TestCase):
         self.assertContains(resp, "Last meter values")
         self.assertNotContains(resp, 'name="last_heartbeat"')
         self.assertNotContains(resp, 'name="last_meter_values"')
+
+    def test_admin_action_sets_availability_state(self):
+        charger = Charger.objects.create(charger_id="AVAIL1")
+        url = reverse("admin:ocpp_charger_changelist")
+        response = self.client.post(
+            url,
+            {
+                "action": "set_availability_state_inoperative",
+                "_selected_action": [charger.pk],
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        charger.refresh_from_db()
+        self.assertEqual(charger.availability_state, "Inoperative")
+        self.assertIsNotNone(charger.availability_state_updated_at)
+
+        response = self.client.post(
+            url,
+            {
+                "action": "set_availability_state_operative",
+                "_selected_action": [charger.pk],
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        charger.refresh_from_db()
+        self.assertEqual(charger.availability_state, "Operative")
+        self.assertIsNotNone(charger.availability_state_updated_at)
 
     def test_purge_action_removes_data(self):
         charger = Charger.objects.create(charger_id="PURGE1")
@@ -2275,6 +2396,8 @@ class DispatchActionViewTests(TestCase):
         )
         store.clear_log(self.log_key, log_type="charger")
         self.addCleanup(store.clear_log, self.log_key, "charger")
+        store.pending_calls.clear()
+        self.addCleanup(store.pending_calls.clear)
         self.url = reverse(
             "charger-action-connector",
             args=[self.charger.charger_id, self.charger.connector_slug],
@@ -2320,6 +2443,37 @@ class DispatchActionViewTests(TestCase):
         self.assertTrue(
             any("RemoteStartTransaction" in entry for entry in log_entries)
         )
+
+    def test_change_availability_dispatches_frame(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "change_availability", "type": "Inoperative"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "ChangeAvailability")
+        self.assertEqual(frame[3]["type"], "Inoperative")
+        self.assertEqual(frame[3]["connectorId"], 1)
+        self.assertIn(frame[1], store.pending_calls)
+        self.charger.refresh_from_db()
+        self.assertEqual(self.charger.availability_requested_state, "Inoperative")
+        self.assertIsNotNone(self.charger.availability_requested_at)
+        self.assertEqual(self.charger.availability_request_status, "")
+
+    def test_change_availability_requires_valid_type(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "change_availability"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(self.ws.sent, [])
+        self.assertFalse(store.pending_calls)
 
 
 class ChargerStatusViewTests(TestCase):
