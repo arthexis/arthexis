@@ -16,50 +16,8 @@
     .inline-heading {
       scroll-margin-top: 80px;
     }
-
-    .related-models {
-      margin-top: 2rem;
-    }
-
-    .related-models__title {
-      font-size: 1.5rem;
-      font-weight: 700;
-      margin: 0 0 0.75rem;
-    }
-
-    .related-models__list {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-    }
-
-    .related-models__item {
-      margin: 0;
-      list-style: none;
-    }
-
-    .related-models__link {
-      display: inline-flex;
-      align-items: center;
-      padding: 0.35rem 0.75rem;
-      border-radius: 9999px;
-      border: 1px solid var(--border-color);
-      text-decoration: none;
-      font-weight: 600;
-      color: var(--body-fg);
-      transition: color 0.2s ease, border-color 0.2s ease;
-    }
-
-    .related-models__link:hover,
-    .related-models__link:focus {
-      color: var(--link-fg);
-      border-color: var(--link-fg);
-      outline: none;
-    }
   </style>
+  {% include "admin/includes/related_models_styles.html" %}
 {% endblock %}
 
 {% block coltype %}colM{% endblock %}
@@ -118,18 +76,7 @@
 {% block submit_buttons_bottom %}{% submit_row %}{% endblock %}
 
 {% related_admin_models opts as related_models %}
-{% if related_models %}
-  <section class="related-models" aria-labelledby="related-models-title">
-    <h2 id="related-models-title" class="related-models__title">{% translate "Related Models" %}</h2>
-    <ul class="related-models__list">
-      {% for related in related_models %}
-        <li class="related-models__item">
-          <a class="related-models__link" href="{{ related.url }}">{{ related.label }}</a>
-        </li>
-      {% endfor %}
-    </ul>
-  </section>
-{% endif %}
+{% include "admin/includes/related_models_section.html" %}
 
 {% block admin_change_form_document_ready %}
     <script id="django-admin-form-add-constants"

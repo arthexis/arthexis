@@ -1,0 +1,13 @@
+{% load i18n %}
+{% if related_models %}
+  <section class="related-models" aria-labelledby="related-models-title">
+    <h2 id="related-models-title" class="related-models__title">{% translate "Related Models" %}</h2>
+    <ul class="related-models__list">
+      {% for related in related_models %}
+        <li class="related-models__item">
+          <a class="related-models__link" href="{{ related.url }}">{{ related.label }}</a>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}
