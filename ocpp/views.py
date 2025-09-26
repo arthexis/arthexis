@@ -414,7 +414,7 @@ def charger_detail(request, cid, connector=None):
     return JsonResponse(payload)
 
 
-@landing("OCPP CSMS Dashboard")
+@landing("CPMS Online Dashboard")
 @live_update()
 def dashboard(request):
     """Landing page listing all known chargers and their status."""
