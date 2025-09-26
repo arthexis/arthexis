@@ -1249,8 +1249,39 @@ class EmailCollectorInline(admin.TabularInline):
 
 
 class EmailCollectorAdmin(EntityModelAdmin):
-    list_display = ("inbox", "subject", "sender", "body", "fragment")
-    search_fields = ("subject", "sender", "body", "fragment")
+    list_display = ("name", "inbox", "subject", "sender", "body", "fragment")
+    search_fields = ("name", "subject", "sender", "body", "fragment")
+    actions = ["preview_messages"]
+
+    @admin.action(description=_("Preview matches"))
+    def preview_messages(self, request, queryset):
+        results = []
+        for collector in queryset.select_related("inbox"):
+            try:
+                messages = collector.search_messages(limit=5)
+                error = None
+            except ValidationError as exc:
+                messages = []
+                error = str(exc)
+            except Exception as exc:  # pragma: no cover - admin feedback
+                messages = []
+                error = str(exc)
+            results.append(
+                {
+                    "collector": collector,
+                    "messages": messages,
+                    "error": error,
+                }
+            )
+        context = {
+            "title": _("Preview Email Collectors"),
+            "results": results,
+            "opts": self.model._meta,
+            "queryset": queryset,
+        }
+        return TemplateResponse(
+            request, "admin/core/emailcollector/preview.html", context
+        )
 
 
 @admin.register(SocialProfile)
@@ -1459,6 +1490,7 @@ class EmailInboxAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmi
                     subject=form.cleaned_data["subject"],
                     from_address=form.cleaned_data["from_address"],
                     body=form.cleaned_data["body"],
+                    use_regular_expressions=False,
                 )
                 context = {
                     "form": form,

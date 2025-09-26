@@ -332,3 +332,32 @@ class EmailCollectorAdminTests(TestCase):
         request2.session = self.client.session
         response2 = self.admin.changeform_view(request2, str(collector.pk))
         self.assertEqual(response2.status_code, 200)
+
+    def test_preview_action_renders_messages(self):
+        collector = EmailCollector.objects.create(inbox=self.inbox, name="Invoices")
+        request = self.factory.post(
+            "/",
+            {"action": "preview_messages", "_selected_action": [collector.pk]},
+        )
+        request.user = self.user
+        request.session = self.client.session
+        with patch.object(
+            CoreEmailCollector,
+            "search_messages",
+            return_value=[
+                {
+                    "subject": "Invoice 1",
+                    "from": "billing@example.com",
+                    "date": "2024-04-01",
+                    "body": "Thanks for your business",
+                }
+            ],
+        ) as mock_search:
+            response = self.admin.preview_messages(
+                request, EmailCollector.objects.filter(pk=collector.pk)
+            )
+        self.assertEqual(response.status_code, 200)
+        content = response.render().content.decode()
+        self.assertIn("Invoices", content)
+        self.assertIn("Invoice 1", content)
+        mock_search.assert_called_once_with(limit=5)
