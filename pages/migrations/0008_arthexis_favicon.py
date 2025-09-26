@@ -25,13 +25,13 @@ def _manager(model, name):
 def apply_arthexis_favicon(apps, schema_editor):
     Site = apps.get_model("sites", "Site")
     SiteBadge = apps.get_model("pages", "SiteBadge")
-    badge_manager = _manager(SiteBadge, "all_objects")
-
     site = Site.objects.filter(domain="arthexis.com").first()
     if not site:
         return
-      
-    badge, created = SiteBadge.all_objects.get_or_create(site=site)
+
+    badge_manager = _manager(SiteBadge, "all_objects")
+
+    badge, created = badge_manager.get_or_create(site=site)
 
     if not created and (badge.is_user_data or badge.favicon):
         return
