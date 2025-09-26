@@ -64,7 +64,7 @@ class NodeTests(TestCase):
         NodeRole.objects.get_or_create(name="Terminal")
 
 
-class NodeGetLocalTests(SimpleTestCase):
+class NodeGetLocalDatabaseUnavailableTests(SimpleTestCase):
     def test_get_local_handles_database_errors(self):
         with patch.object(Node.objects, "filter", side_effect=DatabaseError("fail")):
             with self.assertLogs("nodes.models", level="DEBUG") as logs:
@@ -75,6 +75,8 @@ class NodeGetLocalTests(SimpleTestCase):
             any("Node.get_local skipped: database unavailable" in message for message in logs.output)
         )
 
+
+class NodeGetLocalTests(TestCase):
     def test_register_current_does_not_create_release(self):
         node = None
         created = False
