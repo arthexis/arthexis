@@ -252,23 +252,27 @@ class Node(Entity):
             "mac_address": mac,
             "current_relation": cls.Relation.SELF,
         }
+        role_lock = Path(settings.BASE_DIR) / "locks" / "role.lck"
+        role_name = role_lock.read_text().strip() if role_lock.exists() else "Terminal"
+        desired_role = NodeRole.objects.filter(name=role_name).first()
+
         if node:
+            update_fields = []
             for field, value in defaults.items():
-                setattr(node, field, value)
-            update_fields = list(defaults.keys())
-            node.save(update_fields=update_fields)
+                if getattr(node, field) != value:
+                    setattr(node, field, value)
+                    update_fields.append(field)
+            if desired_role and node.role_id != desired_role.id:
+                node.role = desired_role
+                update_fields.append("role")
+            if update_fields:
+                node.save(update_fields=update_fields)
             created = False
         else:
             node = cls.objects.create(**defaults)
             created = True
-            # assign role from installation lock file
-            role_lock = Path(settings.BASE_DIR) / "locks" / "role.lck"
-            role_name = (
-                role_lock.read_text().strip() if role_lock.exists() else "Terminal"
-            )
-            role = NodeRole.objects.filter(name=role_name).first()
-            if role:
-                node.role = role
+            if desired_role:
+                node.role = desired_role
                 node.save(update_fields=["role"])
         if created and node.role is None:
             terminal = NodeRole.objects.filter(name="Terminal").first()
