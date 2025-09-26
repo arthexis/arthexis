@@ -84,6 +84,14 @@ class LoginViewTests(TestCase):
         resp = self.client.get(reverse("pages:login"))
         self.assertContains(resp, "Use Authenticator app")
 
+    def test_cp_simulator_redirect_shows_restricted_message(self):
+        simulator_path = reverse("cp-simulator")
+        resp = self.client.get(f"{reverse('pages:login')}?next={simulator_path}")
+        self.assertContains(
+            resp,
+            "This page is reserved for members only. Please log in to continue.",
+        )
+
     def test_staff_login_redirects_admin(self):
         resp = self.client.post(
             reverse("pages:login"),

@@ -447,7 +447,7 @@ def dashboard(request):
     return render(request, "ocpp/dashboard.html", context)
 
 
-@login_required
+@login_required(login_url="pages:login")
 @landing("Charge Point Simulator")
 @live_update()
 def cp_simulator(request):
