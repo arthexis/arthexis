@@ -15,19 +15,27 @@ def load_favicon_content() -> bytes:
     return base64.b64decode(FAVICON_SOURCE.read_text().strip())
 
 
+def _manager(model, name):
+    manager = getattr(model, name, None)
+    if manager is not None:
+        return manager
+    return model.objects
+
+
 def apply_arthexis_favicon(apps, schema_editor):
     Site = apps.get_model("sites", "Site")
     SiteBadge = apps.get_model("pages", "SiteBadge")
+    badge_manager = _manager(SiteBadge, "all_objects")
 
     site = Site.objects.filter(domain="arthexis.com").first()
     if not site:
         return
-
+      
     badge, created = SiteBadge.all_objects.get_or_create(site=site)
 
     if not created and (badge.is_user_data or badge.favicon):
         return
-
+      
     badge.badge_color = badge.badge_color or "#28a745"
     badge.is_seed_data = True
     badge.is_user_data = False
@@ -44,12 +52,13 @@ def apply_arthexis_favicon(apps, schema_editor):
 def remove_arthexis_favicon(apps, schema_editor):
     Site = apps.get_model("sites", "Site")
     SiteBadge = apps.get_model("pages", "SiteBadge")
+    badge_manager = _manager(SiteBadge, "all_objects")
 
     site = Site.objects.filter(domain="arthexis.com").first()
     if not site:
         return
 
-    badge = SiteBadge.all_objects.filter(site=site).first()
+    badge = badge_manager.filter(site=site).first()
     if not badge:
         return
 
