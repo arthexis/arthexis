@@ -26,7 +26,8 @@ fi
   echo "Unreleased"
   echo "----------"
   echo
-  git log $range --no-merges --pretty=format:"- %h %s"
+  # Filter out commit subjects that are a single word to keep the changelog informative.
+  git log $range --no-merges --pretty=format:"- %h %s" | awk 'NF > 3'
   if [ -n "$previous" ]; then
     echo
     echo "$previous"
