@@ -43,6 +43,17 @@ class Location(Entity):
 class Charger(Entity):
     """Known charge point."""
 
+    OPERATIVE_STATUSES = {
+        "Available",
+        "Preparing",
+        "Charging",
+        "SuspendedEV",
+        "SuspendedEVSE",
+        "Finishing",
+        "Reserved",
+    }
+    INOPERATIVE_STATUSES = {"Unavailable", "Faulted"}
+
     charger_id = models.CharField(
         _("Serial Number"),
         max_length=100,
@@ -96,6 +107,51 @@ class Charger(Entity):
     last_error_code = models.CharField(max_length=64, blank=True)
     last_status_vendor_info = models.JSONField(null=True, blank=True)
     last_status_timestamp = models.DateTimeField(null=True, blank=True)
+    availability_state = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        help_text=(
+            "Current availability reported by the charger "
+            "(Operative/Inoperative)."
+        ),
+    )
+    availability_state_updated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the current availability state became effective.",
+    )
+    availability_requested_state = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        help_text="Last availability state requested via ChangeAvailability.",
+    )
+    availability_requested_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the last ChangeAvailability request was sent.",
+    )
+    availability_request_status = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        help_text=(
+            "Latest response status for ChangeAvailability "
+            "(Accepted/Rejected/Scheduled)."
+        ),
+    )
+    availability_request_status_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the last ChangeAvailability response was received.",
+    )
+    availability_request_details = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Additional details from the last ChangeAvailability response.",
+    )
     temperature = models.DecimalField(
         max_digits=5, decimal_places=1, null=True, blank=True
     )
@@ -183,6 +239,19 @@ class Charger(Entity):
             return int(str(slug))
         except (TypeError, ValueError) as exc:
             raise ValueError(f"Invalid connector slug: {slug}") from exc
+
+    @classmethod
+    def availability_state_from_status(cls, status: str) -> str | None:
+        """Return the availability state implied by a status notification."""
+
+        normalized = (status or "").strip()
+        if not normalized:
+            return None
+        if normalized in cls.INOPERATIVE_STATUSES:
+            return "Inoperative"
+        if normalized in cls.OPERATIVE_STATUSES:
+            return "Operative"
+        return None
 
     @property
     def connector_slug(self) -> str:
