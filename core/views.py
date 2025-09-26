@@ -352,7 +352,7 @@ def _step_check_todos(release, ctx, log_path: Path) -> None:
             check=False,
         )
     ctx.pop("todos", None)
-    ctx.pop("todos_ack", None)
+    ctx["todos_ack"] = True
 
 
 def _step_check_version(release, ctx, log_path: Path) -> None:

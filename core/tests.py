@@ -858,6 +858,30 @@ class ReleaseProcessTests(TestCase):
         self.assertIsNone(self.release.release_on)
         dump_fixture.assert_not_called()
 
+    def test_new_todo_does_not_reset_pending_flow(self):
+        user = User.objects.create_superuser("admin", "admin@example.com", "pw")
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        Todo.objects.create(request="Initial checklist item")
+        steps = [("Confirm release TODO completion", core_views._step_check_todos)]
+        with mock.patch("core.views.PUBLISH_STEPS", steps):
+            self.client.force_login(user)
+            response = self.client.get(url)
+            self.assertTrue(response.context["has_pending_todos"])
+            self.client.get(f"{url}?ack_todos=1")
+            self.client.get(f"{url}?start=1")
+            self.client.get(f"{url}?step=0")
+            Todo.objects.create(request="Follow-up checklist item")
+            response = self.client.get(url)
+            self.assertEqual(
+                Todo.objects.filter(is_deleted=False, done_on__isnull=True).count(),
+                1,
+            )
+            self.assertIsNone(response.context["todos"])
+            self.assertFalse(response.context["has_pending_todos"])
+            session = self.client.session
+            ctx = session.get(f"release_publish_{self.release.pk}")
+            self.assertTrue(ctx.get("todos_ack"))
+
     def test_release_progress_uses_lockfile(self):
         run = []
 
