@@ -1,9 +1,14 @@
 {% extends "admin/base.html" %}
-{% load i18n %}
+{% load i18n sites %}
 {% block title %}{% if title %}{{ title }} | {% endif %}{{ site_title|default:_('Django site admin') }}{% endblock %}
 {% block extrahead %}
 {{ block.super }}
+{% get_current_site as current_site %}
+{% if current_site and current_site.domain == "arthexis.com" %}
+<link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_arthexis.txt' %}">
+{% else %}
 <link rel="icon" href="data:image/png;base64,{% include 'admin/favicon.txt' %}">
+{% endif %}
 <script id="admin-collapsible-apps">
 document.addEventListener('DOMContentLoaded', function () {
     const modules = document.querySelectorAll('#nav-sidebar .module');
