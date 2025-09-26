@@ -84,3 +84,17 @@ class EmailInboxTests(TestCase):
         )
         with pytest.raises(ValidationError):
             inbox.test_connection()
+
+    def test_string_representation_does_not_duplicate_email_hostname(self):
+        user = User.objects.create(username="imap-user")
+        inbox = EmailInbox.objects.create(
+            user=user,
+            host="imap.example.com",
+            port=993,
+            username="mailer@example.com",
+            password="secret",
+            protocol=EmailInbox.IMAP,
+            use_ssl=True,
+        )
+
+        self.assertEqual(str(inbox), "mailer@example.com")

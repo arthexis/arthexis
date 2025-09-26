@@ -1,0 +1,41 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
+  <a href="{% url 'admin:app_list' opts.app_label %}">{{ opts.app_config.verbose_name }}</a> ›
+  <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a> ›
+  {% trans 'Preview Email Collectors' %}
+</div>
+{% endblock %}
+
+{% block content %}
+{% if results %}
+  {% for item in results %}
+    <div class="module" style="margin-bottom: 1.5em;">
+      <h2>{{ item.collector }}</h2>
+      {% if item.error %}
+        <p class="errornote">{{ item.error }}</p>
+      {% endif %}
+      {% if item.messages %}
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1em;">
+          {% for message in item.messages %}
+            <div class="module" style="padding: 1em;">
+              <h3 style="margin-top: 0;">{{ message.subject|default:_('No subject') }}</h3>
+              <p><strong>{% trans 'From' %}:</strong> {{ message.from|default:_('Unknown sender') }}</p>
+              <p><strong>{% trans 'Date' %}:</strong> {{ message.date|default:_('Unknown date') }}</p>
+              <p>{{ message.body|default:''|truncatechars:280 }}</p>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p>{% trans 'No messages found.' %}</p>
+      {% endif %}
+    </div>
+  {% endfor %}
+{% else %}
+  <p>{% trans 'No collectors were selected.' %}</p>
+{% endif %}
+<p><a href="{% url opts|admin_urlname:'changelist' %}">{% trans 'Back to collectors' %}</a></p>
+{% endblock %}
