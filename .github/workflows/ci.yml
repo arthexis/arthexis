@@ -69,5 +69,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run env refresh
-        run: ./env-refresh.sh
+        run: |
+          # Intentionally avoid --clean so migrations run against existing data
+          ./env-refresh.sh
 
