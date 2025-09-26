@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -13,6 +14,8 @@ from django.core.management import call_command
 from django.contrib.messages import get_messages
 
 from teams.models import OdooProfile
+
+from nodes.models import EmailOutbox
 
 from awg.models import CalculatorTemplate
 
@@ -281,6 +284,46 @@ class UserDataAdminTests(TransactionTestCase):
 
         self.assertFalse(empty.exists())
         mock_call.assert_not_called()
+
+    def test_load_user_fixture_skips_outdated_app(self):
+        outdated = self.data_dir / "missing_app_widget_1.json"
+        fixture = [
+            {
+                "model": "missing_app.widget",
+                "pk": "widget-1",
+                "fields": {"name": "Legacy Widget"},
+            }
+        ]
+        outdated.write_text(json.dumps(fixture), encoding="utf-8")
+
+        with patch("core.user_data.call_command") as mock_call:
+            load_user_fixtures(self.user)
+
+        self.assertTrue(outdated.exists())
+        mock_call.assert_not_called()
+
+    def test_user_data_view_deduplicates_proxy_models(self):
+        outbox = EmailOutbox.objects.create(
+            user=self.user,
+            host="smtp.example.com",
+            username="mailer",
+        )
+        EmailOutbox.all_objects.filter(pk=outbox.pk).update(is_user_data=True)
+        outbox.refresh_from_db()
+
+        response = self.client.get(reverse("admin:user_data"))
+        self.assertEqual(response.status_code, 200)
+
+        sections = response.context_data["sections"]
+        email_sections = [
+            section
+            for section in sections
+            if section["opts"].model_name == "emailoutbox"
+        ]
+
+        self.assertEqual(len(email_sections), 1)
+        self.assertEqual(len(email_sections[0]["items"]), 1)
+        self.assertIn(str(outbox), email_sections[0]["items"][0]["label"])
 
     def test_admin_fixtures_delegate_to_system_user(self):
         User = get_user_model()
