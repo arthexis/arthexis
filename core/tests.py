@@ -1362,6 +1362,22 @@ class TodoFocusViewTests(TestCase):
         change_url = reverse("admin:core_todo_change", args=[todo.pk])
         self.assertContains(resp, f'src="{change_url}"')
 
+    def test_focus_view_avoids_recursive_focus_url(self):
+        todo = Todo.objects.create(request="Task")
+        focus_url = reverse("todo-focus", args=[todo.pk])
+        Todo.objects.filter(pk=todo.pk).update(url=focus_url)
+        resp = self.client.get(reverse("todo-focus", args=[todo.pk]))
+        change_url = reverse("admin:core_todo_change", args=[todo.pk])
+        self.assertContains(resp, f'src="{change_url}"')
+
+    def test_focus_view_avoids_recursive_focus_absolute_url(self):
+        todo = Todo.objects.create(request="Task")
+        focus_url = reverse("todo-focus", args=[todo.pk])
+        Todo.objects.filter(pk=todo.pk).update(url=f"http://testserver{focus_url}")
+        resp = self.client.get(reverse("todo-focus", args=[todo.pk]))
+        change_url = reverse("admin:core_todo_change", args=[todo.pk])
+        self.assertContains(resp, f'src="{change_url}"')
+
     def test_focus_view_redirects_if_todo_completed(self):
         todo = Todo.objects.create(request="Task")
         todo.done_on = timezone.now()
