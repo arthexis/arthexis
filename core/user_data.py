@@ -238,6 +238,36 @@ def _mark_fixture_user_data(path: Path) -> None:
         model.all_objects.filter(pk=pk).update(is_user_data=True)
 
 
+def _fixture_targets_installed_apps(data) -> bool:
+    """Return ``True`` when *data* only targets installed apps and models."""
+
+    if not isinstance(data, list):
+        return True
+
+    labels = {
+        obj.get("model")
+        for obj in data
+        if isinstance(obj, dict) and obj.get("model")
+    }
+
+    for label in labels:
+        if not isinstance(label, str):
+            continue
+        if "." not in label:
+            continue
+        app_label, model_name = label.split(".", 1)
+        if not app_label or not model_name:
+            continue
+        if not apps.is_installed(app_label):
+            return False
+        try:
+            apps.get_model(label)
+        except LookupError:
+            return False
+
+    return True
+
+
 def _load_fixture(path: Path, *, mark_user_data: bool = True) -> bool:
     """Load a fixture from *path* and optionally flag loaded entities."""
 
@@ -261,9 +291,12 @@ def _load_fixture(path: Path, *, mark_user_data: bool = True) -> bool:
         except Exception:
             data = None
         else:
-            if isinstance(data, list) and not data:
-                path.unlink(missing_ok=True)
-                return False
+            if isinstance(data, list):
+                if not data:
+                    path.unlink(missing_ok=True)
+                    return False
+                if not _fixture_targets_installed_apps(data):
+                    return False
 
     try:
         call_command("loaddata", str(path), ignorenonexistent=True)
@@ -484,11 +517,23 @@ def patch_admin_user_datum() -> None:
     admin.site._user_datum_patched = True
 
 
-def _seed_data_view(request):
-    sections = []
+def _iter_entity_admin_models():
+    """Yield registered :class:`Entity` admin models without proxy duplicates."""
+
+    seen: set[type] = set()
     for model, model_admin in admin.site._registry.items():
         if not issubclass(model, Entity):
             continue
+        concrete_model = model._meta.concrete_model
+        if concrete_model in seen:
+            continue
+        seen.add(concrete_model)
+        yield model, model_admin
+
+
+def _seed_data_view(request):
+    sections = []
+    for model, model_admin in _iter_entity_admin_models():
         objs = model.objects.filter(is_seed_data=True)
         if not objs.exists():
             continue
@@ -508,9 +553,7 @@ def _seed_data_view(request):
 
 def _user_data_view(request):
     sections = []
-    for model, model_admin in admin.site._registry.items():
-        if not issubclass(model, Entity):
-            continue
+    for model, model_admin in _iter_entity_admin_models():
         objs = model.objects.filter(is_user_data=True)
         if not objs.exists():
             continue
