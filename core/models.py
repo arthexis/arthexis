@@ -695,12 +695,44 @@ class EmailInbox(Profile):
         except Exception as exc:
             raise ValidationError(str(exc))
 
-    def search_messages(self, subject="", from_address="", body="", limit: int = 10):
+    def search_messages(
+        self,
+        subject="",
+        from_address="",
+        body="",
+        limit: int = 10,
+        use_regular_expressions: bool = False,
+    ):
         """Retrieve up to ``limit`` recent messages matching the filters.
 
-        Parameters are case-insensitive fragments. Results are returned as a list
-        of dictionaries with ``subject``, ``from`` and ``body`` keys.
+        Parameters are case-insensitive fragments by default. When
+        ``use_regular_expressions`` is ``True`` the filters are treated as regular
+        expressions using case-insensitive matching. Results are returned as a
+        list of dictionaries with ``subject``, ``from``, ``body`` and ``date``
+        keys.
         """
+
+        def _compile(pattern: str | None):
+            if not pattern:
+                return None
+            try:
+                return re.compile(pattern, re.IGNORECASE)
+            except re.error as exc:
+                raise ValidationError(str(exc))
+
+        subject_regex = sender_regex = body_regex = None
+        if use_regular_expressions:
+            subject_regex = _compile(subject)
+            sender_regex = _compile(from_address)
+            body_regex = _compile(body)
+
+        def _matches(value: str, needle: str, regex):
+            value = value or ""
+            if regex is not None:
+                return bool(regex.search(value))
+            if not needle:
+                return True
+            return needle.lower() in value.lower()
 
         def _get_body(msg):
             if msg.is_multipart():
@@ -728,28 +760,44 @@ class EmailInbox(Profile):
             )
             conn.login(self.username, self.password)
             conn.select("INBOX")
-            criteria = []
-            if subject:
-                criteria.extend(["SUBJECT", f'"{subject}"'])
-            if from_address:
-                criteria.extend(["FROM", f'"{from_address}"'])
-            if body:
-                criteria.extend(["TEXT", f'"{body}"'])
-            if not criteria:
-                criteria = ["ALL"]
-            typ, data = conn.search(None, *criteria)
-            ids = data[0].split()[-limit:]
+            fetch_limit = limit if not use_regular_expressions else max(limit * 5, limit)
+            if use_regular_expressions:
+                typ, data = conn.search(None, "ALL")
+            else:
+                criteria = []
+                if subject:
+                    criteria.extend(["SUBJECT", f'"{subject}"'])
+                if from_address:
+                    criteria.extend(["FROM", f'"{from_address}"'])
+                if body:
+                    criteria.extend(["TEXT", f'"{body}"'])
+                if not criteria:
+                    criteria = ["ALL"]
+                typ, data = conn.search(None, *criteria)
+            ids = data[0].split()[-fetch_limit:]
             messages = []
             for mid in ids:
                 typ, msg_data = conn.fetch(mid, "(RFC822)")
                 msg = email.message_from_bytes(msg_data[0][1])
+                body_text = _get_body(msg)
+                subj_value = msg.get("Subject", "")
+                from_value = msg.get("From", "")
+                if not (
+                    _matches(subj_value, subject, subject_regex)
+                    and _matches(from_value, from_address, sender_regex)
+                    and _matches(body_text, body, body_regex)
+                ):
+                    continue
                 messages.append(
                     {
-                        "subject": msg.get("Subject", ""),
-                        "from": msg.get("From", ""),
-                        "body": _get_body(msg),
+                        "subject": subj_value,
+                        "from": from_value,
+                        "body": body_text,
+                        "date": msg.get("Date", ""),
                     }
                 )
+                if len(messages) >= limit:
+                    break
             conn.logout()
             return list(reversed(messages))
 
@@ -771,13 +819,20 @@ class EmailInbox(Profile):
             subj = msg.get("Subject", "")
             frm = msg.get("From", "")
             body_text = _get_body(msg)
-            if subject and subject.lower() not in subj.lower():
+            if not (
+                _matches(subj, subject, subject_regex)
+                and _matches(frm, from_address, sender_regex)
+                and _matches(body_text, body, body_regex)
+            ):
                 continue
-            if from_address and from_address.lower() not in frm.lower():
-                continue
-            if body and body.lower() not in body_text.lower():
-                continue
-            messages.append({"subject": subj, "from": frm, "body": body_text})
+            messages.append(
+                {
+                    "subject": subj,
+                    "from": frm,
+                    "body": body_text,
+                    "date": msg.get("Date", ""),
+                }
+            )
             if len(messages) >= limit:
                 break
         conn.quit()
@@ -873,6 +928,11 @@ class SocialProfile(Profile):
 class EmailCollector(Entity):
     """Search an inbox for matching messages and extract data via sigils."""
 
+    name = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Optional label to identify this collector.",
+    )
     inbox = models.ForeignKey(
         "EmailInbox",
         related_name="collectors",
@@ -885,6 +945,10 @@ class EmailCollector(Entity):
         max_length=255,
         blank=True,
         help_text="Pattern with [sigils] to extract values from the body.",
+    )
+    use_regular_expressions = models.BooleanField(
+        default=False,
+        help_text="Treat subject, sender and body filters as regular expressions (case-insensitive).",
     )
 
     def _parse_sigils(self, text: str) -> dict[str, str]:
@@ -905,16 +969,32 @@ class EmailCollector(Entity):
             return {}
         return {k: v.strip() for k, v in match.groupdict().items()}
 
-    def collect(self, limit: int = 10) -> None:
-        """Poll the inbox and store new artifacts until an existing one is found."""
-        from .models import EmailArtifact
+    def __str__(self):  # pragma: no cover - simple representation
+        if self.name:
+            return self.name
+        parts = []
+        if self.subject:
+            parts.append(self.subject)
+        if self.sender:
+            parts.append(self.sender)
+        if not parts:
+            parts.append(str(self.inbox))
+        return " – ".join(parts)
 
-        messages = self.inbox.search_messages(
+    def search_messages(self, limit: int = 10):
+        return self.inbox.search_messages(
             subject=self.subject,
             from_address=self.sender,
             body=self.body,
             limit=limit,
+            use_regular_expressions=self.use_regular_expressions,
         )
+
+    def collect(self, limit: int = 10) -> None:
+        """Poll the inbox and store new artifacts until an existing one is found."""
+        from .models import EmailArtifact
+
+        messages = self.search_messages(limit=limit)
         for msg in messages:
             fp = EmailArtifact.fingerprint_for(
                 msg.get("subject", ""), msg.get("from", ""), msg.get("body", "")

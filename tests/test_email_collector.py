@@ -42,8 +42,15 @@ class EmailCollectorTests(TestCase):
             existing,
             {"subject": "Older", "from": "a@test", "body": "code is 789"},
         ]
-        with patch.object(EmailInbox, "search_messages", return_value=messages):
+        with patch.object(EmailInbox, "search_messages", return_value=messages) as mock_search:
             collector.collect()
+            mock_search.assert_called_once_with(
+                subject="",
+                from_address="",
+                body="",
+                limit=10,
+                use_regular_expressions=False,
+            )
         artifacts = EmailArtifact.objects.filter(collector=collector)
         assert artifacts.count() == 2
         new_artifact = artifacts.get(subject="New")
@@ -55,3 +62,25 @@ class EmailCollectorTests(TestCase):
         with patch.object(EmailCollector, "collect") as mock_collect:
             poll_email_collectors()
             mock_collect.assert_called_once_with()
+
+    def test_collect_with_regular_expressions(self):
+        collector = EmailCollector.objects.create(
+            inbox=self.inbox,
+            use_regular_expressions=True,
+        )
+        with patch.object(EmailInbox, "search_messages", return_value=[]) as mock_search:
+            collector.collect(limit=5)
+        mock_search.assert_called_once_with(
+            subject="",
+            from_address="",
+            body="",
+            limit=5,
+            use_regular_expressions=True,
+        )
+
+    def test_string_representation_prefers_name(self):
+        collector = EmailCollector.objects.create(
+            inbox=self.inbox,
+            name="Invoices",
+        )
+        self.assertEqual(str(collector), "Invoices")

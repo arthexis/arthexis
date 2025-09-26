@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from django.contrib.admin.sites import AdminSite
 from django.test import TestCase, RequestFactory
+from django.core.exceptions import ValidationError
 
 from core.admin import EmailInboxAdmin
 from teams.models import EmailInbox
@@ -80,11 +81,44 @@ class EmailInboxSearchTests(TestCase):
         results = inbox.search_messages(subject="Hello", from_address="a@", body="Body")
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["subject"], "Hello there")
+        self.assertIn("date", results[0])
+
+    @patch("imaplib.IMAP4_SSL", new=lambda h, p: DummyIMAPSearch(h, p))
+    def test_search_messages_imap_with_regex(self):
+        user = User.objects.create(username="imapre")
+        inbox = EmailInbox.objects.create(
+            user=user,
+            host="imap.test",
+            port=993,
+            username="u",
+            password="p",
+            protocol=EmailInbox.IMAP,
+            use_ssl=True,
+        )
+        results = inbox.search_messages(
+            subject="^Hello", use_regular_expressions=True, limit=5
+        )
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["subject"], "Hello there")
+
+    def test_invalid_regex_raises_validation_error(self):
+        user = User.objects.create(username="regex")
+        inbox = EmailInbox.objects.create(
+            user=user,
+            host="imap.test",
+            port=993,
+            username="u",
+            password="p",
+            protocol=EmailInbox.IMAP,
+            use_ssl=True,
+        )
+        with self.assertRaises(ValidationError):
+            inbox.search_messages(subject="(", use_regular_expressions=True)
 
     @patch.object(
         EmailInbox,
         "search_messages",
-        return_value=[{"subject": "S", "from": "F", "body": "B"}],
+        return_value=[{"subject": "S", "from": "F", "body": "B", "date": ""}],
     )
     def test_admin_action(self, mock_search):
         admin = User.objects.create(username="admin", is_staff=True, is_superuser=True)
@@ -106,4 +140,6 @@ class EmailInboxSearchTests(TestCase):
         self.assertEqual(response.status_code, 200)
         content = response.render().content.decode()
         self.assertIn("S", content)
-        mock_search.assert_called_once_with(subject="S", from_address="", body="")
+        mock_search.assert_called_once_with(
+            subject="S", from_address="", body="", use_regular_expressions=False
+        )
