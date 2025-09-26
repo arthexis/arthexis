@@ -12,8 +12,6 @@ def main() -> None:
     """Run administrative tasks."""
     loadenv()
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-    if len(sys.argv) > 1 and sys.argv[1] == "runserver":
-        os.environ.setdefault("DEBUG", "1")
 
     ver_path = Path(__file__).resolve().parent / "VERSION"
     version = ver_path.read_text().strip() if ver_path.exists() else ""
