@@ -69,5 +69,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run env refresh
-        run: ./env-refresh.sh --clean
+        run: ./env-refresh.sh
 
