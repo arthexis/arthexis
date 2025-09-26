@@ -343,6 +343,7 @@ class ReleaseProgressViewTests(TestCase):
                 response = self.client.get(f"{url}?step=4")
 
         self.assertIn(["scripts/generate-changelog.sh"], commands)
+        self.assertEqual(response.status_code, 200)
         expected_request = "Create release pkg 1.0.1"
         todo = Todo.objects.get(request=expected_request)
         self.assertTrue(todo.is_seed_data)
@@ -356,7 +357,10 @@ class ReleaseProgressViewTests(TestCase):
             data[0]["fields"]["url"], reverse("admin:core_packagerelease_changelist")
         )
 
-        log_content = response.context["log_content"]
+        log_path = Path("logs") / f"{self.package.name}-{self.release.version}.log"
+        self.addCleanup(lambda: log_path.unlink(missing_ok=True))
+        self.assertTrue(log_path.exists())
+        log_content = log_path.read_text(encoding="utf-8")
         self.assertIn(
             "Regenerated CHANGELOG.rst using scripts/generate-changelog.sh",
             log_content,
@@ -390,6 +394,94 @@ class ReleaseProgressViewTests(TestCase):
         self.assertIn(
             ["git", "commit", "-m", "chore: add release TODO for pkg"], commands
         )
+
+    @mock.patch("core.views.release_utils._git_clean", return_value=True)
+    @mock.patch("core.views.release_utils.network_available", return_value=False)
+    def test_pre_release_python_fallback(self, net, git_clean):
+        original_version = Path("VERSION").read_text(encoding="utf-8")
+        original_changelog = Path("CHANGELOG.rst").read_text(encoding="utf-8")
+        self.addCleanup(
+            lambda: Path("VERSION").write_text(original_version, encoding="utf-8")
+        )
+        self.addCleanup(
+            lambda: Path("CHANGELOG.rst").write_text(
+                original_changelog, encoding="utf-8"
+            )
+        )
+
+        commands: list[list[str]] = []
+        fixture_filename = "todos__create_release_pkg_1_0_1.json"
+        changelog_entry = "- abc123 fix fallback generation"
+
+        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
+            commands.append(cmd)
+            if cmd == ["scripts/generate-changelog.sh"]:
+                err = OSError(193, "%1 is not a valid Win32 application")
+                err.winerror = 193  # type: ignore[attr-defined]
+                raise err
+            if cmd[:3] == ["git", "describe", "--tags"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="0.1.10\n", stderr="")
+            if cmd[:2] == ["git", "log"]:
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout=f"{changelog_entry}\n", stderr=""
+                )
+            if (
+                cmd[:3] == ["git", "diff", "--cached"]
+                and any(part.endswith("CHANGELOG.rst") for part in cmd)
+            ):
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+            if (
+                cmd[:3] == ["git", "diff", "--cached"]
+                and any(part.endswith(fixture_filename) for part in cmd)
+            ):
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        tmp_dir = Path("tmp_todos_pre_release_fallback")
+        tmp_dir.mkdir(exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(tmp_dir, ignore_errors=True))
+
+        session = self.client.session
+        session_key = f"release_publish_{self.release.pk}"
+        session[session_key] = {
+            "step": 4,
+            "log": f"{self.package.name}-{self.release.version}.log",
+            "started": True,
+        }
+        session.save()
+
+        with mock.patch("core.views.TODO_FIXTURE_DIR", tmp_dir):
+            with mock.patch("core.views.subprocess.run", side_effect=fake_run):
+                url = reverse("release-progress", args=[self.release.pk, "publish"])
+                response = self.client.get(f"{url}?step=4")
+
+        self.assertIn(["scripts/generate-changelog.sh"], commands)
+        self.assertEqual(response.status_code, 200)
+        log_path = Path("logs") / f"{self.package.name}-{self.release.version}.log"
+        self.addCleanup(lambda: log_path.unlink(missing_ok=True))
+        self.assertTrue(log_path.exists())
+        log_content = log_path.read_text(encoding="utf-8")
+        self.assertIn(
+            "scripts/generate-changelog.sh failed: [Errno 193] %1 is not a valid Win32 application",
+            log_content,
+        )
+        self.assertIn("Regenerated CHANGELOG.rst using Python fallback", log_content)
+        self.assertIn("Staged CHANGELOG.rst for commit", log_content)
+        self.assertEqual(
+            Path("VERSION").read_text(encoding="utf-8").strip(),
+            self.release.version,
+        )
+        self.assertIn(changelog_entry, Path("CHANGELOG.rst").read_text(encoding="utf-8"))
+        todo = Todo.objects.get(request="Create release pkg 1.0.1")
+        self.assertIsNone(todo.done_on)
+        fixture_path = tmp_dir / fixture_filename
+        self.assertTrue(fixture_path.exists())
+        self.assertIn(
+            "Committed TODO fixture tmp_todos_pre_release_fallback/"
+            "todos__create_release_pkg_1_0_1.json",
+            log_content,
+        )
+        self.assertIn("Pre-release actions complete", log_content)
 
     def test_todo_done_marks_timestamp(self):
         todo = Todo.objects.create(request="Task")
