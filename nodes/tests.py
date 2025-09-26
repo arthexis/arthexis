@@ -1542,6 +1542,16 @@ class EmailOutboxTests(TestCase):
 
         self.assertEqual(str(outbox), "mailer@example.com")
 
+    def test_string_representation_trims_trailing_at_symbol(self):
+        outbox = EmailOutbox.objects.create(
+            host="smtp.example.com",
+            port=587,
+            username="mailer@",
+            password="secret",
+        )
+
+        self.assertEqual(str(outbox), "mailer@smtp.example.com")
+
     def test_unattached_outbox_used_as_fallback(self):
         EmailOutbox.objects.create(
             group=SecurityGroup.objects.create(name="Attached"),

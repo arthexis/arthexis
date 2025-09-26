@@ -1061,11 +1061,15 @@ class EmailOutbox(Profile):
 
         username = (self.username or "").strip()
         host = (self.host or "").strip()
-        if username and host:
-            if "@" in username:
-                return username
-            return f"{username}@{host}"
         if username:
+            local, sep, domain = username.partition("@")
+            if sep and domain:
+                return username
+            if host:
+                sanitized = username.rstrip("@")
+                if sanitized:
+                    return f"{sanitized}@{host}"
+                return host
             return username
         if host:
             return host

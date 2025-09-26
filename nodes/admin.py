@@ -18,6 +18,7 @@ import subprocess
 from .utils import capture_screenshot, save_screenshot
 from .actions import NodeAction
 
+from core.admin import EmailOutboxAdminForm
 from .models import (
     Node,
     EmailOutbox,
@@ -358,6 +359,7 @@ class NodeAdmin(EntityModelAdmin):
 
 @admin.register(EmailOutbox)
 class EmailOutboxAdmin(EntityModelAdmin):
+    form = EmailOutboxAdminForm
     list_display = (
         "owner_label",
         "host",
