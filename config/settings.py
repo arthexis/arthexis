@@ -638,6 +638,13 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "static"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+# Allow development and freshly-updated environments to serve assets which have
+# not yet been collected into ``STATIC_ROOT``. Without this setting WhiteNoise
+# only looks for files inside ``STATIC_ROOT`` and dashboards like the public
+# traffic chart fail to load their JavaScript dependencies.
+WHITENOISE_USE_FINDERS = True
+WHITENOISE_AUTOREFRESH = DEBUG
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
