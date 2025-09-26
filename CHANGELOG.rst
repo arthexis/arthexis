@@ -1,8 +1,1897 @@
 Changelog
 =========
 
-.. This file is generated from commit messages using scripts/generate-changelog.sh.
-.. Do not edit manually.
+Unreleased
+----------
+
+- b387161 Align EVCS scan default subnet with controller config (#1740)
+- 755c47c fix: support changelog generation without bash (#1769)
+- 92368fa Filter single-word changelog entries (#1768)
+- b831784 chore: remove TODO fixtures
+- 6dea878 rel
+- 2656230 Restore sites template tags and cover fallbacks (#1767)
+- 7156368 Announce autoreloader startup (#1765)
+- d1baf84 Fix admin login template and enable debug defaults (#1766)
+- 1d71362 Remove VS Code live server launch entries (#1764)
+- be9f67a Handle admin crash when node table missing (#1762)
+- ff15a46 Fix OCPP coverage badge links (#1763)
+- 344035c Ensure pre-release regenerates changelog (#1761)
+- 95a0c98 Fix SiteBadge manager usage in favicon migration (#1760)
+- 3bfe0af CI: run env refresh without clean flag (#1759)
+- 0594705 Ensure email profile names respect email usernames (#1756)
+- 03c0fa6 Add email collector naming and testing features (#1754)
+- eb96fae Skip reseeding arthexis favicon when user data exists (#1753)
+- cbe0144 Ensure admin static assets load without collectstatic (#1752)
+- c6d47f4 Add arthexis-specific favicons (#1751)
+- e5fcb25 Skip loading user data fixtures for outdated apps (#1750)
+- 40dfb55 Prevent nested TODO focus frames (#1749)
+- 66245b0 Add related models footer to admin changelist (#1748)
+- 42151a2 Add node relationship tracking and visitor registration defaults (#1700)
+- bbccd6a Allow NetMessage to propagate beyond Terminal role by default (#1747)
+- f1a4714 Adjust eth0 default prefix to /16 for EVCS reachability (#1746)
+- ef806e2 Update eth0 netmask to /16 (#1745)
+- 437dcf8 Improve scan progress reporting (#1744)
+- 70a68a7 Ensure eth0-shared replaces existing ethernet connection (#1743)
+- 37f448f Make VNC validation opt-in for network setup (#1742)
+- f258f68 Allow subnet zero in network setup (#1741)
+- 1464049 Add checklist for Todo fixture rules (#1739)
+- d6d12c7 Add subnet option to network setup (#1738)
+- 54606e5 Restore soft-deleted releases from PyPI refresh (#1737)
+- 4e33555 Add auto-upgrade next check system sigil (#1736)
+- 9468206 Respect DEBUG environment for Terminal role (#1735)
+- bad3ea9 Add CSMS dashboard link to CP simulator notice (#1734)
+- 2e53de7 Add DNS record management with GoDaddy deployment (#1733)
+- 26b6b5e Fix manual navigation landings (#1732)
+- 9408b33 Add release timestamp to package releases (#1731)
+- 5629f37 Add default application descriptions and expose them in admin (#1730)
+- 915329a Add OCPP 1.6 coverage reporting badge (#1729)
+- b123c7c Add admin link column for experience references (#1728)
+- ae03fad Ensure release TODO fixture commits during pre-release (#1727)
+- 2bbf7e9 Defer auto-upgrade setup until database connection is available (#1725)
+- a994003 feat: add release todo during pre-release actions (#1726)
+- c30281e Rename social profile verbose names to social identity (#1724)
+- 7958fd1 Avoid creating references for loopback console URLs (#1721)
+- 56b2fcb Split environment admin into environ and config views (#1723)
+- 171d432 Move release manager admin to workgroup section (#1722)
+- 5543f8c Add SocialProfile model with Bluesky configuration (#1719)
+- 6aecdda Remove duplicate admin page titles (#1718)
+- 0257962 fix: allow publishing releases when version out of sync (#1717)
+- 78befdb Add configuration fieldset to EmailOutbox admin (#1716)
+- 3fa2ccc Avoid duplicating EmailOutbox host in name (#1715)
+- b7468f7 Allow temp password for password change (#1712)
+- f710d3b Add EVCS console scan command (#1714)
+- b8730e4 Add SYS sigil root and modernize system admin view (#1711)
+- 57f2879 Align quick guide list formatting (#1713)
+- 3780b9a Update README feature headings and development notice (#1710)
+- 38b1efe Explain skipped requirements before dot output (#1708)
+- d2129c3 Compact pip output for satisfied requirements (#1707)
+- d43674f Ensure references require active node features (#1706)
+- 297b081 Ensure footer links open in new tabs (#1704)
+- aec4b4d Improve README feature list nesting (#1705)
+- 86ca21f Add temporary password management command and backend (#1703)
+- dc3286f Rename SYS sigil root to CONF (#1699)
+- 94aa5e2 Track invite outbox usage (#1702)
+- 63f04af Add node relationship tracking and visitor registration defaults (#1701)
+- a5219f7 Restrict RFID tag validator to authenticated users (#1696)
+- ed66463 fix(rfid): restrict browser validation to authenticated users (#1697)
+- d3f722e Set Mysteric Gallery footer reference to private (#1698)
+- 4b58d9e chore: expand release step logging (#1695)
+- 797de57 Filter disabled email outboxes and prefer unattached fallback (#1694)
+- 3246a9f feat(rfid): support client-side scanners with server validation (#1693)
+- d2e5f41 rel
+- ef048f3 Adjust header external link icon sizing (#1692)
+- e594404 Improve markdown list and table styling (#1691)
+- 8099f95 fix: tighten todo help text spacing (#1690)
+- 6706e32 chore: remove TODO fixtures
+- 5b373b6 Allow TODO focus view iframe to load admin pages (#1689)
+- cf5ab32 Prefer username in EmailOutbox display fallback (#1688)
+- 9289831 Fix email setup script when node outbox missing (#1687)
+- 28ae384 Improve EmailOutbox selection prioritization (#1686)
+- 735fd7a Remove language list and sync README tables (#1685)
+- 2a60db9 Add Arthexis issuer to authenticator URLs (#1684)
+- 1e16c88 Include full revision in status output and admin view (#1682)
+- 6593195 Rename OCPP nav pill to Chargers (#1681)
+- bff17c2 Add TODO to validate simulator door open admin UI (#1680)
+- 88360d8 Add status option to email setup helper (#1679)
+- c8654da Add scheduled coverage workflow and badge (#1678)
+- d62a62a Exclude current message from NetMessage pruning (#1677)
+- d480bae Add post-upgrade health checks for auto upgrades (#1676)
+- c30080b Update nav labels for manuals and calculators (#1675)
+- cd4454d Prune stale net messages after local display (#1674)
+- 39a1c4f Default live server sync to origin/main (#1673)
+- 487d13e Add admin system validation todo (#1645)
+- b95f4f4 Replace TODO fixtures with QA dashboard validation (#1670)
+- 34cc1dd Restrict default admin login to numeric IP hosts (#1672)
+- c4f2fcd feat: broadcast staff login net messages (#1671)
+- a9ffb38 Remove RPi imager utilities (#1669)
+- 440415a Honor forwarded referer host in CSRF checks (#1668)
+- 31c95ee Normalize stored TODO URLs to loopback-safe paths (#1667)
+- a47cc2d Handle CSRF origin for forwarded hosts and ports (#1666)
+- d782dce Auto-detect previously configured AP connection (#1665)
+- e3648e7 Sanitize todo focus iframe URLs (#1664)
+- 8f57cce Improve charger console reference IP handling (#1662)
+- e7ce0c8 Add configuration section to Odoo profile admin (#1663)
+- 131ded3 Handle CSRF origin matching behind HTTPS proxies (#1661)
+- 7850113 Add --start option to run start.sh after install (#1660)
+- 3b80ed4 Remove obsolete runserver wrapper (#1659)
+- 9bfc563 Ensure live server prep always refreshes env (#1658)
+- 221723e Format upgrade notification timestamp (#1657)
+- 229523e Add --no-build flag to reuse matching rpi images (#1656)
+- 61e6de5 Run network setup on first boot in RPi image (#1654)
+- e8223bf Move TOTP devices into teams admin group (#1655)
+- ecbceac Preconfirm USB target before building RPi images (#1653)
+- 1afe3fa Improve admin system status details (#1652)
+- 9258e46 Show detected node features on system admin page (#1651)
+- 5178311 Add node origin tracking to NetMessage (#1650)
+- 1f7dc68 Move live-server update scripts into scripts directory (#1648)
+- b7c2204 Add header references and charge point console links (#1647)
+- debdc46 Add USB writing support to RPI image generator (#1646)
+- 10759f3 Add manager node tracking to chargers (#1644)
+- d2cb5f4 Update RPi image filename convention (#1643)
+- a76df66 Remove system admin command controls (#1642)
+- 77e4a50 Add last week shortcut to client report week picker (#1640)
+- 77f7781 Add authenticator login toggle alongside password form (#1635)
+- 845761f Adjust client report legend alignment (#1639)
+- 22901b9 Add simulator door open admin action (#1638)
+- c167de1 Add Product admin wizard for importing Odoo products (#1634)
+- 77cf1c5 Restore change link label and open changelists in new tab (#1637)
+- f844172 Disable dashboard traffic widget animation (#1636)
+- e592942 Vendor Chart.js for traffic visualizations (#1633)
+- e6a4d41 Handle root invocation for rpi image builds (#1632)
+- 5cd5e1a Update supported languages and localized docs (#1631)
+- 702986e Hide fixture summary after migration approvals (#1630)
+- 5d13c75 Ensure mmdebstrap unshare mode across rpi-image-gen layers (#1628)
+- b76ef39 Release v0.1.10
+- 3150e4a pre-release commit 0.1.10
+- dfca410 chore: remove TODO fixtures
+- 282afde chore: update fixtures
+- 6d31ae2 Direct profile actions to change views (#1626)
+- 08c73ba fix: sync release metadata before publishing (#1625)
+- da38a5a Set mmdebstrap to unshare mode for image builds (#1624)
+- 80573f4 Require login for energy tariff calculator (#1623)
+- fca1adf Fix rpi-image-gen layer metadata definitions (#1622)
+- b724096 Reject non-Pi4 device layers in rpi-image-gen (#1621)
+- 20279cf Hide manual sigil textarea when validating file uploads (#1619)
+- 8114f46 Resolve canonical rpi-image-gen device layers (#1618)
+- 7c8cfbd Ensure profile admin action visible on dashboard (#1617)
+- ec8ee43 Announce node startups to peers (#1616)
+- 02d28af Move RFID landing under OCPP navigation (#1615)
+- 8b2eec5 feat: add focused view for todo links (#1613)
+- 3f2ac04 Add energy tariff calculator and update power navigation (#1612)
+- f6bae17 Hide Horologia app when Celery disabled (#1614)
+- 393fac3 fix: sync unpublished releases before publish (#1611)
+- 6264b83 Adjust admin report section padding (#1610)
+- 0097862 Allow system user to have profiles (#1609)
+- a6b2de1 Default rpi image builds to Pi 4 (#1608)
+- 5d2f63a Refine README installation guidance and layout (#1606)
+- 4cad9fa Restore prepare next release control on release admin (#1607)
+- b0fb27e Add My Profile admin action for profile models (#1605)
+- 4ae80fb Include timestamp in upgrade notification (#1603)
+- ac18863 Remove bullets from related models list (#1604)
+- 4ba7255 docs: simplify features and format start instructions (#1601)
+- d95214d Refresh environment after live server updates (#1602)
+- fdeaef6 Refresh rpi-image-gen cache when device layer missing (#1600)
+- b8c84e2 Add VS Code live server launch options with upstream sync (#1599)
+- 04f1604 docs: clarify public port behaviour (#1598)
+- 43ea86d Clarify README update guidance (#1595)
+- 8e61fc9 Remove admin sections sidebar and expose profile models (#1596)
+- 3611db7 Hide prepare next release action outside change view (#1594)
+- dbca5ed docs: update README setup guidance (#1593)
+- 081615d Automatically install rpi-image-gen dependencies when sudoed (#1592)
+- 71dfd0a Add coverage for core site fixtures (#1591)
+- e2a17d0 Add benchmark management command for resource usage (#1590)
+- 9048a85 Restore user profile sections in user admin (#1587)
+- 8dba040 Allow merge migrations in check script (#1589)
+- 6e0759d Add related models block to admin change forms (#1588)
+- 4d9433c docs: clarify todo url guidance (#1586)
+- 45f46d8 Adjust client report section spacing (#1585)
+- 660b9e8 merge
+- 5d624d8 Enable user datum controls for user admin (#1583)
+- 8d55efe Remove obsolete Todo fixtures (#1581)
+- 1df2dbb Ensure visitor registration uses reachable node address (#1579)
+- 1a2b5bc Show user datum checkbox for admin users (#1578)
+- 1292214 Allow visitor registration without admin login (#1577)
+- 1a20df7 Adjust auto-upgrade interval for latest channel (#1576)
+- 09ee378 Handle HTTPS when registering visitor nodes (#1574)
+- ca3a09a Refine admin related widget layout (#1573)
+- db2c059 Add automated migration merge handling (#1568)
+- e69602a Fix admin related widget button layout (#1571)
+- 01b02e7 feat: add version endpoint with update banner (#1569)
+- 6a38863 Improve client report section legend styling (#1566)
+- 83f8386 Handle migration conflicts in migration check (#1567)
+- 846fa8a Update energy tariffs schema and 2025 data (#1564)
+- e4a45df Add spacing separators to client report form sections (#1565)
+- 00757c0 feat: add conditional TODO completion checks (#1562)
+- b9307ef Fix profile inline prefixes in admin (#1560)
+- 147b5b8 Add proxy migration for EnergyTariff admin (#1559)
+- 06e87f2 Add throttling and honeypot to invitation requests (#1558)
+- 4cbe01d Route admin fixtures through system delegate (#1557)
+- dc66fe7 Add Operate As profile link in user admin (#1556)
+- db66917 Respect disabled admin accounts (#1554)
+- 5d3e55b Fix Security Group user selector orientation (#1553)
+- 5cc88bc Improve register visitor admin action layout (#1552)
+- 7db57ea Protect client report generation (#1551)
+- 1e8f181 Allow admin default login on Control nodes (#1550)
+- dac511b Show invite send status in show_leads output (#1549)
+- 36afbee Allow systemctl stub to resolve packaged unit files (#1537)
+- d94acde feat(ocpp): hide chargers from public dashboard (#1548)
+- f38118f Ensure auto-upgrade task is recreated automatically (#1546)
+- 65cc86b Update EV Charger calculator description (#1545)
+- 415cf1b Allow public OCPP dashboard with websocket rate limiting (#1544)
+- 29241c3 feat(ocpp): add arthexis simulators without port (#1543)
+- b84de0a Extend consumption updates to five minutes and refresh on disconnect (#1541)
+- 1077fd0 Hide Constellation RFID nav module (#1542)
+- cdc690d Update charge point net message format and scheduling (#1540)
+- 5e2a1d4 Improve client report generation layout and accessibility (#1539)
+- cdbbce0 Ignore generated Pi images (#1538)
+- 1b1ab94 Require hostname when generating Raspberry Pi images (#1536)
+- 57864f9 readwhat
+- 9cbd675 four
+- 296d3d5 Avoid duplicate Hyperline connection when AP uses name (#1535)
+- e822970 Rename Public Wi-Fi Access model labels to Wi-Fi Lease (#1533)
+- 7323183 Update project description for PyPI (#1534)
+- 8579834 Adjust tooltip position for release progress todos (#1532)
+- 297f714 chore: remove TODO fixtures
+- 5274abf Guard admin model graph view permissions (#1447)
+- 99e8667 Add last visit IP tracking to user profile (#1504)
+- db49b1e Update four role architecture table layout (#1527)
+- 8bd998a Add sqlite backups to failover workflow (#1528)
+- 2be875f active
+- 0950dcf Remove ui-screenshots job from CI workflow (#1531)
+- 51cd65c Validate MCP server PID before stopping (#1422)
+- a22e638 Remove pre-commit workflow job (#1530)
+- d7f5e32 Handle missing django_site table gracefully (#1529)
+- 8a93e57 Linearize ocpp migrations (#1526)
+- 2899ddf ci: install geckodriver manually (#1525)
+- 97a7a08 Remove secret scan job from CI (#1524)
+- 827623b Fix charger constraint compatibility and merge migrations (#1521)
+- 02f757c Add remote start controls for OCPP chargers (#1512)
+- b4e70c4 Fix geckodriver action reference (#1522)
+- 49fa4a5 Remove node matrix tests from CI (#1519)
+- 91d1fb5 Add firmware status tracking for chargers (#1517)
+- 2b3f44e Remove secret scan from CI workflow (#1518)
+- d56b018 Add diagnostics status tracking for chargers (#1515)
+- 3013fa2 Load secret key securely and fix gitleaks (#1516)
+- 0010d14 Use setup actions for Firefox in CI (#1514)
+- 22ad446 Track and display OCPP charger statuses (#1513)
+- fe0b744 Format Python files with Black (#1510)
+- 8e43e0b Bootstrap venv in env-refresh script when missing (#1509)
+- 09bfd77 Update upload artifact action to v4 (#1508)
+- 135578a Update VS Code start instructions (#1507)
+- 5f0efea Hide Constellation RFID navigation module (#1505)
+- 4d2188b Update node role feature assignments (#1506)
+- ca23f9e Add postgres node feature detection (#1503)
+- 21cfbd3 Show release manager todos only on terminal nodes (#1501)
+- d5702d5 Simplify node CI matrix and feature coverage (#1499)
+- c9167da Remove container scan from CI workflow (#1498)
+- 64d4b59 Add role-only test filtering and annotate hardware suites (#1496)
+- b99bbf9 feat(ci): map components to node roles (#1495)
+- aac7a0d Handle optional ground calculations in AWG calculator (#1494)
+- 751fdd3 Add migration for calculator template public label (#1492)
+- 099bd08 Add special [1] ground option to AWG calculator (#1493)
+- 1f2e4c8 Enable RFID auto-detection when lock missing (#1491)
+- 7a6e106 Update calculator template public visibility labels (#1490)
+- 7c59ee5 Move Power Lead admin to Power group (#1489)
+- d2fdbae Show all amps columns in cable size admin list (#1488)
+- a95299e Add recurring client report scheduling and delivery (#1486)
+- 7f241fa Allow admin login when using node hostname (#1487)
+- 3656324 Remove unused import from backend test (#1485)
+- 6aae835 Add CI check to enforce committed migrations (#1484)
+- a9c3bbd Restrict admin user profiles and data (#1483)
+- d59f877 Fix LIVES sigil content type (#1482)
+- 8dd4ade Skip sigils tied to missing apps during env refresh (#1481)
+- ad564c7 Add public Wi-Fi invite tracking (#1480)
+- 779c1df Fix nmcli connection type handling for AP router detection (#1475)
+- 1496eb0 Show charger configuration link for staff (#1479)
+- 6803f22 Warn before deleting database without backup (#1478)
+- 1802a0f Add node context filters to footer references (#1477)
+- 7444a90 Adjust ExperienceReference admin column labels (#1476)
+- 5a2b216 Stop deriving node features from role fallback (#1474)
+- dc9caf1 Relicense project under GPLv3 and document third-party notices (#1473)
+- c864152 Add ap-router auto-managed node feature (#1472)
+- f2342fa Remove OCPP charge point console feature (#1471)
+- 1a319b7 Hide invite request link when email unavailable (#1470)
+- e0cbbc5 Add Register Visitor Node action to admin dashboard (#1468)
+- 006486c Add option to skip VNC validation (#1469)
+- d65a35f Allow network setup when VNC service already active (#1467)
+- 2f09e1f Allow gateway hostname access (#1466)
+- d7f8609 Broadcast charging start messages (#1465)
+- 203351a Add admin docs model graph index view (#1464)
+- 1ad1333 Align profile inline header actions (#1462)
+- 257eda5 Add charge point links to location admin (#1463)
+- 32ac444 Remove admin model graph link from dashboard (#1461)
+- 4b55095 Hide inline delete controls and test security group profiles (#1459)
+- ffd18b1 Ensure MFRC522 selects and releases tags before reading (#1460)
+- 9eecd3c Merge live subscription into energy account (#1458)
+- f09ff20 Display default assignments in node admin lists (#1457)
+- 17ee4f0 Add regression test for blank profile inline deletion (#1456)
+- c9fb09c Add interactivity and PDF download to admin model graph (#1455)
+- 37a4550 Link role badge to admin role views (#1454)
+- 59f0790 Fix admin dashboard module header width (#1453)
+- 0074f37 Move user datum checkbox into profile headers (#1452)
+- 7029724 Render admin model graph server-side (#1450)
+- c3e06db Add Bandit hook and address security findings (#1448)
+- 28e6c19 Add visitor node registration handshake (#1446)
+- 4a21d8b Add gitleaks secret scanning to CI (#1445)
+- 2281658 Add container image vulnerability scanning to CI (#1444)
+- d76e00d Add pip-audit security check to CI workflow (#1443)
+- d7035a3 Add Graphviz-powered admin model diagrams (#1442)
+- 0b60b40 Shorten charge point admin column labels (#1441)
+- c5e8837 Improve charger landing experience (#1440)
+- 6fe90e2 Maintain connector colors in charger charts (#1439)
+- 0ea082c Show multi-connector chart on aggregate status view (#1438)
+- 7334904 Expand connector labels for navigation clarity (#1437)
+- 75e6042 Finalize connector-aware routing (#1436)
+- afc26c9 Remove AP Lead references from docs and tests (#1435)
+- a41cb78 Keep profile passwords unchanged when forms submitted blank (#1434)
+- b75ff31 Remove AP lead models and admin registrations (#1433)
+- a2e52a0 Hide EnergyCredit admin from index (#1432)
+- d2a31b3 Align simulator CP paths and labels (#1431)
+- 7d21007 Improve charge point landing experience (#1430)
+- 855b41b fix: allow seed fixtures to update unique entities (#1429)
+- 2fe757f Populate console URL from charger client address (#1428)
+- 0761fbe Handle chargers when Sites entry is missing (#1427)
+- 223ba25 Keep admin change form sections sidebar fixed (#1426)
+- e0e2953 Document release manager TODO for regressions (#1425)
+- f5baec9 feat: protect system user profiles (#1424)
+- 700f416 Adjust assistant profile inline user datum layout (#1423)
+- 2959b3a Rename chat profiles to assistant profiles and add MCP admin controls (#1421)
+- d8dee5a Add standalone RFID scanner CLI and tests (#1420)
+- 8eaffba Handle profile forms without _raw_value helper (#1419)
+- d23e1f4 chore: remove TODO fixtures
+- fe7cc81 Avoid saving empty profile inline forms (#1418)
+- b93d354 Add UI screenshot specs and CI automation (#1417)
+- 23ad5b2 Handle missing Site for admin login (#1416)
+- a150097 Add timeout handling for gway sigil fallback (#1415)
+- 7582bda Reassign admin docs groups for selected models (#1414)
+- a55166b Consolidate user admin sections sidebar (#1413)
+- f3ceae8 Add toggleable sections sidebar to admin change forms (#1412)
+- 2d9838f chore: remove TODO fixtures
+- f843b5c Enable email inbox/outbox profiles and add user admin sidebar (#1409)
+- bf80763 Prune older failover branches after upgrade (#1410)
+- 3f7f20d Add GitHub issue reporting signal handler (#1407)
+- ee861ac Use title case for user profile inline headings (#1406)
+- 1536753 Add GitHub issue reporting helper and task (#1405)
+- e985a52 Remove DC Fast Charger calculator fixture (#1404)
+- 10f2c3b Fix local simulator defaults for current host port (#1403)
+- 0ab4936 Refactor user data storage by username (#1402)
+- 4c32507 Allow optional Odoo profile inline (#1401)
+- db363df Fix admin profile link to target user change view (#1400)
+- 56b5c6f Fix admin template permission checks (#1399)
+- 14b3a9e Skip empty user data fixtures (#1398)
+- 21b43d1 Add user phone numbers with priority support (#1397)
+- cdf791c Add staff-only console link to charger status page (#1396)
+- 9fa89ed Ensure env refresh reloads personal user fixtures (#1395)
+- fdd56fc Add teams proxy APLead migration (#1394)
+- 518c16e Add My Profile admin link (#1393)
+- e047f90 Guard ReleaseManager natural key for unsaved fixtures (#1392)
+- 26c27e4 Detect RFID hardware during control installs (#1391)
+- e2afbae Ensure RFID wiring configuration is enforced (#1390)
+- 2fe0ecf Add AP Lead model and public access point mode (#1389)
+- cc8db05 feat: block release approval without PyPI credentials (#1388)
+- 378db3a Release v0.1.9
+- b4b7058 chore: remove TODO fixtures
+- f3fd995 docs: drop pre-commit requirement from agent guidelines (#1387)
+- 71a3c67 Include control nodes in RFID feature (#1386)
+- 89c4347 Ensure chargers reuse shared locations and add admin map links (#1385)
+- 2c32f4d Handle unwritable install log directory (#1382)
+- 96c70ad Update user data profile fixtures and labels (#1384)
+- 597524d Add CP simulator fixtures for local, router, gateway (#1383)
+- eb35fdd Implement MCP sigil resolver server (#1381)
+- 2dded01 feat: centralize user and group profiles (#1380)
+- 3dfed42 Ensure node feature assignments inherit Entity (#1378)
+- 44c7917 Improve nginx detection for non-root runs (#1379)
+- f85d900 Add admin log viewer for charger and simulator (#1377)
+- 15bb30f Add rpi-camera node feature detection (#1376)
+- 24a8a0c fix: clear revision when importing past releases (#1375)
+- 51ea769 Fix admin sigil forms to preserve raw values (#1373)
+- 261922a Refactor node features and polling tasks (#1374)
+- 0c36722 Fix admin sigil forms to preserve raw values (#1372)
+- fb21c6f Ensure user data reload marks all entities (#1371)
+- 87c5d0e Add GUI toast node feature (#1370)
+- 3347fe4 Skip debug toolbar requests from view tracking (#1369)
+- 783baae Set admin default delegate (#1368)
+- 7afa0be Add guard against nested git repositories (#1367)
+- 5739d5b chore: remove TODO fixtures
+- 3d8a732 feat(core): add operate-as delegation for users (#1366)
+- 109ecd5 Remove CMD sigil root (#1364)
+- f2a700e Show brand WMI codes in EV model admin (#1363)
+- 609f0ea feat: add gway fallback and case-insensitive sigils (#1361)
+- 0671ea0 Add OWASP ZAP security scan workflow (#1362)
+- f92f78b feat: require release manager approval before publish (#1360)
+- 3f4b4a5 Add management command to broadcast Net Messages (#1359)
+- e29c1fe Add flag to customize wlan0 access point name (#1358)
+- 17f3ff1 Limit future action links to top entries (#1357)
+- 314519d Tweak release progress button spacing (#1355)
+- 198c029 Add EV battery estimates and fixtures (#1354)
+- fb4ecb1 Restrict release manager todos to linked users (#1353)
+- 3e53ccc feat: enhance release progress controls (#1352)
+- 3ae9f45 Add public view history tracking with admin analytics (#1351)
+- 9a46480 Expand release manager token text areas (#1350)
+- 28b2552 Adjust object tool button padding (#1349)
+- 35fe161 Release v0.1.9
+- 6391523 chore: remove TODO fixtures
+- cf724c2 Adjust release progress controls and skip redundant version commit (#1348)
+- b0f16d3 Hide stale publish logs until release start (#1347)
+- 92c9a28 chore: remove TODO fixtures
+- b8729df Reorganize EV admin models and cleanup menu (#1346)
+- 60443f0 style: add padding above Future actions heading (#1345)
+- 70d572c Add validation todo for release progress current check (#1344)
+- d71fc52 Align navbar height with top status bar (#1342)
+- 519ff83 chore: add validation todo for admin action buttons (#1343)
+- 865a99f Handle missing site on login (#1341)
+- 5e88cb3 Use natural keys in fixtures (#1340)
+- 1247624 Remove obsolete fixture change check (#1339)
+- c1b74bf Fix duplicate natural_key definition (#1338)
+- a7a5577 Remove unused freeze requirements script (#1337)
+- e9191ca feat: require manual start for release publish (#1336)
+- 9bd3a10 Add natural key managers (#1335)
+- 436731a fix: rename EART root and expose built-in sigils (#1334)
+- 93a1531 Rename Energy Report to Client Report and use hostnames (#1332)
+- 8cd6819 Squash merge on successful CI (#1333)
+- 8cb8094 refactor: reset sigil root fixtures (#1331)
+- ac82b3e Add automerge workflow triggered by CI success (#1330)
+- b7f9059 refactor: rename Todo description to request
+- 441aca4 refactor: remove moved models from Business admin
+- 8294bee Rename Protocols group to singular
+- 079b332 Validate screen User Manuals
+- 5cb3057 Validate screen Seed/User Datum links
+- fa86066 Validate screen RFID admin
+- cc00081 Validate screen Release progress TODO list
+- 123f589 Validate screen Release progress (steps updated)
+- 0645b09 Validate screen Release progress
+- 617496d Validate screen Manual PDF download
+- 07f108f Validate screen EmailCollector
+- 627b730 Validate screen Charger Console
+- 8530206 Validate screen Admin header
+- 7ce992c Validate screen admin dashboard TODO details
+- 71ac5bd Validate screen Admin app list
+- cfdda91 Validate screen Language switcher
+- 3fda439 Validate screen Model documentation
+- b233848 Validate screen Model documentation docstring
+- 21e3862 Field test at Audi Centre
+- 7a14728 Field test at Porsche Centre
+- 255357a Prepare release 0.1.10
+- 4c943b7 git
+- 9dc35bf rem
+- e147400 fix
+- 73512c0 chore: update fixture hash
+- 1216147 feat: automate pre-release commit
+- 7b60e50 Validate view manual_pdf
+- 393f07f Validate screen Admin app list
+- 8e4802b Track fixture and migration hashes
+- 11118ec feat: support MODEL_SOURCE for gway models
+- 60483fb fix: repair admin routing and tests
+- 13d2346 Fix admin URL patch so newly registered apps resolve
+- 948b0f1 test: ensure dashboard shows todo with done button
+- 50792cc Ensure manual PDFs download
+- 1c8a03e Add Workgroup app and relocate administrative models
+- 901402c warn before overwriting database on revert
+- 7130c58 feat: block release when TODOs pending
+- 151b592 Abridge fixture output with model summary
+- a927804 Add EmailCollector validation todo
+- 06b3fa0 feat: add custom label to RFIDs
+- 786d37d Override post_office migrations and ignore hashed DBs
+- 64b1941 chore: add db revision utility
+- a514353 Handle post_office migration base error
+- 58444a3 chore: remove gway dependency and scripts
+- aabd94d Remove SQLite backup handling from refresh and upgrade scripts
+- 68ffdd6 Skip orphaned WorkgroupNewsArticle migration
+- 472668e ci: remove obsolete upgrade path test
+- 53a99d5 feat: adjust language switcher colors
+- b4fac31 feat: improve lcd i2c dependency handling
+- dce12b9 Handle individual fixture errors during env refresh
+- f981e64 Handle missing Site gracefully in get_site
+- 96c0323 Add ProductAdminForm and clean up model doc template
+- 24a760f test: verify core and awg fixtures present
+- 30e5943 Remove news article feature
+- 5f135ef Reduce admin header padding and add validation TODO
+- 8d8d258 Align admin action button size with history link
+- d85d98b Add serial number and connector ID to simulator
+- 96df59b Add todo for validating seed/user datum links
+- adb099c Rename Subscription to LiveSubscription
+- 95adb03 feat: add Odoo product component
+- 59ad721 feat(docs): show model descriptions
+- 7488e63 chore: remove user address admin field
+- 67f94b2 fix: restore cable size and conduit fill fixtures
+- 38e7051 feat: allow aborting publish process
+- 57f86be Release v0.1.9
+- 05df155 chore: update fixtures
+- 82d4605 chore: ignore SQLite transient files
+- a9ff53e Handle non-UTF user fixtures
+- 43ac75c Use natural keys for module and landing fixtures
+- 9ae83fa Remove conflicting fixture primary keys
+- c1bc88e fix: clean landing fixtures and sigil generation
+- 3033c23 Avoid SQLite locks when generating sigils
+- 6021396 ci: use localhost for postgres service
+- 0c9a9f3 Increase Postgres connection timeout
+- d66790d Use direct DB update for user datum flag
+- fd14a95 Include user data flag in NodeRole serialized test
+- c1d5373 feat: display seed fixture filenames in admin
+- cb061d7 Ensure modules reference existing applications
+- 6153c01 Remove sudo from SSH password setup
+- 4fe53ab Use lockfile for auto-upgrade mode
+- 46514d3 Load fixtures in dependency order
+- 0b1b951 Use PostgreSQL service for CI tests
+- 3060e05 Add WiFi watchdog and session lock handling
+- d1c3dd6 Enable WAL mode for SQLite tests
+- 934e1e8 halt network setup without SSH password or VNC
+- 71f51a1 Add charger console template and validation todo
+- ad828c7 Fix node feature role fixtures
+- c89fa57 Add field test TODO items
+- f4c2a14 Handle existing transaction_uuid column in migration
+- f0c8ac1 Sort fixtures to load modules before landings
+- 21ee562 test: add coverage for release version selection
+- 1b08e55 feat: surface RFID scanner and drop efficiency tool
+- c691f6e Add public user manual views
+- 566a541 Require password confirmation to stop server
+- 6071156 Simplify user data handling
+- 9782a2b Add mailer helper wrapping post_office
+- 15b76e3 Introduce EmailOutbox-aware backend
+- 7aa1ea6 fix: restore node role fixtures
+- 41fae24 Route mail through Post Office and start Celery by default
+- b591bd4 Rename post office log verbose name
+- 719deda Add validation todo for EmailCollector screen
+- ce06e34 feat: replace sigil root fixtures with custom prefixes
+- 497d1a9 test: ensure env refresh loads underscored fixtures
+- b7e1e7e Ensure favorites star shows without content type
+- 4222afa Refactor OCPP meter value storage
+- dcc8e36 Avoid DB locks in connector tests
+- 73eed15 Avoid transaction chart drift after charging stops
+- ffcb94a Handle chargers per connector
+- ba99116 Fix energy chart to use meter start
+- 7c38570 Fix energy graph to accumulate meter readings
+- ae77274 Pin wireless connections to wlan0
+- a1a5381 Ensure nmcli leaves wlan1 ready for scanning
+- bb112ac Create combined redis/nginx check for control installs
+- 30c0e8a Highlight current admin model row
+- 095f1ff Wait for secondary wlan1 connection before failing
+- 085082c Check control mode deps at once
+- cc8be85 Rename manuals app
+- 257ca5c test: silence upgrade path skip
+- 2d24913 Adjust dashboard module header padding
+- 7f91d5c Remove unused model permissions
+- bade4e2 Set local site name and remove Zephyrus
+- 77475d6 Handle empty user data fixtures
+- 9c81c98 Restore dropped initial connection
+- be68598 feat(core): restore footer reference fixtures
+- 1d4a1de Fix wlan1 refresh for nmcli without separator option
+- 006a4f8 defer startup notification until after migrations
+- 90f3987 Store unknown RFID on transaction start
+- 2297b5c Add fixtures for Gateway and Router sites
+- 703933c Display startup message on boot
+- 269ac3f Prefer hyperline on wlan1
+- d946811 Remove version prefix from startup NetMessage
+- aca1e49 Skip invalid user fixtures
+- e0dfa48 feat: add Raspberry Pi I2C enable hint
+- 686dd32 chore: split fixtures into individual files
+- bf58cde feat: add change form Test Credentials button
+- 78b9e01 Restore todos fixture
+- 183baa1 feat: add email inbox collector test action
+- 7b838f9 Avoid duplicate nav in manuals admin views
+- 447edc7 start: collect static files before restarting services
+- 0e4237e Ensure user datum records created for imported fixtures
+- 9309fa9 Restore original node role fixtures
+- fa0b3e4 feat(admin): record detailed change history
+- cb18db7 Reduce top navbar padding
+- 99671b4 Add EmailCollector admin inline
+- 632ba57 refactor: rename wlan1 refresh script and improve reliability
+- 04eb6f2 Rename admin list links to browse
+- ab3ec62 Protect active internet connection unless unsafe
+- e1bf635 Rename Gateway role to Satellite
+- 5603b67 Remove reset screen script
+- 48eebd6 feat: guide Redis installation in role switch
+- dea62b1 Rename status check script
+- d1d1c78 Add script for configuring email inboxes and outboxes
+- 120fb27 Use consistent gelectriic-ap network
+- 64455b9 Add script to change device hostname
+- 7d08b17 fix: limit migration check to local apps
+- 34975aa test: ensure project has no pending migrations
+- 2aa52cf fix: mark emailcollector migration as replacement
+- 4fb4b37 test: avoid database flush in seed data tests
+- 35d44c2 Document freezing migrations and tagging artifacts
+- 7864f38 Validate access point before further network setup
+- a4d4288 chore: ensure shell scripts are executable
+- 3c64741 fix: restore migration name for post office
+- cf1cd20 Fix manual admin sidebar permissions
+- 297747b Remove Operation and Logbook models
+- 0764b35 feat(admin): expose single records as actions
+- fbc9543 Validate screen NodeRole admin list
+- 9688402 ci: run env refresh and upgrade tests
+- c4f5824 Add fixtures for new sigil roots
+- bfe1012 Remove default margins from admin form rows
+- 5e54d92 feat: allow sigil lookup by any field
+- 005c857 Gracefully skip tests when prerequisites are missing
+- 7babd86 fix: handle existing config sigil roots
+- 2a799e6 Support nested sigils and deterministic entity lookup
+- e3acc5d Remove Fediverse profile feature
+- 0c30d93 fix(admin): align header clock
+- 4722e40 Add languages and PDF downloads to manuals
+- 8e3b56c Clean untracked files after upgrade
+- 9c46a8e feat: show roots for auto-resolvable fields
+- 39dce79 Number Quick Guide steps in README translations
+- 9c0a5fb Reset SigilRoot before loading fixtures
+- e6135ef Allow single-root sigils
+- 8ef45b3 Remove NodeTask model
+- eb14b8e handle wlan1 fallback failures to always create ap
+- d7d3e0e Format lcd_check command and test
+- 1f684f2 feat(core): add custom sigil roots
+- f4257b8 docs: add quick guide sections
+- f9283ef feat: restore gway support with CLI wrappers
+- d593be7 Fix invalid todos fixture JSON
+- ff53382 style(admin): center server clock
+- 36aa63f Show registered node count for NodeRole
+- 12d0e66 style: align todo done button
+- 583e1e8 Validate screen Model Permissions
+- 9023195 feat: add public permission matrix
+- c33e7ea feat: generate changelog from commit messages
+- ce52df7 feat: show list link on admin index
+- dfe9441 feat: integrate manuals into admin docs
+- ea01301 fix: add admindocs commands route
+- 9773791 feat: add admin table filtering
+- 8b8dd92 feat: link news articles to changelog
+- 5c408fb feat: add command to reload user datum fixtures
+- 7be6bda test: ensure user datum fixtures maintained
+- fb2a18a Remove deprecated Virtual and Particle node roles
+- d3ab6d2 docs: add GUI validation TODO guidance
+- 462d302 Fix admin app list auth link alignment
+- cb97276 feat: fold news into pages app
+- 7253ecd Handle existing sent_on column in InviteLead migration
+- fed2fec refactor: remove app module
+- 041b76a Fix ModelPermission template syntax
+- d144f49 Move model permissions link
+- 82afafd feat: expand sigil validator input
+- 6afb9ac Advise using NonImplemented for stubs
+- 83b97f5 Add interactive network setup and mandatory wlan0 access point
+- ba21ef4 Add User Datum option to EnergyAccount admin
+- 3b93664 feat: add validation todo hook
+- 9e39cb7 Commit TODO completion to git
+- 8e17096 Fix admin related widget button overlap
+- 65c3295 Add EV model fixtures with battery and charging data
+- f7857e2 Advise agents to use fixtures for data
+- 0176952 done
+- c95abb9 Ensure permission group_set returns SecurityGroup
+- 289803f Fix dynamic form field lookup in model permissions template
+- 8a34905 Add release checklist page
+- 29ceedb feat: add migration check automation
+- 2b10ab0 Fix dynamic field labels in permissions template
+- b68900b Use relative URLs for todo links
+- 1e65344 fix: correct release todo urls
+- 8a6f7c9 Fix dynamic field lookup in permissions template
+- 1747a16 fix: exclude superuser from model permissions
+- 95236aa Ensure datum checkboxes in custom admin templates
+- 8079bb7 feat(admin): add per-model permission management
+- f4c12ad Fallback to localized root README when module lacks one
+- ab6bb5a Exclude non-web commands from admin system view
+- 1cefdad Add admin TODO completion
+- d18b892 Normalize language code to lowercase
+- 32b6995 feat: refresh wlan1 connections on boot
+- d436dcb feat: add news articles for past releases
+- 375c1bd Show even AWG preference for odd results
+- 6ff3b5a Add live update helper and enable auto-refresh on select pages
+- 044403b Honor language selection when serving README
+- b070034 docs: guide gpt integration on chatprofile admin
+- fd37a81 Test chat data endpoint
+- 9415bc3 chore: ensure env refresh installs pip
+- d7e7afb docs: mention URLs for Todo tasks
+- 117b4be feat: add news app and fixtures
+- 77b70d2 Reload README on language switch
+- f85782b Limit user datum patching to Entity admins
+- 1155791 Add translations and language switcher for charger pages
+- 5fea54b feat: add release manager todo fixtures
+- 69cf6ee test: patch RFID reader tests
+- 7dbb3e8 feat: add --clean flag to db setup script
+- b3401bf chore: rename upgrade test script
+- bcacbe4 Add shell script tests
+- 708b9a7 Match language dropdown to toolbar buttons
+- 6175a5e Rename user_manuals app to man and rely on module navigation
+- 58307b6 chore: add .sh extension to reset-screen and update shell script guidelines
+- e2c2889 Rename token builder to sigil builder
+- c4e7ee5 Add user manual listings and navigation
+- b918023 Reorder toolbar buttons
+- 15ac6e0 Add guidance for invitation email errors
+- 4a75f05 Style language dropdown to match toolbar buttons
+- 5666947 Add French and Russian README translations and tests
+- fd7e001 fix env refresh clean db check
+- 1368436 Restrict datasette access and add navbar link
+- 650e9a7 Include version and revision in sqlite backups
+- e8725fe Ensure admin change actions render and fix release manager tests
+- 1fdfb7c release work
+- 372717f Add base translation files for French and Russian
+- aca01ee Rename RFID admin action
+- bf25c17 Add test for birthday greetings task
+- 7fe6a2c Patch UserDatum mixin globally and test entity inheritance
+- d0f11e6 feat: add release manager credential test
+- 1c7b9ee Add check flag for switch-role script
+- 6a72d7a Release v0.1.9
+- 84de541 feat: require sudo for reset-screen
+- 1a5eddb Add install.bat for Windows
+- fb590a0 fix: enable Raspberry Pi screen
+- 3b1dc01 fix: pin VS Code env-refresh tasks to workspace
+- e842641 Use local black for pre-commit
+- 0ef3e93 chore: make pre-commit offline-friendly
+- 0638201 fix: prevent env-refresh from altering root
+- 5667bb9 Rename admin index Seed Datum button
+- 2e75efc Add token validation to token builder
+- 6a2ab3f Restrict user datum to entities
+- e5498e5 fix: correct case termination in reset-screen
+- e515dcd chore: create release and upload migration plan
+- 6d166d2 Verify pip install in env refresh
+- 65fbffd test: cover datasette service management
+- 39c5391 style: format code with black
+- 85d4668 Include verbose names in initial user manual migration
+- 6fb7a95 chore: auto-close stale pull requests
+- f35c81e Improve energy report date selection
+- c0c201a fix: capitalize user manual verbose names
+- 952a160 Add accessibility and tests for model status icon
+- 9b7065b included releases
+- 12f5046 feat: allow hyphen in sigil tokens
+- 5431393 Add model status indicator in admin
+- 4066014 feat: support CMD sigil root for management commands
+- 40b5980 ci: comment impacted node roles
+- c6697e2 feat: enhance sigil resolution with context and ids
+- 74ee7a2 Ensure PackageRelease admin lists release actions
+- 7561a7e delete hdmi
+- 3a4712e feat: record screen mode
+- 54b52b0 feat: add screen reset modes
+- c175fb8 Add test mail tools in inbox and outbox admin
+- 3459287 Rename approve_invite command to send_invite
+- a996890 Add admin energy report generation
+- b9aa42c Test database backup creation
+- 3f3b4e6 Remove VNC setup from network configuration
+- 4be63b2 Ignore collected static files
+- 861030b Add energy report model and customer report view
+- d0f0b67 Allow wlan1 to use any wifi as gateway
+- 8bbeffb Serve static files with WhiteNoise
+- 0d2c84e Configure static files collection
+- b828cf9 Add RFID energy consumption report
+- ee13227 Track invite email send status
+- 87bd730 Release v0.1.8
+- 14c51a5 feat: add fixture update command
+- 7852757 test: validate admin group relocation
+- 5c61d23 fix(admin): load net message after DOM ready
+- 256515b Fix generate key link in ChatProfile admin
+- aac0c77 feat: capture migration state during release
+- 3550fb3 docs: expand README with explanatory links
+- 56825da feat: admin key generation UI
+- 4469fd8 Add missing merge migration in core
+- 20e7969 readme
+- 9bec04a feat(admin): add refresh from pypi action
+- f686272 docs: recommend optional squash before release
+- dccdf0f guard rfid features behind configuration
+- 4743a6d feat: expose chat profile api
+- 424233c Rename show_invites command to show_leads
+- b15af7c Allow www.arthexis.com host
+- 47bad64 docs: document management commands
+- f747f1f feat: add release list shortcut
+- acabf1f online
+- 830efe5 Rename management command to show_invites
+- 872af01 Add command to show recent invite and power leads
+- dd0ebbb feat: allow remote database setup
+- ef5025e red
+- af8d99d readme
+- 8a482c7 chore: restore gitkeep files
+- 22ca25c Add active package tracking and update release status
+- 733a900 Skip commit when build has no changes
+- eca4d82 Simplify operation effect field
+- 9d3cb09 Set is_published only after successful PyPI publish
+- 6f4ca69 refactor: drop revision tracking from release
+- 329afbb Release v0.1.7
+- dd169de Release v0.1.7
+- 17cb2bb Release v0.1.7
+- b026011 Release v0.1.7
+- f9cf91e Release v0.1.7
+- cde2bff Release v0.1.7
+- a49aaab Release v0.1.7
+- b1ce57e Release v0.1.7
+- 7c7192c Release v0.1.7
+- bf7076f Release v0.1.7
+- aea27ca Release v0.1.7
+- 688735d Release v0.1.7
+- d3e1256 Release v0.1.7
+- cff6984 Release v0.1.7
+- 5dc618d Release v0.1.7
+- 4cd8d6c Release v0.1.7
+- 28fb90d Release v0.1.7
+- bf7a5bd Release v0.1.7
+- 26b4d61 chore: update fixtures
+- d536680 Release v0.1.7
+- 3588f47 ver
+- 0be2575 refactor: simplify release promotion
+- fb29e42 Release v0.1.7
+- a7b962b chore: update fixtures
+- 832e0ab Release v0.1.7
+- ba9bb8b fix: avoid merge commit prompts
+- 7c74033 ver
+- dfb3eb2 feat: rebase release branch before merge
+- 754a697 fix: merge release branch without fast-forward
+- 6912be3 Write fixture hash during env refresh
+- 890e08e Restore log placeholders
+- d794092 fix: avoid checking out missing fixtures hash
+- 3529c66 chore: dedupe changelog
+- f185c66 Release v0.1.7
+- 4b7626b Release v0.1.7
+- ae2e08f Release v0.1.7
+- 93a21e6 chore: update fixtures
+- dfa6c0e Release v0.1.7
+- 2101034 Skip fixture checks during migration squash
+- ecf09eb Release v0.1.7
+- 62768b3 Release v0.1.7
+- 8823979 Release v0.1.7
+- 21047e9 Release v0.1.7
+- f036325 Release v0.1.7
+- 5dff0a5 Release v0.1.7
+- e9a5f2d Release v0.1.7
+- a226002 Release v0.1.7
+- bae3f59 Release v0.1.7
+- 03e841c Release v0.1.7
+- 8f48c5e Release v0.1.7
+- 6d42d15 Release v0.1.7
+- 047e861 Release v0.1.7
+- 8d68872 Release v0.1.7
+- 2c062fd Release v0.1.7
+- 3273665 Release v0.1.7
+- 4bf6cbd Release v0.1.7
+- b13418c Release v0.1.7
+- 981e59d Release v0.1.7
+- 18e1d4d Release v0.1.7
+- 4dcd62e Release v0.1.7
+- df6d925 Release v0.1.7
+- c0720f7 Release v0.1.7
+- 0b5dd28 Release v0.1.7
+- 55ec85d Release v0.1.7
+- 0387606 Release v0.1.7
+- b43aae6 Release v0.1.7
+- c47020c chore: update fixtures
+- 7b6bb07 Release v0.1.7
+- 43cf2a9 restore fixture hash after env refresh
+- 07c27ea Ignore MD5 checksum files and handle missing fixture hash
+- 0a9b746 Preserve unresolved sigils and log resolution errors
+- 851d2f0 fix: improve release restart and migration squashing
+- 6c06a41 feat: add fixture application check
+- 61ba970 Release v0.1.7
+- 962e527 Release v0.1.7
+- 3684320 chore: update fixtures
+- 743befc Release v0.1.7
+- 47ad15b feat: allow release retry
+- 538d315 ver
+- c2493d6 py
+- 0d45ad2 mysteric
+- eaec76b chore: restore log placeholders
+- 73dda0c Release v0.1.11
+- b7e6b69 Release v0.1.11
+- 82b094b Release v0.1.11
+- 5c4941c Release v0.1.11
+- ca765c2 Release v0.1.11
+- 02c6af1 Release v0.1.11
+- 847ebe5 chore: update fixtures
+- 703e22f Release v0.1.11
+- 4fc2d82 omni
+- c1e2ba3 microservices
+- 248ba81 Add Virtual and Particle node roles
+- d4524bf test: cover dist cleanup in build
+- f14bc47 regress version test
+- bae58ca Add PyPI validation admin action
+- 033f958 Release v0.1.10
+- 63b1437 fix: persist release progress through reload
+- c463956 Release v0.1.10
+- c049ab9 Release v0.1.10
+- 3a5fc86 chore: update fixtures
+- 4c440ab Release v0.1.10
+- 4ae09ec readme
+- eb244d4 docs: update features section in README
+- f5c88ba Release v0.1.9
+- 90f8a2c Release v0.1.9
+- 9adc379 Release v0.1.9
+- e57f315 chore: update fixtures
+- 64d472b Release v0.1.9
+- 67e9179 Update references fixtures
+- 80f96da feat: auto-commit fixture changes during release
+- 9184bce Release v0.1.8
+- 96ce074 Rename infrastructure app
+- 1893403 test: ensure VERSION updated during publish
+- b9d88c7 fix(core): remove duplicate initial migration
+- 9d7e95b Handle closed connection and remove test warning
+- 3e2ffb1 Ensure release fixture uses current revision
+- 2930eb9 Use settings for node role
+- 2e82647 Add PowerLead tracking and shared Lead base
+- 08b35b5 fix: rebase before pushing release metadata
+- f9ab1d0 chore: update release metadata for v0.1.7
+- 06d9078 Release v0.1.7
+- f44c3f8 Delay release fixture until commit
+- d25ba8c Add app config overrides
+- 7dce0e2 Update VERSION and enforce sync with releases
+- 487127e style: match action button padding with history link
+- dd8aeac Track invitation requests via InviteLead model
+- 609bf8d chore: remove release tests and fixture
+- 5a10980 Add logging for invitation requests and node email sending
+- 924d97b Test Celery debug configuration
+- 9089840 Format footer fresh since date
+- bcaa981 chore: tidy env-refresh clean test
+- 8a56463 Make package column clickable in PackageRelease admin
+- 8bc89dc Redirect favorite setup actions back
+- 2a4e03d style: match admin object action buttons
+- 64230ce feat: show freshness timestamp in footer
+- 6b99295 Show all models in app list
+- 910d1a2 Remove pull request references from release
+- 4d601d9 test: update release progress expectations
+- d2525af fix(release): commit release fixture after build
+- 17aac32 theme admin relation buttons and align delete
+- be4168e Rename AWG admin group to Power Calculators
+- ab13409 chore(admin): fix email inbox breadcrumb
+- 61f3621 Allow anonymous access to last message API
+- 3a90ca0 Reset release progress session when version changes
+- 5b541d5 Save object before executing admin change actions
+- bd6fdd4 Use icon semaphores for readonly booleans
+- 186f316 Update release fixture on save
+- 44ce1e0 Show PyPI link after release
+- c8d51a6 docs: link support page
+- c9ef1c1 Release v0.1.4
+- 005f72a Allow invitation request without CSRF token
+- 938d7bd fix: dedupe admin future actions
+- 3823228 feat: add footer divider
+- 1e0dc46 fix: update version file during release
+- 8b904a9 feat: add clean flag for database resets
+- db524f9 Deduplicate future actions
+- 2c66556 Add user data flag to favorites
+- 29d052f fix: add twine to release requirements
+- 1414209 Handle missing users in personal fixtures
+- bfce09a Replace default admin with arthexis user
+- e2ae47d Fix duplicate user fixture during env refresh
+- d253c6f Add RFID card type support
+- 6bc9023 Refactor Celery task setup
+- 1087002 Defer startup notification until request
+- fbd12da Create admin with privileges in backend test
+- ddb1765 Mock subprocess run in publish tests
+- 98baeb9 Remove unused node list columns from admin
+- 53fa536 Propagate NetMessage to three peers and local display
+- f19100c Rename PostgreSQL setup script to db-setup
+- f2893cf Handle SQLite file locks during env refresh
+- 1f3d6a4 fix: enable save-as-copy and user datum admin
+- 5bd6f5b fix(admin): display user datum controls
+- cb4e300 Use NetMessage for startup notification
+- ca6f9aa feat(admin): display last network message
+- 937b630 feat: auto-resolving sigil fields
+- 46d6a57 Add admin favorites
+- 98625e8 fix: enforce unique package name and auto revision
+- be6f981 test: cover prepare next release version
+- 404269b Handle deleted release versions when preparing next
+- d502c4d Add environment view and template
+- a175d80 Expose release currency indicator
+- a6c4b8a Expand acronym list and allow plural capitalization
+- 7fe8278 Mark PyPI and PR URLs read-only
+- 44b558d fix: clean up NetMessage metadata
+- d706f5c Add detailed Email Outbox guidance
+- 9c3f3e2 Prepare release bumps patch version
+- 636a767 Store releases as fixtures and add deletion cleanup
+- 9dbc795 Display release status fields as read-only
+- bfdb0b3 admin: show release status checkboxes
+- 1f364dc Fix twine upload file handling
+- 4a22fae Remove beta application
+- 325858b Rename Packager Profile model to Release Manager
+- 39213db Ensure releases retain PR link and promotion status
+- 65dd958 Add system status admin page
+- 2396ca5 Clarify PyPI credentials in packager profile
+- c9ff100 Improve release promotion workflow and certification
+- f4f2afa Enable user data for all models and update sample game
+- edeaa58 Add fixture for 0.1.1
+- 17598dc Release v0.1.1
+- 4d1a1f7 Add breadcrumbs to release progress page
+- 839183c feat: allow GitHub token per packager
+- a2c0fc2 Handle missing gh in release promotion
+- f11d868 Test admin object actions for releases
+- 8f99fde Rename game app to beta
+- 5ae17ca Rename Vehicle to Electric Vehicle and add footer visibility
+- 96a0aa5 feat: improve release promotion process
+- 21007d7 Add share button with clipboard copy and QR code
+- deac814 feat: configure run and debug reload
+- 16df69e Clarify promote return values
+- c71448d Avoid interactive prompts during release promotion
+- 0212bdb Rename charger models and add EV license plate
+- 9d9d597 Allow release promotion with auto-stash and relocate progress URL
+- 6ed036b Auto-stash during promote
+- 32a4455 Replace Ren'Py prototype with simple image-based game
+- bcc16f7 Ensure outbox setup uses virtualenv and defaults secure options
+- 94c1b6b Print version and revision on startup
+- cb5c318 Ensure package release on node startup
+- 993f135 nodes: use RELEASE env for package release
+- 587d026 chore: remove release fixtures
+- 6507669 Print version and revision on server start
+- 4924ffa Add node email outbox support
+- 7b3d498 Enable Django autoreload in VS Code
+- 47b7b79 Handle missing beat tables when registering poll task
+- cd6a1f0 Add tests for email collector
+- 897bfcf test: remove obsolete readme sidebar tests
+- 12b6e16 feat: show upgrade freshness in footer
+- f4b9225 Add inactivity reload timer on homepage
+- bf0cc73 fix: render footer for all users
+- 5136ea7 Enable autoreload for Debug Server
+- 547675e feat: show upgrade freshness in footer
+- f735069 Rename games app to game
+- b430d86 Clean unpromoted releases
+- 2009cb0 Add base64-encoded Ren'Py demo package
+- 6f654a6 Rename games app to game and sort navigation modules
+- 509fea8 Add persistent Hyperline connection
+- 51aecdd Test for footer presence on home page
+- 7b1f422 Fix test package release setup
+- 57c89bf Add demo Ren'Py game showing Hello World silhouette
+- 19223f1 Handle missing models in personal fixtures
+- 84e3208 fix(core): add release progress template
+- a2794e7 Add games app with Ren'Py game portal
+- 04b2ad6 docs: sync Spanish README
+- daa3f6e Clear site display names in fixtures and test role title
+- 38a99f6 Ensure runserver serves static files
+- cf57cca Handle missing migration table in env refresh
+- fc28497 Improve email inbox admin and copy behavior
+- 9ad19e8 docs: add about me quote
+- 6d1f883 docs: simplify README
+- 8551ec8 fix: correct static and media URLs
+- 45f7939 Add save-as-copy option for entities
+- 70750ac feat(release): add progress page
+- c10f10d Specify debug toolbar namespace
+- 83802dc Replace win10toast with plyer for Windows notifications
+- f489f36 fix: allow env refresh while server running
+- 3e6b709 chore: require manual stop for env refresh
+- c454e45 chore: create default release on startup
+- 6fd9407 Test RFID reader control gating
+- b33c915 Ensure CSRF cookie and standardize domain
+- 9d333fd Add status check script
+- eacc055 Ensure --latest replays migrations and restart server
+- c68126f Use non-interactive sudo in stop script
+- cd21ded Use sudo for process termination
+- cb74ed8 Add timeout handling to stop script
+- 8416085 feat: add electric vehicle proxy and relocate user admin
+- a4838c8 Move Fediverse profile migration
+- 18baad8 Log existing services before restart and detach start
+- 6df97f9 Update services on upgrade
+- ad2cb23 Simplify footer columns and spacing
+- 5a16d33 Manage Celery via dedicated systemd services
+- a539e9f Expand footer layout and show version info
+- 140d813 fix: prevent upgrade script from hanging
+- a066e01 Add quick start section to README
+- 959a2de Preserve user theme selection across navigation
+- 0c53fa9 Attach energy account fixture to arthexis user
+- 5543f25 Make constellation fixture idempotent
+- c8f9aaa Handle missing debug toolbar
+- b0aa4a2 feat: show fixture file names in data lists
+- 4729de5 feat: rename clean flag
+- dc85073 Rename Require RFID field and add help texts
+- f471155 Handle screenshot capture errors
+- a6bdd4b Sync page theme with debug toolbar
+- 6f573a5 Improve data list pages
+- eb46451 Skip loading duplicate package releases
+- 7bac12d Revamp admin data list layout
+- 141060a Add Redis dependency
+- defce6a Enable debug toolbar for terminal mode
+- 6fcc9d2 fix release publishing status and branch reuse
+- f6f0afa Run env-refresh during installation
+- ae66ab4 Inline RFID join table fix into initial migration
+- 418f25d fix: restore footer rendering
+- 9aeb0db Rename account RFID column
+- aee0084 Add admin email inbox search action
+- 2380778 Add user data import/export and uniform column styling
+- ee9e2cf Rename PackageHub model to Package and refresh release
+- 04c4fc0 Fix user datum admin test
+- a2fbc68 feat(nodes): add LCD screen flag
+- e4b58d4 Show AWG calculator results above form on mobile
+- dbf0ae1 Add migration for reference transaction UUID
+- 2d7b694 Log all websocket messages
+- 66d6945 feat: add transaction grouping for content samples
+- e993956 Rename Account and Credit models to energy equivalents
+- 64667fd Add user data admin view and buttons
+- 3605940 Add transaction grouping for references
+- 55e3da4 Add NetMessage propagation action and restrict completion
+- 7302c16 feat: add browser-assisted node registration template
+- dda9a8d Fix user datum admin tests and stabilize email inbox tests
+- 57318be feat: add footer references
+- f5e66c7 Generate QR code for references without image
+- 40b4fc4 fix: store build revision and rename publish flag
+- 1625283 Allow upgrade without installation
+- dd606f1 Require Redis for non-terminal install modes
+- 091813a Persist user datum checkbox state
+- 5e3824b Align install role defaults
+- 7b025b1 Persist user data fixtures
+- cf11ffc fix: include csrf token in invitation form
+- 15c72ea Add promotion workflow for package releases
+- 09e5527 feat: add RFID deep read mode
+- 5469165 Add tests for user datum admin checkbox
+- 19a1539 Secure net-message endpoint with node certificates
+- b132a93 feat(nodes): add network message propagation
+- 81ed407 Link packager profiles to users and add release manager
+- b395204 feat: add progress feedback in upgrade script
+- 86b9911 Remove obsolete backup, recipe, and text pattern models
+- 3058a29 Remove swap color RFID admin action
+- cbe51bf test: cover Odoo password admin form
+- a3f61f1 feat: add user datum persistence
+- e61a839 feat: split package release models
+- 6b536e5 Expand current admin group in navigation
+- 07f48e1 Allow editing role nodes in admin
+- 7f22e2e Fix tests cross-platform
+- 0ca82a0 Add clean refresh VS Code task
+- 826a247 Fix failing tests
+- fec3201 Show user info on login icon hover
+- 0834a7f Stop LCD service on shutdown and uninstall
+- 3de947a ci: run install workflow only when migrations change
+- 0cd14ba test: cover Odoo profile verification
+- 1bf5996 chore: run release workflow on pull requests only
+- ecf3f3d Remove unnecessary PyPI install in release workflow
+- 23be3fc Remove unnecessary PyPI install in release workflow
+- e5670e1 Rename charger number to connector ID and update admin
+- fb27a80 refactor: layer releases and map to migrations
+- 9cffc15 feat(app): introduce code editor widget assets
+- 99bbe7d Move rotated logs to old directory
+- 2945b1b Ensure constellation fixture loads cleanly and stabilize notifications
+- 2022466 Add logging to shell scripts
+- a905160 Remove bind app and migrate entity base
+- 70642d7 Ignore generated security keys
+- fc9485c refactor: move release features to core and rename website app
+- 8d4a6ff Rename integrate app to bind
+- fe23b09 Create site on node registration and update fixtures
+- 549c60a Merge screenshot and text samples into content samples
+- b83b35a Improve permissions selector in security group admin
+- af7072e Add default site fixtures and update names
+- 0f5ec24 Enable horizontal permissions selector for security groups
+- 5ec2363 Add default site fixtures
+- c92be35 Add notify management command
+- 0dcabd7 Generate node key pairs on registration
+- db6a740 Remove migration hash artifacts
+- cc68b69 Display LCD goodbye message on stop
+- d710ff5 feat(admin): use domain for site badge fallback
+- 50026ea Remove Unknown node role
+- b0a62b6 Check nginx for role flags
+- 457dde3 chore: reset migrations on changes
+- 07e40af Refactor modules to use node roles
+- 7ae4747 Refactor node roles and add constellation install option
+- de94000 feat: add terminal install flag
+- 5d128ad Skip landing auto creation during fixture loading
+- dadcdf7 refactor: use core notifications for LCD update status
+- 1d49197 test: verify LCD update notifications
+- 68e78b4 Handle simulator timeouts and remove charger config
+- 1ff0b5a Rename hotspot and ensure services
+- c36e4c5 Document migration step for fresh install
+- a766af6 feat: add control install mode
+- 8ad42e9 feat: register current node during dev refresh
+- 6e2b962 Add upgrade flag to install script
+- 961e620 Avoid duplicate website landings during fixture load
+- 72a5aa7 chore: document admin clock tooltip
+- 2c732fe feat(rfid): simplify public scanner view and register landing
+- b7be05c Rename business and integrate app verbose names
+- 39863d7 Add AWG module to site fixtures
+- b8a9f5e style: align admin badges and clock
+- 3c5ba1d feat: encode RFID color as single character
+- 48206d2 feat(ocpp): add RFID scanner landing
+- c2abf5f Make CP simulator form more compact
+- 433fa3a fix: cleanup rfid view import
+- 09c41fb feat(navbar): improve dropdown behavior
+- c73ab06 style: improve cp simulator layout
+- a157c19 style(admin): align clock and badges
+- 9c6057f refactor: remove sigils integration
+- ef1a715 Track user for text samples
+- 677aafc Remove RFID writing tests
+- d19da2c Reduce server clock font size
+- 5acb1ed Remove obsolete accounts app reference
+- 2965119 Add clean option to installation script
+- 65c0b88 refactor: rename accounts app to core and integrate messaging
+- d7bca40 feat: move Reference model into accounts and remove refs app
+- e61263e Improve network setup reliability
+- 1b3ad9c Ensure network dependencies and simplify install
+- be99683 Increase SQLite timeout to reduce install database locks
+- ade69cd fix: default LCD address when i2c scan fails
+- b7558b5 chore: drop grappelli and restore admin customizations
+- 6f87881 Gracefully handle ToastNotifier init failures
+- 74fc51b Handle missing LCD lock file
+- 8fa9564 Remove custom admin templates conflicting with Grappelli
+- d64f2cc Fix toast notifications repeating
+- 0848bc7 chore: disable celery in VS Code launcher
+- 1702466 Ensure Django initialized once for tests
+- 68f22f7 feat: add django-grappelli admin interface
+- 0565ecf test(msg): cover send admin action
+- e829398 Remove RFID watch toggle from admin
+- efa053a Simplify RFID reader and drop key writing
+- 5ed75be Skip RFID block 0 and document behavior
+- f8eb53a rfid: attempt Key A when Key B fails
+- 78b2c3f fix celery memory backend
+- 8c595c3 Delay startup LCD notification asynchronously
+- 68f5d9d Move async notifications to message helper
+- 3ebdb91 Reduce RFID polling intervals
+- 5966feb feat: make RFID poll interval configurable
+- f0ef29d stop script halts systemd service
+- 1826d03 docs: update public site applications
+- 400f130 Add SecurityGroup proxy migration
+- 728a14f feat(rfid): show uid immediately
+- 2fd581c Allow empty message fields
+- 3dd09cc Remove purge meter readings task fixture
+- c7f479f Remove redundant auto upgrade task
+- ae0ff80 docs: detail shell script flags
+- 1e5c2fc Move runtime flags to locks directory
+- e3c5eb6 Add LCD reset and timing safeguards
+- 137f374 Add optional Celery startup
+- 60fbd58 fix: address failing tests
+- 4c93c28 Handle charger reconnects and simulator termination
+- d2215e2 Refactor admin and remove webshell
+- 4cbdc66 feat: add msg app for system notifications
+- 7e71dc6 migrate(rfid): add sector data and key flags
+- 56ce835 Restore reference admin field capabilities
+- acdcc96 feat: remove RFID length limit
+- 44e87e9 Allow CSRF origin within allowed subnets
+- e964775 Allow clearing RFID reference
+- f3a5adf feat: add satellite install preset
+- aa18bee Ensure wlan0 and eth0 never act as gateways
+- 91beb0e Add auto upgrade check task
+- bc8f4ec Ignore auto upgrade file
+- 00e799d Simplify RFID reference handling and add admin link
+- 727629b feat: add auto upgrade option
+- 3357026 Remove arts app
+- 9ba8a0a Use request host for RFID references
+- cf4c93c Ensure wlan1 reconnects and skip 2.4GHz networks
+- baa6d2b Add migration for RFID last seen
+- 7004e18 upgrade.sh: add --clean-db option
+- f8d294c Ensure proper network bands and shared eth0
+- 0e78293 Add RFID last seen tracking and new colors
+- 7aba6df Create RFID reference with label page
+- 621a37a chore: ignore NGINX_MODE env file
+- 2cc938c Fix internal nginx config and overwrite on install
+- 8eabf01 test(rfid): adjust notification expectations
+- 1fed3e7 Test RFID admin scan view bypasses CSRF
+- 5ce7788 fix(rfid): initialize scanner on first poll
+- ca620a5 style(admin): enlarge header badges
+- 1e5c0d5 fix: ensure nginx conf dir
+- f817949 Add admin interface for OCPP transaction export/import
+- fc32e5d style(admin): limit login badges styling
+- 478361c Rename private flag to internal and default to internal mode
+- acb81a9 Add public/private port modes and firewall checks
+- 79e18e6 style(admin): stack badges under server clock
+- 95ce297 Reload and normalize wlan1 connections
+- a6b4de7 chore(admin): stack header badges
+- bed0cac Add reload flag for start scripts
+- f513177 feat: add version-aware upgrade script
+- 8b7a126 Test Windows notification fallbacks
+- 9e4fff1 Use non-blocking Windows toast notifications
+- 1c49a53 test: cover smbus2 LCD fallback
+- 1a0d3e5 refactor(rfid): drop background reader
+- 996058c Use Windows toast notification as LCD fallback
+- 8834556 Add Windows GUI fallback for LCD notifications
+- b324d11 Simplify LCD notifications
+- d38f9f7 Retry LCD init for notifications
+- 2fe8c90 fix(ocpp): add migration to ensure charger number column
+- 25c31a5 feat: link charger landing page
+- 8c27874 Add always-on RFID watcher with notifications
+- 66a39cb Add charger number field and update fixtures
+- c815805 feat: allow custom port in scripts
+- dc2a353 refactor: remove remote RFID sources
+- 6874b31 docs: clarify migration update policy
+- 5f47b14 Use requirements.md5 in install script
+- 728ed00 Add vscode_manage wrapper for tests
+- 474ecfc Add author field to Reference model??
+- a72c578 initial
+- cc6f5cc Relax contenttypes dependency in accounts migration
+- 874e630 Fix accounts migration auth dependency
+- d0dfcc9 Add initial migrations for accounts and website apps
+- ea73e52 remove migrations
+- 4457061 Reorganize migrations into waves
+- 4530df9 fix: avoid auth/accounts migration cycle
+- 0bf8bc8 refactor: derive latest auth dependency dynamically
+- 7f83f08 Handle auth migration dependency across Django versions
+- 985fafc Fix circular dependency in accounts migration
+- 1070d19 fix: loosen sites migration dependency
+- 63455c3 Fix migration dependencies for contenttypes
+- 420b158 Link RFIDs to Reference model
+- a41c829 Fix auth migration dependency for accounts
+- 1946420 style: reduce space below footer
+- c2d3c92 Fix auth migration dependency
+- 75c84ea Relax auth migration dependency
+- b488e52 Reset migrations and remove custom auth/email workarounds
+- e43f198 Log CSRF failure reason
+- d3bb144 Test language change bypassing CSRF
+- 0038a2b Fix duplicate import in release admin
+- 84fcddc Fix auth migration loading
+- ed58d53 fix: clean nginx conflicts and handle cert suffixes
+- 63e5237 pre-release 0.1.1
+- 9dcc0a7 Patch auth migration to drop integrator import
+- 033e0e8 Remove integrator module references
+- ff5c42f refactor: drop integrator shim and override auth migration
+- 2fa3449 Add desktop screenshot action and rename site capture
+- 4d9c2bd Revamp webshell terminal UI
+- a526f62 Prune site app fixtures and update README
+- f7d092c Add invitation templates and fixture
+- 008bb76 fix: ensure get_revision works outside repo
+- a771272 Align admin datetime inputs
+- cbb8924 Add arts app with article gallery
+- 511c84e Tweak admin clock banner size
+- f77f00e Rename integrator app to integrate
+- 0417c9e Add diagnostics mode for certificate renewal script
+- e52328c Use git commit ID for revision
+- d7b7d07 Reload nginx after copying certs
+- 1bee109 Fix admin index action links
+- 6bfcfd6 Handle duplicate node registration
+- f1bba30 Expand RFID test to include remote sources
+- c72970e Add public charger landing page and QR links
+- 82aeb74 fix: locate cert directories with sudo
+- 8534046 Handle screenshot capture errors
+- 2f2f13e Rename Fast Charger template to DC Fast Charger
+- fecf17e fix: handle suffixed cert directories
+- f63568f Add menu field migration
+- 427304f Fallback to polling when IRQ setup fails
+- 0f1e7e5 feat: show certificate renewal diagnostics
+- 5e7a1ab Improve certificate renewal feedback
+- 17dd735 Show systemd service status after restart
+- 2b75d6a Show renewed certificate expiration
+- 635a69e Remove manage script and refresh docs
+- bb699a5 Use name in RFIDSource str and generate local fixture UUID
+- 278f7fe Handle nginx during cert renewal
+- f264c43 Add certificate renewal script
+- a047061 Add friendly CSRF failure page
+- 834e719 Use INT and BAD in RFID notifications
+- d884558 Align AWG calculator input heights with select fields
+- 08e576a Add remote RFID source fallback
+- 85f252a Add site screenshot admin action
+- ef18b14 feat: unify RFID scanner buttons
+- 8375c1a Refactor notifications to support subject/body and independent scrolling
+- 4aef876 Add manual RFID wiring check and test button
+- ce0efa8 Add General request type and admin status actions
+- b68f54e Simplify RFID scan handling
+- ebf07f3 Add Constellation site fixture
+- 65fe48a Add ordered RFID scanners with proxy support
+- cf9f28d Make navbar icons follow current color
+- 5134089 Add restart view tests and update notifications
+- 9a97861 Update navbar styles for light mode
+- cf74d84 Add negative space star admin favicon
+- f94c870 Add admin action to swap RFID colors
+- ea15c77 feat: add VS Code tasks for new scripts
+- 258de77 Notify LCD on RFID scan
+- 2f44d9d Add tests for seed data handling
+- 4818b50 Improve RFID reader IRQ handling
+- ae6d224 Only clean up GPIO when initialized
+- 3287404 Handle RFID hardware setup failures
+- 4df1ef2 Improve LCD notifications
+- 6d991ab Use nmcli for network setup
+- 3a3dbaf Add network configuration script
+- 083262a Implement notification queue with LCD/GUI fallback
+- e056e79 Scale layout for large viewports
+- 64aadd0 feat: add nginx setup option
+- 993a660 Add background RFID reader using IRQ
+- 0ae492c Ignore all .env files
+- b248591 Allow arthexis.com hostnames
+- 2c755ac fix: allow env-refresh to use python3
+- a07084d Rename refresh scripts to env-refresh
+- 5e2f09e Stop RFID poll loop when reader missing
+- 3252002 Rename dev_maintenance script to refresh
+- ef4c396 Make refresh.sh executable
+- 402986d Rename refresh scripts
+- 32479c8 Normalize base64 favicon formatting
+- 755a021 Rename maintenance scripts to refresh-db
+- 68ef991 Fix navbar icon styles
+- fe5c9d4 Enhance RFID scanner display
+- 888707f Fix seed data admin template access to private model meta
+- 8f13db5 Make URL references clickable in recent view
+- 17b00da fix: ensure entity deletion return value and admin badge strings
+- 1d3f483 docs: clarify shell script usage
+- 1036db5 Add request model with approval workflow
+- e64488e Fix refs tag migration dependency and merge
+- 1588ce0 Add tagging helpers and migrations
+- 8112ccc feat(refs): support text and image references
+- 69888f1 Use service default port
+- ea977c5 Add service management scripts
+- c412b98 Improve new reference form layout
+- a36b0d7 Add color and released fields to RFIDs
+- 2976e40 feat(refs): add reference form
+- 596e1d9 Show site name in navbar
+- 40885bb Add tests and template?
+- f03d505 Use fixed-width font for admin clock
+- 182b132 feat(vscode): add purge logs task
+- 42b0859 Add admin task for database backup
+- d59a04e Fix admin header badge links and clock font
+- 3566489 Customize site title and rename default sites
+- efea244 Use all-caps for navbar pills
+- 2fbdef4 Add MAC address field to Node
+- 6006e7a Add created timestamps to footer reference fixtures
+- e684f10 fix tests for admin clock update
+- 562c1dd feat(admin): display real-time server clock in header
+- 2949426 Fix admin console redirect
+- a70c0e1 Add migration and template for refs
+- 774e58a docs: document helper scripts and VS Code tasks
+- f128696 Use port-agnostic Site lookup
+- b287038 Require RFID for CP2 in fixtures
+- 3f8894b Log OCPP charger sessions to persistent files
+- 04152b1 Add migration for charger temperature
+- 02e15bd Simplify node admin list columns
+- b199f76 docs: move README modification note to AGENTS
+- aeb0476 Redirect webshell root to script view
+- ecf53ef Rename integrations app to Integrator and rename Release admin group
+- 386e35d chore(release): move legacy fixture
+- 5a02568 db
+- dc80077 Add VSCode shortcut for running tasks
+- 8af9cc1 Open console in popup window
+- 27ed0b0 Add VSCode shortcut for running tasks
+- 82bd6bc Add Spanish translations for AWG and OCPP models
+- d211cfb Remove README build automation
+- b52d664 Add language switch to admin header
+- 9862866 Render localized README based on language
+- 6ec270d Make admin groups collapsible with search behavior
+- 0d4b535 Add Spanish README translation and installation guide
+- b86ae3b Add Spanish translations for AWG calculator
+- 37d8a4a Add Python, Django, and OCPP footer references
+- 2167c6a Capture installation metadata when registering local node
+- 7f7ec15 docs: update included apps
+- 5515588 Add configurable screen sources for screenshots
+- 466060a Add language switcher button
+- adfa901 Add migration for Backup model
+- 721a4d5 chore: migrate Odoo password field
+- 3d11c8c Split site/node badge labels
+- 081da21 Stop updating chart after charging session ends
+- 61464f2 Make heartbeat and meter values read-only in Charger admin
+- 5d2d68c Allow environment sigils in Odoo config
+- 3fc2c79 Enable viewing past sessions
+- 7dbe61f Tune simulator energy levels
+- 529e1a8 Remove obsolete node service fixtures
+- 772375f Use async-safe location name lookup in WebSocket handler
+- 3bd3b1a Add sigils-based environment interpolation
+- 9d071b0 Add migration for OdooInstance rename
+- fa8d10c Add NodeCommand for executing shell commands
+- 8cc2418 Remove legacy network and service reload scripts
+- d166638 Remove template models and related functionality
+- 308bc08 Add management command to control systemd units and reload script
+- ab1b605 sp
+- 4dca61b Use natural keys for site fixtures
+- 91a9fd3 Add GWAY-BOX site fixture
+- ff0c825 Extend NMCLITemplate with DNS and IPv6 settings
+- 3891b08 Add detailed WebSocket logging and optional subprotocol
+- 8503fb8 feat(nodes): introduce node action framework
+- 977c3de Prompt for AP password in network setup
+- a0d253d Add local and Ethernet fixture simulators
+- 884e514 Add stop script with optional all parameter
+- ec6e28f start
+- 1037f8b Rename start script and update references
+- a92e94c network
+- b4e5cb8 Add network setup script
+- 50555b0 Replace RFID scanner with reusable poll-based component
+- 7f330a4 Enhance NMCLI template import and add export
+- ec2050b Revert start script name to start.sh
+- 7a3efdc Rename start script to dev-start.sh
+- 903923c Exclude parameter-dependent admin actions
+- a0225d1 Consolidate admin action links into single column
+- 5ad2528 style(admin): show custom actions before add
+- ab63971 Add NMCLI scan action in admin
+- d21bddf Ignore requirements hash file
+- 3bf8d8c fix(admin): place actions beside change link
+- a5331be feat(admin): expose actions on dashboard
+- 5e00b1b Make admin console input single line
+- 49c60f4 Redirect toolbar login to admin when no next
+- e3d815c Add VIN tracking and WMI updates
+- e9ad766 Require auth for OCPP views and filter nav apps
+- 4b06ae8 Move QR template tag to references app
+- 53db3d3 Add RFID label_id migration
+- 4a3a91c Add initial Location fixture and migration
+- 4b95ed5 fix sim
+- 5792824 name sim
+- 98dcc81 Enhance admin console toggle
+- 187ec89 Replace login link with toolbar icons
+- f1e909a Rename energy fields migrations
+- 3a0fb63 Add admin console mode toggle with webshell
+- 78cc231 desc
+- 648aa42 fix: avoid duplicate site apps
+- 0c22615 desc
+- fa624a5 Handle untracked files in upgrade script
+- 6dfe0ba Handle untracked files in upgrade script
+- 4d9c03f Improve footer layout and admin links
+- eba62fc Propagate RFID reader errors
+- 24008e0 Add feedback and timeout for RFID scan
+- 62f746a feat: move RFID reader to dedicated app
+- ec9c6f8 Use kW units in charger status view
+- 12f3fa7 Add session pagination and date search for chargers
+- 41f4a89 Add websocket consumer and RFID template
+- 0b7d7d3 Preload charger status graph with historical data
+- ad14de0 Auto rebuild README after section changes
+- 23d535d Adjust light mode background
+- e67dd80 Style footer
+- f3b2954 fix: prevent charger graph bounce
+- b9168c2 Highlight updated charger status values
+- 7c745a1 Add live kWh chart to charger status view
+- 896ebc2 Allow string RFID primary keys in admin write URLs
+- c62b62d messaging
+- e6a9acb Use status template for charger public view
+- feb8a96 Merge nodes migrations
+- 4d0c28b Compute session energy from meter readings
+- 510b1a6 Remove unused import
+- 2c3ee4c Add padding to dashboard main
+- 751cd1b Fix failing tests
+- bc22584 Add NMCLI template migration
+- 211c2b2 Add node roles and display badges
+- 573b743 Load fixtures in single transaction
+- 0b6413f Add padding to admin dashboard sidebar
+- 214623d awg templates
+- 4dbf644 Allow multiple WMI codes per brand
+- b19bacd fix: adjust admin dashboard width
+- 95276f3 Add task to purge old meter readings
+- 1e3491f Use Monterrey as default timezone
+- 8e98f18 Make OCPP log view scrollable and auto-scroll
+- 4c13e92 Include ongoing transaction energy in totals
+- c2497b1 Add GELECTRIIC RFID fixture
+- 5f8d9d0 Shrink admin dashboard sidebar
+- 101d911 Allow admin login from docker networks
+- f5e376d Fix admin dashboard sidebar width
+- a60b6b1 Create transactions from meter values
+- ef7e534 Auto-refresh charger status page
+- b99b407 Fix admin dashboard sidebar layout
+- fa2db4e Add Transaction admin with meter readings
+- ecb2e81 Add date filters for meter readings admin
+- 6b624e9 Authenticate RFID batch API tests
+- 990dc78 Migrate to new transaction schema
+- f387cca Add copy button to admin messages
+- 8d063ab Stack admin history and actions
+- 425ff46 Style admin dashboard side modules
+- 142d3a8 Handle simulator message responses
+- 3060834 Add timestamps to OCPP logs
+- 957e323 Separate charger and simulator logs
+- bf887ef Add auto-reloading scrollable OCPP log
+- df4fb2d Refactor admin dashboard layout
+- 8658dc3 Fix charger admin tabs and theme
+- 963a280 Add duration and delay options to OCPP simulator
+- e4fa213 feat(admin): tabbed charger form with reference QR
+- aba1a9b fix: remove obsolete contenttypes migration dependency
+- f3546bb Separate node and site logging, default site name
+- d994419 bkp
+- 7c4001d Track admin changelist visits and expose in dashboard
+- 916ca57 Ensure AWG template defaults populate dropdowns
+- a3cca42 Rebuild account-RFID M2M for char primary key
+- 3f9d407 Fix websockets header argument
+- b534692 Add copy button for admin messages
+- 435f56f Add description field migration
+- 6d470ec Wait for simulator connection and log messages
+- 59dfa29 Log simulator traffic and wait for connection
+- d12fc5b Show systemd unit status in admin
+- a8bdc17 Add README sections model
+- 52355e7 Add unique name field to accounts
+- 592c8b3 feat(awg): show templates when no results
+- 19cc2c7 Add Django command wrapper script
+- 90c6448 Add color copy button to admin badge fields
+- d3cb99c Require authentication for API views
+- a907b02 Allow RFID import without id
+- 440aa09 feat: add manage wrapper script
+- 4881b37 Add RFID writer with key fields
+- be69a9e Add command to install systemd unit
+- 052d47e Add systemd unit template model and fixture
+- e42da19 feat: enforce unique RFID assignments
+- 37b2df5 Use admin sun and moon icons for theme toggle
+- d147dbb Handle RFID scan timeout
+- 3cdfbc1 Fix RFID scan view import
+- a244d9e feat(awg): set calculator as main view
+- f0e71c8 Remove generic app index view and routes
+- b0cb1dd Remove git maintenance tasks
+- 27fa5d1 Add show_in_website field migration
+- 45a62cd Remove git push from maintenance
+- 7d45f05 Improve app index view docs
+- 8361fd1 Remove MD5 check from install script
+- 51a833b Remove unused manage_vscode wrapper
+- dedea09 Fix RFID scan view import
+- 0d7d3d8 Add migrations removing seed data fields and models
+- 9217819 Hide apps without URLs from navbar
+- 0c63c8f Add command to register local apps with default site
+- 5974b11 deps: add MFRC522 for RFID scanning
+- bf1d67b Fix RFID scanner import
+- 8286816 Center footer links and shrink QR
+- fe99436 Resolve proxy client IP for admin override
+- 0ae6c97 Display area and amps in AWG cable admin
+- e34440a Allow admin login from local networks
+- 3dbfd7e Allow private network hosts
+- e9e0d73 feat: add readme rebuild admin action
+- dd27bb6 feat: default server port 8888
+- 2def83a Add RFID scan button in admin
+- 26a828e Add RFID scanning admin action
+- 8454bba Make AWG calculator defaults opt-in
+- 52e3c82 Add migration for renamed polling flags
+- 104b5fe feat(awg): add dropdowns to calculator template admin
+- bcea70d Add admin action to verify Bluesky credentials
+- e674a51 Clean calculator query params
+- ce5d5e8 Add QR preview to admin
+- 15994ca Add screenshot polling and deduplication
+- 536b89b Use fixture for default calculator template
+- f08a412 Add node field migration
+- 85ffe0f Expand single-field admin inputs
+- 11508bb Add migration for TextPattern rename
+- 1dee9c2 Handle charger log retrieval case-insensitively
+- 66e99dd Display node screenshots in admin
+- 93d1985 Make AWG calculator template fields optional
+- c4470f8 Generalize fixture loading
+- d39fd95 Fix website migration dependency
+- 347a3a7 Add configurable clipboard polling and text samples
+- 14b7730 Fix migration dependency for sites app
+- 55bc8c4 Add migration for slug-based RFID endpoint
+- 0f6f3ff Add migration for SiteApplication
+- ea5128b chore: update RFID source migration
+- 2fee27b Add Porsche and Audi EV brand fixtures
+- c4ca7df Add calculator template links
+- 5601cc3 Add initial AWG fixtures
+- 8934bca Add script to freeze requirements with markers
+- 0ede2ff deps: add gpiozero for Linux
+- fd2d1eb Add RFIDSource migration
+- a04af43 Fix EmailPattern admin link
+- 6cd2767 Refactor Application model for local app management
+- 65c0d61 Auto migrations
+- 38027d6 Add migration for SeedData names
+- 1a0e452 test: cover post office admin group
+- 8537e68 Add AWG calculator template model and register data tables
+- 1a02860 Add docutils to requirements
+- 42d6649 feat: add admin screenshot capture
+- 971dd11 Hide empty admin groups during model search
+- df19e5f fix: remove Readme app from localhost fixture
+- afdc4bf Fix daphne runserver nostatic conflict
+- b76488e Persist simulator logs to disk
+- 97493ec Remove obsolete readme app
+- 4239cf9 Add public API and message storage for nodes
+- c99d843 Add migration for email pattern rename
+- dc63040 Add migration for EV Brand options
+- f701aa3 Clean up admin imports
+- 5a97366 Add SeedData snapshot management
+- 731f8c7 Auto migrations
+- 74161ba test: update odoo tests
+- 0d77e30 Move RFID functionality to accounts app
+- 066c13d Move TODO features into release app
+- 124603e Capitalise EV Models in admin
+- 7ecaf69 Enable markdown tables
+- 4d69e97 Merge clipboard app into nodes
+- debad4d Handle is_seed_data column if it already exists
+- 2068204 Fix Site dependency and prevent maintenance reset
+- d09d9c1 Add Celery tasks for clipboard samples and node screenshots
+- 71e5195 Replace app READMEs with admindocs
+- c5f3bc6 Move Site admin to website app
+- 6d9e854 test: ensure simulator sends messages
+- 266e664 feat(admin): link site and node badges
+- 3872854 Style README sidebar like PEP pages
+- e2261c1 Add NGINX template fixture
+- 0294e74 Add task to send queued emails
+- 4fbc909 Add EVModel and seed data flags
+- 5428c44 Auto migrations
+- 4814657 fix: relax Site migration dependency
+- 4077e30 Add Brand model and link to vehicles
+- 3e6561e Add seed data flag and export command
+- ea8d1ac Auto migrations
+- 2cfae71 Add footer reference fixture
+- 6f2dc25 Add EmailPattern model and admin test action
+- 6f15719 Move page QR code into footer
+- 1995874 Auto migrations
+- b6ae5e8 Load localhost site fixture during dev maintenance
+- 4642673 Handle inconsistent history in dev maintenance
+- 2aa58b6 Move RFID to dedicated app and add QR sidebar
+- 898389b Remove duplicate website app migration
+- 540ca5a Remove automatic git sync and restart
+- 1aa2a16 Rename build to revision and show revision in footer
+- 9f3e7ac Fix App migration dependency
+- 1e968a6 Auto migrations
+- f37c90d Fix migration dependency on sites app
+- 8c2b33f Add App model and navigation pills
+- da0c623 Move README TOC sidebar to left
+- 73d8994 Move theme toggle into navbar
+- 044fd76 Move website navbar to left
+- 63811e6 chore: decouple dev maintenance from launchers
+- c79344b Auto migrations
+- bd20c9f Auto migrations
+- 25155c0 Add OCPP simulator fixtures and load during maintenance
+- 650a2fd Auto migrations
+- 5c6b1b7 Refactor dev maintenance tasks
+- 8ad2f01 Auto migrations
+- 6f050e1 fixed requirements
+- 1ce6a1c fix: avoid corrupted requirements on windows
+- 1e0fc27 chore: drop gpiozero and mfrc522 dependencies
+- 4d2259c fix: make update requirements task powershell-friendly
+- 7e24522 chore: add vscode update requirements task
+- 920b654 Auto migrations
+- 814d381 feat: add LED controller with gpiozero
+- 8dd5788 Add batch RFID import/export API
+- 615fe8e Integrate Celery with example periodic task
+- 3f7f892 Wrap navbar items with right-floated divs
+- 9efc94f Use localhost name for local IP sites
+- cbf355d Display longitude next to latitude in charger admin
+- 098d2e5 Auto migrations
+- e3d5894 style: add boxed layout to login page
+- e21dfe9 Add VSCode wrapper to bypass debugpy during git restart
+- 0fa852e Auto migrations
+- 831f2b5 Add VSCode wrapper to strip debugpy for git sync restarts
+- 7639580 Add Register Current button to Sites admin
+- fa46d43 test(website): isolate admin sidebar tests
+- 09907a2 Expand node detection to check server IPs
+- d259fbc Auto migrations
+- 03f1ed4 refine debugpy detection for git sync restart
+- 2fe0991 Align navbar text and arrow
+- a6964ce Auto migrations
+- aa52c27 Test restart server under debugpy
+- d92ebb1 Seed default OCPP simulator entries
+- 81429eb Enhance Bluesky admin with credential validation
+- b8a4525 Auto migrations
+- 9819db8 Close SQLite database before deleting
+- e6f9ae8 Skip initial onboarding start page
+- 22236ab fix toc layout and styling
+- 5c66a30 Only rebuild DB when new migrations exist
+- 325b8ed Auto migrations
+- cb63878 Auto migrations
+- 18a1616 feat: track requirements checksum
+- d86585a Make taskbar levels collapsible
+- e590c8c Use references for footer links
+- f550992 Reset migrations after applying
+- 79d217b req
+- a1d611a Add test logging option to release module
+- b0717df Add background git sync in debug mode
+- 1de01f1 Handle git fetch and enforce fast-forward pulls
+- 6396225 Open browser on dev reload
+- a88f4a9 Allow charger log view for unknown chargers
+- 74e1c7b feat: auto sync git during dev reload
+- 68d80b9 Add admin clipboard button to capture system clipboard
+- 0514b62 Add customer onboarding wizard to account admin
+- 9593914 Remove gway dependency from OCPP
+- 65de02d Add RC522 RFID reader interface
+- 55a4ef6 Restrict default admin login to localhost
+- caa8ba7 Add README sidebar table of contents
+- d3f78a3 remove migrations
+- 9b05f2c Reset database in dev maintenance script
+- 18d2d6e Handle SQLite OperationalError in dev maintenance
+- 19e43bd chore: streamline RFID migrations
+- 957c8e2 Add command to reset migrations
+- 0695cb3 docs: limit README generation to releases
+- 514190a Reset nodes migrations and fix NginxConfig table
+- e5c41f0 Use fake-initial for OCPP reset
+- 5738f09 Simplify OCPP migration reset
+- 9275440 Drop OCPP tables when resetting migrations
+- 0b8ac80 Refine OCPP migration reset command
+- dd1c39d Add OCPP migration reset command and docs
+- 520a6f4 chore: run maintenance scripts before debug
+- 5cbbb15 Refine dev server tasks
+- 8f651d2 Add documentation for new recipe model
+- 57cbba1 Reset ocpp migrations if history is inconsistent
+- d64135c Fix virtualenv handling for dev tasks
+- 7f38de9 Install requirements into .venv in debug
+- dc61ba2 fix(ocpp): adjust migration dependencies
+- 6e26a53 Add missing packaging dependency
+- bdbd902 Align Calculate button in AWG calculator
+- 1f4f9c8 Handle Windows venv paths in VS Code
+- ac3df83 Handle Windows venv paths in VS Code
+- 94850ac Support Windows venv interpreter path
+- 58796d5 Replace chat with sink consumer
+- 0801d30 Configure VS Code to use project venv
+- d832088 launch
+- 07ecf75 Add pattern matching to clipboard samples
+- 1d00e79 Organize social integrations
+- 742d722 Add clipboard app for clipboard snapshots
+- 832fd91 Handle non-interactive migrations
+- 1c2f079 Skip unnecessary requirement installs during debug reload
+- 7f7c2eb feat(awg): add three-column layout with results table
+- 53407ea feat(nodes): merge nginx templates into nodes
+- 74f8842 Add CRM app and move Odoo integration
+- 6ec2b4a Rename qrcodes app to references with usage tracking
+- 12eade4 ep
+- d6ce7f1 Add configurable badge colors for sites and nodes
+- b3e0cb1 feat(ocpp): expose simulator landing page
+- e308cc9 Add admin interface for PyPI release configuration
+- c91802d Merge subscriptions into accounts module
+- 46a678a Auto migrations
+- 49bce17 feat(ocpp): add advanced simulator features
+- 27dd2dc feat: add Bluesky integration
+- 8772ce2 feat(awg): unify calculator with site layout
+- fce92fb feat: require purge before deleting charger
+- 4598692 feat: open navbar dropdowns on hover
+- f456bc0 fix: auto create migrations in debug
+- 73e0774 Run dev maintenance tasks in debug
+- d98f03a feat: add full awg calculator
+- 58d6e48 test: verify automatic URL inclusion
+- e00b159 Add AWG calculator landing page
+- ac1f009 Add todos app with comment import
+- 5b9b8c2 Fix RFID inline admin field
+- 18b903c Remove legacy mailer app
+- a70eb1f Rename Nginx configurations to NGINX templates
+- 37d6c39 Auto migrations
+- 6f3ba1d Add VS Code task to update requirements
+- 5ec2d8b feat: improve nginx config admin UX
+- 56205dd fix: drop existing RFID table before recreating
+- d79a720 feat(admin): simplify RFID assignment
+- 9ff5f9b Integrate django-post-office for email queue
+- 661c142 Display site and node badges in admin
+- e51155b feat: add nginx configuration management
+- f5d87ad Add migration for account-linked RFIDs
+- 0f27b35 Add offline mode decorator
+- d5c4350 Accept optional ocpp1.6 subprotocol
+- 8e193d2 Display energy stats and status on charger page
+- 5479a80 style: make footer sticky
+- 75e8ccf merge
+- ce23995 Add QR code generator landing page
+- 23916b5 ocpp simulator controls
+- b71514e Add stable nav links via context processor
+- 6c314db Add footer app with link decorator
+- 8a175d6 Add footer app with link decorator
+- 9211732 Add Bootstrap JS for navbar dropdown
+- 8f47017 merge models
+- 362556d Fix migrations to preserve RFID model
+- 5d83467 Fix charger log view rendering
+- a7e940f Always show navbar with login link
+- 2bcf462 fix sitemap duplicates
+- cda94fa Remove landing decorators from charger views
+- 6f8824e Document automatic dev tasks
+- d9d9e1a Add login page with staff redirect
+- 6915cd0 release: add package and credentials models
+- 3bb254d Add login page with staff redirect
+- 216c08e Add dashboard landing and landing check
+- c52b193 skip dynamic routes in sitemap
+- 4bed06b Improve admin index layout
+- 22a27ff Add landing view support for navbar
+- fd9b559 Improve navigation bar styling and cleanup
+- fc5b127 Add loadenv support and envs directory
+- 1a8ae0c mig
+- 0fe368d Move RFID model under auth app
+- 5a39479 feat(website): add navigation bar and sitemap
+- 6304ad6 feat(website): add navigation bar and sitemap
+- 03843a7 Simplify Account string representation
+- ad20082 Add AWG reference app
+- 35db6d3 Improve charger labels and QR code
+- 904e0b0 Add Address model and link to User
+- 28b31d1 Fix QR code tag to render correctly
+- 9c439bf Add contact details to User
+- 4301fa4 Ensure common abbreviations use uppercase
+- c614efd Parse meter values
+- 0ec8c5f Customize Django admin title
+- 568cadb Move user admin under auth section
+- ac55923 Add mailer app with email queue
+- d1a7340 Add release app for PyPI publishing
+- fd39d01 Print admin URL at startup
+- 9185e88 Rename project branding to Arthexis Constellation
+- d6bc648 Add active app logging
+- b6d0f58 Use custom runserver from readme app
+- 45ff267 Serve ASGI app for all runserver commands
+- 5f15ea7 Use Daphne runserver for WebSockets
+- 3bde04b Add missing initial migration for odoo app
+- d88aa44 Add install and upgrade scripts
+- 3c791e2 Add admin interface for Odoo instances
+- 616c68c Add charger status view with admin link
+- dd7e878 Ignore additional log files
+- b5527eb Accept chargers at any path and record URL
+- d9462a5 Add rotating file logger
+- 0178a06 Add service account flag and balance authorization
+- 58fd862 merge db
+- 305b5c3 Add location fields with map selection
+- 7259355 Align simulator defaults with local CSMS
+- 2692ef5 Link subscriptions to accounts
+- 49b71e0 Show websocket URLs at server startup
+- c4ee526 Add admin interface for credit adjustments
+- d96c197 Add Spanish translation
+- 5afd184 Add charger log views and admin links
+- bf06121 merge db
+- 1ea7e88 Fix simulator start without running event loop
+- 0f16968 Rename qr_links app to qrcodes and add charger landing pages
+- ad02cdc Add credit tracking model and account transaction link
+- a9043ae Add dark mode toggle
+- 3fc9338 merge db
+- 2ed7363 Add simulator model with admin controls
+- b926662 Add admin CSV export with django-import-export
+- ff7e1a0 Add Odoo integration app
+- 97802b8 Add optional phone number field to user
+- 5391b8d Rename RFID blacklist to allowed and add CSV management commands
+- fe9a93b Enable autoreload in dev
+- fb68ff4 Replace UID with RFID field
+- fd7fbd5 Add Bootstrap styling for readme website
+- b50c748 Add WebSocket charge point simulator
+- 31238cd merge db
+- 266e60a Add vehicles linked to accounts
+- 44e618f merge
+- 527668b Add RFID model and support multiple tags
+- b01960c merge
+- f9c28db Create readme and website apps with site routing
+- cc93399 Add RFID enforcement option for chargers
+- 13116ce ocpp: record last heartbeat and metervalues
+- b984410 Add account model for tracking energy credits
+- 1727c49 Add Charger model and auto registration
+- 2f51f62 Persist OCPP transactions
+- 5259263 Remove OCPP refs from base README and update app docs
+- 2095d48 Improve README builder
+- 61fc4bc split README and add build command
+- 8a48a55 Document RFID blacklist
+- b8b0ad4 Add qr_links app with QR code generation
+- f329ee5 Add admin action to register current node
+- 7931464 Add subscriptions app
+- 88c7c2c Add RFID authentication support
+- b1b868c Add nodes app with simple API
+- 8c9a7d7 Add PostgreSQL support
+- 394ee8f launch
+- be879ab Add websocket support using Django Channels
+- 7278f66 Add VS Code launch configurations
+- c92e053 Initialize Django project
+- f5da493 Initial commit
 
 Unreleased
 ----------
@@ -738,4 +2627,3 @@ Unreleased
 - 7278f66 Add VS Code launch configurations
 - c92e053 Initialize Django project
 - f5da493 Initial commit
-
