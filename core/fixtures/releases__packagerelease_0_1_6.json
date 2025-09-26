@@ -1,1 +1,1 @@
-[{"model": "core.packagerelease", "pk": 4, "fields": {"is_seed_data": true, "is_user_data": false, "is_deleted": false, "package": 1, "release_manager": 1, "version": "0.1.6", "revision": "", "pypi_url": "https://pypi.org/project/arthexis/0.1.6/"}}]
+[{"model": "core.packagerelease", "pk": 4, "fields": {"is_seed_data": true, "is_user_data": false, "is_deleted": false, "package": 1, "release_manager": 1, "version": "0.1.6", "revision": "", "pypi_url": "https://pypi.org/project/arthexis/0.1.6/", "release_on": "2025-09-02T14:30:09.723Z"}}]
