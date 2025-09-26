@@ -1126,7 +1126,6 @@ class NetMessage(Entity):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        default=get_terminal_role,
     )
     propagated_to = models.ManyToManyField(
         Node, blank=True, related_name="received_net_messages"
@@ -1157,7 +1156,7 @@ class NetMessage(Entity):
         msg = cls.objects.create(
             subject=subject[:64],
             body=body[:256],
-            reach=role or get_terminal_role(),
+            reach=role,
             node_origin=origin,
         )
         msg.propagate(seen=seen or [])
@@ -1228,7 +1227,7 @@ class NetMessage(Entity):
 
         target_limit = min(3, len(remaining))
 
-        reach_name = self.reach.name if self.reach else "Terminal"
+        reach_name = self.reach.name if self.reach else None
         role_map = {
             "Terminal": ["Terminal"],
             "Control": ["Control", "Terminal"],
@@ -1240,10 +1239,15 @@ class NetMessage(Entity):
                 "Terminal",
             ],
         }
-        role_order = role_map.get(reach_name, ["Terminal"])
+        role_order = role_map.get(reach_name, [None])
         selected: list[Node] = []
         for role_name in role_order:
-            role_nodes = [n for n in remaining if n.role and n.role.name == role_name]
+            if role_name is None:
+                role_nodes = remaining[:]
+            else:
+                role_nodes = [
+                    n for n in remaining if n.role and n.role.name == role_name
+                ]
             random.shuffle(role_nodes)
             for n in role_nodes:
                 selected.append(n)

@@ -1059,6 +1059,17 @@ class NetMessageReachTests(TestCase):
         self.assertEqual(roles, {"Constellation", "Satellite", "Control"})
         self.assertEqual(mock_post.call_count, 3)
 
+    @patch("requests.post")
+    def test_default_reach_not_limited_to_terminal(self, mock_post):
+        msg = NetMessage.objects.create(subject="s", body="b")
+        with patch.object(Node, "get_local", return_value=None), patch(
+            "random.shuffle", side_effect=lambda seq: None
+        ):
+            msg.propagate()
+        roles = set(msg.propagated_to.values_list("role__name", flat=True))
+        self.assertIn("Control", roles)
+        self.assertEqual(mock_post.call_count, 3)
+
 
 class NetMessagePropagationTests(TestCase):
     def setUp(self):
@@ -1088,6 +1099,7 @@ class NetMessagePropagationTests(TestCase):
         with patch.object(Node, "get_local", return_value=self.local):
             msg = NetMessage.broadcast(subject="subject", body="body")
         self.assertEqual(msg.node_origin, self.local)
+        self.assertIsNone(msg.reach)
 
     @patch("requests.post")
     @patch("core.notifications.notify")
