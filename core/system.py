@@ -119,7 +119,7 @@ def _auto_upgrade_next_check() -> str:
 
 
 def _resolve_auto_upgrade_namespace(key: str) -> str | None:
-    """Resolve sigils within the ``AUTO-UPGRADE`` namespace."""
+    """Resolve sigils within the legacy ``AUTO-UPGRADE`` namespace."""
 
     normalized = key.replace("-", "_").upper()
     if normalized == "NEXT_CHECK":
@@ -137,6 +137,9 @@ def resolve_system_namespace_value(key: str) -> str | None:
 
     if not key:
         return None
+    normalized_key = key.replace("-", "_").upper()
+    if normalized_key == "NEXT_VER_CHECK":
+        return _auto_upgrade_next_check()
     namespace, _, remainder = key.partition(".")
     if not remainder:
         return None
@@ -218,8 +221,8 @@ def _build_system_fields(info: dict[str, object]) -> list[SystemField]:
     )
 
     add_field(
-        _("Next auto-upgrade check"),
-        "AUTO-UPGRADE.NEXT-CHECK",
+        _("Next version check"),
+        "NEXT-VER-CHECK",
         info.get("auto_upgrade_next_check", ""),
     )
 

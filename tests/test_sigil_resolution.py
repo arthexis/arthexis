@@ -161,16 +161,21 @@ class SigilResolutionTests(TestCase):
                 return_value="soon",
             ):
                 resolved = sigil_resolver._resolve_token(
-                    "SYS.AUTO-UPGRADE.NEXT-CHECK"
+                    "SYS.NEXT-VER-CHECK"
                 )
         self.assertEqual(resolved, "soon")
 
     def test_system_namespace_value_normalizes_hyphen(self):
         with mock.patch("core.system._auto_upgrade_next_check", return_value="later"):
+            result = system.resolve_system_namespace_value("next-ver-check")
+        self.assertEqual(result, "later")
+
+    def test_system_namespace_value_supports_legacy_auto_upgrade(self):
+        with mock.patch("core.system._auto_upgrade_next_check", return_value="legacy"):
             result = system.resolve_system_namespace_value(
                 "auto-upgrade.next-check"
             )
-        self.assertEqual(result, "later")
+        self.assertEqual(result, "legacy")
 
     def test_entity_sigil_hyphen_field(self):
         ct = ContentType.objects.get_for_model(OdooProfile)
