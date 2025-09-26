@@ -22,7 +22,7 @@ import stat
 import time
 from datetime import timedelta
 
-from django.test import Client, TestCase, TransactionTestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
@@ -35,6 +35,7 @@ from .actions import NodeAction
 from . import dns as dns_utils
 from selenium.common.exceptions import WebDriverException
 from .utils import capture_screenshot
+from django.db.utils import DatabaseError
 
 from .models import (
     Node,
@@ -61,6 +62,18 @@ class NodeTests(TestCase):
         self.user = User.objects.create_user(username="nodeuser", password="pwd")
         self.client.force_login(self.user)
         NodeRole.objects.get_or_create(name="Terminal")
+
+
+class NodeGetLocalTests(SimpleTestCase):
+    def test_get_local_handles_database_errors(self):
+        with patch.object(Node.objects, "filter", side_effect=DatabaseError("fail")):
+            with self.assertLogs("nodes.models", level="DEBUG") as logs:
+                result = Node.get_local()
+
+        self.assertIsNone(result)
+        self.assertTrue(
+            any("Node.get_local skipped: database unavailable" in message for message in logs.output)
+        )
 
     def test_register_current_does_not_create_release(self):
         node = None

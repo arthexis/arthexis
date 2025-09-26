@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from django.db import models
+from django.db.utils import DatabaseError
 from django.db.models.signals import post_delete
 from django.dispatch import Signal, receiver
 from core.entity import Entity
@@ -215,7 +216,11 @@ class Node(Entity):
     def get_local(cls):
         """Return the node representing the current host if it exists."""
         mac = cls.get_current_mac()
-        return cls.objects.filter(mac_address=mac).first()
+        try:
+            return cls.objects.filter(mac_address=mac).first()
+        except DatabaseError:
+            logger.debug("nodes.Node.get_local skipped: database unavailable", exc_info=True)
+            return None
 
     @classmethod
     def register_current(cls):
