@@ -64,5 +64,6 @@ def site_and_node(request: HttpRequest):
         "badge_admin_site_name": site_name or (site.domain if site else ""),
         "badge_site_color": site_color,
         "badge_node_color": node_color,
+        "current_site_domain": site.domain if site else host,
         "TIME_ZONE": settings.TIME_ZONE,
     }
