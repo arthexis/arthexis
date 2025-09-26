@@ -8,6 +8,7 @@ import io
 import shutil
 import re
 from html import escape
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib import admin
@@ -494,12 +495,26 @@ class CustomLoginView(LoginView):
     def get_context_data(self, **kwargs):
         context = super(LoginView, self).get_context_data(**kwargs)
         current_site = get_site(self.request)
+        redirect_target = self.request.GET.get(self.redirect_field_name)
+        restricted_notice = None
+        if redirect_target:
+            parsed_target = urlparse(redirect_target)
+            target_path = parsed_target.path or redirect_target
+            try:
+                simulator_path = reverse("cp-simulator")
+            except NoReverseMatch:  # pragma: no cover - simulator may be uninstalled
+                simulator_path = None
+            if simulator_path and target_path.startswith(simulator_path):
+                restricted_notice = _(
+                    "This page is reserved for members only. Please log in to continue."
+                )
         context.update(
             {
                 "site": current_site,
                 "site_name": getattr(current_site, "name", ""),
                 "next": self.get_success_url(),
                 "can_request_invite": mailer.can_send_email(),
+                "restricted_notice": restricted_notice,
             }
         )
         return context

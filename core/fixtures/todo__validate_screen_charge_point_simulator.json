@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Charge Point Simulator",
+      "url": "/ocpp/simulator/",
+      "request_details": "Ensure the member-only notice appears when unauthenticated users are redirected to log in."
+    }
+  }
+]

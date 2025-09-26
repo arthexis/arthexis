@@ -1306,6 +1306,12 @@ class SimulatorLandingTests(TestCase):
         self.assertContains(resp, "/ocpp/")
         self.assertContains(resp, "/ocpp/simulator/")
 
+    def test_cp_simulator_redirects_to_login(self):
+        response = self.client.get(reverse("cp-simulator"))
+        login_url = reverse("pages:login")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(login_url, response.url)
+
 
 class ChargerAdminTests(TestCase):
     def setUp(self):
