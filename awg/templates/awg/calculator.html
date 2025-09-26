@@ -90,6 +90,11 @@
     <div class="col-lg-6 d-flex flex-column{% if result or error or no_cable %} order-first order-lg-last{% endif %}">
       {% if not result and not error and not no_cable %}
       <div class="mb-3">
+        <div class="p-3 mb-3 rounded" style="border: 1px solid rgba(0, 0, 0, 0.15);">
+          {% blocktrans trimmed %}
+          This application will suggest a common correct sizing of cable, considering voltage drop and standard gauge sizes. Consult a professional electrician or your local electrical code before choosing the right cable for your electrical projects.
+          {% endblocktrans %}
+        </div>
         <button type="submit" class="btn btn-primary w-100 fs-4">{% trans "Calculate" %}</button>
       </div>
       {% if templates %}
