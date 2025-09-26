@@ -23,7 +23,11 @@ def apply_arthexis_favicon(apps, schema_editor):
     if not site:
         return
 
-    badge, _ = SiteBadge.all_objects.get_or_create(site=site)
+    badge, created = SiteBadge.all_objects.get_or_create(site=site)
+
+    if not created and (badge.is_user_data or badge.favicon):
+        return
+
     badge.badge_color = badge.badge_color or "#28a745"
     badge.is_seed_data = True
     badge.is_user_data = False
