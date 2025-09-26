@@ -197,6 +197,7 @@ dmypy.json
 media/
 # Collected static files
 /static/
+!/static/.gitignore
 /staticfiles/
 # Security keys generated for nodes
 security/
