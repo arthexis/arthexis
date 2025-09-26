@@ -4,7 +4,9 @@ from django.contrib.sites.requests import RequestSite
 from django.contrib.sites.models import Site
 from django.db import DatabaseError
 from django.http import HttpRequest
+from django.template import Context, Template
 
+from core.templatetags.sites import get_current_site as tag_get_current_site
 from utils.sites import get_site
 
 
@@ -45,6 +47,46 @@ def test_get_site_handles_database_error_during_current_site_lookup(monkeypatch)
     monkeypatch.setattr("utils.sites.get_current_site", raise_database_error)
 
     site = get_site(request)
+
+    assert isinstance(site, RequestSite)
+    assert site.domain == "testserver"
+
+
+def _render(template_string, context_dict):
+    return Template(template_string).render(Context(context_dict))
+
+
+def test_sites_template_tag_gets_current_site_for_request(monkeypatch):
+    site = Site(domain="testserver", name="Test Server")
+    monkeypatch.setattr(
+        "core.templatetags.sites.site_utils.get_site", lambda request: site
+    )
+
+    tpl = "{% load sites %}{% get_current_site as current %}{{ current.domain }}"
+    request = _build_request()
+    rendered = _render(tpl, {"request": request})
+
+    assert "testserver" in rendered
+
+
+def test_sites_template_tag_without_request_uses_global_site(monkeypatch):
+    site = Site(domain="example.test", name="Example")
+    monkeypatch.setattr("core.templatetags.sites.Site.objects.get_current", lambda: site)
+
+    tpl = "{% load sites %}{% get_current_site as current %}{{ current.domain }}"
+    rendered = _render(tpl, {})
+
+    assert "example.test" in rendered
+
+
+def test_sites_template_tag_falls_back_to_request_site(monkeypatch):
+    monkeypatch.setattr(
+        "core.templatetags.sites.site_utils.get_site", lambda request: None
+    )
+
+    request = _build_request()
+    context = Context({"request": request})
+    site = tag_get_current_site(context)
 
     assert isinstance(site, RequestSite)
     assert site.domain == "testserver"
