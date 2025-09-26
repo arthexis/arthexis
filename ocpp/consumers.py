@@ -553,6 +553,141 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         task.add_done_callback(lambda _: setattr(self, "_consumption_task", None))
         self._consumption_task = task
 
+    async def _handle_call_result(self, message_id: str, payload: dict | None) -> None:
+        metadata = store.pop_pending_call(message_id)
+        if not metadata:
+            return
+        if metadata.get("charger_id") and metadata.get("charger_id") != self.charger_id:
+            return
+        if metadata.get("action") != "ChangeAvailability":
+            return
+        status = str((payload or {}).get("status") or "").strip()
+        requested_type = metadata.get("availability_type")
+        connector_value = metadata.get("connector_id")
+        requested_at = metadata.get("requested_at")
+        await self._update_change_availability_state(
+            connector_value,
+            requested_type,
+            status,
+            requested_at,
+            details="",
+        )
+
+    async def _handle_call_error(
+        self,
+        message_id: str,
+        error_code: str | None,
+        description: str | None,
+        details: dict | None,
+    ) -> None:
+        metadata = store.pop_pending_call(message_id)
+        if not metadata:
+            return
+        if metadata.get("charger_id") and metadata.get("charger_id") != self.charger_id:
+            return
+        if metadata.get("action") != "ChangeAvailability":
+            return
+        detail_text = (description or "").strip()
+        if not detail_text and details:
+            try:
+                detail_text = json.dumps(details, sort_keys=True)
+            except Exception:
+                detail_text = str(details)
+        if not detail_text:
+            detail_text = (error_code or "").strip() or "Error"
+        requested_type = metadata.get("availability_type")
+        connector_value = metadata.get("connector_id")
+        requested_at = metadata.get("requested_at")
+        await self._update_change_availability_state(
+            connector_value,
+            requested_type,
+            "Rejected",
+            requested_at,
+            details=detail_text,
+        )
+
+    async def _update_change_availability_state(
+        self,
+        connector_value: int | None,
+        requested_type: str | None,
+        status: str,
+        requested_at,
+        *,
+        details: str = "",
+    ) -> None:
+        status_value = status or ""
+        now = timezone.now()
+
+        def _apply():
+            filters: dict[str, object] = {"charger_id": self.charger_id}
+            if connector_value is None:
+                filters["connector_id__isnull"] = True
+            else:
+                filters["connector_id"] = connector_value
+            targets = list(Charger.objects.filter(**filters))
+            if not targets:
+                return
+            for target in targets:
+                updates: dict[str, object] = {
+                    "availability_request_status": status_value,
+                    "availability_request_status_at": now,
+                    "availability_request_details": details,
+                }
+                if requested_type:
+                    updates["availability_requested_state"] = requested_type
+                if requested_at:
+                    updates["availability_requested_at"] = requested_at
+                elif requested_type:
+                    updates["availability_requested_at"] = now
+                if status_value == "Accepted" and requested_type:
+                    updates["availability_state"] = requested_type
+                    updates["availability_state_updated_at"] = now
+                Charger.objects.filter(pk=target.pk).update(**updates)
+                for field, value in updates.items():
+                    setattr(target, field, value)
+                if self.charger and self.charger.pk == target.pk:
+                    for field, value in updates.items():
+                        setattr(self.charger, field, value)
+                if self.aggregate_charger and self.aggregate_charger.pk == target.pk:
+                    for field, value in updates.items():
+                        setattr(self.aggregate_charger, field, value)
+
+        await database_sync_to_async(_apply)()
+
+    async def _update_availability_state(
+        self,
+        state: str,
+        timestamp: datetime,
+        connector_value: int | None,
+    ) -> None:
+        def _apply():
+            filters: dict[str, object] = {"charger_id": self.charger_id}
+            if connector_value is None:
+                filters["connector_id__isnull"] = True
+            else:
+                filters["connector_id"] = connector_value
+            updates = {
+                "availability_state": state,
+                "availability_state_updated_at": timestamp,
+            }
+            targets = list(Charger.objects.filter(**filters))
+            if not targets:
+                return
+            Charger.objects.filter(pk__in=[target.pk for target in targets]).update(
+                **updates
+            )
+            for target in targets:
+                for field, value in updates.items():
+                    setattr(target, field, value)
+                if self.charger and self.charger.pk == target.pk:
+                    for field, value in updates.items():
+                        setattr(self.charger, field, value)
+                if self.aggregate_charger and self.aggregate_charger.pk == target.pk:
+                    for field, value in updates.items():
+                        setattr(self.aggregate_charger, field, value)
+
+        await database_sync_to_async(_apply)()
+
     async def disconnect(self, close_code):
         store.release_ip_connection(getattr(self, "client_ip", None), self)
         tx_obj = None
@@ -567,6 +702,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             store.connections.pop(pending_key, None)
         store.end_session_log(self.store_key)
         store.stop_session_lock()
+        store.clear_pending_calls(self.charger_id)
         store.add_log(self.store_key, f"Closed (code={close_code})", log_type="charger")
 
     async def receive(self, text_data=None, bytes_data=None):
@@ -581,7 +717,10 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             msg = json.loads(raw)
         except json.JSONDecodeError:
             return
-        if isinstance(msg, list) and msg and msg[0] == 2:
+        if not isinstance(msg, list) or not msg:
+            return
+        message_type = msg[0]
+        if message_type == 2:
             msg_id, action = msg[1], msg[2]
             payload = msg[3] if len(msg) > 3 else {}
             reply_payload = {}
@@ -655,6 +794,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     f"StatusNotification processed: {json.dumps(payload, sort_keys=True)}",
                     log_type="charger",
                 )
+                availability_state = Charger.availability_state_from_status(status)
+                if availability_state:
+                    await self._update_availability_state(
+                        availability_state, status_timestamp, self.connector_value
+                    )
                 reply_payload = {}
             elif action == "Authorize":
                 account = await self._get_account(payload.get("idTag"))
@@ -842,3 +986,13 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             store.add_log(
                 self.store_key, f"< {json.dumps(response)}", log_type="charger"
             )
+        elif message_type == 3:
+            msg_id = msg[1] if len(msg) > 1 else ""
+            payload = msg[2] if len(msg) > 2 else {}
+            await self._handle_call_result(msg_id, payload)
+        elif message_type == 4:
+            msg_id = msg[1] if len(msg) > 1 else ""
+            error_code = msg[2] if len(msg) > 2 else ""
+            description = msg[3] if len(msg) > 3 else ""
+            details = msg[4] if len(msg) > 4 else {}
+            await self._handle_call_error(msg_id, error_code, description, details)
