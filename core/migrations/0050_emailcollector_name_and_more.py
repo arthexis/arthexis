@@ -15,6 +15,7 @@ class Migration(migrations.Migration):
             name="name",
             field=models.CharField(
                 blank=True,
+                default="",
                 help_text="Optional label to identify this collector.",
                 max_length=255,
             ),
