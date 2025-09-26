@@ -690,28 +690,30 @@ class OdooProfileAdminForm(forms.ModelForm):
         )
 
 
-class EmailInboxAdminForm(forms.ModelForm):
-    """Admin form for :class:`core.models.EmailInbox` with hidden password."""
+class MaskedPasswordFormMixin:
+    """Mixin that hides stored passwords while allowing updates."""
 
-    password = forms.CharField(
-        widget=forms.PasswordInput(render_value=True),
-        required=False,
-        help_text="Leave blank to keep the current password.",
-    )
-
-    class Meta:
-        model = EmailInbox
-        fields = "__all__"
+    password_sigil_fields: tuple[str, ...] = ()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        field = self.fields.get("password")
+        if field is None:
+            return
+        if not isinstance(field.widget, forms.PasswordInput):
+            field.widget = forms.PasswordInput()
+        field.widget.attrs.setdefault("autocomplete", "new-password")
+        field.help_text = field.help_text or "Leave blank to keep the current password."
         if self.instance.pk:
-            self.fields["password"].initial = ""
+            field.initial = ""
             self.initial["password"] = ""
         else:
-            self.fields["password"].required = True
+            field.required = True
 
     def clean_password(self):
+        field = self.fields.get("password")
+        if field is None:
+            return self.cleaned_data.get("password")
         pwd = self.cleaned_data.get("password")
         if not pwd and self.instance.pk:
             return keep_existing("password")
@@ -719,10 +721,23 @@ class EmailInboxAdminForm(forms.ModelForm):
 
     def _post_clean(self):
         super()._post_clean()
-        _restore_sigil_values(
-            self,
-            ["username", "host", "password", "protocol"],
-        )
+        if self.password_sigil_fields:
+            _restore_sigil_values(self, self.password_sigil_fields)
+
+
+class EmailInboxAdminForm(MaskedPasswordFormMixin, forms.ModelForm):
+    """Admin form for :class:`core.models.EmailInbox` with hidden password."""
+
+    password = forms.CharField(
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+        required=False,
+        help_text="Leave blank to keep the current password.",
+    )
+    password_sigil_fields = ("username", "host", "password", "protocol")
+
+    class Meta:
+        model = EmailInbox
+        fields = "__all__"
 
 
 class ProfileInlineFormSet(BaseInlineFormSet):
@@ -880,16 +895,25 @@ class SocialProfileInlineForm(ProfileFormMixin, forms.ModelForm):
         fields = ("network", "handle", "domain", "did")
 
 
-class EmailOutboxInlineForm(ProfileFormMixin, forms.ModelForm):
-    profile_fields = EmailOutbox.profile_fields
+class EmailOutboxAdminForm(MaskedPasswordFormMixin, forms.ModelForm):
+    """Admin form for :class:`nodes.models.EmailOutbox` with hidden password."""
+
     password = forms.CharField(
-        widget=forms.PasswordInput(render_value=True),
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
         required=False,
         help_text="Leave blank to keep the current password.",
     )
+    password_sigil_fields = ("password", "host", "username", "from_email")
 
     class Meta:
         model = EmailOutbox
+        fields = "__all__"
+
+
+class EmailOutboxInlineForm(ProfileFormMixin, EmailOutboxAdminForm):
+    profile_fields = EmailOutbox.profile_fields
+
+    class Meta(EmailOutboxAdminForm.Meta):
         fields = (
             "password",
             "host",
@@ -899,27 +923,6 @@ class EmailOutboxInlineForm(ProfileFormMixin, forms.ModelForm):
             "use_ssl",
             "from_email",
             "is_enabled",
-        )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance.pk:
-            self.fields["password"].initial = ""
-            self.initial["password"] = ""
-        else:
-            self.fields["password"].required = True
-
-    def clean_password(self):
-        pwd = self.cleaned_data.get("password")
-        if not pwd and self.instance.pk:
-            return keep_existing("password")
-        return pwd
-
-    def _post_clean(self):
-        super()._post_clean()
-        _restore_sigil_values(
-            self,
-            ["password", "host", "username", "from_email"],
         )
 
 
