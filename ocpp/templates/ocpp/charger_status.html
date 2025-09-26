@@ -32,7 +32,6 @@
   </style>
     <h1>{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
     <p class="text-muted">{% trans "Connector" %}: {{ charger.connector_label }}</p>
-    <p><a href="{{ page_url }}">{% trans "Landing page" %}</a></p>
     {% if past_session %}
   <div class="alert alert-info" role="alert">
     {% trans "Viewing past session" %} {{ tx.id }}. <a href="{{ page_url }}">{% trans "Back to live" %}</a>
@@ -214,6 +213,7 @@
     <span></span>
     {% endif %}
     <div class="d-flex align-items-center gap-3">
+      <a href="{{ page_url }}">{% trans "Landing page" %}</a>
       <a href="{{ search_url }}">{% trans "Search" %}</a>
       {% if configuration_url %}
       <a href="{{ configuration_url }}">{% trans "Configuration" %}</a>
