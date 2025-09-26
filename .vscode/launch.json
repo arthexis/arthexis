@@ -32,37 +32,6 @@
             ],
             "subProcess": true,
             "preLaunchTask": "Dev: collectstatic"
-        },
-        {
-            "name": "Run Live Server",
-            "type": "python",
-            "request": "launch",
-            "python": "${workspaceFolder}/.venv/bin/python",
-            "windows": {
-                "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
-            },
-            "program": "${workspaceFolder}/vscode_manage.py",
-            "args": [
-                "runserver"
-            ],
-            "django": true,
-            "noDebug": true,
-            "preLaunchTask": "Dev: prepare live server"
-        },
-        {
-            "name": "Debug Live Server",
-            "type": "python",
-            "request": "launch",
-            "python": "${workspaceFolder}/.venv/bin/python",
-            "windows": {
-                "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
-            },
-            "program": "${workspaceFolder}/vscode_manage.py",
-            "args": [
-                "runserver"
-            ],
-            "subProcess": true,
-            "preLaunchTask": "Dev: prepare live server"
         }
     ]
 }
