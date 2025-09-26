@@ -784,7 +784,24 @@ class EmailInbox(Profile):
         return messages
 
     def __str__(self):  # pragma: no cover - simple representation
-        return f"{self.username}@{self.host}"
+        username = (self.username or "").strip()
+        host = (self.host or "").strip()
+
+        if username:
+            if "@" in username:
+                return username
+            if host:
+                return f"{username}@{host}"
+            return username
+
+        if host:
+            return host
+
+        owner = self.owner_display()
+        if owner:
+            return owner
+
+        return super().__str__()
 
 
 class SocialProfile(Profile):
