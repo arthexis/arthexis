@@ -1090,9 +1090,25 @@ def _todo_iframe_url(request, todo: Todo) -> str:
     if not raw_url:
         return fallback
 
+    focus_path = reverse("todo-focus", args=[todo.pk])
+    focus_norm = focus_path.strip("/").lower()
+
+    def _is_focus_target(target: str) -> bool:
+        if not target:
+            return False
+        parsed_target = urlsplit(target)
+        path = parsed_target.path
+        if not path and not parsed_target.scheme and not parsed_target.netloc:
+            path = target.split("?", 1)[0].split("#", 1)[0]
+        normalized = path.strip("/").lower()
+        return normalized == focus_norm if normalized else False
+
+    if _is_focus_target(raw_url):
+        return fallback
+
     parsed = urlsplit(raw_url)
     if not parsed.scheme and not parsed.netloc:
-        return raw_url
+        return fallback if _is_focus_target(parsed.path) else raw_url
 
     if parsed.scheme and parsed.scheme.lower() not in {"http", "https"}:
         return fallback
@@ -1132,7 +1148,10 @@ def _todo_iframe_url(request, todo: Todo) -> str:
         path = parsed.path or "/"
         if not path.startswith("/"):
             path = f"/{path}"
-        return urlunsplit(("", "", path, parsed.query, parsed.fragment)) or fallback
+        relative_url = urlunsplit(("", "", path, parsed.query, parsed.fragment))
+        if _is_focus_target(relative_url):
+            return fallback
+        return relative_url or fallback
 
     return fallback
 
