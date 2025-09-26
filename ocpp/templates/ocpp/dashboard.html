@@ -13,7 +13,7 @@
     data-demo-notice-dismiss
     aria-label="{% trans "Dismiss demo notice" %}"
   ></button>
-  <h2 class="h5 mb-2">{% trans "Demo OCPP 1.6 CSMS" %}</h2>
+  <h2 class="h5 mb-2">{% trans "Demo OCPP 1.6 CPMS (Charge Point Management System)" %}</h2>
   <p class="mb-1">{% trans "Everyone is welcome to use this demo to test their charge points." %}</p>
   <p class="mb-1">{% blocktrans with limit=ws_rate_limit %}Rate limiting applies (maximum {{ limit }} simultaneous connections per IP).{% endblocktrans %}</p>
   <p class="mb-0">{% blocktrans %}Use the following WebSocket URL format, replacing &lt;CHARGE_POINT_ID&gt; with your charge point identifier:{% endblocktrans %}</p>
