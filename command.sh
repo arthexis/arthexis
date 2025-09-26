@@ -17,8 +17,11 @@ fi
 source .venv/bin/activate
 
 if [ $# -eq 0 ]; then
-  echo "Usage: $0 <command> [args...]" >&2
-  exit 1
+  echo "Available Django management commands:"
+  python manage.py help --commands
+  echo
+  echo "Usage: $0 <command> [args...]"
+  exit 0
 fi
 
 COMMAND="${1//-/_}"
