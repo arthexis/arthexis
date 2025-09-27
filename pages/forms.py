@@ -136,7 +136,7 @@ class AuthenticatorEnrollmentForm(forms.Form):
 class UserStoryForm(forms.ModelForm):
     class Meta:
         model = UserStory
-        fields = ("name", "rating", "comments", "path")
+        fields = ("name", "rating", "comments", "take_screenshot", "path")
         widgets = {
             "path": forms.HiddenInput(),
             "comments": forms.Textarea(attrs={"rows": 4, "maxlength": 400}),
@@ -151,6 +151,7 @@ class UserStoryForm(forms.ModelForm):
                 "placeholder": _("Name, email or pseudonym"),
             }
         )
+        self.fields["take_screenshot"].initial = True
         self.fields["rating"].widget = forms.RadioSelect(
             choices=[(i, str(i)) for i in range(1, 6)]
         )
