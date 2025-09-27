@@ -8,7 +8,6 @@ DEFAULT_APPLICATION_DESCRIPTIONS: Dict[str, str] = {
     "core": "Support for Business Processes and monetization.",
     "ocpp": "Compatibility with Standards and Good Practices.",
     "nodes": "System and Node-level operations,",
-    "pages": "Scheduling, Periodicity and Event Signaling,",
+    "pages": "User QA, Continuity Design and Chaos Testing.",
     "teams": "Identity, Entitlements and Access Controls.",
-    "man": "User QA, Continuity Design and Chaos Testing.",
 }
