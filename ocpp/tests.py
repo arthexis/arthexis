@@ -14,7 +14,7 @@ from django.test import Client, TransactionTestCase, TestCase, override_settings
 from unittest import skip
 from contextlib import suppress
 from types import SimpleNamespace
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, AsyncMock
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
@@ -1907,6 +1907,22 @@ class SimulatorAdminTests(TransactionTestCase):
         self.assertContains(resp, "DoorOpen status notification sent")
         self.assertFalse(Simulator.objects.get(pk=sim.pk).door_open)
         store.simulators.pop(sim.pk, None)
+
+    @patch("ocpp.admin.asyncio.get_running_loop", side_effect=RuntimeError)
+    def test_stop_simulator_runs_without_event_loop(self, mock_get_loop):
+        sim = Simulator.objects.create(name="SIMSTOP", cp_path="SIMSTOP")
+        stopper = SimpleNamespace(stop=AsyncMock())
+        store.simulators[sim.pk] = stopper
+        url = reverse("admin:ocpp_simulator_changelist")
+        resp = self.client.post(
+            url,
+            {"action": "stop_simulator", "_selected_action": [sim.pk]},
+            follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        stopper.stop.assert_awaited_once()
+        self.assertTrue(mock_get_loop.called)
+        self.assertNotIn(sim.pk, store.simulators)
 
     def test_as_config_includes_custom_fields(self):
         sim = Simulator.objects.create(
