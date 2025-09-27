@@ -24,7 +24,7 @@ from pages.models import (
     ViewHistory,
     UserStory,
 )
-from pages.admin import ApplicationAdmin, UserStoryAdmin
+from pages.admin import ApplicationAdmin, UserStoryAdmin, ViewHistoryAdmin
 from pages.screenshot_specs import (
     ScreenshotSpec,
     ScreenshotSpecRunner,
@@ -54,7 +54,13 @@ from types import SimpleNamespace
 from django.core.management import call_command
 import re
 from django.contrib.contenttypes.models import ContentType
-from datetime import date, timedelta
+from datetime import (
+    date,
+    datetime,
+    time as datetime_time,
+    timedelta,
+    timezone as datetime_timezone,
+)
 from django.core import mail
 from django.utils import timezone
 from django.utils.text import slugify
@@ -747,6 +753,7 @@ class ViewHistoryAdminTests(TestCase):
         self.assertContains(resp, static("core/vendor/chart.umd.min.js"))
 
     def test_graph_data_endpoint(self):
+        ViewHistory.all_objects.all().delete()
         self._create_history("/", count=2)
         self._create_history("/about/", days_offset=1)
         url = reverse("admin:pages_viewhistory_traffic_data")
@@ -761,6 +768,44 @@ class ViewHistoryAdminTests(TestCase):
         }
         self.assertEqual(totals.get("/"), 2)
         self.assertEqual(totals.get("/about/"), 1)
+
+    def test_graph_data_includes_late_evening_visits(self):
+        target_date = date(2025, 9, 27)
+        entry = ViewHistory.objects.create(
+            path="/late/",
+            method="GET",
+            status_code=200,
+            status_text="OK",
+            error_message="",
+            view_name="pages:index",
+        )
+        local_evening = datetime.combine(target_date, datetime_time(21, 30))
+        aware_evening = timezone.make_aware(
+            local_evening, timezone.get_current_timezone()
+        )
+        entry.visited_at = aware_evening.astimezone(datetime_timezone.utc)
+        entry.save(update_fields=["visited_at"])
+
+        url = reverse("admin:pages_viewhistory_traffic_data")
+        with patch("pages.admin.timezone.localdate", return_value=target_date):
+            resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        totals = {
+            dataset["label"]: sum(dataset["data"]) for dataset in data["datasets"]
+        }
+        self.assertEqual(totals.get("/late/"), 1)
+
+    def test_graph_data_filters_using_datetime_range(self):
+        admin_view = ViewHistoryAdmin(ViewHistory, admin.site)
+        with patch.object(ViewHistory.objects, "filter") as mock_filter:
+            mock_queryset = mock_filter.return_value
+            mock_queryset.exists.return_value = False
+            admin_view._build_chart_data()
+
+        kwargs = mock_filter.call_args.kwargs
+        self.assertIn("visited_at__gte", kwargs)
+        self.assertIn("visited_at__lt", kwargs)
 
     def test_admin_index_displays_widget(self):
         resp = self.client.get(reverse("admin:index"))

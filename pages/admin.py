@@ -14,7 +14,7 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.db.models import Count
 from django.db.models.functions import TruncDate
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 import ipaddress
 from django.apps import apps as django_apps
 from django.conf import settings
@@ -262,8 +262,20 @@ class ViewHistoryAdmin(EntityModelAdmin):
     def _build_chart_data(self, days: int = 30, max_pages: int = 8) -> dict:
         end_date = timezone.localdate()
         start_date = end_date - timedelta(days=days - 1)
+
+        start_at = datetime.combine(start_date, time.min)
+        end_at = datetime.combine(end_date + timedelta(days=1), time.min)
+
+        if settings.USE_TZ:
+            current_tz = timezone.get_current_timezone()
+            start_at = timezone.make_aware(start_at, current_tz)
+            end_at = timezone.make_aware(end_at, current_tz)
+            trunc_expression = TruncDate("visited_at", tzinfo=current_tz)
+        else:
+            trunc_expression = TruncDate("visited_at")
+
         queryset = ViewHistory.objects.filter(
-            visited_at__date__range=(start_date, end_date)
+            visited_at__gte=start_at, visited_at__lt=end_at
         )
 
         meta = {
@@ -289,7 +301,7 @@ class ViewHistoryAdmin(EntityModelAdmin):
 
         aggregates = (
             queryset.filter(path__in=paths)
-            .annotate(day=TruncDate("visited_at"))
+            .annotate(day=trunc_expression)
             .values("day", "path")
             .order_by("day")
             .annotate(total=Count("id"))
