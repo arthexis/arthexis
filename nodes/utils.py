@@ -2,6 +2,8 @@ from datetime import datetime
 from pathlib import Path
 import hashlib
 import logging
+import shutil
+import subprocess
 
 from django.conf import settings
 from selenium import webdriver
@@ -11,6 +13,7 @@ from selenium.common.exceptions import WebDriverException
 from .models import ContentSample
 
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
+CAMERA_DIR = settings.LOG_DIR / "camera"
 logger = logging.getLogger(__name__)
 
 
@@ -44,6 +47,35 @@ def capture_screenshot(url: str, cookies=None) -> Path:
     except WebDriverException as exc:
         logger.error("Failed to capture screenshot from %s: %s", url, exc)
         raise RuntimeError(f"Screenshot capture failed: {exc}") from exc
+
+
+def capture_rpi_snapshot(timeout: int = 10) -> Path:
+    """Capture a snapshot using the Raspberry Pi camera stack."""
+
+    tool_path = shutil.which("rpicam-still")
+    if not tool_path:
+        raise RuntimeError("rpicam-still is not available")
+    CAMERA_DIR.mkdir(parents=True, exist_ok=True)
+    filename = CAMERA_DIR / f"{datetime.utcnow():%Y%m%d%H%M%S}.jpg"
+    try:
+        result = subprocess.run(
+            [tool_path, "-o", str(filename), "-t", "1"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except Exception as exc:  # pragma: no cover - depends on camera stack
+        logger.error("Failed to invoke %s: %s", tool_path, exc)
+        raise RuntimeError(f"Snapshot capture failed: {exc}") from exc
+    if result.returncode != 0:
+        error = (result.stderr or result.stdout or "Snapshot capture failed").strip()
+        logger.error("rpicam-still exited with %s: %s", result.returncode, error)
+        raise RuntimeError(error)
+    if not filename.exists():
+        logger.error("Snapshot file %s was not created", filename)
+        raise RuntimeError("Snapshot capture failed")
+    return filename
 
 
 def save_screenshot(path: Path, node=None, method: str = "", transaction_uuid=None):

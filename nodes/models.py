@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from django.db import models
 from django.db.utils import DatabaseError
 from django.db.models.signals import post_delete
@@ -68,6 +69,12 @@ class NodeFeatureManager(models.Manager):
         return self.get(slug=slug)
 
 
+@dataclass(frozen=True)
+class NodeFeatureDefaultAction:
+    label: str
+    url_name: str
+
+
 class NodeFeature(Entity):
     """Feature that may be enabled on nodes and roles."""
 
@@ -76,6 +83,20 @@ class NodeFeature(Entity):
     roles = models.ManyToManyField(NodeRole, blank=True, related_name="features")
 
     objects = NodeFeatureManager()
+
+    DEFAULT_ACTIONS = {
+        "rfid-scanner": NodeFeatureDefaultAction(
+            label="Scan RFIDs", url_name="admin:core_rfid_scan"
+        ),
+        "screenshot-poll": NodeFeatureDefaultAction(
+            label="Take Screenshot",
+            url_name="admin:nodes_nodefeature_take_screenshot",
+        ),
+        "rpi-camera": NodeFeatureDefaultAction(
+            label="Take a Snapshot",
+            url_name="admin:nodes_nodefeature_take_snapshot",
+        ),
+    }
 
     class Meta:
         ordering = ["display"]
@@ -115,6 +136,11 @@ class NodeFeature(Entity):
             base_path = Path(node.base_path or settings.BASE_DIR)
             return (base_path / "locks" / lock).exists()
         return False
+
+    def get_default_action(self) -> NodeFeatureDefaultAction | None:
+        """Return the configured default action for this feature if any."""
+
+        return self.DEFAULT_ACTIONS.get(self.slug)
 
 
 def get_terminal_role():

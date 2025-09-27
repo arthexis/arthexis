@@ -881,6 +881,33 @@ class NodeAdminTests(TestCase):
         if security_dir.exists():
             shutil.rmtree(security_dir)
 
+    def _create_local_node(self):
+        return Node.objects.create(
+            hostname="localnode",
+            address="127.0.0.1",
+            port=8000,
+            mac_address=Node.get_current_mac(),
+        )
+
+    def test_node_feature_list_shows_default_action_when_enabled(self):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="rfid-scanner", defaults={"display": "RFID Scanner"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        response = self.client.get(reverse("admin:nodes_nodefeature_changelist"))
+        action_url = reverse("admin:core_rfid_scan")
+        self.assertContains(response, f'href="{action_url}"')
+
+    def test_node_feature_list_hides_default_action_when_disabled(self):
+        self._create_local_node()
+        NodeFeature.objects.get_or_create(
+            slug="screenshot-poll", defaults={"display": "Screenshot Poll"}
+        )
+        response = self.client.get(reverse("admin:nodes_nodefeature_changelist"))
+        action_url = reverse("admin:nodes_nodefeature_take_screenshot")
+        self.assertNotContains(response, f'href="{action_url}"')
+
     def test_register_current_host(self):
         url = reverse("admin:nodes_node_register_current")
         hostname = socket.gethostname()
@@ -1014,6 +1041,67 @@ class NodeAdminTests(TestCase):
         )
         samples = list(ContentSample.objects.filter(kind=ContentSample.IMAGE))
         self.assertEqual(samples[0].transaction_uuid, samples[1].transaction_uuid)
+
+    @patch("nodes.admin.capture_screenshot")
+    def test_take_screenshot_default_action_creates_sample(
+        self, mock_capture_screenshot
+    ):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="screenshot-poll", defaults={"display": "Screenshot Poll"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        screenshot_dir = settings.LOG_DIR / "screenshots"
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        file_path = screenshot_dir / "default.png"
+        file_path.write_bytes(b"default")
+        mock_capture_screenshot.return_value = Path("screenshots/default.png")
+        response = self.client.get(
+            reverse("admin:nodes_nodefeature_take_screenshot"), follow=True
+        )
+        self.assertEqual(response.status_code, 200)
+        sample = ContentSample.objects.get(kind=ContentSample.IMAGE)
+        self.assertEqual(sample.node, node)
+        self.assertEqual(sample.method, "DEFAULT_ACTION")
+        mock_capture_screenshot.assert_called_once_with("http://testserver/")
+        change_url = reverse("admin:nodes_contentsample_change", args=[sample.pk])
+        self.assertEqual(response.redirect_chain[-1][0], change_url)
+
+    def test_take_screenshot_default_action_requires_enabled_feature(self):
+        self._create_local_node()
+        NodeFeature.objects.get_or_create(
+            slug="screenshot-poll", defaults={"display": "Screenshot Poll"}
+        )
+        response = self.client.get(
+            reverse("admin:nodes_nodefeature_take_screenshot"), follow=True
+        )
+        self.assertEqual(response.status_code, 200)
+        changelist_url = reverse("admin:nodes_nodefeature_changelist")
+        self.assertEqual(response.wsgi_request.path, changelist_url)
+        self.assertEqual(ContentSample.objects.count(), 0)
+        self.assertContains(response, "Screenshot Poll feature is not enabled")
+
+    @patch("nodes.admin.capture_rpi_snapshot")
+    def test_take_snapshot_default_action_creates_sample(self, mock_snapshot):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="rpi-camera", defaults={"display": "Raspberry Pi Camera"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        camera_dir = settings.LOG_DIR / "camera"
+        camera_dir.mkdir(parents=True, exist_ok=True)
+        file_path = camera_dir / "snap.jpg"
+        file_path.write_bytes(b"camera")
+        mock_snapshot.return_value = file_path
+        response = self.client.get(
+            reverse("admin:nodes_nodefeature_take_snapshot"), follow=True
+        )
+        self.assertEqual(response.status_code, 200)
+        sample = ContentSample.objects.get(kind=ContentSample.IMAGE)
+        self.assertEqual(sample.node, node)
+        self.assertEqual(sample.method, "RPI_CAMERA")
+        change_url = reverse("admin:nodes_contentsample_change", args=[sample.pk])
+        self.assertEqual(response.redirect_chain[-1][0], change_url)
 
 
 class NetMessageAdminTests(TransactionTestCase):
@@ -1770,6 +1858,21 @@ class NodeFeatureTests(TestCase):
                 mac_address="00:11:22:33:44:55",
                 role=self.role,
             )
+
+    def test_default_action_mapping_for_known_feature(self):
+        feature = NodeFeature.objects.create(
+            slug="rfid-scanner", display="RFID Scanner"
+        )
+        action = feature.get_default_action()
+        self.assertIsNotNone(action)
+        self.assertEqual(action.label, "Scan RFIDs")
+        self.assertEqual(action.url_name, "admin:core_rfid_scan")
+
+    def test_default_action_missing_when_unconfigured(self):
+        feature = NodeFeature.objects.create(
+            slug="custom-feature", display="Custom Feature"
+        )
+        self.assertIsNone(feature.get_default_action())
 
     def test_lcd_screen_enabled(self):
         feature = NodeFeature.objects.create(slug="lcd-screen", display="LCD")
