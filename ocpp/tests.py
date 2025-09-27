@@ -1598,6 +1598,66 @@ class ChargerLandingTests(TestCase):
         self.assertContains(resp, "progress-bar")
         store.transactions.pop(key, None)
 
+    def test_public_status_shows_rfid_link_for_known_tag(self):
+        aggregate = Charger.objects.create(charger_id="PUBRFID")
+        connector = Charger.objects.create(
+            charger_id="PUBRFID",
+            connector_id=1,
+        )
+        tx = Transaction.objects.create(
+            charger=connector,
+            meter_start=1000,
+            start_time=timezone.now(),
+            rfid="TAGLINK",
+        )
+        key = store.identity_key(connector.charger_id, connector.connector_id)
+        store.transactions[key] = tx
+        tag = RFID.objects.create(rfid="TAGLINK")
+        admin_url = reverse("admin:core_rfid_change", args=[tag.pk])
+        try:
+            response = self.client.get(
+                reverse(
+                    "charger-page-connector",
+                    args=[connector.charger_id, connector.connector_slug],
+                )
+            )
+            self.assertContains(response, admin_url)
+            self.assertContains(response, "TAGLINK")
+
+            overview = self.client.get(reverse("charger-page", args=[aggregate.charger_id]))
+            self.assertContains(overview, admin_url)
+        finally:
+            store.transactions.pop(key, None)
+
+    def test_public_status_shows_rfid_text_when_unknown(self):
+        Charger.objects.create(charger_id="PUBTEXT")
+        connector = Charger.objects.create(
+            charger_id="PUBTEXT",
+            connector_id=1,
+        )
+        tx = Transaction.objects.create(
+            charger=connector,
+            meter_start=1000,
+            start_time=timezone.now(),
+            rfid="TAGNONE",
+        )
+        key = store.identity_key(connector.charger_id, connector.connector_id)
+        store.transactions[key] = tx
+        try:
+            response = self.client.get(
+                reverse(
+                    "charger-page-connector",
+                    args=[connector.charger_id, connector.connector_slug],
+                )
+            )
+            self.assertContains(response, "TAGNONE")
+            self.assertNotContains(response, "TAGNONE</a>")
+
+            overview = self.client.get(reverse("charger-page", args=[connector.charger_id]))
+            self.assertContains(overview, "TAGNONE")
+        finally:
+            store.transactions.pop(key, None)
+
     def test_display_name_used_on_public_pages(self):
         charger = Charger.objects.create(
             charger_id="NAMED",
