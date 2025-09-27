@@ -19,6 +19,13 @@ from decimal import Decimal
 from django.utils.dateparse import parse_datetime
 from .models import Transaction, Charger, MeterValue
 from .reference_utils import host_is_local_loopback
+from .evcs_discovery import (
+    DEFAULT_CONSOLE_PORT,
+    HTTPS_PORTS,
+    build_console_url,
+    prioritise_ports,
+    scan_open_ports,
+)
 
 FORWARDED_PAIR_RE = re.compile(r"for=(?:\"?)(?P<value>[^;,\"\s]+)(?:\"?)", re.IGNORECASE)
 
@@ -305,9 +312,14 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         if host_is_local_loopback(ip):
             return
         host = ip
-        if ":" in host and not host.startswith("["):
-            host = f"[{host}]"
-        url = f"http://{host}:8900"
+        ports = scan_open_ports(host)
+        if ports:
+            ordered_ports = prioritise_ports(ports)
+        else:
+            ordered_ports = prioritise_ports([DEFAULT_CONSOLE_PORT])
+        port = ordered_ports[0] if ordered_ports else DEFAULT_CONSOLE_PORT
+        secure = port in HTTPS_PORTS
+        url = build_console_url(host, port, secure)
         alt_text = f"{serial} Console"
         reference = Reference.objects.filter(alt_text=alt_text).order_by("id").first()
         if reference is None:
