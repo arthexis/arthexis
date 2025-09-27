@@ -29,6 +29,7 @@ from .models import (
     Favorite,
     ViewHistory,
     UserManual,
+    UserStory,
 )
 from django.contrib.contenttypes.models import ContentType
 from core.user_data import EntityModelAdmin
@@ -324,6 +325,27 @@ class ViewHistoryAdmin(EntityModelAdmin):
             )
 
         return {"labels": labels, "datasets": datasets, "meta": meta}
+
+
+@admin.register(UserStory)
+class UserStoryAdmin(EntityModelAdmin):
+    date_hierarchy = "submitted_at"
+    list_display = ("name", "rating", "path", "submitted_at", "user")
+    list_filter = ("rating", "submitted_at")
+    search_fields = ("name", "comments", "path")
+    readonly_fields = ("name", "rating", "comments", "path", "submitted_at", "user")
+    ordering = ("-submitted_at",)
+    fields = (
+        "name",
+        "rating",
+        "comments",
+        "path",
+        "user",
+        "submitted_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
 
 
 def favorite_toggle(request, ct_id):
