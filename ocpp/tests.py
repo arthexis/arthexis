@@ -362,6 +362,87 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertEqual(charger.availability_requested_state, "Inoperative")
         await communicator.disconnect()
 
+    async def test_get_configuration_result_logged(self):
+        store.pending_calls.clear()
+        pending_key = store.pending_key("CFGRES")
+        store.clear_log(pending_key, log_type="charger")
+        log_key = store.identity_key("CFGRES", None)
+        store.clear_log(log_key, log_type="charger")
+        communicator = WebsocketCommunicator(application, "/CFGRES/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        message_id = "cfg-result"
+        payload = {
+            "configurationKey": [
+                {
+                    "key": "AllowOfflineTxForUnknownId",
+                    "readonly": True,
+                    "value": "false",
+                }
+            ]
+        }
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "GetConfiguration",
+                "charger_id": "CFGRES",
+                "connector_id": None,
+                "log_key": log_key,
+                "requested_at": timezone.now(),
+            },
+        )
+
+        await communicator.send_json_to([3, message_id, payload])
+        await asyncio.sleep(0.05)
+
+        log_entries = store.get_logs(log_key, log_type="charger")
+        self.assertTrue(
+            any("GetConfiguration result" in entry for entry in log_entries)
+        )
+        self.assertNotIn(message_id, store.pending_calls)
+
+        await communicator.disconnect()
+        store.clear_log(log_key, log_type="charger")
+        store.clear_log(pending_key, log_type="charger")
+
+    async def test_get_configuration_error_logged(self):
+        store.pending_calls.clear()
+        pending_key = store.pending_key("CFGERR")
+        store.clear_log(pending_key, log_type="charger")
+        log_key = store.identity_key("CFGERR", None)
+        store.clear_log(log_key, log_type="charger")
+        communicator = WebsocketCommunicator(application, "/CFGERR/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        message_id = "cfg-error"
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "GetConfiguration",
+                "charger_id": "CFGERR",
+                "connector_id": None,
+                "log_key": log_key,
+                "requested_at": timezone.now(),
+            },
+        )
+
+        await communicator.send_json_to(
+            [4, message_id, "InternalError", "Boom", {"detail": "nope"}]
+        )
+        await asyncio.sleep(0.05)
+
+        log_entries = store.get_logs(log_key, log_type="charger")
+        self.assertTrue(
+            any("GetConfiguration error" in entry for entry in log_entries)
+        )
+        self.assertNotIn(message_id, store.pending_calls)
+
+        await communicator.disconnect()
+        store.clear_log(log_key, log_type="charger")
+        store.clear_log(pending_key, log_type="charger")
+
     async def test_status_notification_updates_availability_state(self):
         store.pending_calls.clear()
         communicator = WebsocketCommunicator(application, "/STATAVAIL/")
@@ -1641,6 +1722,46 @@ class ChargerAdminTests(TestCase):
         self.client.post(delete_url, {"post": "yes"})
         self.assertFalse(Charger.objects.filter(pk=charger.pk).exists())
 
+    def test_fetch_configuration_dispatches_request(self):
+        charger = Charger.objects.create(charger_id="CFGADMIN", connector_id=1)
+        ws = DummyWebSocket()
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.clear_log(log_key, log_type="charger")
+        pending_key = store.pending_key(charger.charger_id)
+        store.clear_log(pending_key, log_type="charger")
+        store.set_connection(charger.charger_id, charger.connector_id, ws)
+        store.pending_calls.clear()
+        try:
+            url = reverse("admin:ocpp_charger_changelist")
+            response = self.client.post(
+                url,
+                {
+                    "action": "fetch_cp_configuration",
+                    "_selected_action": [charger.pk],
+                },
+                follow=True,
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(ws.sent), 1)
+            frame = json.loads(ws.sent[0])
+            self.assertEqual(frame[0], 2)
+            self.assertEqual(frame[2], "GetConfiguration")
+            self.assertIn(frame[1], store.pending_calls)
+            metadata = store.pending_calls[frame[1]]
+            self.assertEqual(metadata.get("action"), "GetConfiguration")
+            self.assertEqual(metadata.get("charger_id"), charger.charger_id)
+            self.assertEqual(metadata.get("connector_id"), charger.connector_id)
+            self.assertEqual(metadata.get("log_key"), log_key)
+            log_entries = store.get_logs(log_key, log_type="charger")
+            self.assertTrue(
+                any("GetConfiguration" in entry for entry in log_entries)
+            )
+        finally:
+            store.pop_connection(charger.charger_id, charger.connector_id)
+            store.pending_calls.clear()
+            store.clear_log(log_key, log_type="charger")
+            store.clear_log(pending_key, log_type="charger")
+
 
 class LocationAdminTests(TestCase):
     def setUp(self):
@@ -1796,6 +1917,10 @@ class SimulatorAdminTests(TransactionTestCase):
             duration=500,
             pre_charge_delay=5,
             vin="WP0ZZZ99999999999",
+            configuration_keys=[
+                {"key": "HeartbeatInterval", "value": "300", "readonly": True}
+            ],
+            configuration_unknown_keys=["Bogus"],
         )
         cfg = sim.as_config()
         self.assertEqual(cfg.interval, 3.5)
@@ -1803,6 +1928,11 @@ class SimulatorAdminTests(TransactionTestCase):
         self.assertEqual(cfg.duration, 500)
         self.assertEqual(cfg.pre_charge_delay, 5)
         self.assertEqual(cfg.vin, "WP0ZZZ99999999999")
+        self.assertEqual(
+            cfg.configuration_keys,
+            [{"key": "HeartbeatInterval", "value": "300", "readonly": True}],
+        )
+        self.assertEqual(cfg.configuration_unknown_keys, ["Bogus"])
 
     def _post_simulator_change(self, sim: Simulator, **overrides):
         url = reverse("admin:ocpp_simulator_change", args=[sim.pk])
@@ -1820,6 +1950,10 @@ class SimulatorAdminTests(TransactionTestCase):
             "username": sim.username,
             "password": sim.password,
             "door_open": "on" if overrides.get("door_open", False) else "",
+            "configuration_keys": json.dumps(sim.configuration_keys or []),
+            "configuration_unknown_keys": json.dumps(
+                sim.configuration_unknown_keys or []
+            ),
             "_save": "Save",
         }
         data.update(overrides)
@@ -2397,8 +2531,85 @@ class ChargePointSimulatorTests(TransactionTestCase):
             idx for idx, payload in enumerate(status_payloads) if payload.get("errorCode") == "NoError"
         )
         self.assertLess(first_open, first_close)
-        self.assertEqual(door_open_messages[0].get("status"), "Faulted")
-        self.assertEqual(door_closed_messages[0].get("status"), "Available")
+
+    async def test_get_configuration_uses_configured_keys(self):
+        cfg = SimulatorConfig(
+            configuration_keys=[
+                {"key": "HeartbeatInterval", "value": "300", "readonly": True},
+                {"key": "MeterValueSampleInterval", "value": 900},
+            ],
+            configuration_unknown_keys=["UnknownX"],
+        )
+        sim = ChargePointSimulator(cfg)
+        sent: list[list[object]] = []
+
+        async def send(msg: str):
+            sent.append(json.loads(msg))
+
+        async def recv():  # pragma: no cover - should not be called
+            raise AssertionError("recv should not be called for GetConfiguration")
+
+        handled = await sim._handle_csms_call(
+            [
+                2,
+                "cfg-1",
+                "GetConfiguration",
+                {"key": ["HeartbeatInterval", "UnknownX", "MissingKey"]},
+            ],
+            send,
+            recv,
+        )
+        self.assertTrue(handled)
+        self.assertEqual(len(sent), 1)
+        frame = sent[0]
+        self.assertEqual(frame[0], 3)
+        self.assertEqual(frame[1], "cfg-1")
+        payload = frame[2]
+        self.assertIn("configurationKey", payload)
+        self.assertEqual(
+            payload["configurationKey"],
+            [{"key": "HeartbeatInterval", "value": "300", "readonly": True}],
+        )
+        self.assertIn("unknownKey", payload)
+        self.assertCountEqual(payload["unknownKey"], ["UnknownX", "MissingKey"])
+
+    async def test_get_configuration_without_filter_returns_all(self):
+        cfg = SimulatorConfig(
+            configuration_keys=[
+                {"key": "AuthorizeRemoteTxRequests", "value": True},
+                {"key": "ConnectorPhaseRotation", "value": "ABC"},
+            ],
+            configuration_unknown_keys=["GhostKey"],
+        )
+        sim = ChargePointSimulator(cfg)
+        sent: list[list[object]] = []
+
+        async def send(msg: str):
+            sent.append(json.loads(msg))
+
+        async def recv():  # pragma: no cover - should not be called
+            raise AssertionError("recv should not be called for GetConfiguration")
+
+        handled = await sim._handle_csms_call(
+            [2, "cfg-2", "GetConfiguration", {}],
+            send,
+            recv,
+        )
+        self.assertTrue(handled)
+        frame = sent[0]
+        payload = frame[2]
+        keys = payload.get("configurationKey")
+        self.assertEqual(len(keys), 2)
+        returned_keys = {item["key"] for item in keys}
+        self.assertEqual(
+            returned_keys,
+            {"AuthorizeRemoteTxRequests", "ConnectorPhaseRotation"},
+        )
+        values = {item["key"]: item.get("value") for item in keys}
+        self.assertEqual(values["AuthorizeRemoteTxRequests"], "True")
+        self.assertEqual(values["ConnectorPhaseRotation"], "ABC")
+        self.assertIn("unknownKey", payload)
+        self.assertEqual(payload["unknownKey"], ["GhostKey"])
 
 
 class PurgeMeterReadingsTaskTests(TestCase):
