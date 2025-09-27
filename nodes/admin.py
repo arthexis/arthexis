@@ -507,7 +507,7 @@ class NodeFeatureAdmin(EntityModelAdmin):
         "is_enabled_display",
         "default_action",
     )
-    actions = ["check_selected_features"]
+    actions = ["check_features_for_eligibility", "enable_selected_features"]
     readonly_fields = ("is_enabled",)
     search_fields = ("display", "slug")
 
@@ -537,34 +537,47 @@ class NodeFeatureAdmin(EntityModelAdmin):
             return action.label
         return format_html('<a href="{}">{}</a>', url, action.label)
 
-    @admin.action(description="Check selected features")
-    def check_selected_features(self, request, queryset):
+    def _manual_enablement_message(self, feature, node):
+        if node is None:
+            return (
+                "Manual enablement is unavailable without a registered local node."
+            )
+        if feature.slug in Node.MANUAL_FEATURE_SLUGS:
+            return "This feature can be enabled manually."
+        return "This feature cannot be enabled manually."
+
+    @admin.action(description="Check features for eligibility")
+    def check_features_for_eligibility(self, request, queryset):
         from .feature_checks import feature_checks
 
         features = list(queryset)
         total = len(features)
         successes = 0
+        node = Node.get_local()
         for feature in features:
+            enablement_message = self._manual_enablement_message(feature, node)
             try:
-                result = feature_checks.run(feature)
+                result = feature_checks.run(feature, node=node)
             except Exception as exc:  # pragma: no cover - defensive
                 self.message_user(
                     request,
-                    f"{feature.display}: {exc}",
+                    f"{feature.display}: {exc} {enablement_message}",
                     level=messages.ERROR,
                 )
                 continue
             if result is None:
                 self.message_user(
                     request,
-                    f"No check is configured for {feature.display}.",
+                    f"No check is configured for {feature.display}. {enablement_message}",
                     level=messages.WARNING,
                 )
                 continue
             message = result.message or (
                 f"{feature.display} check {'passed' if result.success else 'failed'}."
             )
-            self.message_user(request, message, level=result.level)
+            self.message_user(
+                request, f"{message} {enablement_message}", level=result.level
+            )
             if result.success:
                 successes += 1
         if total:
@@ -573,6 +586,68 @@ class NodeFeatureAdmin(EntityModelAdmin):
                 f"Completed {successes} of {total} feature check(s) successfully.",
                 level=messages.INFO,
             )
+
+    @admin.action(description="Enable selected action")
+    def enable_selected_features(self, request, queryset):
+        node = Node.get_local()
+        if node is None:
+            self.message_user(
+                request,
+                "No local node is registered; unable to enable features manually.",
+                level=messages.ERROR,
+            )
+            return
+
+        manual_features = [
+            feature
+            for feature in queryset
+            if feature.slug in Node.MANUAL_FEATURE_SLUGS
+        ]
+        non_manual_features = [
+            feature
+            for feature in queryset
+            if feature.slug not in Node.MANUAL_FEATURE_SLUGS
+        ]
+        for feature in non_manual_features:
+            self.message_user(
+                request,
+                f"{feature.display} cannot be enabled manually.",
+                level=messages.WARNING,
+            )
+
+        if not manual_features:
+            self.message_user(
+                request,
+                "None of the selected features can be enabled manually.",
+                level=messages.WARNING,
+            )
+            return
+
+        current_manual = set(
+            node.features.filter(slug__in=Node.MANUAL_FEATURE_SLUGS).values_list(
+                "slug", flat=True
+            )
+        )
+        desired_manual = current_manual | {feature.slug for feature in manual_features}
+        newly_enabled = desired_manual - current_manual
+        if not newly_enabled:
+            self.message_user(
+                request,
+                "Selected manual features are already enabled.",
+                level=messages.INFO,
+            )
+            return
+
+        node.update_manual_features(desired_manual)
+        display_map = {feature.slug: feature.display for feature in manual_features}
+        newly_enabled_names = [display_map[slug] for slug in sorted(newly_enabled)]
+        self.message_user(
+            request,
+            "Enabled {} feature(s): {}".format(
+                len(newly_enabled), ", ".join(newly_enabled_names)
+            ),
+            level=messages.SUCCESS,
+        )
 
     def get_urls(self):
         urls = super().get_urls()
