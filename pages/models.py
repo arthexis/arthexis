@@ -4,12 +4,14 @@ from django.contrib.sites.models import Site
 from nodes.models import NodeRole
 from django.apps import apps as django_apps
 from django.utils.text import slugify
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import gettext, gettext_lazy as _
 from importlib import import_module
 from django.urls import URLPattern
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.core.validators import MaxLengthValidator, MaxValueValidator, MinValueValidator
+
+from core import github_issues
 
 
 class ApplicationManager(models.Manager):
@@ -291,6 +293,10 @@ class UserStory(Entity):
         validators=[MaxLengthValidator(400)],
         help_text=_("Share more about your experience."),
     )
+    take_screenshot = models.BooleanField(
+        default=True,
+        help_text=_("Request a screenshot capture for this feedback."),
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -299,6 +305,15 @@ class UserStory(Entity):
         related_name="user_stories",
     )
     submitted_at = models.DateTimeField(auto_now_add=True)
+    github_issue_number = models.PositiveIntegerField(
+        blank=True,
+        null=True,
+        help_text=_("Number of the GitHub issue created for this feedback."),
+    )
+    github_issue_url = models.URLField(
+        blank=True,
+        help_text=_("Link to the GitHub issue created for this feedback."),
+    )
 
     class Meta:
         ordering = ["-submitted_at"]
@@ -308,6 +323,87 @@ class UserStory(Entity):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         display = self.name or _("Anonymous")
         return f"{display} ({self.rating}/5)"
+
+    def get_github_issue_labels(self) -> list[str]:
+        """Return default labels used when creating GitHub issues."""
+
+        return ["feedback"]
+
+    def get_github_issue_fingerprint(self) -> str | None:
+        """Return a fingerprint used to avoid duplicate issue submissions."""
+
+        if self.pk:
+            return f"user-story:{self.pk}"
+        return None
+
+    def build_github_issue_title(self) -> str:
+        """Return the title used for GitHub issues."""
+
+        path = self.path or "/"
+        return gettext("Feedback for %(path)s (%(rating)s/5)") % {
+            "path": path,
+            "rating": self.rating,
+        }
+
+    def build_github_issue_body(self) -> str:
+        """Return the issue body summarising the feedback details."""
+
+        name = self.name or gettext("Anonymous")
+        path = self.path or "/"
+        screenshot_requested = gettext("Yes") if self.take_screenshot else gettext("No")
+
+        lines = [
+            f"**Path:** {path}",
+            f"**Rating:** {self.rating}/5",
+            f"**Name:** {name}",
+            f"**Screenshot requested:** {screenshot_requested}",
+        ]
+
+        if self.submitted_at:
+            lines.append(f"**Submitted at:** {self.submitted_at.isoformat()}")
+
+        comment = (self.comments or "").strip()
+        if comment:
+            lines.extend(["", comment])
+
+        return "\n".join(lines).strip()
+
+    def create_github_issue(self) -> str | None:
+        """Create a GitHub issue for this feedback and store the identifiers."""
+
+        if self.github_issue_url:
+            return self.github_issue_url
+
+        response = github_issues.create_issue(
+            self.build_github_issue_title(),
+            self.build_github_issue_body(),
+            labels=self.get_github_issue_labels(),
+            fingerprint=self.get_github_issue_fingerprint(),
+        )
+
+        if response is None:
+            return None
+
+        try:
+            payload = response.json()
+        except ValueError:  # pragma: no cover - defensive guard
+            payload = {}
+
+        issue_url = payload.get("html_url")
+        issue_number = payload.get("number")
+
+        update_fields = []
+        if issue_url and issue_url != self.github_issue_url:
+            self.github_issue_url = issue_url
+            update_fields.append("github_issue_url")
+        if issue_number is not None and issue_number != self.github_issue_number:
+            self.github_issue_number = issue_number
+            update_fields.append("github_issue_number")
+
+        if update_fields:
+            self.save(update_fields=update_fields)
+
+        return issue_url
 
 
 from django.db.models.signals import post_save

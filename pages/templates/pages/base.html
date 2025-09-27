@@ -163,8 +163,8 @@
         position: fixed;
         right: 1.75rem;
         bottom: 1.75rem;
-        width: 3.5rem;
-        height: 3.5rem;
+        width: 3rem;
+        height: 3rem;
         border-radius: 50%;
         border: 0;
         background: linear-gradient(135deg, #facc15, #fb923c);
@@ -184,6 +184,7 @@
       .user-story-toggle svg {
         width: 1.75rem;
         height: 1.75rem;
+        display: block;
       }
       body.user-story-open {
         overflow: hidden;
@@ -221,6 +222,21 @@
         display: inline-flex;
         flex-direction: row-reverse;
         gap: 0.35rem;
+      }
+      .user-story-feedback-options {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+      .user-story-screenshot {
+        margin: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      .user-story-screenshot .form-check-input {
+        margin-top: 0;
       }
       .user-story-rating input {
         position: absolute;
@@ -371,8 +387,13 @@
       aria-expanded="false"
       aria-label="{% trans 'Share your feedback' %}"
     >
-      <svg aria-hidden="true" focusable="false">
-        <use href="#icon-star"></use>
+      <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+        <path
+          fill="currentColor"
+          fill-rule="evenodd"
+          d="M11.049 2.927a1 1 0 011.902 0l1.563 4.813a1 1 0 00.95.69h5.063c.969 0 1.371 1.24.588 1.81l-4.096 2.977a1 1 0 00-.364 1.118l1.563 4.813c.3.921-.755 1.688-1.54 1.118l-4.096-2.977a1 1 0 00-1.175 0l-4.096 2.977c-.784.57-1.838-.197-1.539-1.118l1.563-4.813a1 1 0 00-.364-1.118L2.445 10.24c-.783-.57-.38-1.81.588-1.81h5.063a1 1 0 00.95-.69l1.563-4.813z"
+          clip-rule="evenodd"
+        ></path>
       </svg>
       <span class="visually-hidden">{% trans 'Share your feedback' %}</span>
     </button>
@@ -411,17 +432,30 @@
             </div>
             <div class="mb-3">
               <span class="form-label d-block">{% trans 'Your experience on this page' %}</span>
-              <div class="user-story-rating" role="radiogroup" aria-labelledby="user-story-title">
-                <input type="radio" id="user-story-rating-5" name="rating" value="5" required>
-                <label for="user-story-rating-5" title="{% trans 'Excellent' %}" aria-label="{% trans '5 stars' %}">★</label>
-                <input type="radio" id="user-story-rating-4" name="rating" value="4">
-                <label for="user-story-rating-4" title="{% trans 'Great' %}" aria-label="{% trans '4 stars' %}">★</label>
-                <input type="radio" id="user-story-rating-3" name="rating" value="3">
-                <label for="user-story-rating-3" title="{% trans 'Good' %}" aria-label="{% trans '3 stars' %}">★</label>
-                <input type="radio" id="user-story-rating-2" name="rating" value="2">
-                <label for="user-story-rating-2" title="{% trans 'Okay' %}" aria-label="{% trans '2 stars' %}">★</label>
-                <input type="radio" id="user-story-rating-1" name="rating" value="1">
-                <label for="user-story-rating-1" title="{% trans 'Needs improvement' %}" aria-label="{% trans '1 star' %}">★</label>
+              <div class="user-story-feedback-options">
+                <div class="user-story-rating" role="radiogroup" aria-labelledby="user-story-title">
+                  <input type="radio" id="user-story-rating-5" name="rating" value="5" required>
+                  <label for="user-story-rating-5" title="{% trans 'Excellent' %}" aria-label="{% trans '5 stars' %}">★</label>
+                  <input type="radio" id="user-story-rating-4" name="rating" value="4">
+                  <label for="user-story-rating-4" title="{% trans 'Great' %}" aria-label="{% trans '4 stars' %}">★</label>
+                  <input type="radio" id="user-story-rating-3" name="rating" value="3">
+                  <label for="user-story-rating-3" title="{% trans 'Good' %}" aria-label="{% trans '3 stars' %}">★</label>
+                  <input type="radio" id="user-story-rating-2" name="rating" value="2">
+                  <label for="user-story-rating-2" title="{% trans 'Okay' %}" aria-label="{% trans '2 stars' %}">★</label>
+                  <input type="radio" id="user-story-rating-1" name="rating" value="1">
+                  <label for="user-story-rating-1" title="{% trans 'Needs improvement' %}" aria-label="{% trans '1 star' %}">★</label>
+                </div>
+                <div class="form-check user-story-screenshot">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="user-story-take-screenshot"
+                    name="take_screenshot"
+                    value="1"
+                    checked
+                  >
+                  <label class="form-check-label" for="user-story-take-screenshot">{% trans 'Take a screenshot' %}</label>
+                </div>
               </div>
             </div>
             <div class="mb-3">

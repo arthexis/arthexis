@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import admin, messages
 from django.contrib.sites.admin import SiteAdmin as DjangoSiteAdmin
 from django.contrib.sites.models import Site
@@ -16,6 +18,7 @@ from datetime import timedelta
 import ipaddress
 from django.apps import apps as django_apps
 from django.conf import settings
+from django.utils.translation import gettext_lazy as _, ngettext
 
 from nodes.models import Node
 from nodes.utils import capture_screenshot, save_screenshot
@@ -33,6 +36,9 @@ from .models import (
 )
 from django.contrib.contenttypes.models import ContentType
 from core.user_data import EntityModelAdmin
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_local_app_choices():
@@ -330,19 +336,108 @@ class ViewHistoryAdmin(EntityModelAdmin):
 @admin.register(UserStory)
 class UserStoryAdmin(EntityModelAdmin):
     date_hierarchy = "submitted_at"
-    list_display = ("name", "rating", "path", "submitted_at", "user")
-    list_filter = ("rating", "submitted_at")
-    search_fields = ("name", "comments", "path")
-    readonly_fields = ("name", "rating", "comments", "path", "submitted_at", "user")
+    actions = ["create_github_issues"]
+    list_display = (
+        "name",
+        "rating",
+        "path",
+        "submitted_at",
+        "github_issue_display",
+        "take_screenshot",
+    )
+    list_filter = ("rating", "submitted_at", "take_screenshot")
+    search_fields = ("name", "comments", "path", "github_issue_url")
+    readonly_fields = (
+        "name",
+        "rating",
+        "comments",
+        "take_screenshot",
+        "path",
+        "user",
+        "submitted_at",
+        "github_issue_number",
+        "github_issue_url",
+    )
     ordering = ("-submitted_at",)
     fields = (
         "name",
         "rating",
         "comments",
+        "take_screenshot",
         "path",
         "user",
         "submitted_at",
+        "github_issue_number",
+        "github_issue_url",
     )
+
+    @admin.display(description=_("GitHub issue"), ordering="github_issue_number")
+    def github_issue_display(self, obj):
+        if obj.github_issue_url:
+            label = (
+                f"#{obj.github_issue_number}"
+                if obj.github_issue_number is not None
+                else obj.github_issue_url
+            )
+            return format_html(
+                '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
+                obj.github_issue_url,
+                label,
+            )
+        if obj.github_issue_number is not None:
+            return f"#{obj.github_issue_number}"
+        return _("Not created")
+
+    @admin.action(description=_("Create GitHub issues"))
+    def create_github_issues(self, request, queryset):
+        created = 0
+        skipped = 0
+
+        for story in queryset:
+            if story.github_issue_url:
+                skipped += 1
+                continue
+
+            try:
+                issue_url = story.create_github_issue()
+            except Exception as exc:  # pragma: no cover - network/runtime errors
+                logger.exception("Failed to create GitHub issue for UserStory %s", story.pk)
+                self.message_user(
+                    request,
+                    _("Unable to create a GitHub issue for %(story)s: %(error)s")
+                    % {"story": story, "error": exc},
+                    messages.ERROR,
+                )
+                continue
+
+            if issue_url:
+                created += 1
+            else:
+                skipped += 1
+
+        if created:
+            self.message_user(
+                request,
+                ngettext(
+                    "Created %(count)d GitHub issue.",
+                    "Created %(count)d GitHub issues.",
+                    created,
+                )
+                % {"count": created},
+                messages.SUCCESS,
+            )
+
+        if skipped:
+            self.message_user(
+                request,
+                ngettext(
+                    "Skipped %(count)d feedback item (issue already exists or was throttled).",
+                    "Skipped %(count)d feedback items (issues already exist or were throttled).",
+                    skipped,
+                )
+                % {"count": skipped},
+                messages.INFO,
+            )
 
     def has_add_permission(self, request):
         return False

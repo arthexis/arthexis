@@ -13,6 +13,7 @@ from urllib.parse import quote
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.contrib import admin
+from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import DisallowedHost
 import socket
 from pages.models import (
@@ -23,7 +24,7 @@ from pages.models import (
     ViewHistory,
     UserStory,
 )
-from pages.admin import ApplicationAdmin
+from pages.admin import ApplicationAdmin, UserStoryAdmin
 from pages.screenshot_specs import (
     ScreenshotSpec,
     ScreenshotSpecRunner,
@@ -48,7 +49,7 @@ import shutil
 from io import StringIO
 from django.conf import settings
 from pathlib import Path
-from unittest.mock import patch, Mock
+from unittest.mock import MagicMock, Mock, patch
 from types import SimpleNamespace
 from django.core.management import call_command
 import re
@@ -1757,6 +1758,7 @@ class UserStorySubmissionTests(TestCase):
                 "rating": 5,
                 "comments": "Loved the experience!",
                 "path": "/wizard/step-1/",
+                "take_screenshot": "1",
             },
         )
         self.assertEqual(response.status_code, 200)
@@ -1767,6 +1769,7 @@ class UserStorySubmissionTests(TestCase):
         self.assertEqual(story.path, "/wizard/step-1/")
         self.assertEqual(story.user, self.user)
         self.assertTrue(story.is_user_data)
+        self.assertTrue(story.take_screenshot)
 
     def test_anonymous_submission_uses_provided_name(self):
         response = self.client.post(
@@ -1776,6 +1779,7 @@ class UserStorySubmissionTests(TestCase):
                 "rating": 3,
                 "comments": "It was fine.",
                 "path": "/status/",
+                "take_screenshot": "on",
             },
         )
         self.assertEqual(response.status_code, 200)
@@ -1784,6 +1788,7 @@ class UserStorySubmissionTests(TestCase):
         self.assertEqual(story.name, "Guest Reviewer")
         self.assertIsNone(story.user)
         self.assertEqual(story.comments, "It was fine.")
+        self.assertTrue(story.take_screenshot)
 
     def test_invalid_rating_returns_errors(self):
         response = self.client.post(
@@ -1792,6 +1797,7 @@ class UserStorySubmissionTests(TestCase):
                 "rating": 7,
                 "comments": "Way off the scale",
                 "path": "/feedback/",
+                "take_screenshot": "1",
             },
         )
         self.assertEqual(response.status_code, 400)
@@ -1806,12 +1812,95 @@ class UserStorySubmissionTests(TestCase):
                 "rating": 2,
                 "comments": "Could be better.",
                 "path": "/feedback/",
+                "take_screenshot": "1",
             },
         )
         self.assertEqual(response.status_code, 200)
         story = UserStory.objects.get()
         self.assertEqual(story.name, "Anonymous")
         self.assertIsNone(story.user)
+        self.assertTrue(story.take_screenshot)
+
+    def test_submission_without_screenshot_request(self):
+        response = self.client.post(
+            self.url,
+            {
+                "rating": 4,
+                "comments": "Skip the screenshot, please.",
+                "path": "/feedback/",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        story = UserStory.objects.get()
+        self.assertFalse(story.take_screenshot)
+
+
+class UserStoryAdminActionTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.factory = RequestFactory()
+        User = get_user_model()
+        self.admin_user = User.objects.create_superuser(
+            username="admin",
+            email="admin@example.com",
+            password="pwd",
+        )
+        self.story = UserStory.objects.create(
+            path="/",
+            name="Feedback",
+            rating=4,
+            comments="Helpful notes",
+            take_screenshot=True,
+        )
+        self.admin = UserStoryAdmin(UserStory, admin.site)
+
+    def _build_request(self):
+        request = self.factory.post("/admin/pages/userstory/")
+        request.user = self.admin_user
+        request.session = self.client.session
+        setattr(request, "_messages", FallbackStorage(request))
+        return request
+
+    @patch("pages.models.github_issues.create_issue")
+    def test_create_github_issues_action_updates_issue_fields(self, mock_create_issue):
+        response = MagicMock()
+        response.json.return_value = {
+            "html_url": "https://github.com/example/repo/issues/123",
+            "number": 123,
+        }
+        mock_create_issue.return_value = response
+
+        request = self._build_request()
+        queryset = UserStory.objects.filter(pk=self.story.pk)
+        self.admin.create_github_issues(request, queryset)
+
+        self.story.refresh_from_db()
+        self.assertEqual(self.story.github_issue_number, 123)
+        self.assertEqual(
+            self.story.github_issue_url,
+            "https://github.com/example/repo/issues/123",
+        )
+
+        mock_create_issue.assert_called_once()
+        args, kwargs = mock_create_issue.call_args
+        self.assertIn("Feedback for", args[0])
+        self.assertIn("**Rating:**", args[1])
+        self.assertEqual(kwargs.get("labels"), ["feedback"])
+        self.assertEqual(
+            kwargs.get("fingerprint"), f"user-story:{self.story.pk}"
+        )
+
+    @patch("pages.models.github_issues.create_issue")
+    def test_create_github_issues_action_skips_existing_issue(self, mock_create_issue):
+        self.story.github_issue_url = "https://github.com/example/repo/issues/5"
+        self.story.github_issue_number = 5
+        self.story.save(update_fields=["github_issue_url", "github_issue_number"])
+
+        request = self._build_request()
+        queryset = UserStory.objects.filter(pk=self.story.pk)
+        self.admin.create_github_issues(request, queryset)
+
+        mock_create_issue.assert_not_called()
 
 
 class ClientReportLiveUpdateTests(TestCase):
