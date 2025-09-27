@@ -76,6 +76,7 @@ from .user_data import (
 )
 from .widgets import OdooProductWidget
 from .mcp import process as mcp_process
+from .mcp.server import resolve_base_urls
 
 
 admin.site.unregister(Group)
@@ -1636,14 +1637,19 @@ class AssistantProfileAdmin(
         config = dict(getattr(settings, "MCP_SIGIL_SERVER", {}))
         host = config.get("host") or "127.0.0.1"
         port = config.get("port", 8800)
+        base_url, issuer_url = resolve_base_urls(config)
         if isinstance(response, dict):
             response.setdefault("mcp_server_host", host)
             response.setdefault("mcp_server_port", port)
+            response.setdefault("mcp_server_base_url", base_url)
+            response.setdefault("mcp_server_issuer_url", issuer_url)
         else:
             context_data = getattr(response, "context_data", None)
             if context_data is not None:
                 context_data.setdefault("mcp_server_host", host)
                 context_data.setdefault("mcp_server_port", port)
+                context_data.setdefault("mcp_server_base_url", base_url)
+                context_data.setdefault("mcp_server_issuer_url", issuer_url)
         return response
 
     def start_server(self, request):
@@ -1941,7 +1947,7 @@ class ProductAdmin(EntityModelAdmin):
         return profile.execute(
             "product.product",
             "search_read",
-            domain,
+            [domain],
             {
                 "fields": [
                     "name",
@@ -2129,7 +2135,7 @@ class ProductAdmin(EntityModelAdmin):
             products = profile.execute(
                 "product.product",
                 "search_read",
-                [],
+                [[]],
                 {
                     "fields": [
                         "name",

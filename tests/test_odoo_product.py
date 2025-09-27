@@ -34,7 +34,7 @@ class OdooProductTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), [{"id": 5, "name": "Prod"}])
         mock_exec.assert_called_once_with(
-            "product.product", "search_read", [], {"fields": ["name"], "limit": 50}
+            "product.product", "search_read", [[]], {"fields": ["name"], "limit": 50}
         )
 
     def test_product_admin_form_uses_widget(self):
@@ -115,7 +115,7 @@ class ProductAdminFetchWizardTests(TestCase):
         mock_execute.assert_called_once_with(
             "product.product",
             "search_read",
-            [("name", "ilike", "Wid")],
+            [[("name", "ilike", "Wid")]],
             {
                 "fields": [
                     "name",
@@ -163,7 +163,7 @@ class ProductAdminFetchWizardTests(TestCase):
         mock_execute.assert_called_once_with(
             "product.product",
             "search_read",
-            [],
+            [[]],
             {
                 "fields": [
                     "name",
@@ -227,7 +227,7 @@ class ProductAdminRegisterFromOdooTests(TestCase):
         mock_execute.assert_called_once_with(
             "product.product",
             "search_read",
-            [],
+            [[]],
             {
                 "fields": [
                     "name",
