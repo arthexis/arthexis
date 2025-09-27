@@ -186,6 +186,10 @@
         height: 1.75rem;
         display: block;
       }
+      body.user-story-open .user-story-toggle {
+        z-index: 1060;
+        pointer-events: none;
+      }
       body.user-story-open {
         overflow: hidden;
       }
@@ -231,6 +235,7 @@
       }
       .user-story-screenshot {
         margin: 0;
+        margin-left: auto;
         display: inline-flex;
         align-items: center;
         gap: 0.35rem;
