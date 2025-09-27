@@ -933,6 +933,8 @@ def dispatch_action(request, cid, connector=None):
             charger_obj, _ = Charger.objects.get_or_create(
                 charger_id=cid, connector_id=connector_value
             )
+
+    _ensure_charger_access(request.user, charger_obj)
     ws = store.get_connection(cid, connector_value)
     if ws is None:
         return JsonResponse({"detail": "no connection"}, status=404)
