@@ -1,9 +1,11 @@
+import re
 import socket
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
@@ -42,6 +44,8 @@ class Location(Entity):
 
 class Charger(Entity):
     """Known charge point."""
+
+    _PLACEHOLDER_SERIAL_RE = re.compile(r"^<[^>]+>$")
 
     OPERATIVE_STATUSES = {
         "Available",
@@ -211,6 +215,38 @@ class Charger(Entity):
             ),
         ]
 
+    @classmethod
+    def normalize_serial(cls, value: str | None) -> str:
+        """Return ``value`` trimmed for consistent comparisons."""
+
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    @classmethod
+    def is_placeholder_serial(cls, value: str | None) -> bool:
+        """Return ``True`` when ``value`` matches the placeholder pattern."""
+
+        normalized = cls.normalize_serial(value)
+        return bool(normalized) and bool(cls._PLACEHOLDER_SERIAL_RE.match(normalized))
+
+    @classmethod
+    def validate_serial(cls, value: str | None) -> str:
+        """Return a normalized serial number or raise ``ValidationError``."""
+
+        normalized = cls.normalize_serial(value)
+        if not normalized:
+            raise ValidationError({"charger_id": _("Serial Number cannot be blank.")})
+        if cls.is_placeholder_serial(normalized):
+            raise ValidationError(
+                {
+                    "charger_id": _(
+                        "Serial Number placeholder values such as <charger_id> are not allowed."
+                    )
+                }
+            )
+        return normalized
+
     AGGREGATE_CONNECTOR_SLUG = "all"
 
     def identity_tuple(self) -> tuple[str, int | None]:
@@ -321,7 +357,12 @@ class Charger(Entity):
         scheme = getattr(settings, "DEFAULT_HTTP_PROTOCOL", "http")
         return f"{scheme}://{domain}{self.get_absolute_url()}"
 
+    def clean(self):
+        super().clean()
+        self.charger_id = type(self).validate_serial(self.charger_id)
+
     def save(self, *args, **kwargs):
+        self.charger_id = type(self).validate_serial(self.charger_id)
         update_fields = kwargs.get("update_fields")
         update_list = list(update_fields) if update_fields is not None else None
         if not self.manager_node_id:

@@ -21,6 +21,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.translation import override, gettext as _
 from django.contrib.sites.models import Site
+from django.core.exceptions import ValidationError
 from pages.models import Application, Module
 from nodes.models import Node, NodeRole
 
@@ -1270,6 +1271,21 @@ class ChargerLandingTests(TestCase):
         resp = self.client.get(reverse("charger-status", args=["PAGE2"]))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "PAGE2")
+
+    def test_placeholder_serial_rejected(self):
+        with self.assertRaises(ValidationError):
+            Charger.objects.create(charger_id="<charger_id>")
+
+    def test_placeholder_serial_not_created_from_status_view(self):
+        existing = Charger.objects.count()
+        response = self.client.get(reverse("charger-status", args=["<charger_id>"]))
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(Charger.objects.count(), existing)
+        self.assertFalse(
+            Location.objects.filter(
+                name__startswith="<", name__endswith=">", chargers__isnull=True
+            ).exists()
+        )
 
     def test_charger_page_shows_progress(self):
         charger = Charger.objects.create(charger_id="STATS")

@@ -15,6 +15,7 @@ from django.utils.translation import gettext_lazy as _, gettext, ngettext
 from django.urls import NoReverseMatch, reverse
 from django.conf import settings
 from django.utils import translation, timezone
+from django.core.exceptions import ValidationError
 
 from utils.api import api_login_required
 
@@ -58,6 +59,10 @@ def _reverse_connector_url(name: str, serial: str, connector_slug: str) -> str:
 def _get_charger(serial: str, connector_slug: str | None) -> tuple[Charger, str]:
     """Return charger for the requested identity, creating if necessary."""
 
+    try:
+        serial = Charger.validate_serial(serial)
+    except ValidationError as exc:
+        raise Http404("Charger not found") from exc
     connector_value, normalized_slug = _normalize_connector_slug(connector_slug)
     if connector_value is None:
         charger, _ = Charger.objects.get_or_create(

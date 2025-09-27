@@ -7,6 +7,7 @@ from datetime import datetime
 from django.utils import timezone
 from core.models import EnergyAccount, Reference, RFID as CoreRFID
 from nodes.models import NetMessage
+from django.core.exceptions import ValidationError
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -130,7 +131,20 @@ class CSMSConsumer(AsyncWebsocketConsumer):
 
     @requires_network
     async def connect(self):
-        self.charger_id = self.scope["url_route"]["kwargs"].get("cid", "")
+        raw_serial = self.scope["url_route"]["kwargs"].get("cid", "")
+        try:
+            self.charger_id = Charger.validate_serial(raw_serial)
+        except ValidationError as exc:
+            serial = Charger.normalize_serial(raw_serial)
+            store_key = store.pending_key(serial)
+            message = exc.messages[0] if exc.messages else "Invalid Serial Number"
+            store.add_log(
+                store_key,
+                f"Rejected connection: {message}",
+                log_type="charger",
+            )
+            await self.close(code=4003)
+            return
         self.connector_value: int | None = None
         self.store_key = store.pending_key(self.charger_id)
         self.aggregate_charger: Charger | None = None
