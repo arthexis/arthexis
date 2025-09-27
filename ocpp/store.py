@@ -23,6 +23,7 @@ logs: dict[str, dict[str, list[str]]] = {"charger": {}, "simulator": {}}
 history: dict[str, dict[str, object]] = {}
 simulators = {}
 ip_connections: dict[str, set[object]] = {}
+pending_calls: dict[str, dict[str, object]] = {}
 
 # mapping of charger id / cp_path to friendly names used for log files
 log_names: dict[str, dict[str, str]] = {"charger": {}, "simulator": {}}
@@ -185,6 +186,30 @@ def pop_transaction(serial: str, connector: int | str | None = None):
         if tx is not None:
             return tx
     return None
+
+
+def register_pending_call(message_id: str, metadata: dict[str, object]) -> None:
+    """Store metadata about an outstanding CSMS call."""
+
+    pending_calls[message_id] = dict(metadata)
+
+
+def pop_pending_call(message_id: str) -> dict[str, object] | None:
+    """Return and remove metadata for a previously registered call."""
+
+    return pending_calls.pop(message_id, None)
+
+
+def clear_pending_calls(serial: str) -> None:
+    """Remove any pending calls associated with the provided charger id."""
+
+    to_remove = [
+        key
+        for key, value in pending_calls.items()
+        if value.get("charger_id") == serial
+    ]
+    for key in to_remove:
+        pending_calls.pop(key, None)
 
 
 def reassign_identity(old_key: str, new_key: str) -> str:

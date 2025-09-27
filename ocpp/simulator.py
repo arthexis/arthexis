@@ -47,6 +47,9 @@ class ChargePointSimulator:
         self.status = "stopped"
         self._connected = threading.Event()
         self._connect_error = ""
+        self._availability_state = "Operative"
+        self._pending_availability: Optional[str] = None
+        self._in_transaction = False
 
     def trigger_door_open(self) -> None:
         """Queue a DoorOpen status notification for the simulator."""
@@ -95,6 +98,91 @@ class ChargePointSimulator:
         )
         await recv()
 
+    async def _send_status_notification(self, send, recv, status: str) -> None:
+        cfg = self.config
+        await send(
+            json.dumps(
+                [
+                    2,
+                    f"status-{uuid.uuid4().hex}",
+                    "StatusNotification",
+                    {
+                        "connectorId": cfg.connector_id,
+                        "errorCode": "NoError",
+                        "status": status,
+                    },
+                ]
+            )
+        )
+        await recv()
+
+    async def _wait_until_operative(self, send, recv) -> bool:
+        cfg = self.config
+        delay = cfg.interval if cfg.interval > 0 else 1.0
+        while self._availability_state != "Operative" and not self._stop_event.is_set():
+            await send(
+                json.dumps(
+                    [
+                        2,
+                        f"hb-wait-{uuid.uuid4().hex}",
+                        "Heartbeat",
+                        {},
+                    ]
+                )
+            )
+            try:
+                await recv()
+            except Exception:
+                return False
+            await self._maybe_send_door_event(send, recv)
+            await asyncio.sleep(delay)
+        return self._availability_state == "Operative" and not self._stop_event.is_set()
+
+    async def _handle_change_availability(self, message_id: str, payload, send, recv) -> None:
+        cfg = self.config
+        requested_type = str((payload or {}).get("type") or "").strip()
+        connector_raw = (payload or {}).get("connectorId")
+        try:
+            connector_value = int(connector_raw)
+        except (TypeError, ValueError):
+            connector_value = None
+        if connector_value in (None, 0):
+            connector_value = 0
+        valid_connectors = {0, cfg.connector_id}
+        send_status: Optional[str] = None
+        status_result = "Rejected"
+        if requested_type in {"Operative", "Inoperative"} and connector_value in valid_connectors:
+            if requested_type == "Inoperative":
+                if self._in_transaction:
+                    self._pending_availability = "Inoperative"
+                    status_result = "Scheduled"
+                else:
+                    self._pending_availability = None
+                    status_result = "Accepted"
+                    if self._availability_state != "Inoperative":
+                        self._availability_state = "Inoperative"
+                        send_status = "Unavailable"
+            else:  # Operative
+                self._pending_availability = None
+                status_result = "Accepted"
+                if self._availability_state != "Operative":
+                    self._availability_state = "Operative"
+                    send_status = "Available"
+        response = [3, message_id, {"status": status_result}]
+        await send(json.dumps(response))
+        if send_status:
+            await self._send_status_notification(send, recv, send_status)
+
+    async def _handle_csms_call(self, msg, send, recv) -> bool:
+        if not isinstance(msg, list) or not msg or msg[0] != 2:
+            return False
+        action = msg[2]
+        payload = msg[3] if len(msg) > 3 else {}
+        if action == "ChangeAvailability":
+            await self._handle_change_availability(msg[1], payload, send, recv)
+            return True
+        return False
+
     @requires_network
     async def _run_session(self) -> None:
         cfg = self.config
@@ -137,26 +225,34 @@ class ChargePointSimulator:
                 store.add_log(cfg.cp_path, f"> {msg}", log_type="simulator")
 
             async def recv() -> str:
-                try:
-                    raw = await asyncio.wait_for(ws.recv(), timeout=60)
-                except asyncio.TimeoutError:
-                    self.status = "stopped"
-                    self._stop_event.set()
-                    store.add_log(
-                        cfg.cp_path,
-                        "Timeout waiting for response from charger",
-                        log_type="simulator",
-                    )
-                    raise
-                except websockets.exceptions.ConnectionClosed:
-                    self.status = "stopped"
-                    self._stop_event.set()
-                    raise
-                except Exception:
-                    self.status = "error"
-                    raise
-                store.add_log(cfg.cp_path, f"< {raw}", log_type="simulator")
-                return raw
+                while True:
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=60)
+                    except asyncio.TimeoutError:
+                        self.status = "stopped"
+                        self._stop_event.set()
+                        store.add_log(
+                            cfg.cp_path,
+                            "Timeout waiting for response from charger",
+                            log_type="simulator",
+                        )
+                        raise
+                    except websockets.exceptions.ConnectionClosed:
+                        self.status = "stopped"
+                        self._stop_event.set()
+                        raise
+                    except Exception:
+                        self.status = "error"
+                        raise
+                    store.add_log(cfg.cp_path, f"< {raw}", log_type="simulator")
+                    try:
+                        parsed = json.loads(raw)
+                    except Exception:
+                        return raw
+                    handled = await self._handle_csms_call(parsed, send, recv)
+                    if handled:
+                        continue
+                    return raw
 
             # handshake
             boot = json.dumps(
@@ -203,7 +299,11 @@ class ChargePointSimulator:
                                 {
                                     "connectorId": cfg.connector_id,
                                     "errorCode": "NoError",
-                                    "status": "Available",
+                                    "status": (
+                                        "Available"
+                                        if self._availability_state == "Operative"
+                                        else "Unavailable"
+                                    ),
                                 },
                             ]
                         )
@@ -241,6 +341,8 @@ class ChargePointSimulator:
                 await self._maybe_send_door_event(send, recv)
                 await asyncio.sleep(cfg.interval)
 
+            if not await self._wait_until_operative(send, recv):
+                return
             meter_start = random.randint(1000, 2000)
             await send(
                 json.dumps(
@@ -263,6 +365,7 @@ class ChargePointSimulator:
                 self.status = "error"
                 raise
             tx_id = resp[2].get("transactionId")
+            self._in_transaction = True
 
             meter = meter_start
             steps = max(1, int(cfg.duration / cfg.interval))
@@ -323,6 +426,13 @@ class ChargePointSimulator:
             )
             await recv()
             await self._maybe_send_door_event(send, recv)
+            self._in_transaction = False
+            if self._pending_availability:
+                pending = self._pending_availability
+                self._pending_availability = None
+                self._availability_state = pending
+                status_label = "Available" if pending == "Operative" else "Unavailable"
+                await self._send_status_notification(send, recv, status_label)
         except asyncio.TimeoutError:
             if not self._connected.is_set():
                 self._connect_error = "Timeout waiting for response"
@@ -353,6 +463,7 @@ class ChargePointSimulator:
             self._stop_event.set()
             raise
         finally:
+            self._in_transaction = False
             if ws is not None:
                 await ws.close()
                 store.add_log(

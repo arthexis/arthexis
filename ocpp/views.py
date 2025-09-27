@@ -1,5 +1,6 @@
 import asyncio
 import json
+import uuid
 from datetime import datetime, timedelta, timezone as dt_timezone
 from types import SimpleNamespace
 
@@ -13,7 +14,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.utils.translation import gettext_lazy as _, gettext, ngettext
 from django.urls import NoReverseMatch, reverse
 from django.conf import settings
-from django.utils import translation
+from django.utils import translation, timezone
 
 from utils.api import api_login_required
 
@@ -885,6 +886,18 @@ def charger_log_page(request, cid, connector=None):
 @api_login_required
 def dispatch_action(request, cid, connector=None):
     connector_value, _ = _normalize_connector_slug(connector)
+    if connector_value is None:
+        charger_obj = (
+            Charger.objects.filter(charger_id=cid, connector_id__isnull=True)
+            .order_by("pk")
+            .first()
+        )
+    else:
+        charger_obj = (
+            Charger.objects.filter(charger_id=cid, connector_id=connector_value)
+            .order_by("pk")
+            .first()
+        )
     ws = store.get_connection(cid, connector_value)
     if ws is None:
         return JsonResponse({"detail": "no connection"}, status=404)
@@ -933,6 +946,44 @@ def dispatch_action(request, cid, connector=None):
             ]
         )
         asyncio.get_event_loop().create_task(ws.send(msg))
+    elif action == "change_availability":
+        availability_type = data.get("type")
+        if availability_type not in {"Operative", "Inoperative"}:
+            return JsonResponse({"detail": "invalid availability type"}, status=400)
+        connector_payload = connector_value if connector_value is not None else 0
+        if "connectorId" in data:
+            candidate = data.get("connectorId")
+            if candidate not in (None, ""):
+                try:
+                    connector_payload = int(candidate)
+                except (TypeError, ValueError):
+                    connector_payload = candidate
+        message_id = uuid.uuid4().hex
+        payload = {"connectorId": connector_payload, "type": availability_type}
+        msg = json.dumps([2, message_id, "ChangeAvailability", payload])
+        asyncio.get_event_loop().create_task(ws.send(msg))
+        requested_at = timezone.now()
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "ChangeAvailability",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "availability_type": availability_type,
+                "requested_at": requested_at,
+            },
+        )
+        if charger_obj:
+            updates = {
+                "availability_requested_state": availability_type,
+                "availability_requested_at": requested_at,
+                "availability_request_status": "",
+                "availability_request_status_at": None,
+                "availability_request_details": "",
+            }
+            Charger.objects.filter(pk=charger_obj.pk).update(**updates)
+            for field, value in updates.items():
+                setattr(charger_obj, field, value)
     elif action == "reset":
         msg = json.dumps(
             [2, str(datetime.utcnow().timestamp()), "Reset", {"type": "Soft"}]

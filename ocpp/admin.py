@@ -11,6 +11,9 @@ from django.urls import path
 from django.http import HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 
+import uuid
+from asgiref.sync import async_to_sync
+
 from .models import (
     Charger,
     Simulator,
@@ -139,6 +142,20 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             },
         ),
         (
+            "Availability",
+            {
+                "fields": (
+                    "availability_state",
+                    "availability_state_updated_at",
+                    "availability_requested_state",
+                    "availability_requested_at",
+                    "availability_request_status",
+                    "availability_request_status_at",
+                    "availability_request_details",
+                )
+            },
+        ),
+        (
             "Configuration",
             {"fields": ("public_display", "require_rfid")},
         ),
@@ -155,6 +172,13 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "firmware_status",
         "firmware_status_info",
         "firmware_timestamp",
+        "availability_state",
+        "availability_state_updated_at",
+        "availability_requested_state",
+        "availability_requested_at",
+        "availability_request_status",
+        "availability_request_status_at",
+        "availability_request_details",
     )
     list_display = (
         "charger_id",
@@ -163,6 +187,8 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "require_rfid_display",
         "public_display",
         "last_heartbeat",
+        "availability_state",
+        "availability_request_status",
         "firmware_status",
         "firmware_timestamp",
         "session_kw",
@@ -172,7 +198,14 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "status_link",
     )
     search_fields = ("charger_id", "connector_id", "location__name")
-    actions = ["purge_data", "delete_selected"]
+    actions = [
+        "purge_data",
+        "change_availability_operative",
+        "change_availability_inoperative",
+        "set_availability_state_operative",
+        "set_availability_state_inoperative",
+        "delete_selected",
+    ]
 
     def get_view_on_site_url(self, obj=None):
         return obj.get_absolute_url() if obj else None
@@ -238,6 +271,97 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         self.message_user(request, "Data purged for selected chargers")
 
     purge_data.short_description = "Purge data"
+
+    def _dispatch_change_availability(self, request, queryset, availability_type: str):
+        sent = 0
+        for charger in queryset:
+            connector_value = charger.connector_id
+            ws = store.get_connection(charger.charger_id, connector_value)
+            if ws is None:
+                self.message_user(
+                    request,
+                    f"{charger}: no active connection",
+                    level=messages.ERROR,
+                )
+                continue
+            connector_id = connector_value if connector_value is not None else 0
+            message_id = uuid.uuid4().hex
+            payload = {"connectorId": connector_id, "type": availability_type}
+            msg = json.dumps([2, message_id, "ChangeAvailability", payload])
+            try:
+                async_to_sync(ws.send)(msg)
+            except Exception as exc:  # pragma: no cover - network error
+                self.message_user(
+                    request,
+                    f"{charger}: failed to send ChangeAvailability ({exc})",
+                    level=messages.ERROR,
+                )
+                continue
+            log_key = store.identity_key(charger.charger_id, connector_value)
+            store.add_log(log_key, f"< {msg}", log_type="charger")
+            timestamp = timezone.now()
+            store.register_pending_call(
+                message_id,
+                {
+                    "action": "ChangeAvailability",
+                    "charger_id": charger.charger_id,
+                    "connector_id": connector_value,
+                    "availability_type": availability_type,
+                    "requested_at": timestamp,
+                },
+            )
+            updates = {
+                "availability_requested_state": availability_type,
+                "availability_requested_at": timestamp,
+                "availability_request_status": "",
+                "availability_request_status_at": None,
+                "availability_request_details": "",
+            }
+            Charger.objects.filter(pk=charger.pk).update(**updates)
+            for field, value in updates.items():
+                setattr(charger, field, value)
+            sent += 1
+        if sent:
+            self.message_user(
+                request,
+                f"Sent ChangeAvailability ({availability_type}) to {sent} charger(s)",
+            )
+
+    @admin.action(description="Set availability to Operative")
+    def change_availability_operative(self, request, queryset):
+        self._dispatch_change_availability(request, queryset, "Operative")
+
+    @admin.action(description="Set availability to Inoperative")
+    def change_availability_inoperative(self, request, queryset):
+        self._dispatch_change_availability(request, queryset, "Inoperative")
+
+    def _set_availability_state(
+        self, request, queryset, availability_state: str
+    ) -> None:
+        timestamp = timezone.now()
+        updated = 0
+        for charger in queryset:
+            updates = {
+                "availability_state": availability_state,
+                "availability_state_updated_at": timestamp,
+            }
+            Charger.objects.filter(pk=charger.pk).update(**updates)
+            for field, value in updates.items():
+                setattr(charger, field, value)
+            updated += 1
+        if updated:
+            self.message_user(
+                request,
+                f"Updated availability to {availability_state} for {updated} charger(s)",
+            )
+
+    @admin.action(description="Mark availability as Operative")
+    def set_availability_state_operative(self, request, queryset):
+        self._set_availability_state(request, queryset, "Operative")
+
+    @admin.action(description="Mark availability as Inoperative")
+    def set_availability_state_inoperative(self, request, queryset):
+        self._set_availability_state(request, queryset, "Inoperative")
 
     def delete_queryset(self, request, queryset):
         for obj in queryset:
