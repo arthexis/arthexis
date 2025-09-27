@@ -685,10 +685,15 @@ LOGGING = {
             "backupCount": 7,
             "encoding": "utf-8",
             "formatter": "standard",
-        }
+        },
+        "console": {
+            "class": "logging.StreamHandler",
+            "level": "ERROR",
+            "formatter": "standard",
+        },
     },
     "root": {
-        "handlers": ["file"],
+        "handlers": ["file", "console"],
         "level": "DEBUG",
     },
 }
