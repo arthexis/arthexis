@@ -235,7 +235,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     )
     list_display = (
         "charger_id",
-        "connector_id",
+        "connector_number",
         "location_name",
         "require_rfid_display",
         "public_display",
@@ -299,6 +299,12 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     def get_log_identifier(self, obj):
         return store.identity_key(obj.charger_id, obj.connector_id)
 
+    def connector_number(self, obj):
+        return obj.connector_id if obj.connector_id is not None else ""
+
+    connector_number.short_description = "#"
+    connector_number.admin_order_field = "connector_id"
+
     def status_link(self, obj):
         from django.utils.html import format_html
         from django.urls import reverse
@@ -307,7 +313,8 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             "charger-status-connector",
             args=[obj.charger_id, obj.connector_slug],
         )
-        return format_html('<a href="{}" target="_blank">status</a>', url)
+        label = (obj.last_status or "status").strip() or "status"
+        return format_html('<a href="{}" target="_blank">{}</a>', url, label)
 
     status_link.short_description = "Status"
 
