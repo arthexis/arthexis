@@ -250,6 +250,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     filter_horizontal = ("owner_users", "owner_groups")
     actions = [
         "purge_data",
+        "fetch_cp_configuration",
         "change_availability_operative",
         "change_availability_inoperative",
         "set_availability_state_operative",
@@ -321,6 +322,50 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         self.message_user(request, "Data purged for selected chargers")
 
     purge_data.short_description = "Purge data"
+
+    @admin.action(description="Fetch CP configuration")
+    def fetch_cp_configuration(self, request, queryset):
+        fetched = 0
+        for charger in queryset:
+            connector_value = charger.connector_id
+            ws = store.get_connection(charger.charger_id, connector_value)
+            if ws is None:
+                self.message_user(
+                    request,
+                    f"{charger}: no active connection",
+                    level=messages.ERROR,
+                )
+                continue
+            message_id = uuid.uuid4().hex
+            payload = {}
+            msg = json.dumps([2, message_id, "GetConfiguration", payload])
+            try:
+                async_to_sync(ws.send)(msg)
+            except Exception as exc:  # pragma: no cover - network error
+                self.message_user(
+                    request,
+                    f"{charger}: failed to send GetConfiguration ({exc})",
+                    level=messages.ERROR,
+                )
+                continue
+            log_key = store.identity_key(charger.charger_id, connector_value)
+            store.add_log(log_key, f"< {msg}", log_type="charger")
+            store.register_pending_call(
+                message_id,
+                {
+                    "action": "GetConfiguration",
+                    "charger_id": charger.charger_id,
+                    "connector_id": connector_value,
+                    "log_key": log_key,
+                    "requested_at": timezone.now(),
+                },
+            )
+            fetched += 1
+        if fetched:
+            self.message_user(
+                request,
+                f"Requested configuration from {fetched} charger(s)",
+            )
 
     def _dispatch_change_availability(self, request, queryset, availability_type: str):
         sent = 0
@@ -444,15 +489,36 @@ class SimulatorAdmin(LogViewAdminMixin, EntityModelAdmin):
         "running",
         "log_link",
     )
-    fields = (
-        "name",
-        "cp_path",
-        ("host", "ws_port"),
-        "rfid",
-        ("duration", "interval", "pre_charge_delay"),
-        "kw_max",
-        ("repeat", "door_open"),
-        ("username", "password"),
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "cp_path",
+                    ("host", "ws_port"),
+                    "rfid",
+                    ("duration", "interval", "pre_charge_delay"),
+                    "kw_max",
+                    ("repeat", "door_open"),
+                    ("username", "password"),
+                )
+            },
+        ),
+        (
+            "Configuration",
+            {
+                "fields": (
+                    "configuration_keys",
+                    "configuration_unknown_keys",
+                ),
+                "classes": ("collapse",),
+                "description": (
+                    "Provide JSON lists for configurationKey entries and "
+                    "unknownKey values returned by GetConfiguration."
+                ),
+            },
+        ),
     )
     actions = ("start_simulator", "stop_simulator", "send_open_door")
 

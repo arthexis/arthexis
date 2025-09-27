@@ -785,6 +785,18 @@ class Simulator(Entity):
         default=False,
         help_text=_("Send a DoorOpen error StatusNotification when enabled."),
     )
+    configuration_keys = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_(
+            "List of configurationKey entries to return for GetConfiguration calls."
+        ),
+    )
+    configuration_unknown_keys = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_("Keys to include in the GetConfiguration unknownKey response."),
+    )
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
@@ -811,6 +823,8 @@ class Simulator(Entity):
             repeat=self.repeat,
             username=self.username or None,
             password=self.password or None,
+            configuration_keys=self.configuration_keys or [],
+            configuration_unknown_keys=self.configuration_unknown_keys or [],
         )
 
     @property

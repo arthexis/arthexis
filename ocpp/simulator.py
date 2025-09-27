@@ -4,7 +4,7 @@ import json
 import random
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 import threading
 
@@ -34,6 +34,8 @@ class SimulatorConfig:
     password: Optional[str] = None
     serial_number: str = ""
     connector_id: int = 1
+    configuration_keys: list[dict[str, object]] = field(default_factory=list)
+    configuration_unknown_keys: list[str] = field(default_factory=list)
 
 
 class ChargePointSimulator:
@@ -181,7 +183,66 @@ class ChargePointSimulator:
         if action == "ChangeAvailability":
             await self._handle_change_availability(msg[1], payload, send, recv)
             return True
+        if action == "GetConfiguration":
+            await self._handle_get_configuration(msg[1], payload, send)
+            return True
         return False
+
+    async def _handle_get_configuration(self, message_id: str, payload, send) -> None:
+        cfg = self.config
+        payload = payload if isinstance(payload, dict) else {}
+        requested_keys_raw = payload.get("key")
+        requested_keys: list[str] = []
+        if isinstance(requested_keys_raw, (list, tuple)):
+            for item in requested_keys_raw:
+                if isinstance(item, str):
+                    key_text = item.strip()
+                else:
+                    key_text = str(item).strip()
+                if key_text:
+                    requested_keys.append(key_text)
+
+        configured_entries: list[dict[str, object]] = []
+        for entry in cfg.configuration_keys:
+            if not isinstance(entry, dict):
+                continue
+            key_raw = entry.get("key")
+            key_text = str(key_raw).strip() if key_raw is not None else ""
+            if not key_text:
+                continue
+            if requested_keys and key_text not in requested_keys:
+                continue
+            value = entry.get("value")
+            readonly = entry.get("readonly")
+            payload_entry: dict[str, object] = {"key": key_text}
+            if value is not None:
+                payload_entry["value"] = str(value)
+            if readonly is not None:
+                payload_entry["readonly"] = bool(readonly)
+            configured_entries.append(payload_entry)
+
+        unknown_keys: list[str] = []
+        for key in cfg.configuration_unknown_keys:
+            key_text = str(key).strip()
+            if not key_text:
+                continue
+            if requested_keys and key_text not in requested_keys:
+                continue
+            if key_text not in unknown_keys:
+                unknown_keys.append(key_text)
+
+        if requested_keys:
+            matched = {entry["key"] for entry in configured_entries}
+            for key in requested_keys:
+                if key not in matched and key not in unknown_keys:
+                    unknown_keys.append(key)
+
+        response_payload: dict[str, object] = {}
+        if configured_entries:
+            response_payload["configurationKey"] = configured_entries
+        if unknown_keys:
+            response_payload["unknownKey"] = unknown_keys
+        await send(json.dumps([3, message_id, response_payload]))
 
     @requires_network
     async def _run_session(self) -> None:
