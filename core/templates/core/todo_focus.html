@@ -51,6 +51,14 @@
       gap: 0.5rem;
       flex-shrink: 0;
     }
+    .todo-button-open {
+      background: #f1f5f9;
+      color: #1e293b;
+      border-color: rgba(30, 41, 59, 0.18);
+    }
+    .todo-button-open:hover {
+      background: rgba(148, 163, 184, 0.2);
+    }
     .todo-button, .todo-button:visited {
       display: inline-flex;
       align-items: center;
@@ -84,6 +92,22 @@
     .todo-done-form {
       margin: 0;
     }
+    .todo-auth-callout {
+      margin-top: 0.75rem;
+      background: #fff7ed;
+      border: 1px solid rgba(234, 88, 12, 0.25);
+      border-radius: 0.75rem;
+      padding: 0.75rem 1rem;
+      color: #9a3412;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    .todo-auth-callout p {
+      margin: 0.25rem 0 0;
+    }
+    .todo-auth-callout p:first-child {
+      margin-top: 0;
+    }
     iframe.todo-frame {
       flex: 1 1 auto;
       width: 100%;
@@ -99,8 +123,31 @@
       {% if todo.request_details %}
       <p class="todo-details">{{ todo.request_details }}</p>
       {% endif %}
+      {% if focus_auth.has_requirements %}
+      <div class="todo-auth-callout">
+        {% if focus_auth.require_logout %}
+        <p>{% trans "Review this page while logged out. Use the Open target button to launch it without leaving the admin." %}</p>
+        {% endif %}
+        {% if focus_auth.users %}
+        <p>
+          {% blocktrans with users=focus_auth.users|join:', ' %}Sign in using: {{ users }}{% endblocktrans %}
+        </p>
+        {% endif %}
+        {% if focus_auth.permissions %}
+        <p>
+          {% blocktrans with perms=focus_auth.permissions|join:', ' %}Required permissions: {{ perms }}{% endblocktrans %}
+        </p>
+        {% endif %}
+        {% if focus_auth.notes %}
+        <p>
+          {% blocktrans with notes=focus_auth.notes|join:', ' %}Additional authentication notes: {{ notes }}{% endblocktrans %}
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
     </div>
     <div class="todo-actions">
+      <a href="{{ focus_target_url }}" target="_blank" rel="noopener" class="todo-button todo-button-open">{% trans "Open target" %}</a>
       <form method="post" action="{{ done_url }}" class="todo-done-form">
         {% csrf_token %}
         <input type="hidden" name="next" value="{{ next_url }}">
