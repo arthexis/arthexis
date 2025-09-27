@@ -191,3 +191,4 @@ class TOTPDeviceAdminProxy(CoreTOTPDeviceAdmin):
                 _("Token rejected. The device was not calibrated."),
                 level=messages.ERROR,
             )
+

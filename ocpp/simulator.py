@@ -175,6 +175,130 @@ class ChargePointSimulator:
         if send_status:
             await self._send_status_notification(send, recv, send_status)
 
+    async def _handle_trigger_message(self, message_id: str, payload, send, recv) -> None:
+        cfg = self.config
+        payload = payload if isinstance(payload, dict) else {}
+        requested = str(payload.get("requestedMessage") or "").strip()
+        connector_raw = payload.get("connectorId")
+        try:
+            connector_value = int(connector_raw) if connector_raw is not None else None
+        except (TypeError, ValueError):
+            connector_value = None
+
+        async def _send_follow_up(action: str, payload_obj: dict) -> None:
+            await send(
+                json.dumps(
+                    [
+                        2,
+                        f"trigger-{uuid.uuid4().hex}",
+                        action,
+                        payload_obj,
+                    ]
+                )
+            )
+            await recv()
+
+        status_result = "NotSupported"
+        follow_up = None
+
+        if requested == "BootNotification":
+            status_result = "Accepted"
+
+            async def _boot_notification() -> None:
+                await _send_follow_up(
+                    "BootNotification",
+                    {
+                        "chargePointVendor": "SimVendor",
+                        "chargePointModel": "Simulator",
+                        "serialNumber": cfg.serial_number,
+                    },
+                )
+
+            follow_up = _boot_notification
+        elif requested == "Heartbeat":
+            status_result = "Accepted"
+
+            async def _heartbeat() -> None:
+                await _send_follow_up("Heartbeat", {})
+
+            follow_up = _heartbeat
+        elif requested == "StatusNotification":
+            valid_connector = connector_value in (None, cfg.connector_id)
+            if valid_connector:
+                status_result = "Accepted"
+
+                async def _status_notification() -> None:
+                    status_label = (
+                        "Available"
+                        if self._availability_state == "Operative"
+                        else "Unavailable"
+                    )
+                    await _send_follow_up(
+                        "StatusNotification",
+                        {
+                            "connectorId": connector_value or cfg.connector_id,
+                            "errorCode": "NoError",
+                            "status": status_label,
+                        },
+                    )
+
+                follow_up = _status_notification
+            else:
+                status_result = "Rejected"
+        elif requested == "MeterValues":
+            valid_connector = connector_value in (None, cfg.connector_id)
+            if valid_connector:
+                status_result = "Accepted"
+
+                async def _meter_values() -> None:
+                    await _send_follow_up(
+                        "MeterValues",
+                        {
+                            "connectorId": connector_value or cfg.connector_id,
+                            "meterValue": [
+                                {
+                                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                    "sampledValue": [
+                                        {
+                                            "value": "0",
+                                            "measurand": "Energy.Active.Import.Register",
+                                            "unit": "kW",
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                    )
+
+                follow_up = _meter_values
+            else:
+                status_result = "Rejected"
+        elif requested == "DiagnosticsStatusNotification":
+            status_result = "Accepted"
+
+            async def _diagnostics() -> None:
+                await _send_follow_up(
+                    "DiagnosticsStatusNotification",
+                    {"status": "Idle"},
+                )
+
+            follow_up = _diagnostics
+        elif requested == "FirmwareStatusNotification":
+            status_result = "Accepted"
+
+            async def _firmware() -> None:
+                await _send_follow_up(
+                    "FirmwareStatusNotification",
+                    {"status": "Idle"},
+                )
+
+            follow_up = _firmware
+
+        response = [3, message_id, {"status": status_result}]
+        await send(json.dumps(response))
+        if status_result == "Accepted" and follow_up:
+            await follow_up()
+
     async def _handle_csms_call(self, msg, send, recv) -> bool:
         if not isinstance(msg, list) or not msg or msg[0] != 2:
             return False
@@ -185,6 +309,9 @@ class ChargePointSimulator:
             return True
         if action == "GetConfiguration":
             await self._handle_get_configuration(msg[1], payload, send)
+            return True
+        if action == "TriggerMessage":
+            await self._handle_trigger_message(msg[1], payload, send, recv)
             return True
         return False
 

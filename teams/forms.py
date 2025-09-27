@@ -59,7 +59,6 @@ class TOTPDeviceAdminForm(forms.ModelForm):
             self._save_issuer(pending_instance)
             delattr(self, "_pending_instance")
 
-
 class TOTPDeviceCalibrationActionForm(ActionForm):
     token = forms.CharField(
         label=_("One-time password"),
@@ -76,3 +75,4 @@ class TOTPDeviceCalibrationActionForm(ActionForm):
         if token is not None:
             cleaned_data["token"] = token.strip()
         return cleaned_data
+
