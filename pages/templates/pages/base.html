@@ -363,7 +363,7 @@
                   {% endfor %}
                 </select>
               </form>
-              <a class="btn btn-sm btn-outline-light position-relative user-info-trigger" href="{% if request.user.is_authenticated %}{% url 'admin:index' %}{% else %}{% url 'pages:login' %}{% endif %}" aria-label="{% if request.user.is_authenticated %}{% trans "Admin" %}{% else %}{% trans "Login" %}{% endif %}">
+              <a class="btn btn-sm btn-outline-dark position-relative user-info-trigger" href="{% if request.user.is_authenticated %}{% url 'admin:index' %}{% else %}{% url 'pages:login' %}{% endif %}" aria-label="{% if request.user.is_authenticated %}{% trans "Admin" %}{% else %}{% trans "Login" %}{% endif %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-person"></use>
                 </svg>
@@ -373,7 +373,7 @@
                 </div>
                 {% endif %}
               </a>
-              <button id="share-button" class="btn btn-sm btn-outline-light ms-2" type="button" aria-label="{% trans 'Share' %}">
+              <button id="share-button" class="btn btn-sm btn-outline-dark ms-2" type="button" aria-label="{% trans 'Share' %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-share"></use>
                 </svg>
