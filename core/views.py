@@ -8,7 +8,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, login
 from django.contrib import messages
 from django.contrib.sites.models import Site
-from django.http import Http404, JsonResponse
+from django.http import Http404, JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.utils import timezone
 from django.utils.text import slugify
@@ -21,6 +21,9 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import errno
 import subprocess
+
+from django.template.loader import get_template
+from django.test import signals
 
 from utils import revision
 from utils.api import api_login_required
@@ -75,6 +78,10 @@ def _append_log(path: Path, message: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(message + "\n")
+
+
+def _release_log_name(package_name: str, version: str) -> str:
+    return f"pr.{package_name}.v{version}.log"
 
 
 def _clean_repo() -> None:
@@ -599,9 +606,14 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
     except Exception:
         _clean_repo()
         raise
-    release_name = f"{release.package.name}-{release.version}"
-    new_log = log_path.with_name(f"{release_name}.log")
-    log_path.rename(new_log)
+    target_name = _release_log_name(release.package.name, release.version)
+    new_log = log_path.with_name(target_name)
+    if log_path != new_log:
+        if new_log.exists():
+            new_log.unlink()
+        log_path.rename(new_log)
+    else:
+        new_log = log_path
     ctx["log"] = new_log.name
     _append_log(new_log, "Build complete")
 
@@ -880,9 +892,8 @@ def release_progress(request, pk: int, action: str):
             if restart_path.exists():
                 restart_path.unlink()
             log_dir = Path("logs")
-            for log_file in log_dir.glob(
-                f"{release.package.name}-{previous_version}*.log"
-            ):
+            pattern = f"pr.{release.package.name}.v{previous_version}*.log"
+            for log_file in log_dir.glob(pattern):
                 log_file.unlink()
         if not release.is_current:
             raise Http404("Release is not current")
@@ -904,7 +915,8 @@ def release_progress(request, pk: int, action: str):
         if lock_path.exists():
             lock_path.unlink()
         log_dir = Path("logs")
-        for f in log_dir.glob(f"{release.package.name}-{release.version}*.log"):
+        pattern = f"pr.{release.package.name}.v{release.version}*.log"
+        for f in log_dir.glob(pattern):
             f.unlink()
         return redirect(request.path)
     ctx = request.session.get(session_key)
@@ -979,8 +991,7 @@ def release_progress(request, pk: int, action: str):
     else:
         ctx.pop("todos", None)
 
-    identifier = f"{release.package.name}-{release.version}"
-    log_name = f"{identifier}.log"
+    log_name = _release_log_name(release.package.name, release.version)
     if ctx.get("log") != log_name:
         ctx = {
             "step": 0,
@@ -1186,7 +1197,18 @@ def release_progress(request, pk: int, action: str):
     else:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_path.write_text(json.dumps(ctx), encoding="utf-8")
-    return render(request, "core/release_progress.html", context)
+    template = get_template("core/release_progress.html")
+    content = template.render(context, request)
+    signals.template_rendered.send(
+        sender=template.__class__,
+        template=template,
+        context=context,
+        using=getattr(getattr(template, "engine", None), "name", None),
+    )
+    response = HttpResponse(content)
+    response.context = context
+    response.templates = [template]
+    return response
 
 
 def _dedupe_preserve_order(values):
