@@ -765,15 +765,28 @@ class EmailInbox(Profile):
                 typ, data = conn.search(None, "ALL")
             else:
                 criteria = []
-                if subject:
-                    criteria.extend(["SUBJECT", f'"{subject}"'])
-                if from_address:
-                    criteria.extend(["FROM", f'"{from_address}"'])
-                if body:
-                    criteria.extend(["TEXT", f'"{body}"'])
+                charset = None
+
+                def _append(term: str, value: str):
+                    nonlocal charset
+                    if not value:
+                        return
+                    try:
+                        value.encode("ascii")
+                        encoded_value = value
+                    except UnicodeEncodeError:
+                        charset = charset or "UTF-8"
+                        encoded_value = value.encode("utf-8")
+                    criteria.extend([term, encoded_value])
+
+                _append("SUBJECT", subject)
+                _append("FROM", from_address)
+                _append("TEXT", body)
+
                 if not criteria:
-                    criteria = ["ALL"]
-                typ, data = conn.search(None, *criteria)
+                    typ, data = conn.search(None, "ALL")
+                else:
+                    typ, data = conn.search(charset, *criteria)
             ids = data[0].split()[-fetch_limit:]
             messages = []
             for mid in ids:
