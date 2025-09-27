@@ -30,7 +30,7 @@ def filter_visible_references(
         if host:
             site = Site.objects.filter(domain__iexact=host).first()
 
-    site_id = site.pk if site else None
+    site_id = getattr(site, "pk", None)
 
     if node is None:
         try:
