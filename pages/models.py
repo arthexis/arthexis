@@ -304,6 +304,14 @@ class UserStory(Entity):
         null=True,
         related_name="user_stories",
     )
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="owned_user_stories",
+        help_text=_("Internal owner for this feedback."),
+    )
     submitted_at = models.DateTimeField(auto_now_add=True)
     github_issue_number = models.PositiveIntegerField(
         blank=True,

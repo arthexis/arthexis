@@ -344,6 +344,7 @@ class UserStoryAdmin(EntityModelAdmin):
         "submitted_at",
         "github_issue_display",
         "take_screenshot",
+        "owner",
     )
     list_filter = ("rating", "submitted_at", "take_screenshot")
     search_fields = ("name", "comments", "path", "github_issue_url")
@@ -354,6 +355,7 @@ class UserStoryAdmin(EntityModelAdmin):
         "take_screenshot",
         "path",
         "user",
+        "owner",
         "submitted_at",
         "github_issue_number",
         "github_issue_url",
@@ -366,6 +368,7 @@ class UserStoryAdmin(EntityModelAdmin):
         "take_screenshot",
         "path",
         "user",
+        "owner",
         "submitted_at",
         "github_issue_number",
         "github_issue_url",

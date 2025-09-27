@@ -1768,6 +1768,7 @@ class UserStorySubmissionTests(TestCase):
         self.assertEqual(story.rating, 5)
         self.assertEqual(story.path, "/wizard/step-1/")
         self.assertEqual(story.user, self.user)
+        self.assertEqual(story.owner, self.user)
         self.assertTrue(story.is_user_data)
         self.assertTrue(story.take_screenshot)
 
@@ -1787,6 +1788,7 @@ class UserStorySubmissionTests(TestCase):
         story = UserStory.objects.get()
         self.assertEqual(story.name, "Guest Reviewer")
         self.assertIsNone(story.user)
+        self.assertIsNone(story.owner)
         self.assertEqual(story.comments, "It was fine.")
         self.assertTrue(story.take_screenshot)
 
@@ -1819,6 +1821,7 @@ class UserStorySubmissionTests(TestCase):
         story = UserStory.objects.get()
         self.assertEqual(story.name, "Anonymous")
         self.assertIsNone(story.user)
+        self.assertIsNone(story.owner)
         self.assertTrue(story.take_screenshot)
 
     def test_submission_without_screenshot_request(self):
@@ -1833,6 +1836,7 @@ class UserStorySubmissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         story = UserStory.objects.get()
         self.assertFalse(story.take_screenshot)
+        self.assertIsNone(story.owner)
 
 
 class UserStoryAdminActionTests(TestCase):
