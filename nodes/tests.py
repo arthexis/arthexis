@@ -1067,6 +1067,51 @@ class NodeAdminTests(TestCase):
         change_url = reverse("admin:nodes_contentsample_change", args=[sample.pk])
         self.assertEqual(response.redirect_chain[-1][0], change_url)
 
+    def test_check_selected_features_action_success(self):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="rfid-scanner", defaults={"display": "RFID Scanner"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        changelist_url = reverse("admin:nodes_nodefeature_changelist")
+        response = self.client.post(
+            changelist_url,
+            {
+                "action": "check_selected_features",
+                "_selected_action": [str(feature.pk)],
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "RFID Scanner is enabled on localnode.", html=False
+        )
+        self.assertContains(
+            response, "Completed 1 of 1 feature check(s) successfully.", html=False
+        )
+
+    def test_check_selected_features_action_warns_when_disabled(self):
+        self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="rfid-scanner", defaults={"display": "RFID Scanner"}
+        )
+        changelist_url = reverse("admin:nodes_nodefeature_changelist")
+        response = self.client.post(
+            changelist_url,
+            {
+                "action": "check_selected_features",
+                "_selected_action": [str(feature.pk)],
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "RFID Scanner is not enabled on localnode.", html=False
+        )
+        self.assertContains(
+            response, "Completed 0 of 1 feature check(s) successfully.", html=False
+        )
+
     def test_take_screenshot_default_action_requires_enabled_feature(self):
         self._create_local_node()
         NodeFeature.objects.get_or_create(

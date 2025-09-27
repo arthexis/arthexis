@@ -499,6 +499,7 @@ class NodeFeatureAdmin(EntityModelAdmin):
         "is_enabled_display",
         "default_action",
     )
+    actions = ["check_selected_features"]
     readonly_fields = ("is_enabled",)
     search_fields = ("display", "slug")
 
@@ -527,6 +528,43 @@ class NodeFeatureAdmin(EntityModelAdmin):
         except NoReverseMatch:
             return action.label
         return format_html('<a href="{}">{}</a>', url, action.label)
+
+    @admin.action(description="Check selected features")
+    def check_selected_features(self, request, queryset):
+        from .feature_checks import feature_checks
+
+        features = list(queryset)
+        total = len(features)
+        successes = 0
+        for feature in features:
+            try:
+                result = feature_checks.run(feature)
+            except Exception as exc:  # pragma: no cover - defensive
+                self.message_user(
+                    request,
+                    f"{feature.display}: {exc}",
+                    level=messages.ERROR,
+                )
+                continue
+            if result is None:
+                self.message_user(
+                    request,
+                    f"No check is configured for {feature.display}.",
+                    level=messages.WARNING,
+                )
+                continue
+            message = result.message or (
+                f"{feature.display} check {'passed' if result.success else 'failed'}."
+            )
+            self.message_user(request, message, level=result.level)
+            if result.success:
+                successes += 1
+        if total:
+            self.message_user(
+                request,
+                f"Completed {successes} of {total} feature check(s) successfully.",
+                level=messages.INFO,
+            )
 
     def get_urls(self):
         urls = super().get_urls()
