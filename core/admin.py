@@ -371,6 +371,29 @@ class ReleaseManagerAdminForm(forms.ModelForm):
             "github_token": forms.Textarea(attrs={"rows": 3, "style": "width: 40em;"}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["pypi_token"].help_text = format_html(
+            "{} <a href=\"{}\" target=\"_blank\" rel=\"noopener noreferrer\">{}</a>{}",
+            "Generate an API token from your PyPI account settings.",
+            "https://pypi.org/manage/account/token/",
+            "pypi.org/manage/account/token/",
+            (
+                " by clicking “Add API token”, optionally scoping it to the package, "
+                "and paste the full `pypi-***` value here."
+            ),
+        )
+        self.fields["github_token"].help_text = format_html(
+            "{} <a href=\"{}\" target=\"_blank\" rel=\"noopener noreferrer\">{}</a>{}",
+            "Create a personal access token at GitHub → Settings → Developer settings →",
+            "https://github.com/settings/tokens",
+            "github.com/settings/tokens",
+            (
+                " with the repository access needed for releases (repo scope for classic tokens "
+                "or an equivalent fine-grained token) and paste it here."
+            ),
+        )
+
 
 @admin.register(ReleaseManager)
 class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
