@@ -100,7 +100,9 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
 
 
 @pytest.mark.role("Constellation")
-def test_verify_auto_upgrade_health_retries_and_reverts(monkeypatch, tmp_path):
+def test_verify_auto_upgrade_health_reverts_and_records_revision(
+    monkeypatch, tmp_path
+):
     base = _setup_tmp(monkeypatch, tmp_path)
     locks = base / "locks"
     locks.mkdir()
@@ -129,23 +131,76 @@ def test_verify_auto_upgrade_health_retries_and_reverts(monkeypatch, tmp_path):
 
     monkeypatch.setattr(tasks.subprocess, "run", fake_run)
 
-    tasks.verify_auto_upgrade_health.run(attempt=1)
-    assert scheduled
-    assert scheduled[-1]["kwargs"].get("kwargs") == {"attempt": 2}
-    assert scheduled[-1]["kwargs"].get("countdown") == tasks.AUTO_UPGRADE_HEALTH_DELAY_SECONDS
+    monkeypatch.setattr(
+        tasks.subprocess,
+        "check_output",
+        lambda *a, **k: b"deadbeef",
+    )
 
-    scheduled.clear()
-    tasks.verify_auto_upgrade_health.run(attempt=2)
-    assert scheduled
-    assert scheduled[-1]["kwargs"].get("kwargs") == {"attempt": 3}
-
-    scheduled.clear()
-    tasks.verify_auto_upgrade_health.run(attempt=3)
+    result = tasks.verify_auto_upgrade_health.run(attempt=1)
+    assert result is False
     assert not scheduled
     assert run_calls
     final_call = run_calls[-1]
     assert final_call["args"] == ["./upgrade.sh", "--revert"]
     assert final_call["cwd"] == base
+
+    skip_file = locks / tasks.AUTO_UPGRADE_SKIP_LOCK_NAME
+    assert skip_file.exists()
+    assert skip_file.read_text().strip() == "deadbeef"
+
+
+@pytest.mark.role("Constellation")
+def test_check_github_updates_skips_blocked_revision(monkeypatch, tmp_path):
+    base = _setup_tmp(monkeypatch, tmp_path)
+    locks = base / "locks"
+    locks.mkdir()
+    (locks / "auto_upgrade.lck").write_text("latest")
+    (locks / tasks.AUTO_UPGRADE_SKIP_LOCK_NAME).write_text("blocked\n")
+
+    def fake_check_output(args, cwd=None, **kwargs):
+        if args[:3] == ["git", "rev-parse", "main"]:
+            return b"local"
+        if args[:3] == ["git", "rev-parse", "origin/main"]:
+            return b"blocked"
+        if args[:3] == ["git", "show", "origin/main:VERSION"]:
+            return b"2.0"
+        raise AssertionError(f"Unexpected command: {args}")
+
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    run_calls = []
+
+    def fake_run(args, cwd=None, check=None):
+        run_calls.append(args)
+        return types.SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+
+    scheduled = []
+
+    def fake_apply_async(*args, **kwargs):
+        scheduled.append((args, kwargs))
+
+    monkeypatch.setattr(
+        tasks.verify_auto_upgrade_health,
+        "apply_async",
+        fake_apply_async,
+    )
+
+    called = {}
+    import nodes.apps as nodes_apps
+
+    monkeypatch.setattr(
+        nodes_apps, "_startup_notification", lambda: called.setdefault("x", True)
+    )
+
+    tasks.check_github_updates()
+
+    assert called.get("x")
+    assert scheduled == []
+    assert run_calls and run_calls[0][0] == "git"
+    assert all(cmd[0] != "./upgrade.sh" for cmd in run_calls)
 
 
 def _matches_upgrade_stamp(body: str) -> bool:
