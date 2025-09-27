@@ -204,6 +204,13 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                 "fields": ("reference",),
             },
         ),
+        (
+            "Owner",
+            {
+                "fields": ("owner_users", "owner_groups"),
+                "classes": ("collapse",),
+            },
+        ),
     )
     readonly_fields = (
         "last_heartbeat",
@@ -237,6 +244,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "status_link",
     )
     search_fields = ("charger_id", "connector_id", "location__name")
+    filter_horizontal = ("owner_users", "owner_groups")
     actions = [
         "purge_data",
         "change_availability_operative",

@@ -36,7 +36,7 @@ from .models import (
     DataTransferMessage,
 )
 from .consumers import CSMSConsumer
-from core.models import EnergyAccount, EnergyCredit, Reference, RFID
+from core.models import EnergyAccount, EnergyCredit, Reference, RFID, SecurityGroup
 from . import store
 from django.db.models.deletion import ProtectedError
 from decimal import Decimal
@@ -2963,3 +2963,69 @@ class LiveUpdateViewTests(TestCase):
         ids = [item["charger_id"] for item in payload["chargers"]]
         self.assertIn(public.charger_id, ids)
         self.assertNotIn(private.charger_id, ids)
+
+    def test_dashboard_restricts_to_owner_users(self):
+        User = get_user_model()
+        owner = User.objects.create_user(username="owner", password="pw")
+        other = User.objects.create_user(username="outsider", password="pw")
+        unrestricted = Charger.objects.create(charger_id="UNRESTRICTED")
+        restricted = Charger.objects.create(charger_id="RESTRICTED")
+        restricted.owner_users.add(owner)
+
+        self.client.force_login(owner)
+        owner_resp = self.client.get(reverse("ocpp-dashboard"))
+        owner_chargers = [item["charger"] for item in owner_resp.context["chargers"]]
+        self.assertIn(unrestricted, owner_chargers)
+        self.assertIn(restricted, owner_chargers)
+
+        self.client.force_login(other)
+        other_resp = self.client.get(reverse("ocpp-dashboard"))
+        other_chargers = [item["charger"] for item in other_resp.context["chargers"]]
+        self.assertIn(unrestricted, other_chargers)
+        self.assertNotIn(restricted, other_chargers)
+
+        self.client.force_login(owner)
+        detail_resp = self.client.get(
+            reverse("charger-page", args=[restricted.charger_id])
+        )
+        self.assertEqual(detail_resp.status_code, 200)
+
+        self.client.force_login(other)
+        denied_resp = self.client.get(
+            reverse("charger-page", args=[restricted.charger_id])
+        )
+        self.assertEqual(denied_resp.status_code, 404)
+
+    def test_dashboard_restricts_to_owner_groups(self):
+        User = get_user_model()
+        group = SecurityGroup.objects.create(name="Operations")
+        member = User.objects.create_user(username="member", password="pw")
+        outsider = User.objects.create_user(username="visitor", password="pw")
+        member.groups.add(group)
+        unrestricted = Charger.objects.create(charger_id="GROUPFREE")
+        restricted = Charger.objects.create(charger_id="GROUPLOCKED")
+        restricted.owner_groups.add(group)
+
+        self.client.force_login(member)
+        member_resp = self.client.get(reverse("ocpp-dashboard"))
+        member_chargers = [item["charger"] for item in member_resp.context["chargers"]]
+        self.assertIn(unrestricted, member_chargers)
+        self.assertIn(restricted, member_chargers)
+
+        self.client.force_login(outsider)
+        outsider_resp = self.client.get(reverse("ocpp-dashboard"))
+        outsider_chargers = [item["charger"] for item in outsider_resp.context["chargers"]]
+        self.assertIn(unrestricted, outsider_chargers)
+        self.assertNotIn(restricted, outsider_chargers)
+
+        self.client.force_login(member)
+        status_resp = self.client.get(
+            reverse("charger-status", args=[restricted.charger_id])
+        )
+        self.assertEqual(status_resp.status_code, 200)
+
+        self.client.force_login(outsider)
+        group_denied = self.client.get(
+            reverse("charger-status", args=[restricted.charger_id])
+        )
+        self.assertEqual(group_denied.status_code, 404)

@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.db import models
+from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -19,6 +20,7 @@ from core.models import (
     ElectricVehicle as CoreElectricVehicle,
     Brand as CoreBrand,
     EVModel as CoreEVModel,
+    SecurityGroup,
 )
 from .reference_utils import url_targets_local_loopback
 
@@ -195,9 +197,59 @@ class Charger(Entity):
         blank=True,
         related_name="managed_chargers",
     )
+    owner_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="owned_chargers",
+        help_text=_("Users who can view this charge point."),
+    )
+    owner_groups = models.ManyToManyField(
+        SecurityGroup,
+        blank=True,
+        related_name="owned_chargers",
+        help_text=_("Security groups that can view this charge point."),
+    )
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.charger_id
+
+    @classmethod
+    def visible_for_user(cls, user):
+        """Return chargers marked for display that the user may view."""
+
+        qs = cls.objects.filter(public_display=True)
+        if getattr(user, "is_superuser", False):
+            return qs
+        if not getattr(user, "is_authenticated", False):
+            return qs.filter(
+                owner_users__isnull=True, owner_groups__isnull=True
+            ).distinct()
+        group_ids = list(user.groups.values_list("pk", flat=True))
+        visibility = Q(owner_users__isnull=True, owner_groups__isnull=True) | Q(
+            owner_users=user
+        )
+        if group_ids:
+            visibility |= Q(owner_groups__pk__in=group_ids)
+        return qs.filter(visibility).distinct()
+
+    def has_owner_scope(self) -> bool:
+        """Return ``True`` when owner restrictions are defined."""
+
+        return self.owner_users.exists() or self.owner_groups.exists()
+
+    def is_visible_to(self, user) -> bool:
+        """Return ``True`` when ``user`` may view this charger."""
+
+        if getattr(user, "is_superuser", False):
+            return True
+        if not self.has_owner_scope():
+            return True
+        if not getattr(user, "is_authenticated", False):
+            return False
+        if self.owner_users.filter(pk=user.pk).exists():
+            return True
+        user_group_ids = user.groups.values_list("pk", flat=True)
+        return self.owner_groups.filter(pk__in=user_group_ids).exists()
 
     class Meta:
         verbose_name = _("Charge Point")
