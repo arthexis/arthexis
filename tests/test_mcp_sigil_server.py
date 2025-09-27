@@ -7,8 +7,10 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 
+from django.contrib.sites.models import Site
+
 from core.mcp.schemas import ResolveOptions
-from core.mcp.server import SigilResolverServer
+from core.mcp.server import SigilResolverServer, resolve_base_urls
 from core.mcp.service import (
     ResolutionResult,
     SigilResolverService,
@@ -120,3 +122,40 @@ class SigilResolverServerTests(TestCase):
         self.assertEqual(
             expected, sorted(rendered["roots"], key=lambda item: item["prefix"])
         )
+
+
+class SigilResolverServerURLTests(TestCase):
+    def setUp(self) -> None:
+        self.site = Site.objects.get_current()
+        self.original_domain = self.site.domain
+        self.original_name = self.site.name
+        self.addCleanup(self._restore_site)
+
+    def _restore_site(self) -> None:
+        self.site.domain = self.original_domain
+        self.site.name = self.original_name
+        self.site.save()
+
+    def test_resolve_base_urls_uses_site_domain(self) -> None:
+        self.site.domain = "mcp.example.test"
+        self.site.save()
+        config = {"host": "0.0.0.0", "port": 8800, "api_keys": ["secret"], "required_scopes": []}
+        base_url, issuer_url = resolve_base_urls(config)
+        self.assertEqual(base_url, "https://mcp.example.test:8800")
+        self.assertEqual(issuer_url, base_url)
+
+    def test_resolve_base_urls_falls_back_to_host(self) -> None:
+        self.site.domain = ""
+        self.site.save()
+        config = {"host": "127.0.0.1", "port": 8800, "api_keys": ["secret"], "required_scopes": []}
+        base_url, issuer_url = resolve_base_urls(config)
+        self.assertEqual(base_url, "http://127.0.0.1:8800")
+        self.assertEqual(issuer_url, base_url)
+
+    def test_resolve_base_urls_honors_full_url_site_domain(self) -> None:
+        self.site.domain = "https://resolver.example.com"
+        self.site.save()
+        config = {"host": "0.0.0.0", "port": 8800, "api_keys": ["secret"], "required_scopes": []}
+        base_url, issuer_url = resolve_base_urls(config)
+        self.assertEqual(base_url, "https://resolver.example.com")
+        self.assertEqual(issuer_url, base_url)
