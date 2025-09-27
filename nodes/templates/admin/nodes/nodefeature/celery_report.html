@@ -1,0 +1,120 @@
+{% extends "admin/base_site.html" %}
+{% load i18n tz %}
+
+{% block content %}
+<div id="content-main" class="celery-report">
+  <h1>{{ title }}</h1>
+  <div class="module celery-report__period">
+    <h2 class="celery-report__period-title">{% trans "Reporting window" %}</h2>
+    <p class="celery-report__period-options">
+      {% for option in period_options %}
+        {% if option.selected %}
+          <strong>{{ option.label }}</strong>
+        {% else %}
+          <a href="{{ option.url }}">{{ option.label }}</a>
+        {% endif %}
+        {% if not forloop.last %}
+          <span aria-hidden="true">·</span>
+        {% endif %}
+      {% endfor %}
+    </p>
+    <p class="help">
+      {% blocktrans with end=window_end|date:"DATETIME_FORMAT" %}
+        Showing tasks scheduled to run before {{ end }}.
+      {% endblocktrans %}
+    </p>
+  </div>
+
+  <div class="module celery-report__section">
+    <h2>{% trans "Scheduled tasks" %}</h2>
+    {% if scheduled_tasks %}
+      <table class="table table-striped celery-report__table">
+        <thead>
+          <tr>
+            <th scope="col">{% trans "Name" %}</th>
+            <th scope="col">{% trans "Task" %}</th>
+            <th scope="col">{% trans "Schedule" %}</th>
+            <th scope="col">{% trans "Next run" %}</th>
+            <th scope="col">{% trans "Status" %}</th>
+            <th scope="col">{% trans "Source" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in scheduled_tasks %}
+          <tr>
+            <th scope="row">{{ item.name }}</th>
+            <td><code>{{ item.task }}</code></td>
+            <td>
+              {% if item.schedule_description %}
+                {{ item.schedule_description }}
+              {% else %}
+                <em>{% trans "Unknown" %}</em>
+              {% endif %}
+            </td>
+            <td>
+              {% if item.next_run %}
+                {{ item.next_run|date:"DATETIME_FORMAT" }}
+              {% else %}
+                <em>{% trans "Unknown" %}</em>
+              {% endif %}
+            </td>
+            <td>
+              {% if item.enabled %}
+                {% trans "Enabled" %}
+              {% else %}
+                {% trans "Disabled" %}
+              {% endif %}
+            </td>
+            <td>{{ item.source }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p><em>{% trans "No tasks are scheduled for the selected period." %}</em></p>
+    {% endif %}
+  </div>
+
+  <div class="module celery-report__section">
+    <h2>{% trans "Recent log entries" %}</h2>
+    <p class="help">
+      {% blocktrans with start=log_window_start|date:"DATETIME_FORMAT" end=current_time|date:"DATETIME_FORMAT" %}
+        Showing Celery log entries between {{ start }} and {{ end }}.
+      {% endblocktrans %}
+    </p>
+    {% if log_sources %}
+      <p class="small">
+        {% blocktrans with sources=log_sources|join:", " %}
+          Scanned log files: {{ sources }}.
+        {% endblocktrans %}
+      </p>
+    {% endif %}
+    {% if log_entries %}
+      <table class="table table-striped celery-report__table">
+        <thead>
+          <tr>
+            <th scope="col">{% trans "Timestamp" %}</th>
+            <th scope="col">{% trans "Level" %}</th>
+            <th scope="col">{% trans "Logger" %}</th>
+            <th scope="col">{% trans "Message" %}</th>
+            <th scope="col">{% trans "Source" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in log_entries %}
+          <tr>
+            <td>{{ entry.timestamp|date:"DATETIME_FORMAT" }}</td>
+            <td>{{ entry.level }}</td>
+            <td>{{ entry.logger }}</td>
+            <td>{{ entry.message }}</td>
+            <td>{{ entry.source }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p><em>{% trans "No log entries found for the selected period." %}</em></p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

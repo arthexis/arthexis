@@ -88,6 +88,10 @@ class NodeFeature(Entity):
         "rfid-scanner": NodeFeatureDefaultAction(
             label="Scan RFIDs", url_name="admin:core_rfid_scan"
         ),
+        "celery-queue": NodeFeatureDefaultAction(
+            label="Celery Report",
+            url_name="admin:nodes_nodefeature_celery_report",
+        ),
         "screenshot-poll": NodeFeatureDefaultAction(
             label="Take Screenshot",
             url_name="admin:nodes_nodefeature_take_screenshot",

@@ -1,6 +1,7 @@
 from django.contrib import admin, messages
 from django.urls import NoReverseMatch, path, reverse
 from django.shortcuts import redirect, render
+from django.template.response import TemplateResponse
 from django.utils.html import format_html
 from django import forms
 from django.contrib.admin.widgets import FilteredSelectMultiple
@@ -9,6 +10,7 @@ from django.db.models import Count
 from django.conf import settings
 from pathlib import Path
 from django.http import HttpResponse
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 import base64
 import pyperclip
@@ -17,6 +19,12 @@ import uuid
 import subprocess
 from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
 from .actions import NodeAction
+from .reports import (
+    collect_celery_log_entries,
+    collect_scheduled_tasks,
+    iter_report_periods,
+    resolve_period,
+)
 
 from core.admin import EmailOutboxAdminForm
 from .models import (
@@ -570,6 +578,11 @@ class NodeFeatureAdmin(EntityModelAdmin):
         urls = super().get_urls()
         custom = [
             path(
+                "celery-report/",
+                self.admin_site.admin_view(self.celery_report),
+                name="nodes_nodefeature_celery_report",
+            ),
+            path(
                 "take-screenshot/",
                 self.admin_site.admin_view(self.take_screenshot),
                 name="nodes_nodefeature_take_screenshot",
@@ -581,6 +594,43 @@ class NodeFeatureAdmin(EntityModelAdmin):
             ),
         ]
         return custom + urls
+
+    def celery_report(self, request):
+        period = resolve_period(request.GET.get("period"))
+        now = timezone.now()
+        window_end = now + period.delta
+        log_window_start = now - period.delta
+
+        scheduled_tasks = collect_scheduled_tasks(now, window_end)
+        log_collection = collect_celery_log_entries(log_window_start, now)
+
+        period_options = [
+            {
+                "key": candidate.key,
+                "label": candidate.label,
+                "selected": candidate.key == period.key,
+                "url": f"?period={candidate.key}",
+            }
+            for candidate in iter_report_periods()
+        ]
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": _("Celery Report"),
+            "period": period,
+            "period_options": period_options,
+            "current_time": now,
+            "window_end": window_end,
+            "log_window_start": log_window_start,
+            "scheduled_tasks": scheduled_tasks,
+            "log_entries": log_collection.entries,
+            "log_sources": log_collection.checked_sources,
+        }
+        return TemplateResponse(
+            request,
+            "admin/nodes/nodefeature/celery_report.html",
+            context,
+        )
 
     def _ensure_feature_enabled(self, request, slug: str, action_label: str):
         try:

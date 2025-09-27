@@ -1,8 +1,23 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
+{% load i18n admin_extras %}
 
 {% block content %}
 <div id="content-main">
+  <div class="module system-reports">
+    <h2>{% trans "System Reports" %}</h2>
+    {% celery_feature_enabled as celery_enabled %}
+    {% if celery_enabled %}
+      <ul>
+        <li>
+          <a href="{% url 'admin:nodes_nodefeature_celery_report' %}">
+            {% trans "Celery Report" %}
+          </a>
+        </li>
+      </ul>
+    {% else %}
+      <p class="help">{% trans "Celery support is not enabled on this node." %}</p>
+    {% endif %}
+  </div>
   <div>
     <table class="system-info-table table table-striped">
       <thead>
