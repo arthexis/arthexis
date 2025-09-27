@@ -155,6 +155,12 @@ def get_terminal_role():
 class Node(Entity):
     """Information about a running node in the network."""
 
+    DEFAULT_BADGE_COLOR = "#28a745"
+    ROLE_BADGE_COLORS = {
+        "Constellation": "#daa520",  # goldenrod
+        "Control": "#673ab7",  # deep purple
+    }
+
     class Relation(models.TextChoices):
         UPSTREAM = "UPSTREAM", "Upstream"
         DOWNSTREAM = "DOWNSTREAM", "Downstream"
@@ -165,7 +171,7 @@ class Node(Entity):
     address = models.GenericIPAddressField()
     mac_address = models.CharField(max_length=17, unique=True, null=True, blank=True)
     port = models.PositiveIntegerField(default=8000)
-    badge_color = models.CharField(max_length=7, default="#28a745")
+    badge_color = models.CharField(max_length=7, default=DEFAULT_BADGE_COLOR)
     role = models.ForeignKey(NodeRole, on_delete=models.SET_NULL, null=True, blank=True)
     current_relation = models.CharField(
         max_length=10,
@@ -446,6 +452,29 @@ class Node(Entity):
         return self.mac_address == self.get_current_mac()
 
     def save(self, *args, **kwargs):
+        role_name = None
+        role = getattr(self, "role", None)
+        if role and getattr(role, "name", None):
+            role_name = role.name
+        elif self.role_id:
+            role_name = (
+                NodeRole.objects.filter(pk=self.role_id)
+                .values_list("name", flat=True)
+                .first()
+            )
+
+        role_color = self.ROLE_BADGE_COLORS.get(role_name)
+        if role_color and (
+            not self.badge_color or self.badge_color == self.DEFAULT_BADGE_COLOR
+        ):
+            self.badge_color = role_color
+            update_fields = kwargs.get("update_fields")
+            if update_fields:
+                fields = set(update_fields)
+                if "badge_color" not in fields:
+                    fields.add("badge_color")
+                    kwargs["update_fields"] = tuple(fields)
+
         if self.mac_address:
             self.mac_address = self.mac_address.lower()
         if not self.public_endpoint:
