@@ -24,6 +24,7 @@ history: dict[str, dict[str, object]] = {}
 simulators = {}
 ip_connections: dict[str, set[object]] = {}
 pending_calls: dict[str, dict[str, object]] = {}
+triggered_followups: dict[str, list[dict[str, object]]] = {}
 
 # mapping of charger id / cp_path to friendly names used for log files
 log_names: dict[str, dict[str, str]] = {"charger": {}, "simulator": {}}
@@ -200,6 +201,51 @@ def pop_pending_call(message_id: str) -> dict[str, object] | None:
     return pending_calls.pop(message_id, None)
 
 
+def register_triggered_followup(
+    serial: str,
+    action: str,
+    *,
+    connector: int | str | None = None,
+    log_key: str | None = None,
+    target: str | None = None,
+) -> None:
+    """Record that ``serial`` should send ``action`` after a TriggerMessage."""
+
+    entry = {
+        "action": action,
+        "connector": connector_slug(connector),
+        "log_key": log_key,
+        "target": target,
+    }
+    triggered_followups.setdefault(serial, []).append(entry)
+
+
+def consume_triggered_followup(
+    serial: str, action: str, connector: int | str | None = None
+) -> dict[str, object] | None:
+    """Return metadata for a previously registered follow-up message."""
+
+    entries = triggered_followups.get(serial)
+    if not entries:
+        return None
+    connector_slug_value = connector_slug(connector)
+    for index, entry in enumerate(entries):
+        if entry.get("action") != action:
+            continue
+        expected_slug = entry.get("connector")
+        if expected_slug == AGGREGATE_SLUG:
+            matched = True
+        else:
+            matched = connector_slug_value == expected_slug
+        if not matched:
+            continue
+        result = entries.pop(index)
+        if not entries:
+            triggered_followups.pop(serial, None)
+        return result
+    return None
+
+
 def clear_pending_calls(serial: str) -> None:
     """Remove any pending calls associated with the provided charger id."""
 
@@ -210,6 +256,7 @@ def clear_pending_calls(serial: str) -> None:
     ]
     for key in to_remove:
         pending_calls.pop(key, None)
+    triggered_followups.pop(serial, None)
 
 
 def reassign_identity(old_key: str, new_key: str) -> str:

@@ -586,7 +586,9 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return
         if metadata.get("charger_id") and metadata.get("charger_id") != self.charger_id:
             return
-        if metadata.get("action") == "DataTransfer":
+        action = metadata.get("action")
+        log_key = metadata.get("log_key") or self.store_key
+        if action == "DataTransfer":
             message_pk = metadata.get("message_pk")
             if not message_pk:
                 return
@@ -616,8 +618,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
 
             await database_sync_to_async(_apply)()
             return
-        if metadata.get("action") == "GetConfiguration":
-            log_key = metadata.get("log_key") or self.store_key
+        if action == "GetConfiguration":
             payload_data = payload if isinstance(payload, dict) else {}
             try:
                 payload_text = json.dumps(
@@ -631,7 +632,53 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 log_type="charger",
             )
             return
-        if metadata.get("action") != "ChangeAvailability":
+        if action == "TriggerMessage":
+            payload_data = payload if isinstance(payload, dict) else {}
+            status_value = str(payload_data.get("status") or "").strip()
+            target = metadata.get("trigger_target") or metadata.get("follow_up_action")
+            connector_value = metadata.get("trigger_connector")
+            message = "TriggerMessage result"
+            if target:
+                message = f"TriggerMessage {target} result"
+            if status_value:
+                message += f": status={status_value}"
+            if connector_value:
+                message += f", connector={connector_value}"
+            store.add_log(log_key, message, log_type="charger")
+            if status_value == "Accepted" and target:
+                store.register_triggered_followup(
+                    self.charger_id,
+                    str(target),
+                    connector=connector_value,
+                    log_key=log_key,
+                    target=str(target),
+                )
+            return
+        if action == "RemoteStartTransaction":
+            payload_data = payload if isinstance(payload, dict) else {}
+            status_value = str(payload_data.get("status") or "").strip()
+            message = "RemoteStartTransaction result"
+            if status_value:
+                message += f": status={status_value}"
+            store.add_log(log_key, message, log_type="charger")
+            return
+        if action == "RemoteStopTransaction":
+            payload_data = payload if isinstance(payload, dict) else {}
+            status_value = str(payload_data.get("status") or "").strip()
+            message = "RemoteStopTransaction result"
+            if status_value:
+                message += f": status={status_value}"
+            store.add_log(log_key, message, log_type="charger")
+            return
+        if action == "Reset":
+            payload_data = payload if isinstance(payload, dict) else {}
+            status_value = str(payload_data.get("status") or "").strip()
+            message = "Reset result"
+            if status_value:
+                message += f": status={status_value}"
+            store.add_log(log_key, message, log_type="charger")
+            return
+        if action != "ChangeAvailability":
             return
         status = str((payload or {}).get("status") or "").strip()
         requested_type = metadata.get("availability_type")
@@ -657,7 +704,9 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return
         if metadata.get("charger_id") and metadata.get("charger_id") != self.charger_id:
             return
-        if metadata.get("action") == "DataTransfer":
+        action = metadata.get("action")
+        log_key = metadata.get("log_key") or self.store_key
+        if action == "DataTransfer":
             message_pk = metadata.get("message_pk")
             if not message_pk:
                 return
@@ -687,8 +736,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
 
             await database_sync_to_async(_apply)()
             return
-        if metadata.get("action") == "GetConfiguration":
-            log_key = metadata.get("log_key") or self.store_key
+        if action == "GetConfiguration":
             parts: list[str] = []
             code_text = (error_code or "").strip()
             if code_text:
@@ -709,7 +757,61 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 message = "GetConfiguration error"
             store.add_log(log_key, message, log_type="charger")
             return
-        if metadata.get("action") != "ChangeAvailability":
+        if action == "TriggerMessage":
+            target = metadata.get("trigger_target") or metadata.get("follow_up_action")
+            connector_value = metadata.get("trigger_connector")
+            parts: list[str] = []
+            if error_code:
+                parts.append(f"code={str(error_code).strip()}")
+            if description:
+                parts.append(f"description={str(description).strip()}")
+            if details:
+                try:
+                    parts.append(
+                        "details="
+                        + json.dumps(details, sort_keys=True, ensure_ascii=False)
+                    )
+                except TypeError:
+                    parts.append(f"details={details}")
+            label = f"TriggerMessage {target}" if target else "TriggerMessage"
+            message = label + " error"
+            if parts:
+                message += ": " + ", ".join(parts)
+            if connector_value:
+                message += f", connector={connector_value}"
+            store.add_log(log_key, message, log_type="charger")
+            return
+        if action == "RemoteStartTransaction":
+            message = "RemoteStartTransaction error"
+            if error_code:
+                message += f": code={str(error_code).strip()}"
+            if description:
+                suffix = str(description).strip()
+                if suffix:
+                    message += f", description={suffix}"
+            store.add_log(log_key, message, log_type="charger")
+            return
+        if action == "RemoteStopTransaction":
+            message = "RemoteStopTransaction error"
+            if error_code:
+                message += f": code={str(error_code).strip()}"
+            if description:
+                suffix = str(description).strip()
+                if suffix:
+                    message += f", description={suffix}"
+            store.add_log(log_key, message, log_type="charger")
+            return
+        if action == "Reset":
+            message = "Reset error"
+            if error_code:
+                message += f": code={str(error_code).strip()}"
+            if description:
+                suffix = str(description).strip()
+                if suffix:
+                    message += f", description={suffix}"
+            store.add_log(log_key, message, log_type="charger")
+            return
+        if action != "ChangeAvailability":
             return
         detail_text = (description or "").strip()
         if not detail_text and details:
@@ -943,6 +1045,27 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             msg_id, action = msg[1], msg[2]
             payload = msg[3] if len(msg) > 3 else {}
             reply_payload = {}
+            connector_hint = None
+            if isinstance(payload, dict):
+                connector_hint = payload.get("connectorId")
+            follow_up = store.consume_triggered_followup(
+                self.charger_id, action, connector_hint
+            )
+            if follow_up:
+                follow_up_log_key = follow_up.get("log_key") or self.store_key
+                target_label = follow_up.get("target") or action
+                connector_slug_value = follow_up.get("connector")
+                suffix = ""
+                if (
+                    connector_slug_value
+                    and connector_slug_value != store.AGGREGATE_SLUG
+                ):
+                    suffix = f" (connector {connector_slug_value})"
+                store.add_log(
+                    follow_up_log_key,
+                    f"TriggerMessage follow-up received: {target_label}{suffix}",
+                    log_type="charger",
+                )
             await self._assign_connector(payload.get("connectorId"))
             if action == "BootNotification":
                 reply_payload = {
