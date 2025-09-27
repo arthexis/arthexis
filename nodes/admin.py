@@ -70,6 +70,24 @@ class NodeManagerAdmin(EntityModelAdmin):
         "user__username",
         "group__name",
     )
+    fieldsets = (
+        (_("Owner"), {"fields": ("user", "group")}),
+        (
+            _("Credentials"),
+            {"fields": ("api_key", "api_secret", "customer_id")},
+        ),
+        (
+            _("Configuration"),
+            {
+                "fields": (
+                    "provider",
+                    "default_domain",
+                    "use_sandbox",
+                    "is_enabled",
+                )
+            },
+        ),
+    )
 
 
 @admin.register(DNSRecord)
@@ -371,15 +389,15 @@ class EmailOutboxAdmin(EntityModelAdmin):
     )
     change_form_template = "admin/nodes/emailoutbox/change_form.html"
     fieldsets = (
-        ("Owner", {"fields": ("user", "group", "node")}),
+        ("Owner", {"fields": ("user", "group")}),
+        ("Credentials", {"fields": ("username", "password")}),
         (
             "Configuration",
             {
                 "fields": (
+                    "node",
                     "host",
                     "port",
-                    "username",
-                    "password",
                     "use_tls",
                     "use_ssl",
                     "from_email",

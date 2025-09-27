@@ -1350,10 +1350,8 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
     changelist_actions = ["my_profile"]
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
-        (
-            "Configuration",
-            {"fields": ("host", "database", "username", "password")},
-        ),
+        ("Configuration", {"fields": ("host", "database")}),
+        ("Credentials", {"fields": ("username", "password")}),
         (
             "Odoo Employee",
             {"fields": ("verified_on", "odoo_uid", "name", "email")},
@@ -1443,18 +1441,10 @@ class EmailInboxAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmi
 
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
+        ("Credentials", {"fields": ("username", "password")}),
         (
-            None,
-            {
-                "fields": (
-                    "username",
-                    "host",
-                    "port",
-                    "password",
-                    "protocol",
-                    "use_ssl",
-                )
-            },
+            "Configuration",
+            {"fields": ("host", "port", "protocol", "use_ssl")},
         ),
     )
 
@@ -1552,17 +1542,10 @@ class AssistantProfileAdmin(
     changelist_actions = ["my_profile"]
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
+        ("Credentials", {"fields": ("user_key_hash",)}),
         (
-            None,
-            {
-                "fields": (
-                    "scopes",
-                    "is_active",
-                    "user_key_hash",
-                    "created_at",
-                    "last_used_at",
-                )
-            },
+            "Configuration",
+            {"fields": ("scopes", "is_active", "created_at", "last_used_at")},
         ),
     )
 
