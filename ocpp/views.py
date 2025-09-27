@@ -86,11 +86,26 @@ def _connector_set(charger: Charger) -> list[Charger]:
     return siblings
 
 
-def _connector_overview(charger: Charger) -> list[dict]:
+def _visible_chargers(user):
+    """Return chargers visible to ``user`` on public dashboards."""
+
+    return Charger.visible_for_user(user).prefetch_related("owner_users", "owner_groups")
+
+
+def _ensure_charger_access(user, charger: Charger):
+    """Raise 404 when the user cannot view the charger."""
+
+    if not charger.is_visible_to(user):
+        raise Http404("Charger not found")
+
+
+def _connector_overview(charger: Charger, user=None) -> list[dict]:
     """Return connector metadata used for navigation and summaries."""
 
     overview: list[dict] = []
     for sibling in _connector_set(charger):
+        if user is not None and not sibling.is_visible_to(user):
+            continue
         tx_obj = store.get_transaction(sibling.charger_id, sibling.connector_id)
         state, color = _charger_state(sibling, tx_obj)
         overview.append(
@@ -239,7 +254,7 @@ def _diagnostics_payload(charger: Charger) -> dict[str, str | None]:
 def charger_list(request):
     """Return a JSON list of known chargers and state."""
     data = []
-    for charger in Charger.objects.filter(public_display=True):
+    for charger in _visible_chargers(request.user):
         cid = charger.charger_id
         sessions: list[tuple[Charger, Transaction]] = []
         tx_obj = store.get_transaction(cid, charger.connector_id)
@@ -331,6 +346,7 @@ def charger_list(request):
 @api_login_required
 def charger_detail(request, cid, connector=None):
     charger, connector_slug = _get_charger(cid, connector)
+    _ensure_charger_access(request.user, charger)
 
     sessions: list[tuple[Charger, Transaction]] = []
     tx_obj = store.get_transaction(cid, charger.connector_id)
@@ -432,7 +448,7 @@ def dashboard(request):
             request.get_full_path(), login_url=reverse("pages:login")
         )
     chargers = []
-    for charger in Charger.objects.filter(public_display=True):
+    for charger in _visible_chargers(request.user):
         tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
         if not tx_obj:
             tx_obj = (
@@ -558,7 +574,8 @@ def cp_simulator(request):
 def charger_page(request, cid, connector=None):
     """Public landing page for a charger displaying usage guidance or progress."""
     charger, connector_slug = _get_charger(cid, connector)
-    overview = _connector_overview(charger)
+    _ensure_charger_access(request.user, charger)
+    overview = _connector_overview(charger, request.user)
     sessions = _live_sessions(charger)
     tx = None
     active_connector_count = 0
@@ -625,6 +642,7 @@ def charger_page(request, cid, connector=None):
 @login_required
 def charger_status(request, cid, connector=None):
     charger, connector_slug = _get_charger(cid, connector)
+    _ensure_charger_access(request.user, charger)
     session_id = request.GET.get("session")
     sessions = _live_sessions(charger)
     live_tx = None
@@ -728,7 +746,7 @@ def charger_status(request, cid, connector=None):
                         "connector_id": connector_id,
                     }
                 )
-    overview = _connector_overview(charger)
+    overview = _connector_overview(charger, request.user)
     connector_links = [
         {
             "slug": item["slug"],
@@ -804,6 +822,7 @@ def charger_status(request, cid, connector=None):
 @login_required
 def charger_session_search(request, cid, connector=None):
     charger, connector_slug = _get_charger(cid, connector)
+    _ensure_charger_access(request.user, charger)
     date_str = request.GET.get("date")
     transactions = None
     if date_str:
@@ -821,7 +840,7 @@ def charger_session_search(request, cid, connector=None):
             transactions = qs.order_by("-start_time")
         except ValueError:
             transactions = []
-    overview = _connector_overview(charger)
+    overview = _connector_overview(charger, request.user)
     connector_links = [
         {
             "slug": item["slug"],
@@ -855,8 +874,9 @@ def charger_log_page(request, cid, connector=None):
     status_url = None
     if log_type == "charger":
         charger, connector_slug = _get_charger(cid, connector)
+        _ensure_charger_access(request.user, charger)
         log_key = store.identity_key(cid, charger.connector_id)
-        overview = _connector_overview(charger)
+        overview = _connector_overview(charger, request.user)
         connector_links = [
             {
                 "slug": item["slug"],
@@ -913,6 +933,8 @@ def dispatch_action(request, cid, connector=None):
             charger_obj, _ = Charger.objects.get_or_create(
                 charger_id=cid, connector_id=connector_value
             )
+
+    _ensure_charger_access(request.user, charger_obj)
     ws = store.get_connection(cid, connector_value)
     if ws is None:
         return JsonResponse({"detail": "no connection"}, status=404)
