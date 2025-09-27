@@ -2,6 +2,8 @@ import os
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
+import time
+
 import tests.conftest  # noqa: F401
 
 import django
@@ -1877,6 +1879,45 @@ class ChargerAdminTests(TestCase):
             log_entries = store.get_logs(log_key, log_type="charger")
             self.assertTrue(
                 any("GetConfiguration" in entry for entry in log_entries)
+            )
+        finally:
+            store.pop_connection(charger.charger_id, charger.connector_id)
+            store.pending_calls.clear()
+            store.clear_log(log_key, log_type="charger")
+            store.clear_log(pending_key, log_type="charger")
+
+    def test_fetch_configuration_timeout_logged(self):
+        charger = Charger.objects.create(charger_id="CFGWAIT", connector_id=1)
+        ws = DummyWebSocket()
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        pending_key = store.pending_key(charger.charger_id)
+        store.clear_log(log_key, log_type="charger")
+        store.clear_log(pending_key, log_type="charger")
+        store.set_connection(charger.charger_id, charger.connector_id, ws)
+        store.pending_calls.clear()
+        original_schedule = store.schedule_call_timeout
+        try:
+            with patch("ocpp.admin.store.schedule_call_timeout") as mock_schedule:
+                def _side_effect(message_id, *, timeout=5.0, **kwargs):
+                    kwargs["timeout"] = 0.05
+                    return original_schedule(message_id, **kwargs)
+
+                mock_schedule.side_effect = _side_effect
+                url = reverse("admin:ocpp_charger_changelist")
+                response = self.client.post(
+                    url,
+                    {
+                        "action": "fetch_cp_configuration",
+                        "_selected_action": [charger.pk],
+                    },
+                    follow=True,
+                )
+                self.assertEqual(response.status_code, 200)
+                mock_schedule.assert_called_once()
+            time.sleep(0.1)
+            log_entries = store.get_logs(log_key, log_type="charger")
+            self.assertTrue(
+                any("GetConfiguration timed out" in entry for entry in log_entries)
             )
         finally:
             store.pop_connection(charger.charger_id, charger.connector_id)
