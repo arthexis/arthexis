@@ -83,6 +83,16 @@
               <p class="fs-5 mb-0">{{ tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</p>
             </div>
           </div>
+          {% if tx_rfid_details %}
+          <div class="mt-3 text-center text-sm-start">
+            <h2 class="h6 text-uppercase text-muted mb-1" data-i18n="rfid_label">{% trans "RFID" %}</h2>
+            {% if tx_rfid_details.url %}
+            <p class="mb-0"><a href="{{ tx_rfid_details.url }}">{{ tx_rfid_details.value }}</a></p>
+            {% else %}
+            <p class="mb-0">{{ tx_rfid_details.value }}</p>
+            {% endif %}
+          </div>
+          {% endif %}
           {% else %}
           <div class="py-4 text-center">
             <p class="lead mb-0" data-i18n="instruction_text">
@@ -130,6 +140,15 @@
             {% if item.tx %}
             <p class="mb-1"><small><span data-i18n="energy_label">{% trans "Energy" %}</span>: {{ item.tx.kw|floatformat:2 }} kW</small></p>
             <p class="mb-0 text-muted"><small><span data-i18n="started_label">{% trans "Started" %}</span>: {{ item.tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</small></p>
+            {% if item.rfid_details %}
+            <p class="mb-0"><small><span data-i18n="rfid_label">{% trans "RFID" %}</span>:
+              {% if item.rfid_details.url %}
+              <a href="{{ item.rfid_details.url }}">{{ item.rfid_details.value }}</a>
+              {% else %}
+              {{ item.rfid_details.value }}
+              {% endif %}
+            </small></p>
+            {% endif %}
             {% else %}
             <p class="mb-0 text-muted"><small data-i18n="no_active_transaction">{% trans "No active transaction" %}</small></p>
             {% endif %}

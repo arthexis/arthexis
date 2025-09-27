@@ -26,7 +26,7 @@ from pages.utils import landing
 from core.liveupdate import live_update
 
 from . import store
-from .models import Transaction, Charger, DataTransferMessage
+from .models import Transaction, Charger, DataTransferMessage, RFID
 from .evcs import (
     _start_simulator,
     _stop_simulator,
@@ -99,7 +99,41 @@ def _ensure_charger_access(user, charger: Charger):
         raise Http404("Charger not found")
 
 
-def _connector_overview(charger: Charger, user=None) -> list[dict]:
+def _transaction_rfid_details(
+    tx_obj, *, cache: dict[str, dict[str, str | None]] | None = None
+) -> dict[str, str | None] | None:
+    """Return normalized RFID metadata for a transaction-like object."""
+
+    if not tx_obj:
+        return None
+    rfid_value = getattr(tx_obj, "rfid", None)
+    if not rfid_value:
+        return None
+    normalized = str(rfid_value).strip()
+    if not normalized:
+        return None
+    normalized = normalized.upper()
+    if cache is not None and normalized in cache:
+        return cache[normalized]
+    tag = RFID.objects.filter(rfid=normalized).only("pk").first()
+    rfid_url = None
+    if tag:
+        try:
+            rfid_url = reverse("admin:core_rfid_change", args=[tag.pk])
+        except NoReverseMatch:  # pragma: no cover - admin may be disabled
+            rfid_url = None
+    details = {"value": normalized, "url": rfid_url}
+    if cache is not None:
+        cache[normalized] = details
+    return details
+
+
+def _connector_overview(
+    charger: Charger,
+    user=None,
+    *,
+    rfid_cache: dict[str, dict[str, str | None]] | None = None,
+) -> list[dict]:
     """Return connector metadata used for navigation and summaries."""
 
     overview: list[dict] = []
@@ -123,6 +157,9 @@ def _connector_overview(charger: Charger, user=None) -> list[dict]:
                 "last_status_timestamp": sibling.last_status_timestamp,
                 "last_status_vendor_info": sibling.last_status_vendor_info,
                 "tx": tx_obj,
+                "rfid_details": _transaction_rfid_details(
+                    tx_obj, cache=rfid_cache
+                ),
                 "connected": store.is_connected(
                     sibling.charger_id, sibling.connector_id
                 ),
@@ -166,6 +203,7 @@ def _landing_page_translations() -> dict[str, dict[str, str]]:
                 "charging_label": gettext("Charging"),
                 "energy_label": gettext("Energy"),
                 "started_label": gettext("Started"),
+                "rfid_label": gettext("RFID"),
                 "instruction_text": gettext(
                     "Plug in your vehicle and slide your RFID card over the reader to begin charging."
                 ),
@@ -575,7 +613,10 @@ def charger_page(request, cid, connector=None):
     """Public landing page for a charger displaying usage guidance or progress."""
     charger, connector_slug = _get_charger(cid, connector)
     _ensure_charger_access(request.user, charger)
-    overview = _connector_overview(charger, request.user)
+    rfid_cache: dict[str, dict[str, str | None]] = {}
+    overview = _connector_overview(
+        charger, request.user, rfid_cache=rfid_cache
+    )
     sessions = _live_sessions(charger)
     tx = None
     active_connector_count = 0
@@ -621,12 +662,14 @@ def charger_page(request, cid, connector=None):
         item for item in overview if item["charger"].connector_id is not None
     ]
     status_url = _reverse_connector_url("charger-status", cid, connector_slug)
+    tx_rfid_details = _transaction_rfid_details(tx, cache=rfid_cache)
     return render(
         request,
         "ocpp/charger_page.html",
         {
             "charger": charger,
             "tx": tx,
+            "tx_rfid_details": tx_rfid_details,
             "connector_slug": connector_slug,
             "connector_links": connector_links,
             "connector_overview": connector_overview,
