@@ -616,6 +616,21 @@ class CSMSConsumer(AsyncWebsocketConsumer):
 
             await database_sync_to_async(_apply)()
             return
+        if metadata.get("action") == "GetConfiguration":
+            log_key = metadata.get("log_key") or self.store_key
+            payload_data = payload if isinstance(payload, dict) else {}
+            try:
+                payload_text = json.dumps(
+                    payload_data, sort_keys=True, ensure_ascii=False
+                )
+            except TypeError:
+                payload_text = str(payload_data)
+            store.add_log(
+                log_key,
+                f"GetConfiguration result: {payload_text}",
+                log_type="charger",
+            )
+            return
         if metadata.get("action") != "ChangeAvailability":
             return
         status = str((payload or {}).get("status") or "").strip()
@@ -671,6 +686,28 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 )
 
             await database_sync_to_async(_apply)()
+            return
+        if metadata.get("action") == "GetConfiguration":
+            log_key = metadata.get("log_key") or self.store_key
+            parts: list[str] = []
+            code_text = (error_code or "").strip()
+            if code_text:
+                parts.append(f"code={code_text}")
+            description_text = (description or "").strip()
+            if description_text:
+                parts.append(f"description={description_text}")
+            if details:
+                try:
+                    details_text = json.dumps(details, sort_keys=True, ensure_ascii=False)
+                except TypeError:
+                    details_text = str(details)
+                if details_text:
+                    parts.append(f"details={details_text}")
+            if parts:
+                message = "GetConfiguration error: " + ", ".join(parts)
+            else:
+                message = "GetConfiguration error"
+            store.add_log(log_key, message, log_type="charger")
             return
         if metadata.get("action") != "ChangeAvailability":
             return
