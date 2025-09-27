@@ -40,7 +40,7 @@ def odoo_products(request):
         products = profile.execute(
             "product.product",
             "search_read",
-            [],
+            [[]],
             {"fields": ["name"], "limit": 50},
         )
     except Exception:
