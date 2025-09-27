@@ -27,7 +27,14 @@ from nodes.models import Node, NodeRole
 
 from config.asgi import application
 
-from .models import Transaction, Charger, Simulator, MeterReading, Location
+from .models import (
+    Transaction,
+    Charger,
+    Simulator,
+    MeterReading,
+    Location,
+    DataTransferMessage,
+)
 from .consumers import CSMSConsumer
 from core.models import EnergyAccount, EnergyCredit, Reference, RFID
 from . import store
@@ -1239,6 +1246,92 @@ class CSMSConsumerTests(TransactionTestCase):
                 await communicator2.disconnect()
             if connected3_retry and communicator3_retry is not None:
                 await communicator3_retry.disconnect()
+
+    async def test_data_transfer_inbound_persists_message(self):
+        store.pending_calls.clear()
+        communicator = WebsocketCommunicator(application, "/DTIN/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        payload = {"vendorId": "Acme", "messageId": "diag", "data": {"foo": "bar"}}
+        await communicator.send_json_to([2, "dt-msg", "DataTransfer", payload])
+        response = await communicator.receive_json_from()
+        self.assertEqual(response, [3, "dt-msg", {"status": "UnknownVendorId"}])
+
+        await communicator.disconnect()
+
+        message = await database_sync_to_async(DataTransferMessage.objects.get)(
+            ocpp_message_id="dt-msg"
+        )
+        self.assertEqual(
+            message.direction, DataTransferMessage.DIRECTION_CP_TO_CSMS
+        )
+        self.assertEqual(message.vendor_id, "Acme")
+        self.assertEqual(message.message_id, "diag")
+        self.assertEqual(message.payload, payload)
+        self.assertEqual(message.status, "UnknownVendorId")
+        self.assertIsNotNone(message.responded_at)
+
+    async def test_data_transfer_action_round_trip(self):
+        store.pending_calls.clear()
+        communicator = WebsocketCommunicator(application, "/DTOUT/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        User = get_user_model()
+        user = await database_sync_to_async(User.objects.create_user)(
+            username="dtuser", password="pw"
+        )
+        await database_sync_to_async(self.client.force_login)(user)
+
+        url = reverse("charger-action", args=["DTOUT"])
+        request_payload = {
+            "action": "data_transfer",
+            "vendorId": "AcmeCorp",
+            "messageId": "ping",
+            "data": {"echo": "value"},
+        }
+        response = await database_sync_to_async(self.client.post)(
+            url,
+            data=json.dumps(request_payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        response_body = json.loads(response.content.decode())
+        sent_frame = json.loads(response_body["sent"])
+        self.assertEqual(sent_frame[2], "DataTransfer")
+        sent_payload = sent_frame[3]
+        self.assertEqual(sent_payload["vendorId"], "AcmeCorp")
+        self.assertEqual(sent_payload.get("messageId"), "ping")
+
+        outbound = await communicator.receive_json_from()
+        self.assertEqual(outbound, sent_frame)
+
+        message_id = sent_frame[1]
+        record = await database_sync_to_async(DataTransferMessage.objects.get)(
+            ocpp_message_id=message_id
+        )
+        self.assertEqual(
+            record.direction, DataTransferMessage.DIRECTION_CSMS_TO_CP
+        )
+        self.assertEqual(record.status, "Pending")
+        self.assertIsNone(record.response_data)
+        self.assertIn(message_id, store.pending_calls)
+        self.assertEqual(store.pending_calls[message_id]["message_pk"], record.pk)
+
+        reply_payload = {"status": "Accepted", "data": {"result": "ok"}}
+        await communicator.send_json_to([3, message_id, reply_payload])
+        await asyncio.sleep(0.05)
+
+        updated = await database_sync_to_async(DataTransferMessage.objects.get)(
+            pk=record.pk
+        )
+        self.assertEqual(updated.status, "Accepted")
+        self.assertEqual(updated.response_data, {"result": "ok"})
+        self.assertIsNotNone(updated.responded_at)
+        self.assertNotIn(message_id, store.pending_calls)
+
+        await communicator.disconnect()
 
 
 class ChargerLandingTests(TestCase):
