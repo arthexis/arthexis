@@ -299,20 +299,40 @@ class Command(BaseCommand):
         nmap_path: str,
     ) -> list[IPv4Address]:
         args = [nmap_path, "-sn", "-PR", "-n", str(network), "-oG", "-"]
-        try:
-            proc = subprocess.run(
-                args,
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-        except FileNotFoundError as exc:
-            raise CommandError("nmap is required to discover EVCS consoles") from exc
-        except subprocess.SubprocessError as exc:
-            raise CommandError(f"nmap host discovery failed: {exc}") from exc
+        proc = self._run_nmap(args)
 
         if proc.returncode != 0:
-            raise CommandError(f"nmap host discovery failed with exit code {proc.returncode}")
+            if self._nmap_requires_privileges(proc):
+                self.stderr.write(
+                    self.style.WARNING(
+                        "nmap host discovery requires elevated privileges for ARP scans.",
+                    )
+                )
+                self.stdout.write(
+                    "Re-run this command with sudo for the most accurate results."
+                )
+                if not self._prompt_unprivileged_scan():
+                    raise CommandError(
+                        "Host discovery aborted. Re-run with sudo for full accuracy."
+                    )
+                fallback_args = [
+                    nmap_path,
+                    "--unprivileged",
+                    "-sn",
+                    "-n",
+                    str(network),
+                    "-oG",
+                    "-",
+                ]
+                proc = self._run_nmap(fallback_args)
+                if proc.returncode != 0:
+                    raise CommandError(
+                        f"nmap host discovery failed with exit code {proc.returncode}"
+                    )
+            else:
+                raise CommandError(
+                    f"nmap host discovery failed with exit code {proc.returncode}"
+                )
 
         hosts: list[IPv4Address] = []
         for line in proc.stdout.splitlines():
@@ -333,6 +353,32 @@ class Command(BaseCommand):
                 continue
             hosts.append(address)
         return hosts
+
+    def _run_nmap(self, args: Sequence[str]):
+        try:
+            return subprocess.run(
+                args,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError as exc:
+            raise CommandError("nmap is required to discover EVCS consoles") from exc
+        except subprocess.SubprocessError as exc:
+            raise CommandError(f"nmap host discovery failed: {exc}") from exc
+
+    def _nmap_requires_privileges(self, proc) -> bool:
+        if proc.returncode != 1:
+            return False
+        stderr = (proc.stderr or "").lower()
+        return "requires root privileges" in stderr or "requires root privs" in stderr
+
+    def _prompt_unprivileged_scan(self) -> bool:
+        prompt = (
+            "Proceed with a less accurate unprivileged scan instead? [y/N]: "
+        )
+        response = input(prompt)
+        return response.strip().lower() in {"y", "yes"}
 
     def _discover(
         self,

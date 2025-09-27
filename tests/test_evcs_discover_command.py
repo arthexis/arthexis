@@ -1,9 +1,11 @@
 import json
-from ipaddress import ip_address
+import subprocess
+from ipaddress import ip_address, ip_network
 from types import SimpleNamespace
 
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from core.models import Reference
 from ocpp.evcs_discovery import ConsoleEndpoint, build_console_url
@@ -177,3 +179,62 @@ def test_discover_deduplicates_serials(monkeypatch):
         top_ports=Command.DEFAULT_PORT,
     )
     assert result == {"SERIAL": ConsoleEndpoint(host="192.0.2.1", port=8900, secure=False)}
+
+
+class DummyCompletedProcess:
+    def __init__(self, *, returncode=0, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def test_discover_hosts_falls_back_to_unprivileged_scan(monkeypatch):
+    cmd = Command()
+    calls = []
+
+    def fake_run(args, check, capture_output, text):
+        calls.append(args)
+        if "--unprivileged" in args:
+            return DummyCompletedProcess(
+                returncode=0,
+                stdout="Host: 192.0.2.5 ()\nHost: 192.0.2.6 ()",
+            )
+        return DummyCompletedProcess(
+            returncode=1,
+            stderr="You requested a scan type which requires root privileges.",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(Command, "_prompt_unprivileged_scan", lambda self: True)
+
+    hosts = cmd._discover_hosts(
+        ip_network("192.0.2.0/29"),
+        include_self=False,
+        controller_ip=None,
+        nmap_path="nmap",
+    )
+
+    assert calls[0][:3] == ["nmap", "-sn", "-PR"]
+    assert any("--unprivileged" in arg for arg in calls[1])
+    assert hosts == [ip_address("192.0.2.5"), ip_address("192.0.2.6")]
+
+
+def test_discover_hosts_aborts_when_declined(monkeypatch):
+    cmd = Command()
+
+    def fake_run(args, check, capture_output, text):
+        return DummyCompletedProcess(
+            returncode=1,
+            stderr="You requested a scan type which requires root privileges.",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(Command, "_prompt_unprivileged_scan", lambda self: False)
+
+    with pytest.raises(CommandError):
+        cmd._discover_hosts(
+            ip_network("192.0.2.0/29"),
+            include_self=False,
+            controller_ip=None,
+            nmap_path="nmap",
+        )
