@@ -585,7 +585,18 @@ class NodeFeatureAdmin(EntityModelAdmin):
         self.message_user(
             request, f"Screenshot saved to {sample.path}", level=messages.SUCCESS
         )
-        return redirect("admin:nodes_contentsample_change", sample.pk)
+        try:
+            change_url = reverse(
+                "admin:nodes_contentsample_change", args=[sample.pk]
+            )
+        except NoReverseMatch:  # pragma: no cover - admin URL always registered
+            self.message_user(
+                request,
+                "Screenshot saved but the admin page could not be resolved.",
+                level=messages.WARNING,
+            )
+            return redirect("..")
+        return redirect(change_url)
 
     def take_snapshot(self, request):
         feature = self._ensure_feature_enabled(
@@ -608,7 +619,18 @@ class NodeFeatureAdmin(EntityModelAdmin):
         self.message_user(
             request, f"Snapshot saved to {sample.path}", level=messages.SUCCESS
         )
-        return redirect("admin:nodes_contentsample_change", sample.pk)
+        try:
+            change_url = reverse(
+                "admin:nodes_contentsample_change", args=[sample.pk]
+            )
+        except NoReverseMatch:  # pragma: no cover - admin URL always registered
+            self.message_user(
+                request,
+                "Snapshot saved but the admin page could not be resolved.",
+                level=messages.WARNING,
+            )
+            return redirect("..")
+        return redirect(change_url)
 
 
 @admin.register(ContentSample)
