@@ -944,6 +944,18 @@ class NodeAdminTests(TestCase):
         action_url = reverse("admin:core_rfid_scan")
         self.assertContains(response, f'href="{action_url}"')
 
+    def test_node_feature_list_shows_all_actions_for_rpi_camera(self):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="rpi-camera", defaults={"display": "Raspberry Pi Camera"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        response = self.client.get(reverse("admin:nodes_nodefeature_changelist"))
+        snapshot_url = reverse("admin:nodes_nodefeature_take_snapshot")
+        stream_url = reverse("admin:nodes_nodefeature_view_stream")
+        self.assertContains(response, f'href="{snapshot_url}"')
+        self.assertContains(response, f'href="{stream_url}"')
+
     def test_node_feature_list_hides_default_action_when_disabled(self):
         self._create_local_node()
         NodeFeature.objects.get_or_create(
@@ -1240,6 +1252,35 @@ class NodeAdminTests(TestCase):
         self.assertEqual(sample.method, "RPI_CAMERA")
         change_url = reverse("admin:nodes_contentsample_change", args=[sample.pk])
         self.assertEqual(response.redirect_chain[-1][0], change_url)
+
+    def test_view_stream_requires_enabled_feature(self):
+        self._create_local_node()
+        NodeFeature.objects.get_or_create(
+            slug="rpi-camera", defaults={"display": "Raspberry Pi Camera"}
+        )
+        response = self.client.get(
+            reverse("admin:nodes_nodefeature_view_stream"), follow=True
+        )
+        self.assertEqual(response.status_code, 200)
+        changelist_url = reverse("admin:nodes_nodefeature_changelist")
+        self.assertEqual(response.wsgi_request.path, changelist_url)
+        self.assertContains(
+            response, "Raspberry Pi Camera feature is not enabled on this node."
+        )
+
+    def test_view_stream_renders_when_feature_enabled(self):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="rpi-camera", defaults={"display": "Raspberry Pi Camera"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        response = self.client.get(reverse("admin:nodes_nodefeature_view_stream"))
+        self.assertEqual(response.status_code, 200)
+        response.render()
+        default_stream = getattr(settings, "RPI_CAMERA_STREAM_URL", "http://127.0.0.1:8554/")
+        self.assertEqual(response.context_data["stream_url"], default_stream)
+        self.assertContains(response, default_stream)
+        self.assertContains(response, "camera-stream__frame")
 
 
 class NetMessageAdminTests(TransactionTestCase):
@@ -2001,24 +2042,39 @@ class NodeFeatureTests(TestCase):
         feature = NodeFeature.objects.create(
             slug="rfid-scanner", display="RFID Scanner"
         )
-        action = feature.get_default_action()
-        self.assertIsNotNone(action)
+        actions = feature.get_default_actions()
+        self.assertEqual(len(actions), 1)
+        action = actions[0]
         self.assertEqual(action.label, "Scan RFIDs")
         self.assertEqual(action.url_name, "admin:core_rfid_scan")
+        self.assertEqual(feature.get_default_action(), action)
 
     def test_celery_feature_default_action(self):
         feature = NodeFeature.objects.create(
             slug="celery-queue", display="Celery Queue"
         )
-        action = feature.get_default_action()
-        self.assertIsNotNone(action)
+        actions = feature.get_default_actions()
+        self.assertEqual(len(actions), 1)
+        action = actions[0]
         self.assertEqual(action.label, "Celery Report")
         self.assertEqual(action.url_name, "admin:nodes_nodefeature_celery_report")
+        self.assertEqual(feature.get_default_action(), action)
+
+    def test_rpi_camera_feature_has_multiple_actions(self):
+        feature = NodeFeature.objects.create(
+            slug="rpi-camera", display="Raspberry Pi Camera"
+        )
+        actions = feature.get_default_actions()
+        self.assertEqual(len(actions), 2)
+        labels = {action.label for action in actions}
+        self.assertIn("Take a Snapshot", labels)
+        self.assertIn("View stream", labels)
 
     def test_default_action_missing_when_unconfigured(self):
         feature = NodeFeature.objects.create(
             slug="custom-feature", display="Custom Feature"
         )
+        self.assertEqual(feature.get_default_actions(), ())
         self.assertIsNone(feature.get_default_action())
 
     def test_lcd_screen_enabled(self):

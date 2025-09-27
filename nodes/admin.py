@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.urls import NoReverseMatch, path, reverse
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from django import forms
 from django.contrib.admin.widgets import FilteredSelectMultiple
 from core.widgets import CopyColorWidget
@@ -505,7 +505,7 @@ class NodeFeatureAdmin(EntityModelAdmin):
         "slug",
         "default_roles",
         "is_enabled_display",
-        "default_action",
+        "available_actions",
     )
     actions = ["check_features_for_eligibility", "enable_selected_features"]
     readonly_fields = ("is_enabled",)
@@ -524,18 +524,26 @@ class NodeFeatureAdmin(EntityModelAdmin):
     def is_enabled_display(self, obj):
         return obj.is_enabled
 
-    @admin.display(description="Default Action")
-    def default_action(self, obj):
+    @admin.display(description="Actions")
+    def available_actions(self, obj):
         if not obj.is_enabled:
             return "—"
-        action = obj.get_default_action()
-        if not action:
+        actions = obj.get_default_actions()
+        if not actions:
             return "—"
-        try:
-            url = reverse(action.url_name)
-        except NoReverseMatch:
-            return action.label
-        return format_html('<a href="{}">{}</a>', url, action.label)
+
+        links = []
+        for action in actions:
+            try:
+                url = reverse(action.url_name)
+            except NoReverseMatch:
+                links.append(action.label)
+            else:
+                links.append(format_html('<a href="{}">{}</a>', url, action.label))
+
+        if not links:
+            return "—"
+        return format_html_join("<br>", "{}", ((link,) for link in links))
 
     def _manual_enablement_message(self, feature, node):
         if node is None:
@@ -667,6 +675,11 @@ class NodeFeatureAdmin(EntityModelAdmin):
                 self.admin_site.admin_view(self.take_snapshot),
                 name="nodes_nodefeature_take_snapshot",
             ),
+            path(
+                "view-stream/",
+                self.admin_site.admin_view(self.view_stream),
+                name="nodes_nodefeature_view_stream",
+            ),
         ]
         return custom + urls
 
@@ -794,6 +807,25 @@ class NodeFeatureAdmin(EntityModelAdmin):
             )
             return redirect("..")
         return redirect(change_url)
+
+    def view_stream(self, request):
+        feature = self._ensure_feature_enabled(request, "rpi-camera", "View stream")
+        if not feature:
+            return redirect("..")
+
+        stream_url = getattr(
+            settings, "RPI_CAMERA_STREAM_URL", "http://127.0.0.1:8554/"
+        )
+        context = {
+            **self.admin_site.each_context(request),
+            "title": _("Raspberry Pi Camera Stream"),
+            "stream_url": stream_url,
+        }
+        return TemplateResponse(
+            request,
+            "admin/nodes/nodefeature/view_stream.html",
+            context,
+        )
 
 
 @admin.register(ContentSample)
