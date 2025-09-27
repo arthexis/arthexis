@@ -2,15 +2,24 @@ import os
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
+import tests.conftest  # noqa: F401
+
 import django
 
+django.setup = tests.conftest._original_setup
 django.setup()
 
 from asgiref.testing import ApplicationCommunicator
 from channels.testing import WebsocketCommunicator
 from channels.db import database_sync_to_async
 from asgiref.sync import async_to_sync
-from django.test import Client, TransactionTestCase, TestCase, override_settings
+from django.test import (
+    Client,
+    RequestFactory,
+    TransactionTestCase,
+    TestCase,
+    override_settings,
+)
 from unittest import skip
 from contextlib import suppress
 from types import SimpleNamespace
@@ -36,6 +45,7 @@ from .models import (
     DataTransferMessage,
 )
 from .consumers import CSMSConsumer
+from .views import dispatch_action
 from core.models import EnergyAccount, EnergyCredit, Reference, RFID, SecurityGroup
 from . import store
 from django.db.models.deletion import ProtectedError
@@ -94,6 +104,47 @@ class DummyWebSocket:
     async def send(self, message):
         self.sent.append(message)
 
+
+class DispatchActionTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def tearDown(self):  # pragma: no cover - cleanup guard
+        store.pending_calls.clear()
+        store.triggered_followups.clear()
+
+    def test_trigger_message_registers_pending_call(self):
+        charger = Charger.objects.create(charger_id="TRIGGER1")
+        dummy = DummyWebSocket()
+        key = store.set_connection("TRIGGER1", None, dummy)
+        self.addCleanup(lambda: store.connections.pop(key, None))
+        log_key = store.identity_key("TRIGGER1", None)
+        store.clear_log(log_key, log_type="charger")
+        self.addCleanup(lambda: store.clear_log(log_key, log_type="charger"))
+
+        request = self.factory.post(
+            "/chargers/TRIGGER1/action/",
+            data=json.dumps({"action": "trigger_message", "target": "BootNotification"}),
+            content_type="application/json",
+        )
+        request.user = SimpleNamespace(
+            is_authenticated=True,
+            is_superuser=True,
+            is_staff=True,
+        )
+
+        response = dispatch_action(request, "TRIGGER1")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(dummy.sent)
+        frame = json.loads(dummy.sent[-1])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "TriggerMessage")
+        message_id = frame[1]
+        self.assertIn(message_id, store.pending_calls)
+        metadata = store.pending_calls[message_id]
+        self.assertEqual(metadata.get("action"), "TriggerMessage")
+        self.assertEqual(metadata.get("trigger_target"), "BootNotification")
+        self.assertEqual(metadata.get("log_key"), log_key)
 
 class ChargerFixtureTests(TestCase):
     fixtures = [
@@ -438,6 +489,77 @@ class CSMSConsumerTests(TransactionTestCase):
             any("GetConfiguration error" in entry for entry in log_entries)
         )
         self.assertNotIn(message_id, store.pending_calls)
+
+        await communicator.disconnect()
+        store.clear_log(log_key, log_type="charger")
+        store.clear_log(pending_key, log_type="charger")
+
+    async def test_trigger_message_follow_up_logged(self):
+        store.pending_calls.clear()
+        cid = "TRIGLOG"
+        pending_key = store.pending_key(cid)
+        log_key = store.identity_key(cid, None)
+        store.clear_log(pending_key, log_type="charger")
+        store.clear_log(log_key, log_type="charger")
+
+        communicator = WebsocketCommunicator(application, f"/{cid}/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [
+                2,
+                "boot",
+                "BootNotification",
+                {"chargePointVendor": "Test", "chargePointModel": "Model"},
+            ]
+        )
+        await communicator.receive_json_from()
+
+        message_id = "trigger-result"
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "TriggerMessage",
+                "charger_id": cid,
+                "connector_id": None,
+                "log_key": log_key,
+                "trigger_target": "BootNotification",
+                "trigger_connector": None,
+            },
+        )
+
+        await communicator.send_json_to([3, message_id, {"status": "Accepted"}])
+        await asyncio.sleep(0.05)
+        self.assertNotIn(message_id, store.pending_calls)
+
+        log_entries = store.get_logs(log_key, log_type="charger")
+        self.assertTrue(
+            any(
+                "TriggerMessage BootNotification result" in entry
+                or "TriggerMessage result" in entry
+                for entry in log_entries
+            )
+        )
+
+        await communicator.send_json_to(
+            [
+                2,
+                "trigger-follow",
+                "BootNotification",
+                {"chargePointVendor": "Test", "chargePointModel": "Model"},
+            ]
+        )
+        await communicator.receive_json_from()
+        await asyncio.sleep(0.05)
+
+        log_entries = store.get_logs(log_key, log_type="charger")
+        self.assertTrue(
+            any(
+                "TriggerMessage follow-up received: BootNotification" in entry
+                for entry in log_entries
+            )
+        )
 
         await communicator.disconnect()
         store.clear_log(log_key, log_type="charger")
@@ -2610,6 +2732,70 @@ class ChargePointSimulatorTests(TransactionTestCase):
         self.assertEqual(values["ConnectorPhaseRotation"], "ABC")
         self.assertIn("unknownKey", payload)
         self.assertEqual(payload["unknownKey"], ["GhostKey"])
+
+    async def test_trigger_message_heartbeat_follow_up(self):
+        cfg = SimulatorConfig()
+        sim = ChargePointSimulator(cfg)
+        sent: list[list[object]] = []
+        recv_count = 0
+
+        async def send(msg: str):
+            sent.append(json.loads(msg))
+
+        async def recv():
+            nonlocal recv_count
+            recv_count += 1
+            return json.dumps([3, f"ack-{recv_count}", {}])
+
+        handled = await sim._handle_csms_call(
+            [
+                2,
+                "trigger-req",
+                "TriggerMessage",
+                {"requestedMessage": "Heartbeat"},
+            ],
+            send,
+            recv,
+        )
+
+        self.assertTrue(handled)
+        self.assertGreaterEqual(len(sent), 2)
+        result_frame = sent[0]
+        follow_up_frame = sent[1]
+        self.assertEqual(result_frame[0], 3)
+        self.assertEqual(result_frame[1], "trigger-req")
+        self.assertEqual(result_frame[2].get("status"), "Accepted")
+        self.assertEqual(follow_up_frame[0], 2)
+        self.assertEqual(follow_up_frame[2], "Heartbeat")
+        self.assertEqual(recv_count, 1)
+
+    async def test_trigger_message_rejected_for_invalid_connector(self):
+        cfg = SimulatorConfig(connector_id=5)
+        sim = ChargePointSimulator(cfg)
+        sent: list[list[object]] = []
+
+        async def send(msg: str):
+            sent.append(json.loads(msg))
+
+        async def recv():  # pragma: no cover - should not be called
+            raise AssertionError("recv should not be called for rejected TriggerMessage")
+
+        handled = await sim._handle_csms_call(
+            [
+                2,
+                "trigger-invalid",
+                "TriggerMessage",
+                {"requestedMessage": "StatusNotification", "connectorId": 1},
+            ],
+            send,
+            recv,
+        )
+
+        self.assertTrue(handled)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0][0], 3)
+        self.assertEqual(sent[0][1], "trigger-invalid")
+        self.assertEqual(sent[0][2].get("status"), "Rejected")
 
 
 class PurgeMeterReadingsTaskTests(TestCase):

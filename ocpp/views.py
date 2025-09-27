@@ -912,6 +912,7 @@ def charger_log_page(request, cid, connector=None):
 @api_login_required
 def dispatch_action(request, cid, connector=None):
     connector_value, _ = _normalize_connector_slug(connector)
+    log_key = store.identity_key(cid, connector_value)
     if connector_value is None:
         charger_obj = (
             Charger.objects.filter(charger_id=cid, connector_id__isnull=True)
@@ -947,15 +948,27 @@ def dispatch_action(request, cid, connector=None):
         tx_obj = store.get_transaction(cid, connector_value)
         if not tx_obj:
             return JsonResponse({"detail": "no transaction"}, status=404)
+        message_id = uuid.uuid4().hex
         msg = json.dumps(
             [
                 2,
-                str(datetime.utcnow().timestamp()),
+                message_id,
                 "RemoteStopTransaction",
                 {"transactionId": tx_obj.pk},
             ]
         )
         async_to_sync(ws.send)(msg)
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "RemoteStopTransaction",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "transaction_id": tx_obj.pk,
+                "requested_at": timezone.now(),
+            },
+        )
     elif action == "remote_start":
         id_tag = data.get("idTag")
         if not isinstance(id_tag, str) or not id_tag.strip():
@@ -974,15 +987,27 @@ def dispatch_action(request, cid, connector=None):
                 payload["connectorId"] = connector_id
         if "chargingProfile" in data and data["chargingProfile"] is not None:
             payload["chargingProfile"] = data["chargingProfile"]
+        message_id = uuid.uuid4().hex
         msg = json.dumps(
             [
                 2,
-                str(datetime.utcnow().timestamp()),
+                message_id,
                 "RemoteStartTransaction",
                 payload,
             ]
         )
         async_to_sync(ws.send)(msg)
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "RemoteStartTransaction",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "id_tag": id_tag,
+                "requested_at": timezone.now(),
+            },
+        )
     elif action == "change_availability":
         availability_type = data.get("type")
         if availability_type not in {"Operative", "Inoperative"}:
@@ -1057,13 +1082,68 @@ def dispatch_action(request, cid, connector=None):
                 "charger_id": cid,
                 "connector_id": connector_value,
                 "message_pk": record.pk,
+                "log_key": log_key,
             },
         )
     elif action == "reset":
-        msg = json.dumps(
-            [2, str(datetime.utcnow().timestamp()), "Reset", {"type": "Soft"}]
-        )
+        message_id = uuid.uuid4().hex
+        msg = json.dumps([2, message_id, "Reset", {"type": "Soft"}])
         async_to_sync(ws.send)(msg)
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "Reset",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "requested_at": timezone.now(),
+            },
+        )
+    elif action == "trigger_message":
+        trigger_target = data.get("target") or data.get("triggerTarget")
+        if not isinstance(trigger_target, str) or not trigger_target.strip():
+            return JsonResponse({"detail": "target required"}, status=400)
+        trigger_target = trigger_target.strip()
+        allowed_targets = {
+            "BootNotification",
+            "DiagnosticsStatusNotification",
+            "FirmwareStatusNotification",
+            "Heartbeat",
+            "MeterValues",
+            "StatusNotification",
+        }
+        if trigger_target not in allowed_targets:
+            return JsonResponse({"detail": "invalid target"}, status=400)
+        payload: dict[str, object] = {"requestedMessage": trigger_target}
+        trigger_connector = None
+        connector_field = data.get("connectorId")
+        if connector_field in (None, ""):
+            connector_field = data.get("connector")
+        if connector_field in (None, "") and connector_value is not None:
+            connector_field = connector_value
+        if connector_field not in (None, ""):
+            try:
+                trigger_connector = int(connector_field)
+            except (TypeError, ValueError):
+                return JsonResponse({"detail": "connectorId must be an integer"}, status=400)
+            if trigger_connector <= 0:
+                return JsonResponse({"detail": "connectorId must be positive"}, status=400)
+            payload["connectorId"] = trigger_connector
+        message_id = uuid.uuid4().hex
+        msg = json.dumps([2, message_id, "TriggerMessage", payload])
+        async_to_sync(ws.send)(msg)
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "TriggerMessage",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "trigger_target": trigger_target,
+                "trigger_connector": trigger_connector,
+                "requested_at": timezone.now(),
+            },
+        )
     else:
         return JsonResponse({"detail": "unknown action"}, status=400)
     log_key = store.identity_key(cid, connector_value)
