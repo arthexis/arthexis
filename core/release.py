@@ -344,3 +344,7 @@ def publish(
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise ReleaseError(proc.stdout + proc.stderr)
+
+    tag_name = f"v{version}"
+    _run(["git", "tag", tag_name])
+    _run(["git", "push", "origin", tag_name])

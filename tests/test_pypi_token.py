@@ -24,10 +24,13 @@ class PyPITokenTests(TestCase):
             run.return_value.stdout = ""
             run.return_value.stderr = ""
             release.publish(version="0.1.1", creds=creds)
-        cmd = run.call_args[0][0]
-        assert "__token__" in cmd
-        assert "pypi-token" in cmd
-        assert "ignored" not in cmd
+        commands = [call.args[0] for call in run.call_args_list]
+        twine_cmd = next(cmd for cmd in commands if "twine" in cmd)
+        assert "__token__" in twine_cmd
+        assert "pypi-token" in twine_cmd
+        assert "ignored" not in twine_cmd
+        assert ["git", "tag", "v0.1.1"] in commands
+        assert ["git", "push", "origin", "v0.1.1"] in commands
 
     def test_publish_prefers_profile_over_env(self):
         profile = release.Credentials(token="profile-token")
@@ -50,9 +53,12 @@ class PyPITokenTests(TestCase):
             run.return_value.stdout = ""
             run.return_value.stderr = ""
             release.publish(version="0.1.1")
-        cmd = run.call_args[0][0]
-        assert "__token__" in cmd
-        assert "profile-token" in cmd
-        assert "env-user" not in cmd
-        assert "env-pass" not in cmd
-        assert "env-token" not in cmd
+        commands = [call.args[0] for call in run.call_args_list]
+        twine_cmd = next(cmd for cmd in commands if "twine" in cmd)
+        assert "__token__" in twine_cmd
+        assert "profile-token" in twine_cmd
+        assert "env-user" not in twine_cmd
+        assert "env-pass" not in twine_cmd
+        assert "env-token" not in twine_cmd
+        assert ["git", "tag", "v0.1.1"] in commands
+        assert ["git", "push", "origin", "v0.1.1"] in commands
