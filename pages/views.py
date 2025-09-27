@@ -1051,6 +1051,7 @@ def submit_user_story(request):
         story = form.save(commit=False)
         if request.user.is_authenticated:
             story.user = request.user
+            story.owner = request.user
             if not story.name:
                 story.name = request.user.get_username()[:40]
         if not story.name:
