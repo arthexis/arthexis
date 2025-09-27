@@ -6,9 +6,11 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.forms import AuthenticationForm
 from django.core.management import call_command
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.test import RequestFactory
 
 from core import temp_passwords
 from core.backends import TempPasswordBackend
@@ -83,6 +85,29 @@ def test_temp_password_backend_authenticates_and_activates(tmp_path, monkeypatch
     assert authenticated.is_active
     files = list(tmp_path.iterdir())
     assert len(files) == 1
+
+
+def test_temp_password_form_login_reactivates_inactive_user(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "TEMP_PASSWORD_LOCK_DIR", str(tmp_path), raising=False)
+
+    User = get_user_model()
+    user = User.objects.create_user(username="frank", password="irrelevant", is_staff=True)
+    user.is_active = False
+    user.save(update_fields=["is_active"])
+
+    password = "TempPass123"
+    expires_at = timezone.now() + timedelta(minutes=10)
+    temp_passwords.store_temp_password(user.username, password, expires_at)
+
+    request = RequestFactory().post("/admin/login/")
+    form = AuthenticationForm(request=request, data={"username": user.username, "password": password})
+
+    assert form.is_valid()
+    authenticated = form.get_user()
+    assert authenticated is not None
+    assert authenticated.pk == user.pk
+    authenticated.refresh_from_db()
+    assert authenticated.is_active
 
 
 def test_temp_password_backend_rejects_expired(tmp_path, monkeypatch):
