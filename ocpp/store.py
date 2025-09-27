@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import asyncio
 from datetime import datetime
 import json
+from pathlib import Path
 import re
-import asyncio
+import threading
 
 from core.log_paths import select_log_dir
 
@@ -199,6 +200,41 @@ def pop_pending_call(message_id: str) -> dict[str, object] | None:
     """Return and remove metadata for a previously registered call."""
 
     return pending_calls.pop(message_id, None)
+
+
+def schedule_call_timeout(
+    message_id: str,
+    *,
+    timeout: float = 5.0,
+    action: str | None = None,
+    log_key: str | None = None,
+    log_type: str = "charger",
+    message: str | None = None,
+) -> None:
+    """Schedule a timeout notice if a pending call is not answered."""
+
+    def _notify() -> None:
+        metadata = pending_calls.get(message_id)
+        if not metadata:
+            return
+        if action and metadata.get("action") != action:
+            return
+        if metadata.get("timeout_notice_sent"):
+            return
+        target_log = log_key or metadata.get("log_key")
+        if not target_log:
+            metadata["timeout_notice_sent"] = True
+            return
+        label = message
+        if not label:
+            action_label = action or str(metadata.get("action") or "Call")
+            label = f"{action_label} request timed out"
+        add_log(target_log, label, log_type=log_type)
+        metadata["timeout_notice_sent"] = True
+
+    timer = threading.Timer(timeout, _notify)
+    timer.daemon = True
+    timer.start()
 
 
 def register_triggered_followup(

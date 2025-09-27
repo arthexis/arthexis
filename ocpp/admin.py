@@ -367,6 +367,16 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                     "requested_at": timezone.now(),
                 },
             )
+            store.schedule_call_timeout(
+                message_id,
+                timeout=5.0,
+                action="GetConfiguration",
+                log_key=log_key,
+                message=(
+                    "GetConfiguration timed out: charger did not respond"
+                    " (operation may not be supported)"
+                ),
+            )
             fetched += 1
         if fetched:
             self.message_user(
