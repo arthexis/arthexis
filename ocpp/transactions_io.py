@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Iterable
 
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -107,23 +108,36 @@ def import_transactions(data: dict) -> int:
     """
     charger_map: dict[str, Charger] = {}
     for item in data.get("chargers", []):
+        try:
+            serial = Charger.validate_serial(item.get("charger_id"))
+        except ValidationError:
+            continue
         connector_value = item.get("connector_id", None)
         if connector_value in ("", None):
             connector_value = None
         elif isinstance(connector_value, str):
             connector_value = int(connector_value)
         charger, _ = Charger.objects.get_or_create(
-            charger_id=item["charger_id"],
+            charger_id=serial,
             defaults={
                 "connector_id": connector_value,
                 "require_rfid": item.get("require_rfid", False),
             },
         )
-        charger_map[item["charger_id"]] = charger
+        charger_map[serial] = charger
 
     imported = 0
     for tx in data.get("transactions", []):
-        charger = charger_map.get(tx.get("charger"))
+        serial = Charger.normalize_serial(tx.get("charger"))
+        if not serial or Charger.is_placeholder_serial(serial):
+            continue
+        charger = charger_map.get(serial)
+        if charger is None:
+            try:
+                charger, _ = Charger.objects.get_or_create(charger_id=serial)
+            except ValidationError:
+                continue
+            charger_map[serial] = charger
         transaction = Transaction.objects.create(
             charger=charger,
             account_id=tx.get("account"),
