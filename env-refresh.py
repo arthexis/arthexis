@@ -294,16 +294,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                 for priority in sorted(patched):
                     for fixture in patched[priority]:
                         try:
-                            try:
-                                call_command(
-                                    "loaddata",
-                                    fixture,
-                                    natural_foreign=True,
-                                    natural_primary=True,
-                                    verbosity=0,
-                                )
-                            except TypeError:
-                                call_command("loaddata", fixture, verbosity=0)
+                            call_command("loaddata", fixture, verbosity=0)
                         except DeserializationError as exc:
                             print(f"Skipping fixture {fixture} due to: {exc}")
                         else:
