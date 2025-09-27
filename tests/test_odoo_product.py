@@ -58,6 +58,16 @@ class ProductAdminFetchWizardTests(TestCase):
         request._messages = FallbackStorage(request)
         return request
 
+    def test_register_action_redirects(self):
+        request = self._prepare_request(
+            {"action": "register_from_odoo", "_selected_action": []}
+        )
+        response = self.admin.register_from_odoo(request, Product.objects.none())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url, reverse("admin:core_product_register_from_odoo")
+        )
+
     def test_wizard_requires_credentials(self):
         request = self._prepare_request(
             {"action": "fetch_odoo_product", "_selected_action": []}
@@ -170,4 +180,84 @@ class ProductAdminFetchWizardTests(TestCase):
         self.assertEqual(product.odoo_product, {"id": 11, "name": "Imported"})
         self.assertEqual(
             response.url, reverse("admin:core_product_change", args=[product.pk])
+        )
+
+
+class ProductAdminRegisterFromOdooTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            username="register-admin", email="reg@example.com", password="pwd"
+        )
+        self.client.force_login(self.user)
+
+    def _create_profile(self):
+        return OdooProfile.objects.create(
+            user=self.user,
+            host="http://odoo",
+            database="db",
+            username="api",
+            password="secret",
+            verified_on=timezone.now(),
+            odoo_uid=5,
+        )
+
+    def test_view_requires_credentials(self):
+        url = reverse("admin:core_product_register_from_odoo")
+        response = self.client.get(url)
+        self.assertContains(response, "Configure your Odoo employee credentials")
+
+    @patch.object(OdooProfile, "execute")
+    def test_view_lists_products(self, mock_execute):
+        self._create_profile()
+        mock_execute.return_value = [
+            {
+                "id": 17,
+                "name": "Service",
+                "description_sale": "Annual service",
+                "list_price": 199.0,
+                "standard_price": 120.0,
+            }
+        ]
+        url = reverse("admin:core_product_register_from_odoo")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Service")
+        self.assertContains(response, "Annual service")
+        self.assertContains(response, "199.0")
+        mock_execute.assert_called_once_with(
+            "product.product",
+            "search_read",
+            [],
+            {
+                "fields": [
+                    "name",
+                    "description_sale",
+                    "list_price",
+                    "standard_price",
+                ],
+                "limit": 0,
+            },
+        )
+
+    @patch.object(OdooProfile, "execute")
+    def test_view_creates_product(self, mock_execute):
+        self._create_profile()
+        mock_execute.return_value = [
+            {
+                "id": 21,
+                "name": "Managed Service",
+                "description_sale": "Managed offering",
+                "list_price": 99.0,
+                "standard_price": 55.0,
+            }
+        ]
+        url = reverse("admin:core_product_register_from_odoo")
+        response = self.client.post(url, {"product_id": "21"})
+        product = Product.objects.get()
+        self.assertEqual(product.name, "Managed Service")
+        self.assertEqual(product.description, "Managed offering")
+        self.assertEqual(product.renewal_period, 30)
+        self.assertEqual(product.odoo_product, {"id": 21, "name": "Managed Service"})
+        self.assertRedirects(
+            response, reverse("admin:core_product_change", args=[product.pk])
         )
