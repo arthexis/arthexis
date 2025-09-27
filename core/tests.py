@@ -1369,6 +1369,13 @@ class TodoFocusViewTests(TestCase):
         change_url = reverse("admin:core_todo_change", args=[todo.pk])
         self.assertContains(resp, f'src="{change_url}"')
 
+    def test_focus_view_includes_open_target_button(self):
+        todo = Todo.objects.create(request="Task", url="/docs/")
+        resp = self.client.get(reverse("todo-focus", args=[todo.pk]))
+        self.assertContains(resp, 'class="todo-button todo-button-open"')
+        self.assertContains(resp, 'target="_blank"')
+        self.assertContains(resp, 'href="/docs/"')
+
     def test_focus_view_sanitizes_loopback_absolute_url(self):
         todo = Todo.objects.create(
             request="Task",
@@ -1401,6 +1408,19 @@ class TodoFocusViewTests(TestCase):
         resp = self.client.get(reverse("todo-focus", args=[todo.pk]))
         change_url = reverse("admin:core_todo_change", args=[todo.pk])
         self.assertContains(resp, f'src="{change_url}"')
+
+    def test_focus_view_parses_auth_directives(self):
+        todo = Todo.objects.create(
+            request="Task",
+            url="/docs/?section=chart&_todo_auth=logout&_todo_auth=user:demo&_todo_auth=perm:core.view_user&_todo_auth=extra",
+        )
+        resp = self.client.get(reverse("todo-focus", args=[todo.pk]))
+        self.assertContains(resp, 'src="/docs/?section=chart"')
+        self.assertContains(resp, 'href="/docs/?section=chart"')
+        self.assertContains(resp, "logged out")
+        self.assertContains(resp, "Sign in using: demo")
+        self.assertContains(resp, "Required permissions: core.view_user")
+        self.assertContains(resp, "Additional authentication notes: extra")
 
     def test_focus_view_redirects_if_todo_completed(self):
         todo = Todo.objects.create(request="Task")

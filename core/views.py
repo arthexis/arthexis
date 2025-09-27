@@ -18,7 +18,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.utils.http import url_has_allowed_host_and_scheme
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import errno
 import subprocess
 
@@ -1164,13 +1164,81 @@ def release_progress(request, pk: int, action: str):
     return render(request, "core/release_progress.html", context)
 
 
-def _todo_iframe_url(request, todo: Todo) -> str:
-    """Return a safe iframe URL for ``todo`` scoped to the current host."""
+def _dedupe_preserve_order(values):
+    seen = set()
+    result = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+def _parse_todo_auth_directives(query: str):
+    directives = {
+        "require_logout": False,
+        "users": [],
+        "permissions": [],
+        "notes": [],
+    }
+    if not query:
+        return "", directives
+
+    remaining = []
+    for key, value in parse_qsl(query, keep_blank_values=True):
+        if key != "_todo_auth":
+            remaining.append((key, value))
+            continue
+        token = (value or "").strip()
+        if not token:
+            continue
+        kind, _, payload = token.partition(":")
+        kind = kind.strip().lower()
+        payload = payload.strip()
+        if kind in {"logout", "anonymous", "anon"}:
+            directives["require_logout"] = True
+        elif kind in {"user", "username"} and payload:
+            directives["users"].append(payload)
+        elif kind in {"perm", "permission"} and payload:
+            directives["permissions"].append(payload)
+        else:
+            directives["notes"].append(token)
+
+    sanitized_query = urlencode(remaining, doseq=True)
+    return sanitized_query, directives
+
+
+def _todo_iframe_url(request, todo: Todo):
+    """Return a safe iframe URL and auth context for ``todo``."""
 
     fallback = reverse("admin:core_todo_change", args=[todo.pk])
     raw_url = (todo.url or "").strip()
+
+    auth_context = {
+        "require_logout": False,
+        "users": [],
+        "permissions": [],
+        "notes": [],
+    }
+
+    def _final_context(target_url: str):
+        return {
+            "target_url": target_url or fallback,
+            "require_logout": auth_context["require_logout"],
+            "users": _dedupe_preserve_order(auth_context["users"]),
+            "permissions": _dedupe_preserve_order(auth_context["permissions"]),
+            "notes": _dedupe_preserve_order(auth_context["notes"]),
+            "has_requirements": bool(
+                auth_context["require_logout"]
+                or auth_context["users"]
+                or auth_context["permissions"]
+                or auth_context["notes"]
+            ),
+        }
+
     if not raw_url:
-        return fallback
+        return fallback, _final_context(fallback)
 
     focus_path = reverse("todo-focus", args=[todo.pk])
     focus_norm = focus_path.strip("/").lower()
@@ -1186,14 +1254,31 @@ def _todo_iframe_url(request, todo: Todo) -> str:
         return normalized == focus_norm if normalized else False
 
     if _is_focus_target(raw_url):
-        return fallback
+        return fallback, _final_context(fallback)
 
     parsed = urlsplit(raw_url)
+
+    def _merge_directives(parsed_result):
+        sanitized_query, directives = _parse_todo_auth_directives(parsed_result.query)
+        if directives["require_logout"]:
+            auth_context["require_logout"] = True
+        auth_context["users"].extend(directives["users"])
+        auth_context["permissions"].extend(directives["permissions"])
+        auth_context["notes"].extend(directives["notes"])
+        return parsed_result._replace(query=sanitized_query)
+
     if not parsed.scheme and not parsed.netloc:
-        return fallback if _is_focus_target(parsed.path) else raw_url
+        sanitized = _merge_directives(parsed)
+        path = sanitized.path or "/"
+        if not path.startswith("/"):
+            path = f"/{path}"
+        relative_url = urlunsplit(("", "", path, sanitized.query, sanitized.fragment))
+        if _is_focus_target(relative_url):
+            return fallback, _final_context(fallback)
+        return relative_url or fallback, _final_context(relative_url)
 
     if parsed.scheme and parsed.scheme.lower() not in {"http", "https"}:
-        return fallback
+        return fallback, _final_context(fallback)
 
     request_host = request.get_host().strip().lower()
     host_without_port = request_host.split(":", 1)[0]
@@ -1227,15 +1312,16 @@ def _todo_iframe_url(request, todo: Todo) -> str:
     hostname = (parsed.hostname or "").strip().lower()
     netloc = parsed.netloc.strip().lower()
     if hostname in allowed_hosts or netloc in allowed_hosts:
-        path = parsed.path or "/"
+        sanitized = _merge_directives(parsed)
+        path = sanitized.path or "/"
         if not path.startswith("/"):
             path = f"/{path}"
-        relative_url = urlunsplit(("", "", path, parsed.query, parsed.fragment))
+        relative_url = urlunsplit(("", "", path, sanitized.query, sanitized.fragment))
         if _is_focus_target(relative_url):
-            return fallback
-        return relative_url or fallback
+            return fallback, _final_context(fallback)
+        return relative_url or fallback, _final_context(relative_url)
 
-    return fallback
+    return fallback, _final_context(fallback)
 
 
 @staff_member_required
@@ -1244,10 +1330,13 @@ def todo_focus(request, pk: int):
     if todo.done_on:
         return redirect(_get_return_url(request))
 
-    iframe_url = _todo_iframe_url(request, todo)
+    iframe_url, focus_auth = _todo_iframe_url(request, todo)
+    focus_target_url = focus_auth.get("target_url", iframe_url) if focus_auth else iframe_url
     context = {
         "todo": todo,
         "iframe_url": iframe_url,
+        "focus_target_url": focus_target_url,
+        "focus_auth": focus_auth,
         "next_url": _get_return_url(request),
         "done_url": reverse("todo-done", args=[todo.pk]),
     }
