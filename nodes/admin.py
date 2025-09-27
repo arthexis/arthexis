@@ -1,5 +1,5 @@
 from django.contrib import admin, messages
-from django.urls import path, reverse
+from django.urls import NoReverseMatch, path, reverse
 from django.shortcuts import redirect, render
 from django.utils.html import format_html
 from django import forms
@@ -15,7 +15,7 @@ import pyperclip
 from pyperclip import PyperclipException
 import uuid
 import subprocess
-from .utils import capture_screenshot, save_screenshot
+from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
 from .actions import NodeAction
 
 from core.admin import EmailOutboxAdminForm
@@ -492,7 +492,13 @@ class NodeRoleAdmin(EntityModelAdmin):
 @admin.register(NodeFeature)
 class NodeFeatureAdmin(EntityModelAdmin):
     filter_horizontal = ("roles",)
-    list_display = ("display", "slug", "default_roles", "is_enabled_display")
+    list_display = (
+        "display",
+        "slug",
+        "default_roles",
+        "is_enabled_display",
+        "default_action",
+    )
     readonly_fields = ("is_enabled",)
     search_fields = ("display", "slug")
 
@@ -508,6 +514,101 @@ class NodeFeatureAdmin(EntityModelAdmin):
     @admin.display(description="Is Enabled", boolean=True, ordering="is_enabled")
     def is_enabled_display(self, obj):
         return obj.is_enabled
+
+    @admin.display(description="Default Action")
+    def default_action(self, obj):
+        if not obj.is_enabled:
+            return "—"
+        action = obj.get_default_action()
+        if not action:
+            return "—"
+        try:
+            url = reverse(action.url_name)
+        except NoReverseMatch:
+            return action.label
+        return format_html('<a href="{}">{}</a>', url, action.label)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "take-screenshot/",
+                self.admin_site.admin_view(self.take_screenshot),
+                name="nodes_nodefeature_take_screenshot",
+            ),
+            path(
+                "take-snapshot/",
+                self.admin_site.admin_view(self.take_snapshot),
+                name="nodes_nodefeature_take_snapshot",
+            ),
+        ]
+        return custom + urls
+
+    def _ensure_feature_enabled(self, request, slug: str, action_label: str):
+        try:
+            feature = NodeFeature.objects.get(slug=slug)
+        except NodeFeature.DoesNotExist:
+            self.message_user(
+                request,
+                f"{action_label} is unavailable because the feature is not configured.",
+                level=messages.ERROR,
+            )
+            return None
+        if not feature.is_enabled:
+            self.message_user(
+                request,
+                f"{feature.display} feature is not enabled on this node.",
+                level=messages.WARNING,
+            )
+            return None
+        return feature
+
+    def take_screenshot(self, request):
+        feature = self._ensure_feature_enabled(
+            request, "screenshot-poll", "Take Screenshot"
+        )
+        if not feature:
+            return redirect("..")
+        url = request.build_absolute_uri("/")
+        try:
+            path = capture_screenshot(url)
+        except Exception as exc:  # pragma: no cover - depends on selenium setup
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return redirect("..")
+        node = Node.get_local()
+        sample = save_screenshot(path, node=node, method="DEFAULT_ACTION")
+        if not sample:
+            self.message_user(
+                request, "Duplicate screenshot; not saved", level=messages.INFO
+            )
+            return redirect("..")
+        self.message_user(
+            request, f"Screenshot saved to {sample.path}", level=messages.SUCCESS
+        )
+        return redirect("admin:nodes_contentsample_change", sample.pk)
+
+    def take_snapshot(self, request):
+        feature = self._ensure_feature_enabled(
+            request, "rpi-camera", "Take a Snapshot"
+        )
+        if not feature:
+            return redirect("..")
+        try:
+            path = capture_rpi_snapshot()
+        except Exception as exc:  # pragma: no cover - depends on camera stack
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return redirect("..")
+        node = Node.get_local()
+        sample = save_screenshot(path, node=node, method="RPI_CAMERA")
+        if not sample:
+            self.message_user(
+                request, "Duplicate snapshot; not saved", level=messages.INFO
+            )
+            return redirect("..")
+        self.message_user(
+            request, f"Snapshot saved to {sample.path}", level=messages.SUCCESS
+        )
+        return redirect("admin:nodes_contentsample_change", sample.pk)
 
 
 @admin.register(ContentSample)
