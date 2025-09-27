@@ -255,6 +255,8 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "change_availability_inoperative",
         "set_availability_state_operative",
         "set_availability_state_inoperative",
+        "remote_stop_transaction",
+        "reset_chargers",
         "delete_selected",
     ]
 
@@ -474,6 +476,112 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     @admin.action(description="Mark availability as Inoperative")
     def set_availability_state_inoperative(self, request, queryset):
         self._set_availability_state(request, queryset, "Inoperative")
+
+    @admin.action(description="Remote stop active transaction")
+    def remote_stop_transaction(self, request, queryset):
+        stopped = 0
+        for charger in queryset:
+            connector_value = charger.connector_id
+            ws = store.get_connection(charger.charger_id, connector_value)
+            if ws is None:
+                self.message_user(
+                    request,
+                    f"{charger}: no active connection",
+                    level=messages.ERROR,
+                )
+                continue
+            tx_obj = store.get_transaction(charger.charger_id, connector_value)
+            if tx_obj is None:
+                self.message_user(
+                    request,
+                    f"{charger}: no active transaction",
+                    level=messages.ERROR,
+                )
+                continue
+            message_id = uuid.uuid4().hex
+            payload = {"transactionId": tx_obj.pk}
+            msg = json.dumps([
+                2,
+                message_id,
+                "RemoteStopTransaction",
+                payload,
+            ])
+            try:
+                async_to_sync(ws.send)(msg)
+            except Exception as exc:  # pragma: no cover - network error
+                self.message_user(
+                    request,
+                    f"{charger}: failed to send RemoteStopTransaction ({exc})",
+                    level=messages.ERROR,
+                )
+                continue
+            log_key = store.identity_key(charger.charger_id, connector_value)
+            store.add_log(log_key, f"< {msg}", log_type="charger")
+            store.register_pending_call(
+                message_id,
+                {
+                    "action": "RemoteStopTransaction",
+                    "charger_id": charger.charger_id,
+                    "connector_id": connector_value,
+                    "transaction_id": tx_obj.pk,
+                    "log_key": log_key,
+                    "requested_at": timezone.now(),
+                },
+            )
+            stopped += 1
+        if stopped:
+            self.message_user(
+                request,
+                f"Sent RemoteStopTransaction to {stopped} charger(s)",
+            )
+
+    @admin.action(description="Reset charger (soft)")
+    def reset_chargers(self, request, queryset):
+        reset = 0
+        for charger in queryset:
+            connector_value = charger.connector_id
+            ws = store.get_connection(charger.charger_id, connector_value)
+            if ws is None:
+                self.message_user(
+                    request,
+                    f"{charger}: no active connection",
+                    level=messages.ERROR,
+                )
+                continue
+            message_id = uuid.uuid4().hex
+            msg = json.dumps([
+                2,
+                message_id,
+                "Reset",
+                {"type": "Soft"},
+            ])
+            try:
+                async_to_sync(ws.send)(msg)
+            except Exception as exc:  # pragma: no cover - network error
+                self.message_user(
+                    request,
+                    f"{charger}: failed to send Reset ({exc})",
+                    level=messages.ERROR,
+                )
+                continue
+            log_key = store.identity_key(charger.charger_id, connector_value)
+            store.add_log(log_key, f"< {msg}", log_type="charger")
+            store.register_pending_call(
+                message_id,
+                {
+                    "action": "Reset",
+                    "charger_id": charger.charger_id,
+                    "connector_id": connector_value,
+                    "log_key": log_key,
+                    "requested_at": timezone.now(),
+                },
+            )
+            reset += 1
+        if reset:
+            self.message_user(
+                request,
+                f"Sent Reset to {reset} charger(s)",
+            )
 
     def delete_queryset(self, request, queryset):
         for obj in queryset:
