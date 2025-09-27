@@ -1,0 +1,83 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block breadcrumbs %}
+{% if has_permission %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name|capfirst }}</a>
+  &rsaquo; <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; {% trans 'Configuration' %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{{ title }}</h1>
+  {% if results %}
+    {% for item in results %}
+      <div class="module">
+        <h2>{{ item.charger }}</h2>
+        {% if item.requested_at %}
+          <p class="help">{% trans 'Requested' %}: {{ item.requested_at }}{% if item.responded_at %} &middot; {% trans 'Responded' %}: {{ item.responded_at }}{% endif %}</p>
+        {% endif %}
+        {% if item.error %}
+          <p class="errornote">{{ item.error }}</p>
+        {% else %}
+          {% if item.configuration %}
+            <table class="config-table">
+              <thead>
+                <tr>
+                  <th scope="col">{% trans 'Key' %}</th>
+                  <th scope="col">{% trans 'Value' %}</th>
+                  <th scope="col">{% trans 'Readonly' %}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in item.configuration %}
+                  <tr>
+                    <th scope="row"><code>{{ row.key }}</code></th>
+                    <td>{% if row.value is not None %}<code>{{ row.value }}</code>{% else %}<em>{% trans 'Not provided' %}</em>{% endif %}</td>
+                    <td>{% if row.readonly %}{% trans 'Yes' %}{% else %}{% trans 'No' %}{% endif %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <p>{% trans 'No configuration entries were returned.' %}</p>
+          {% endif %}
+          {% if item.unknown_keys %}
+            <p class="help">{% blocktrans with keys=item.unknown_keys|join:', ' %}Unknown keys: {{ keys }}{% endblocktrans %}</p>
+          {% endif %}
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% else %}
+    <p>{% trans 'No results to display.' %}</p>
+  {% endif %}
+  <p><a href="{% url opts|admin_urlname:'changelist' %}" class="button">{% trans 'Back to charge points' %}</a></p>
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .config-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5em;
+  }
+  .config-table th,
+  .config-table td {
+    border: 1px solid #ccc;
+    padding: 0.5em;
+    vertical-align: top;
+  }
+  .config-table th {
+    background-color: #f8f8f8;
+  }
+</style>
+{% endblock %}

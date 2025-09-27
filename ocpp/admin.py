@@ -2,6 +2,7 @@ from django.contrib import admin, messages
 from django import forms
 
 import asyncio
+from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from datetime import timedelta
 import json
 
@@ -200,12 +201,14 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     search_fields = ("charger_id", "connector_id", "location__name")
     actions = [
         "purge_data",
+        "fetch_cp_configuration",
         "change_availability_operative",
         "change_availability_inoperative",
         "set_availability_state_operative",
         "set_availability_state_inoperative",
         "delete_selected",
     ]
+    configuration_timeout_seconds = 5
 
     def get_view_on_site_url(self, obj=None):
         return obj.get_absolute_url() if obj else None
@@ -271,6 +274,101 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         self.message_user(request, "Data purged for selected chargers")
 
     purge_data.short_description = "Purge data"
+
+    @admin.action(description="Fetch selected CP configuration")
+    def fetch_cp_configuration(self, request, queryset):
+        results = []
+        for charger in queryset:
+            connector_value = charger.connector_id
+            connection = store.get_connection(charger.charger_id, connector_value)
+            entry = {
+                "charger": charger,
+                "requested_at": None,
+                "responded_at": None,
+                "configuration": [],
+                "unknown_keys": [],
+                "error": None,
+            }
+            if connection is None:
+                entry["error"] = "No active connection"
+                results.append(entry)
+                continue
+
+            message_id = uuid.uuid4().hex
+            payload: dict[str, object] = {}
+            future: Future = Future()
+            requested_at = timezone.now()
+            store.register_pending_call(
+                message_id,
+                {
+                    "action": "GetConfiguration",
+                    "charger_id": charger.charger_id,
+                    "connector_id": connector_value,
+                    "future": future,
+                    "requested_at": requested_at,
+                },
+            )
+            msg = json.dumps([2, message_id, "GetConfiguration", payload])
+            log_key = store.identity_key(charger.charger_id, connector_value)
+            try:
+                async_to_sync(connection.send)(msg)
+            except Exception as exc:  # pragma: no cover - network error
+                store.pop_pending_call(message_id)
+                entry["error"] = f"Failed to send request: {exc}"
+                results.append(entry)
+                continue
+
+            store.add_log(log_key, f"< {msg}", log_type="charger")
+
+            try:
+                result = future.result(timeout=self.configuration_timeout_seconds)
+            except FutureTimeoutError:
+                store.pop_pending_call(message_id)
+                entry["error"] = "Timed out waiting for configuration response"
+                results.append(entry)
+                continue
+
+            entry["requested_at"] = requested_at
+            entry["responded_at"] = result.get("received_at")
+
+            if result.get("status") != "result":
+                description = result.get("description") or "Unknown error"
+                entry["error"] = description
+                results.append(entry)
+                continue
+
+            payload_data = result.get("payload") or {}
+            configuration = payload_data.get("configurationKey") or []
+            normalized = []
+            for item in configuration:
+                key = (item or {}).get("key")
+                if key is None:
+                    continue
+                normalized.append(
+                    {
+                        "key": str(key),
+                        "value": (item or {}).get("value"),
+                        "readonly": bool((item or {}).get("readonly")),
+                    }
+                )
+            entry["configuration"] = sorted(
+                normalized, key=lambda item: item["key"].lower()
+            )
+            unknown_keys = payload_data.get("unknownKey") or []
+            entry["unknown_keys"] = [str(key) for key in unknown_keys if key is not None]
+            results.append(entry)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": "Charge Point configuration",
+            "results": results,
+        }
+        return TemplateResponse(
+            request,
+            "admin/ocpp/charger/configuration_results.html",
+            context,
+        )
 
     def _dispatch_change_availability(self, request, queryset, availability_type: str):
         sent = 0
@@ -663,3 +761,5 @@ class MeterValueAdmin(EntityModelAdmin):
     )
     date_hierarchy = "timestamp"
     list_filter = ("charger", MeterValueDateFilter)
+    configuration_timeout_seconds = 5
+

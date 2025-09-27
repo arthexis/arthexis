@@ -1407,6 +1407,8 @@ class ChargerAdminTests(TestCase):
             username="ocpp-admin", password="secret", email="admin@example.com"
         )
         self.client.force_login(self.admin)
+        store.connections.clear()
+        store.pending_calls.clear()
 
     def test_admin_lists_landing_link(self):
         charger = Charger.objects.create(charger_id="ADMIN1")
@@ -1494,6 +1496,69 @@ class ChargerAdminTests(TestCase):
         charger.refresh_from_db()
         self.assertEqual(charger.availability_state, "Operative")
         self.assertIsNotNone(charger.availability_state_updated_at)
+
+    def test_fetch_configuration_action_returns_results(self):
+        charger = Charger.objects.create(charger_id="CFG1")
+
+        class DummyConnection:
+            def __init__(self):
+                self.sent = []
+
+            async def send(self, message):  # pragma: no cover - exercised via admin
+                self.sent.append(message)
+                data = json.loads(message)
+                message_id = data[1]
+                metadata = store.pending_calls.get(message_id)
+                if not metadata:
+                    return
+                future = metadata.get("future")
+                if future and not future.done():
+                    future.set_result(
+                        {
+                            "status": "result",
+                            "payload": {
+                                "configurationKey": [
+                                    {
+                                        "key": "AllowOfflineTxForUnknownId",
+                                        "value": "false",
+                                        "readonly": True,
+                                    },
+                                    {
+                                        "key": "HeartbeatInterval",
+                                        "value": "30",
+                                        "readonly": False,
+                                    },
+                                ],
+                                "unknownKey": ["CustomKey"],
+                            },
+                            "received_at": timezone.now(),
+                        }
+                    )
+                store.pending_calls.pop(message_id, None)
+
+        connection = DummyConnection()
+        store.set_connection(charger.charger_id, charger.connector_id, connection)
+
+        url = reverse("admin:ocpp_charger_changelist")
+        response = self.client.post(
+            url,
+            {"action": "fetch_cp_configuration", "_selected_action": [charger.pk]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "AllowOfflineTxForUnknownId")
+        self.assertContains(response, "HeartbeatInterval")
+        self.assertContains(response, "CustomKey")
+
+    def test_fetch_configuration_action_handles_missing_connection(self):
+        charger = Charger.objects.create(charger_id="CFG2")
+        url = reverse("admin:ocpp_charger_changelist")
+        response = self.client.post(
+            url,
+            {"action": "fetch_cp_configuration", "_selected_action": [charger.pk]},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No active connection")
 
     def test_purge_action_removes_data(self):
         charger = Charger.objects.create(charger_id="PURGE1")

@@ -559,19 +559,31 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return
         if metadata.get("charger_id") and metadata.get("charger_id") != self.charger_id:
             return
-        if metadata.get("action") != "ChangeAvailability":
+        action = metadata.get("action")
+        if action == "ChangeAvailability":
+            status = str((payload or {}).get("status") or "").strip()
+            requested_type = metadata.get("availability_type")
+            connector_value = metadata.get("connector_id")
+            requested_at = metadata.get("requested_at")
+            await self._update_change_availability_state(
+                connector_value,
+                requested_type,
+                status,
+                requested_at,
+                details="",
+            )
             return
-        status = str((payload or {}).get("status") or "").strip()
-        requested_type = metadata.get("availability_type")
-        connector_value = metadata.get("connector_id")
-        requested_at = metadata.get("requested_at")
-        await self._update_change_availability_state(
-            connector_value,
-            requested_type,
-            status,
-            requested_at,
-            details="",
-        )
+        if action == "GetConfiguration":
+            future = metadata.get("future")
+            if future and not future.done():
+                future.set_result(
+                    {
+                        "status": "result",
+                        "payload": payload or {},
+                        "received_at": timezone.now(),
+                    }
+                )
+            return
 
     async def _handle_call_error(
         self,
@@ -585,26 +597,48 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return
         if metadata.get("charger_id") and metadata.get("charger_id") != self.charger_id:
             return
-        if metadata.get("action") != "ChangeAvailability":
+        action = metadata.get("action")
+        if action == "ChangeAvailability":
+            detail_text = (description or "").strip()
+            if not detail_text and details:
+                try:
+                    detail_text = json.dumps(details, sort_keys=True)
+                except Exception:
+                    detail_text = str(details)
+            if not detail_text:
+                detail_text = (error_code or "").strip() or "Error"
+            requested_type = metadata.get("availability_type")
+            connector_value = metadata.get("connector_id")
+            requested_at = metadata.get("requested_at")
+            await self._update_change_availability_state(
+                connector_value,
+                requested_type,
+                "Rejected",
+                requested_at,
+                details=detail_text,
+            )
             return
-        detail_text = (description or "").strip()
-        if not detail_text and details:
-            try:
-                detail_text = json.dumps(details, sort_keys=True)
-            except Exception:
-                detail_text = str(details)
-        if not detail_text:
-            detail_text = (error_code or "").strip() or "Error"
-        requested_type = metadata.get("availability_type")
-        connector_value = metadata.get("connector_id")
-        requested_at = metadata.get("requested_at")
-        await self._update_change_availability_state(
-            connector_value,
-            requested_type,
-            "Rejected",
-            requested_at,
-            details=detail_text,
-        )
+        if action == "GetConfiguration":
+            future = metadata.get("future")
+            if future and not future.done():
+                detail_text = (description or "").strip()
+                if not detail_text and details:
+                    try:
+                        detail_text = json.dumps(details, sort_keys=True)
+                    except Exception:  # pragma: no cover - unexpected serialization
+                        detail_text = str(details)
+                if not detail_text:
+                    detail_text = (error_code or "").strip() or "Error"
+                future.set_result(
+                    {
+                        "status": "error",
+                        "description": detail_text,
+                        "payload": details or {},
+                        "error_code": error_code or "",
+                        "received_at": timezone.now(),
+                    }
+                )
+            return
 
     async def _update_change_availability_state(
         self,
