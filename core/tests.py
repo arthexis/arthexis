@@ -1046,7 +1046,9 @@ class ReleaseProgressFixtureVisibilityTests(TestCase):
                 package=package, version=current_version
             )
         self.session_key = f"release_publish_{self.release.pk}"
-        self.log_name = f"{self.release.package.name}-{self.release.version}.log"
+        self.log_name = core_views._release_log_name(
+            self.release.package.name, self.release.version
+        )
         self.lock_path = Path("locks") / f"{self.session_key}.json"
         self.restart_path = Path("locks") / f"{self.session_key}.restarts"
         self.log_path = Path("logs") / self.log_name

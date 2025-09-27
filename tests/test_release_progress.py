@@ -17,6 +17,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from core.models import Package, PackageRelease, Todo, ReleaseManager
+from core import views as core_views
 
 
 class ReleaseProgressViewTests(TestCase):
@@ -33,6 +34,9 @@ class ReleaseProgressViewTests(TestCase):
             package=self.package,
             version="1.0",
             revision="",
+        )
+        self.log_name = core_views._release_log_name(
+            self.package.name, self.release.version
         )
         self.version_path = Path("VERSION")
         self.original_version = self.version_path.read_text(encoding="utf-8")
@@ -63,7 +67,7 @@ class ReleaseProgressViewTests(TestCase):
 
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     def test_stale_log_removed_on_start(self, git_clean):
-        log_path = self.log_dir / (f"{self.package.name}-{self.release.version}.log")
+        log_path = self.log_dir / self.log_name
         log_path.write_text("old data")
 
         url = reverse("release-progress", args=[self.release.pk, "publish"])
@@ -77,7 +81,7 @@ class ReleaseProgressViewTests(TestCase):
         self.assertNotIn("old data", response.context["log_content"])
 
     def test_log_hidden_before_start(self):
-        log_path = self.log_dir / (f"{self.package.name}-{self.release.version}.log")
+        log_path = self.log_dir / self.log_name
         log_path.write_text("old data")
 
         url = reverse("release-progress", args=[self.release.pk, "publish"])
@@ -151,7 +155,7 @@ class ReleaseProgressViewTests(TestCase):
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
             "step": 1,
-            "log": f"{self.package.name}-{self.release.version}.log",
+            "log": self.log_name,
             "started": True,
         }
         session.save()
@@ -194,7 +198,7 @@ class ReleaseProgressViewTests(TestCase):
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
             "step": 1,
-            "log": f"{self.package.name}-{self.release.version}.log",
+            "log": self.log_name,
             "started": True,
         }
         session.save()
@@ -224,7 +228,7 @@ class ReleaseProgressViewTests(TestCase):
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
             "step": 7,
-            "log": f"{self.package.name}-{self.release.version}.log",
+            "log": self.log_name,
             "started": True,
         }
         session.save()
@@ -249,7 +253,7 @@ class ReleaseProgressViewTests(TestCase):
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
             "step": 7,
-            "log": f"{self.package.name}-{self.release.version}.log",
+            "log": self.log_name,
             "started": True,
         }
         session.save()
@@ -272,7 +276,7 @@ class ReleaseProgressViewTests(TestCase):
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
             "step": 7,
-            "log": f"{self.package.name}-{self.release.version}.log",
+            "log": self.log_name,
             "started": True,
         }
         session.save()
@@ -332,7 +336,7 @@ class ReleaseProgressViewTests(TestCase):
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
             "step": 4,
-            "log": f"{self.package.name}-{self.release.version}.log",
+            "log": self.log_name,
             "started": True,
         }
         session.save()
@@ -357,7 +361,7 @@ class ReleaseProgressViewTests(TestCase):
             data[0]["fields"]["url"], reverse("admin:core_packagerelease_changelist")
         )
 
-        log_path = Path("logs") / f"{self.package.name}-{self.release.version}.log"
+        log_path = Path("logs") / self.log_name
         self.addCleanup(lambda: log_path.unlink(missing_ok=True))
         self.assertTrue(log_path.exists())
         log_content = log_path.read_text(encoding="utf-8")
@@ -445,7 +449,7 @@ class ReleaseProgressViewTests(TestCase):
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
             "step": 4,
-            "log": f"{self.package.name}-{self.release.version}.log",
+            "log": self.log_name,
             "started": True,
         }
         session.save()
@@ -457,7 +461,7 @@ class ReleaseProgressViewTests(TestCase):
 
         self.assertIn(["scripts/generate-changelog.sh"], commands)
         self.assertEqual(response.status_code, 200)
-        log_path = Path("logs") / f"{self.package.name}-{self.release.version}.log"
+        log_path = Path("logs") / self.log_name
         self.addCleanup(lambda: log_path.unlink(missing_ok=True))
         self.assertTrue(log_path.exists())
         log_content = log_path.read_text(encoding="utf-8")
