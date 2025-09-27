@@ -1410,6 +1410,29 @@ class FaviconTests(TestCase):
             )
             self.assertContains(resp, b64)
 
+    def test_control_nodes_use_purple_favicon(self):
+        with override_settings(MEDIA_ROOT=self.tmpdir):
+            role, _ = NodeRole.objects.get_or_create(name="Control")
+            Node.objects.update_or_create(
+                mac_address=Node.get_current_mac(),
+                defaults={
+                    "hostname": "localhost",
+                    "address": "127.0.0.1",
+                    "role": role,
+                },
+            )
+            Site.objects.update_or_create(
+                id=1, defaults={"domain": "testserver", "name": ""}
+            )
+            resp = self.client.get(reverse("pages:index"))
+            b64 = (
+                Path(settings.BASE_DIR)
+                .joinpath("pages", "fixtures", "data", "favicon_control.txt")
+                .read_text()
+                .strip()
+            )
+            self.assertContains(resp, b64)
+
 
 class FavoriteTests(TestCase):
     def setUp(self):
