@@ -15,7 +15,14 @@ from django.contrib.sites.models import Site
 from django.contrib import admin
 from django.core.exceptions import DisallowedHost
 import socket
-from pages.models import Application, Module, SiteBadge, Favorite, ViewHistory
+from pages.models import (
+    Application,
+    Module,
+    SiteBadge,
+    Favorite,
+    ViewHistory,
+    UserStory,
+)
 from pages.admin import ApplicationAdmin
 from pages.screenshot_specs import (
     ScreenshotSpec,
@@ -1733,6 +1740,78 @@ class DatasetteTests(TestCase):
             self.assertContains(resp, 'href="/data/"')
         finally:
             lock_file.unlink(missing_ok=True)
+
+
+class UserStorySubmissionTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.url = reverse("pages:user-story-submit")
+        User = get_user_model()
+        self.user = User.objects.create_user(username="feedbacker", password="pwd")
+
+    def test_authenticated_submission_defaults_to_username(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            self.url,
+            {
+                "rating": 5,
+                "comments": "Loved the experience!",
+                "path": "/wizard/step-1/",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"success": True})
+        story = UserStory.objects.get()
+        self.assertEqual(story.name, "feedbacker")
+        self.assertEqual(story.rating, 5)
+        self.assertEqual(story.path, "/wizard/step-1/")
+        self.assertEqual(story.user, self.user)
+        self.assertTrue(story.is_user_data)
+
+    def test_anonymous_submission_uses_provided_name(self):
+        response = self.client.post(
+            self.url,
+            {
+                "name": "Guest Reviewer",
+                "rating": 3,
+                "comments": "It was fine.",
+                "path": "/status/",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(UserStory.objects.count(), 1)
+        story = UserStory.objects.get()
+        self.assertEqual(story.name, "Guest Reviewer")
+        self.assertIsNone(story.user)
+        self.assertEqual(story.comments, "It was fine.")
+
+    def test_invalid_rating_returns_errors(self):
+        response = self.client.post(
+            self.url,
+            {
+                "rating": 7,
+                "comments": "Way off the scale",
+                "path": "/feedback/",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertFalse(UserStory.objects.exists())
+        self.assertIn("rating", data.get("errors", {}))
+
+    def test_anonymous_submission_without_name_uses_fallback(self):
+        response = self.client.post(
+            self.url,
+            {
+                "rating": 2,
+                "comments": "Could be better.",
+                "path": "/feedback/",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        story = UserStory.objects.get()
+        self.assertEqual(story.name, "Anonymous")
+        self.assertIsNone(story.user)
 
 
 class ClientReportLiveUpdateTests(TestCase):

@@ -9,6 +9,7 @@ from importlib import import_module
 from django.urls import URLPattern
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
+from django.core.validators import MaxLengthValidator, MaxValueValidator, MinValueValidator
 
 
 class ApplicationManager(models.Manager):
@@ -277,6 +278,36 @@ class Favorite(Entity):
 
     class Meta:
         unique_together = ("user", "content_type")
+
+
+class UserStory(Entity):
+    path = models.CharField(max_length=500)
+    name = models.CharField(max_length=40, blank=True)
+    rating = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text=_("Rate your experience from 1 (lowest) to 5 (highest)."),
+    )
+    comments = models.TextField(
+        validators=[MaxLengthValidator(400)],
+        help_text=_("Share more about your experience."),
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="user_stories",
+    )
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-submitted_at"]
+        verbose_name = _("User Story")
+        verbose_name_plural = _("User Stories")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        display = self.name or _("Anonymous")
+        return f"{display} ({self.rating}/5)"
 
 
 from django.db.models.signals import post_save

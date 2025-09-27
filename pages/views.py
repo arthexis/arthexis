@@ -20,7 +20,7 @@ from django.contrib.auth.views import LoginView
 from django import forms
 from django.apps import apps as django_apps
 from utils.sites import get_site
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from nodes.models import Node
 from django.template.response import TemplateResponse
@@ -33,6 +33,7 @@ from core import mailer, public_wifi
 from core.backends import TOTP_DEVICE_NAME
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.views.decorators.http import require_POST
 from django.core.cache import cache
 from django.views.decorators.cache import never_cache
 from django.utils.cache import patch_vary_headers
@@ -79,8 +80,12 @@ from core.liveupdate import live_update
 from django_otp import login as otp_login
 from django_otp.plugins.otp_totp.models import TOTPDevice
 import qrcode
-from .forms import AuthenticatorEnrollmentForm, AuthenticatorLoginForm
-from .models import Module, UserManual
+from .forms import (
+    AuthenticatorEnrollmentForm,
+    AuthenticatorLoginForm,
+    UserStoryForm,
+)
+from .models import Module, UserManual, UserStory
 
 
 logger = logging.getLogger(__name__)
@@ -1028,6 +1033,34 @@ def client_report(request):
         "login_url": login_url,
     }
     return render(request, "pages/client_report.html", context)
+
+
+@require_POST
+def submit_user_story(request):
+    data = request.POST.copy()
+    if request.user.is_authenticated and not data.get("name"):
+        data["name"] = request.user.get_username()[:40]
+    if not data.get("path"):
+        data["path"] = request.get_full_path()
+
+    form = UserStoryForm(data)
+    if request.user.is_authenticated:
+        form.instance.user = request.user
+
+    if form.is_valid():
+        story = form.save(commit=False)
+        if request.user.is_authenticated:
+            story.user = request.user
+            if not story.name:
+                story.name = request.user.get_username()[:40]
+        if not story.name:
+            story.name = str(_("Anonymous"))[:40]
+        story.path = (story.path or request.get_full_path())[:500]
+        story.is_user_data = True
+        story.save()
+        return JsonResponse({"success": True})
+
+    return JsonResponse({"success": False, "errors": form.errors}, status=400)
 
 
 def csrf_failure(request, reason=""):

@@ -9,6 +9,8 @@ from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.debug import sensitive_variables
 
+from .models import UserStory
+
 
 class AuthenticatorLoginForm(AuthenticationForm):
     """Authentication form that supports password or authenticator codes."""
@@ -129,3 +131,38 @@ class AuthenticatorEnrollmentForm(forms.Form):
 
     def get_verified_device(self):
         return self.device
+
+
+class UserStoryForm(forms.ModelForm):
+    class Meta:
+        model = UserStory
+        fields = ("name", "rating", "comments", "path")
+        widgets = {
+            "path": forms.HiddenInput(),
+            "comments": forms.Textarea(attrs={"rows": 4, "maxlength": 400}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["name"].required = False
+        self.fields["name"].widget.attrs.update(
+            {
+                "maxlength": 40,
+                "placeholder": _("Name, email or pseudonym"),
+            }
+        )
+        self.fields["rating"].widget = forms.RadioSelect(
+            choices=[(i, str(i)) for i in range(1, 6)]
+        )
+
+    def clean_comments(self):
+        comments = (self.cleaned_data.get("comments") or "").strip()
+        if len(comments) > 400:
+            raise forms.ValidationError(
+                _("Feedback must be 400 characters or fewer."), code="max_length"
+            )
+        return comments
+
+    def clean_name(self):
+        name = (self.cleaned_data.get("name") or "").strip()
+        return name[:40]
