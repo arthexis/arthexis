@@ -1,5 +1,6 @@
 from django import forms
 from django.conf import settings
+from django.contrib.admin.helpers import ActionForm
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import gettext_lazy as _
 
@@ -57,3 +58,21 @@ class TOTPDeviceAdminForm(forms.ModelForm):
         if pending_instance is not None:
             self._save_issuer(pending_instance)
             delattr(self, "_pending_instance")
+
+class TOTPDeviceCalibrationActionForm(ActionForm):
+    token = forms.CharField(
+        label=_("One-time password"),
+        required=False,
+        help_text=_(
+            "Enter the current authenticator code when running the"
+            " calibration action."
+        ),
+    )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        token = cleaned_data.get("token")
+        if token is not None:
+            cleaned_data["token"] = token.strip()
+        return cleaned_data
+
