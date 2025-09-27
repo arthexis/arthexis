@@ -290,7 +290,7 @@
   </head>
   <body class="p-3 pb-0 d-flex flex-column min-vh-100">
     <div class="container flex-grow-1 mb-5">
-      <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-2 m-0">
+      <nav class="navbar navbar-expand-lg navbar-light bg-body py-2 m-0">
         <div class="container-fluid">
           <a class="navbar-brand" href="/">{{ badge_site_name|default:"Arthexis" }}</a>
           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -349,7 +349,7 @@
               {% endif %}
             </ul>
             <div class="toolbar ms-lg-3 d-flex align-items-center" role="toolbar">
-              <button id="theme-toggle" class="btn btn-sm btn-outline-light me-2" onclick="toggleTheme()" aria-label="{% trans "Dark Mode" %}">
+              <button id="theme-toggle" class="btn btn-sm btn-outline-dark me-2" onclick="toggleTheme()" aria-label="{% trans "Dark Mode" %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-moon"></use>
                 </svg>
@@ -522,13 +522,13 @@
         const buttons = document.querySelectorAll('.toolbar .btn');
         if (theme === 'light') {
           navbar.classList.remove('navbar-dark', 'bg-dark');
-          navbar.classList.add('navbar-light', 'bg-white');
+          navbar.classList.add('navbar-light', 'bg-body');
           buttons.forEach(btn => {
             btn.classList.remove('btn-outline-light');
             btn.classList.add('btn-outline-dark');
           });
         } else {
-          navbar.classList.remove('navbar-light', 'bg-white');
+          navbar.classList.remove('navbar-light', 'bg-body');
           navbar.classList.add('navbar-dark', 'bg-dark');
           buttons.forEach(btn => {
             btn.classList.remove('btn-outline-dark');
