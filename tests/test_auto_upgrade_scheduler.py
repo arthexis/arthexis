@@ -11,7 +11,7 @@ def test_ensure_auto_upgrade_task_skips_without_lock(tmp_path):
     assert not PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).exists()
 
 
-def test_ensure_auto_upgrade_task_uses_latest_interval(tmp_path):
+def test_ensure_auto_upgrade_task_uses_five_minute_interval_for_latest(tmp_path):
     PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).delete()
 
     locks_dir = tmp_path / "locks"
@@ -26,7 +26,7 @@ def test_ensure_auto_upgrade_task_uses_latest_interval(tmp_path):
     assert task.interval.period == IntervalSchedule.MINUTES
 
 
-def test_ensure_auto_upgrade_task_uses_version_interval(tmp_path):
+def test_ensure_auto_upgrade_task_uses_five_minute_interval_for_version(tmp_path):
     PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).delete()
 
     locks_dir = tmp_path / "locks"
@@ -37,5 +37,5 @@ def test_ensure_auto_upgrade_task_uses_version_interval(tmp_path):
 
     task = PeriodicTask.objects.get(name=AUTO_UPGRADE_TASK_NAME)
     assert task.task == AUTO_UPGRADE_TASK_PATH
-    assert task.interval.every == 10
+    assert task.interval.every == 5
     assert task.interval.period == IntervalSchedule.MINUTES
