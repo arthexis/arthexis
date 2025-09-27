@@ -41,6 +41,7 @@ from core.models import (
     Reference,
     ReleaseManager,
     Todo,
+    TOTPDeviceSettings,
 )
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
@@ -324,6 +325,15 @@ class AuthenticatorSetupTests(TestCase):
         label = quote(f"{settings.OTP_TOTP_ISSUER}:{self.staff.username}")
         self.assertIn(label, config_url)
         self.assertIn(f"issuer={quote(settings.OTP_TOTP_ISSUER)}", config_url)
+
+    def test_device_config_url_uses_custom_issuer_when_available(self):
+        self.client.post(reverse("pages:authenticator-setup"), {"action": "generate"})
+        device = TOTPDevice.objects.get(user=self.staff)
+        TOTPDeviceSettings.objects.create(device=device, issuer="Custom Co")
+        config_url = device.config_url
+        quoted_issuer = quote("Custom Co")
+        self.assertIn(quoted_issuer, config_url)
+        self.assertIn(f"issuer={quoted_issuer}", config_url)
 
     def test_pending_device_context_includes_qr(self):
         self.client.post(reverse("pages:authenticator-setup"), {"action": "generate"})

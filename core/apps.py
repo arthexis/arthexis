@@ -21,6 +21,7 @@ class CoreConfig(AppConfig):
         from pathlib import Path
 
         from django.conf import settings
+        from django.core.exceptions import ObjectDoesNotExist
         from django.contrib.auth import get_user_model
         from django.db.models.signals import post_migrate
         from django.core.signals import got_request_exception
@@ -38,6 +39,26 @@ class CoreConfig(AppConfig):
             generate_model_sigils,
         )
         from .admin_history import patch_admin_history
+
+        from django_otp.plugins.otp_totp.models import TOTPDevice as OTP_TOTPDevice
+
+        if not hasattr(
+            OTP_TOTPDevice._read_str_from_settings, "_core_totp_issuer_patch"
+        ):
+            original_read_str = OTP_TOTPDevice._read_str_from_settings
+
+            def _core_totp_read_str(self, key):
+                if key == "OTP_TOTP_ISSUER":
+                    try:
+                        settings_obj = self.custom_settings
+                    except ObjectDoesNotExist:
+                        settings_obj = None
+                    if settings_obj and settings_obj.issuer:
+                        return settings_obj.issuer
+                return original_read_str(self, key)
+
+            _core_totp_read_str._core_totp_issuer_patch = True
+            OTP_TOTPDevice._read_str_from_settings = _core_totp_read_str
 
         def create_default_arthexis(**kwargs):
             User = get_user_model()
