@@ -17,7 +17,7 @@ from nodes.models import NetMessage
 
 
 AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 30
-AUTO_UPGRADE_HEALTH_MAX_ATTEMPTS = 3
+AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
 
 
 logger = logging.getLogger(__name__)
@@ -66,6 +66,46 @@ def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
         logger.warning("Failed to append auto-upgrade log entry: %s", message)
 
 
+def _skip_lock_path(base_dir: Path) -> Path:
+    return base_dir / "locks" / AUTO_UPGRADE_SKIP_LOCK_NAME
+
+
+def _load_skipped_revisions(base_dir: Path) -> set[str]:
+    skip_file = _skip_lock_path(base_dir)
+    try:
+        return {
+            line.strip()
+            for line in skip_file.read_text().splitlines()
+            if line.strip()
+        }
+    except FileNotFoundError:
+        return set()
+    except OSError:
+        logger.warning("Failed to read auto-upgrade skip lockfile")
+        return set()
+
+
+def _add_skipped_revision(base_dir: Path, revision: str) -> None:
+    if not revision:
+        return
+
+    skip_file = _skip_lock_path(base_dir)
+    try:
+        skip_file.parent.mkdir(parents=True, exist_ok=True)
+        existing = _load_skipped_revisions(base_dir)
+        if revision in existing:
+            return
+        with skip_file.open("a", encoding="utf-8") as fh:
+            fh.write(f"{revision}\n")
+        _append_auto_upgrade_log(
+            base_dir, f"Recorded blocked revision {revision} for auto-upgrade"
+        )
+    except OSError:
+        logger.warning(
+            "Failed to update auto-upgrade skip lockfile with revision %s", revision
+        )
+
+
 def _resolve_service_url(base_dir: Path) -> str:
     """Return the local URL used to probe the Django suite."""
 
@@ -110,6 +150,23 @@ def check_github_updates() -> None:
     except Exception:
         startup = None
 
+    remote_revision = (
+        subprocess.check_output(
+            ["git", "rev-parse", f"origin/{branch}"], cwd=base_dir
+        )
+        .decode()
+        .strip()
+    )
+
+    skipped_revisions = _load_skipped_revisions(base_dir)
+    if remote_revision in skipped_revisions:
+        _append_auto_upgrade_log(
+            base_dir, f"Skipping auto-upgrade for blocked revision {remote_revision}"
+        )
+        if startup:
+            startup()
+        return
+
     upgrade_stamp = timezone.now().strftime("@ %Y%m%d %H:%M")
 
     upgrade_was_applied = False
@@ -120,19 +177,7 @@ def check_github_updates() -> None:
             .decode()
             .strip()
         )
-        remote = (
-            subprocess.check_output(
-                [
-                    "git",
-                    "rev-parse",
-                    f"origin/{branch}",
-                ],
-                cwd=base_dir,
-            )
-            .decode()
-            .strip()
-        )
-        if local == remote:
+        if local == remote_revision:
             if startup:
                 startup()
             return
@@ -254,12 +299,29 @@ def _schedule_health_check(next_attempt: int) -> None:
     )
 
 
+def _handle_failed_health_check(base_dir: Path, detail: str) -> None:
+    revision = ""
+    try:
+        revision = (
+            subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=base_dir)
+            .decode()
+            .strip()
+        )
+    except Exception:  # pragma: no cover - best effort capture
+        logger.warning("Failed to determine revision during auto-upgrade revert")
+
+    _add_skipped_revision(base_dir, revision)
+    _append_auto_upgrade_log(base_dir, "Health check failed; reverting upgrade")
+    subprocess.run(["./upgrade.sh", "--revert"], cwd=base_dir, check=True)
+
+
 @shared_task
 def verify_auto_upgrade_health(attempt: int = 1) -> bool | None:
     """Verify the upgraded suite responds successfully.
 
-    When the check fails three times in a row the upgrade is rolled back by
-    invoking ``upgrade.sh --revert``.
+    After the post-upgrade delay the site is probed once; any response other
+    than HTTP 200 triggers an automatic revert and records the failing
+    revision so future upgrade attempts skip it.
     """
 
     base_dir = Path(__file__).resolve().parent.parent
@@ -270,33 +332,29 @@ def verify_auto_upgrade_health(attempt: int = 1) -> bool | None:
     )
 
     status: int | None = None
+    detail = "succeeded"
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
             status = getattr(response, "status", response.getcode())
     except urllib.error.HTTPError as exc:
         status = exc.code
+        detail = f"returned HTTP {exc.code}"
         logger.warning(
             "Auto-upgrade health check attempt %s returned HTTP %s", attempt, exc.code
         )
     except urllib.error.URLError as exc:
+        detail = f"failed with {exc}"
         logger.warning(
             "Auto-upgrade health check attempt %s failed: %s", attempt, exc
         )
     except Exception as exc:  # pragma: no cover - unexpected network error
+        detail = f"failed with {exc}"
         logger.exception(
             "Unexpected error probing suite during auto-upgrade attempt %s", attempt
         )
-        detail = f"failed with {exc}"
         _record_health_check_result(base_dir, attempt, status, detail)
-        if attempt >= AUTO_UPGRADE_HEALTH_MAX_ATTEMPTS:
-            _append_auto_upgrade_log(
-                base_dir,
-                "Health check raised unexpected error; reverting upgrade",
-            )
-            subprocess.run(["./upgrade.sh", "--revert"], cwd=base_dir, check=True)
-        else:
-            _schedule_health_check(attempt + 1)
-        return None
+        _handle_failed_health_check(base_dir, detail)
+        return False
 
     if status == 200:
         _record_health_check_result(base_dir, attempt, status, "succeeded")
@@ -307,21 +365,15 @@ def verify_auto_upgrade_health(attempt: int = 1) -> bool | None:
         )
         return True
 
-    _record_health_check_result(base_dir, attempt, status, "failed")
+    if detail == "succeeded":
+        if status is not None:
+            detail = f"returned HTTP {status}"
+        else:
+            detail = "failed with unknown status"
 
-    if attempt >= AUTO_UPGRADE_HEALTH_MAX_ATTEMPTS:
-        logger.error(
-            "Auto-upgrade health check failed after %s attempts; reverting", attempt
-        )
-        _append_auto_upgrade_log(
-            base_dir,
-            "Health check failed three times; reverting upgrade",
-        )
-        subprocess.run(["./upgrade.sh", "--revert"], cwd=base_dir, check=True)
-        return False
-
-    _schedule_health_check(attempt + 1)
-    return None
+    _record_health_check_result(base_dir, attempt, status, detail)
+    _handle_failed_health_check(base_dir, detail)
+    return False
 
 
 @shared_task
