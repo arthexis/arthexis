@@ -2057,6 +2057,95 @@ class ChargerAdminTests(TestCase):
             store.clear_log(log_key, log_type="charger")
             store.clear_log(pending_key, log_type="charger")
 
+    def test_remote_stop_action_dispatches_request(self):
+        charger = Charger.objects.create(charger_id="STOPME", connector_id=1)
+        ws = DummyWebSocket()
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        pending_key = store.pending_key(charger.charger_id)
+        store.clear_log(log_key, log_type="charger")
+        store.clear_log(pending_key, log_type="charger")
+        store.set_connection(charger.charger_id, charger.connector_id, ws)
+        tx = Transaction.objects.create(
+            charger=charger,
+            start_time=timezone.now(),
+        )
+        tx_key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.transactions[tx_key] = tx
+        store.pending_calls.clear()
+        try:
+            url = reverse("admin:ocpp_charger_changelist")
+            response = self.client.post(
+                url,
+                {
+                    "action": "remote_stop_transaction",
+                    "_selected_action": [charger.pk],
+                },
+                follow=True,
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(ws.sent), 1)
+            frame = json.loads(ws.sent[0])
+            self.assertEqual(frame[0], 2)
+            self.assertEqual(frame[2], "RemoteStopTransaction")
+            self.assertIn("transactionId", frame[3])
+            self.assertEqual(frame[3]["transactionId"], tx.pk)
+            self.assertIn(frame[1], store.pending_calls)
+            metadata = store.pending_calls[frame[1]]
+            self.assertEqual(metadata.get("action"), "RemoteStopTransaction")
+            self.assertEqual(metadata.get("charger_id"), charger.charger_id)
+            self.assertEqual(metadata.get("connector_id"), charger.connector_id)
+            self.assertEqual(metadata.get("transaction_id"), tx.pk)
+            self.assertEqual(metadata.get("log_key"), log_key)
+            log_entries = store.get_logs(log_key, log_type="charger")
+            self.assertTrue(
+                any("RemoteStopTransaction" in entry for entry in log_entries)
+            )
+        finally:
+            store.pop_connection(charger.charger_id, charger.connector_id)
+            store.pending_calls.clear()
+            store.transactions.pop(tx_key, None)
+            store.clear_log(log_key, log_type="charger")
+            store.clear_log(pending_key, log_type="charger")
+
+    def test_reset_action_dispatches_request(self):
+        charger = Charger.objects.create(charger_id="RESETME", connector_id=1)
+        ws = DummyWebSocket()
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        pending_key = store.pending_key(charger.charger_id)
+        store.clear_log(log_key, log_type="charger")
+        store.clear_log(pending_key, log_type="charger")
+        store.set_connection(charger.charger_id, charger.connector_id, ws)
+        store.pending_calls.clear()
+        try:
+            url = reverse("admin:ocpp_charger_changelist")
+            response = self.client.post(
+                url,
+                {
+                    "action": "reset_chargers",
+                    "_selected_action": [charger.pk],
+                },
+                follow=True,
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(ws.sent), 1)
+            frame = json.loads(ws.sent[0])
+            self.assertEqual(frame[0], 2)
+            self.assertEqual(frame[2], "Reset")
+            self.assertEqual(frame[3], {"type": "Soft"})
+            self.assertIn(frame[1], store.pending_calls)
+            metadata = store.pending_calls[frame[1]]
+            self.assertEqual(metadata.get("action"), "Reset")
+            self.assertEqual(metadata.get("charger_id"), charger.charger_id)
+            self.assertEqual(metadata.get("connector_id"), charger.connector_id)
+            self.assertEqual(metadata.get("log_key"), log_key)
+            log_entries = store.get_logs(log_key, log_type="charger")
+            self.assertTrue(any("Reset" in entry for entry in log_entries))
+        finally:
+            store.pop_connection(charger.charger_id, charger.connector_id)
+            store.pending_calls.clear()
+            store.clear_log(log_key, log_type="charger")
+            store.clear_log(pending_key, log_type="charger")
+
 
 class LocationAdminTests(TestCase):
     def setUp(self):
