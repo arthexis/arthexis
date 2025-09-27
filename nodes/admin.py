@@ -492,7 +492,7 @@ class NodeRoleAdmin(EntityModelAdmin):
 @admin.register(NodeFeature)
 class NodeFeatureAdmin(EntityModelAdmin):
     filter_horizontal = ("roles",)
-    list_display = ("display", "slug", "default_roles", "is_enabled")
+    list_display = ("display", "slug", "default_roles", "is_enabled_display")
     readonly_fields = ("is_enabled",)
     search_fields = ("display", "slug")
 
@@ -504,6 +504,10 @@ class NodeFeatureAdmin(EntityModelAdmin):
     def default_roles(self, obj):
         roles = [role.name for role in obj.roles.all()]
         return ", ".join(roles) if roles else "—"
+
+    @admin.display(description="Is Enabled", boolean=True, ordering="is_enabled")
+    def is_enabled_display(self, obj):
+        return obj.is_enabled
 
 
 @admin.register(ContentSample)
