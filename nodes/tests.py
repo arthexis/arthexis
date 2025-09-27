@@ -63,6 +63,43 @@ from cryptography.hazmat.primitives import serialization, hashes
 from core.models import PackageRelease, SecurityGroup
 
 
+class NodeBadgeColorTests(TestCase):
+    def setUp(self):
+        self.constellation, _ = NodeRole.objects.get_or_create(name="Constellation")
+        self.control, _ = NodeRole.objects.get_or_create(name="Control")
+
+    def test_constellation_role_defaults_to_goldenrod(self):
+        node = Node.objects.create(
+            hostname="constellation",
+            address="10.1.0.1",
+            port=8000,
+            mac_address="00:aa:bb:cc:dd:01",
+            role=self.constellation,
+        )
+        self.assertEqual(node.badge_color, "#daa520")
+
+    def test_control_role_defaults_to_deep_purple(self):
+        node = Node.objects.create(
+            hostname="control",
+            address="10.1.0.2",
+            port=8001,
+            mac_address="00:aa:bb:cc:dd:02",
+            role=self.control,
+        )
+        self.assertEqual(node.badge_color, "#673ab7")
+
+    def test_custom_badge_color_is_preserved(self):
+        node = Node.objects.create(
+            hostname="custom",
+            address="10.1.0.3",
+            port=8002,
+            mac_address="00:aa:bb:cc:dd:03",
+            role=self.constellation,
+            badge_color="#123456",
+        )
+        self.assertEqual(node.badge_color, "#123456")
+
+
 class NodeTests(TestCase):
     def setUp(self):
         self.client = Client()
