@@ -255,6 +255,7 @@
 <script>
   let kwChart = null;
   const chartData = { labels: [], datasets: [] };
+  let lastChartSignature = null;
   const COLOR_PALETTE = [
     { border: 'rgba(255,69,0,1)', background: 'rgba(255,69,0,0.3)' },
     { border: 'rgba(30,144,255,1)', background: 'rgba(30,144,255,0.3)' },
@@ -320,14 +321,17 @@
     if (!payload) {
       chartData.labels = [];
       chartData.datasets = [];
-      return;
+      const emptySignature = JSON.stringify(chartData);
+      const changed = emptySignature !== lastChartSignature;
+      lastChartSignature = emptySignature;
+      return changed;
     }
     const labels = Array.isArray(payload.labels) ? payload.labels : [];
-    chartData.labels = labels.map((ts) => {
+    const normalizedLabels = labels.map((ts) => {
       const parsed = new Date(ts);
       return Number.isNaN(parsed.getTime()) ? ts : parsed.toLocaleTimeString();
     });
-    chartData.datasets = (payload.datasets || []).map((dataset, index) => {
+    const datasets = (payload.datasets || []).map((dataset, index) => {
       const palette = getPaletteForDataset(dataset, index);
       const values = Array.isArray(dataset.values)
         ? dataset.values.map((value) => {
@@ -348,9 +352,21 @@
         spanGaps: true,
       };
     });
+    const signature = JSON.stringify({
+      labels: normalizedLabels,
+      datasets: datasets.map((dataset) => ({
+        label: dataset.label,
+        data: dataset.data,
+      })),
+    });
+    const changed = signature !== lastChartSignature;
+    lastChartSignature = signature;
+    chartData.labels = normalizedLabels;
+    chartData.datasets = datasets;
+    return changed;
   }
 
-  function renderChart() {
+  function renderChart(shouldUpdate = true) {
     const canvas = document.getElementById('kw-chart');
     if (!canvas) return;
     if (!kwChart) {
@@ -365,7 +381,7 @@
           }
         }
       });
-    } else {
+    } else if (shouldUpdate) {
       kwChart.data.labels = chartData.labels;
       kwChart.data.datasets = chartData.datasets;
       kwChart.update();
@@ -404,9 +420,9 @@
               placeholder.replaceWith(oldCanvas);
             }
           }
-          applyChartPayload(payload);
+          const chartChanged = applyChartPayload(payload);
           if (kwChart || (payload && chartData.datasets.length)) {
-            renderChart();
+            renderChart(chartChanged);
           }
           changedIds.forEach(id => {
             const el = current.querySelector(`#${id}`);
@@ -420,8 +436,8 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     const payload = parseChartPayload(document);
-    applyChartPayload(payload);
-    renderChart();
+    const chartChanged = applyChartPayload(payload);
+    renderChart(chartChanged);
   });
 
   setInterval(reloadStatus, 5000);
