@@ -1947,7 +1947,7 @@ class ProductAdmin(EntityModelAdmin):
         return profile.execute(
             "product.product",
             "search_read",
-            domain,
+            [domain],
             {
                 "fields": [
                     "name",
@@ -2135,7 +2135,7 @@ class ProductAdmin(EntityModelAdmin):
             products = profile.execute(
                 "product.product",
                 "search_read",
-                [],
+                [[]],
                 {
                     "fields": [
                         "name",
