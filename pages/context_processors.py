@@ -9,10 +9,21 @@ from core.reference_utils import filter_visible_references
 from .models import Module
 
 _favicon_path = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data" / "favicon.txt"
+_control_favicon_path = (
+    Path(settings.BASE_DIR) / "pages" / "fixtures" / "data" / "favicon_control.txt"
+)
+
 try:
     _DEFAULT_FAVICON = f"data:image/png;base64,{_favicon_path.read_text().strip()}"
 except OSError:
     _DEFAULT_FAVICON = ""
+
+try:
+    _CONTROL_FAVICON = (
+        f"data:image/png;base64,{_control_favicon_path.read_text().strip()}"
+    )
+except OSError:
+    _CONTROL_FAVICON = _DEFAULT_FAVICON
 
 
 def nav_links(request):
@@ -84,7 +95,10 @@ def nav_links(request):
             except Exception:
                 pass
         if not favicon_url:
-            favicon_url = _DEFAULT_FAVICON
+            if node and getattr(node.role, "name", "") == "Control":
+                favicon_url = _CONTROL_FAVICON
+            else:
+                favicon_url = _DEFAULT_FAVICON
 
     header_refs_qs = (
         Reference.objects.filter(show_in_header=True)
