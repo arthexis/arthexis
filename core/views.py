@@ -357,7 +357,7 @@ def _step_check_todos(release, ctx, log_path: Path) -> None:
 
 def _step_check_version(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
-    from packaging.version import Version
+    from packaging.version import InvalidVersion, Version
 
     if not release_utils._git_clean():
         proc = subprocess.run(
@@ -417,8 +417,33 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
     if release_utils.network_available():
         try:
             resp = requests.get(f"https://pypi.org/pypi/{release.package.name}/json")
-            if resp.ok and release.version in resp.json().get("releases", {}):
-                raise Exception(f"Version {release.version} already on PyPI")
+            if resp.ok:
+                data = resp.json()
+                releases = data.get("releases", {})
+                try:
+                    target_version = Version(release.version)
+                except InvalidVersion:
+                    target_version = None
+
+                for candidate, files in releases.items():
+                    same_version = candidate == release.version
+                    if target_version is not None and not same_version:
+                        try:
+                            same_version = Version(candidate) == target_version
+                        except InvalidVersion:
+                            same_version = False
+                    if not same_version:
+                        continue
+
+                    has_available_files = any(
+                        isinstance(file_data, dict)
+                        and not file_data.get("yanked", False)
+                        for file_data in files or []
+                    )
+                    if has_available_files:
+                        raise Exception(
+                            f"Version {release.version} already on PyPI"
+                        )
         except Exception as exc:
             # network errors should be logged but not crash
             if "already on PyPI" in str(exc):

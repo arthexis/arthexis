@@ -770,6 +770,50 @@ class ReleaseProcessTests(TestCase):
         self.assertFalse(proc.stdout.strip())
         self.assertEqual(version_path.read_text(encoding="utf-8"), original)
 
+    @mock.patch("core.views.requests.get")
+    @mock.patch("core.views.release_utils.network_available", return_value=True)
+    @mock.patch("core.views.release_utils._git_clean", return_value=True)
+    def test_step_check_ignores_yanked_release(
+        self, git_clean, network_available, requests_get
+    ):
+        response = mock.Mock()
+        response.ok = True
+        response.json.return_value = {
+            "releases": {
+                "0.1.12": [
+                    {"filename": "pkg.whl", "yanked": True},
+                    {"filename": "pkg.tar.gz", "yanked": True},
+                ]
+            }
+        }
+        requests_get.return_value = response
+        self.release.version = "0.1.12"
+        _step_check_version(self.release, {}, Path("rel.log"))
+        requests_get.assert_called_once()
+
+    @mock.patch("core.views.requests.get")
+    @mock.patch("core.views.release_utils.network_available", return_value=True)
+    @mock.patch("core.views.release_utils._git_clean", return_value=True)
+    def test_step_check_blocks_available_release(
+        self, git_clean, network_available, requests_get
+    ):
+        response = mock.Mock()
+        response.ok = True
+        response.json.return_value = {
+            "releases": {
+                "0.1.12": [
+                    {"filename": "pkg.whl", "yanked": False},
+                    {"filename": "pkg.tar.gz"},
+                ]
+            }
+        }
+        requests_get.return_value = response
+        self.release.version = "0.1.12"
+        with self.assertRaises(Exception) as exc:
+            _step_check_version(self.release, {}, Path("rel.log"))
+        self.assertIn("already on PyPI", str(exc.exception))
+        requests_get.assert_called_once()
+
     @mock.patch("core.models.PackageRelease.dump_fixture")
     def test_save_does_not_dump_fixture(self, dump):
         self.release.pypi_url = "https://example.com"
