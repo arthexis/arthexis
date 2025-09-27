@@ -164,6 +164,13 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                     "last_path",
                     "last_heartbeat",
                     "last_meter_values",
+                )
+            },
+        ),
+        (
+            "Firmware",
+            {
+                "fields": (
                     "firmware_status",
                     "firmware_status_info",
                     "firmware_timestamp",
@@ -233,10 +240,6 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "require_rfid_display",
         "public_display",
         "last_heartbeat",
-        "availability_state",
-        "availability_request_status",
-        "firmware_status",
-        "firmware_timestamp",
         "session_kw",
         "total_kw_display",
         "page_link",
