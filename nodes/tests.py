@@ -3,7 +3,15 @@ import os
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
 
-django.setup()
+try:  # Use the pytest-specific setup when available for database readiness
+    from tests.conftest import safe_setup as _safe_setup  # type: ignore
+except Exception:  # pragma: no cover - fallback for direct execution
+    _safe_setup = None
+
+if _safe_setup is not None:
+    _safe_setup()
+else:  # pragma: no cover - fallback when pytest fixtures are unavailable
+    django.setup()
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,7 +35,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
 from django.contrib.sites.models import Site
-from django_celery_beat.models import PeriodicTask
+from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from django.conf import settings
 from django.utils import timezone
 from dns import resolver as dns_resolver
@@ -1868,6 +1876,15 @@ class NodeFeatureTests(TestCase):
         self.assertEqual(action.label, "Scan RFIDs")
         self.assertEqual(action.url_name, "admin:core_rfid_scan")
 
+    def test_celery_feature_default_action(self):
+        feature = NodeFeature.objects.create(
+            slug="celery-queue", display="Celery Queue"
+        )
+        action = feature.get_default_action()
+        self.assertIsNotNone(action)
+        self.assertEqual(action.label, "Celery Report")
+        self.assertEqual(action.url_name, "admin:nodes_nodefeature_celery_report")
+
     def test_default_action_missing_when_unconfigured(self):
         feature = NodeFeature.objects.create(
             slug="custom-feature", display="Custom Feature"
@@ -2043,6 +2060,68 @@ class NodeFeatureTests(TestCase):
             node.refresh_features()
         self.assertFalse(
             NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
+        )
+
+
+class CeleryReportAdminViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.superuser = User.objects.create_superuser(
+            username="admin", email="admin@example.com", password="secret"
+        )
+        self.client.force_login(self.superuser)
+
+        self.log_file = Path(settings.LOG_DIR) / settings.LOG_FILE_NAME
+        self.log_file.parent.mkdir(parents=True, exist_ok=True)
+        self._original_log_contents: str | None = None
+        if self.log_file.exists():
+            self._original_log_contents = self.log_file.read_text(encoding="utf-8")
+        self.addCleanup(self._restore_log_file)
+
+        PeriodicTask.objects.all().delete()
+
+    def _restore_log_file(self):
+        if self._original_log_contents is None:
+            try:
+                self.log_file.unlink()
+            except FileNotFoundError:
+                pass
+        else:
+            self.log_file.write_text(
+                self._original_log_contents, encoding="utf-8"
+            )
+
+    def test_report_includes_tasks_and_logs(self):
+        now = timezone.now()
+        schedule = IntervalSchedule.objects.create(
+            every=1, period=IntervalSchedule.HOURS
+        )
+        PeriodicTask.objects.create(
+            name="test-task",
+            task="core.tasks.heartbeat",
+            interval=schedule,
+            enabled=True,
+            last_run_at=now - timedelta(minutes=30),
+        )
+
+        localized = timezone.localtime(now)
+        log_line = (
+            f"{localized.strftime('%Y-%m-%d %H:%M:%S,%f')} "
+            "[INFO] core.tasks: Heartbeat task executed\n"
+        )
+        self.log_file.write_text(log_line, encoding="utf-8")
+
+        response = self.client.get(
+            reverse("admin:nodes_nodefeature_celery_report")
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Celery Report")
+        self.assertContains(response, "test-task")
+        self.assertContains(response, settings.LOG_FILE_NAME)
+        entries = response.context_data["log_entries"]
+        self.assertTrue(
+            any("Heartbeat task executed" in entry.message for entry in entries)
         )
 
 
