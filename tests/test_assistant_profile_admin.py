@@ -41,6 +41,8 @@ class AssistantProfileAdminTests(TestCase):
         self.assertContains(response, "Authorization")
         self.assertContains(response, "ChatGPT Developer Mode")
         self.assertContains(response, "Assistant Profiles list")
+        self.assertContains(response, "Error fetching OAuth configuration")
+        self.assertContains(response, "MCP_SIGIL_RESOURCE_URL")
 
     def test_generate_key_button(self):
         url = reverse(
@@ -49,7 +51,8 @@ class AssistantProfileAdminTests(TestCase):
         )
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        key = response.context["user_key"]
+        context = getattr(response, "context_data", None) or response.context
+        key = context["user_key"]
         self.assertTrue(key)
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.user_key_hash, hash_key(key))

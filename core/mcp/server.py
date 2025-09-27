@@ -6,6 +6,9 @@ import json
 from typing import Any, Mapping
 from weakref import WeakKeyDictionary
 
+from django.contrib.sites.models import Site
+from django.core.exceptions import ImproperlyConfigured
+
 from django.db.models.signals import post_delete, post_save
 
 from core.models import SigilRoot
@@ -21,6 +24,92 @@ from .service import (
     SigilRootCatalog,
     SigilSessionState,
 )
+
+
+def resolve_base_urls(config: Mapping[str, Any]) -> tuple[str, str]:
+    """Return the public base URLs advertised to MCP clients."""
+
+    port = int(config.get("port", 8800))
+    base_url = (config.get("resource_server_url") or "").strip()
+    issuer_url = (config.get("issuer_url") or "").strip()
+
+    if not base_url:
+        base_url = _site_base_url(port) or _host_base_url(config.get("host"), port)
+
+    if not issuer_url:
+        issuer_url = base_url
+
+    return base_url, issuer_url
+
+
+def _site_base_url(port: int) -> str | None:
+    """Derive a base URL from the current ``Site`` domain when available."""
+
+    try:
+        site = Site.objects.get_current()
+    except (ImproperlyConfigured, Site.DoesNotExist):  # pragma: no cover - defensive
+        return None
+    except Exception:  # pragma: no cover - database unavailable during startup
+        return None
+
+    domain = (site.domain or "").strip()
+    if not domain:
+        return None
+
+    # Allow administrators to include a full URL in the Sites domain field.
+    if "://" in domain:
+        return domain.rstrip("/")
+
+    scheme = "https"
+    normalized_domain = domain
+    if normalized_domain.startswith("localhost") or normalized_domain.startswith("127."):
+        scheme = "http"
+
+    host, port_override = _split_host_port(normalized_domain)
+    port_to_use = port_override or port
+
+    return _build_url(scheme, host, port_to_use)
+
+
+def _host_base_url(host: str | None, port: int) -> str:
+    host = (host or "127.0.0.1").strip()
+    if host in {"0.0.0.0", "::"}:
+        host = "127.0.0.1"
+
+    scheme = "http"
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        scheme = "https"
+
+    return _build_url(scheme, host, port)
+
+
+def _split_host_port(value: str) -> tuple[str, int | None]:
+    if value.startswith("[") and "]" in value:
+        host, _, remainder = value.partition("]")
+        host = f"{host}]"
+        if remainder.startswith(":"):
+            try:
+                return host, int(remainder[1:])
+            except ValueError:
+                return host, None
+        return host, None
+
+    if value.count(":") == 1:
+        host, port = value.split(":", 1)
+        if port.isdigit():
+            return host, int(port)
+    return value, None
+
+
+def _build_url(scheme: str, host: str, port: int) -> str:
+    default_port = 443 if scheme == "https" else 80
+    formatted_host = host
+    if ":" in host and not host.startswith("["):
+        formatted_host = f"[{host}]"
+
+    if port == default_port:
+        return f"{scheme}://{formatted_host}".rstrip("/")
+    return f"{scheme}://{formatted_host}:{port}".rstrip("/")
 
 
 class SigilResolverServer:
@@ -49,8 +138,7 @@ class SigilResolverServer:
         scopes = self.config["required_scopes"]
         if api_keys:
             token_verifier = ApiKeyTokenVerifier.from_keys(api_keys, scopes=scopes)
-            base_url = self.config["resource_server_url"] or self._default_base_url()
-            issuer_url = self.config["issuer_url"] or base_url
+            base_url, issuer_url = resolve_base_urls(self.config)
             auth_settings = AuthSettings(
                 issuer_url=issuer_url,
                 resource_server_url=base_url,
@@ -162,12 +250,6 @@ class SigilResolverServer:
             metadata={"unresolved": result.unresolved},
         )
         return response.model_dump(by_alias=True)
-
-    def _default_base_url(self) -> str:
-        host = self.config["host"]
-        if host in {"0.0.0.0", "::"}:
-            host = "127.0.0.1"
-        return f"http://{host}:{self.config['port']}"
 
     def _normalize_config(self, config: Mapping[str, Any]) -> dict[str, Any]:
         host = config.get("host", "127.0.0.1")
