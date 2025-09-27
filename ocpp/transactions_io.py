@@ -61,6 +61,12 @@ def export_transactions(
                 "soc_stop": tx.soc_stop,
                 "start_time": tx.start_time.isoformat(),
                 "stop_time": tx.stop_time.isoformat() if tx.stop_time else None,
+                "received_start_time": tx.received_start_time.isoformat()
+                if tx.received_start_time
+                else None,
+                "received_stop_time": tx.received_stop_time.isoformat()
+                if tx.received_stop_time
+                else None,
                 "meter_values": [
                     {
                         "connector_id": mv.connector_id,
@@ -157,6 +163,10 @@ def import_transactions(data: dict) -> int:
             soc_stop=tx.get("soc_stop"),
             start_time=_parse_dt(tx.get("start_time")),
             stop_time=_parse_dt(tx.get("stop_time")),
+            received_start_time=_parse_dt(tx.get("received_start_time"))
+            or _parse_dt(tx.get("start_time")),
+            received_stop_time=_parse_dt(tx.get("received_stop_time"))
+            or _parse_dt(tx.get("stop_time")),
         )
         for mv in tx.get("meter_values", []):
             connector_id = mv.get("connector_id")

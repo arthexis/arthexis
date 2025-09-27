@@ -694,7 +694,7 @@ class TransactionAdmin(EntityModelAdmin):
         "stop_time",
         "kw",
     )
-    readonly_fields = ("kw",)
+    readonly_fields = ("kw", "received_start_time", "received_stop_time")
     list_filter = ("charger", "account")
     date_hierarchy = "start_time"
     inlines = [MeterValueInline]
