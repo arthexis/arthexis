@@ -71,9 +71,9 @@
         <label class="form-label" for="ground">{% trans "Ground:" %}</label>
         <select id="ground" name="ground" class="form-select">
           <option value="" {% if not form.ground %}selected{% endif %}></option>
-          <option value="[1]" {% if form.ground == "[1]" %}selected{% endif %}>[1]</option>
-          <option value="1" {% if form.ground == "1" %}selected{% endif %}>1</option>
-          <option value="0" {% if form.ground == "0" %}selected{% endif %}>0</option>
+          <option value="[1]" {% if form.ground == "[1]" %}selected{% endif %}>[1] ({% trans "Maybe" %})</option>
+          <option value="1" {% if form.ground == "1" %}selected{% endif %}>1 ({% trans "Yes" %})</option>
+          <option value="0" {% if form.ground == "0" %}selected{% endif %}>0 ({% trans "No" %})</option>
         </select>
       </div>
       <div class="mb-3">
