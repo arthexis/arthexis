@@ -84,21 +84,33 @@ class NodeFeature(Entity):
 
     objects = NodeFeatureManager()
 
-    DEFAULT_ACTIONS = {
-        "rfid-scanner": NodeFeatureDefaultAction(
-            label="Scan RFIDs", url_name="admin:core_rfid_scan"
+    DEFAULT_ACTIONS: dict[str, tuple[NodeFeatureDefaultAction, ...]] = {
+        "rfid-scanner": (
+            NodeFeatureDefaultAction(
+                label="Scan RFIDs", url_name="admin:core_rfid_scan"
+            ),
         ),
-        "celery-queue": NodeFeatureDefaultAction(
-            label="Celery Report",
-            url_name="admin:nodes_nodefeature_celery_report",
+        "celery-queue": (
+            NodeFeatureDefaultAction(
+                label="Celery Report",
+                url_name="admin:nodes_nodefeature_celery_report",
+            ),
         ),
-        "screenshot-poll": NodeFeatureDefaultAction(
-            label="Take Screenshot",
-            url_name="admin:nodes_nodefeature_take_screenshot",
+        "screenshot-poll": (
+            NodeFeatureDefaultAction(
+                label="Take Screenshot",
+                url_name="admin:nodes_nodefeature_take_screenshot",
+            ),
         ),
-        "rpi-camera": NodeFeatureDefaultAction(
-            label="Take a Snapshot",
-            url_name="admin:nodes_nodefeature_take_snapshot",
+        "rpi-camera": (
+            NodeFeatureDefaultAction(
+                label="Take a Snapshot",
+                url_name="admin:nodes_nodefeature_take_snapshot",
+            ),
+            NodeFeatureDefaultAction(
+                label="View stream",
+                url_name="admin:nodes_nodefeature_view_stream",
+            ),
         ),
     }
 
@@ -141,10 +153,19 @@ class NodeFeature(Entity):
             return (base_path / "locks" / lock).exists()
         return False
 
-    def get_default_action(self) -> NodeFeatureDefaultAction | None:
-        """Return the configured default action for this feature if any."""
+    def get_default_actions(self) -> tuple[NodeFeatureDefaultAction, ...]:
+        """Return the configured default actions for this feature."""
 
-        return self.DEFAULT_ACTIONS.get(self.slug)
+        actions = self.DEFAULT_ACTIONS.get(self.slug, ())
+        if isinstance(actions, NodeFeatureDefaultAction):  # pragma: no cover - legacy
+            return (actions,)
+        return actions
+
+    def get_default_action(self) -> NodeFeatureDefaultAction | None:
+        """Return the first configured default action for this feature if any."""
+
+        actions = self.get_default_actions()
+        return actions[0] if actions else None
 
 
 def get_terminal_role():
