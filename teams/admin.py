@@ -29,6 +29,7 @@ from core.models import (
 from nodes.admin import EmailOutboxAdmin
 from nodes.models import EmailOutbox as CoreEmailOutbox
 
+from .forms import TOTPDeviceAdminForm
 from .models import (
     InviteLead,
     User,
@@ -109,3 +110,17 @@ except NotRegistered:
 @admin.register(TOTPDevice)
 class TOTPDeviceAdminProxy(CoreTOTPDeviceAdmin):
     raw_id_fields = ()
+    form = TOTPDeviceAdminForm
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = super().get_fieldsets(request, obj=obj)
+        if fieldsets:
+            identity_fields = list(fieldsets[0][1].get("fields", ()))
+            if "issuer" not in identity_fields:
+                try:
+                    insert_at = identity_fields.index("name") + 1
+                except ValueError:
+                    insert_at = len(identity_fields)
+                identity_fields.insert(insert_at, "issuer")
+                fieldsets[0][1]["fields"] = identity_fields
+        return fieldsets

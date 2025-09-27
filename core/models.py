@@ -2650,3 +2650,23 @@ class Todo(Entity):
         if isinstance(field, ConditionTextField):
             return field.evaluate(self)
         return ConditionCheckResult(True, "")
+
+
+class TOTPDeviceSettings(models.Model):
+    """Per-device configuration options for authenticator enrollments."""
+
+    device = models.OneToOneField(
+        "otp_totp.TOTPDevice",
+        on_delete=models.CASCADE,
+        related_name="custom_settings",
+    )
+    issuer = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text=_("Label shown in authenticator apps. Leave blank to use Arthexis."),
+    )
+
+    class Meta:
+        verbose_name = _("Authenticator device settings")
+        verbose_name_plural = _("Authenticator device settings")
