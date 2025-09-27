@@ -1,9 +1,10 @@
-import asyncio
-import json
 import base64
 import ipaddress
 import re
 from datetime import datetime
+import asyncio
+import inspect
+import json
 from django.utils import timezone
 from core.models import EnergyAccount, Reference, RFID as CoreRFID
 from nodes.models import NetMessage
@@ -17,7 +18,7 @@ from config.offline import requires_network
 from . import store
 from decimal import Decimal
 from django.utils.dateparse import parse_datetime
-from .models import Transaction, Charger, MeterValue
+from .models import Transaction, Charger, MeterValue, DataTransferMessage
 from .reference_utils import host_is_local_loopback
 from .evcs_discovery import (
     DEFAULT_CONSOLE_PORT,
@@ -585,6 +586,36 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return
         if metadata.get("charger_id") and metadata.get("charger_id") != self.charger_id:
             return
+        if metadata.get("action") == "DataTransfer":
+            message_pk = metadata.get("message_pk")
+            if not message_pk:
+                return
+
+            def _apply():
+                message = DataTransferMessage.objects.filter(pk=message_pk).first()
+                if not message:
+                    return
+                status_value = str((payload or {}).get("status") or "").strip()
+                message.status = status_value
+                message.response_data = (payload or {}).get("data")
+                message.error_code = ""
+                message.error_description = ""
+                message.error_details = None
+                message.responded_at = timezone.now()
+                message.save(
+                    update_fields=[
+                        "status",
+                        "response_data",
+                        "error_code",
+                        "error_description",
+                        "error_details",
+                        "responded_at",
+                        "updated_at",
+                    ]
+                )
+
+            await database_sync_to_async(_apply)()
+            return
         if metadata.get("action") != "ChangeAvailability":
             return
         status = str((payload or {}).get("status") or "").strip()
@@ -611,6 +642,36 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return
         if metadata.get("charger_id") and metadata.get("charger_id") != self.charger_id:
             return
+        if metadata.get("action") == "DataTransfer":
+            message_pk = metadata.get("message_pk")
+            if not message_pk:
+                return
+
+            def _apply():
+                message = DataTransferMessage.objects.filter(pk=message_pk).first()
+                if not message:
+                    return
+                status_value = (error_code or "Error").strip() or "Error"
+                message.status = status_value
+                message.response_data = None
+                message.error_code = (error_code or "").strip()
+                message.error_description = (description or "").strip()
+                message.error_details = details
+                message.responded_at = timezone.now()
+                message.save(
+                    update_fields=[
+                        "status",
+                        "response_data",
+                        "error_code",
+                        "error_description",
+                        "error_details",
+                        "responded_at",
+                        "updated_at",
+                    ]
+                )
+
+            await database_sync_to_async(_apply)()
+            return
         if metadata.get("action") != "ChangeAvailability":
             return
         detail_text = (description or "").strip()
@@ -631,6 +692,101 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             requested_at,
             details=detail_text,
         )
+
+    async def _handle_data_transfer(
+        self, message_id: str, payload: dict | None
+    ) -> dict[str, object]:
+        payload = payload if isinstance(payload, dict) else {}
+        vendor_id = str(payload.get("vendorId") or "").strip()
+        vendor_message_id = payload.get("messageId")
+        if vendor_message_id is None:
+            vendor_message_id_text = ""
+        elif isinstance(vendor_message_id, str):
+            vendor_message_id_text = vendor_message_id.strip()
+        else:
+            vendor_message_id_text = str(vendor_message_id)
+        connector_value = self.connector_value
+
+        def _get_or_create_charger():
+            if self.charger and getattr(self.charger, "pk", None):
+                return self.charger
+            if connector_value is None:
+                charger, _ = Charger.objects.get_or_create(
+                    charger_id=self.charger_id,
+                    connector_id=None,
+                    defaults={"last_path": self.scope.get("path", "")},
+                )
+                return charger
+            charger, _ = Charger.objects.get_or_create(
+                charger_id=self.charger_id,
+                connector_id=connector_value,
+                defaults={"last_path": self.scope.get("path", "")},
+            )
+            return charger
+
+        charger_obj = await database_sync_to_async(_get_or_create_charger)()
+        message = await database_sync_to_async(DataTransferMessage.objects.create)(
+            charger=charger_obj,
+            connector_id=connector_value,
+            direction=DataTransferMessage.DIRECTION_CP_TO_CSMS,
+            ocpp_message_id=message_id,
+            vendor_id=vendor_id,
+            message_id=vendor_message_id_text,
+            payload=payload or {},
+            status="Pending",
+        )
+
+        status = "Rejected" if not vendor_id else "UnknownVendorId"
+        response_data = None
+        error_code = ""
+        error_description = ""
+        error_details = None
+
+        handler = self._resolve_data_transfer_handler(vendor_id) if vendor_id else None
+        if handler:
+            try:
+                result = handler(message, payload)
+                if inspect.isawaitable(result):
+                    result = await result
+            except Exception as exc:  # pragma: no cover - defensive guard
+                status = "Rejected"
+                error_code = "InternalError"
+                error_description = str(exc)
+            else:
+                if isinstance(result, tuple):
+                    status = str(result[0]) if result else status
+                    if len(result) > 1:
+                        response_data = result[1]
+                elif isinstance(result, dict):
+                    status = str(result.get("status", status))
+                    if "data" in result:
+                        response_data = result["data"]
+                elif isinstance(result, str):
+                    status = result
+        final_status = status or "Rejected"
+
+        def _finalise():
+            DataTransferMessage.objects.filter(pk=message.pk).update(
+                status=final_status,
+                response_data=response_data,
+                error_code=error_code,
+                error_description=error_description,
+                error_details=error_details,
+                responded_at=timezone.now(),
+            )
+
+        await database_sync_to_async(_finalise)()
+
+        reply_payload: dict[str, object] = {"status": final_status}
+        if response_data is not None:
+            reply_payload["data"] = response_data
+        return reply_payload
+
+    def _resolve_data_transfer_handler(self, vendor_id: str):
+        if not vendor_id:
+            return None
+        candidate = f"handle_data_transfer_{vendor_id.lower()}"
+        return getattr(self, candidate, None)
 
     async def _update_change_availability_state(
         self,
@@ -757,6 +913,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     "interval": 300,
                     "status": "Accepted",
                 }
+            elif action == "DataTransfer":
+                reply_payload = await self._handle_data_transfer(msg_id, payload)
             elif action == "Heartbeat":
                 reply_payload = {"currentTime": datetime.utcnow().isoformat() + "Z"}
                 now = timezone.now()

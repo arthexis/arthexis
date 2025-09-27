@@ -1,4 +1,3 @@
-import asyncio
 import json
 import uuid
 from datetime import datetime, timedelta, timezone as dt_timezone
@@ -17,6 +16,8 @@ from django.conf import settings
 from django.utils import translation, timezone
 from django.core.exceptions import ValidationError
 
+from asgiref.sync import async_to_sync
+
 from utils.api import api_login_required
 
 from nodes.models import Node
@@ -25,7 +26,7 @@ from pages.utils import landing
 from core.liveupdate import live_update
 
 from . import store
-from .models import Transaction, Charger
+from .models import Transaction, Charger, DataTransferMessage
 from .evcs import (
     _start_simulator,
     _stop_simulator,
@@ -903,6 +904,15 @@ def dispatch_action(request, cid, connector=None):
             .order_by("pk")
             .first()
         )
+    if charger_obj is None:
+        if connector_value is None:
+            charger_obj, _ = Charger.objects.get_or_create(
+                charger_id=cid, connector_id=None
+            )
+        else:
+            charger_obj, _ = Charger.objects.get_or_create(
+                charger_id=cid, connector_id=connector_value
+            )
     ws = store.get_connection(cid, connector_value)
     if ws is None:
         return JsonResponse({"detail": "no connection"}, status=404)
@@ -923,7 +933,7 @@ def dispatch_action(request, cid, connector=None):
                 {"transactionId": tx_obj.pk},
             ]
         )
-        asyncio.get_event_loop().create_task(ws.send(msg))
+        async_to_sync(ws.send)(msg)
     elif action == "remote_start":
         id_tag = data.get("idTag")
         if not isinstance(id_tag, str) or not id_tag.strip():
@@ -950,7 +960,7 @@ def dispatch_action(request, cid, connector=None):
                 payload,
             ]
         )
-        asyncio.get_event_loop().create_task(ws.send(msg))
+        async_to_sync(ws.send)(msg)
     elif action == "change_availability":
         availability_type = data.get("type")
         if availability_type not in {"Operative", "Inoperative"}:
@@ -966,7 +976,7 @@ def dispatch_action(request, cid, connector=None):
         message_id = uuid.uuid4().hex
         payload = {"connectorId": connector_payload, "type": availability_type}
         msg = json.dumps([2, message_id, "ChangeAvailability", payload])
-        asyncio.get_event_loop().create_task(ws.send(msg))
+        async_to_sync(ws.send)(msg)
         requested_at = timezone.now()
         store.register_pending_call(
             message_id,
@@ -989,11 +999,49 @@ def dispatch_action(request, cid, connector=None):
             Charger.objects.filter(pk=charger_obj.pk).update(**updates)
             for field, value in updates.items():
                 setattr(charger_obj, field, value)
+    elif action == "data_transfer":
+        vendor_id = data.get("vendorId")
+        if not isinstance(vendor_id, str) or not vendor_id.strip():
+            return JsonResponse({"detail": "vendorId required"}, status=400)
+        vendor_id = vendor_id.strip()
+        payload: dict[str, object] = {"vendorId": vendor_id}
+        message_identifier = ""
+        if "messageId" in data and data["messageId"] is not None:
+            message_candidate = data["messageId"]
+            if not isinstance(message_candidate, str):
+                return JsonResponse({"detail": "messageId must be a string"}, status=400)
+            message_identifier = message_candidate.strip()
+            if message_identifier:
+                payload["messageId"] = message_identifier
+        if "data" in data:
+            payload["data"] = data["data"]
+        message_id = uuid.uuid4().hex
+        msg = json.dumps([2, message_id, "DataTransfer", payload])
+        record = DataTransferMessage.objects.create(
+            charger=charger_obj,
+            connector_id=connector_value,
+            direction=DataTransferMessage.DIRECTION_CSMS_TO_CP,
+            ocpp_message_id=message_id,
+            vendor_id=vendor_id,
+            message_id=message_identifier,
+            payload=payload,
+            status="Pending",
+        )
+        async_to_sync(ws.send)(msg)
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "DataTransfer",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "message_pk": record.pk,
+            },
+        )
     elif action == "reset":
         msg = json.dumps(
             [2, str(datetime.utcnow().timestamp()), "Reset", {"type": "Soft"}]
         )
-        asyncio.get_event_loop().create_task(ws.send(msg))
+        async_to_sync(ws.send)(msg)
     else:
         return JsonResponse({"detail": "unknown action"}, status=400)
     log_key = store.identity_key(cid, connector_value)

@@ -31,6 +31,9 @@ A `StartTransaction` call may arrive with an optional RFID. The CSMS looks up th
 ### FirmwareStatusNotification
 Firmware status notifications persist the reported status, optional info string, and timestamp on all `Charger` identities associated with the connection. Each update is logged so operators can trace firmware upgrade progress.【F:ocpp/consumers.py†L429-L498】【F:ocpp/consumers.py†L943-L970】
 
+### DataTransfer
+Incoming `DataTransfer` requests are written to the `DataTransferMessage` table so every payload, vendor identifier, and follow-up status is auditable. The consumer stores the raw request with a `cp_to_csms` direction marker, invokes any vendor-specific handler, and records the final status or error metadata alongside the response timestamp before returning the call result to the charger.【F:ocpp/consumers.py†L583-L782】【F:ocpp/models.py†L767-L810】
+
 ## CSMS → charge point calls
 Outgoing calls originate from the control endpoint that proxies UI and admin actions to the live WebSocket session.
 
@@ -45,6 +48,9 @@ Reset commands always request a soft reset and are dispatched as asynchronous We
 
 ### ChangeAvailability
 Change availability requests enforce `Operative`/`Inoperative` validation, normalise the connector id, and send the `ChangeAvailability` call with a unique message id. The view registers pending-call metadata so the WebSocket consumer can reconcile the eventual response, and resets the request tracking fields on the affected `Charger` record to indicate a new change is in progress.【F:ocpp/views.py†L951-L983】【F:ocpp/store.py†L1-L88】【F:ocpp/models.py†L120-L176】
+
+### DataTransfer
+Operators can issue a `DataTransfer` via the control endpoint by providing the vendor id, optional message id, and payload data. The view validates the request, persists a `DataTransferMessage` row flagged as `csms_to_cp`, sends the call to the charger, and registers a pending call keyed to that record. When the charger replies, the consumer matches the message id, updates the stored status, response data, or error details, and timestamps the outcome so outbound diagnostics remain traceable.【F:ocpp/views.py†L900-L1040】【F:ocpp/consumers.py†L583-L782】【F:ocpp/models.py†L767-L810】
 
 ### Handling responses
 When a charger replies to `ChangeAvailability`, the consumer matches the message id against the pending-call registry. Call results mark the request as accepted and update the requested state, while call errors flag the request as rejected and capture the error details. The stored status feeds the admin interface so operators can track whether the requested availability state took effect.【F:ocpp/consumers.py†L500-L603】【F:ocpp/consumers.py†L604-L672】
