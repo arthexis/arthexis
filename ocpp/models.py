@@ -78,7 +78,7 @@ class Charger(Entity):
         help_text="Optional connector identifier for multi-connector chargers.",
     )
     public_display = models.BooleanField(
-        _("Show on Public Dashboard"),
+        _("Public"),
         default=True,
         help_text="Display this charger on the public status dashboard.",
     )
@@ -88,21 +88,21 @@ class Charger(Entity):
         help_text="Require a valid RFID before starting a charging session.",
     )
     firmware_status = models.CharField(
-        _("Firmware Status"),
+        _("Status"),
         max_length=32,
         blank=True,
         default="",
         help_text="Latest firmware status reported by the charger.",
     )
     firmware_status_info = models.CharField(
-        _("Firmware Status Details"),
+        _("Status Details"),
         max_length=255,
         blank=True,
         default="",
         help_text="Additional information supplied with the firmware status.",
     )
     firmware_timestamp = models.DateTimeField(
-        _("Firmware Status Timestamp"),
+        _("Status Timestamp"),
         null=True,
         blank=True,
         help_text="When the charger reported the current firmware status.",
@@ -114,6 +114,7 @@ class Charger(Entity):
     last_status_vendor_info = models.JSONField(null=True, blank=True)
     last_status_timestamp = models.DateTimeField(null=True, blank=True)
     availability_state = models.CharField(
+        _("State"),
         max_length=16,
         blank=True,
         default="",
@@ -123,22 +124,26 @@ class Charger(Entity):
         ),
     )
     availability_state_updated_at = models.DateTimeField(
+        _("State Updated At"),
         null=True,
         blank=True,
         help_text="When the current availability state became effective.",
     )
     availability_requested_state = models.CharField(
+        _("Requested State"),
         max_length=16,
         blank=True,
         default="",
         help_text="Last availability state requested via ChangeAvailability.",
     )
     availability_requested_at = models.DateTimeField(
+        _("Requested At"),
         null=True,
         blank=True,
         help_text="When the last ChangeAvailability request was sent.",
     )
     availability_request_status = models.CharField(
+        _("Request Status"),
         max_length=16,
         blank=True,
         default="",
@@ -148,11 +153,13 @@ class Charger(Entity):
         ),
     )
     availability_request_status_at = models.DateTimeField(
+        _("Request Status At"),
         null=True,
         blank=True,
         help_text="When the last ChangeAvailability response was received.",
     )
     availability_request_details = models.CharField(
+        _("Request Details"),
         max_length=255,
         blank=True,
         default="",
