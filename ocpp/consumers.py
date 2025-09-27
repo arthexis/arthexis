@@ -105,6 +105,22 @@ def _resolve_client_ip(scope: dict) -> str | None:
     return fallback
 
 
+def _parse_ocpp_timestamp(value) -> datetime | None:
+    """Return an aware :class:`~datetime.datetime` for OCPP timestamps."""
+
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        timestamp = value
+    else:
+        timestamp = parse_datetime(str(value))
+    if not timestamp:
+        return None
+    if timezone.is_naive(timestamp):
+        timestamp = timezone.make_aware(timestamp, timezone.get_current_timezone())
+    return timestamp
+
+
 class SinkConsumer(AsyncWebsocketConsumer):
     """Accept any message without validation."""
 
@@ -1239,6 +1255,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 else:
                     authorized = True
                 if authorized:
+                    start_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
+                    received_start = timezone.now()
                     tx_obj = await database_sync_to_async(Transaction.objects.create)(
                         charger=self.charger,
                         account=account,
@@ -1246,7 +1264,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         vin=(payload.get("vin") or ""),
                         connector_id=payload.get("connectorId"),
                         meter_start=payload.get("meterStart"),
-                        start_time=timezone.now(),
+                        start_time=start_timestamp or received_start,
+                        received_start_time=received_start,
                     )
                     store.transactions[self.store_key] = tx_obj
                     store.start_session_log(self.store_key, tx_obj.pk)
@@ -1267,17 +1286,22 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         Transaction.objects.filter(pk=tx_id, charger=self.charger).first
                     )()
                 if not tx_obj and tx_id is not None:
+                    received_start = timezone.now()
                     tx_obj = await database_sync_to_async(Transaction.objects.create)(
                         pk=tx_id,
                         charger=self.charger,
-                        start_time=timezone.now(),
+                        start_time=received_start,
+                        received_start_time=received_start,
                         meter_start=payload.get("meterStart")
                         or payload.get("meterStop"),
                         vin=(payload.get("vin") or ""),
                     )
                 if tx_obj:
+                    stop_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
+                    received_stop = timezone.now()
                     tx_obj.meter_stop = payload.get("meterStop")
-                    tx_obj.stop_time = timezone.now()
+                    tx_obj.stop_time = stop_timestamp or received_stop
+                    tx_obj.received_stop_time = received_stop
                     await database_sync_to_async(tx_obj.save)()
                     await self._update_consumption_message(tx_obj.pk)
                 await self._cancel_consumption_message()

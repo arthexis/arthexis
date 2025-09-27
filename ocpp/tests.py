@@ -58,7 +58,7 @@ import asyncio
 from pathlib import Path
 from .simulator import SimulatorConfig, ChargePointSimulator
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from .tasks import purge_meter_readings
 from django.db import close_old_connections
 from django.db.utils import OperationalError
@@ -304,6 +304,78 @@ class CSMSConsumerTests(TransactionTestCase):
             pk=tx_id, charger__charger_id="RFIDREC"
         )
         self.assertEqual(tx.rfid, "TAG123")
+
+        await communicator.disconnect()
+
+    async def test_start_transaction_uses_payload_timestamp(self):
+        communicator = WebsocketCommunicator(application, "/STAMPED/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        start_ts = datetime(2025, 9, 26, 18, 1, tzinfo=dt_timezone.utc)
+        before = timezone.now()
+        await communicator.send_json_to(
+            [
+                2,
+                "1",
+                "StartTransaction",
+                {"meterStart": 5, "timestamp": start_ts.isoformat()},
+            ]
+        )
+        response = await communicator.receive_json_from()
+        after = timezone.now()
+        tx_id = response[2]["transactionId"]
+
+        tx = await database_sync_to_async(Transaction.objects.get)(
+            pk=tx_id, charger__charger_id="STAMPED"
+        )
+        self.assertEqual(tx.start_time, start_ts)
+        self.assertIsNotNone(tx.received_start_time)
+        self.assertGreaterEqual(tx.received_start_time, before)
+        self.assertLessEqual(tx.received_start_time, after)
+
+        await communicator.disconnect()
+
+    async def test_stop_transaction_uses_payload_timestamp(self):
+        communicator = WebsocketCommunicator(application, "/STOPSTAMP/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [
+                2,
+                "1",
+                "StartTransaction",
+                {"meterStart": 10},
+            ]
+        )
+        response = await communicator.receive_json_from()
+        tx_id = response[2]["transactionId"]
+
+        stop_ts = datetime(2025, 9, 26, 18, 5, tzinfo=dt_timezone.utc)
+        before = timezone.now()
+        await communicator.send_json_to(
+            [
+                2,
+                "2",
+                "StopTransaction",
+                {
+                    "transactionId": tx_id,
+                    "meterStop": 20,
+                    "timestamp": stop_ts.isoformat(),
+                },
+            ]
+        )
+        await communicator.receive_json_from()
+        after = timezone.now()
+
+        tx = await database_sync_to_async(Transaction.objects.get)(
+            pk=tx_id, charger__charger_id="STOPSTAMP"
+        )
+        self.assertEqual(tx.stop_time, stop_ts)
+        self.assertIsNotNone(tx.received_stop_time)
+        self.assertGreaterEqual(tx.received_stop_time, before)
+        self.assertLessEqual(tx.received_stop_time, after)
 
         await communicator.disconnect()
 

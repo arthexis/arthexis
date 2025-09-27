@@ -723,7 +723,39 @@ def charger_status(request, cid, connector=None):
     paginator = Paginator(transactions_qs, 10)
     page_obj = paginator.get_page(request.GET.get("page"))
     transactions = page_obj.object_list
+    date_view = request.GET.get("dates", "charger").lower()
+    if date_view not in {"charger", "received"}:
+        date_view = "charger"
+
+    def _date_query(mode: str) -> str:
+        params = request.GET.copy()
+        params["dates"] = mode
+        query = params.urlencode()
+        return f"?{query}" if query else ""
+
+    date_view_options = {
+        "charger": _("Charger timestamps"),
+        "received": _("Received timestamps"),
+    }
+    date_toggle_links = [
+        {
+            "mode": mode,
+            "label": label,
+            "url": _date_query(mode),
+            "active": mode == date_view,
+        }
+        for mode, label in date_view_options.items()
+    ]
     chart_data = {"labels": [], "datasets": []}
+    pagination_params = request.GET.copy()
+    pagination_params["dates"] = date_view
+    pagination_params.pop("page", None)
+    pagination_query = pagination_params.urlencode()
+    session_params = request.GET.copy()
+    session_params["dates"] = date_view
+    session_params.pop("session", None)
+    session_params.pop("page", None)
+    session_query = session_params.urlencode()
 
     def _series_from_transaction(tx):
         points: list[tuple[str, float]] = []
@@ -858,6 +890,10 @@ def charger_status(request, cid, connector=None):
                     for dataset in chart_data["datasets"]
                 )
             ),
+            "date_view": date_view,
+            "date_toggle_links": date_toggle_links,
+            "pagination_query": pagination_query,
+            "session_query": session_query,
         },
     )
 
@@ -867,6 +903,28 @@ def charger_session_search(request, cid, connector=None):
     charger, connector_slug = _get_charger(cid, connector)
     _ensure_charger_access(request.user, charger)
     date_str = request.GET.get("date")
+    date_view = request.GET.get("dates", "charger").lower()
+    if date_view not in {"charger", "received"}:
+        date_view = "charger"
+
+    def _date_query(mode: str) -> str:
+        params = request.GET.copy()
+        params["dates"] = mode
+        query = params.urlencode()
+        return f"?{query}" if query else ""
+
+    date_toggle_links = [
+        {
+            "mode": mode,
+            "label": label,
+            "url": _date_query(mode),
+            "active": mode == date_view,
+        }
+        for mode, label in {
+            "charger": _("Charger timestamps"),
+            "received": _("Received timestamps"),
+        }.items()
+    ]
     transactions = None
     if date_str:
         try:
@@ -904,6 +962,8 @@ def charger_session_search(request, cid, connector=None):
             "connector_slug": connector_slug,
             "connector_links": connector_links,
             "status_url": status_url,
+            "date_view": date_view,
+            "date_toggle_links": date_toggle_links,
         },
     )
 

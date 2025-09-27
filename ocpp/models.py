@@ -628,6 +628,8 @@ class Transaction(Entity):
     )
     start_time = models.DateTimeField()
     stop_time = models.DateTimeField(null=True, blank=True)
+    received_start_time = models.DateTimeField(null=True, blank=True)
+    received_stop_time = models.DateTimeField(null=True, blank=True)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.charger}:{self.pk}"

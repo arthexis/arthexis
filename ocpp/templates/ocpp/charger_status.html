@@ -106,7 +106,11 @@
       <ul>
         <li>{% trans "Transaction ID" %}: {{ tx.id }}</li>
         <li>{% trans "Meter Start" %}: {{ tx.meter_start }}</li>
+        {% if date_view == "received" %}
+        <li>{% trans "Start Time" %}: {{ tx.received_start_time|default:tx.start_time }}</li>
+        {% else %}
         <li>{% trans "Start Time" %}: {{ tx.start_time }}</li>
+        {% endif %}
         <li>{% trans "Session Energy" %}: <span id="session-kw">{{ tx.kw|floatformat:2 }}</span> kW</li>
       </ul>
       {% elif not past_session %}
@@ -167,7 +171,13 @@
         {% endif %}
         {% if item.tx %}
         <p class="mb-1"><small>{% trans "Energy" %}: {{ item.tx.kw|floatformat:2 }} kW</small></p>
+        {% if date_view == "received" %}
+        {% with display_start=item.tx.received_start_time|default:item.tx.start_time %}
+        <p class="mb-0 text-muted"><small>{% trans "Started" %}: {{ display_start|date:"SHORT_DATETIME_FORMAT" }}</small></p>
+        {% endwith %}
+        {% else %}
         <p class="mb-0 text-muted"><small>{% trans "Started" %}: {{ item.tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</small></p>
+        {% endif %}
         {% else %}
         <p class="mb-0 text-muted"><small>{% trans "No active transaction" %}</small></p>
         {% endif %}
@@ -177,7 +187,16 @@
   </div>
   {% endif %}
 
-  <h2>{% trans "Sessions" %}</h2>
+  <div class="d-flex flex-column flex-md-row gap-2 justify-content-between align-items-md-center">
+    <h2 class="mb-0">{% trans "Sessions" %}</h2>
+    {% if date_toggle_links %}
+    <div class="btn-group" role="group" aria-label="{% trans 'Date display' %}">
+      {% for link in date_toggle_links %}
+      <a class="btn btn-outline-secondary{% if link.active %} active{% endif %}" href="{{ link.url }}">{{ link.label }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
   <table class="table">
     <thead>
       <tr>
@@ -185,8 +204,8 @@
         <th>{% trans "Connector" %}</th>
         {% endif %}
         <th>{% trans "ID" %}</th>
-        <th>{% trans "Start" %}</th>
-        <th>{% trans "Stop" %}</th>
+        <th>{% trans "Start" %}<span class="d-block small text-muted">{% if date_view == "received" %}{% trans "Received time" %}{% else %}{% trans "Charger time" %}{% endif %}</span></th>
+        <th>{% trans "Stop" %}<span class="d-block small text-muted">{% if date_view == "received" %}{% trans "Received time" %}{% else %}{% trans "Charger time" %}{% endif %}</span></th>
         <th>{% trans "Energy (kW)" %}</th>
       </tr>
     </thead>
@@ -196,9 +215,14 @@
         {% if charger.connector_id is None %}
         <td>{{ tx.charger.connector_label|default:tx.charger.connector_id }}</td>
         {% endif %}
-        <td><a href="?session={{ tx.id }}">{{ tx.id }}</a></td>
+        <td><a href="?session={{ tx.id }}{% if session_query %}&{{ session_query }}{% endif %}">{{ tx.id }}</a></td>
+        {% if date_view == "received" %}
+        <td>{{ tx.received_start_time|default:tx.start_time }}</td>
+        <td>{{ tx.received_stop_time|default:tx.stop_time|default:"-" }}</td>
+        {% else %}
         <td>{{ tx.start_time }}</td>
         <td>{{ tx.stop_time|default:"-" }}</td>
+        {% endif %}
         <td>{{ tx.kw|floatformat:2 }}</td>
       </tr>
       {% empty %}
@@ -208,7 +232,7 @@
   </table>
   <div class="d-flex justify-content-between align-items-center">
     {% if page_obj.has_previous %}
-    <a href="?page={{ page_obj.previous_page_number }}">{% trans "Previous 10" %}</a>
+    <a href="?page={{ page_obj.previous_page_number }}{% if pagination_query %}&{{ pagination_query }}{% endif %}">{% trans "Previous 10" %}</a>
     {% else %}
     <span></span>
     {% endif %}
@@ -220,7 +244,7 @@
       {% endif %}
     </div>
     {% if page_obj.has_next %}
-    <a href="?page={{ page_obj.next_page_number }}">{% trans "Next 10" %}</a>
+    <a href="?page={{ page_obj.next_page_number }}{% if pagination_query %}&{{ pagination_query }}{% endif %}">{% trans "Next 10" %}</a>
     {% else %}
     <span></span>
     {% endif %}
