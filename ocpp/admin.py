@@ -622,7 +622,13 @@ class SimulatorAdmin(LogViewAdminMixin, EntityModelAdmin):
                 if sim:
                     await sim.stop()
 
-        asyncio.get_event_loop().create_task(_stop(list(queryset)))
+        objs = list(queryset)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(_stop(objs))
+        else:
+            loop.create_task(_stop(objs))
         self.message_user(request, "Stopping simulators")
 
     stop_simulator.short_description = "Stop selected simulators"
