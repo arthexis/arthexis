@@ -771,12 +771,13 @@ class EmailInbox(Profile):
                     nonlocal charset
                     if not value:
                         return
+                    quoted_value = '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
                     try:
-                        value.encode("ascii")
-                        encoded_value = value
+                        quoted_value.encode("ascii")
+                        encoded_value = quoted_value
                     except UnicodeEncodeError:
                         charset = charset or "UTF-8"
-                        encoded_value = value.encode("utf-8")
+                        encoded_value = quoted_value.encode("utf-8")
                     criteria.extend([term, encoded_value])
 
                 _append("SUBJECT", subject)
