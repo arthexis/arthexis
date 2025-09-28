@@ -1295,7 +1295,11 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertContains(status_resp, "background-color: #dc3545")
 
         aggregate_status = self.client.get(reverse("charger-status", args=[serial]))
-        self.assertContains(aggregate_status, "Reported status")
+        self.assertContains(
+            aggregate_status,
+            f"Serial Number: {serial}",
+        )
+        self.assertNotContains(aggregate_status, 'id="last-status-raw"')
         self.assertContains(aggregate_status, "Info: Relay malfunction")
 
         page_resp = self.client.get(reverse("charger-page", args=[serial]))
