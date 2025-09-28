@@ -87,16 +87,9 @@ if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
 else
   LCD_FEATURE=false
 fi
-if [ -f "$LOCK_DIR/control.lck" ]; then
-  CONTROL_FEATURE=true
-else
-  CONTROL_FEATURE=false
-fi
-
 echo "Features:"
 echo "  Celery: $CELERY_FEATURE"
 echo "  LCD screen: $LCD_FEATURE"
-echo "  Control: $CONTROL_FEATURE"
 
 echo "Checking running status..."
 RUNNING=false
