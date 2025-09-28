@@ -7,8 +7,5 @@ websocket_urlpatterns = [
     # Accept connections at any path; the last segment is the charger ID.
     # Some charge points omit the final segment and only provide the
     # identifier via query parameters, so allow an empty match here.
-    re_path(
-        r"^(?:$|(?:.*/)?(?P<cid>[^/]+)/?)$",
-        consumers.CSMSConsumer.as_asgi(),
-    ),
+    re_path(r"^(?:.*/)?(?P<cid>[^/]*)/?$", consumers.CSMSConsumer.as_asgi()),
 ]

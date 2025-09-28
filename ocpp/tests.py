@@ -2413,6 +2413,28 @@ class SimulatorAdminTests(TransactionTestCase):
         charger = await database_sync_to_async(Charger.objects.get)(charger_id="QCHARGE")
         self.assertEqual(charger.last_path, "/")
 
+    async def test_query_string_cid_overrides_path_segment(self):
+        communicator = WebsocketCommunicator(application, "/ocpp?cid=QSEGOVR")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.disconnect()
+
+        charger = await database_sync_to_async(Charger.objects.get)(charger_id="QSEGOVR")
+        self.assertEqual(charger.last_path, "/ocpp")
+
+    async def test_query_string_charge_point_id_overrides_path_segment(self):
+        communicator = WebsocketCommunicator(
+            application, "/ocpp?chargePointId=QPSEG"
+        )
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.disconnect()
+
+        charger = await database_sync_to_async(Charger.objects.get)(charger_id="QPSEG")
+        self.assertEqual(charger.last_path, "/ocpp")
+
     async def test_nested_path_accepted_and_recorded(self):
         communicator = WebsocketCommunicator(application, "/foo/NEST/")
         connected, _ = await communicator.connect()

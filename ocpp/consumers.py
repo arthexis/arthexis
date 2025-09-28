@@ -155,27 +155,32 @@ class CSMSConsumer(AsyncWebsocketConsumer):
     consumption_update_interval = 300
 
     def _extract_serial_identifier(self) -> str:
-        """Return the charge point serial from the path or query string."""
-
-        raw_serial = self.scope["url_route"]["kwargs"].get("cid", "")
-        if raw_serial:
-            return raw_serial
+        """Return the charge point serial from the query string or path."""
 
         query_bytes = self.scope.get("query_string") or b""
-        if not query_bytes:
-            return ""
+        if query_bytes:
+            try:
+                parsed = parse_qs(
+                    query_bytes.decode("utf-8", "ignore"),
+                    keep_blank_values=False,
+                )
+            except Exception:
+                parsed = {}
+            if parsed:
+                normalized = {
+                    key.lower(): values for key, values in parsed.items() if values
+                }
+                for candidate in (
+                    "cid",
+                    "chargepointid",
+                    "charge_point_id",
+                    "chargerid",
+                ):
+                    values = normalized.get(candidate)
+                    if values:
+                        return values[0]
 
-        try:
-            parsed = parse_qs(query_bytes.decode("utf-8", "ignore"), keep_blank_values=False)
-        except Exception:
-            return ""
-
-        normalized = {key.lower(): values for key, values in parsed.items() if values}
-        for candidate in ("cid", "chargepointid", "charge_point_id", "chargerid"):
-            values = normalized.get(candidate)
-            if values:
-                return values[0]
-        return ""
+        return self.scope["url_route"]["kwargs"].get("cid", "")
 
     @requires_network
     async def connect(self):
