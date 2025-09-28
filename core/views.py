@@ -1,4 +1,5 @@
 import json
+import logging
 import shutil
 from datetime import timedelta
 
@@ -28,6 +29,8 @@ from django.test import signals
 from utils import revision
 from utils.api import api_login_required
 
+logger = logging.getLogger(__name__)
+
 from .models import Product, EnergyAccount, PackageRelease, Todo
 from .models import RFID
 
@@ -47,6 +50,13 @@ def odoo_products(request):
             {"fields": ["name"], "limit": 50},
         )
     except Exception:
+        logger.exception(
+            "Failed to fetch Odoo products via API for user %s (profile_id=%s, host=%s, database=%s)",
+            getattr(request.user, "pk", None),
+            getattr(profile, "pk", None),
+            getattr(profile, "host", None),
+            getattr(profile, "database", None),
+        )
         return JsonResponse({"detail": "Unable to fetch products"}, status=502)
     items = [{"id": p.get("id"), "name": p.get("name", "")} for p in products]
     return JsonResponse(items, safe=False)

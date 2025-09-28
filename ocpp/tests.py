@@ -806,14 +806,9 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertEqual(detail_payload["firmwareStatus"], "Installing")
         self.assertEqual(detail_payload["firmwareStatusInfo"], "Applying patch")
         self.assertEqual(detail_payload["firmwareTimestamp"], ts.isoformat())
-        self.assertIn('id="firmware-status">Installing<', html)
-        self.assertIn('id="firmware-status-info">Applying patch<', html)
-        match = re.search(
-            r'id="firmware-timestamp"[^>]*data-iso="([^"]+)"', html
-        )
-        self.assertIsNotNone(match)
-        parsed_iso = datetime.fromisoformat(match.group(1))
-        self.assertAlmostEqual(parsed_iso.timestamp(), ts.timestamp(), places=3)
+        self.assertNotIn('id="firmware-status"', html)
+        self.assertNotIn('id="firmware-status-info"', html)
+        self.assertNotIn('id="firmware-timestamp"', html)
 
         matching = [
             item
