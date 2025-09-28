@@ -174,6 +174,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     "cid",
                     "chargepointid",
                     "charge_point_id",
+                    "chargeboxid",
                     "chargerid",
                 ):
                     values = normalized.get(candidate)
