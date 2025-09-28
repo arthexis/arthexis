@@ -23,6 +23,8 @@ from django.utils.translation import gettext_lazy as _, ngettext
 from nodes.models import Node
 from nodes.utils import capture_screenshot, save_screenshot
 
+from .forms import UserManualAdminForm
+
 from .models import (
     SiteBadge,
     Application,
@@ -190,6 +192,7 @@ class ModuleAdmin(EntityModelAdmin):
 
 @admin.register(UserManual)
 class UserManualAdmin(EntityModelAdmin):
+    form = UserManualAdminForm
     list_display = ("title", "slug", "languages", "is_seed_data", "is_user_data")
     search_fields = ("title", "slug", "description")
     list_filter = ("is_seed_data", "is_user_data")
