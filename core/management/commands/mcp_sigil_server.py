@@ -34,7 +34,8 @@ class Command(BaseCommand):
         if options.get("public"):
             host = "0.0.0.0"
 
-        port = options.get("port", config.get("port", 8800))
+        port_option = options.get("port")
+        port = port_option if port_option is not None else config.get("port", 8800)
         try:
             port = int(port)
         except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
