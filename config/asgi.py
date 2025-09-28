@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/5.2/howto/deployment/asgi/
 
 import os
 from config.loadenv import loadenv
-from asgiref.typing import Receive, Scope, Send
+from typing import Any, Awaitable, Callable, Dict, MutableMapping
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
@@ -22,6 +22,10 @@ loadenv()
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 django_asgi_app = get_asgi_application()
+
+Scope = MutableMapping[str, Any]
+Receive = Callable[[], Awaitable[Dict[str, Any]]]
+Send = Callable[[Dict[str, Any]], Awaitable[None]]
 
 websocket_patterns = ocpp.routing.websocket_urlpatterns
 
