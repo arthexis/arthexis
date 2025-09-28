@@ -1277,10 +1277,26 @@ class NodeAdminTests(TestCase):
         response = self.client.get(reverse("admin:nodes_nodefeature_view_stream"))
         self.assertEqual(response.status_code, 200)
         response.render()
-        default_stream = getattr(settings, "RPI_CAMERA_STREAM_URL", "http://127.0.0.1:8554/")
-        self.assertEqual(response.context_data["stream_url"], default_stream)
-        self.assertContains(response, default_stream)
+        expected_stream = "http://testserver:8554/"
+        self.assertEqual(response.context_data["stream_url"], expected_stream)
+        self.assertContains(response, expected_stream)
         self.assertContains(response, "camera-stream__frame")
+
+    def test_view_stream_uses_configured_stream_url(self):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="rpi-camera", defaults={"display": "Raspberry Pi Camera"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        configured_stream = "https://camera.local/stream"
+        with self.settings(RPI_CAMERA_STREAM_URL=configured_stream):
+            response = self.client.get(
+                reverse("admin:nodes_nodefeature_view_stream")
+            )
+        self.assertEqual(response.status_code, 200)
+        response.render()
+        self.assertEqual(response.context_data["stream_url"], configured_stream)
+        self.assertContains(response, configured_stream)
 
 
 class NetMessageAdminTests(TransactionTestCase):
