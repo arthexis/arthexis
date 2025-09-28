@@ -26,15 +26,44 @@ from .service import (
 )
 
 
+def _normalize_mount_path(value: str | None, *, default: str = "/") -> str:
+    """Return a normalized mount path with a leading slash."""
+
+    if not value:
+        path = default
+    else:
+        path = value.strip() or default
+
+    if not path.startswith("/"):
+        path = f"/{path}"
+
+    if len(path) > 1 and path.endswith("/"):
+        path = path.rstrip("/")
+
+    return path
+
+
+def _append_mount(base_url: str, mount_path: str) -> str:
+    if mount_path == "/":
+        return base_url.rstrip("/")
+    return f"{base_url.rstrip('/')}{mount_path}"
+
+
 def resolve_base_urls(config: Mapping[str, Any]) -> tuple[str, str]:
     """Return the public base URLs advertised to MCP clients."""
 
     port = int(config.get("port", 8800))
     base_url = (config.get("resource_server_url") or "").strip()
     issuer_url = (config.get("issuer_url") or "").strip()
+    mount_path = _normalize_mount_path(config.get("mount_path"))
 
+    derived_base = False
     if not base_url:
         base_url = _site_base_url(port) or _host_base_url(config.get("host"), port)
+        derived_base = True
+
+    if mount_path != "/" and derived_base:
+        base_url = _append_mount(base_url, mount_path)
 
     if not issuer_url:
         issuer_url = base_url
@@ -150,6 +179,7 @@ class SigilResolverServer:
             instructions=self.config["instructions"],
             host=self.config["host"],
             port=self.config["port"],
+            mount_path=self.config["mount_path"],
             auth=auth_settings,
             token_verifier=token_verifier,
         )
@@ -266,6 +296,7 @@ class SigilResolverServer:
             "issuer_url": config.get("issuer_url"),
             "resource_server_url": config.get("resource_server_url"),
             "instructions": instructions,
+            "mount_path": _normalize_mount_path(config.get("mount_path")),
         }
 
     def _handle_root_saved(
