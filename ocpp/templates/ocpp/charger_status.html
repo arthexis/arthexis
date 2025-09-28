@@ -30,8 +30,19 @@
       animation: text-update-fade 1s ease-out;
     }
   </style>
-    <h1>{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
-    <p class="text-muted">{% trans "Connector" %}: {{ charger.connector_label }}</p>
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start align-items-stretch gap-3 mb-3">
+      <div>
+        <h1 class="mb-1">{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
+        <div class="d-flex flex-column flex-sm-row gap-2 text-muted">
+          <span>{% trans "Connector" %}: {{ charger.connector_label }}</span>
+          <span>{% trans "Serial Number" %}: {{ charger.charger_id }}</span>
+        </div>
+      </div>
+      <div class="d-flex align-items-center">
+        <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
+        <strong id="charger-state">{{ state }}</strong>
+      </div>
+    </div>
     {% if past_session %}
   <div class="alert alert-info" role="alert">
     {% trans "Viewing past session" %} {{ tx.id }}. <a href="{{ page_url }}">{% trans "Back to live" %}</a>
@@ -39,14 +50,6 @@
   {% endif %}
   <div class="row mb-4">
     <div class="col-md-4">
-      <p>{% trans "Serial Number" %}: {{ charger.charger_id }}</p>
-      <div class="mb-3 d-flex align-items-center">
-        <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
-        <strong id="charger-state">{{ state }}</strong>
-      </div>
-      {% if charger.last_status %}
-      <p class="text-muted small mb-1" id="last-status-raw">{% trans "Reported status" %}: {{ charger.last_status }}</p>
-      {% endif %}
       {% if charger.last_error_code %}
       <p class="text-muted small mb-1" id="last-status-error">{% trans "Error code" %}: {{ charger.last_error_code }}</p>
       {% endif %}
@@ -85,22 +88,6 @@
       {% if charger.temperature is not None %}
       <p>{% trans "Temperature" %}: <span id="temperature">{{ charger.temperature }}</span> {{ charger.temperature_unit }}</p>
       {% endif %}
-      <div class="mb-3">
-        <h2 class="h6">{% trans "Firmware" %}</h2>
-        {% if charger.firmware_status %}
-        <p>{% trans "Status" %}: <span id="firmware-status">{{ charger.firmware_status }}</span></p>
-        {% else %}
-        <p>{% trans "Status" %}: <span id="firmware-status" class="text-muted">{% trans "Unknown" %}</span></p>
-        {% endif %}
-        {% if charger.firmware_status_info %}
-        <p>{% trans "Details" %}: <span id="firmware-status-info">{{ charger.firmware_status_info }}</span></p>
-        {% endif %}
-        {% if charger.firmware_timestamp %}
-        {% with iso_ts=charger.firmware_timestamp|date:"c" %}
-        <p>{% trans "Updated" %}: <span id="firmware-timestamp" data-iso="{{ iso_ts }}">{{ charger.firmware_timestamp|date:"SHORT_DATETIME_FORMAT" }}</span></p>
-        {% endwith %}
-        {% endif %}
-      </div>
       {% if tx %}
       <h2>{% if past_session %}{% trans "Session" %}{% else %}{% trans "Current Transaction" %}{% endif %}</h2>
       <ul>
