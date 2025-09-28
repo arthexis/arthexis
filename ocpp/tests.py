@@ -2424,17 +2424,31 @@ class SimulatorAdminTests(TransactionTestCase):
 
         charger = await database_sync_to_async(Charger.objects.get)(charger_id="QBOX")
         self.assertEqual(charger.last_path, "/")
-
-    async def test_query_string_charge_box_identity_supported(self):
+    async def test_query_string_charge_box_id_case_insensitive(self):
         communicator = WebsocketCommunicator(
-            application, "/?chargeBoxIdentity=QIDENT"
+            application, "/?CHARGEBOXID=CaseSense"
+        )
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.disconnect()
+        charger = await database_sync_to_async(Charger.objects.get)(
+            charger_id="CaseSense"
+        )
+        self.assertEqual(charger.last_path, "/")
+
+    async def test_query_string_charge_box_id_strips_whitespace(self):
+        communicator = WebsocketCommunicator(
+            application, "/?chargeBoxId=%20Trimmed%20Value%20"
         )
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
         await communicator.disconnect()
 
-        charger = await database_sync_to_async(Charger.objects.get)(charger_id="QIDENT")
+        charger = await database_sync_to_async(Charger.objects.get)(
+            charger_id="Trimmed Value"
+        )
         self.assertEqual(charger.last_path, "/")
 
     async def test_query_string_cid_overrides_path_segment(self):
