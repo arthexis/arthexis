@@ -12,6 +12,7 @@ from pathlib import Path
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from urllib.parse import urlsplit, urlunsplit
 import base64
 import pyperclip
 from pyperclip import PyperclipException
@@ -813,9 +814,17 @@ class NodeFeatureAdmin(EntityModelAdmin):
         if not feature:
             return redirect("..")
 
-        stream_url = getattr(
-            settings, "RPI_CAMERA_STREAM_URL", "http://127.0.0.1:8554/"
-        )
+        configured_stream = getattr(settings, "RPI_CAMERA_STREAM_URL", "").strip()
+        if configured_stream:
+            stream_url = configured_stream
+        else:
+            base_uri = request.build_absolute_uri("/")
+            parsed = urlsplit(base_uri)
+            hostname = parsed.hostname or "127.0.0.1"
+            port = getattr(settings, "RPI_CAMERA_STREAM_PORT", 8554)
+            scheme = getattr(settings, "RPI_CAMERA_STREAM_SCHEME", "http")
+            netloc = f"{hostname}:{port}" if port else hostname
+            stream_url = urlunsplit((scheme, netloc, "/", "", ""))
         context = {
             **self.admin_site.each_context(request),
             "title": _("Raspberry Pi Camera Stream"),
