@@ -22,6 +22,21 @@ class DummyIMAP:
         pass
 
 
+class DummyIMAPSelectError(DummyIMAP):
+    def __init__(self, host, port):
+        super().__init__(host, port)
+        self.logout_called = False
+
+    def select(self, mailbox):
+        return (
+            "NO",
+            [b"[TRYCREATE] No data in .Sent (0.001 + 0.000 secs)"]
+        )
+
+    def logout(self):
+        self.logout_called = True
+
+
 class DummyPOP:
     def __init__(self, host, port):
         self.host = host
@@ -84,6 +99,26 @@ class EmailInboxTests(TestCase):
         )
         with pytest.raises(ValidationError):
             inbox.test_connection()
+
+    def test_search_messages_handles_select_error(self):
+        user = User.objects.create(username="imap-select")
+        inbox = EmailInbox.objects.create(
+            user=user,
+            host="imap.test",
+            port=993,
+            username="good",
+            password="p",
+            protocol=EmailInbox.IMAP,
+            use_ssl=True,
+        )
+        dummy = DummyIMAPSelectError(inbox.host, inbox.port)
+
+        with patch("imaplib.IMAP4_SSL", new=lambda h, p: dummy):
+            with pytest.raises(ValidationError) as excinfo:
+                inbox.search_messages()
+
+        assert "No data in .Sent" in str(excinfo.value)
+        assert dummy.logout_called is True
 
     def test_string_representation_does_not_duplicate_email_hostname(self):
         user = User.objects.create(username="imap-user")
