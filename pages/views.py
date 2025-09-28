@@ -169,7 +169,7 @@ def _build_model_graph(models):
         raise RuntimeError("Graphviz is not installed")
 
     graph = Digraph(
-        "admin_app_models",
+        name="admin_app_models",
         graph_attr={
             "rankdir": "LR",
             "splines": "ortho",
@@ -229,7 +229,7 @@ def _build_model_graph(models):
         label = '<\n  <table BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">\n    '
         label += "\n    ".join(rows)
         label += "\n  </table>\n>"
-        graph.node(node_id, label=label)
+        graph.node(name=node_id, label=label)
 
     edges = set()
     for model in models:
@@ -244,7 +244,11 @@ def _build_model_graph(models):
             key = (source_id, node_ids[related], tuple(sorted(attrs.items())))
             if key not in edges:
                 edges.add(key)
-                graph.edge(source_id, node_ids[related], **attrs)
+                graph.edge(
+                    tail_name=source_id,
+                    head_name=node_ids[related],
+                    **attrs,
+                )
 
         for field in model._meta.local_many_to_many:
             related = _resolve_related_model(field, model._meta.app_label)
@@ -259,7 +263,11 @@ def _build_model_graph(models):
             key = (source_id, node_ids[related], tuple(sorted(attrs.items())))
             if key not in edges:
                 edges.add(key)
-                graph.edge(source_id, node_ids[related], **attrs)
+                graph.edge(
+                    tail_name=source_id,
+                    head_name=node_ids[related],
+                    **attrs,
+                )
 
     return graph
 
