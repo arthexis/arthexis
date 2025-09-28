@@ -16,6 +16,7 @@ from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
 from django.views.decorators.debug import sensitive_variables
 from datetime import time as datetime_time, timedelta
+import logging
 from django.contrib.contenttypes.models import ContentType
 import hashlib
 import os
@@ -36,6 +37,8 @@ from defusedxml import xmlrpc as defused_xmlrpc
 
 defused_xmlrpc.monkey_patch()
 xmlrpc_client = defused_xmlrpc.xmlrpc_client
+
+logger = logging.getLogger(__name__)
 
 from .entity import Entity, EntityUserManager, EntityManager
 from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
@@ -593,6 +596,15 @@ class OdooProfile(Profile):
                 kwargs,
             )
         except Exception:
+            logger.exception(
+                "Odoo RPC %s.%s failed for profile %s (host=%s, database=%s, username=%s)",
+                model,
+                method,
+                self.pk,
+                self.host,
+                self.database,
+                self.username,
+            )
             self._clear_verification()
             self.save(update_fields=["verified_on"])
             raise
