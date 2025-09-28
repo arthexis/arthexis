@@ -543,7 +543,7 @@ class NodeFeatureAdmin(EntityModelAdmin):
 
         if not links:
             return "—"
-        return format_html_join("<br>", "{}", ((link,) for link in links))
+        return format_html_join(" | ", "{}", ((link,) for link in links))
 
     def _manual_enablement_message(self, feature, node):
         if node is None:
