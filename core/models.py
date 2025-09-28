@@ -765,66 +765,93 @@ class EmailInbox(Profile):
             import imaplib
             import email
 
+            def _decode_imap_bytes(value):
+                if isinstance(value, bytes):
+                    return value.decode("utf-8", errors="ignore")
+                return str(value)
+
             conn = (
                 imaplib.IMAP4_SSL(self.host, self.port)
                 if self.use_ssl
                 else imaplib.IMAP4(self.host, self.port)
             )
-            conn.login(self.username, self.password)
-            conn.select("INBOX")
-            fetch_limit = limit if not use_regular_expressions else max(limit * 5, limit)
-            if use_regular_expressions:
-                typ, data = conn.search(None, "ALL")
-            else:
-                criteria = []
-                charset = None
+            try:
+                conn.login(self.username, self.password)
+                typ, data = conn.select("INBOX")
+                if typ != "OK":
+                    message = " ".join(_decode_imap_bytes(item) for item in data or [])
+                    if not message:
+                        message = "Unable to select INBOX"
+                    raise ValidationError(message)
 
-                def _append(term: str, value: str):
-                    nonlocal charset
-                    if not value:
-                        return
-                    try:
-                        value.encode("ascii")
-                        encoded_value = value
-                    except UnicodeEncodeError:
-                        charset = charset or "UTF-8"
-                        encoded_value = value.encode("utf-8")
-                    criteria.extend([term, encoded_value])
-
-                _append("SUBJECT", subject)
-                _append("FROM", from_address)
-                _append("TEXT", body)
-
-                if not criteria:
+                fetch_limit = (
+                    limit if not use_regular_expressions else max(limit * 5, limit)
+                )
+                if use_regular_expressions:
                     typ, data = conn.search(None, "ALL")
                 else:
-                    typ, data = conn.search(charset, *criteria)
-            ids = data[0].split()[-fetch_limit:]
-            messages = []
-            for mid in ids:
-                typ, msg_data = conn.fetch(mid, "(RFC822)")
-                msg = email.message_from_bytes(msg_data[0][1])
-                body_text = _get_body(msg)
-                subj_value = msg.get("Subject", "")
-                from_value = msg.get("From", "")
-                if not (
-                    _matches(subj_value, subject, subject_regex)
-                    and _matches(from_value, from_address, sender_regex)
-                    and _matches(body_text, body, body_regex)
-                ):
-                    continue
-                messages.append(
-                    {
-                        "subject": subj_value,
-                        "from": from_value,
-                        "body": body_text,
-                        "date": msg.get("Date", ""),
-                    }
-                )
-                if len(messages) >= limit:
-                    break
-            conn.logout()
-            return list(reversed(messages))
+                    criteria = []
+                    charset = None
+
+                    def _append(term: str, value: str):
+                        nonlocal charset
+                        if not value:
+                            return
+                        try:
+                            value.encode("ascii")
+                            encoded_value = value
+                        except UnicodeEncodeError:
+                            charset = charset or "UTF-8"
+                            encoded_value = value.encode("utf-8")
+                        criteria.extend([term, encoded_value])
+
+                    _append("SUBJECT", subject)
+                    _append("FROM", from_address)
+                    _append("TEXT", body)
+
+                    if not criteria:
+                        typ, data = conn.search(None, "ALL")
+                    else:
+                        typ, data = conn.search(charset, *criteria)
+
+                if typ != "OK":
+                    message = " ".join(_decode_imap_bytes(item) for item in data or [])
+                    if not message:
+                        message = "Unable to search mailbox"
+                    raise ValidationError(message)
+
+                ids = data[0].split()[-fetch_limit:]
+                messages = []
+                for mid in ids:
+                    typ, msg_data = conn.fetch(mid, "(RFC822)")
+                    if typ != "OK" or not msg_data:
+                        continue
+                    msg = email.message_from_bytes(msg_data[0][1])
+                    body_text = _get_body(msg)
+                    subj_value = msg.get("Subject", "")
+                    from_value = msg.get("From", "")
+                    if not (
+                        _matches(subj_value, subject, subject_regex)
+                        and _matches(from_value, from_address, sender_regex)
+                        and _matches(body_text, body, body_regex)
+                    ):
+                        continue
+                    messages.append(
+                        {
+                            "subject": subj_value,
+                            "from": from_value,
+                            "body": body_text,
+                            "date": msg.get("Date", ""),
+                        }
+                    )
+                    if len(messages) >= limit:
+                        break
+                return list(reversed(messages))
+            finally:
+                try:
+                    conn.logout()
+                except Exception:  # pragma: no cover - best effort cleanup
+                    pass
 
         import poplib
         import email
