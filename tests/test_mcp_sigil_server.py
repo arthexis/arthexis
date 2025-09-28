@@ -108,6 +108,13 @@ class SigilResolverServerTests(TestCase):
         self.assertIsNone(open_fastmcp._token_verifier)
         self.assertIsNone(open_fastmcp.settings.auth)
 
+    def test_build_fastmcp_uses_configured_mount_path(self) -> None:
+        server = SigilResolverServer(
+            {"api_keys": [], "host": "127.0.0.1", "port": 9000, "mount_path": "/bridge"}
+        )
+        fastmcp = server.build_fastmcp()
+        self.assertEqual(fastmcp.settings.mount_path, "/bridge")
+
     def test_resource_lists_roots(self) -> None:
         fastmcp = self.server.build_fastmcp()
         resource = asyncio.run(
@@ -158,4 +165,18 @@ class SigilResolverServerURLTests(TestCase):
         config = {"host": "0.0.0.0", "port": 8800, "api_keys": ["secret"], "required_scopes": []}
         base_url, issuer_url = resolve_base_urls(config)
         self.assertEqual(base_url, "https://resolver.example.com")
+        self.assertEqual(issuer_url, base_url)
+
+    def test_resolve_base_urls_appends_mount_path_when_derived(self) -> None:
+        self.site.domain = "resolver.example.com"
+        self.site.save()
+        config = {
+            "host": "0.0.0.0",
+            "port": 8800,
+            "api_keys": ["secret"],
+            "required_scopes": [],
+            "mount_path": "/mcp",
+        }
+        base_url, issuer_url = resolve_base_urls(config)
+        self.assertEqual(base_url, "https://resolver.example.com:8800/mcp")
         self.assertEqual(issuer_url, base_url)
