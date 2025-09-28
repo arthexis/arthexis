@@ -22,9 +22,15 @@ from pages.models import (
     SiteBadge,
     Favorite,
     ViewHistory,
+    UserManual,
     UserStory,
 )
-from pages.admin import ApplicationAdmin, UserStoryAdmin, ViewHistoryAdmin
+from pages.admin import (
+    ApplicationAdmin,
+    UserManualAdmin,
+    UserStoryAdmin,
+    ViewHistoryAdmin,
+)
 from pages.screenshot_specs import (
     ScreenshotSpec,
     ScreenshotSpecRunner,
@@ -1240,6 +1246,58 @@ class ApplicationAdminDisplayTests(TestCase):
         )
         resp = self.client.get(reverse("admin:pages_application_changelist"))
         self.assertContains(resp, "Power, Energy and Cost calculations.")
+
+
+class UserManualAdminFormTests(TestCase):
+    def setUp(self):
+        self.manual = UserManual.objects.create(
+            slug="manual-one",
+            title="Manual One",
+            description="Test manual",
+            languages="en",
+            content_html="<p>Manual</p>",
+            content_pdf=base64.b64encode(b"initial").decode("ascii"),
+        )
+
+    def test_widget_uses_slug_for_download(self):
+        admin_instance = UserManualAdmin(UserManual, admin.site)
+        form_class = admin_instance.get_form(request=None, obj=self.manual)
+        form = form_class(instance=self.manual)
+        field = form.fields["content_pdf"]
+        self.assertEqual(field.widget.download_name, f"{self.manual.slug}.pdf")
+        self.assertEqual(field.widget.content_type, "application/pdf")
+
+    def test_upload_encodes_content_pdf(self):
+        admin_instance = UserManualAdmin(UserManual, admin.site)
+        form_class = admin_instance.get_form(request=None, obj=self.manual)
+        payload = {
+            "slug": self.manual.slug,
+            "title": self.manual.title,
+            "description": self.manual.description,
+            "languages": self.manual.languages,
+            "content_html": self.manual.content_html,
+        }
+        upload = SimpleUploadedFile("manual.pdf", b"PDF data")
+        form = form_class(data=payload, files={"content_pdf": upload}, instance=self.manual)
+        self.assertTrue(form.is_valid(), form.errors.as_json())
+        self.assertEqual(
+            form.cleaned_data["content_pdf"],
+            base64.b64encode(b"PDF data").decode("ascii"),
+        )
+
+    def test_initial_base64_preserved_without_upload(self):
+        admin_instance = UserManualAdmin(UserManual, admin.site)
+        form_class = admin_instance.get_form(request=None, obj=self.manual)
+        payload = {
+            "slug": self.manual.slug,
+            "title": self.manual.title,
+            "description": self.manual.description,
+            "languages": self.manual.languages,
+            "content_html": self.manual.content_html,
+        }
+        form = form_class(data=payload, files={}, instance=self.manual)
+        self.assertTrue(form.is_valid(), form.errors.as_json())
+        self.assertEqual(form.cleaned_data["content_pdf"], self.manual.content_pdf)
 
 
 class LandingCreationTests(TestCase):

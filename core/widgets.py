@@ -1,4 +1,5 @@
 from django import forms
+from django.forms.widgets import ClearableFileInput
 import json
 
 
@@ -49,3 +50,45 @@ class OdooProductWidget(forms.Select):
             return json.loads(raw)
         except Exception:
             return {}
+
+
+class AdminBase64FileWidget(ClearableFileInput):
+    """Clearable file input that exposes base64 data for downloads."""
+
+    template_name = "widgets/admin_base64_file.html"
+
+    def __init__(
+        self,
+        *,
+        download_name: str | None = None,
+        content_type: str = "application/octet-stream",
+        **kwargs,
+    ) -> None:
+        self.download_name = download_name
+        self.content_type = content_type
+        super().__init__(**kwargs)
+
+    def is_initial(self, value):
+        if isinstance(value, str):
+            return bool(value)
+        return super().is_initial(value)
+
+    def format_value(self, value):
+        if isinstance(value, str):
+            return value
+        return super().format_value(value)
+
+    def get_context(self, name, value, attrs):
+        if isinstance(value, str):
+            base64_value = value.strip()
+            rendered_value = None
+        else:
+            base64_value = None
+            rendered_value = value
+        context = super().get_context(name, rendered_value, attrs)
+        widget_context = context["widget"]
+        widget_context["is_initial"] = bool(base64_value)
+        widget_context["base64_value"] = base64_value
+        widget_context["download_name"] = self.download_name or f"{name}.bin"
+        widget_context["content_type"] = self.content_type
+        return context
