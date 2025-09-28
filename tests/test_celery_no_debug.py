@@ -7,7 +7,16 @@ import pytest
 pytestmark = [pytest.mark.feature("celery-queue")]
 
 
-@pytest.mark.parametrize("role", ["Constellation", "Satellite"])
+@pytest.mark.parametrize(
+    "role",
+    [
+        "Constellation",
+        "Satellite",
+        "Control",
+        "Terminal",
+        "Gateway",
+    ],
+)
 def test_celery_disables_debug(monkeypatch, role):
     """Celery should not run in debug mode for production node roles."""
     monkeypatch.setenv("NODE_ROLE", role)
