@@ -2302,15 +2302,13 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     change_list_template = "admin/core/rfid/change_list.html"
     resource_class = RFIDResource
     list_display = (
-        "label_id",
+        "label",
         "rfid",
         "custom_label",
         "color",
         "kind",
         "released",
-        "energy_accounts_display",
         "allowed",
-        "added_on",
         "last_seen_on",
     )
     list_filter = ("color", "released", "allowed")
@@ -2321,10 +2319,11 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     readonly_fields = ("added_on", "last_seen_on")
     form = RFIDForm
 
-    def energy_accounts_display(self, obj):
-        return ", ".join(str(a) for a in obj.energy_accounts.all())
+    def label(self, obj):
+        return obj.label_id
 
-    energy_accounts_display.short_description = "Energy Accounts"
+    label.admin_order_field = "label_id"
+    label.short_description = "Label"
 
     def scan_rfids(self, request, queryset):
         return redirect("admin:core_rfid_scan")
@@ -2367,8 +2366,18 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
 
     def scan_next(self, request):
         from ocpp.rfid.scanner import scan_sources
+        from ocpp.rfid.reader import validate_rfid_value
 
-        result = scan_sources(request)
+        if request.method == "POST":
+            try:
+                payload = json.loads(request.body.decode("utf-8") or "{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+            rfid = payload.get("rfid") or payload.get("value")
+            kind = payload.get("kind")
+            result = validate_rfid_value(rfid, kind=kind)
+        else:
+            result = scan_sources(request)
         status = 500 if result.get("error") else 200
         return JsonResponse(result, status=status)
 
