@@ -16,6 +16,7 @@ from django.contrib.auth.admin import (
     GroupAdmin as DjangoGroupAdmin,
     UserAdmin as DjangoUserAdmin,
 )
+import logging
 from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
@@ -77,6 +78,8 @@ from .user_data import (
 from .widgets import OdooProductWidget
 from .mcp import process as mcp_process
 from .mcp.server import resolve_base_urls
+
+logger = logging.getLogger(__name__)
 
 
 admin.site.unregister(Group)
@@ -1998,6 +2001,13 @@ class ProductAdmin(EntityModelAdmin):
             try:
                 results = self._search_odoo_products(profile, form)
             except Exception:
+                logger.exception(
+                    "Failed to fetch Odoo products for user %s (profile_id=%s, host=%s, database=%s)",
+                    getattr(getattr(request, "user", None), "pk", None),
+                    getattr(profile, "pk", None),
+                    getattr(profile, "host", None),
+                    getattr(profile, "database", None),
+                )
                 form.add_error(None, _("Unable to fetch products from Odoo."))
                 results = []
             else:
