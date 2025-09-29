@@ -3136,6 +3136,32 @@ class ChargePointSimulatorTests(TransactionTestCase):
         self.assertIn("unknownKey", payload)
         self.assertEqual(payload["unknownKey"], ["GhostKey"])
 
+    async def test_unknown_action_returns_call_error(self):
+        cfg = SimulatorConfig(cp_path="SIM-CALL-ERROR/")
+        sim = ChargePointSimulator(cfg)
+        sent: list[list[object]] = []
+
+        async def send(msg: str):
+            sent.append(json.loads(msg))
+
+        async def recv():  # pragma: no cover - should not be called
+            raise AssertionError("recv should not be called for unsupported actions")
+
+        handled = await sim._handle_csms_call(
+            [2, "msg-1", "Reset", {"type": "Soft"}],
+            send,
+            recv,
+        )
+
+        self.assertTrue(handled)
+        self.assertEqual(len(sent), 1)
+        frame = sent[0]
+        self.assertEqual(frame[0], 4)
+        self.assertEqual(frame[1], "msg-1")
+        self.assertEqual(frame[2], "NotSupported")
+        self.assertIn("Reset", frame[3])
+        self.assertIsInstance(frame[4], dict)
+
     async def test_trigger_message_heartbeat_follow_up(self):
         cfg = SimulatorConfig()
         sim = ChargePointSimulator(cfg)
