@@ -28,6 +28,7 @@ from .transactions_io import (
     export_transactions,
     import_transactions as import_transactions_data,
 )
+from core.admin import SaveBeforeChangeAction
 from core.user_data import EntityModelAdmin
 
 
@@ -602,7 +603,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
 
 
 @admin.register(Simulator)
-class SimulatorAdmin(LogViewAdminMixin, EntityModelAdmin):
+class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin):
     list_display = (
         "name",
         "cp_path",
@@ -646,6 +647,7 @@ class SimulatorAdmin(LogViewAdminMixin, EntityModelAdmin):
         ),
     )
     actions = ("start_simulator", "stop_simulator", "send_open_door")
+    change_actions = ["start_simulator_action", "stop_simulator_action"]
 
     log_type = "simulator"
 
@@ -757,6 +759,14 @@ class SimulatorAdmin(LogViewAdminMixin, EntityModelAdmin):
         self.message_user(request, "Stopping simulators")
 
     stop_simulator.short_description = "Stop selected simulators"
+
+    def start_simulator_action(self, request, obj):
+        queryset = type(obj).objects.filter(pk=obj.pk)
+        self.start_simulator(request, queryset)
+
+    def stop_simulator_action(self, request, obj):
+        queryset = type(obj).objects.filter(pk=obj.pk)
+        self.stop_simulator(request, queryset)
 
     def log_link(self, obj):
         from django.utils.html import format_html
