@@ -25,8 +25,25 @@ for env_file in *.env; do
   set +a
 done
 
-# Collect static files before starting services
-python manage.py collectstatic --noinput
+# Collect static files only when their sources change
+STATIC_MD5_FILE="$BASE_DIR/staticfiles.md5"
+if ! STATIC_HASH=$(python scripts/staticfiles_md5.py); then
+  echo "Failed to compute static files hash; running collectstatic."
+  python manage.py collectstatic --noinput
+else
+  STORED_HASH=""
+  [ -f "$STATIC_MD5_FILE" ] && STORED_HASH=$(cat "$STATIC_MD5_FILE")
+  if [ "$STATIC_HASH" != "$STORED_HASH" ]; then
+    if python manage.py collectstatic --noinput; then
+      echo "$STATIC_HASH" > "$STATIC_MD5_FILE"
+    else
+      echo "collectstatic failed"
+      exit 1
+    fi
+  else
+    echo "Static files unchanged. Skipping collectstatic."
+  fi
+fi
 
 # If a systemd service was installed, restart it instead of launching a new process
 if [ -f "$LOCK_DIR/service.lck" ]; then
