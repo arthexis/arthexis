@@ -25,58 +25,21 @@ from django.middleware.csrf import CsrfViewMiddleware
 from django.core.exceptions import DisallowedHost
 from django.contrib.sites import shortcuts as sites_shortcuts
 from django.contrib.sites.requests import RequestSite
-from django.core.management.utils import get_random_secret_key
 from urllib.parse import urlsplit
 import django.utils.encoding as encoding
+
+from config.settings_helpers import (
+    extract_ip_from_host,
+    install_validate_host_with_subnets,
+    load_secret_key,
+    strip_ipv6_brackets,
+)
 
 if not hasattr(encoding, "force_text"):  # pragma: no cover - Django>=5 compatibility
     from django.utils.encoding import force_str
 
     encoding.force_text = force_str
-
-
-
-_original_validate_host = http_request.validate_host
-
-
-def _strip_ipv6_brackets(host: str) -> str:
-    if host.startswith("[") and host.endswith("]"):
-        return host[1:-1]
-    return host
-
-
-def _extract_ip_from_host(host: str):
-    """Return an :mod:`ipaddress` object for ``host`` when possible."""
-
-    candidate = _strip_ipv6_brackets(host)
-    try:
-        return ipaddress.ip_address(candidate)
-    except ValueError:
-        domain, _port = split_domain_port(host)
-        if domain and domain != host:
-            candidate = _strip_ipv6_brackets(domain)
-            try:
-                return ipaddress.ip_address(candidate)
-            except ValueError:
-                return None
-    return None
-
-
-def _validate_host_with_subnets(host, allowed_hosts):
-    ip = _extract_ip_from_host(host)
-    if ip is None:
-        return _original_validate_host(host, allowed_hosts)
-    for pattern in allowed_hosts:
-        try:
-            network = ipaddress.ip_network(pattern)
-        except ValueError:
-            continue
-        if ip in network:
-            return True
-    return _original_validate_host(host, allowed_hosts)
-
-
-http_request.validate_host = _validate_host_with_subnets
+install_validate_host_with_subnets()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -96,29 +59,7 @@ with contextlib.suppress(FileNotFoundError):
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-
-
-def _load_secret_key() -> str:
-    for env_var in ("DJANGO_SECRET_KEY", "SECRET_KEY"):
-        value = os.environ.get(env_var)
-        if value:
-            return value
-
-    secret_file = BASE_DIR / "locks" / "django-secret.key"
-    with contextlib.suppress(OSError):
-        stored_key = secret_file.read_text(encoding="utf-8").strip()
-        if stored_key:
-            return stored_key
-
-    generated_key = get_random_secret_key()
-    with contextlib.suppress(OSError):
-        secret_file.parent.mkdir(parents=True, exist_ok=True)
-        secret_file.write_text(generated_key, encoding="utf-8")
-
-    return generated_key
-
-
-SECRET_KEY = _load_secret_key()
+SECRET_KEY = load_secret_key(BASE_DIR)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
@@ -258,7 +199,7 @@ def _normalize_origin_tuple(scheme: str | None, host: str) -> tuple[str, str, st
     if not scheme or scheme.lower() not in {"http", "https"}:
         return None
     domain, port = split_domain_port(host)
-    normalized_host = _strip_ipv6_brackets(domain.strip().lower())
+    normalized_host = strip_ipv6_brackets(domain.strip().lower())
     if not normalized_host:
         return None
     normalized_port = port.strip() if isinstance(port, str) else port
@@ -325,13 +266,13 @@ def _origin_verified_with_subnets(self, request):
     if normalized_origin is None:
         return _original_origin_verified(self, request)
 
-    origin_ip = _extract_ip_from_host(normalized_origin[1])
+    origin_ip = extract_ip_from_host(normalized_origin[1])
 
     for candidate in _candidate_origin_tuples(request, allowed_hosts):
         if candidate == normalized_origin:
             return True
 
-        candidate_ip = _extract_ip_from_host(candidate[1])
+        candidate_ip = extract_ip_from_host(candidate[1])
         if origin_ip and candidate_ip:
             for pattern in allowed_hosts:
                 try:
@@ -367,13 +308,13 @@ def _check_referer_with_forwarded(self, request):
         return _original_check_referer(self, request)
 
     allowed_hosts = _get_allowed_hosts()
-    referer_ip = _extract_ip_from_host(normalized_referer[1])
+    referer_ip = extract_ip_from_host(normalized_referer[1])
 
     for candidate in _candidate_origin_tuples(request, allowed_hosts):
         if candidate == normalized_referer:
             return
 
-        candidate_ip = _extract_ip_from_host(candidate[1])
+        candidate_ip = extract_ip_from_host(candidate[1])
         if referer_ip and candidate_ip:
             for pattern in allowed_hosts:
                 try:
