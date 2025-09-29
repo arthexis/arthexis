@@ -34,10 +34,13 @@ def test_wrapper_sets_debug_env_without_debugger(monkeypatch):
         runpy, "run_path", lambda path, run_name: called.setdefault("path", path)
     )
 
-    vscode_manage.main(["runserver", "--noreload"])
+    monkeypatch.setattr(sys, "argv", ["python"])
+
+    vscode_manage.main(["runserver"])
 
     assert called["path"] == "manage.py"
     assert os.environ["DEBUG"] == "0"
+    assert sys.argv == ["manage.py", "runserver", "--noreload"]
 
 
 def test_wrapper_adds_noreload_for_debug_sessions(monkeypatch):
