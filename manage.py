@@ -21,8 +21,6 @@ def main() -> None:
     if rev_short:
         msg += f" r{rev_short}"
     print(msg)
-    if os.environ.get("RUN_MAIN") != "true":
-        print("Preparing Django auto-reloader...")
     try:
         from django.core.management import execute_from_command_line
         from daphne.management.commands.runserver import (
