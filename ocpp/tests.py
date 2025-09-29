@@ -57,6 +57,7 @@ import websockets
 import asyncio
 from pathlib import Path
 from .simulator import SimulatorConfig, ChargePointSimulator
+from .evcs import simulate, SimulatorState, _simulators
 import re
 from datetime import datetime, timedelta, timezone as dt_timezone
 from .tasks import purge_meter_readings
@@ -3454,6 +3455,27 @@ class DispatchActionViewTests(TestCase):
         self.loop.run_until_complete(asyncio.sleep(0))
         self.assertEqual(self.ws.sent, [])
         self.assertFalse(store.pending_calls)
+
+
+class SimulatorStateMappingTests(TestCase):
+    def tearDown(self):
+        _simulators[1] = SimulatorState()
+        _simulators[2] = SimulatorState()
+
+    def test_simulate_uses_requested_state(self):
+        calls = []
+
+        async def fake(cp_idx, *args, sim_state=None, **kwargs):
+            calls.append(sim_state)
+            if sim_state is not None:
+                sim_state.running = False
+
+        with patch("ocpp.evcs.simulate_cp", new=fake):
+            coro = simulate(cp=2, daemon=True, threads=1)
+            asyncio.run(coro)
+
+        self.assertEqual(len(calls), 1)
+        self.assertIs(calls[0], _simulators[2])
 
 
 class ChargerStatusViewTests(TestCase):
