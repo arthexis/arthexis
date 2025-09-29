@@ -186,6 +186,8 @@ async def simulate_cp(
     interval: float = 5.0,
     username: Optional[str] = None,
     password: Optional[str] = None,
+    *,
+    sim_state: SimulatorState | None = None,
 ) -> None:
     """Simulate one charge point session.
 
@@ -206,7 +208,7 @@ async def simulate_cp(
         b64 = base64.b64encode(userpass.encode("utf-8")).decode("ascii")
         headers["Authorization"] = f"Basic {b64}"
 
-    state = _simulators.get(cp_idx + 1, _simulators[1])
+    state = sim_state or _simulators.get(cp_idx + 1, _simulators[1])
 
     loop_count = 0
     while loop_count < session_count and state.running:
@@ -570,6 +572,7 @@ def simulate(
                 interval,
                 username,
                 password,
+                sim_state=state,
             )
 
         def run_thread(idx: int) -> None:
@@ -592,6 +595,7 @@ def simulate(
                     interval,
                     username,
                     password,
+                    sim_state=state,
                 )
             )
 
@@ -644,6 +648,7 @@ def simulate(
                 interval,
                 username,
                 password,
+                sim_state=state,
             )
         )
     else:
@@ -671,6 +676,7 @@ def simulate(
                     username,
                     password,
                 ),
+                kwargs={"sim_state": state},
                 daemon=True,
             )
             t.start()
