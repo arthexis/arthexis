@@ -2247,6 +2247,20 @@ class SimulatorAdminTests(TransactionTestCase):
         mock_start.assert_called_once()
         store.simulators.clear()
 
+    @patch("ocpp.admin.ChargePointSimulator.start")
+    def test_start_simulator_change_action(self, mock_start):
+        sim = Simulator.objects.create(name="SIMCHG", cp_path="SIMCHG")
+        mock_start.return_value = (True, "Started", "/tmp/log")
+        resp = self._post_simulator_change(
+            sim,
+            _action="start_simulator_action",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "View Log")
+        self.assertContains(resp, "/tmp/log")
+        mock_start.assert_called_once()
+        store.simulators.clear()
+
     def test_admin_shows_ws_url(self):
         sim = Simulator.objects.create(
             name="SIM2", cp_path="SIMY", host="h", ws_port=1111
@@ -2301,6 +2315,20 @@ class SimulatorAdminTests(TransactionTestCase):
             url,
             {"action": "stop_simulator", "_selected_action": [sim.pk]},
             follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        stopper.stop.assert_awaited_once()
+        self.assertTrue(mock_get_loop.called)
+        self.assertNotIn(sim.pk, store.simulators)
+
+    @patch("ocpp.admin.asyncio.get_running_loop", side_effect=RuntimeError)
+    def test_stop_simulator_change_action(self, mock_get_loop):
+        sim = Simulator.objects.create(name="SIMCHGSTOP", cp_path="SIMCHGSTOP")
+        stopper = SimpleNamespace(stop=AsyncMock())
+        store.simulators[sim.pk] = stopper
+        resp = self._post_simulator_change(
+            sim,
+            _action="stop_simulator_action",
         )
         self.assertEqual(resp.status_code, 200)
         stopper.stop.assert_awaited_once()
