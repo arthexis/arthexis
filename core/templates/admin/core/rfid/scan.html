@@ -1,5 +1,16 @@
 {% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:core_rfid_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; {% trans "Scan" %}
+</div>
+{% endblock %}
+
 {% block content %}
-<h1>RFID Scanner</h1>
+<h1>{% trans "RFID Scanner" %}</h1>
 {% include "rfid/scanner.html" with scan_url=scan_url prefix="admin" %}
 {% endblock %}
