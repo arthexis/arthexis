@@ -5,7 +5,7 @@ This note summarizes how the CSMS signals successful charger connections and how
 ## What the CSMS records
 
 * When a charger handshake succeeds, the CSMS accepts the socket and records a log entry similar to `Connected (subprotocol=...)`. The subprotocol is only negotiated when the client offers `ocpp1.6`; otherwise the connection is still accepted and logged with `subprotocol=none`.
-* The serial number is taken from the WebSocket path or the common OCPP query parameters (`cid`, `chargePointId`, `charge_point_id`, `chargeBoxId`, `charge_box_id`, `chargerId`). Whitespace-only query parameters are ignored.
+* The serial number is taken from the WebSocket path or the common OCPP query parameters (`cid`, `chargePointId`, `charge_point_id`, `chargeBoxId`, `charge_box_id`, `chargerId`). Parameter names are matched case-insensitively and whitespace-only values are ignored.
 
 If the most recent charger log is weeks old, the EVCS is not completing the WebSocket handshake today. No new attempt has made it past the TCP/TLS negotiation or the HTTP upgrade request.
 

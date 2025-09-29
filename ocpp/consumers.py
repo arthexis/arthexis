@@ -32,6 +32,18 @@ from .evcs_discovery import (
 FORWARDED_PAIR_RE = re.compile(r"for=(?:\"?)(?P<value>[^;,\"\s]+)(?:\"?)", re.IGNORECASE)
 
 
+# Query parameter keys that may contain the charge point serial. Keys are
+# matched case-insensitively and trimmed before use.
+SERIAL_QUERY_PARAM_NAMES = (
+    "cid",
+    "chargepointid",
+    "charge_point_id",
+    "chargeboxid",
+    "charge_box_id",
+    "chargerid",
+)
+
+
 def _parse_ip(value: str | None):
     """Return an :mod:`ipaddress` object for the provided value, if valid."""
 
@@ -170,14 +182,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 normalized = {
                     key.lower(): values for key, values in parsed.items() if values
                 }
-                for candidate in (
-                    "cid",
-                    "chargepointid",
-                    "charge_point_id",
-                    "chargeboxid",
-                    "charge_box_id",
-                    "chargerid",
-                ):
+                for candidate in SERIAL_QUERY_PARAM_NAMES:
                     values = normalized.get(candidate)
                     if not values:
                         continue

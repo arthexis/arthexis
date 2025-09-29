@@ -2439,6 +2439,20 @@ class SimulatorAdminTests(TransactionTestCase):
         )
         self.assertEqual(charger.last_path, "/")
 
+    async def test_query_string_charge_box_id_snake_case_supported(self):
+        communicator = WebsocketCommunicator(
+            application, "/?charge_box_id=SnakeCase"
+        )
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.disconnect()
+
+        charger = await database_sync_to_async(Charger.objects.get)(
+            charger_id="SnakeCase"
+        )
+        self.assertEqual(charger.last_path, "/")
+
     async def test_query_string_charge_box_id_strips_whitespace(self):
         communicator = WebsocketCommunicator(
             application, "/?chargeBoxId=%20Trimmed%20Value%20"
