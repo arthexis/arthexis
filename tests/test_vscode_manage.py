@@ -22,6 +22,7 @@ def test_wrapper_strips_debugpy(monkeypatch):
     assert "DEBUGPY_LAUNCHER_PORT" not in os.environ
     assert "/debugpy" not in os.environ["PYTHONPATH"]
     assert os.environ["DEBUG"] == "1"
+    assert sys.argv == ["manage.py", "runserver", "--noreload"]
 
 
 def test_wrapper_sets_debug_env_without_debugger(monkeypatch):
@@ -37,3 +38,14 @@ def test_wrapper_sets_debug_env_without_debugger(monkeypatch):
 
     assert called["path"] == "manage.py"
     assert os.environ["DEBUG"] == "0"
+
+
+def test_wrapper_adds_noreload_for_debug_sessions(monkeypatch):
+    monkeypatch.setenv("DEBUGPY_LAUNCHER_PORT", "1234")
+
+    monkeypatch.setattr(runpy, "run_path", lambda *args, **kwargs: None)
+    monkeypatch.setattr(sys, "argv", ["python"])
+
+    vscode_manage.main(["runserver", "0.0.0.0:8000"])
+
+    assert sys.argv == ["manage.py", "runserver", "--noreload", "0.0.0.0:8000"]

@@ -21,6 +21,8 @@ def main(argv=None):
     is_debug_session = "DEBUGPY_LAUNCHER_PORT" in os.environ
     if is_runserver:
         os.environ["DEBUG"] = "1" if is_debug_session else "0"
+        if is_debug_session and "--noreload" not in argv:
+            argv.insert(1, "--noreload")
     try:
         if celery_enabled:
             worker = subprocess.Popen(
