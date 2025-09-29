@@ -174,11 +174,19 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     "cid",
                     "chargepointid",
                     "charge_point_id",
+                    "chargeboxid",
+                    "charge_box_id",
                     "chargerid",
                 ):
                     values = normalized.get(candidate)
-                    if values:
-                        return values[0]
+                    if not values:
+                        continue
+                    for value in values:
+                        if not value:
+                            continue
+                        trimmed = value.strip()
+                        if trimmed:
+                            return trimmed
 
         return self.scope["url_route"]["kwargs"].get("cid", "")
 
