@@ -1075,6 +1075,65 @@ class ConstellationNavTests(TestCase):
         resp = self.client.get(reverse("pages:index"))
         self.assertContains(resp, 'href="/ocpp/"')
 
+class ControlNavTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        role, _ = NodeRole.objects.get_or_create(name="Control")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": "localhost",
+                "address": "127.0.0.1",
+                "role": role,
+            },
+        )
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
+        )
+        fixtures = [
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "control__application_ocpp.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "control__module_ocpp.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "control__landing_ocpp_dashboard.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "control__landing_ocpp_cp_simulator.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "control__landing_ocpp_rfid.json",
+            ),
+        ]
+        call_command("loaddata", *map(str, fixtures))
+
+    def test_ocpp_dashboard_visible(self):
+        user = get_user_model().objects.create_user("control", password="pw")
+        self.client.force_login(user)
+        resp = self.client.get(reverse("pages:index"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'href="/ocpp/"')
+        self.assertContains(
+            resp, 'badge rounded-pill text-bg-secondary">CHARGERS'
+        )
+
     def test_header_links_visible_when_defined(self):
         Reference.objects.create(
             alt_text="Console",
