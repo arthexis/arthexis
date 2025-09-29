@@ -302,18 +302,39 @@ class ChargePointSimulator:
     async def _handle_csms_call(self, msg, send, recv) -> bool:
         if not isinstance(msg, list) or not msg or msg[0] != 2:
             return False
+        message_id = msg[1] if len(msg) > 1 else ""
+        if not isinstance(message_id, str):
+            message_id = str(message_id)
         action = msg[2]
         payload = msg[3] if len(msg) > 3 else {}
         if action == "ChangeAvailability":
-            await self._handle_change_availability(msg[1], payload, send, recv)
+            await self._handle_change_availability(message_id, payload, send, recv)
             return True
         if action == "GetConfiguration":
-            await self._handle_get_configuration(msg[1], payload, send)
+            await self._handle_get_configuration(message_id, payload, send)
             return True
         if action == "TriggerMessage":
-            await self._handle_trigger_message(msg[1], payload, send, recv)
+            await self._handle_trigger_message(message_id, payload, send, recv)
             return True
-        return False
+        cfg = self.config
+        action_name = str(action)
+        store.add_log(
+            cfg.cp_path,
+            f"Received unsupported action '{action_name}', replying with CallError",
+            log_type="simulator",
+        )
+        await send(
+            json.dumps(
+                [
+                    4,
+                    message_id,
+                    "NotSupported",
+                    f"Simulator does not implement {action_name}",
+                    {},
+                ]
+            )
+        )
+        return True
 
     async def _handle_get_configuration(self, message_id: str, payload, send) -> None:
         cfg = self.config
