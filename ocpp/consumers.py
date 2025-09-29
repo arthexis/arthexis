@@ -169,11 +169,13 @@ class CSMSConsumer(AsyncWebsocketConsumer):
     def _extract_serial_identifier(self) -> str:
         """Return the charge point serial from the query string or path."""
 
+        self.serial_source = None
         query_bytes = self.scope.get("query_string") or b""
+        self._raw_query_string = query_bytes.decode("utf-8", "ignore") if query_bytes else ""
         if query_bytes:
             try:
                 parsed = parse_qs(
-                    query_bytes.decode("utf-8", "ignore"),
+                    self._raw_query_string,
                     keep_blank_values=False,
                 )
             except Exception:
@@ -192,7 +194,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         trimmed = value.strip()
                         if trimmed:
                             return trimmed
-
+                          
         return self.scope["url_route"]["kwargs"].get("cid", "")
 
     @requires_network
@@ -204,6 +206,13 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             serial = Charger.normalize_serial(raw_serial)
             store_key = store.pending_key(serial)
             message = exc.messages[0] if exc.messages else "Invalid Serial Number"
+            details: list[str] = []
+            if getattr(self, "serial_source", None):
+                details.append(f"serial_source={self.serial_source}")
+            if getattr(self, "_raw_query_string", ""):
+                details.append(f"query_string={self._raw_query_string!r}")
+            if details:
+                message = f"{message} ({'; '.join(details)})"
             store.add_log(
                 store_key,
                 f"Rejected connection: {message}",
