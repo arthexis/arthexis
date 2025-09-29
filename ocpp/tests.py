@@ -1669,6 +1669,51 @@ class ChargerLandingTests(TestCase):
         self.assertContains(resp, "progress-bar")
         store.transactions.pop(key, None)
 
+    def test_public_page_overrides_available_status_when_charging(self):
+        charger = Charger.objects.create(
+            charger_id="STATEPUB",
+            last_status="Available",
+        )
+        tx = Transaction.objects.create(
+            charger=charger,
+            meter_start=1000,
+            start_time=timezone.now(),
+        )
+        key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.transactions[key] = tx
+        try:
+            response = self.client.get(reverse("charger-page", args=["STATEPUB"]))
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(
+                response,
+                'class="badge" style="background-color: #198754;">Charging</span>',
+            )
+        finally:
+            store.transactions.pop(key, None)
+
+    def test_admin_status_overrides_available_status_when_charging(self):
+        charger = Charger.objects.create(
+            charger_id="STATEADM",
+            last_status="Available",
+        )
+        tx = Transaction.objects.create(
+            charger=charger,
+            meter_start=1000,
+            start_time=timezone.now(),
+        )
+        key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.transactions[key] = tx
+        try:
+            response = self.client.get(reverse("charger-status", args=["STATEADM"]))
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, 'id="charger-state">Charging</strong>')
+            self.assertContains(
+                response,
+                'style="width:20px;height:20px;background-color: #198754;"',
+            )
+        finally:
+            store.transactions.pop(key, None)
+
     def test_public_status_shows_rfid_link_for_known_tag(self):
         aggregate = Charger.objects.create(charger_id="PUBRFID")
         connector = Charger.objects.create(
