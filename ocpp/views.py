@@ -249,11 +249,22 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
     """Return human readable state and color for a charger."""
 
     status_value = (charger.last_status or "").strip()
+    has_session = bool(tx_obj)
     if status_value:
         key = status_value.lower()
         label, color = STATUS_BADGE_MAP.get(key, (status_value, "#0d6efd"))
         error_code = (charger.last_error_code or "").strip()
-        if error_code and error_code.lower() not in _ERROR_OK_VALUES:
+        error_code_lower = error_code.lower()
+        if (
+            has_session
+            and error_code_lower in _ERROR_OK_VALUES
+            and (key not in STATUS_BADGE_MAP or key == "available")
+        ):
+            # Some stations continue reporting "Available" (or an unknown status)
+            # while a session is active. Override the badge so the user can see
+            # the charger is actually busy.
+            label, color = STATUS_BADGE_MAP.get("charging", (_("Charging"), "#198754"))
+        elif error_code and error_code_lower not in _ERROR_OK_VALUES:
             label = _("%(status)s (%(error)s)") % {
                 "status": label,
                 "error": error_code,
@@ -263,7 +274,6 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
 
     cid = charger.charger_id
     connected = store.is_connected(cid, charger.connector_id)
-    has_session = bool(tx_obj)
     if connected and has_session:
         return _("Charging"), "green"
     if connected:
