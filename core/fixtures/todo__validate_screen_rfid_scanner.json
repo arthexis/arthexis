@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen RFID Scanner",
+      "url": "/ocpp/rfid/",
+      "request_details": "Ensure both the single and table modes render correctly, record scans, and show the running total."
+    }
+  }
+]
