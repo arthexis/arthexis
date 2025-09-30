@@ -1231,6 +1231,12 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     )(**update_kwargs)
                 _update_instance(self.aggregate_charger)
                 _update_instance(self.charger)
+                if connector_value is not None and status.lower() == "available":
+                    tx_obj = store.transactions.pop(self.store_key, None)
+                    if tx_obj:
+                        await self._cancel_consumption_message()
+                        store.end_session_log(self.store_key)
+                        store.stop_session_lock()
                 store.add_log(
                     self.store_key,
                     f"StatusNotification processed: {json.dumps(payload, sort_keys=True)}",

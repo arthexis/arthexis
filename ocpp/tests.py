@@ -291,6 +291,44 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    def test_status_notification_available_clears_active_session(self):
+        aggregate = Charger.objects.create(charger_id="STATUSCLR")
+        connector = Charger.objects.create(
+            charger_id="STATUSCLR",
+            connector_id=2,
+        )
+        tx = Transaction.objects.create(
+            charger=connector,
+            meter_start=10,
+            start_time=timezone.now(),
+        )
+        store_key = store.identity_key("STATUSCLR", 2)
+        store.transactions[store_key] = tx
+        consumer = CSMSConsumer()
+        consumer.scope = {"headers": [], "client": ("127.0.0.1", 1234)}
+        consumer.charger_id = "STATUSCLR"
+        consumer.store_key = store_key
+        consumer.connector_value = 2
+        consumer.charger = connector
+        consumer.aggregate_charger = aggregate
+        consumer._consumption_task = None
+        consumer._consumption_message_uuid = None
+        consumer.send = AsyncMock()
+        payload = {
+            "connectorId": 2,
+            "status": "Available",
+            "errorCode": "NoError",
+            "transactionId": tx.pk,
+        }
+        try:
+            with patch.object(consumer, "_assign_connector", new=AsyncMock()):
+                async_to_sync(consumer.receive)(
+                    text_data=json.dumps([2, "1", "StatusNotification", payload])
+                )
+        finally:
+            store.transactions.pop(store_key, None)
+        self.assertNotIn(store_key, store.transactions)
+
     async def test_rfid_recorded(self):
         await database_sync_to_async(Charger.objects.create)(charger_id="RFIDREC")
         communicator = WebsocketCommunicator(application, "/RFIDREC/?cid=RFIDREC")
