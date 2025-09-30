@@ -11,14 +11,14 @@
       <div class="card shadow-sm border-0 overflow-hidden">
         <div class="card-header d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
           <div>
-            <h1 class="h3 mb-1">{{ charger_label }}</h1>
-            <p class="text-muted mb-0 small">
+            <h1 class="h5 mb-1 text-break">{{ charger_label }}</h1>
+            <p class="text-muted mb-0 small text-break">
               <span data-i18n="serial_number_label">{% trans "Serial Number" %}</span>: {{ charger.charger_id }}
               &middot;
               <span data-i18n="connector_label">{% trans "Connector" %}</span>: {{ charger.connector_label }}
             </p>
             <div class="mt-2">
-              <span class="badge" style="background-color: {{ color }};">{{ state }}</span>
+              <span class="badge text-uppercase fw-semibold px-3 py-2 shadow-sm" style="background-color: {{ color }}; color: #fff;">{{ state }}</span>
             </div>
           </div>
           {% if request.user.is_authenticated %}
