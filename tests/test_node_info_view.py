@@ -28,3 +28,23 @@ class NodeInfoViewTests(TestCase):
         payload = response.json()
         self.assertEqual(payload["address"], "10.42.0.1")
         route_mock.assert_called_once_with("10.42.0.2", node.port)
+
+    def test_node_info_prefers_request_domain(self):
+        mac = Node.get_current_mac()
+        slug = f"test-node-{uuid.uuid4().hex}"
+        defaults = {
+            "hostname": "internal-host",
+            "address": "10.0.0.5",
+            "port": 8123,
+            "public_endpoint": slug,
+        }
+        Node.objects.update_or_create(mac_address=mac, defaults=defaults)
+
+        with patch("nodes.views._get_route_address", return_value=""):
+            response = self.client.get(
+                reverse("node-info"), HTTP_HOST="arthexis.com"
+            )
+
+        payload = response.json()
+        self.assertEqual(payload["hostname"], "arthexis.com")
+        self.assertEqual(payload["address"], "arthexis.com")

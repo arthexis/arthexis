@@ -82,6 +82,25 @@ def _get_host_ip(request) -> str:
     return domain
 
 
+def _get_host_domain(request) -> str:
+    """Return the domain from the host header when it isn't an IP."""
+
+    try:
+        host = request.get_host()
+    except Exception:  # pragma: no cover - defensive
+        return ""
+    if not host:
+        return ""
+    domain, _ = split_domain_port(host)
+    if not domain:
+        return ""
+    try:
+        ipaddress.ip_address(domain)
+    except ValueError:
+        return domain
+    return ""
+
+
 def _get_advertised_address(request, node) -> str:
     """Return the best address for the client to reach this node."""
 
@@ -121,9 +140,19 @@ def node_info(request):
         node, _ = Node.register_current()
 
     token = request.GET.get("token", "")
-    address = _get_advertised_address(request, node)
+    host_domain = _get_host_domain(request)
+    advertised_address = _get_advertised_address(request, node)
+    if host_domain:
+        hostname = host_domain
+        if advertised_address and advertised_address != node.address:
+            address = advertised_address
+        else:
+            address = host_domain
+    else:
+        hostname = node.hostname
+        address = advertised_address
     data = {
-        "hostname": node.hostname,
+        "hostname": hostname,
         "address": address,
         "port": node.port,
         "mac_address": node.mac_address,
