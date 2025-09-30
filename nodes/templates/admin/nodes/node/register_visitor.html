@@ -303,11 +303,13 @@
                     credentials: "same-origin",
                     body: JSON.stringify(hostPayload),
                 });
-                if (result && result.detail) {
-                    setStatus(hostResult, result.detail, false);
-                } else {
-                    setStatus(hostResult, messages.hostRegistered, false);
+                const detail = result && typeof result === "object" ? result.detail : "";
+                const identifier = result && typeof result === "object" ? result.id : null;
+                if (!identifier) {
+                    const errorMessage = detail || messages.partial;
+                    throw new Error(errorMessage);
                 }
+                setStatus(hostResult, detail || messages.hostRegistered, false);
             } catch (error) {
                 setStatus(hostResult, formatError(error), true);
             }
@@ -321,11 +323,13 @@
                     credentials: "include",
                     body: JSON.stringify(visitorPayload),
                 });
-                if (result && result.detail) {
-                    setStatus(visitorResult, result.detail, false);
-                } else {
-                    setStatus(visitorResult, messages.visitorRegistered, false);
+                const detail = result && typeof result === "object" ? result.detail : "";
+                const identifier = result && typeof result === "object" ? result.id : null;
+                if (!identifier) {
+                    const errorMessage = detail || messages.partial;
+                    throw new Error(errorMessage);
                 }
+                setStatus(visitorResult, detail || messages.visitorRegistered, false);
             } catch (error) {
                 setStatus(visitorResult, formatError(error), true);
             }
