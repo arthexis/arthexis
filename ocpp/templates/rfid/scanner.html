@@ -1,8 +1,10 @@
 {% with prefix=prefix|default:"rfid" %}
   <div id="{{ prefix }}-scanner">
-    <div class="rfid-mode-toggle">
-      <button type="button" id="{{ prefix }}-mode-toggle" data-toggle-url="{{ toggle_url }}">{{ toggle_label }}</button>
-    </div>
+    {% if toggle_url %}
+      <div class="rfid-mode-toggle">
+        <a id="{{ prefix }}-mode-toggle" class="button" href="{{ toggle_url }}" data-toggle-url="{{ toggle_url }}">{{ toggle_label }}</a>
+      </div>
+    {% endif %}
   <p id="{{ prefix }}-status">Scanner ready</p>
   <p>
     {% if request.user.is_authenticated %}
@@ -107,7 +109,8 @@
   const configureEl = document.getElementById('{{ prefix }}-configure');
   const modeToggleBtn = document.getElementById('{{ prefix }}-mode-toggle');
   const adminTemplate = '{{ admin_change_url_template|default:""|escapejs }}';
-  const tableMode = {{ table_mode|yesno:"true,false" }};
+  const tableMode = {% if table_mode %}true{% else %}false{% endif %};
+
   const historyBody = tableMode ? document.getElementById('{{ prefix }}-history-body') : null;
   const totalCountEl = tableMode ? document.getElementById('{{ prefix }}-total-count') : null;
   const isStaff = {{ request.user.is_staff|yesno:"true,false" }};
@@ -120,12 +123,13 @@
   let lastLocalAt = 0;
 
   if(modeToggleBtn){
-    modeToggleBtn.addEventListener('click', function(){
-      const targetUrl = modeToggleBtn.getAttribute('data-toggle-url');
-      if(targetUrl){
-        window.location.href = targetUrl;
-      }
-    });
+    const toggleTarget = modeToggleBtn.getAttribute('data-toggle-url') || modeToggleBtn.getAttribute('href');
+    if(toggleTarget){
+      modeToggleBtn.addEventListener('click', function(event){
+        event.preventDefault();
+        window.location.href = toggleTarget;
+      });
+    }
   }
 
   function booleanText(value){
