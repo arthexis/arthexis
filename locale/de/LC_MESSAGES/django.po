@@ -29,3 +29,11 @@ msgstr "Italienisch"
 msgid "German"
 msgstr "Deutsch"
 
+#: ocpp/views.py:747 ocpp/views.py:934
+msgid "Charger timestamps"
+msgstr "Zeitstempel der Ladestation"
+
+#: ocpp/templates/ocpp/charger_status.html:132
+msgid "Select a connector to view live chart data."
+msgstr "Wählen Sie einen Anschluss aus, um Live-Diagrammdaten anzuzeigen."
+
