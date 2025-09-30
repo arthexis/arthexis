@@ -1330,6 +1330,14 @@ class TodoDoneTests(TestCase):
         self.assertIsNotNone(todo.done_on)
         self.assertFalse(todo.is_deleted)
 
+    def test_mark_done_missing_task_refreshes(self):
+        todo = Todo.objects.create(request="Task", is_seed_data=True)
+        todo.delete()
+        resp = self.client.post(reverse("todo-done", args=[todo.pk]))
+        self.assertRedirects(resp, reverse("admin:index"))
+        messages = [m.message for m in get_messages(resp.wsgi_request)]
+        self.assertFalse(messages)
+
     def test_mark_done_condition_failure_shows_message(self):
         todo = Todo.objects.create(
             request="Task",
