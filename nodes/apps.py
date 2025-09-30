@@ -31,6 +31,21 @@ def _startup_notification() -> None:
     rev_short = revision_value[-6:] if revision_value else ""
 
     body = version
+    if body:
+        normalized = body.lstrip("vV") or body
+        base_version = normalized.rstrip("+")
+        needs_marker = False
+        if base_version and revision_value:
+            try:  # pragma: no cover - defensive guard
+                from core.models import PackageRelease
+
+                needs_marker = not PackageRelease.matches_revision(
+                    base_version, revision_value
+                )
+            except Exception:
+                logger.debug("Startup release comparison failed", exc_info=True)
+        if needs_marker and not normalized.endswith("+"):
+            body = f"{body}+"
     if rev_short:
         body = f"{body} r{rev_short}" if body else f"r{rev_short}"
 

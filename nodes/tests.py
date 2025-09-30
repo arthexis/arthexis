@@ -61,7 +61,7 @@ from .backends import OutboxEmailBackend
 from .tasks import capture_node_screenshot, sample_clipboard
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
-from core.models import PackageRelease, SecurityGroup, RFID
+from core.models import Package, PackageRelease, SecurityGroup, RFID
 
 
 class NodeBadgeColorTests(TestCase):
@@ -341,6 +341,48 @@ class NodeGetLocalTests(TestCase):
         subject, body = mock_notify.call_args[0]
         self.assertEqual(subject, "UP friend")
         self.assertEqual(body, "v2.0.0 r123456")
+
+    def test_register_node_marks_nonrelease_version(self):
+        package = Package.objects.create(name="pkg-node", is_active=False)
+        PackageRelease.objects.create(
+            package=package,
+            version="2.0.0",
+            revision="0" * 40,
+        )
+
+        node = Node.objects.create(
+            hostname="friend",
+            address="10.1.1.5",
+            port=8123,
+            mac_address="aa:bb:cc:dd:ee:11",
+            installed_version="1.0.0",
+            installed_revision="rev-old",
+        )
+        user = get_user_model().objects.create_user(
+            username="node-registrar", password="pwd"
+        )
+        self.client.force_login(user)
+        url = reverse("register-node")
+        payload = {
+            "hostname": "friend",
+            "address": "10.1.1.5",
+            "port": 8123,
+            "mac_address": "aa:bb:cc:dd:ee:11",
+            "installed_version": "2.0.0",
+            "installed_revision": "1" * 40,
+        }
+        with patch("nodes.models.notify_async") as mock_notify:
+            response = self.client.post(
+                url, data=json.dumps(payload), content_type="application/json"
+            )
+        self.assertEqual(response.status_code, 200)
+        node.refresh_from_db()
+        self.assertEqual(node.installed_version, "2.0.0")
+        self.assertEqual(node.installed_revision, "1" * 40)
+        mock_notify.assert_called_once()
+        subject, body = mock_notify.call_args[0]
+        self.assertEqual(subject, "UP friend")
+        self.assertEqual(body, "v2.0.0+ r111111")
 
     def test_register_node_update_without_version_change_still_notifies(self):
         node = Node.objects.create(
@@ -1774,6 +1816,36 @@ class StartupNotificationTests(TestCase):
         _, kwargs = mock_broadcast.call_args
         self.assertEqual(kwargs["subject"], "host:9000")
         self.assertTrue(kwargs["body"].startswith("1.2.3 r"))
+
+    def test_startup_notification_marks_nonrelease_version(self):
+        from nodes.apps import _startup_notification
+
+        package = Package.objects.create(name="pkg-start", is_active=False)
+        PackageRelease.objects.create(
+            package=package,
+            version="1.2.3",
+            revision="0" * 40,
+        )
+
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            (tmp_path / "VERSION").write_text("1.2.3")
+            with self.settings(BASE_DIR=tmp_path):
+                with patch(
+                    "nodes.apps.revision.get_revision", return_value="1" * 40
+                ):
+                    with patch("nodes.models.NetMessage.broadcast") as mock_broadcast:
+                        with patch(
+                            "nodes.apps.socket.gethostname", return_value="host"
+                        ):
+                            with patch.dict(os.environ, {"PORT": "9000"}):
+                                _startup_notification()
+                                time.sleep(0.1)
+
+        mock_broadcast.assert_called_once()
+        _, kwargs = mock_broadcast.call_args
+        self.assertEqual(kwargs["subject"], "host:9000")
+        self.assertEqual(kwargs["body"], "1.2.3+ r111111")
 
 
 class StartupHandlerTests(TestCase):
