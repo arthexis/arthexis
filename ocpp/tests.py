@@ -30,6 +30,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.utils.encoding import force_str
 from django.utils.translation import override, gettext as _
 from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
@@ -48,6 +49,7 @@ from .models import (
 )
 from .consumers import CSMSConsumer
 from .views import dispatch_action
+from .status_display import STATUS_BADGE_MAP
 from core.models import EnergyAccount, EnergyCredit, Reference, RFID, SecurityGroup
 from . import store
 from django.db.models.deletion import ProtectedError
@@ -1919,6 +1921,25 @@ class ChargerAdminTests(TestCase):
         resp = self.client.get(url)
         log_url = reverse("admin:ocpp_charger_log", args=[charger.pk])
         self.assertContains(resp, log_url)
+
+    def test_admin_status_overrides_available_when_active_session(self):
+        charger = Charger.objects.create(
+            charger_id="ADMINCHARGE",
+            last_status="Available",
+        )
+        tx = Transaction.objects.create(
+            charger=charger,
+            start_time=timezone.now(),
+        )
+        key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.transactions[key] = tx
+        try:
+            url = reverse("admin:ocpp_charger_changelist")
+            resp = self.client.get(url)
+            charging_label = force_str(STATUS_BADGE_MAP["charging"][0])
+            self.assertContains(resp, f">{charging_label}<")
+        finally:
+            store.transactions.pop(key, None)
 
     def test_admin_log_view_displays_entries(self):
         charger = Charger.objects.create(charger_id="LOG2")

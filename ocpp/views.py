@@ -33,6 +33,7 @@ from .evcs import (
     get_simulator_state,
     _simulator_status_json,
 )
+from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 
 
 def _normalize_connector_slug(slug: str | None) -> tuple[int | None, str]:
@@ -228,23 +229,6 @@ def _landing_page_translations() -> dict[str, dict[str, str]]:
     return catalog
 
 
-STATUS_BADGE_MAP: dict[str, tuple[str, str]] = {
-    "available": (_("Available"), "#0d6efd"),
-    "preparing": (_("Preparing"), "#0d6efd"),
-    "charging": (_("Charging"), "#198754"),
-    "suspendedevse": (_("Suspended (EVSE)"), "#fd7e14"),
-    "suspendedev": (_("Suspended (EV)"), "#fd7e14"),
-    "finishing": (_("Finishing"), "#20c997"),
-    "faulted": (_("Faulted"), "#dc3545"),
-    "unavailable": (_("Unavailable"), "#6c757d"),
-    "reserved": (_("Reserved"), "#6f42c1"),
-    "occupied": (_("Occupied"), "#0dcaf0"),
-    "outofservice": (_("Out of Service"), "#6c757d"),
-}
-
-_ERROR_OK_VALUES = {"", "noerror", "no_error"}
-
-
 def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
     """Return human readable state and color for a charger."""
 
@@ -257,14 +241,14 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
         error_code_lower = error_code.lower()
         if (
             has_session
-            and error_code_lower in _ERROR_OK_VALUES
+            and error_code_lower in ERROR_OK_VALUES
             and (key not in STATUS_BADGE_MAP or key == "available")
         ):
             # Some stations continue reporting "Available" (or an unknown status)
             # while a session is active. Override the badge so the user can see
             # the charger is actually busy.
             label, color = STATUS_BADGE_MAP.get("charging", (_("Charging"), "#198754"))
-        elif error_code and error_code_lower not in _ERROR_OK_VALUES:
+        elif error_code and error_code_lower not in ERROR_OK_VALUES:
             label = _("%(status)s (%(error)s)") % {
                 "status": label,
                 "error": error_code,
