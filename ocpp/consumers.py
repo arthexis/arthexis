@@ -285,6 +285,37 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             ).first
         )()
 
+    async def _ensure_rfid_seen(self, id_tag: str) -> CoreRFID | None:
+        """Ensure an RFID record exists and update its last seen timestamp."""
+
+        if not id_tag:
+            return None
+
+        normalized = id_tag.upper()
+
+        def _ensure() -> CoreRFID:
+            now = timezone.now()
+            tag, created = CoreRFID.objects.get_or_create(
+                rfid=normalized,
+                defaults={"allowed": False, "last_seen_on": now},
+            )
+            if created:
+                updates = []
+                if tag.allowed:
+                    tag.allowed = False
+                    updates.append("allowed")
+                if tag.last_seen_on != now:
+                    tag.last_seen_on = now
+                    updates.append("last_seen_on")
+                if updates:
+                    tag.save(update_fields=updates)
+            else:
+                tag.last_seen_on = now
+                tag.save(update_fields=["last_seen_on"])
+            return tag
+
+        return await database_sync_to_async(_ensure)()
+
     async def _assign_connector(self, connector: int | str | None) -> None:
         """Ensure ``self.charger`` matches the provided connector id."""
         if connector in (None, "", "-"):
@@ -1212,7 +1243,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     )
                 reply_payload = {}
             elif action == "Authorize":
-                account = await self._get_account(payload.get("idTag"))
+                id_tag = payload.get("idTag")
+                account = await self._get_account(id_tag)
                 if self.charger.require_rfid:
                     status = (
                         "Accepted"
@@ -1221,6 +1253,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         else "Invalid"
                     )
                 else:
+                    await self._ensure_rfid_seen(id_tag)
                     status = "Accepted"
                 reply_payload = {"idTagInfo": {"status": status}}
             elif action == "MeterValues":
@@ -1294,9 +1327,12 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 id_tag = payload.get("idTag")
                 account = await self._get_account(id_tag)
                 if id_tag:
-                    await database_sync_to_async(CoreRFID.objects.get_or_create)(
-                        rfid=id_tag.upper()
-                    )
+                    if self.charger.require_rfid:
+                        await database_sync_to_async(CoreRFID.objects.get_or_create)(
+                            rfid=id_tag.upper()
+                        )
+                    else:
+                        await self._ensure_rfid_seen(id_tag)
                 await self._assign_connector(payload.get("connectorId"))
                 if self.charger.require_rfid:
                     authorized = (

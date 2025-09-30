@@ -293,7 +293,7 @@ class CSMSConsumerTests(TransactionTestCase):
 
     async def test_rfid_recorded(self):
         await database_sync_to_async(Charger.objects.create)(charger_id="RFIDREC")
-        communicator = WebsocketCommunicator(application, "/RFIDREC/")
+        communicator = WebsocketCommunicator(application, "/RFIDREC/?cid=RFIDREC")
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
@@ -307,6 +307,10 @@ class CSMSConsumerTests(TransactionTestCase):
             pk=tx_id, charger__charger_id="RFIDREC"
         )
         self.assertEqual(tx.rfid, "TAG123")
+
+        tag = await database_sync_to_async(RFID.objects.get)(rfid="TAG123")
+        self.assertFalse(tag.allowed)
+        self.assertIsNotNone(tag.last_seen_on)
 
         await communicator.disconnect()
 
