@@ -5,7 +5,7 @@
 {% block title %}{{ charger.display_name|default:charger.name|default:charger.charger_id }} - {% trans "Status" %}{% endblock %}
 
 {% block content %}
-<div id="status-content">
+<div id="status-content" data-chart-animate="{{ chart_should_animate|yesno:'true,false,false' }}">
   {% if connector_links %}
   <div class="mb-3">
     <div class="nav nav-pills flex-wrap gap-2">
@@ -240,6 +240,7 @@
 <script src="{% static 'core/vendor/chart.umd.min.js' %}" data-chartjs="true"></script>
 <script>
   let kwChart = null;
+  let chartShouldAnimate = false;
   const chartData = { labels: [], datasets: [] };
   let lastChartSignature = null;
   const COLOR_PALETTE = [
@@ -418,13 +419,16 @@
   function renderChart(shouldUpdate = true) {
     const canvas = document.getElementById('kw-chart');
     if (!canvas) return;
+    const animationOptions = chartShouldAnimate
+      ? { duration: 700, easing: 'easeOutQuad' }
+      : false;
     if (!kwChart) {
       const ctx = canvas.getContext('2d');
       kwChart = new Chart(ctx, {
         type: 'line',
         data: chartData,
         options: {
-          animation: false,
+          animation: animationOptions,
           interaction: { mode: 'index', intersect: false },
           scales: {
             y: { beginAtZero: true }
@@ -434,7 +438,8 @@
     } else if (shouldUpdate) {
       kwChart.data.labels = chartData.labels;
       kwChart.data.datasets = chartData.datasets;
-      kwChart.update('none');
+      kwChart.options.animation = animationOptions;
+      kwChart.update(chartShouldAnimate ? undefined : 'none');
     }
   }
 
@@ -460,6 +465,13 @@
             }
           });
           const payload = parseChartPayload(newContent);
+          const newAnimateAttr = newContent.getAttribute('data-chart-animate');
+          if (newAnimateAttr === null) {
+            current.removeAttribute('data-chart-animate');
+          } else {
+            current.setAttribute('data-chart-animate', newAnimateAttr);
+          }
+          chartShouldAnimate = newAnimateAttr === 'true';
           current.innerHTML = newContent.innerHTML;
           if (typeof window.setupRemoteStartForm === 'function') {
             window.setupRemoteStartForm(current);
@@ -485,6 +497,11 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    const statusRoot = document.getElementById('status-content');
+    if (statusRoot) {
+      const animateAttr = statusRoot.getAttribute('data-chart-animate');
+      chartShouldAnimate = animateAttr === 'true';
+    }
     const payload = parseChartPayload(document);
     const chartChanged = applyChartPayload(payload);
     renderChart(chartChanged);
