@@ -692,3 +692,11 @@ msgstr "Disponible"
 #: ocpp/views.py:29
 msgid "Offline"
 msgstr "Sin conexión"
+
+#: ocpp/views.py:747 ocpp/views.py:934
+msgid "Charger timestamps"
+msgstr "Marcas de tiempo del cargador"
+
+#: ocpp/templates/ocpp/charger_status.html:132
+msgid "Select a connector to view live chart data."
+msgstr "Seleccione un conector para ver los datos de la gráfica en vivo."
