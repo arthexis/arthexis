@@ -567,6 +567,8 @@ LANGUAGES = [
 
 LOCALE_PATHS = [BASE_DIR / "locale"]
 
+FORMAT_MODULE_PATH = ["config.formats"]
+
 TIME_ZONE = "America/Monterrey"
 
 USE_I18N = True
