@@ -28,6 +28,7 @@ from .transactions_io import (
     export_transactions,
     import_transactions as import_transactions_data,
 )
+from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 from core.admin import SaveBeforeChangeAction
 from core.user_data import EntityModelAdmin
 
@@ -317,9 +318,34 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             args=[obj.charger_id, obj.connector_slug],
         )
         label = (obj.last_status or "status").strip() or "status"
+        status_key = label.lower()
+        error_code = (obj.last_error_code or "").strip().lower()
+        if (
+            self._has_active_session(obj)
+            and error_code in ERROR_OK_VALUES
+            and (status_key not in STATUS_BADGE_MAP or status_key == "available")
+        ):
+            label = STATUS_BADGE_MAP["charging"][0]
         return format_html('<a href="{}" target="_blank">{}</a>', url, label)
 
     status_link.short_description = "Status"
+
+    def _has_active_session(self, charger: Charger) -> bool:
+        """Return whether ``charger`` currently has an active session."""
+
+        if store.get_transaction(charger.charger_id, charger.connector_id):
+            return True
+        if charger.connector_id is not None:
+            return False
+        sibling_connectors = (
+            Charger.objects.filter(charger_id=charger.charger_id)
+            .exclude(pk=charger.pk)
+            .values_list("connector_id", flat=True)
+        )
+        for connector_id in sibling_connectors:
+            if store.get_transaction(charger.charger_id, connector_id):
+                return True
+        return False
 
     def location_name(self, obj):
         return obj.location.name if obj.location else ""
