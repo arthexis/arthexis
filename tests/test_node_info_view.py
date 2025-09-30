@@ -47,4 +47,4 @@ class NodeInfoViewTests(TestCase):
 
         payload = response.json()
         self.assertEqual(payload["hostname"], "arthexis.com")
-        self.assertEqual(payload["address"], "arthexis.com")
+        self.assertEqual(payload["address"], "10.0.0.5")

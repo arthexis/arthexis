@@ -144,10 +144,7 @@ def node_info(request):
     advertised_address = _get_advertised_address(request, node)
     if host_domain:
         hostname = host_domain
-        if advertised_address and advertised_address != node.address:
-            address = advertised_address
-        else:
-            address = host_domain
+        address = advertised_address or node.address
     else:
         hostname = node.hostname
         address = advertised_address
