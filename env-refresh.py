@@ -125,6 +125,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     """Run all database related maintenance steps."""
     default_db = settings.DATABASES["default"]
     using_sqlite = default_db["ENGINE"] == "django.db.backends.sqlite3"
+    additional_aliases = [alias for alias in settings.DATABASES if alias != "default"]
 
     base_dir = Path(settings.BASE_DIR)
     local_apps = _local_app_labels()
@@ -209,6 +210,12 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     call_command("migrate", interactive=False)
                 except Exception:
                     raise exc
+
+    for alias in additional_aliases:
+        try:
+            call_command("migrate", database=alias, interactive=False)
+        except OperationalError:
+            continue
 
     # Remove auto-generated SigilRoot entries so fixtures define prefixes
     SigilRoot = apps.get_model("core", "SigilRoot")

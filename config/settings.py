@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import contextlib
+import json
 import os
 import sys
 import ipaddress
@@ -508,30 +509,57 @@ def _postgres_available() -> bool:
         return False
 
 
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+        "OPTIONS": {"timeout": 60},
+        "TEST": {"NAME": BASE_DIR / "test_db.sqlite3"},
+    }
+}
+
 if _postgres_available():
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.environ.get("POSTGRES_DB", "postgres"),
-            "USER": os.environ.get("POSTGRES_USER", "postgres"),
-            "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
-            "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
-            "PORT": os.environ.get("POSTGRES_PORT", "5432"),
-            "OPTIONS": {"options": "-c timezone=UTC"},
-            "TEST": {
-                "NAME": f"{os.environ.get('POSTGRES_DB', 'postgres')}_test",
-            },
-        }
+    DATABASES["persistent"] = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("POSTGRES_DB", "postgres"),
+        "USER": os.environ.get("POSTGRES_USER", "postgres"),
+        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
+        "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
+        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+        "OPTIONS": {"options": "-c timezone=UTC"},
+        "TEST": {
+            "NAME": f"{os.environ.get('POSTGRES_DB', 'postgres')}_test",
+        },
     }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-            "OPTIONS": {"timeout": 60},
-            "TEST": {"NAME": BASE_DIR / "test_db.sqlite3"},
-        }
-    }
+
+
+def _load_model_database_mapping() -> dict[str, str]:
+    mapping_path = BASE_DIR / "config" / "data" / "model_databases.json"
+    try:
+        data = json.loads(mapping_path.read_text())
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError:
+        return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    normalized: dict[str, str] = {}
+    for label, alias in data.items():
+        if not isinstance(label, str) or not isinstance(alias, str):
+            continue
+        normalized[label.lower()] = alias
+    return normalized
+
+
+MODEL_DATABASES = {
+    label: alias
+    for label, alias in _load_model_database_mapping().items()
+    if alias in DATABASES
+}
+
+DATABASE_ROUTERS = ["config.database_router.ModelDatabaseRouter"]
 
 
 # Password validation
