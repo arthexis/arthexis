@@ -34,6 +34,7 @@ from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, o
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
+from django.contrib.auth.models import Permission
 from django.contrib.sites.models import Site
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from django.conf import settings
@@ -1021,6 +1022,34 @@ class NodeAdminTests(TestCase):
             f'attachment; filename="{node.public_endpoint}.pub"',
         )
         self.assertIn(node.public_key.strip(), resp.content.decode())
+
+    def test_register_current_requires_superuser(self):
+        User = get_user_model()
+        staff = User.objects.create_user(
+            username="staff", password="pass", is_staff=True
+        )
+        permission = Permission.objects.get(codename="view_node")
+        staff.user_permissions.add(permission)
+        self.client.force_login(staff)
+
+        response = self.client.get(reverse("admin:nodes_node_register_current"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_register_current_link_hidden_for_non_superusers(self):
+        User = get_user_model()
+        staff = User.objects.create_user(
+            username="linkstaff", password="pass", is_staff=True
+        )
+        permission = Permission.objects.get(codename="view_node")
+        staff.user_permissions.add(permission)
+        self.client.force_login(staff)
+
+        response = self.client.get(reverse("admin:nodes_node_changelist"))
+
+        self.assertNotContains(
+            response, reverse("admin:nodes_node_register_current")
+        )
 
     @patch("nodes.admin.capture_screenshot")
     def test_capture_site_screenshot_from_admin(self, mock_capture_screenshot):

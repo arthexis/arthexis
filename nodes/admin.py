@@ -13,6 +13,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from urllib.parse import urlsplit, urlunsplit
+from django.core.exceptions import PermissionDenied
 import base64
 import pyperclip
 from pyperclip import PyperclipException
@@ -242,6 +243,8 @@ class NodeAdmin(EntityModelAdmin):
 
     def register_current(self, request):
         """Create or update this host and offer browser node registration."""
+        if not request.user.is_superuser:
+            raise PermissionDenied
         node, created = Node.register_current()
         if created:
             self.message_user(
