@@ -16,6 +16,8 @@ from utils.api import api_login_required
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
+from core.models import RFID
+
 from .models import Node, NetMessage, NodeRole, node_information_updated
 from .utils import capture_screenshot, save_screenshot
 
@@ -338,6 +340,64 @@ def capture(request):
     screenshot = save_screenshot(path, node=node, method=request.method)
     node_id = screenshot.node.id if screenshot and screenshot.node else None
     return JsonResponse({"screenshot": str(path), "node": node_id})
+
+
+@csrf_exempt
+def export_rfids(request):
+    """Return serialized RFID records for authenticated peers."""
+
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required"}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "invalid json"}, status=400)
+
+    requester = payload.get("requester")
+    signature = request.headers.get("X-Signature")
+    if not requester:
+        return JsonResponse({"detail": "requester required"}, status=400)
+    if not signature:
+        return JsonResponse({"detail": "signature required"}, status=403)
+
+    node = Node.objects.filter(uuid=requester).first()
+    if not node or not node.public_key:
+        return JsonResponse({"detail": "unknown requester"}, status=403)
+
+    try:
+        public_key = serialization.load_pem_public_key(node.public_key.encode())
+        public_key.verify(
+            base64.b64decode(signature),
+            request.body,
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+    except Exception:
+        return JsonResponse({"detail": "invalid signature"}, status=403)
+
+    tags = []
+    for tag in RFID.objects.all().order_by("label_id"):
+        tags.append(
+            {
+                "rfid": tag.rfid,
+                "custom_label": tag.custom_label,
+                "key_a": tag.key_a,
+                "key_b": tag.key_b,
+                "data": tag.data,
+                "key_a_verified": tag.key_a_verified,
+                "key_b_verified": tag.key_b_verified,
+                "allowed": tag.allowed,
+                "color": tag.color,
+                "kind": tag.kind,
+                "released": tag.released,
+                "last_seen_on": tag.last_seen_on.isoformat()
+                if tag.last_seen_on
+                else None,
+            }
+        )
+
+    return JsonResponse({"rfids": tags})
 
 
 @csrf_exempt
