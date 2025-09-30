@@ -1,5 +1,5 @@
 {% extends "pages/base.html" %}
 {% block content %}
 <h1>RFID Scanner</h1>
-{% include "rfid/scanner.html" with scan_url=scan_url restart_url=restart_url test_url=test_url deep_read_url=deep_read_url %}
+{% include "rfid/scanner.html" with scan_url=scan_url restart_url=restart_url test_url=test_url deep_read_url=deep_read_url table_mode=table_mode toggle_url=toggle_url toggle_label=toggle_label %}
 {% endblock %}

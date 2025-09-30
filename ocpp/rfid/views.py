@@ -62,10 +62,29 @@ def scan_deep(_request):
 @login_required(login_url="pages:login")
 def reader(request):
     """Public page to scan RFID tags."""
+    params = request.GET.copy()
+    mode = params.get("mode")
+    table_mode = mode == "table"
+    params = params.copy()
+    params._mutable = True
+    if table_mode:
+        params.pop("mode", None)
+        toggle_label = "Switch to Single Mode"
+    else:
+        params["mode"] = "table"
+        toggle_label = "Switch to Table Mode"
+    toggle_query = params.urlencode()
+    toggle_url = request.path
+    if toggle_query:
+        toggle_url = f"{toggle_url}?{toggle_query}"
+
     context = {
         "scan_url": reverse("rfid-scan-next"),
         "restart_url": reverse("rfid-scan-restart"),
         "test_url": reverse("rfid-scan-test"),
+        "table_mode": table_mode,
+        "toggle_url": toggle_url,
+        "toggle_label": toggle_label,
     }
     if request.user.is_staff:
         context["admin_change_url_template"] = reverse(
