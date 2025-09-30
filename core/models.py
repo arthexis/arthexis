@@ -3,7 +3,7 @@ from django.contrib.auth.models import (
     Group,
     UserManager as DjangoUserManager,
 )
-from django.db import models
+from django.db import DatabaseError, models
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.conf import settings
@@ -2521,6 +2521,40 @@ class PackageRelease(Entity):
         if not releases:
             return None
         return max(releases, key=lambda r: Version(r.version))
+
+    @classmethod
+    def matches_revision(cls, version: str, revision: str) -> bool:
+        """Return ``True`` when *revision* matches the stored release revision.
+
+        When the release metadata cannot be retrieved (for example during
+        database initialization), the method optimistically returns ``True`` so
+        callers continue operating without raising secondary errors.
+        """
+
+        version = (version or "").strip()
+        revision = (revision or "").strip()
+        if not version or not revision:
+            return True
+
+        try:
+            queryset = cls.objects.filter(version=version)
+            release_revision = (
+                queryset.filter(package__is_active=True)
+                .values_list("revision", flat=True)
+                .first()
+            )
+            if release_revision is None:
+                release_revision = queryset.values_list("revision", flat=True).first()
+        except DatabaseError:  # pragma: no cover - depends on DB availability
+            logger.debug(
+                "PackageRelease.matches_revision skipped: database unavailable",
+                exc_info=True,
+            )
+            return True
+
+        if not release_revision:
+            return True
+        return release_revision.strip() == revision
 
     def build(self, **kwargs) -> None:
         """Wrapper around :func:`core.release.build` for convenience."""

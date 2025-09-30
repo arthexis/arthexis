@@ -7,7 +7,7 @@ from django.db.utils import DatabaseError
 from django.db.models.signals import post_delete
 from django.dispatch import Signal, receiver
 from core.entity import Entity
-from core.models import Profile
+from core.models import PackageRelease, Profile
 from core.fields import SigilLongAutoField, SigilShortAutoField
 import re
 import json
@@ -755,7 +755,16 @@ def _format_upgrade_body(version: str, revision: str) -> str:
     parts: list[str] = []
     if version:
         normalized = version.lstrip("vV") or version
-        parts.append(f"v{normalized}")
+        base_version = normalized.rstrip("+")
+        display_version = normalized
+        if (
+            base_version
+            and revision
+            and not PackageRelease.matches_revision(base_version, revision)
+            and not normalized.endswith("+")
+        ):
+            display_version = f"{display_version}+"
+        parts.append(f"v{display_version}")
     if revision:
         rev_clean = re.sub(r"[^0-9A-Za-z]", "", revision)
         rev_short = (rev_clean[-6:] if rev_clean else revision[-6:])
