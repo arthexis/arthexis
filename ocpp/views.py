@@ -854,6 +854,8 @@ def charger_status(request, cid, connector=None):
             "error": str(_("Unable to send remote start request.")),
         }
     action_url = _reverse_connector_url("charger-action", cid, connector_slug)
+    chart_should_animate = bool(has_active_session and not past_session)
+
     return render(
         request,
         "ocpp/charger_status.html",
@@ -888,6 +890,7 @@ def charger_status(request, cid, connector=None):
             "date_toggle_links": date_toggle_links,
             "pagination_query": pagination_query,
             "session_query": session_query,
+            "chart_should_animate": chart_should_animate,
         },
     )
 
