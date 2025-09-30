@@ -1,8 +1,8 @@
 {% with prefix=prefix|default:"rfid" %}
   <div id="{{ prefix }}-scanner">
-  <div class="rfid-mode-toggle">
-    <a class="rfid-mode-button" id="{{ prefix }}-mode-toggle" href="{{ toggle_url }}">{{ toggle_label }}</a>
-  </div>
+    <div class="rfid-mode-toggle">
+      <button type="button" id="{{ prefix }}-mode-toggle" data-toggle-url="{{ toggle_url }}">{{ toggle_label }}</button>
+    </div>
   <p id="{{ prefix }}-status">Scanner ready</p>
   <p>
     {% if request.user.is_authenticated %}
@@ -53,20 +53,7 @@
   justify-content: flex-end;
   margin-bottom: 1em;
 }
-#{{ prefix }}-scanner .rfid-mode-button {
-  background-color: #005a9c;
-  border: none;
-  border-radius: 4px;
-  color: #fff;
-  cursor: pointer;
-  font-size: 1em;
-  padding: 0.5em 1em;
-  text-decoration: none;
-}
-#{{ prefix }}-scanner .rfid-mode-button:hover,
-#{{ prefix }}-scanner .rfid-mode-button:focus {
-  background-color: #004377;
-}
+
 #{{ prefix }}-scanner .field {
   display: flex;
   margin: 0.5em 0;
@@ -118,6 +105,7 @@
   const restartTestBtn = document.getElementById('{{ prefix }}-restart-test');
   const deepBtn = document.getElementById('{{ prefix }}-deep-read');
   const configureEl = document.getElementById('{{ prefix }}-configure');
+  const modeToggleBtn = document.getElementById('{{ prefix }}-mode-toggle');
   const adminTemplate = '{{ admin_change_url_template|default:""|escapejs }}';
   const tableMode = {{ table_mode|yesno:"true,false" }};
   const historyBody = tableMode ? document.getElementById('{{ prefix }}-history-body') : null;
@@ -130,6 +118,15 @@
   let localConnected = false;
   let lastLocalValue = null;
   let lastLocalAt = 0;
+
+  if(modeToggleBtn){
+    modeToggleBtn.addEventListener('click', function(){
+      const targetUrl = modeToggleBtn.getAttribute('data-toggle-url');
+      if(targetUrl){
+        window.location.href = targetUrl;
+      }
+    });
+  }
 
   function booleanText(value){
     if(value === undefined || value === null){
