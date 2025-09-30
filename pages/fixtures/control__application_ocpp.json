@@ -1,0 +1,11 @@
+[
+  {
+    "model": "pages.application",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "ocpp",
+      "description": ""
+    }
+  }
+]

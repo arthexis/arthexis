@@ -57,6 +57,7 @@ import websockets
 import asyncio
 from pathlib import Path
 from .simulator import SimulatorConfig, ChargePointSimulator
+from .evcs import simulate, SimulatorState, _simulators
 import re
 from datetime import datetime, timedelta, timezone as dt_timezone
 from .tasks import purge_meter_readings
@@ -1668,6 +1669,51 @@ class ChargerLandingTests(TestCase):
         resp = self.client.get(reverse("charger-page", args=["STATS"]))
         self.assertContains(resp, "progress-bar")
         store.transactions.pop(key, None)
+
+    def test_public_page_overrides_available_status_when_charging(self):
+        charger = Charger.objects.create(
+            charger_id="STATEPUB",
+            last_status="Available",
+        )
+        tx = Transaction.objects.create(
+            charger=charger,
+            meter_start=1000,
+            start_time=timezone.now(),
+        )
+        key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.transactions[key] = tx
+        try:
+            response = self.client.get(reverse("charger-page", args=["STATEPUB"]))
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(
+                response,
+                'class="badge" style="background-color: #198754;">Charging</span>',
+            )
+        finally:
+            store.transactions.pop(key, None)
+
+    def test_admin_status_overrides_available_status_when_charging(self):
+        charger = Charger.objects.create(
+            charger_id="STATEADM",
+            last_status="Available",
+        )
+        tx = Transaction.objects.create(
+            charger=charger,
+            meter_start=1000,
+            start_time=timezone.now(),
+        )
+        key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.transactions[key] = tx
+        try:
+            response = self.client.get(reverse("charger-status", args=["STATEADM"]))
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, 'id="charger-state">Charging</strong>')
+            self.assertContains(
+                response,
+                'style="width:20px;height:20px;background-color: #198754;"',
+            )
+        finally:
+            store.transactions.pop(key, None)
 
     def test_public_status_shows_rfid_link_for_known_tag(self):
         aggregate = Charger.objects.create(charger_id="PUBRFID")
@@ -3409,6 +3455,27 @@ class DispatchActionViewTests(TestCase):
         self.loop.run_until_complete(asyncio.sleep(0))
         self.assertEqual(self.ws.sent, [])
         self.assertFalse(store.pending_calls)
+
+
+class SimulatorStateMappingTests(TestCase):
+    def tearDown(self):
+        _simulators[1] = SimulatorState()
+        _simulators[2] = SimulatorState()
+
+    def test_simulate_uses_requested_state(self):
+        calls = []
+
+        async def fake(cp_idx, *args, sim_state=None, **kwargs):
+            calls.append(sim_state)
+            if sim_state is not None:
+                sim_state.running = False
+
+        with patch("ocpp.evcs.simulate_cp", new=fake):
+            coro = simulate(cp=2, daemon=True, threads=1)
+            asyncio.run(coro)
+
+        self.assertEqual(len(calls), 1)
+        self.assertIs(calls[0], _simulators[2])
 
 
 class ChargerStatusViewTests(TestCase):

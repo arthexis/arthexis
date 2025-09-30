@@ -2372,6 +2372,8 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         context["admin_change_url_template"] = reverse(
             "admin:core_rfid_change", args=[0]
         )
+        context["title"] = _("Scan RFIDs")
+        context["opts"] = self.model._meta
         return render(request, "admin/core/rfid/scan.html", context)
 
     def scan_next(self, request):

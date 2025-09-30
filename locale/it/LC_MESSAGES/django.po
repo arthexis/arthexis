@@ -29,3 +29,11 @@ msgstr "Italiano"
 msgid "German"
 msgstr "Tedesco"
 
+#: ocpp/views.py:747 ocpp/views.py:934
+msgid "Charger timestamps"
+msgstr "Timestamp del caricatore"
+
+#: ocpp/templates/ocpp/charger_status.html:132
+msgid "Select a connector to view live chart data."
+msgstr "Seleziona un connettore per visualizzare i dati del grafico in tempo reale."
+

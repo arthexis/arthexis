@@ -55,6 +55,7 @@
   justify-content: flex-end;
   margin-bottom: 1em;
 }
+
 #{{ prefix }}-scanner .field {
   display: flex;
   margin: 0.5em 0;
@@ -109,6 +110,7 @@
   const modeToggleBtn = document.getElementById('{{ prefix }}-mode-toggle');
   const adminTemplate = '{{ admin_change_url_template|default:""|escapejs }}';
   const tableMode = {% if table_mode %}true{% else %}false{% endif %};
+
   const historyBody = tableMode ? document.getElementById('{{ prefix }}-history-body') : null;
   const totalCountEl = tableMode ? document.getElementById('{{ prefix }}-total-count') : null;
   const isStaff = {{ request.user.is_staff|yesno:"true,false" }};
