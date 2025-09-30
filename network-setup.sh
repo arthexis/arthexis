@@ -599,7 +599,7 @@ if [[ $RUN_FIREWALL == true ]]; then
     if [ "$MODE" = "public" ]; then
         PORTS+=(80 443 8000)
     else
-        PORTS+=(8000 8888)
+        PORTS+=(8000 8080 8888)
     fi
 
     if command -v ufw >/dev/null 2>&1; then

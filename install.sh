@@ -369,6 +369,7 @@ else
     sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
 server {
     listen 8000;
+    listen 8080;
     server_name _;
     location / {
         proxy_pass http://127.0.0.1:PORT_PLACEHOLDER;
