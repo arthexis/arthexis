@@ -1403,8 +1403,11 @@ def todo_focus(request, pk: int):
 @staff_member_required
 @require_POST
 def todo_done(request, pk: int):
-    todo = get_object_or_404(Todo, pk=pk, is_deleted=False, done_on__isnull=True)
     redirect_to = _get_return_url(request)
+    try:
+        todo = Todo.objects.get(pk=pk, is_deleted=False, done_on__isnull=True)
+    except Todo.DoesNotExist:
+        return redirect(redirect_to)
     result = todo.check_on_done_condition()
     if not result.passed:
         messages.error(request, _format_condition_failure(todo, result))
