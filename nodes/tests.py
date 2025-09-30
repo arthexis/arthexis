@@ -1545,6 +1545,27 @@ class NetMessageAdminTests(TransactionTestCase):
         self.assertEqual(response.status_code, 302)
         mock_propagate.assert_called_once()
 
+    def test_reply_action_prefills_initial_data(self):
+        role = NodeRole.objects.get(name="Terminal")
+        node = Node.objects.create(
+            hostname="remote",
+            address="10.0.0.10",
+            port=8100,
+            mac_address="00:11:22:33:44:55",
+            role=role,
+        )
+        original = NetMessage.objects.create(
+            subject="Ping",
+            body="Hello",
+            node_origin=node,
+        )
+        url = f"{reverse('admin:nodes_netmessage_add')}?reply_to={original.pk}"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        form = response.context_data["adminform"].form
+        self.assertEqual(form["subject"].value(), "Re: Ping")
+        self.assertEqual(str(form["reach"].value()), str(role.pk))
+
 
 class LastNetMessageViewTests(TestCase):
     def setUp(self):
@@ -1553,10 +1574,19 @@ class LastNetMessageViewTests(TestCase):
 
     def test_returns_latest_message(self):
         NetMessage.objects.create(subject="old", body="msg1")
-        NetMessage.objects.create(subject="new", body="msg2")
+        latest = NetMessage.objects.create(subject="new", body="msg2")
         resp = self.client.get(reverse("last-net-message"))
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json(), {"subject": "new", "body": "msg2"})
+        self.assertEqual(
+            resp.json(),
+            {
+                "subject": "new",
+                "body": "msg2",
+                "admin_url": reverse(
+                    "admin:nodes_netmessage_change", args=[latest.pk]
+                ),
+            },
+        )
 
 
 class NetMessageReachTests(TestCase):

@@ -1078,6 +1078,7 @@ class ContentSampleAdmin(EntityModelAdmin):
 
 @admin.register(NetMessage)
 class NetMessageAdmin(EntityModelAdmin):
+    change_form_template = "admin/nodes/netmessage/change_form.html"
     list_display = (
         "subject",
         "body",
@@ -1091,6 +1092,34 @@ class NetMessageAdmin(EntityModelAdmin):
     ordering = ("-created",)
     readonly_fields = ("complete",)
     actions = ["send_messages"]
+
+    def get_changeform_initial_data(self, request):
+        initial = super().get_changeform_initial_data(request)
+        initial = dict(initial) if initial else {}
+        reply_to = request.GET.get("reply_to")
+        if reply_to:
+            try:
+                message = (
+                    NetMessage.objects.select_related("node_origin__role")
+                    .get(pk=reply_to)
+                )
+            except (NetMessage.DoesNotExist, ValueError, TypeError):
+                message = None
+            if message:
+                subject = (message.subject or "").strip()
+                if subject:
+                    if not subject.lower().startswith("re:"):
+                        subject = f"Re: {subject}"
+                else:
+                    subject = "Re:"
+                initial.setdefault("subject", subject[:64])
+                if (
+                    message.node_origin
+                    and message.node_origin.role_id
+                    and "reach" not in initial
+                ):
+                    initial["reach"] = message.node_origin.role_id
+        return initial
 
     def send_messages(self, request, queryset):
         for msg in queryset:
