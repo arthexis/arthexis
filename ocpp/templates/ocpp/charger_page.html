@@ -6,15 +6,6 @@
 {% block content %}
 {% with charger.display_name|default:charger.name|default:charger.charger_id as charger_label %}
 <div class="container px-0 px-sm-4" data-language-container>
-  {% if connector_links %}
-  <div class="mb-3">
-    <div class="nav nav-pills flex-wrap gap-2 justify-content-center justify-content-sm-start">
-      {% for link in connector_links %}
-      <a class="nav-link {% if link.active %}active{% endif %}" href="{{ link.url }}">{{ link.label }}</a>
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
   <div class="row justify-content-center mt-2 mt-sm-4">
     <div class="col-12 col-lg-8 col-xl-6">
       <div class="card shadow-sm border-0 overflow-hidden">
