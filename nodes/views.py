@@ -8,6 +8,7 @@ from django.http.request import split_domain_port
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
 from django.conf import settings
+from django.urls import reverse
 from pathlib import Path
 from django.utils.cache import patch_vary_headers
 
@@ -536,5 +537,11 @@ def last_net_message(request):
 
     msg = NetMessage.objects.order_by("-created").first()
     if not msg:
-        return JsonResponse({"subject": "", "body": ""})
-    return JsonResponse({"subject": msg.subject, "body": msg.body})
+        return JsonResponse({"subject": "", "body": "", "admin_url": ""})
+    return JsonResponse(
+        {
+            "subject": msg.subject,
+            "body": msg.body,
+            "admin_url": reverse("admin:nodes_netmessage_change", args=[msg.pk]),
+        }
+    )
