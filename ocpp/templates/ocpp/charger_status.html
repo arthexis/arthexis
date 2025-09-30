@@ -287,6 +287,39 @@
     return COLOR_PALETTE[index % COLOR_PALETTE.length];
   }
 
+  function datasetKey(dataset, index) {
+    if (
+      dataset &&
+      dataset.connector_id !== undefined &&
+      dataset.connector_id !== null
+    ) {
+      return `connector-${dataset.connector_id}`;
+    }
+    if (dataset && typeof dataset.label === 'string') {
+      const trimmed = dataset.label.trim();
+      if (trimmed) {
+        return trimmed.toLowerCase();
+      }
+    }
+    return `dataset-${index}`;
+  }
+
+  function normalizeValues(values) {
+    if (!Array.isArray(values)) {
+      return [];
+    }
+    return values.map((value) => {
+      if (value === null || value === undefined || value === '') {
+        return null;
+      }
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : null;
+      }
+      const numeric = Number(value);
+      return Number.isNaN(numeric) ? null : numeric;
+    });
+  }
+
   function parseChartPayload(root) {
     if (!root || !root.querySelector) {
       return null;
@@ -305,51 +338,81 @@
 
   function applyChartPayload(payload) {
     if (!payload) {
-      chartData.labels = [];
-      chartData.datasets = [];
-      const emptySignature = JSON.stringify(chartData);
-      const changed = emptySignature !== lastChartSignature;
-      lastChartSignature = emptySignature;
-      return changed;
+      return false;
     }
     const labels = Array.isArray(payload.labels) ? payload.labels : [];
     const normalizedLabels = labels.map((ts) => {
       const parsed = new Date(ts);
       return Number.isNaN(parsed.getTime()) ? ts : parsed.toLocaleTimeString();
     });
-    const datasets = (payload.datasets || []).map((dataset, index) => {
+    const datasetPayloads = Array.isArray(payload.datasets)
+      ? payload.datasets
+      : [];
+    const normalizedDatasets = datasetPayloads.map((dataset, index) => {
       const palette = getPaletteForDataset(dataset, index);
-      const values = Array.isArray(dataset.values)
-        ? dataset.values.map((value) => {
-            if (value === null || value === undefined || value === '') {
-              return null;
-            }
-            const numeric = Number(value);
-            return Number.isNaN(numeric) ? null : numeric;
-          })
-        : [];
+      const values = normalizeValues(dataset.values);
+      let label = '';
+      if (typeof dataset.label === 'string' && dataset.label.trim()) {
+        label = dataset.label;
+      } else if (
+        dataset.connector_id !== undefined &&
+        dataset.connector_id !== null
+      ) {
+        label = `Connector ${dataset.connector_id}`;
+      } else {
+        label = `Dataset ${index + 1}`;
+      }
       return {
-        label: dataset.label || `Connector ${index + 1}`,
-        data: values,
+        key: datasetKey(dataset, index),
+        label,
+        values,
+        palette,
+      };
+    });
+    const signature = JSON.stringify({
+      labels,
+      datasets: normalizedDatasets.map(({ key, label, values }) => ({
+        key,
+        label,
+        values,
+      })),
+    });
+    if (signature === lastChartSignature) {
+      return false;
+    }
+    lastChartSignature = signature;
+
+    chartData.labels.splice(0, chartData.labels.length, ...normalizedLabels);
+
+    const existingMap = new Map(
+      chartData.datasets.map((dataset) => [dataset._key, dataset])
+    );
+    const nextDatasets = normalizedDatasets.map((entry) => {
+      const existing = existingMap.get(entry.key);
+      if (existing) {
+        existing.label = entry.label;
+        existing.data = entry.values;
+        existing.borderColor = entry.palette.border;
+        existing.backgroundColor = entry.palette.background;
+        existing.fill = true;
+        existing.tension = 0.4;
+        existing.spanGaps = true;
+        existing._key = entry.key;
+        return existing;
+      }
+      return {
+        _key: entry.key,
+        label: entry.label,
+        data: entry.values,
+        borderColor: entry.palette.border,
+        backgroundColor: entry.palette.background,
         fill: true,
-        borderColor: palette.border,
-        backgroundColor: palette.background,
         tension: 0.4,
         spanGaps: true,
       };
     });
-    const signature = JSON.stringify({
-      labels: normalizedLabels,
-      datasets: datasets.map((dataset) => ({
-        label: dataset.label,
-        data: dataset.data,
-      })),
-    });
-    const changed = signature !== lastChartSignature;
-    lastChartSignature = signature;
-    chartData.labels = normalizedLabels;
-    chartData.datasets = datasets;
-    return changed;
+    chartData.datasets.splice(0, chartData.datasets.length, ...nextDatasets);
+    return true;
   }
 
   function renderChart(shouldUpdate = true) {
@@ -361,6 +424,7 @@
         type: 'line',
         data: chartData,
         options: {
+          animation: false,
           interaction: { mode: 'index', intersect: false },
           scales: {
             y: { beginAtZero: true }
@@ -370,7 +434,7 @@
     } else if (shouldUpdate) {
       kwChart.data.labels = chartData.labels;
       kwChart.data.datasets = chartData.datasets;
-      kwChart.update();
+      kwChart.update('none');
     }
   }
 
