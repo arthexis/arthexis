@@ -1299,11 +1299,34 @@ class RFID(Entity):
         related_name="rfids",
         help_text="Optional reference for this RFID.",
     )
+    origin_node = models.ForeignKey(
+        "nodes.Node",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_rfids",
+        help_text="Node where this RFID record was created.",
+    )
     released = models.BooleanField(default=False)
     added_on = models.DateTimeField(auto_now_add=True)
     last_seen_on = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        if not self.origin_node_id:
+            try:
+                from nodes.models import Node  # imported lazily to avoid circular import
+            except Exception:  # pragma: no cover - nodes app may be unavailable
+                node = None
+            else:
+                node = Node.get_local()
+            if node:
+                self.origin_node = node
+                if update_fields:
+                    fields = set(update_fields)
+                    if "origin_node" not in fields:
+                        fields.add("origin_node")
+                        kwargs["update_fields"] = tuple(fields)
         if self.pk:
             old = type(self).objects.filter(pk=self.pk).values("key_a", "key_b").first()
             if old:

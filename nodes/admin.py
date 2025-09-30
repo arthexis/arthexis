@@ -14,11 +14,18 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from urllib.parse import urlsplit, urlunsplit
 from django.core.exceptions import PermissionDenied
+from django.utils.dateparse import parse_datetime
 import base64
+import json
 import pyperclip
 from pyperclip import PyperclipException
 import uuid
 import subprocess
+
+import requests
+from requests import RequestException
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
 from .actions import NodeAction
 from .reports import (
@@ -41,6 +48,7 @@ from .models import (
     DNSRecord,
 )
 from . import dns as dns_utils
+from core.models import RFID
 from core.user_data import EntityModelAdmin
 
 
@@ -212,7 +220,12 @@ class NodeAdmin(EntityModelAdmin):
     change_list_template = "admin/nodes/node/change_list.html"
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
-    actions = ["register_visitor", "run_task", "take_screenshots"]
+    actions = [
+        "register_visitor",
+        "run_task",
+        "take_screenshots",
+        "fetch_rfids",
+    ]
     inlines = [NodeFeatureAssignmentInline]
 
     def get_urls(self):
@@ -349,6 +362,151 @@ class NodeAdmin(EntityModelAdmin):
                 if sample:
                     count += 1
         self.message_user(request, f"{count} screenshots captured", messages.SUCCESS)
+
+    @admin.action(description="Fetch RFIDs from selected")
+    def fetch_rfids(self, request, queryset):
+        local_node = Node.get_local()
+        if not local_node:
+            self.message_user(
+                request,
+                "Local node is not registered.",
+                messages.ERROR,
+            )
+            return None
+
+        security_dir = Path(local_node.base_path or settings.BASE_DIR) / "security"
+        priv_path = security_dir / f"{local_node.public_endpoint}"
+        if not priv_path.exists():
+            self.message_user(
+                request,
+                "Local node private key not found.",
+                messages.ERROR,
+            )
+            return None
+
+        try:
+            private_key = serialization.load_pem_private_key(
+                priv_path.read_bytes(), password=None
+            )
+        except Exception as exc:  # pragma: no cover - unexpected key errors
+            self.message_user(
+                request,
+                f"Failed to load private key: {exc}",
+                messages.ERROR,
+            )
+            return None
+
+        payload = json.dumps(
+            {"requester": str(local_node.uuid)},
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        signature = base64.b64encode(
+            private_key.sign(
+                payload.encode(),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+        ).decode()
+        headers = {
+            "Content-Type": "application/json",
+            "X-Signature": signature,
+        }
+
+        processed = 0
+        total_created = 0
+        total_updated = 0
+        errors = 0
+
+        for node in queryset:
+            if local_node.pk and node.pk == local_node.pk:
+                continue
+            url = f"http://{node.address}:{node.port}/nodes/rfid/export/"
+            try:
+                response = requests.post(
+                    url,
+                    data=payload,
+                    headers=headers,
+                    timeout=5,
+                )
+            except RequestException as exc:
+                self.message_user(request, f"{node}: {exc}", messages.ERROR)
+                errors += 1
+                continue
+
+            if response.status_code != 200:
+                self.message_user(
+                    request,
+                    f"{node}: {response.status_code} {response.text}",
+                    messages.ERROR,
+                )
+                errors += 1
+                continue
+
+            try:
+                data = response.json()
+            except ValueError:
+                self.message_user(
+                    request,
+                    f"{node}: invalid JSON response",
+                    messages.ERROR,
+                )
+                errors += 1
+                continue
+
+            created = 0
+            updated = 0
+            rfids = data.get("rfids", []) or []
+            for entry in rfids:
+                rfid_value = entry.get("rfid")
+                if not rfid_value:
+                    continue
+                defaults = {
+                    "custom_label": entry.get("custom_label", ""),
+                    "key_a": entry.get(
+                        "key_a", RFID._meta.get_field("key_a").default
+                    ),
+                    "key_b": entry.get(
+                        "key_b", RFID._meta.get_field("key_b").default
+                    ),
+                    "data": entry.get("data", []),
+                    "key_a_verified": bool(entry.get("key_a_verified", False)),
+                    "key_b_verified": bool(entry.get("key_b_verified", False)),
+                    "allowed": bool(entry.get("allowed", True)),
+                    "color": entry.get("color", RFID.BLACK),
+                    "kind": entry.get("kind", RFID.CLASSIC),
+                    "released": bool(entry.get("released", False)),
+                    "origin_node": node,
+                }
+                if "last_seen_on" in entry:
+                    last_seen_raw = entry.get("last_seen_on")
+                    if last_seen_raw:
+                        defaults["last_seen_on"] = parse_datetime(last_seen_raw)
+                    else:
+                        defaults["last_seen_on"] = None
+
+                obj, created_flag = RFID.objects.update_or_create(
+                    rfid=rfid_value,
+                    defaults=defaults,
+                )
+                if created_flag:
+                    created += 1
+                else:
+                    updated += 1
+
+            processed += 1
+            total_created += created
+            total_updated += updated
+
+        if processed:
+            message = (
+                f"Fetched RFIDs from {processed} node(s); "
+                f"{total_created} created, {total_updated} updated."
+            )
+            level = messages.SUCCESS if not errors else messages.WARNING
+            self.message_user(request, message, level)
+        elif not errors:
+            self.message_user(request, "No remote nodes selected.", messages.INFO)
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}

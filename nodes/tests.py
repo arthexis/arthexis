@@ -61,7 +61,7 @@ from .backends import OutboxEmailBackend
 from .tasks import capture_node_screenshot, sample_clipboard
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
-from core.models import PackageRelease, SecurityGroup
+from core.models import PackageRelease, SecurityGroup, RFID
 
 
 class NodeBadgeColorTests(TestCase):
@@ -1326,6 +1326,150 @@ class NodeAdminTests(TestCase):
         response.render()
         self.assertEqual(response.context_data["stream_url"], configured_stream)
         self.assertContains(response, configured_stream)
+
+    @patch("nodes.admin.requests.post")
+    def test_fetch_rfids_action_fetches_and_imports(self, mock_post):
+        local = self._create_local_node()
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        private_bytes = key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        public_bytes = key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        security_dir = Path(settings.BASE_DIR) / "security"
+        security_dir.mkdir(parents=True, exist_ok=True)
+        (security_dir / f"{local.public_endpoint}").write_bytes(private_bytes)
+        (security_dir / f"{local.public_endpoint}.pub").write_bytes(public_bytes)
+        local.public_key = public_bytes.decode()
+        local.save(update_fields=["public_key"])
+
+        remote = Node.objects.create(
+            hostname="remote",
+            address="127.0.0.2",
+            port=8010,
+            mac_address="aa:bb:cc:dd:ee:ff",
+        )
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "rfids": [
+                {
+                    "rfid": "abc123",
+                    "custom_label": "Remote tag",
+                    "key_a": "A1B2C3D4E5F6",
+                    "key_b": "FFFFFFFFFFFF",
+                    "data": ["sector"],
+                    "key_a_verified": True,
+                    "key_b_verified": False,
+                    "allowed": True,
+                    "color": RFID.BLACK,
+                    "kind": RFID.CLASSIC,
+                    "released": False,
+                    "last_seen_on": None,
+                }
+            ]
+        }
+        mock_response.text = ""
+        mock_post.return_value = mock_response
+
+        response = self.client.post(
+            reverse("admin:nodes_node_changelist"),
+            {"action": "fetch_rfids", "_selected_action": [str(remote.pk)]},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(RFID.objects.filter(rfid="ABC123").exists())
+        tag = RFID.objects.get(rfid="ABC123")
+        self.assertEqual(tag.custom_label, "Remote tag")
+        self.assertEqual(tag.origin_node, remote)
+        self.assertEqual(tag.data, ["sector"])
+
+        self.assertTrue(mock_post.called)
+        call_kwargs = mock_post.call_args.kwargs
+        payload = call_kwargs["data"]
+        headers = call_kwargs["headers"]
+        signature = base64.b64decode(headers["X-Signature"])
+        key.public_key().verify(
+            signature,
+            payload.encode(),
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+        self.assertContains(response, "Fetched RFIDs from 1 node(s)")
+
+
+class RFIDExportViewTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        NodeRole.objects.get_or_create(name="Terminal")
+        self.local_node = Node.objects.create(
+            hostname="local",
+            address="127.0.0.1",
+            port=8000,
+            mac_address=Node.get_current_mac(),
+        )
+        self.remote_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        self.remote_public = (
+            self.remote_key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
+        self.remote_node = Node.objects.create(
+            hostname="remote",
+            address="10.0.0.2",
+            port=8100,
+            mac_address="00:11:22:33:44:55",
+            public_key=self.remote_public,
+        )
+
+    def _sign_payload(self, payload):
+        payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        signature = self.remote_key.sign(
+            payload_json.encode(),
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+        return payload_json, base64.b64encode(signature).decode()
+
+    def test_export_requires_signature(self):
+        payload_json = json.dumps(
+            {"requester": str(self.remote_node.uuid)},
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        response = self.client.post(
+            reverse("node-rfid-export"),
+            data=payload_json,
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_export_returns_serialized_data(self):
+        RFID.objects.create(rfid="ABCDEF")
+        payload_json, signature = self._sign_payload(
+            {"requester": str(self.remote_node.uuid)}
+        )
+        response = self.client.post(
+            reverse("node-rfid-export"),
+            data=payload_json,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("rfids", body)
+        self.assertEqual(len(body["rfids"]), 1)
+        tag_data = body["rfids"][0]
+        self.assertEqual(tag_data["rfid"], "ABCDEF")
+        self.assertIn("custom_label", tag_data)
 
 
 class NetMessageAdminTests(TransactionTestCase):
