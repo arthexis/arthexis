@@ -544,11 +544,11 @@ class ChargePointSimulator:
                                     ],
                                 },
                             ]
+                        )
                     )
-                )
-                await recv()
-                await self._maybe_send_door_event(send, recv)
-                await asyncio.sleep(cfg.interval)
+                    await recv()
+                    await self._maybe_send_door_event(send, recv)
+                    await asyncio.sleep(cfg.interval)
 
             if not await self._wait_until_operative(send, recv):
                 return
