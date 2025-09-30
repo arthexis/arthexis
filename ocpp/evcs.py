@@ -48,6 +48,7 @@ from typing import Dict, Optional
 
 import websockets
 from . import store
+from .message_utils import wait_for_call_result
 
 # ---------------------------------------------------------------------------
 # Helper utilities
@@ -186,6 +187,8 @@ async def simulate_cp(
     interval: float = 5.0,
     username: Optional[str] = None,
     password: Optional[str] = None,
+    *,
+    sim_state: SimulatorState | None = None,
 ) -> None:
     """Simulate one charge point session.
 
@@ -206,7 +209,7 @@ async def simulate_cp(
         b64 = base64.b64encode(userpass.encode("utf-8")).decode("ascii")
         headers["Authorization"] = f"Basic {b64}"
 
-    state = _simulators.get(cp_idx + 1, _simulators[1])
+    state = sim_state or _simulators.get(cp_idx + 1, _simulators[1])
 
     loop_count = 0
     while loop_count < session_count and state.running:
@@ -247,6 +250,21 @@ async def simulate_cp(
             stop_event = asyncio.Event()
             reset_event = asyncio.Event()
 
+            async def _handle_call(msg) -> bool:
+                if not isinstance(msg, list) or not msg or msg[0] != 2:
+                    return False
+                msg_id = msg[1]
+                action = str(msg[2]) if len(msg) > 2 else ""
+                await _send([3, msg_id, {}])
+                if action == "RemoteStopTransaction":
+                    state.last_message = "RemoteStopTransaction"
+                    stop_event.set()
+                elif action == "Reset":
+                    state.last_message = "Reset"
+                    reset_event.set()
+                    stop_event.set()
+                return True
+
             async def listen():
                 try:
                     while True:
@@ -255,17 +273,7 @@ async def simulate_cp(
                             msg = json.loads(raw)
                         except json.JSONDecodeError:
                             continue
-
-                        if isinstance(msg, list) and msg and msg[0] == 2:
-                            msg_id, action = msg[1], msg[2]
-                            await _send([3, msg_id, {}])
-                            if action == "RemoteStopTransaction":
-                                state.last_message = "RemoteStopTransaction"
-                                stop_event.set()
-                            elif action == "Reset":
-                                state.last_message = "Reset"
-                                reset_event.set()
-                                stop_event.set()
+                        await _handle_call(msg)
                 except websockets.ConnectionClosed:
                     stop_event.set()
 
@@ -282,10 +290,10 @@ async def simulate_cp(
                 ]
             )
             state.last_message = "BootNotification"
-            await _recv()
+            await wait_for_call_result(_recv, "boot", handle_call=_handle_call)
             await _send([2, "auth", "Authorize", {"idTag": rfid}])
             state.last_message = "Authorize"
-            await _recv()
+            await wait_for_call_result(_recv, "auth", handle_call=_handle_call)
 
             state.phase = "Available"
 
@@ -353,8 +361,12 @@ async def simulate_cp(
                 ]
             )
             state.last_message = "StartTransaction"
-            resp = await _recv()
-            tx_id = json.loads(resp)[2].get("transactionId")
+            start_payload = await wait_for_call_result(
+                _recv, "start", handle_call=_handle_call
+            )
+            tx_id = start_payload.get("transactionId")
+            if tx_id is None:
+                raise RuntimeError("StartTransaction response missing transactionId")
 
             state.last_status = "Running"
             state.phase = "Charging"
@@ -415,7 +427,7 @@ async def simulate_cp(
             )
             state.last_message = "StopTransaction"
             state.phase = "Available"
-            await _recv()
+            await wait_for_call_result(_recv, "stop", handle_call=_handle_call)
 
             # Idle phase: heartbeats and idle meter values
             idle_time = 20 if session_count == 1 else 60
@@ -570,6 +582,7 @@ def simulate(
                 interval,
                 username,
                 password,
+                sim_state=state,
             )
 
         def run_thread(idx: int) -> None:
@@ -592,6 +605,7 @@ def simulate(
                     interval,
                     username,
                     password,
+                    sim_state=state,
                 )
             )
 
@@ -644,6 +658,7 @@ def simulate(
                 interval,
                 username,
                 password,
+                sim_state=state,
             )
         )
     else:
@@ -671,6 +686,7 @@ def simulate(
                     username,
                     password,
                 ),
+                kwargs={"sim_state": state},
                 daemon=True,
             )
             t.start()

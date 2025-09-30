@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Review CP simulator disconnect regression",
+      "url": "/ocpp/simulator/",
+      "request_details": "Confirm concurrent simulator runs keep including the transactionId in MeterValues so sessions no longer stop early on LocalSim."
+    }
+  }
+]

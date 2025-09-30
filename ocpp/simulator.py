@@ -12,6 +12,7 @@ import websockets
 from config.offline import requires_network
 
 from . import store
+from .message_utils import wait_for_call_result
 
 
 @dataclass
@@ -478,11 +479,11 @@ class ChargePointSimulator:
             )
             await send(boot)
             try:
-                resp = json.loads(await recv())
+                boot_payload = await wait_for_call_result(recv, "boot")
             except Exception:
                 self.status = "error"
                 raise
-            status = resp[2].get("status")
+            status = boot_payload.get("status")
             if status != "Accepted":
                 if not self._connected.is_set():
                     self._connect_error = f"Boot status {status}"
@@ -490,7 +491,7 @@ class ChargePointSimulator:
                 return
 
             await send(json.dumps([2, "auth", "Authorize", {"idTag": cfg.rfid}]))
-            await recv()
+            await wait_for_call_result(recv, "auth")
             await self._maybe_send_door_event(send, recv)
             if not self._connected.is_set():
                 self.status = "running"
@@ -569,11 +570,13 @@ class ChargePointSimulator:
                 )
             )
             try:
-                resp = json.loads(await recv())
+                start_payload = await wait_for_call_result(recv, "start")
             except Exception:
                 self.status = "error"
                 raise
-            tx_id = resp[2].get("transactionId")
+            tx_id = start_payload.get("transactionId")
+            if tx_id is None:
+                raise RuntimeError("StartTransaction response missing transactionId")
             self._in_transaction = True
 
             meter = meter_start
@@ -633,7 +636,7 @@ class ChargePointSimulator:
                     ]
                 )
             )
-            await recv()
+            await wait_for_call_result(recv, "stop")
             await self._maybe_send_door_event(send, recv)
             self._in_transaction = False
             if self._pending_availability:

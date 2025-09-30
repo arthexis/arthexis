@@ -18,6 +18,7 @@ from asgiref.sync import async_to_sync
 from django.test import (
     Client,
     RequestFactory,
+    SimpleTestCase,
     TransactionTestCase,
     TestCase,
     override_settings,
@@ -26,6 +27,7 @@ from unittest import skip
 from contextlib import suppress
 from types import SimpleNamespace
 from unittest.mock import patch, Mock, AsyncMock
+from collections import deque
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
@@ -57,6 +59,8 @@ import websockets
 import asyncio
 from pathlib import Path
 from .simulator import SimulatorConfig, ChargePointSimulator
+from .evcs import simulate, SimulatorState, _simulators
+from .message_utils import wait_for_call_result
 import re
 from datetime import datetime, timedelta, timezone as dt_timezone
 from .tasks import purge_meter_readings
@@ -105,6 +109,47 @@ class DummyWebSocket:
 
     async def send(self, message):
         self.sent.append(message)
+
+
+class MessageUtilsTests(SimpleTestCase):
+    def test_wait_for_call_result_handles_remote_calls(self):
+        frames = deque(
+            [
+                json.dumps([3, "status", {}]),
+                json.dumps([2, "reset-1", "Reset", {}]),
+                json.dumps([3, "start", {"transactionId": 42}]),
+            ]
+        )
+        handled: list[list[object]] = []
+
+        async def recv():
+            return frames.popleft()
+
+        async def handle_call(msg):
+            handled.append(msg)
+            return True
+
+        async def runner():
+            return await wait_for_call_result(
+                recv, "start", handle_call=handle_call
+            )
+
+        payload = asyncio.run(runner())
+        self.assertEqual(payload["transactionId"], 42)
+        self.assertEqual(len(handled), 1)
+        self.assertEqual(handled[0][2], "Reset")
+
+    def test_wait_for_call_result_raises_on_call_error(self):
+        frames = deque([json.dumps([4, "start", "InternalError", "boom"])])
+
+        async def recv():
+            return frames.popleft()
+
+        async def runner():
+            return await wait_for_call_result(recv, "start")
+
+        with self.assertRaises(RuntimeError):
+            asyncio.run(runner())
 
 
 class DispatchActionTests(TestCase):
@@ -3454,6 +3499,27 @@ class DispatchActionViewTests(TestCase):
         self.loop.run_until_complete(asyncio.sleep(0))
         self.assertEqual(self.ws.sent, [])
         self.assertFalse(store.pending_calls)
+
+
+class SimulatorStateMappingTests(TestCase):
+    def tearDown(self):
+        _simulators[1] = SimulatorState()
+        _simulators[2] = SimulatorState()
+
+    def test_simulate_uses_requested_state(self):
+        calls = []
+
+        async def fake(cp_idx, *args, sim_state=None, **kwargs):
+            calls.append(sim_state)
+            if sim_state is not None:
+                sim_state.running = False
+
+        with patch("ocpp.evcs.simulate_cp", new=fake):
+            coro = simulate(cp=2, daemon=True, threads=1)
+            asyncio.run(coro)
+
+        self.assertEqual(len(calls), 1)
+        self.assertIs(calls[0], _simulators[2])
 
 
 class ChargerStatusViewTests(TestCase):
