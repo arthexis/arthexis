@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import os
+import shlex
+import shutil
 import subprocess
 import sys
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 try:  # pragma: no cover - optional dependency
     import toml  # type: ignore
@@ -28,6 +29,9 @@ class Package:
     license: str
     repository_url: str = "https://github.com/arthexis/arthexis"
     homepage_url: str = "https://arthexis.com"
+    version_path: Optional[Path | str] = None
+    dependencies_path: Optional[Path | str] = None
+    test_command: Optional[str] = None
 
 
 @dataclass
@@ -104,7 +108,10 @@ def _manager_credentials() -> Optional[Credentials]:
     return None
 
 
-def run_tests(log_path: Optional[Path] = None) -> subprocess.CompletedProcess:
+def run_tests(
+    log_path: Optional[Path] = None,
+    command: Optional[Sequence[str]] = None,
+) -> subprocess.CompletedProcess:
     """Run the project's test suite and write output to ``log_path``.
 
     The log file is stored separately from regular application logs to avoid
@@ -112,11 +119,8 @@ def run_tests(log_path: Optional[Path] = None) -> subprocess.CompletedProcess:
     """
 
     log_path = log_path or Path("logs/test.log")
-    proc = subprocess.run(
-        [sys.executable, "manage.py", "test"],
-        capture_output=True,
-        text=True,
-    )
+    cmd = list(command) if command is not None else [sys.executable, "manage.py", "test"]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_path.write_text(proc.stdout + proc.stderr, encoding="utf-8")
     return proc
@@ -198,7 +202,7 @@ def build(
                 "Git repository is not clean. Commit, stash, or enable auto stash before building."
             )
 
-    version_path = Path("VERSION")
+    version_path = Path(package.version_path) if package.version_path else Path("VERSION")
     if version is None:
         if not version_path.exists():
             raise ReleaseError("VERSION file not found")
@@ -210,17 +214,29 @@ def build(
             version_path.write_text(version + "\n")
     else:
         # Ensure the VERSION file reflects the provided release version
+        if version_path.parent != Path("."):
+            version_path.parent.mkdir(parents=True, exist_ok=True)
         version_path.write_text(version + "\n")
 
+    requirements_path = (
+        Path(package.dependencies_path)
+        if package.dependencies_path
+        else Path("requirements.txt")
+    )
     requirements = [
         line.strip()
-        for line in Path("requirements.txt").read_text().splitlines()
+        for line in requirements_path.read_text().splitlines()
         if line.strip() and not line.startswith("#")
     ]
 
     if tests:
         log_path = Path("logs/test.log")
-        proc = run_tests(log_path=log_path)
+        test_command = (
+            shlex.split(package.test_command)
+            if package.test_command
+            else None
+        )
+        proc = run_tests(log_path=log_path, command=test_command)
         if proc.returncode != 0:
             raise TestsFailed(log_path, proc.stdout + proc.stderr)
 

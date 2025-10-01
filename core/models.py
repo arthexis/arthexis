@@ -2376,6 +2376,9 @@ class Package(Entity):
     license = models.CharField(max_length=100, default=DEFAULT_PACKAGE.license)
     repository_url = models.URLField(default=DEFAULT_PACKAGE.repository_url)
     homepage_url = models.URLField(default=DEFAULT_PACKAGE.homepage_url)
+    version_path = models.CharField(max_length=255, blank=True, default="")
+    dependencies_path = models.CharField(max_length=255, blank=True, default="")
+    test_command = models.TextField(blank=True, default="")
     release_manager = models.ForeignKey(
         ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
     )
@@ -2414,6 +2417,9 @@ class Package(Entity):
             license=self.license,
             repository_url=self.repository_url,
             homepage_url=self.homepage_url,
+            version_path=self.version_path or None,
+            dependencies_path=self.dependencies_path or None,
+            test_command=self.test_command or None,
         )
 
 
