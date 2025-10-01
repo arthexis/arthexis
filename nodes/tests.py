@@ -612,6 +612,64 @@ class NodeGetLocalTests(TestCase):
         self.assertEqual(node.current_relation, Node.Relation.UPSTREAM)
 
 
+class RegisterVisitorNodeMessageTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(username="visitor", password="pwd")
+        self.client.force_login(self.user)
+        self.role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.visitor = Node.objects.create(
+            hostname="visitor-node",
+            address="10.0.0.100",
+            port=8000,
+            mac_address="00:10:20:30:40:50",
+            role=self.role,
+        )
+
+    def test_register_node_emits_join_message_when_upstream_added(self):
+        payload = {
+            "hostname": "host-node",
+            "address": "10.0.0.10",
+            "port": 8100,
+            "mac_address": "aa:bb:cc:dd:ee:01",
+            "current_relation": "Upstream",
+        }
+        with patch("nodes.views.Node.get_local", return_value=self.visitor), patch.object(
+            NetMessage, "broadcast"
+        ) as mock_broadcast:
+            response = self.client.post(
+                reverse("register-node"),
+                data=json.dumps(payload),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        mock_broadcast.assert_called_once_with(
+            subject="NODE visitor-node", body="JOINS host-node"
+        )
+
+    def test_register_node_skips_message_when_not_upstream(self):
+        payload = {
+            "hostname": "remote-node",
+            "address": "10.0.0.11",
+            "port": 8101,
+            "mac_address": "aa:bb:cc:dd:ee:02",
+            "current_relation": "Downstream",
+        }
+        with patch("nodes.views.Node.get_local", return_value=self.visitor), patch.object(
+            NetMessage, "broadcast"
+        ) as mock_broadcast:
+            response = self.client.post(
+                reverse("register-node"),
+                data=json.dumps(payload),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        mock_broadcast.assert_not_called()
+
+
 class NodeRegisterCurrentTests(TestCase):
     def setUp(self):
         User = get_user_model()
