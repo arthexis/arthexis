@@ -199,6 +199,33 @@ def _add_cors_headers(request, response):
     return response
 
 
+def _node_display_name(node: Node) -> str:
+    """Return a human-friendly name for ``node`` suitable for messaging."""
+
+    for attr in ("hostname", "public_endpoint", "address"):
+        value = getattr(node, attr, "") or ""
+        value = value.strip()
+        if value:
+            return value
+    identifier = getattr(node, "pk", None)
+    return str(identifier or node)
+
+
+def _announce_visitor_join(new_node: Node, relation: Node.Relation | None) -> None:
+    """Emit a network message when the visitor node links to a host."""
+
+    if relation != Node.Relation.UPSTREAM:
+        return
+
+    local_node = Node.get_local()
+    if not local_node:
+        return
+
+    visitor_name = _node_display_name(local_node)
+    host_name = _node_display_name(new_node)
+    NetMessage.broadcast(subject=f"NODE {visitor_name}", body=f"JOINS {host_name}")
+
+
 @csrf_exempt
 def register_node(request):
     """Register or update a node from POSTed JSON data."""
@@ -352,6 +379,8 @@ def register_node(request):
         current_revision=current_revision,
         request=request,
     )
+
+    _announce_visitor_join(node, relation_value)
 
     response = JsonResponse({"id": node.id})
     return _add_cors_headers(request, response)
