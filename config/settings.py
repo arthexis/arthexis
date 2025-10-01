@@ -22,7 +22,7 @@ from celery.schedules import crontab
 from django.http import request as http_request
 from django.http.request import split_domain_port
 from django.middleware.csrf import CsrfViewMiddleware
-from django.core.exceptions import DisallowedHost
+from django.core.exceptions import DisallowedHost, ImproperlyConfigured
 from django.contrib.sites import shortcuts as sites_shortcuts
 from django.contrib.sites.requests import RequestSite
 from urllib.parse import urlsplit
@@ -486,8 +486,16 @@ OTP_TOTP_ISSUER = os.environ.get("OTP_TOTP_ISSUER", "Arthexis")
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+FORCED_DB_BACKEND = os.environ.get("ARTHEXIS_FORCE_DB_BACKEND", "").strip().lower()
+if FORCED_DB_BACKEND and FORCED_DB_BACKEND not in {"sqlite", "postgres"}:
+    raise ImproperlyConfigured(
+        "ARTHEXIS_FORCE_DB_BACKEND must be 'sqlite' or 'postgres' when defined."
+    )
+
 
 def _postgres_available() -> bool:
+    if FORCED_DB_BACKEND == "sqlite":
+        return False
     try:
         import psycopg
     except Exception:
@@ -508,7 +516,15 @@ def _postgres_available() -> bool:
         return False
 
 
-if _postgres_available():
+if FORCED_DB_BACKEND == "postgres":
+    _use_postgres = True
+elif FORCED_DB_BACKEND == "sqlite":
+    _use_postgres = False
+else:
+    _use_postgres = _postgres_available()
+
+
+if _use_postgres:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
@@ -524,10 +540,16 @@ if _postgres_available():
         }
     }
 else:
+    _sqlite_override = os.environ.get("ARTHEXIS_SQLITE_PATH")
+    if _sqlite_override:
+        SQLITE_DB_PATH = Path(_sqlite_override)
+    else:
+        SQLITE_DB_PATH = BASE_DIR / "db.sqlite3"
+
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+            "NAME": SQLITE_DB_PATH,
             "OPTIONS": {"timeout": 60},
             "TEST": {"NAME": BASE_DIR / "test_db.sqlite3"},
         }
