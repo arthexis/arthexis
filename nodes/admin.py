@@ -1078,20 +1078,48 @@ class ContentSampleAdmin(EntityModelAdmin):
 
 @admin.register(NetMessage)
 class NetMessageAdmin(EntityModelAdmin):
+    class NetMessageAdminForm(forms.ModelForm):
+        class Meta:
+            model = NetMessage
+            fields = "__all__"
+            widgets = {"body": forms.Textarea(attrs={"rows": 4})}
+
+    form = NetMessageAdminForm
     change_form_template = "admin/nodes/netmessage/change_form.html"
     list_display = (
         "subject",
         "body",
-        "reach",
+        "filter_node",
+        "filter_node_role",
         "node_origin",
         "created",
         "complete",
     )
     search_fields = ("subject", "body")
-    list_filter = ("complete", "reach")
+    list_filter = ("complete", "filter_node_role", "filter_current_relation")
     ordering = ("-created",)
     readonly_fields = ("complete",)
     actions = ["send_messages"]
+    fieldsets = (
+        (None, {"fields": ("subject", "body")}),
+        (
+            "Filters",
+            {
+                "fields": (
+                    "filter_node",
+                    "filter_node_feature",
+                    "filter_node_role",
+                    "filter_current_relation",
+                    "filter_installed_version",
+                    "filter_installed_revision",
+                )
+            },
+        ),
+        (
+            "Propagation",
+            {"fields": ("node_origin", "propagated_to", "complete")},
+        ),
+    )
 
     def get_changeform_initial_data(self, request):
         initial = super().get_changeform_initial_data(request)
@@ -1113,12 +1141,8 @@ class NetMessageAdmin(EntityModelAdmin):
                 else:
                     subject = "Re:"
                 initial.setdefault("subject", subject[:64])
-                if (
-                    message.node_origin
-                    and message.node_origin.role_id
-                    and "reach" not in initial
-                ):
-                    initial["reach"] = message.node_origin.role_id
+                if message.node_origin and "filter_node" not in initial:
+                    initial["filter_node"] = message.node_origin.pk
         return initial
 
     def send_messages(self, request, queryset):

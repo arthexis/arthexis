@@ -1007,6 +1007,17 @@ class NodeRegisterCurrentTests(TestCase):
             mac_address="00:11:22:33:44:cc",
             public_key=public_key,
         )
+        target_role, _ = NodeRole.objects.get_or_create(name="Control")
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="net-message", defaults={"display": "Net Message"}
+        )
+        target = Node.objects.create(
+            hostname="target",
+            address="10.0.0.2",
+            port=8001,
+            mac_address="00:11:22:33:44:dd",
+            role=target_role,
+        )
         msg_id = str(uuid.uuid4())
         payload = {
             "uuid": msg_id,
@@ -1015,6 +1026,12 @@ class NodeRegisterCurrentTests(TestCase):
             "seen": [],
             "sender": str(sender.uuid),
             "origin": str(sender.uuid),
+            "filter_node": str(target.uuid),
+            "filter_node_feature": feature.slug,
+            "filter_node_role": target_role.name,
+            "filter_current_relation": Node.Relation.UPSTREAM,
+            "filter_installed_version": "1.0.0",
+            "filter_installed_revision": "rev123",
         }
         payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
         signature = key.sign(payload_json.encode(), padding.PKCS1v15(), hashes.SHA256())
@@ -1028,6 +1045,12 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertTrue(NetMessage.objects.filter(uuid=msg_id).exists())
         message = NetMessage.objects.get(uuid=msg_id)
         self.assertEqual(message.node_origin, sender)
+        self.assertEqual(message.filter_node, target)
+        self.assertEqual(message.filter_node_feature, feature)
+        self.assertEqual(message.filter_node_role, target_role)
+        self.assertEqual(message.filter_current_relation, Node.Relation.UPSTREAM)
+        self.assertEqual(message.filter_installed_version, "1.0.0")
+        self.assertEqual(message.filter_installed_revision, "rev123")
 
     def test_clipboard_polling_creates_task(self):
         feature, _ = NodeFeature.objects.get_or_create(
@@ -1683,7 +1706,7 @@ class NetMessageAdminTests(TransactionTestCase):
         self.assertEqual(response.status_code, 200)
         form = response.context_data["adminform"].form
         self.assertEqual(form["subject"].value(), "Re: Ping")
-        self.assertEqual(str(form["reach"].value()), str(role.pk))
+        self.assertEqual(str(form["filter_node"].value()), str(node.pk))
 
 
 class LastNetMessageViewTests(TestCase):
@@ -1779,6 +1802,76 @@ class NetMessageReachTests(TestCase):
         roles = set(msg.propagated_to.values_list("role__name", flat=True))
         self.assertIn("Control", roles)
         self.assertEqual(mock_post.call_count, 3)
+
+
+class NetMessageFilterTests(TestCase):
+    def setUp(self):
+        self.terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.control_role, _ = NodeRole.objects.get_or_create(name="Control")
+        self.nodes = {
+            "terminal": Node.objects.create(
+                hostname="terminal-filter",
+                address="10.20.0.1",
+                port=8020,
+                mac_address="00:11:22:33:55:01",
+                role=self.terminal_role,
+            ),
+            "control": Node.objects.create(
+                hostname="control-filter",
+                address="10.20.0.2",
+                port=8021,
+                mac_address="00:11:22:33:55:02",
+                role=self.control_role,
+            ),
+        }
+        self.feature, _ = NodeFeature.objects.get_or_create(
+            slug="filter-test", defaults={"display": "Filter Test"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(
+            node=self.nodes["control"], feature=self.feature
+        )
+        self.nodes["control"].current_relation = Node.Relation.UPSTREAM
+        self.nodes["control"].installed_version = "1.2.3"
+        self.nodes["control"].installed_revision = "abc123"
+        self.nodes["control"].save(
+            update_fields=[
+                "current_relation",
+                "installed_version",
+                "installed_revision",
+            ]
+        )
+
+    @patch("requests.post")
+    def test_filter_node_limits_targets(self, mock_post):
+        msg = NetMessage.objects.create(
+            subject="s", body="b", filter_node=self.nodes["control"]
+        )
+        with patch.object(Node, "get_local", return_value=None):
+            msg.propagate()
+        self.assertEqual(
+            list(msg.propagated_to.values_list("pk", flat=True)),
+            [self.nodes["control"].pk],
+        )
+        mock_post.assert_called_once()
+
+    @patch("requests.post")
+    def test_filter_fields_limit_queryset(self, mock_post):
+        msg = NetMessage.objects.create(
+            subject="s",
+            body="b",
+            filter_node_feature=self.feature,
+            filter_node_role=self.control_role,
+            filter_current_relation=Node.Relation.UPSTREAM,
+            filter_installed_version="1.2.3",
+            filter_installed_revision="abc123",
+        )
+        with patch.object(Node, "get_local", return_value=None):
+            msg.propagate()
+        self.assertEqual(
+            list(msg.propagated_to.values_list("pk", flat=True)),
+            [self.nodes["control"].pk],
+        )
+        mock_post.assert_called_once()
 
 
 class NetMessageBroadcastStringReachTests(TestCase):

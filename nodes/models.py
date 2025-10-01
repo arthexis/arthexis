@@ -1263,6 +1263,45 @@ class NetMessage(Entity):
     )
     subject = models.CharField(max_length=64, blank=True)
     body = models.CharField(max_length=256, blank=True)
+    filter_node = models.ForeignKey(
+        "Node",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="filtered_net_messages",
+        verbose_name="Node",
+    )
+    filter_node_feature = models.ForeignKey(
+        "NodeFeature",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Node feature",
+    )
+    filter_node_role = models.ForeignKey(
+        NodeRole,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="filtered_net_messages",
+        verbose_name="Node role",
+    )
+    filter_current_relation = models.CharField(
+        max_length=10,
+        blank=True,
+        choices=Node.Relation.choices,
+        verbose_name="Current relation",
+    )
+    filter_installed_version = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name="Installed version",
+    )
+    filter_installed_revision = models.CharField(
+        max_length=40,
+        blank=True,
+        verbose_name="Installed revision",
+    )
     reach = models.ForeignKey(
         NodeRole,
         on_delete=models.SET_NULL,
@@ -1354,13 +1393,38 @@ class NetMessage(Entity):
             if node and (not local or node.pk != local.pk):
                 self.propagated_to.add(node)
 
-        all_nodes = Node.objects.all()
+        filtered_nodes = Node.objects.all()
+        if self.filter_node_id:
+            filtered_nodes = filtered_nodes.filter(pk=self.filter_node_id)
+        if self.filter_node_feature_id:
+            filtered_nodes = filtered_nodes.filter(
+                features__pk=self.filter_node_feature_id
+            )
+        if self.filter_node_role_id:
+            filtered_nodes = filtered_nodes.filter(role_id=self.filter_node_role_id)
+        if self.filter_current_relation:
+            filtered_nodes = filtered_nodes.filter(
+                current_relation=self.filter_current_relation
+            )
+        if self.filter_installed_version:
+            filtered_nodes = filtered_nodes.filter(
+                installed_version=self.filter_installed_version
+            )
+        if self.filter_installed_revision:
+            filtered_nodes = filtered_nodes.filter(
+                installed_revision=self.filter_installed_revision
+            )
+
+        filtered_nodes = filtered_nodes.distinct()
+
         if local:
-            all_nodes = all_nodes.exclude(pk=local.pk)
-        total_known = all_nodes.count()
+            filtered_nodes = filtered_nodes.exclude(pk=local.pk)
+        total_known = filtered_nodes.count()
 
         remaining = list(
-            all_nodes.exclude(pk__in=self.propagated_to.values_list("pk", flat=True))
+            filtered_nodes.exclude(
+                pk__in=self.propagated_to.values_list("pk", flat=True)
+            )
         )
         if not remaining:
             self.complete = True
@@ -1369,7 +1433,8 @@ class NetMessage(Entity):
 
         target_limit = min(3, len(remaining))
 
-        reach_name = self.reach.name if self.reach else None
+        reach_source = self.filter_node_role or self.reach
+        reach_name = reach_source.name if reach_source else None
         role_map = {
             "Terminal": ["Terminal"],
             "Control": ["Control", "Terminal"],
@@ -1381,23 +1446,40 @@ class NetMessage(Entity):
                 "Terminal",
             ],
         }
-        role_order = role_map.get(reach_name, [None])
         selected: list[Node] = []
-        for role_name in role_order:
-            if role_name is None:
-                role_nodes = remaining[:]
+        if self.filter_node_id:
+            target = next((n for n in remaining if n.pk == self.filter_node_id), None)
+            if target:
+                selected = [target]
             else:
-                role_nodes = [
-                    n for n in remaining if n.role and n.role.name == role_name
-                ]
-            random.shuffle(role_nodes)
-            for n in role_nodes:
-                selected.append(n)
-                remaining.remove(n)
+                self.complete = True
+                self.save(update_fields=["complete"])
+                return
+        else:
+            if self.filter_node_role_id:
+                role_order = [reach_name]
+            else:
+                role_order = role_map.get(reach_name, [None])
+            for role_name in role_order:
+                if role_name is None:
+                    role_nodes = remaining[:]
+                else:
+                    role_nodes = [
+                        n for n in remaining if n.role and n.role.name == role_name
+                    ]
+                random.shuffle(role_nodes)
+                for n in role_nodes:
+                    selected.append(n)
+                    remaining.remove(n)
+                    if len(selected) >= target_limit:
+                        break
                 if len(selected) >= target_limit:
                     break
-            if len(selected) >= target_limit:
-                break
+
+        if not selected:
+            self.complete = True
+            self.save(update_fields=["complete"])
+            return
 
         seen_list = seen.copy()
         selected_ids = [str(n.uuid) for n in selected]
@@ -1412,6 +1494,18 @@ class NetMessage(Entity):
                 "sender": local_id,
                 "origin": origin_uuid,
             }
+            if self.filter_node:
+                payload["filter_node"] = str(self.filter_node.uuid)
+            if self.filter_node_feature:
+                payload["filter_node_feature"] = self.filter_node_feature.slug
+            if self.filter_node_role:
+                payload["filter_node_role"] = self.filter_node_role.name
+            if self.filter_current_relation:
+                payload["filter_current_relation"] = self.filter_current_relation
+            if self.filter_installed_version:
+                payload["filter_installed_version"] = self.filter_installed_version
+            if self.filter_installed_revision:
+                payload["filter_installed_revision"] = self.filter_installed_revision
             payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
             headers = {"Content-Type": "application/json"}
             if private_key:

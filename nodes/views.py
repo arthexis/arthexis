@@ -19,7 +19,13 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 from core.models import RFID
 
-from .models import Node, NetMessage, NodeRole, node_information_updated
+from .models import (
+    Node,
+    NetMessage,
+    NodeFeature,
+    NodeRole,
+    node_information_updated,
+)
 from .utils import capture_screenshot, save_screenshot
 
 
@@ -528,6 +534,25 @@ def net_message(request):
     reach_role = None
     if reach_name:
         reach_role = NodeRole.objects.filter(name=reach_name).first()
+    filter_node_uuid = data.get("filter_node")
+    filter_node = None
+    if filter_node_uuid:
+        filter_node = Node.objects.filter(uuid=filter_node_uuid).first()
+    filter_feature_slug = data.get("filter_node_feature")
+    filter_feature = None
+    if filter_feature_slug:
+        filter_feature = NodeFeature.objects.filter(slug=filter_feature_slug).first()
+    filter_role_name = data.get("filter_node_role")
+    filter_role = None
+    if filter_role_name:
+        filter_role = NodeRole.objects.filter(name=filter_role_name).first()
+    filter_relation_value = data.get("filter_current_relation")
+    filter_relation = ""
+    if filter_relation_value:
+        relation = Node.normalize_relation(filter_relation_value)
+        filter_relation = relation.value if relation else ""
+    filter_installed_version = (data.get("filter_installed_version") or "")[:20]
+    filter_installed_revision = (data.get("filter_installed_revision") or "")[:40]
     seen = data.get("seen", [])
     origin_id = data.get("origin")
     origin_node = None
@@ -544,6 +569,12 @@ def net_message(request):
             "body": body[:256],
             "reach": reach_role,
             "node_origin": origin_node,
+            "filter_node": filter_node,
+            "filter_node_feature": filter_feature,
+            "filter_node_role": filter_role,
+            "filter_current_relation": filter_relation,
+            "filter_installed_version": filter_installed_version,
+            "filter_installed_revision": filter_installed_revision,
         },
     )
     if not created:
@@ -556,6 +587,18 @@ def net_message(request):
         if msg.node_origin_id is None and origin_node:
             msg.node_origin = origin_node
             update_fields.append("node_origin")
+        field_updates = {
+            "filter_node": filter_node,
+            "filter_node_feature": filter_feature,
+            "filter_node_role": filter_role,
+            "filter_current_relation": filter_relation,
+            "filter_installed_version": filter_installed_version,
+            "filter_installed_revision": filter_installed_revision,
+        }
+        for field, value in field_updates.items():
+            if getattr(msg, field) != value:
+                setattr(msg, field, value)
+                update_fields.append(field)
         msg.save(update_fields=update_fields)
     msg.propagate(seen=seen)
     return JsonResponse({"status": "propagated", "complete": msg.complete})
