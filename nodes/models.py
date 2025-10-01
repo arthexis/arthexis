@@ -1263,6 +1263,13 @@ class NetMessage(Entity):
     )
     subject = models.CharField(max_length=64, blank=True)
     body = models.CharField(max_length=256, blank=True)
+    payload_type = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name="Payload MIME type",
+    )
+    payload = models.TextField(blank=True, default="")
     filter_node = models.ForeignKey(
         "Node",
         on_delete=models.SET_NULL,
@@ -1326,6 +1333,9 @@ class NetMessage(Entity):
         body: str,
         reach: NodeRole | str | None = None,
         seen: list[str] | None = None,
+        *,
+        payload: object | None = None,
+        payload_type: str | None = None,
     ):
         role = None
         if reach:
@@ -1334,11 +1344,20 @@ class NetMessage(Entity):
             else:
                 role = NodeRole.objects.filter(name=reach).first()
         origin = Node.get_local()
+        if isinstance(payload, (dict, list)):
+            payload_value = json.dumps(payload)
+        elif payload is None:
+            payload_value = ""
+        else:
+            payload_value = str(payload)
+        payload_type_value = (payload_type or "")[:255]
         msg = cls.objects.create(
             subject=subject[:64],
             body=body[:256],
             reach=role,
             node_origin=origin,
+            payload=payload_value,
+            payload_type=payload_type_value,
         )
         msg.propagate(seen=seen or [])
         return msg
@@ -1494,6 +1513,10 @@ class NetMessage(Entity):
                 "sender": local_id,
                 "origin": origin_uuid,
             }
+            if self.payload:
+                payload["payload"] = self.payload
+            if self.payload_type:
+                payload["payload_type"] = self.payload_type
             if self.filter_node:
                 payload["filter_node"] = str(self.filter_node.uuid)
             if self.filter_node_feature:

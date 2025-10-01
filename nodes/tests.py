@@ -1716,7 +1716,12 @@ class LastNetMessageViewTests(TestCase):
 
     def test_returns_latest_message(self):
         NetMessage.objects.create(subject="old", body="msg1")
-        latest = NetMessage.objects.create(subject="new", body="msg2")
+        latest = NetMessage.objects.create(
+            subject="new",
+            body="msg2",
+            payload="{\"info\":1}",
+            payload_type="application/json",
+        )
         resp = self.client.get(reverse("last-net-message"))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(
@@ -1724,6 +1729,8 @@ class LastNetMessageViewTests(TestCase):
             {
                 "subject": "new",
                 "body": "msg2",
+                "payload": latest.payload,
+                "payload_type": latest.payload_type,
                 "admin_url": reverse(
                     "admin:nodes_netmessage_change", args=[latest.pk]
                 ),
@@ -1927,17 +1934,31 @@ class NetMessagePropagationTests(TestCase):
             )
 
     def test_broadcast_sets_node_origin(self):
+        payload = {"hello": "world"}
         with patch.object(Node, "get_local", return_value=self.local):
-            msg = NetMessage.broadcast(subject="subject", body="body")
+            msg = NetMessage.broadcast(
+                subject="subject",
+                body="body",
+                payload=payload,
+                payload_type="application/json",
+            )
         self.assertEqual(msg.node_origin, self.local)
         self.assertIsNone(msg.reach)
+        self.assertEqual(msg.payload, json.dumps(payload))
+        self.assertEqual(msg.payload_type, "application/json")
 
     @patch("requests.post")
     @patch("core.notifications.notify")
     def test_propagate_forwards_to_three_and_notifies_local(
         self, mock_notify, mock_post
     ):
-        msg = NetMessage.objects.create(subject="s", body="b", reach=self.role)
+        msg = NetMessage.objects.create(
+            subject="s",
+            body="b",
+            reach=self.role,
+            payload="{\"foo\":\"bar\"}",
+            payload_type="application/json",
+        )
         with patch.object(Node, "get_local", return_value=self.local):
             msg.propagate(seen=[str(self.remotes[0].uuid)])
         mock_notify.assert_called_once_with("s", "b")
@@ -1945,6 +1966,8 @@ class NetMessagePropagationTests(TestCase):
         for call_args in mock_post.call_args_list:
             payload = json.loads(call_args.kwargs["data"])
             self.assertEqual(payload.get("origin"), str(self.local.uuid))
+            self.assertEqual(payload.get("payload"), msg.payload)
+            self.assertEqual(payload.get("payload_type"), msg.payload_type)
         targets = {
             call.args[0].split("//")[1].split("/")[0]
             for call in mock_post.call_args_list

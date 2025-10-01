@@ -553,6 +553,14 @@ def net_message(request):
         filter_relation = relation.value if relation else ""
     filter_installed_version = (data.get("filter_installed_version") or "")[:20]
     filter_installed_revision = (data.get("filter_installed_revision") or "")[:40]
+    raw_payload = data.get("payload")
+    if isinstance(raw_payload, (dict, list)):
+        payload_text = json.dumps(raw_payload, separators=(",", ":"), sort_keys=True)
+    elif raw_payload is None:
+        payload_text = ""
+    else:
+        payload_text = str(raw_payload)
+    payload_type = (data.get("payload_type") or "")[:255]
     seen = data.get("seen", [])
     origin_id = data.get("origin")
     origin_node = None
@@ -575,6 +583,8 @@ def net_message(request):
             "filter_current_relation": filter_relation,
             "filter_installed_version": filter_installed_version,
             "filter_installed_revision": filter_installed_revision,
+            "payload": payload_text,
+            "payload_type": payload_type,
         },
     )
     if not created:
@@ -594,6 +604,8 @@ def net_message(request):
             "filter_current_relation": filter_relation,
             "filter_installed_version": filter_installed_version,
             "filter_installed_revision": filter_installed_revision,
+            "payload": payload_text,
+            "payload_type": payload_type,
         }
         for field, value in field_updates.items():
             if getattr(msg, field) != value:
@@ -609,11 +621,21 @@ def last_net_message(request):
 
     msg = NetMessage.objects.order_by("-created").first()
     if not msg:
-        return JsonResponse({"subject": "", "body": "", "admin_url": ""})
+        return JsonResponse(
+            {
+                "subject": "",
+                "body": "",
+                "payload": "",
+                "payload_type": "",
+                "admin_url": "",
+            }
+        )
     return JsonResponse(
         {
             "subject": msg.subject,
             "body": msg.body,
+            "payload": msg.payload,
+            "payload_type": msg.payload_type,
             "admin_url": reverse("admin:nodes_netmessage_change", args=[msg.pk]),
         }
     )

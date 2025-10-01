@@ -1082,26 +1082,30 @@ class NetMessageAdmin(EntityModelAdmin):
         class Meta:
             model = NetMessage
             fields = "__all__"
-            widgets = {"body": forms.Textarea(attrs={"rows": 4})}
+            widgets = {
+                "body": forms.Textarea(attrs={"rows": 4}),
+                "payload": forms.Textarea(attrs={"rows": 4}),
+            }
 
     form = NetMessageAdminForm
     change_form_template = "admin/nodes/netmessage/change_form.html"
     list_display = (
         "subject",
         "body",
+        "payload_type",
         "filter_node",
         "filter_node_role",
         "node_origin",
         "created",
         "complete",
     )
-    search_fields = ("subject", "body")
+    search_fields = ("subject", "body", "payload")
     list_filter = ("complete", "filter_node_role", "filter_current_relation")
     ordering = ("-created",)
     readonly_fields = ("complete",)
     actions = ["send_messages"]
     fieldsets = (
-        (None, {"fields": ("subject", "body")}),
+        (None, {"fields": ("subject", "body", "payload_type", "payload")}),
         (
             "Filters",
             {
