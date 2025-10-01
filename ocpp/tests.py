@@ -1,14 +1,32 @@
 import os
+import sys
+import time
+from importlib import util as importlib_util
+from pathlib import Path
+from types import ModuleType
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
-import time
-
-import tests.conftest  # noqa: F401
+try:  # pragma: no cover - exercised via test command imports
+    import tests.conftest as tests_conftest  # type: ignore[import-not-found]
+except ModuleNotFoundError:  # pragma: no cover - fallback for pytest importlib mode
+    tests_dir = Path(__file__).resolve().parents[1] / "tests"
+    spec = importlib_util.spec_from_file_location(
+        "tests.conftest", tests_dir / "conftest.py"
+    )
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive
+        raise
+    tests_conftest = importlib_util.module_from_spec(spec)
+    package = sys.modules.setdefault("tests", ModuleType("tests"))
+    package.__path__ = [str(tests_dir)]
+    sys.modules.setdefault("tests.conftest", tests_conftest)
+    spec.loader.exec_module(tests_conftest)
+else:
+    sys.modules.setdefault("tests.conftest", tests_conftest)
 
 import django
 
-django.setup = tests.conftest._original_setup
+django.setup = tests_conftest._original_setup
 django.setup()
 
 from asgiref.testing import ApplicationCommunicator
@@ -57,7 +75,6 @@ from decimal import Decimal
 import json
 import websockets
 import asyncio
-from pathlib import Path
 from .simulator import SimulatorConfig, ChargePointSimulator
 from .evcs import simulate, SimulatorState, _simulators
 import re
@@ -492,6 +509,63 @@ class CSMSConsumerTests(TransactionTestCase):
 
         self.assertTrue(message_mock.save.called)
         self.assertTrue(message_mock.propagate.called)
+
+    async def test_assign_connector_promotes_pending_connection(self):
+        serial = "ASSIGNPROMOTE"
+        path = f"/{serial}/"
+        pending_key = store.pending_key(serial)
+        new_key = store.identity_key(serial, 1)
+        aggregate_key = store.identity_key(serial, None)
+
+        store.connections.pop(pending_key, None)
+        store.connections.pop(new_key, None)
+        store.logs["charger"].pop(new_key, None)
+        store.log_names["charger"].pop(new_key, None)
+        store.log_names["charger"].pop(aggregate_key, None)
+
+        aggregate = await database_sync_to_async(Charger.objects.create)(
+            charger_id=serial,
+            connector_id=None,
+        )
+
+        consumer = CSMSConsumer()
+        consumer.scope = {"path": path, "headers": [], "client": ("127.0.0.1", 1234)}
+        consumer.charger_id = serial
+        consumer.store_key = pending_key
+        consumer.connector_value = None
+        consumer.client_ip = "127.0.0.1"
+        consumer.charger = aggregate
+        consumer.aggregate_charger = aggregate
+
+        store.connections[pending_key] = consumer
+
+        try:
+            with patch.object(Charger, "refresh_manager_node", autospec=True) as mock_refresh:
+                mock_refresh.return_value = None
+                await consumer._assign_connector(1)
+
+            self.assertEqual(consumer.store_key, new_key)
+            self.assertNotIn(pending_key, store.connections)
+
+            connector = await database_sync_to_async(Charger.objects.get)(
+                charger_id=serial,
+                connector_id=1,
+            )
+            self.assertEqual(consumer.charger.pk, connector.pk)
+            self.assertEqual(consumer.charger.connector_id, 1)
+            self.assertIsNone(consumer.aggregate_charger.connector_id)
+
+            self.assertIn(new_key, store.log_names["charger"])
+            self.assertIn(aggregate_key, store.log_names["charger"])
+
+            self.assertNotIn(pending_key, store.connections)
+        finally:
+            store.connections.pop(new_key, None)
+            store.connections.pop(pending_key, None)
+            store.logs["charger"].pop(new_key, None)
+            store.log_names["charger"].pop(new_key, None)
+            store.log_names["charger"].pop(aggregate_key, None)
+            await database_sync_to_async(Charger.objects.filter(charger_id=serial).delete)()
 
     async def test_change_availability_result_updates_model(self):
         store.pending_calls.clear()
