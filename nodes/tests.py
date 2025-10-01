@@ -123,6 +123,32 @@ class NodeGetLocalDatabaseUnavailableTests(SimpleTestCase):
 
 
 class NodeGetLocalTests(TestCase):
+    def test_normalize_relation_handles_various_inputs(self):
+        self.assertEqual(
+            Node.normalize_relation(Node.Relation.UPSTREAM),
+            Node.Relation.UPSTREAM,
+        )
+        self.assertEqual(
+            Node.normalize_relation(None),
+            Node.Relation.PEER,
+        )
+        self.assertEqual(
+            Node.normalize_relation("Upstream"),
+            Node.Relation.UPSTREAM,
+        )
+        self.assertEqual(
+            Node.normalize_relation("DOWNSTREAM"),
+            Node.Relation.DOWNSTREAM,
+        )
+        self.assertEqual(
+            Node.normalize_relation("peer"),
+            Node.Relation.PEER,
+        )
+        self.assertEqual(
+            Node.normalize_relation("unexpected"),
+            Node.Relation.PEER,
+        )
+
     def test_register_current_does_not_create_release(self):
         node = None
         created = False
