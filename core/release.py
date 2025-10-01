@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -14,6 +14,15 @@ except Exception:  # pragma: no cover - fallback when missing
     toml = None  # type: ignore
 
 from config.offline import requires_network, network_available
+
+
+DEFAULT_PACKAGE_MODULES = [
+    "core",
+    "config",
+    "nodes",
+    "ocpp",
+    "pages",
+]
 
 
 @dataclass
@@ -28,6 +37,7 @@ class Package:
     license: str
     repository_url: str = "https://github.com/arthexis/arthexis"
     homepage_url: str = "https://arthexis.com"
+    packages: list[str] = field(default_factory=lambda: list(DEFAULT_PACKAGE_MODULES))
 
 
 @dataclass
@@ -147,15 +157,7 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
             },
         },
         "tool": {
-            "setuptools": {
-                "packages": [
-                    "core",
-                    "config",
-                    "nodes",
-                    "ocpp",
-                    "pages",
-                ]
-            }
+            "setuptools": {"packages": list(package.packages)}
         },
     }
 
