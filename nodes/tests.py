@@ -1781,6 +1781,34 @@ class NetMessageReachTests(TestCase):
         self.assertEqual(mock_post.call_count, 3)
 
 
+class NetMessageBroadcastStringReachTests(TestCase):
+    def test_broadcast_uses_role_lookup_for_string_reach(self):
+        role = NodeRole.objects.create(name="Terminal")
+        local = Node.objects.create(
+            hostname="terminal-local",
+            address="10.10.0.1",
+            port=8010,
+            mac_address="00:aa:bb:cc:dd:ff",
+            role=role,
+            public_endpoint="terminal-local",
+        )
+        seen = ["existing"]
+
+        with patch.object(Node, "get_local", return_value=local), patch.object(
+            NetMessage, "propagate"
+        ) as mock_propagate:
+            msg = NetMessage.broadcast(
+                "Subject", "Body", reach="Terminal", seen=seen
+            )
+
+        self.assertEqual(msg.reach, role)
+        self.assertEqual(msg.node_origin, local)
+        mock_propagate.assert_called_once()
+        called_args = mock_propagate.call_args
+        self.assertIn("seen", called_args.kwargs)
+        self.assertIs(called_args.kwargs["seen"], seen)
+
+
 class NetMessagePropagationTests(TestCase):
     def setUp(self):
         self.role, _ = NodeRole.objects.get_or_create(name="Terminal")
