@@ -16,6 +16,7 @@ class PackageReleaseMigrationTests(SimpleTestCase):
         test_cases = [
             "3.1.0",
             "5.0.1",
+            "2.3.4",
         ]
 
         for version in test_cases:
@@ -23,7 +24,11 @@ class PackageReleaseMigrationTests(SimpleTestCase):
                 release = PackageRelease(version=version)
 
                 major, minor, patch = (int(part) for part in version.split("."))
-                expected_migration = (major << 2) | (minor << 1) | patch
+                expected_migration = (
+                    (major << PackageRelease._MAJOR_SHIFT)
+                    | (minor << PackageRelease._MINOR_SHIFT)
+                    | patch
+                )
 
                 self.assertEqual(release.migration_number, expected_migration)
                 self.assertEqual(

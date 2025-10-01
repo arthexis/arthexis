@@ -2420,6 +2420,13 @@ class Package(Entity):
 class PackageRelease(Entity):
     """Store metadata for a specific package version."""
 
+    _PATCH_BITS = 12
+    _MINOR_BITS = 12
+    _PATCH_MASK = (1 << _PATCH_BITS) - 1
+    _MINOR_MASK = (1 << _MINOR_BITS) - 1
+    _MINOR_SHIFT = _PATCH_BITS
+    _MAJOR_SHIFT = _PATCH_BITS + _MINOR_BITS
+
     objects = PackageReleaseManager()
 
     def natural_key(self):
@@ -2487,14 +2494,18 @@ class PackageRelease(Entity):
         from packaging.version import Version
 
         v = Version(self.version)
-        return (v.major << 2) | (v.minor << 1) | v.micro
+        return (
+            (v.major << self._MAJOR_SHIFT)
+            | (v.minor << self._MINOR_SHIFT)
+            | v.micro
+        )
 
     @staticmethod
     def version_from_migration(number: int) -> str:
         """Return version string encoded by ``number``."""
-        major = (number >> 2) & 0x3FFFFF
-        minor = (number >> 1) & 0x1
-        patch = number & 0x1
+        major = number >> PackageRelease._MAJOR_SHIFT
+        minor = (number >> PackageRelease._MINOR_SHIFT) & PackageRelease._MINOR_MASK
+        patch = number & PackageRelease._PATCH_MASK
         return f"{major}.{minor}.{patch}"
 
     @property
