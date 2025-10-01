@@ -246,6 +246,41 @@ class NodeGetLocalTests(TestCase):
         hostnames = {n["hostname"] for n in data["nodes"]}
         self.assertEqual(hostnames, {"dup", "local2"})
 
+    def test_register_node_generates_unique_public_endpoint(self):
+        url = reverse("register-node")
+        User = get_user_model()
+        user = User.objects.create_user(username="registrar", password="pwd")
+        self.client.force_login(user)
+        first = self.client.post(
+            url,
+            data={
+                "hostname": "duplicate-host",
+                "address": "10.0.0.10",
+                "port": 8080,
+                "mac_address": "00:11:22:33:aa:bb",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(first.status_code, 200)
+        node_one = Node.objects.get(mac_address="00:11:22:33:aa:bb")
+        self.assertEqual(node_one.public_endpoint, "duplicate-host")
+
+        second = self.client.post(
+            url,
+            data={
+                "hostname": "duplicate-host",
+                "address": "10.0.0.11",
+                "port": 8081,
+                "mac_address": "00:11:22:33:aa:cc",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(second.status_code, 200)
+        node_two = Node.objects.get(mac_address="00:11:22:33:aa:cc")
+
+        self.assertNotEqual(node_one.public_endpoint, node_two.public_endpoint)
+        self.assertTrue(node_two.public_endpoint.startswith("duplicate-host-"))
+
     def test_register_node_feature_toggle(self):
         NodeFeature.objects.get_or_create(
             slug="clipboard-poll", defaults={"display": "Clipboard Poll"}

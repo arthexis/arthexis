@@ -472,7 +472,46 @@ class Node(Entity):
         """Determine if this node represents the current host."""
         return self.mac_address == self.get_current_mac()
 
+    @classmethod
+    def _generate_unique_public_endpoint(
+        cls, value: str | None, *, exclude_pk: int | None = None
+    ) -> str:
+        """Return a unique public endpoint slug for ``value``."""
+
+        field = cls._meta.get_field("public_endpoint")
+        max_length = getattr(field, "max_length", None) or 50
+        base_slug = slugify(value or "") or "node"
+        if len(base_slug) > max_length:
+            base_slug = base_slug[:max_length]
+        slug = base_slug
+        queryset = cls.objects.all()
+        if exclude_pk is not None:
+            queryset = queryset.exclude(pk=exclude_pk)
+        counter = 2
+        while queryset.filter(public_endpoint=slug).exists():
+            suffix = f"-{counter}"
+            available = max_length - len(suffix)
+            if available <= 0:
+                slug = suffix[-max_length:]
+            else:
+                slug = f"{base_slug[:available]}{suffix}"
+            counter += 1
+        return slug
+
     def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+
+        def include_update_field(field: str):
+            nonlocal update_fields
+            if update_fields is None:
+                return
+            fields = set(update_fields)
+            if field in fields:
+                return
+            fields.add(field)
+            update_fields = tuple(fields)
+            kwargs["update_fields"] = update_fields
+
         role_name = None
         role = getattr(self, "role", None)
         if role and getattr(role, "name", None):
@@ -489,17 +528,28 @@ class Node(Entity):
             not self.badge_color or self.badge_color == self.DEFAULT_BADGE_COLOR
         ):
             self.badge_color = role_color
-            update_fields = kwargs.get("update_fields")
-            if update_fields:
-                fields = set(update_fields)
-                if "badge_color" not in fields:
-                    fields.add("badge_color")
-                    kwargs["update_fields"] = tuple(fields)
+            include_update_field("badge_color")
 
         if self.mac_address:
             self.mac_address = self.mac_address.lower()
-        if not self.public_endpoint:
-            self.public_endpoint = slugify(self.hostname)
+        endpoint_value = slugify(self.public_endpoint or "")
+        if not endpoint_value:
+            endpoint_value = self._generate_unique_public_endpoint(
+                self.hostname, exclude_pk=self.pk
+            )
+        else:
+            queryset = (
+                self.__class__.objects.exclude(pk=self.pk)
+                if self.pk
+                else self.__class__.objects.all()
+            )
+            if queryset.filter(public_endpoint=endpoint_value).exists():
+                endpoint_value = self._generate_unique_public_endpoint(
+                    self.hostname or endpoint_value, exclude_pk=self.pk
+                )
+        if self.public_endpoint != endpoint_value:
+            self.public_endpoint = endpoint_value
+            include_update_field("public_endpoint")
         super().save(*args, **kwargs)
         if self.pk:
             self.refresh_features()
