@@ -41,7 +41,17 @@ xmlrpc_client = defused_xmlrpc.xmlrpc_client
 logger = logging.getLogger(__name__)
 
 from .entity import Entity, EntityUserManager, EntityManager
-from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
+from .release import (
+    Package as ReleasePackage,
+    Credentials,
+    DEFAULT_PACKAGE,
+)
+
+
+def default_package_modules() -> list[str]:
+    """Return the default package module list."""
+
+    return list(DEFAULT_PACKAGE.packages)
 from . import temp_passwords
 from . import user_data  # noqa: F401 - ensure signal registration
 from .fields import (
@@ -2376,6 +2386,10 @@ class Package(Entity):
     license = models.CharField(max_length=100, default=DEFAULT_PACKAGE.license)
     repository_url = models.URLField(default=DEFAULT_PACKAGE.repository_url)
     homepage_url = models.URLField(default=DEFAULT_PACKAGE.homepage_url)
+    packages = models.JSONField(
+        default=default_package_modules,
+        help_text="Packages/modules to include in the built distribution.",
+    )
     release_manager = models.ForeignKey(
         ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
     )
@@ -2414,6 +2428,7 @@ class Package(Entity):
             license=self.license,
             repository_url=self.repository_url,
             homepage_url=self.homepage_url,
+            packages=list(self.packages or []),
         )
 
 
