@@ -38,6 +38,7 @@ class Package:
     license: str
     repository_url: str = "https://github.com/arthexis/arthexis"
     homepage_url: str = "https://arthexis.com"
+    packages: Sequence[str] = tuple(DEFAULT_PACKAGE_MODULES)
     version_path: Optional[Path | str] = None
     dependencies_path: Optional[Path | str] = None
     test_command: Optional[str] = None
