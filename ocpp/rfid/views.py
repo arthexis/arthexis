@@ -72,7 +72,7 @@ def reader(request):
         "table_mode": table_mode,
         "toggle_url": toggle_url,
         "toggle_label": toggle_label,
-        "admin_view_url": None,
+        "show_release_info": False,
     }
     if request.user.is_staff:
         context["admin_change_url_template"] = reverse(
