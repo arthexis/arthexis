@@ -686,9 +686,15 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return
         action = metadata.get("action")
         log_key = metadata.get("log_key") or self.store_key
+        payload_data = payload if isinstance(payload, dict) else {}
         if action == "DataTransfer":
             message_pk = metadata.get("message_pk")
             if not message_pk:
+                store.record_pending_call_result(
+                    message_id,
+                    metadata=metadata,
+                    payload=payload_data,
+                )
                 return
 
             def _apply():
@@ -715,9 +721,13 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 )
 
             await database_sync_to_async(_apply)()
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                payload=payload_data,
+            )
             return
         if action == "GetConfiguration":
-            payload_data = payload if isinstance(payload, dict) else {}
             try:
                 payload_text = json.dumps(
                     payload_data, sort_keys=True, ensure_ascii=False
@@ -729,9 +739,13 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 f"GetConfiguration result: {payload_text}",
                 log_type="charger",
             )
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                payload=payload_data,
+            )
             return
         if action == "TriggerMessage":
-            payload_data = payload if isinstance(payload, dict) else {}
             status_value = str(payload_data.get("status") or "").strip()
             target = metadata.get("trigger_target") or metadata.get("follow_up_action")
             connector_value = metadata.get("trigger_connector")
@@ -751,32 +765,54 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     log_key=log_key,
                     target=str(target),
                 )
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                payload=payload_data,
+            )
             return
         if action == "RemoteStartTransaction":
-            payload_data = payload if isinstance(payload, dict) else {}
             status_value = str(payload_data.get("status") or "").strip()
             message = "RemoteStartTransaction result"
             if status_value:
                 message += f": status={status_value}"
             store.add_log(log_key, message, log_type="charger")
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                payload=payload_data,
+            )
             return
         if action == "RemoteStopTransaction":
-            payload_data = payload if isinstance(payload, dict) else {}
             status_value = str(payload_data.get("status") or "").strip()
             message = "RemoteStopTransaction result"
             if status_value:
                 message += f": status={status_value}"
             store.add_log(log_key, message, log_type="charger")
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                payload=payload_data,
+            )
             return
         if action == "Reset":
-            payload_data = payload if isinstance(payload, dict) else {}
             status_value = str(payload_data.get("status") or "").strip()
             message = "Reset result"
             if status_value:
                 message += f": status={status_value}"
             store.add_log(log_key, message, log_type="charger")
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                payload=payload_data,
+            )
             return
         if action != "ChangeAvailability":
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                payload=payload_data,
+            )
             return
         status = str((payload or {}).get("status") or "").strip()
         requested_type = metadata.get("availability_type")
@@ -788,6 +824,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             status,
             requested_at,
             details="",
+        )
+        store.record_pending_call_result(
+            message_id,
+            metadata=metadata,
+            payload=payload_data,
         )
 
     async def _handle_call_error(
@@ -807,6 +848,14 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         if action == "DataTransfer":
             message_pk = metadata.get("message_pk")
             if not message_pk:
+                store.record_pending_call_result(
+                    message_id,
+                    metadata=metadata,
+                    success=False,
+                    error_code=error_code,
+                    error_description=description,
+                    error_details=details,
+                )
                 return
 
             def _apply():
@@ -833,6 +882,14 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 )
 
             await database_sync_to_async(_apply)()
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                success=False,
+                error_code=error_code,
+                error_description=description,
+                error_details=details,
+            )
             return
         if action == "GetConfiguration":
             parts: list[str] = []
@@ -854,6 +911,14 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             else:
                 message = "GetConfiguration error"
             store.add_log(log_key, message, log_type="charger")
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                success=False,
+                error_code=error_code,
+                error_description=description,
+                error_details=details,
+            )
             return
         if action == "TriggerMessage":
             target = metadata.get("trigger_target") or metadata.get("follow_up_action")
@@ -878,6 +943,14 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             if connector_value:
                 message += f", connector={connector_value}"
             store.add_log(log_key, message, log_type="charger")
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                success=False,
+                error_code=error_code,
+                error_description=description,
+                error_details=details,
+            )
             return
         if action == "RemoteStartTransaction":
             message = "RemoteStartTransaction error"
@@ -888,6 +961,14 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 if suffix:
                     message += f", description={suffix}"
             store.add_log(log_key, message, log_type="charger")
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                success=False,
+                error_code=error_code,
+                error_description=description,
+                error_details=details,
+            )
             return
         if action == "RemoteStopTransaction":
             message = "RemoteStopTransaction error"
@@ -898,6 +979,14 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 if suffix:
                     message += f", description={suffix}"
             store.add_log(log_key, message, log_type="charger")
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                success=False,
+                error_code=error_code,
+                error_description=description,
+                error_details=details,
+            )
             return
         if action == "Reset":
             message = "Reset error"
@@ -908,8 +997,24 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 if suffix:
                     message += f", description={suffix}"
             store.add_log(log_key, message, log_type="charger")
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                success=False,
+                error_code=error_code,
+                error_description=description,
+                error_details=details,
+            )
             return
         if action != "ChangeAvailability":
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                success=False,
+                error_code=error_code,
+                error_description=description,
+                error_details=details,
+            )
             return
         detail_text = (description or "").strip()
         if not detail_text and details:
@@ -928,6 +1033,14 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             "Rejected",
             requested_at,
             details=detail_text,
+        )
+        store.record_pending_call_result(
+            message_id,
+            metadata=metadata,
+            success=False,
+            error_code=error_code,
+            error_description=description,
+            error_details=details,
         )
 
     async def _handle_data_transfer(
