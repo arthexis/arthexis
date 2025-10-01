@@ -2501,6 +2501,13 @@ class NodeFeatureTests(TestCase):
         ):
             self.assertFalse(feature.is_enabled)
 
+    def test_feature_disabled_when_local_node_missing(self):
+        feature = NodeFeature.objects.create(slug="lcd-screen", display="LCD")
+        with patch("nodes.models.Node.get_local", return_value=None):
+            with patch("core.notifications.supports_gui_toast") as mock_toast:
+                self.assertFalse(feature.is_enabled)
+        mock_toast.assert_not_called()
+
     def test_rfid_scanner_lock(self):
         feature = NodeFeature.objects.create(slug="rfid-scanner", display="RFID")
         feature.roles.add(self.role)
