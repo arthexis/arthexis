@@ -11,7 +11,11 @@ import tests.conftest  # noqa: F401
 
 import pytest
 
-from ocpp.consumers import _resolve_client_ip
+from ocpp.consumers import (
+    CSMSConsumer,
+    SERIAL_QUERY_PARAM_NAMES,
+    _resolve_client_ip,
+)
 
 
 @pytest.mark.parametrize(
@@ -84,3 +88,24 @@ def test_resolve_client_ip_trims_formats(header, expected):
     scope = {"headers": [header]}
 
     assert _resolve_client_ip(scope) == expected
+
+
+@pytest.mark.parametrize("query_key", SERIAL_QUERY_PARAM_NAMES)
+def test_extract_serial_identifier_from_query_params(query_key):
+    consumer = CSMSConsumer()
+    consumer.scope = {
+        "query_string": f"{query_key}= %20SER123%20".encode(),
+        "url_route": {"kwargs": {"cid": "FALLBACK"}},
+    }
+
+    assert consumer._extract_serial_identifier() == "SER123"
+
+
+def test_extract_serial_identifier_falls_back_to_url_route():
+    consumer = CSMSConsumer()
+    consumer.scope = {
+        "query_string": b"",
+        "url_route": {"kwargs": {"cid": "FALLBACK"}},
+    }
+
+    assert consumer._extract_serial_identifier() == "FALLBACK"
