@@ -57,3 +57,4 @@ class PackageReleaseCredentialTests(TestCase):
         with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "env-token"}, clear=True):
             self.assertIsNone(release.to_credentials())
             self.assertEqual(release.get_github_token(), "env-token")
+
