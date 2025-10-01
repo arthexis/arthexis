@@ -1,14 +1,32 @@
 import os
+import sys
+import time
+from importlib import util as importlib_util
+from pathlib import Path
+from types import ModuleType
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
-import time
-
-import tests.conftest  # noqa: F401
+try:  # pragma: no cover - exercised via test command imports
+    import tests.conftest as tests_conftest  # type: ignore[import-not-found]
+except ModuleNotFoundError:  # pragma: no cover - fallback for pytest importlib mode
+    tests_dir = Path(__file__).resolve().parents[1] / "tests"
+    spec = importlib_util.spec_from_file_location(
+        "tests.conftest", tests_dir / "conftest.py"
+    )
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive
+        raise
+    tests_conftest = importlib_util.module_from_spec(spec)
+    package = sys.modules.setdefault("tests", ModuleType("tests"))
+    package.__path__ = [str(tests_dir)]
+    sys.modules.setdefault("tests.conftest", tests_conftest)
+    spec.loader.exec_module(tests_conftest)
+else:
+    sys.modules.setdefault("tests.conftest", tests_conftest)
 
 import django
 
-django.setup = tests.conftest._original_setup
+django.setup = tests_conftest._original_setup
 django.setup()
 
 from asgiref.testing import ApplicationCommunicator
@@ -57,7 +75,6 @@ from decimal import Decimal
 import json
 import websockets
 import asyncio
-from pathlib import Path
 from .simulator import SimulatorConfig, ChargePointSimulator
 from .evcs import simulate, SimulatorState, _simulators
 import re
