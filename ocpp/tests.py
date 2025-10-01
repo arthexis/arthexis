@@ -3549,10 +3549,20 @@ class DispatchActionViewTests(TestCase):
         self.addCleanup(store.clear_log, self.log_key, "charger")
         store.pending_calls.clear()
         self.addCleanup(store.pending_calls.clear)
+        store._pending_call_events.clear()
+        store._pending_call_results.clear()
+        self.addCleanup(store._pending_call_events.clear)
+        self.addCleanup(store._pending_call_results.clear)
         self.url = reverse(
             "charger-action-connector",
             args=[self.charger.charger_id, self.charger.connector_slug],
         )
+        self.wait_patch = patch(
+            "ocpp.views.store.wait_for_pending_call",
+            side_effect=self._wait_success,
+        )
+        self.mock_wait = self.wait_patch.start()
+        self.addCleanup(self.wait_patch.stop)
 
     def _close_loop(self):
         try:
@@ -3564,6 +3574,16 @@ class DispatchActionViewTests(TestCase):
             if not self.loop.is_closed():
                 self.loop.close()
             asyncio.set_event_loop(self.previous_loop)
+
+    def _wait_success(self, message_id, timeout=5.0):  # noqa: D401 - helper for patch
+        metadata = store.pending_calls.pop(message_id, None)
+        store._pending_call_events.pop(message_id, None)
+        store._pending_call_results.pop(message_id, None)
+        return {
+            "success": True,
+            "payload": {"status": "Accepted"},
+            "metadata": dict(metadata or {}),
+        }
 
     def test_remote_start_requires_id_tag(self):
         response = self.client.post(
@@ -3609,11 +3629,73 @@ class DispatchActionViewTests(TestCase):
         self.assertEqual(frame[2], "ChangeAvailability")
         self.assertEqual(frame[3]["type"], "Inoperative")
         self.assertEqual(frame[3]["connectorId"], 1)
-        self.assertIn(frame[1], store.pending_calls)
         self.charger.refresh_from_db()
         self.assertEqual(self.charger.availability_requested_state, "Inoperative")
         self.assertIsNotNone(self.charger.availability_requested_at)
         self.assertEqual(self.charger.availability_request_status, "")
+        self.assertNotIn(frame[1], store.pending_calls)
+
+    def test_remote_start_reports_rejection(self):
+        def rejected(message_id, timeout=5.0):
+            metadata = store.pending_calls.pop(message_id, None)
+            store._pending_call_events.pop(message_id, None)
+            store._pending_call_results.pop(message_id, None)
+            return {
+                "success": True,
+                "payload": {"status": "Rejected"},
+                "metadata": dict(metadata or {}),
+            }
+
+        self.mock_wait.side_effect = rejected
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "remote_start", "idTag": "RF1234"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        detail = response.json().get("detail", "")
+        self.assertIn("Rejected", detail)
+        self.mock_wait.side_effect = self._wait_success
+
+    def test_remote_start_reports_error_details(self):
+        def call_error(message_id, timeout=5.0):
+            metadata = store.pending_calls.pop(message_id, None)
+            store._pending_call_events.pop(message_id, None)
+            store._pending_call_results.pop(message_id, None)
+            return {
+                "success": False,
+                "error_code": "NotSupported",
+                "error_description": "Not supported",
+                "error_details": {"reason": "unsupported"},
+                "metadata": dict(metadata or {}),
+            }
+
+        self.mock_wait.side_effect = call_error
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "remote_start", "idTag": "RF1234"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        detail = response.json().get("detail", "")
+        self.assertIn("NotSupported", detail)
+        self.assertIn("unsupported", detail)
+        self.mock_wait.side_effect = self._wait_success
+
+    def test_remote_start_reports_timeout(self):
+        def no_response(message_id, timeout=5.0):
+            return None
+
+        self.mock_wait.side_effect = no_response
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "remote_start", "idTag": "RF1234"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 504)
+        detail = response.json().get("detail", "")
+        self.assertIn("did not receive", detail)
+        self.mock_wait.side_effect = self._wait_success
 
     def test_change_availability_requires_valid_type(self):
         response = self.client.post(

@@ -36,6 +36,101 @@ from .evcs import (
 from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 
 
+CALL_ACTION_LABELS = {
+    "RemoteStartTransaction": _("Remote start transaction"),
+    "RemoteStopTransaction": _("Remote stop transaction"),
+    "ChangeAvailability": _("Change availability"),
+    "DataTransfer": _("Data transfer"),
+    "Reset": _("Reset"),
+    "TriggerMessage": _("Trigger message"),
+}
+
+CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
+    "RemoteStartTransaction": {"Accepted"},
+    "RemoteStopTransaction": {"Accepted"},
+    "ChangeAvailability": {"Accepted", "Scheduled"},
+    "DataTransfer": {"Accepted"},
+    "Reset": {"Accepted"},
+    "TriggerMessage": {"Accepted"},
+}
+
+
+def _format_details(value: object) -> str:
+    """Return a JSON representation of ``value`` suitable for error messages."""
+
+    if value in (None, ""):
+        return ""
+    if isinstance(value, str):
+        text = value.strip()
+        if text:
+            return text
+        return ""
+    try:
+        return json.dumps(value, sort_keys=True, ensure_ascii=False)
+    except TypeError:
+        return str(value)
+
+
+def _evaluate_pending_call_result(
+    message_id: str,
+    ocpp_action: str,
+    *,
+    expected_statuses: set[str] | None = None,
+) -> tuple[bool, str | None, int | None]:
+    """Wait for a pending call result and translate failures into messages."""
+
+    action_label = CALL_ACTION_LABELS.get(ocpp_action, ocpp_action)
+    result = store.wait_for_pending_call(message_id, timeout=5.0)
+    if result is None:
+        detail = _("%(action)s did not receive a response from the charger.") % {
+            "action": action_label,
+        }
+        return False, detail, 504
+    if not result.get("success", True):
+        parts: list[str] = []
+        error_code = str(result.get("error_code") or "").strip()
+        if error_code:
+            parts.append(_("code=%(code)s") % {"code": error_code})
+        error_description = str(result.get("error_description") or "").strip()
+        if error_description:
+            parts.append(
+                _("description=%(description)s") % {"description": error_description}
+            )
+        error_details = result.get("error_details")
+        details_text = _format_details(error_details)
+        if details_text:
+            parts.append(_("details=%(details)s") % {"details": details_text})
+        if parts:
+            detail = _("%(action)s failed: %(details)s") % {
+                "action": action_label,
+                "details": ", ".join(parts),
+            }
+        else:
+            detail = _("%(action)s failed.") % {"action": action_label}
+        return False, detail, 400
+    payload = result.get("payload")
+    payload_dict = payload if isinstance(payload, dict) else {}
+    if expected_statuses is not None:
+        status_value = str(payload_dict.get("status") or "").strip()
+        normalized_expected = {value.casefold() for value in expected_statuses if value}
+        if not status_value:
+            detail = _("%(action)s response did not include a status.") % {
+                "action": action_label,
+            }
+            return False, detail, 400
+        if normalized_expected and status_value.casefold() not in normalized_expected:
+            detail = _("%(action)s rejected with status %(status)s.") % {
+                "action": action_label,
+                "status": status_value,
+            }
+            remaining = {k: v for k, v in payload_dict.items() if k != "status"}
+            extra = _format_details(remaining)
+            if extra:
+                detail += " " + _("Details: %(details)s") % {"details": extra}
+            return False, detail, 400
+    return True, None, None
+
+
 def _normalize_connector_slug(slug: str | None) -> tuple[int | None, str]:
     """Return connector value and normalized slug or raise 404."""
 
@@ -1044,11 +1139,17 @@ def dispatch_action(request, cid, connector=None):
     except json.JSONDecodeError:
         data = {}
     action = data.get("action")
+    message_id: str | None = None
+    ocpp_action: str | None = None
+    expected_statuses: set[str] | None = None
+    msg: str | None = None
     if action == "remote_stop":
         tx_obj = store.get_transaction(cid, connector_value)
         if not tx_obj:
             return JsonResponse({"detail": "no transaction"}, status=404)
         message_id = uuid.uuid4().hex
+        ocpp_action = "RemoteStopTransaction"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
         msg = json.dumps(
             [
                 2,
@@ -1088,6 +1189,8 @@ def dispatch_action(request, cid, connector=None):
         if "chargingProfile" in data and data["chargingProfile"] is not None:
             payload["chargingProfile"] = data["chargingProfile"]
         message_id = uuid.uuid4().hex
+        ocpp_action = "RemoteStartTransaction"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
         msg = json.dumps(
             [
                 2,
@@ -1121,6 +1224,8 @@ def dispatch_action(request, cid, connector=None):
                 except (TypeError, ValueError):
                     connector_payload = candidate
         message_id = uuid.uuid4().hex
+        ocpp_action = "ChangeAvailability"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
         payload = {"connectorId": connector_payload, "type": availability_type}
         msg = json.dumps([2, message_id, "ChangeAvailability", payload])
         async_to_sync(ws.send)(msg)
@@ -1163,6 +1268,8 @@ def dispatch_action(request, cid, connector=None):
         if "data" in data:
             payload["data"] = data["data"]
         message_id = uuid.uuid4().hex
+        ocpp_action = "DataTransfer"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
         msg = json.dumps([2, message_id, "DataTransfer", payload])
         record = DataTransferMessage.objects.create(
             charger=charger_obj,
@@ -1187,6 +1294,8 @@ def dispatch_action(request, cid, connector=None):
         )
     elif action == "reset":
         message_id = uuid.uuid4().hex
+        ocpp_action = "Reset"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
         msg = json.dumps([2, message_id, "Reset", {"type": "Soft"}])
         async_to_sync(ws.send)(msg)
         store.register_pending_call(
@@ -1230,6 +1339,8 @@ def dispatch_action(request, cid, connector=None):
                 return JsonResponse({"detail": "connectorId must be positive"}, status=400)
             payload["connectorId"] = trigger_connector
         message_id = uuid.uuid4().hex
+        ocpp_action = "TriggerMessage"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
         msg = json.dumps([2, message_id, "TriggerMessage", payload])
         async_to_sync(ws.send)(msg)
         store.register_pending_call(
@@ -1247,5 +1358,15 @@ def dispatch_action(request, cid, connector=None):
     else:
         return JsonResponse({"detail": "unknown action"}, status=400)
     log_key = store.identity_key(cid, connector_value)
+    if msg is None or message_id is None or ocpp_action is None:
+        return JsonResponse({"detail": "unknown action"}, status=400)
     store.add_log(log_key, f"< {msg}", log_type="charger")
+    expected_statuses = expected_statuses or CALL_EXPECTED_STATUSES.get(ocpp_action)
+    success, detail, status_code = _evaluate_pending_call_result(
+        message_id,
+        ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+    if not success:
+        return JsonResponse({"detail": detail}, status=status_code or 400)
     return JsonResponse({"sent": msg})
