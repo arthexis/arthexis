@@ -10,6 +10,7 @@ from pages.utils import landing
 
 from .scanner import scan_sources, restart_sources, test_sources, enable_deep_read_mode
 from .reader import validate_rfid_value
+from .utils import build_mode_toggle
 
 
 @login_required(login_url="pages:login")
@@ -62,21 +63,7 @@ def scan_deep(_request):
 @login_required(login_url="pages:login")
 def reader(request):
     """Public page to scan RFID tags."""
-    params = request.GET.copy()
-    mode = params.get("mode")
-    table_mode = mode == "table"
-    params = params.copy()
-    params._mutable = True
-    if table_mode:
-        params.pop("mode", None)
-        toggle_label = "Switch to Single Mode"
-    else:
-        params["mode"] = "table"
-        toggle_label = "Switch to Table Mode"
-    toggle_query = params.urlencode()
-    toggle_url = request.path
-    if toggle_query:
-        toggle_url = f"{toggle_url}?{toggle_query}"
+    table_mode, toggle_url, toggle_label = build_mode_toggle(request)
 
     context = {
         "scan_url": reverse("rfid-scan-next"),
@@ -92,4 +79,5 @@ def reader(request):
             "admin:core_rfid_change", args=[0]
         )
         context["deep_read_url"] = reverse("rfid-scan-deep")
+        context["admin_view_url"] = reverse("admin:core_rfid_scan")
     return render(request, "rfid/reader.html", context)
