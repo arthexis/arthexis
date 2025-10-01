@@ -35,6 +35,7 @@ import calendar
 import re
 from django_object_actions import DjangoObjectActions
 from ocpp.models import Transaction
+from ocpp.rfid.utils import build_mode_toggle
 from nodes.models import EmailOutbox
 from .models import (
     User,
@@ -2368,12 +2369,24 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
 
     def scan_view(self, request):
         context = self.admin_site.each_context(request)
-        context["scan_url"] = reverse("admin:core_rfid_scan_next")
-        context["admin_change_url_template"] = reverse(
-            "admin:core_rfid_change", args=[0]
+        table_mode, toggle_url, toggle_label = build_mode_toggle(request)
+        public_view_url = reverse("rfid-reader")
+        if table_mode:
+            public_view_url = f"{public_view_url}?mode=table"
+        context.update(
+            {
+                "scan_url": reverse("admin:core_rfid_scan_next"),
+                "admin_change_url_template": reverse(
+                    "admin:core_rfid_change", args=[0]
+                ),
+                "title": _("Scan RFIDs"),
+                "opts": self.model._meta,
+                "table_mode": table_mode,
+                "toggle_url": toggle_url,
+                "toggle_label": toggle_label,
+                "public_view_url": public_view_url,
+            }
         )
-        context["title"] = _("Scan RFIDs")
-        context["opts"] = self.model._meta
         return render(request, "admin/core/rfid/scan.html", context)
 
     def scan_next(self, request):

@@ -1,8 +1,15 @@
 {% with prefix=prefix|default:"rfid" %}
   <div id="{{ prefix }}-scanner">
-    {% if toggle_url %}
+    {% if toggle_url or admin_view_url or public_view_url %}
       <div class="rfid-mode-toggle">
-        <a id="{{ prefix }}-mode-toggle" class="button" href="{{ toggle_url }}" data-toggle-url="{{ toggle_url }}">{{ toggle_label }}</a>
+        {% if toggle_url %}
+          <a id="{{ prefix }}-mode-toggle" class="button" href="{{ toggle_url }}" data-toggle-url="{{ toggle_url }}">{{ toggle_label }}</a>
+        {% endif %}
+        {% if request.user.is_staff and admin_view_url %}
+          <a class="button secondary" href="{{ admin_view_url }}">Admin View</a>
+        {% elif request.user.is_staff and public_view_url %}
+          <a class="button secondary" href="{{ public_view_url }}">Public View</a>
+        {% endif %}
       </div>
     {% endif %}
   <p id="{{ prefix }}-status">Scanner ready</p>
@@ -50,10 +57,58 @@
   {% endif %}
 </div>
 <style>
+#{{ prefix }}-scanner {
+  --rfid-table-border: #d0d5dd;
+  --rfid-header-bg: #f1f5f9;
+  --rfid-header-text: #1f2937;
+  --rfid-row-bg: #ffffff;
+  --rfid-row-alt-bg: #f8fafc;
+  --rfid-row-text: #111827;
+  --rfid-row-hover-bg: #e0f2fe;
+}
+
+@media (prefers-color-scheme: dark) {
+  #{{ prefix }}-scanner {
+    --rfid-table-border: rgba(255, 255, 255, 0.24);
+    --rfid-header-bg: rgba(255, 255, 255, 0.08);
+    --rfid-header-text: #f9fafb;
+    --rfid-row-bg: rgba(17, 24, 39, 0.7);
+    --rfid-row-alt-bg: rgba(17, 24, 39, 0.55);
+    --rfid-row-text: #e5e7eb;
+    --rfid-row-hover-bg: rgba(59, 130, 246, 0.3);
+  }
+}
+
 #{{ prefix }}-scanner .rfid-mode-toggle {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75em;
   margin-bottom: 1em;
+}
+
+#{{ prefix }}-scanner .rfid-mode-toggle .button {
+  text-decoration: none;
+  padding: 0.35em 0.9em;
+  border-radius: 9999px;
+  font-weight: 600;
+  background: var(--rfid-header-bg);
+  color: var(--rfid-header-text);
+  border: 1px solid var(--rfid-table-border);
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+}
+
+#{{ prefix }}-scanner .rfid-mode-toggle .button:hover {
+  background: var(--rfid-row-hover-bg);
+}
+
+#{{ prefix }}-scanner .rfid-mode-toggle .button.secondary {
+  background: transparent;
+  color: inherit;
+}
+
+#{{ prefix }}-scanner .rfid-mode-toggle .button.secondary:hover {
+  background: var(--rfid-header-bg);
 }
 
 #{{ prefix }}-scanner .field {
@@ -72,21 +127,45 @@
   margin-top: 1em;
 }
 #{{ prefix }}-scanner .rfid-history {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   width: 100%;
+  border: 1px solid var(--rfid-table-border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background-color: var(--rfid-row-bg);
+  color: var(--rfid-row-text);
 }
 #{{ prefix }}-scanner .rfid-history th,
 #{{ prefix }}-scanner .rfid-history td {
-  border: 1px solid #ccc;
-  padding: 0.5em;
+  padding: 0.5em 0.75em;
   text-align: left;
+  border-right: 1px solid var(--rfid-table-border);
 }
-#{{ prefix }}-scanner .rfid-history thead {
-  background-color: #f5f5f5;
+#{{ prefix }}-scanner .rfid-history th:last-child,
+#{{ prefix }}-scanner .rfid-history td:last-child {
+  border-right: none;
+}
+#{{ prefix }}-scanner .rfid-history thead th {
+  background-color: var(--rfid-header-bg);
+  color: var(--rfid-header-text);
+  font-weight: 600;
+  border-bottom: 1px solid var(--rfid-table-border);
+}
+#{{ prefix }}-scanner .rfid-history tbody tr {
+  background-color: var(--rfid-row-bg);
+  transition: background-color 0.2s ease-in-out;
+}
+#{{ prefix }}-scanner .rfid-history tbody tr:nth-child(odd) {
+  background-color: var(--rfid-row-alt-bg);
+}
+#{{ prefix }}-scanner .rfid-history tbody tr:hover {
+  background-color: var(--rfid-row-hover-bg);
 }
 #{{ prefix }}-scanner .rfid-history-total {
   font-weight: bold;
   margin-top: 0.75em;
+  color: var(--rfid-row-text);
 }
 #{{ prefix }}-status {
   font-size: 1.2em;
