@@ -269,6 +269,39 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_rejected_connection_logs_query_string(self):
+        raw_serial = "<charger_id>"
+        query_string = "chargeboxid=%3Ccharger_id%3E"
+        pending_key = store.pending_key(Charger.normalize_serial(raw_serial))
+        store.ip_connections.clear()
+        store.clear_log(pending_key, log_type="charger")
+
+        communicator = ClientWebsocketCommunicator(
+            application, f"/?{query_string}"
+        )
+
+        try:
+            connected = await communicator.connect()
+            self.assertEqual(connected, (False, 4003))
+
+            log_entries = store.get_logs(pending_key, log_type="charger")
+            self.assertTrue(
+                any(
+                    "Rejected connection:" in entry and query_string in entry
+                    for entry in log_entries
+                ),
+                log_entries,
+            )
+        finally:
+            store.ip_connections.clear()
+            store.clear_log(pending_key, log_type="charger")
+            lower_key = pending_key.lower()
+            for key in list(store.logs["charger"].keys()):
+                if key.lower() == lower_key:
+                    store.logs["charger"].pop(key, None)
+            with suppress(Exception):
+                await communicator.disconnect()
+
     async def test_transaction_saved(self):
         communicator = WebsocketCommunicator(application, "/TEST/")
         connected, _ = await communicator.connect()
