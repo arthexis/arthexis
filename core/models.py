@@ -41,7 +41,17 @@ xmlrpc_client = defused_xmlrpc.xmlrpc_client
 logger = logging.getLogger(__name__)
 
 from .entity import Entity, EntityUserManager, EntityManager
-from .release import Package as ReleasePackage, Credentials, DEFAULT_PACKAGE
+from .release import (
+    Package as ReleasePackage,
+    Credentials,
+    DEFAULT_PACKAGE,
+)
+
+
+def default_package_modules() -> list[str]:
+    """Return the default package module list."""
+
+    return list(DEFAULT_PACKAGE.packages)
 from . import temp_passwords
 from . import user_data  # noqa: F401 - ensure signal registration
 from .fields import (

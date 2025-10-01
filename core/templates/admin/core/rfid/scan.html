@@ -12,5 +12,5 @@
 
 {% block content %}
 <h1>{% trans "RFID Scanner" %}</h1>
-{% include "rfid/scanner.html" with scan_url=scan_url prefix="admin" table_mode=table_mode toggle_url=toggle_url toggle_label=toggle_label public_view_url=public_view_url %}
+{% include "rfid/scanner.html" with scan_url=scan_url prefix="admin" show_release_info=show_release_info %}
 {% endblock %}

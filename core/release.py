@@ -17,6 +17,15 @@ except Exception:  # pragma: no cover - fallback when missing
 from config.offline import requires_network, network_available
 
 
+DEFAULT_PACKAGE_MODULES = [
+    "core",
+    "config",
+    "nodes",
+    "ocpp",
+    "pages",
+]
+
+
 @dataclass
 class Package:
     """Metadata for building a distributable package."""
@@ -151,15 +160,7 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
             },
         },
         "tool": {
-            "setuptools": {
-                "packages": [
-                    "core",
-                    "config",
-                    "nodes",
-                    "ocpp",
-                    "pages",
-                ]
-            }
+            "setuptools": {"packages": list(package.packages)}
         },
     }
 
