@@ -1,5 +1,19 @@
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
+
 from ... import release
+from ...models import Package as PackageModel
+
+
+REQUIRED_PACKAGE_FIELDS = (
+    "name",
+    "description",
+    "author",
+    "email",
+    "python_requires",
+    "license",
+    "repository_url",
+    "homepage_url",
+)
 
 
 class Command(BaseCommand):
@@ -29,8 +43,13 @@ class Command(BaseCommand):
         parser.add_argument(
             "--stash", action="store_true", help="Auto stash changes before building"
         )
+        parser.add_argument(
+            "--package",
+            help="Build using the specified package (ID or name)",
+        )
 
     def handle(self, *args, **options):
+        package = self._get_package(options.get("package"))
         try:
             release.build(
                 bump=options["bump"],
@@ -42,8 +61,44 @@ class Command(BaseCommand):
                 all=options["all"],
                 force=options["force"],
                 stash=options["stash"],
+                package=package,
             )
         except release.ReleaseError as exc:
             self.stderr.write(self.style.ERROR(str(exc)))
             return 1
         return 0
+
+    def _get_package(self, identifier):
+        if not identifier:
+            return release.DEFAULT_PACKAGE
+
+        package_obj = self._resolve_package(identifier)
+        self._validate_package(package_obj)
+        return package_obj.to_package()
+
+    def _resolve_package(self, identifier: str) -> PackageModel:
+        query = PackageModel.objects.all()
+
+        try:
+            package_obj = query.get(pk=int(identifier))
+        except (ValueError, PackageModel.DoesNotExist):
+            try:
+                package_obj = query.get(name=identifier)
+            except PackageModel.DoesNotExist as exc:  # pragma: no cover - safeguard
+                raise CommandError(f"Package '{identifier}' not found") from exc
+        return package_obj
+
+    def _validate_package(self, package_obj: PackageModel) -> None:
+        missing = []
+        for field in REQUIRED_PACKAGE_FIELDS:
+            value = getattr(package_obj, field)
+            if isinstance(value, str):
+                value = value.strip()
+            if not value:
+                missing.append(package_obj._meta.get_field(field).verbose_name)
+
+        if missing:
+            readable = ", ".join(missing)
+            raise CommandError(
+                f"Package '{package_obj.name}' is missing required packaging configuration: {readable}."
+            )
