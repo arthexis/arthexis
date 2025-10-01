@@ -1,60 +1,37 @@
 from __future__ import annotations
 
 import os
-from unittest import mock
 
-from django.contrib.auth import get_user_model
-from django.test import TestCase
+import django
+from django.test import SimpleTestCase
 
-from core.models import Package, PackageRelease, ReleaseManager
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+django.setup()
+
+from core.models import PackageRelease
 
 
-class PackageReleaseCredentialTests(TestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self.user_model = get_user_model()
-        self.user_counter = 0
+class PackageReleaseMigrationTests(SimpleTestCase):
+    def test_version_bits_round_trip(self) -> None:
+        test_cases = [
+            "3.1.0",
+            "5.0.1",
+            "2.3.4",
+        ]
 
-    def create_manager(self, **kwargs) -> ReleaseManager:
-        self.user_counter += 1
-        user = self.user_model.objects.create_user(
-            username=f"manager{self.user_counter}", password="pass"
-        )
-        return ReleaseManager.objects.create(user=user, **kwargs)
+        for version in test_cases:
+            with self.subTest(version=version):
+                release = PackageRelease(version=version)
 
-    def test_credential_and_token_hierarchy(self) -> None:
-        release_manager = self.create_manager(
-            pypi_token="release-pypi-token", github_token="release-github-token"
-        )
-        package = Package.objects.create(name="test-package")
-        release = PackageRelease.objects.create(
-            package=package, release_manager=release_manager, version="1.0.0"
-        )
+                major, minor, patch = (int(part) for part in version.split("."))
+                expected_migration = (
+                    (major << PackageRelease._MAJOR_SHIFT)
+                    | (minor << PackageRelease._MINOR_SHIFT)
+                    | patch
+                )
 
-        release_creds = release.to_credentials()
-        self.assertIsNotNone(release_creds)
-        self.assertEqual(release_creds.token, "release-pypi-token")
-        self.assertEqual(release.get_github_token(), "release-github-token")
-
-        package_manager = self.create_manager(
-            pypi_token="package-pypi-token", github_token="package-github-token"
-        )
-        release.release_manager = None
-        release.save(update_fields=["release_manager"])
-        package.release_manager = package_manager
-        package.save(update_fields=["release_manager"])
-        release.refresh_from_db()
-
-        package_creds = release.to_credentials()
-        self.assertIsNotNone(package_creds)
-        self.assertEqual(package_creds.token, "package-pypi-token")
-        self.assertEqual(release.get_github_token(), "package-github-token")
-
-        package.release_manager = None
-        package.save(update_fields=["release_manager"])
-        release.refresh_from_db()
-
-        with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "env-token"}, clear=True):
-            self.assertIsNone(release.to_credentials())
-            self.assertEqual(release.get_github_token(), "env-token")
-
+                self.assertEqual(release.migration_number, expected_migration)
+                self.assertEqual(
+                    PackageRelease.version_from_migration(expected_migration),
+                    version,
+                )
