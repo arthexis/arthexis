@@ -1789,8 +1789,10 @@ class NetMessageReachTests(TestCase):
         with patch.object(Node, "get_local", return_value=None):
             msg.propagate()
         roles = set(msg.propagated_to.values_list("role__name", flat=True))
-        self.assertEqual(roles, {"Constellation", "Satellite", "Control"})
-        self.assertEqual(mock_post.call_count, 3)
+        self.assertEqual(
+            roles, {"Constellation", "Satellite", "Control", "Terminal"}
+        )
+        self.assertEqual(mock_post.call_count, 4)
 
     @patch("requests.post")
     def test_default_reach_not_limited_to_terminal(self, mock_post):
@@ -1801,7 +1803,7 @@ class NetMessageReachTests(TestCase):
             msg.propagate()
         roles = set(msg.propagated_to.values_list("role__name", flat=True))
         self.assertIn("Control", roles)
-        self.assertEqual(mock_post.call_count, 3)
+        self.assertEqual(mock_post.call_count, 4)
 
 
 class NetMessageFilterTests(TestCase):
@@ -1953,6 +1955,29 @@ class NetMessagePropagationTests(TestCase):
         self.assertNotIn(sender_addr, targets)
         self.assertEqual(msg.propagated_to.count(), 4)
         self.assertTrue(msg.complete)
+
+    @patch("requests.post")
+    @patch("core.notifications.notify", return_value=False)
+    def test_propagate_defaults_to_six_when_available(
+        self, mock_notify, mock_post
+    ):
+        for idx in range(6, 12):
+            self.remotes.append(
+                Node.objects.create(
+                    hostname=f"n{idx}",
+                    address=f"10.0.0.{idx}",
+                    port=8000 + idx,
+                    mac_address=f"00:11:22:33:44:{idx:02x}",
+                    role=self.role,
+                    public_endpoint=f"n{idx}",
+                )
+            )
+        msg = NetMessage.objects.create(subject="s", body="b", reach=self.role)
+        with patch.object(Node, "get_local", return_value=self.local):
+            msg.propagate()
+        self.assertEqual(mock_post.call_count, 6)
+        self.assertEqual(msg.propagated_to.count(), 6)
+        self.assertFalse(msg.complete)
 
     @patch("requests.post")
     @patch("core.notifications.notify", return_value=True)

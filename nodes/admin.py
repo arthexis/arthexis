@@ -1093,6 +1093,7 @@ class NetMessageAdmin(EntityModelAdmin):
         "filter_node_role",
         "node_origin",
         "created",
+        "target_limit",
         "complete",
     )
     search_fields = ("subject", "body")
@@ -1117,7 +1118,14 @@ class NetMessageAdmin(EntityModelAdmin):
         ),
         (
             "Propagation",
-            {"fields": ("node_origin", "propagated_to", "complete")},
+            {
+                "fields": (
+                    "node_origin",
+                    "target_limit",
+                    "propagated_to",
+                    "complete",
+                )
+            },
         ),
     )
 
