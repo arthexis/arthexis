@@ -102,6 +102,9 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "feature(slug): mark test as requiring a node feature"
     )
+    config.addinivalue_line(
+        "markers", "django_db: mark test as requiring database access"
+    )
 
 
 def _env_flag(name: str) -> bool:
