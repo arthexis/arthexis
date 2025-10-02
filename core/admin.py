@@ -1,10 +1,17 @@
+from io import BytesIO
+
 from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
 from django.urls import NoReverseMatch, path, reverse
 from urllib.parse import urlencode
 from django.shortcuts import redirect, render
-from django.http import JsonResponse, HttpResponseBase, HttpResponseRedirect
+from django.http import (
+    HttpResponse,
+    JsonResponse,
+    HttpResponseBase,
+    HttpResponseRedirect,
+)
 from django.template.response import TemplateResponse
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
@@ -34,6 +41,10 @@ import datetime
 import calendar
 import re
 from django_object_actions import DjangoObjectActions
+from reportlab.lib import colors
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
 from ocpp.models import Transaction
 from ocpp.rfid.utils import build_mode_toggle
 from nodes.models import EmailOutbox
@@ -2326,7 +2337,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     search_fields = ("label_id", "rfid", "custom_label")
     autocomplete_fields = ["energy_accounts"]
     raw_id_fields = ["reference"]
-    actions = ["scan_rfids"]
+    actions = ["scan_rfids", "print_card_labels"]
     readonly_fields = ("added_on", "last_seen_on")
     form = RFIDForm
 
@@ -2340,6 +2351,84 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         return redirect("admin:core_rfid_scan")
 
     scan_rfids.short_description = "Scan RFIDs"
+
+    def print_card_labels(self, request, queryset):
+        queryset = queryset.select_related("reference").order_by("label_id")
+        if not queryset.exists():
+            self.message_user(
+                request,
+                _("Select at least one RFID to print labels."),
+                level=messages.WARNING,
+            )
+            return HttpResponseRedirect(request.get_full_path())
+
+        buffer = BytesIO()
+        card_width = 85.6 * mm
+        card_height = 54 * mm
+        margin = 5 * mm
+        highlight_height = 20 * mm
+
+        pdf = canvas.Canvas(buffer, pagesize=(card_width, card_height))
+        pdf.setTitle("RFID Card Labels")
+
+        for tag in queryset:
+            pdf.setPageSize((card_width, card_height))
+            pdf.setFillColor(colors.white)
+            pdf.rect(0, 0, card_width, card_height, stroke=0, fill=1)
+
+            # Highlighted area for the primary card number
+            pdf.setFillColor(colors.HexColor("#E6EEF8"))
+            pdf.roundRect(
+                margin,
+                card_height - margin - highlight_height,
+                card_width - 2 * margin,
+                highlight_height,
+                6,
+                stroke=0,
+                fill=1,
+            )
+
+            pdf.setFillColor(colors.HexColor("#1A1A1A"))
+            font_name = "Helvetica-Bold"
+            font_size = 28
+            pdf.setFont(font_name, font_size)
+            primary_label = str(tag.label_id)
+            descent = abs(pdfmetrics.getDescent(font_name) / 1000 * font_size)
+            vertical_center = card_height - margin - (highlight_height / 2)
+            baseline = vertical_center - (descent / 2)
+            pdf.drawCentredString(
+                card_width / 2,
+                baseline,
+                primary_label,
+            )
+
+            pdf.setFont("Helvetica", 11)
+            text = pdf.beginText()
+            text.setTextOrigin(margin, card_height - margin - highlight_height - 12)
+            text.setLeading(14)
+
+            details = [_("RFID: %s") % tag.rfid]
+            if tag.custom_label:
+                details.append(_("Custom label: %s") % tag.custom_label)
+            details.append(_("Color: %s") % tag.get_color_display())
+            details.append(_("Type: %s") % tag.get_kind_display())
+            if tag.reference:
+                details.append(_("Reference: %s") % tag.reference)
+
+            for line in details:
+                text.textLine(line)
+
+            pdf.drawText(text)
+            pdf.showPage()
+
+        pdf.save()
+        buffer.seek(0)
+
+        response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+        response["Content-Disposition"] = "attachment; filename=rfid-card-labels.pdf"
+        return response
+
+    print_card_labels.short_description = _("Print Card Labels")
 
     def get_urls(self):
         urls = super().get_urls()
