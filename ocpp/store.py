@@ -25,6 +25,9 @@ history: dict[str, dict[str, object]] = {}
 simulators = {}
 ip_connections: dict[str, set[object]] = {}
 pending_calls: dict[str, dict[str, object]] = {}
+_pending_call_events: dict[str, threading.Event] = {}
+_pending_call_results: dict[str, dict[str, object]] = {}
+_pending_call_lock = threading.Lock()
 triggered_followups: dict[str, list[dict[str, object]]] = {}
 
 # mapping of charger id / cp_path to friendly names used for log files
@@ -193,13 +196,66 @@ def pop_transaction(serial: str, connector: int | str | None = None):
 def register_pending_call(message_id: str, metadata: dict[str, object]) -> None:
     """Store metadata about an outstanding CSMS call."""
 
-    pending_calls[message_id] = dict(metadata)
+    copy = dict(metadata)
+    with _pending_call_lock:
+        pending_calls[message_id] = copy
+        event = threading.Event()
+        _pending_call_events[message_id] = event
+        _pending_call_results.pop(message_id, None)
 
 
 def pop_pending_call(message_id: str) -> dict[str, object] | None:
     """Return and remove metadata for a previously registered call."""
 
-    return pending_calls.pop(message_id, None)
+    with _pending_call_lock:
+        return pending_calls.pop(message_id, None)
+
+
+def record_pending_call_result(
+    message_id: str,
+    *,
+    metadata: dict[str, object] | None = None,
+    success: bool = True,
+    payload: object | None = None,
+    error_code: str | None = None,
+    error_description: str | None = None,
+    error_details: object | None = None,
+) -> None:
+    """Record the outcome for a previously registered pending call."""
+
+    result = {
+        "metadata": dict(metadata or {}),
+        "success": success,
+        "payload": payload,
+        "error_code": error_code,
+        "error_description": error_description,
+        "error_details": error_details,
+    }
+    with _pending_call_lock:
+        _pending_call_results[message_id] = result
+        event = _pending_call_events.pop(message_id, None)
+    if event:
+        event.set()
+
+
+def wait_for_pending_call(
+    message_id: str, *, timeout: float = 5.0
+) -> dict[str, object] | None:
+    """Wait for a pending call to be resolved and return the stored result."""
+
+    with _pending_call_lock:
+        existing = _pending_call_results.pop(message_id, None)
+        if existing is not None:
+            return existing
+        event = _pending_call_events.get(message_id)
+    if not event:
+        return None
+    if not event.wait(timeout):
+        return None
+    with _pending_call_lock:
+        result = _pending_call_results.pop(message_id, None)
+        _pending_call_events.pop(message_id, None)
+        return result
 
 
 def schedule_call_timeout(
@@ -214,7 +270,8 @@ def schedule_call_timeout(
     """Schedule a timeout notice if a pending call is not answered."""
 
     def _notify() -> None:
-        metadata = pending_calls.get(message_id)
+        with _pending_call_lock:
+            metadata = pending_calls.get(message_id)
         if not metadata:
             return
         if action and metadata.get("action") != action:
@@ -285,13 +342,16 @@ def consume_triggered_followup(
 def clear_pending_calls(serial: str) -> None:
     """Remove any pending calls associated with the provided charger id."""
 
-    to_remove = [
-        key
-        for key, value in pending_calls.items()
-        if value.get("charger_id") == serial
-    ]
-    for key in to_remove:
-        pending_calls.pop(key, None)
+    with _pending_call_lock:
+        to_remove = [
+            key
+            for key, value in pending_calls.items()
+            if value.get("charger_id") == serial
+        ]
+        for key in to_remove:
+            pending_calls.pop(key, None)
+            _pending_call_events.pop(key, None)
+            _pending_call_results.pop(key, None)
     triggered_followups.pop(serial, None)
 
 
