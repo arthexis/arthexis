@@ -68,7 +68,8 @@ jobs:
 
       - name: Generate coverage badge
         if: steps.coverage-data.outputs.has_data == 'true'
-        uses: tj-actions/coverage-badge-py@v2
+        run: |
+          coverage-badge -f -o coverage.svg
 
       - name: Verify coverage badge changes
         if: steps.coverage-data.outputs.has_data == 'true'
@@ -96,8 +97,10 @@ jobs:
         if: steps.coverage-data.outputs.has_data == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-xml
-          path: coverage.xml
+          name: coverage-reports
+          path: |
+            coverage.xml
+            coverage-report.txt
 
       - name: Fail if tests failed
         if: steps.pytest.outputs.exit_code != '0'
