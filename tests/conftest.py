@@ -19,7 +19,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 _original_setup = django.setup
 
 
-def safe_setup():
+def safe_setup(*args, **kwargs):
     """Initialize Django and ensure the test database is migrated.
 
     Pytest does not use ``pytest-django`` for these tests, so simply calling
@@ -62,7 +62,7 @@ def safe_setup():
                         cursor.execute(f'CREATE DATABASE "{test_name}"')
 
         # Perform the regular Django setup after configuring the test database
-        _original_setup()
+        _original_setup(*args, **kwargs)
 
         from django.db import connections
 
