@@ -205,6 +205,7 @@
   let localConnected = false;
   let lastLocalValue = null;
   let lastLocalAt = 0;
+  const historyEntries = tableMode ? new Map() : null;
 
   if(modeToggleBtn){
     const toggleTarget = modeToggleBtn.getAttribute('data-toggle-url') || modeToggleBtn.getAttribute('href');
@@ -230,12 +231,8 @@
     return data.allowed && data.released ? 'Yes' : 'No';
   }
 
-  function appendHistoryRow(data, labelValue){
-    if(!historyBody){
-      return;
-    }
-    const row = document.createElement('tr');
-    const cells = [
+  function buildHistoryCells(data, labelValue){
+    const values = [
       new Date().toLocaleTimeString(),
       labelValue,
       data.kind || '',
@@ -243,19 +240,42 @@
       validText(data),
     ];
     if(isStaff){
-      cells.push(data.rfid || '');
+      values.push(data.rfid || '');
     }
     if(showReleaseInfo){
-      cells.push(booleanText(data.released));
-      cells.push(data.reference || '');
+      values.push(booleanText(data.released));
+      values.push(data.reference || '');
     }
-    cells.forEach((value) => {
+    return values;
+  }
+
+  function appendHistoryRow(data, labelValue){
+    if(!historyBody){
+      return;
+    }
+    const key = data.rfid || (labelValue ? `label:${labelValue}` : null);
+    if(!key){
+      return;
+    }
+    if(historyEntries && historyEntries.has(key)){
+      const existingRow = historyEntries.get(key);
+      if(existingRow && existingRow.parentElement === historyBody){
+        historyBody.removeChild(existingRow);
+      }
+    }
+    const row = document.createElement('tr');
+    buildHistoryCells(data, labelValue).forEach((value) => {
       const cell = document.createElement('td');
       cell.textContent = value;
       row.appendChild(cell);
     });
     historyBody.insertBefore(row, historyBody.firstChild);
-    historyCount += 1;
+    if(historyEntries){
+      historyEntries.set(key, row);
+      historyCount = historyEntries.size;
+    } else {
+      historyCount += 1;
+    }
     if(totalCountEl){
       totalCountEl.textContent = String(historyCount);
     }
