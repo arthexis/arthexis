@@ -785,9 +785,23 @@ class EmailInbox(Profile):
             decoded = []
             for text, encoding in parts:
                 if isinstance(text, bytes):
-                    decoded.append(
-                        text.decode(encoding or "utf-8", errors="ignore")
-                    )
+                    encodings_to_try = []
+                    if encoding:
+                        encodings_to_try.append(encoding)
+                    encodings_to_try.extend(["utf-8", "latin-1"])
+                    for candidate in encodings_to_try:
+                        try:
+                            decoded.append(
+                                text.decode(candidate, errors="ignore")
+                            )
+                            break
+                        except LookupError:
+                            continue
+                    else:
+                        try:
+                            decoded.append(text.decode("utf-8", errors="ignore"))
+                        except Exception:
+                            decoded.append("")
                 else:
                     decoded.append(text)
             return "".join(decoded)
