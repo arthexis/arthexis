@@ -1,19 +1,24 @@
 {% extends "admin/change_form.html" %}
 {% load i18n %}
+
+{% block extrahead %}
+{{ block.super }}
+{% include "admin/includes/seed_datum_styles.html" %}
+{% endblock %}
 {% block content_title %}
 <div style="display:flex; justify-content:space-between; align-items:center;">
     <h1>{{ title }}</h1>
     <div style="display:flex; align-items:center; gap:1em; flex-wrap:wrap;">
         {% if show_user_datum %}
-        <label style="color: var(--body-quiet-color); display:flex; align-items:center; gap:0.35rem;">
+        <label class="seed-datum-flag seed-datum-flag--user">
             <input type="checkbox" name="_user_datum" form="{{ opts.model_name }}_form"{% if is_user_datum %} checked{% endif %}>
-            <span>{% trans "User Datum" %} [ <a href="{% url 'admin:user_data' %}">{% trans "View" %}</a> ]</span>
+            <span class="seed-datum-text">{% trans "User Datum" %} [ <a href="{% url 'admin:user_data' %}">{% trans "View" %}</a> ]</span>
         </label>
         {% endif %}
         {% if show_seed_datum %}
-        <label style="color: var(--body-quiet-color); display:flex; align-items:center; gap:0.35rem;">
-            <input type="checkbox" name="_seed_datum" form="{{ opts.model_name }}_form"{% if original and original.is_seed_data %} checked{% endif %} disabled>
-            <span>{% trans "Seed Datum" %} [ <a href="{% url 'admin:seed_data' %}">{% trans "View" %}</a> ]</span>
+        <label class="seed-datum-flag seed-datum-flag--seed">
+            <input type="checkbox" class="seed-datum-checkbox" name="_seed_datum" form="{{ opts.model_name }}_form"{% if original and original.is_seed_data %} checked{% endif %} disabled>
+            <span class="seed-datum-text">{% trans "Seed Datum" %} [ <a href="{% url 'admin:seed_data' %}">{% trans "View" %}</a> ]</span>
         </label>
         {% endif %}
         {% if operate_as_profile_url_template %}
