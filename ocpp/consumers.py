@@ -297,12 +297,12 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             now = timezone.now()
             tag, created = CoreRFID.objects.get_or_create(
                 rfid=normalized,
-                defaults={"allowed": False, "last_seen_on": now},
+                defaults={"allowed": True, "last_seen_on": now},
             )
             if created:
                 updates = []
-                if tag.allowed:
-                    tag.allowed = False
+                if not tag.allowed:
+                    tag.allowed = True
                     updates.append("allowed")
                 if tag.last_seen_on != now:
                     tag.last_seen_on = now
