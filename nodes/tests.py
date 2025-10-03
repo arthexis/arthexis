@@ -43,13 +43,17 @@ from dns import resolver as dns_resolver
 from .actions import NodeAction
 from . import dns as dns_utils
 from selenium.common.exceptions import WebDriverException
-from .utils import capture_screenshot
+from .classifiers import run_default_classifiers
+from .utils import capture_screenshot, save_screenshot
 from django.db.utils import DatabaseError
 
 from .models import (
     Node,
     EmailOutbox,
+    ContentClassifier,
+    ContentClassification,
     ContentSample,
+    ContentTag,
     NodeRole,
     NodeFeature,
     NodeFeatureAssignment,
@@ -3168,3 +3172,61 @@ class DNSIntegrationTests(TestCase):
         record.refresh_from_db()
         self.assertEqual(record.last_error, message)
         self.assertIsNone(record.last_verified_at)
+
+
+def fake_text_classifier(sample):
+    content = sample.content or ""
+    return [
+        {"slug": "text-sample", "label": "Text Sample", "confidence": 0.75},
+        {"slug": "shared-tag", "label": "Shared Tag", "metadata": {"length": len(content)}},
+    ]
+
+
+def fake_image_classifier(sample):
+    return ["screenshot-tag"]
+
+
+class ContentClassifierTests(TestCase):
+    def setUp(self):
+        ContentClassifier.objects.create(
+            slug="text-classifier",
+            label="Text Classifier",
+            kind=ContentSample.TEXT,
+            entrypoint="nodes.tests.fake_text_classifier",
+            run_by_default=True,
+            active=True,
+        )
+        ContentClassifier.objects.create(
+            slug="image-classifier",
+            label="Image Classifier",
+            kind=ContentSample.IMAGE,
+            entrypoint="nodes.tests.fake_image_classifier",
+            run_by_default=True,
+            active=True,
+        )
+
+    def test_save_screenshot_triggers_classifier(self):
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            screenshot_path = base / "capture.png"
+            screenshot_path.write_bytes(b"binary image data")
+            with override_settings(LOG_DIR=base):
+                sample = save_screenshot(screenshot_path, method="TEST")
+
+        self.assertIsNotNone(sample)
+        tags = ContentClassification.objects.filter(sample=sample)
+        self.assertTrue(tags.filter(tag__slug="screenshot-tag").exists())
+
+    def test_text_sample_runs_default_classifiers_without_duplicates(self):
+        sample = ContentSample.objects.create(
+            content="Example content", kind=ContentSample.TEXT
+        )
+
+        self.assertEqual(sample.classifications.count(), 2)
+        text_tag = sample.classifications.get(tag__slug="text-sample")
+        self.assertAlmostEqual(text_tag.confidence, 0.75)
+        shared_tag = sample.classifications.get(tag__slug="shared-tag")
+        self.assertEqual(shared_tag.metadata, {"length": len(sample.content)})
+
+        run_default_classifiers(sample)
+        self.assertEqual(sample.classifications.count(), 2)

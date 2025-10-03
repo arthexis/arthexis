@@ -1608,6 +1608,66 @@ class ContentSample(Entity):
         return str(self.name)
 
 
+class ContentClassifier(Entity):
+    """Configured callable that classifies :class:`ContentSample` objects."""
+
+    slug = models.SlugField(max_length=100, unique=True)
+    label = models.CharField(max_length=150)
+    kind = models.CharField(max_length=10, choices=ContentSample.KIND_CHOICES)
+    entrypoint = models.CharField(max_length=255, help_text="Dotted path to classifier callable")
+    run_by_default = models.BooleanField(default=True)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["label"]
+        verbose_name = "Content Classifier"
+        verbose_name_plural = "Content Classifiers"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.label
+
+
+class ContentTag(Entity):
+    """Tag that can be attached to classified content samples."""
+
+    slug = models.SlugField(max_length=100, unique=True)
+    label = models.CharField(max_length=150)
+
+    class Meta:
+        ordering = ["label"]
+        verbose_name = "Content Tag"
+        verbose_name_plural = "Content Tags"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.label
+
+
+class ContentClassification(Entity):
+    """Link between a sample, classifier, and assigned tag."""
+
+    sample = models.ForeignKey(
+        ContentSample, on_delete=models.CASCADE, related_name="classifications"
+    )
+    classifier = models.ForeignKey(
+        ContentClassifier, on_delete=models.CASCADE, related_name="classifications"
+    )
+    tag = models.ForeignKey(
+        ContentTag, on_delete=models.CASCADE, related_name="classifications"
+    )
+    confidence = models.FloatField(null=True, blank=True)
+    metadata = models.JSONField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("sample", "classifier", "tag")
+        ordering = ["-created_at"]
+        verbose_name = "Content Classification"
+        verbose_name_plural = "Content Classifications"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.sample} → {self.tag}"
+
+
 UserModel = get_user_model()
 
 

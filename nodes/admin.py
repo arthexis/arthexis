@@ -26,6 +26,7 @@ import requests
 from requests import RequestException
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+from .classifiers import run_default_classifiers, suppress_default_classifiers
 from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
 from .actions import NodeAction
 from .reports import (
@@ -43,6 +44,9 @@ from .models import (
     NodeFeature,
     NodeFeatureAssignment,
     ContentSample,
+    ContentClassifier,
+    ContentClassification,
+    ContentTag,
     NetMessage,
     NodeManager,
     DNSRecord,
@@ -998,10 +1002,31 @@ class NodeFeatureAdmin(EntityModelAdmin):
         )
 
 
+@admin.register(ContentTag)
+class ContentTagAdmin(EntityModelAdmin):
+    list_display = ("label", "slug")
+    search_fields = ("label", "slug")
+
+
+@admin.register(ContentClassifier)
+class ContentClassifierAdmin(EntityModelAdmin):
+    list_display = ("label", "slug", "kind", "run_by_default", "active")
+    list_filter = ("kind", "run_by_default", "active")
+    search_fields = ("label", "slug", "entrypoint")
+
+
+class ContentClassificationInline(admin.TabularInline):
+    model = ContentClassification
+    extra = 0
+    autocomplete_fields = ("classifier", "tag")
+
+
 @admin.register(ContentSample)
 class ContentSampleAdmin(EntityModelAdmin):
     list_display = ("name", "kind", "node", "user", "created_at")
     readonly_fields = ("created_at", "name", "user", "image_preview")
+    inlines = (ContentClassificationInline,)
+    list_filter = ("kind", "classifications__tag")
 
     def get_urls(self):
         urls = super().get_urls()
@@ -1036,9 +1061,11 @@ class ContentSampleAdmin(EntityModelAdmin):
             )
             return redirect("..")
         user = request.user if request.user.is_authenticated else None
-        ContentSample.objects.create(
-            content=content, user=user, kind=ContentSample.TEXT
-        )
+        with suppress_default_classifiers():
+            sample = ContentSample.objects.create(
+                content=content, user=user, kind=ContentSample.TEXT
+            )
+        run_default_classifiers(sample)
         self.message_user(
             request, "Text sample added from clipboard.", level=messages.SUCCESS
         )

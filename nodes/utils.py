@@ -10,6 +10,7 @@ from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.common.exceptions import WebDriverException
 
+from .classifiers import run_default_classifiers, suppress_default_classifiers
 from .models import ContentSample
 
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
@@ -102,4 +103,7 @@ def save_screenshot(path: Path, node=None, method: str = "", transaction_uuid=No
     }
     if transaction_uuid is not None:
         data["transaction_uuid"] = transaction_uuid
-    return ContentSample.objects.create(**data)
+    with suppress_default_classifiers():
+        sample = ContentSample.objects.create(**data)
+    run_default_classifiers(sample)
+    return sample
