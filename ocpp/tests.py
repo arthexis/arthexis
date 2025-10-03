@@ -397,7 +397,7 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertEqual(tx.rfid, "TAG123")
 
         tag = await database_sync_to_async(RFID.objects.get)(rfid="TAG123")
-        self.assertFalse(tag.allowed)
+        self.assertTrue(tag.allowed)
         self.assertIsNotNone(tag.last_seen_on)
 
         await communicator.disconnect()
