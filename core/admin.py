@@ -66,6 +66,7 @@ from .models import (
     CustomSigil,
     Reference,
     OdooProfile,
+    OpenPayProfile,
     EmailInbox,
     SocialProfile,
     EmailCollector,
@@ -876,6 +877,54 @@ class OdooProfileAdminForm(forms.ModelForm):
         )
 
 
+class OpenPayProfileAdminForm(forms.ModelForm):
+    """Admin form for :class:`core.models.OpenPayProfile` with masked secrets."""
+
+    private_key = forms.CharField(
+        widget=forms.PasswordInput(render_value=True),
+        required=False,
+        help_text="Leave blank to keep the current key.",
+    )
+    webhook_secret = forms.CharField(
+        widget=forms.PasswordInput(render_value=True),
+        required=False,
+        help_text="Leave blank to keep the current secret.",
+    )
+
+    class Meta:
+        model = OpenPayProfile
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            for field in ("private_key", "webhook_secret"):
+                if field in self.fields:
+                    self.fields[field].initial = ""
+                    self.initial[field] = ""
+        else:
+            self.fields["private_key"].required = True
+
+    def clean_private_key(self):
+        key = self.cleaned_data.get("private_key")
+        if not key and self.instance.pk:
+            return keep_existing("private_key")
+        return key
+
+    def clean_webhook_secret(self):
+        secret = self.cleaned_data.get("webhook_secret")
+        if secret == "" and self.instance.pk:
+            return keep_existing("webhook_secret")
+        return secret
+
+    def _post_clean(self):
+        super()._post_clean()
+        _restore_sigil_values(
+            self,
+            ["merchant_id", "private_key", "public_key", "webhook_secret"],
+        )
+
+
 class MaskedPasswordFormMixin:
     """Mixin that hides stored passwords while allowing updates."""
 
@@ -1066,6 +1115,33 @@ class OdooProfileInlineForm(ProfileFormMixin, OdooProfileAdminForm):
         return cleaned
 
 
+class OpenPayProfileInlineForm(ProfileFormMixin, OpenPayProfileAdminForm):
+    profile_fields = OpenPayProfile.profile_fields
+
+    class Meta(OpenPayProfileAdminForm.Meta):
+        exclude = ("user", "group", "verified_on", "verification_reference")
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("DELETE") or self.errors:
+            return cleaned
+
+        required = ("merchant_id", "private_key", "public_key")
+        provided = [
+            name for name in required if not self._is_empty_value(cleaned.get(name))
+        ]
+        missing = [
+            name for name in required if self._is_empty_value(cleaned.get(name))
+        ]
+        if provided and missing:
+            raise forms.ValidationError(
+                _(
+                    "Provide merchant ID, private key, and public key to configure OpenPay."
+                )
+            )
+        return cleaned
+
+
 class EmailInboxInlineForm(ProfileFormMixin, EmailInboxAdminForm):
     profile_fields = EmailInbox.profile_fields
 
@@ -1194,6 +1270,28 @@ PROFILE_INLINE_CONFIG = {
         ),
         "readonly_fields": ("verified_on", "odoo_uid", "name", "email"),
     },
+    OpenPayProfile: {
+        "form": OpenPayProfileInlineForm,
+        "fieldsets": (
+            (
+                None,
+                {
+                    "fields": (
+                        "merchant_id",
+                        "public_key",
+                        "private_key",
+                        "is_production",
+                        "webhook_secret",
+                    )
+                },
+            ),
+            (
+                _("Verification"),
+                {"fields": ("verified_on", "verification_reference")},
+            ),
+        ),
+        "readonly_fields": ("verified_on", "verification_reference"),
+    },
     EmailInbox: {
         "form": EmailInboxInlineForm,
         "fields": (
@@ -1289,6 +1387,7 @@ def _build_profile_inline(model, owner_field):
 
 PROFILE_MODELS = (
     OdooProfile,
+    OpenPayProfile,
     EmailInbox,
     EmailOutbox,
     SocialProfile,
@@ -1545,6 +1644,69 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
 
     verify_credentials_action.label = "Test credentials"
     verify_credentials_action.short_description = "Test credentials"
+
+
+@admin.register(OpenPayProfile)
+class OpenPayProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
+    change_form_template = "django_object_actions/change_form.html"
+    form = OpenPayProfileAdminForm
+    list_display = ("owner", "merchant_id", "environment", "verified_on")
+    readonly_fields = ("verified_on", "verification_reference")
+    actions = ["verify_credentials"]
+    change_actions = ["verify_credentials_action", "my_profile_action"]
+    changelist_actions = ["my_profile"]
+    fieldsets = (
+        (_("Owner"), {"fields": ("user", "group")}),
+        (_("Gateway"), {"fields": ("merchant_id", "public_key", "is_production")}),
+        (_("Credentials"), {"fields": ("private_key", "webhook_secret")}),
+        (
+            _("Verification"),
+            {"fields": ("verified_on", "verification_reference")},
+        ),
+    )
+
+    @admin.display(description=_("Owner"))
+    def owner(self, obj):
+        return obj.owner_display()
+
+    @admin.display(description=_("Environment"))
+    def environment(self, obj):
+        return _("Production") if obj.is_production else _("Sandbox")
+
+    def _verify_credentials(self, request, profile):
+        owner = profile.owner_display() or profile.merchant_id
+        try:
+            profile.verify()
+        except ValidationError as exc:
+            message = "; ".join(exc.messages)
+            self.message_user(
+                request,
+                f"{owner}: {message}",
+                level=messages.ERROR,
+            )
+        except Exception as exc:  # pragma: no cover - admin feedback
+            self.message_user(
+                request,
+                f"{owner}: {exc}",
+                level=messages.ERROR,
+            )
+        else:
+            self.message_user(
+                request,
+                _("%(owner)s verified") % {"owner": owner},
+                level=messages.SUCCESS,
+            )
+
+    @admin.action(description=_("Test credentials"))
+    def verify_credentials(self, request, queryset):
+        for profile in queryset:
+            self._verify_credentials(request, profile)
+
+    def verify_credentials_action(self, request, obj):
+        self._verify_credentials(request, obj)
+
+    verify_credentials_action.label = _("Test credentials")
+    verify_credentials_action.short_description = _("Test credentials")
 
 
 class EmailSearchForm(forms.Form):

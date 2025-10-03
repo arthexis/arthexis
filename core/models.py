@@ -19,6 +19,7 @@ from datetime import time as datetime_time, timedelta
 import logging
 from django.contrib.contenttypes.models import ContentType
 import hashlib
+import hmac
 import os
 import subprocess
 import secrets
@@ -34,6 +35,7 @@ from urllib.parse import urlparse
 from utils import revision as revision_utils
 from typing import Type
 from defusedxml import xmlrpc as defused_xmlrpc
+import requests
 
 defused_xmlrpc.monkey_patch()
 xmlrpc_client = defused_xmlrpc.xmlrpc_client
@@ -633,6 +635,164 @@ class OdooProfile(Profile):
                     | (Q(user__isnull=True) & Q(group__isnull=False))
                 ),
                 name="odooprofile_requires_owner",
+            )
+        ]
+
+
+class OpenPayProfile(Profile):
+    """Store OpenPay gateway credentials for a user or security group."""
+
+    SANDBOX_API_URL = "https://sandbox-api.openpay.mx/v1"
+    PRODUCTION_API_URL = "https://api.openpay.mx/v1"
+
+    profile_fields = (
+        "merchant_id",
+        "private_key",
+        "public_key",
+        "is_production",
+        "webhook_secret",
+    )
+
+    merchant_id = SigilShortAutoField(max_length=100)
+    private_key = SigilShortAutoField(max_length=255)
+    public_key = SigilShortAutoField(max_length=255)
+    is_production = models.BooleanField(default=False)
+    webhook_secret = SigilShortAutoField(max_length=255, blank=True)
+    verified_on = models.DateTimeField(null=True, blank=True)
+    verification_reference = models.CharField(max_length=255, blank=True, editable=False)
+
+    def _clear_verification(self):
+        self.verified_on = None
+        self.verification_reference = ""
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            old = type(self).all_objects.get(pk=self.pk)
+            if (
+                old.merchant_id != self.merchant_id
+                or old.private_key != self.private_key
+                or old.public_key != self.public_key
+                or old.is_production != self.is_production
+                or old.webhook_secret != self.webhook_secret
+            ):
+                self._clear_verification()
+        super().save(*args, **kwargs)
+
+    @property
+    def is_verified(self):
+        return self.verified_on is not None
+
+    def get_api_base_url(self) -> str:
+        return self.PRODUCTION_API_URL if self.is_production else self.SANDBOX_API_URL
+
+    def build_api_url(self, path: str = "") -> str:
+        path = path.strip("/")
+        base = self.get_api_base_url()
+        if path:
+            return f"{base}/{self.merchant_id}/{path}"
+        return f"{base}/{self.merchant_id}"
+
+    def get_auth(self) -> tuple[str, str]:
+        return (self.private_key, "")
+
+    def is_sandbox(self) -> bool:
+        return not self.is_production
+
+    def sign_webhook(self, payload: bytes | str, timestamp: str | None = None) -> str:
+        if not self.webhook_secret:
+            raise ValueError("Webhook secret is not configured")
+        if isinstance(payload, str):
+            payload_bytes = payload.encode("utf-8")
+        else:
+            payload_bytes = payload
+        if timestamp:
+            message = b".".join([timestamp.encode("utf-8"), payload_bytes])
+        else:
+            message = payload_bytes
+        return hmac.new(
+            self.webhook_secret.encode("utf-8"),
+            message,
+            hashlib.sha512,
+        ).hexdigest()
+
+    def use_production(self):
+        self.is_production = True
+        self._clear_verification()
+        return self
+
+    def use_sandbox(self):
+        self.is_production = False
+        self._clear_verification()
+        return self
+
+    def set_environment(self, *, production: bool):
+        self.is_production = bool(production)
+        self._clear_verification()
+        return self
+
+    def verify(self):
+        url = self.build_api_url("charges")
+        try:
+            response = requests.get(
+                url,
+                auth=self.get_auth(),
+                params={"limit": 1},
+                timeout=10,
+            )
+        except requests.RequestException as exc:  # pragma: no cover - network failure
+            self._clear_verification()
+            if self.pk:
+                self.save(update_fields=["verification_reference", "verified_on"])
+            raise ValidationError(
+                _("Unable to verify OpenPay credentials: %(error)s")
+                % {"error": exc}
+            ) from exc
+        if response.status_code != 200:
+            self._clear_verification()
+            if self.pk:
+                self.save(update_fields=["verification_reference", "verified_on"])
+            raise ValidationError(_("Invalid OpenPay credentials"))
+        try:
+            payload = response.json() or {}
+        except ValueError:
+            payload = {}
+        reference = ""
+        if isinstance(payload, dict):
+            reference = (
+                payload.get("status")
+                or payload.get("name")
+                or payload.get("id")
+                or payload.get("description")
+                or ""
+            )
+        elif isinstance(payload, list) and payload:
+            first = payload[0]
+            if isinstance(first, dict):
+                reference = (
+                    first.get("status")
+                    or first.get("id")
+                    or first.get("description")
+                    or ""
+                )
+        self.verification_reference = str(reference) if reference else ""
+        self.verified_on = timezone.now()
+        self.save(update_fields=["verification_reference", "verified_on"])
+        return True
+
+    def __str__(self):  # pragma: no cover - simple representation
+        owner = self.owner_display()
+        return f"{owner} @ {self.merchant_id}" if owner else self.merchant_id
+
+    class Meta:
+        verbose_name = _("OpenPay Merchant")
+        verbose_name_plural = _("OpenPay Merchants")
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (Q(user__isnull=False) & Q(group__isnull=True))
+                    | (Q(user__isnull=True) & Q(group__isnull=False))
+                ),
+                name="openpayprofile_requires_owner",
             )
         ]
 
