@@ -2270,6 +2270,7 @@ class ProductFetchWizardForm(forms.Form):
 class ProductAdmin(EntityModelAdmin):
     form = ProductAdminForm
     actions = ["fetch_odoo_product", "register_from_odoo"]
+    change_list_template = "admin/core/product/change_list.html"
 
     def _odoo_profile_admin(self):
         return self.admin_site._registry.get(OdooProfile)
