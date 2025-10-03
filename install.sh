@@ -349,6 +349,24 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+
+    # Model Context Protocol server (SSE)
+    location = /mcp {
+        return 301 /mcp/;
+    }
+
+    location /mcp/ {
+        proxy_pass http://127.0.0.1:MCP_PORT_PLACEHOLDER/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Cache-Control "no-cache";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600;
+    }
     #DATASETTE_START
     location /data/ {
         auth_request /datasette-auth/;
@@ -381,6 +399,24 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+
+    # Model Context Protocol server (SSE)
+    location = /mcp {
+        return 301 /mcp/;
+    }
+
+    location /mcp/ {
+        proxy_pass http://127.0.0.1:MCP_PORT_PLACEHOLDER/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Cache-Control "no-cache";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600;
+    }
     #DATASETTE_START
     location /data/ {
         auth_request /datasette-auth/;
@@ -400,6 +436,8 @@ NGINXCONF
 fi
 
 sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
+MCP_PROXY_PORT="${MCP_SIGIL_PORT:-8800}"
+sudo sed -i "s/MCP_PORT_PLACEHOLDER/$MCP_PROXY_PORT/" "$NGINX_CONF"
 if [ "$ENABLE_DATASETTE" = true ]; then
     sudo sed -i "s/DATA_PORT_PLACEHOLDER/$DATASETTE_PORT/" "$NGINX_CONF"
     sudo sed -i '/#DATASETTE_START/d;/#DATASETTE_END/d' "$NGINX_CONF"

@@ -465,7 +465,7 @@ MCP_SIGIL_SERVER = {
     "required_scopes": ["sigils:read"],
     "issuer_url": os.environ.get("MCP_SIGIL_ISSUER_URL"),
     "resource_server_url": os.environ.get("MCP_SIGIL_RESOURCE_URL"),
-    "mount_path": os.environ.get("MCP_SIGIL_MOUNT_PATH"),
+    "mount_path": os.environ.get("MCP_SIGIL_MOUNT_PATH", "/mcp"),
 }
 
 
