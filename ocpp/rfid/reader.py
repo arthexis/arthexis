@@ -1,4 +1,6 @@
+import os
 import re
+import subprocess
 import time
 from django.utils import timezone
 from django.core.exceptions import ValidationError
@@ -30,17 +32,42 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
     updates.add("last_seen_on")
     if updates:
         tag.save(update_fields=sorted(updates))
+    allowed = bool(tag.allowed)
+    raw_command = getattr(tag, "external_command", "")
+    if isinstance(raw_command, str):
+        command = raw_command.strip()
+    else:
+        command = ""
+    if command:
+        env = os.environ.copy()
+        env["RFID_VALUE"] = rfid
+        env["RFID_LABEL_ID"] = str(tag.pk)
+        try:
+            completed = subprocess.run(
+                command,
+                shell=True,
+                check=False,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        except Exception:
+            command_allowed = False
+        else:
+            command_allowed = completed.returncode == 0
+        allowed = allowed and command_allowed
+
     result = {
         "rfid": rfid,
         "label_id": tag.pk,
         "created": created,
         "color": tag.color,
-        "allowed": tag.allowed,
+        "allowed": allowed,
         "released": tag.released,
         "reference": tag.reference.value if tag.reference else None,
         "kind": tag.kind,
     }
-    status_text = "OK" if tag.allowed else "BAD"
+    status_text = "OK" if allowed else "BAD"
     color_word = (tag.color or "").upper()
     notify_async(f"RFID {tag.label_id} {status_text}".strip(), f"{rfid} {color_word}".strip())
     return result

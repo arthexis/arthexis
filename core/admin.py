@@ -2287,6 +2287,7 @@ class RFIDResource(resources.ModelResource):
             "rfid",
             "custom_label",
             "reference",
+            "external_command",
             "allowed",
             "color",
             "kind",
