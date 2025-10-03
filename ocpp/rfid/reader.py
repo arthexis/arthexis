@@ -116,18 +116,40 @@ def read_rfid(
                         created=created,
                         kind=kind,
                     )
-                    if tag.kind == RFID.CLASSIC and time.time() < _deep_read_until:
+                    deep_read_active = (
+                        tag.kind == RFID.CLASSIC and time.time() < _deep_read_until
+                    )
+                    if deep_read_active:
+                        keys = {}
+                        if hasattr(tag, "key_a"):
+                            keys["a"] = getattr(tag, "key_a") or ""
+                            keys["a_verified"] = bool(
+                                getattr(tag, "key_a_verified", False)
+                            )
+                        if hasattr(tag, "key_b"):
+                            keys["b"] = getattr(tag, "key_b") or ""
+                            keys["b_verified"] = bool(
+                                getattr(tag, "key_b_verified", False)
+                            )
+                        if keys:
+                            result["keys"] = keys
+                        result["deep_read"] = True
                         dump = []
                         default_key = [0xFF] * 6
                         for block in range(64):
                             try:
+                                used_key = None
                                 status = mfrc.MFRC522_Auth(
                                     mfrc.PICC_AUTHENT1A, block, default_key, uid
                                 )
+                                if status == mfrc.MI_OK:
+                                    used_key = "A"
                                 if status != mfrc.MI_OK:
                                     status = mfrc.MFRC522_Auth(
                                         mfrc.PICC_AUTHENT1B, block, default_key, uid
                                     )
+                                    if status == mfrc.MI_OK:
+                                        used_key = "B"
                                 if status == mfrc.MI_OK:
                                     read_status = mfrc.MFRC522_Read(block)
                                     if isinstance(read_status, tuple):
@@ -135,7 +157,10 @@ def read_rfid(
                                     else:
                                         r, data = (mfrc.MI_OK, read_status)
                                     if r == mfrc.MI_OK and data is not None:
-                                        dump.append({"block": block, "data": data})
+                                        entry = {"block": block, "data": data}
+                                        if used_key:
+                                            entry["key"] = used_key
+                                        dump.append(entry)
                             except Exception:
                                 continue
                         result["dump"] = dump

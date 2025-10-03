@@ -55,6 +55,23 @@
       <div class="field"><span class="label">Released:</span><span class="value" id="{{ prefix }}-released"></span></div>
       <div class="field"><span class="label">Reference:</span><span class="value" id="{{ prefix }}-reference"></span></div>
     {% endif %}
+    {% if request.user.is_staff %}
+      <div id="{{ prefix }}-deep-details" class="deep-read-details" style="display:none;">
+        <h3>Deep Read Details</h3>
+        <div class="deep-read-keys">
+          <div class="deep-read-key">
+            <span class="label">Key A:</span>
+            <span class="value" id="{{ prefix }}-key-a"></span>
+          </div>
+          <div class="deep-read-key">
+            <span class="label">Key B:</span>
+            <span class="value" id="{{ prefix }}-key-b"></span>
+          </div>
+        </div>
+        <p class="deep-read-summary" id="{{ prefix }}-deep-status"></p>
+        <ul id="{{ prefix }}-deep-blocks" class="deep-read-blocks"></ul>
+      </div>
+    {% endif %}
   {% endif %}
 </div>
 <style>
@@ -168,6 +185,54 @@
   margin-top: 0.75em;
   color: var(--rfid-row-text);
 }
+#{{ prefix }}-scanner .deep-read-details {
+  margin-top: 1.5em;
+  padding: 1em 1.25em;
+  border: 1px solid var(--rfid-table-border);
+  border-radius: 0.5rem;
+  background-color: var(--rfid-row-alt-bg);
+  color: var(--rfid-row-text);
+}
+#{{ prefix }}-scanner .deep-read-details h3 {
+  margin: 0 0 0.75em;
+  font-size: 1.1em;
+}
+#{{ prefix }}-scanner .deep-read-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75em;
+  margin: 0 0 0.75em;
+}
+#{{ prefix }}-scanner .deep-read-key {
+  display: flex;
+  gap: 0.5em;
+  align-items: baseline;
+}
+#{{ prefix }}-scanner .deep-read-key .label {
+  width: auto;
+  font-weight: 600;
+}
+#{{ prefix }}-scanner .deep-read-key .value {
+  font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.95em;
+}
+#{{ prefix }}-scanner .deep-read-summary {
+  margin: 0 0 0.75em;
+  font-size: 0.95em;
+}
+#{{ prefix }}-scanner .deep-read-blocks {
+  margin: 0;
+  padding-left: 1.25em;
+  list-style: disc;
+  font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9em;
+}
+#{{ prefix }}-scanner .deep-read-blocks li {
+  margin-bottom: 0.35em;
+}
+#{{ prefix }}-scanner .deep-read-blocks li:last-child {
+  margin-bottom: 0;
+}
 #{{ prefix }}-status {
   font-size: 1.2em;
   margin-bottom: 1em;
@@ -187,6 +252,11 @@
   const deepBtn = document.getElementById('{{ prefix }}-deep-read');
   const configureEl = document.getElementById('{{ prefix }}-configure');
   const modeToggleBtn = document.getElementById('{{ prefix }}-mode-toggle');
+  const deepDetailsEl = document.getElementById('{{ prefix }}-deep-details');
+  const keyAEl = document.getElementById('{{ prefix }}-key-a');
+  const keyBEl = document.getElementById('{{ prefix }}-key-b');
+  const deepBlocksEl = document.getElementById('{{ prefix }}-deep-blocks');
+  const deepStatusEl = document.getElementById('{{ prefix }}-deep-status');
   const adminTemplate = '{{ admin_change_url_template|default:""|escapejs }}';
   const tableMode = {% if table_mode %}true{% else %}false{% endif %};
 
@@ -218,6 +288,127 @@
       return '';
     }
     return value ? 'Yes' : 'No';
+  }
+
+  function normalizeKeyValue(value){
+    if(typeof value === 'string'){
+      return value.trim().toUpperCase();
+    }
+    if(value === undefined || value === null){
+      return '';
+    }
+    return String(value);
+  }
+
+  function formatKeyText(value, verified){
+    const normalized = normalizeKeyValue(value);
+    if(!normalized){
+      return '';
+    }
+    if(verified === undefined || verified === null){
+      return normalized;
+    }
+    return verified ? `${normalized} (verified)` : `${normalized} (unverified)`;
+  }
+
+  function formatBlockEntry(entry){
+    if(!entry || typeof entry !== 'object'){
+      return null;
+    }
+    const parts = [];
+    if(typeof entry.block === 'number' && Number.isFinite(entry.block)){
+      parts.push(`Block ${entry.block}`);
+    }
+    if(entry.key){
+      parts.push(`Key ${entry.key}`);
+    }
+    let dataText = '';
+    if(Array.isArray(entry.data)){
+      dataText = entry.data
+        .map((value) => {
+          const number = Number(value);
+          if(Number.isFinite(number)){
+            return number.toString(16).padStart(2, '0').toUpperCase();
+          }
+          if(typeof value === 'string' && value){
+            return value.toUpperCase();
+          }
+          return '';
+        })
+        .filter(Boolean)
+        .join(' ');
+    } else if(entry.data !== undefined && entry.data !== null){
+      dataText = String(entry.data);
+    }
+    if(dataText){
+      parts.push(dataText);
+    }
+    if(!parts.length){
+      return null;
+    }
+    return parts.join(' – ');
+  }
+
+  function clearDeepDetails(){
+    if(!deepDetailsEl){
+      return;
+    }
+    deepDetailsEl.style.display = 'none';
+    if(keyAEl){ keyAEl.textContent = ''; }
+    if(keyBEl){ keyBEl.textContent = ''; }
+    if(deepStatusEl){ deepStatusEl.textContent = ''; }
+    if(deepBlocksEl){ deepBlocksEl.innerHTML = ''; }
+  }
+
+  function updateDeepDetails(data){
+    if(!deepDetailsEl || tableMode){
+      return;
+    }
+    const dumpEntries = Array.isArray(data && data.dump) ? data.dump : [];
+    const hasDump = dumpEntries.length > 0;
+    const isDeep = Boolean(data && data.deep_read);
+    if(!isDeep && !hasDump){
+      clearDeepDetails();
+      return;
+    }
+    deepDetailsEl.style.display = 'block';
+    const keys = (data && data.keys) || {};
+    if(keyAEl){
+      const keyAValue = keys.a !== undefined ? keys.a : keys.key_a;
+      const keyAVerified =
+        keys.a_verified !== undefined ? keys.a_verified : keys.key_a_verified;
+      keyAEl.textContent = formatKeyText(keyAValue, keyAVerified);
+    }
+    if(keyBEl){
+      const keyBValue = keys.b !== undefined ? keys.b : keys.key_b;
+      const keyBVerified =
+        keys.b_verified !== undefined ? keys.b_verified : keys.key_b_verified;
+      keyBEl.textContent = formatKeyText(keyBValue, keyBVerified);
+    }
+    if(deepBlocksEl){
+      deepBlocksEl.innerHTML = '';
+      dumpEntries.forEach((entry) => {
+        const text = formatBlockEntry(entry);
+        if(text){
+          const item = document.createElement('li');
+          item.textContent = text;
+          deepBlocksEl.appendChild(item);
+        }
+      });
+      if(!deepBlocksEl.childElementCount){
+        const item = document.createElement('li');
+        item.textContent = 'No readable data blocks.';
+        deepBlocksEl.appendChild(item);
+      }
+    }
+    if(deepStatusEl){
+      if(hasDump){
+        const count = dumpEntries.length;
+        deepStatusEl.textContent = `Discovered ${count} data block${count === 1 ? '' : 's'}.`;
+      } else {
+        deepStatusEl.textContent = 'No data blocks were readable with the current keys.';
+      }
+    }
   }
 
   function validText(data){
@@ -280,6 +471,7 @@
   function showError(message){
     console.error(message);
     const defaultMsg = 'RFID reader not detected. Please connect the reader.';
+    clearDeepDetails();
     if(typeof message === 'string' && message){
       statusEl.textContent = message;
     } else {
@@ -295,6 +487,7 @@
       return;
     }
     if(!data.rfid){
+      clearDeepDetails();
       return;
     }
     const labelValue = data.label_id === undefined || data.label_id === null ? '' : data.label_id;
@@ -318,6 +511,7 @@
       configureEl.href = adminTemplate ? adminTemplate.replace('0', labelValue) : '#';
       configureEl.style.display = 'inline';
     }
+    updateDeepDetails(data);
     const okText = data.allowed === undefined ? '' : (data.allowed ? 'OK' : 'BAD');
     const statusMsg = okText ? `RFID ${labelValue} ${okText}` : `RFID ${labelValue}`;
     statusEl.textContent = data.created ? `Created ${statusMsg}` : statusMsg;
