@@ -4,6 +4,12 @@ Changelog
 Unreleased
 ----------
 
+- bbc2efd1 Add admin action to launch GitHub repository creation (#1957)
+- 063e8859 Add external command validation for RFID tags (#1956)
+- f6015cf8 Add helper to create GitHub repositories (#1954)
+- e76e1275 Add GitHub repository creation action (#1955)
+- f676b864 feat(nodes): auto-detect gway runner feature (#1953)
+- 66407cc4 Add changelog sections and store release notes (#1952)
 - 8ce4825e Allow switch-role to toggle auto-upgrade (#1951)
 - f1d041b0 Display RFID deep read details in scanner (#1949)
 - 1c611add Run gway upgrade after suite updates (#1950)
@@ -331,6 +337,9 @@ v0.1.11 (2025-09-26)
 - 5cd5e1a9 Update supported languages and localized docs (#1631)
 - 702986ed Hide fixture summary after migration approvals (#1630)
 - 5d13c753 Ensure mmdebstrap unshare mode across rpi-image-gen layers (#1628)
+- 248ba818 Add Virtual and Particle node roles
+- d4524bf0 test: cover dist cleanup in build
+- bae58ca7 Add PyPI validation admin action
 
 v0.1.10 (2025-09-21)
 --------------------
@@ -556,6 +565,8 @@ v0.1.10 (2025-09-21)
 - e2afbaef Ensure RFID wiring configuration is enforced (#1390)
 - 2fe0ecf4 Add AP Lead model and public access point mode (#1389)
 - cc8db050 feat: block release approval without PyPI credentials (#1388)
+- 63b1437e fix: persist release progress through reload
+- eb244d43 docs: update features section in README
 
 v0.1.9 (2025-09-17)
 -------------------
@@ -599,10 +610,6 @@ v0.1.9 (2025-09-17)
 - 3ae9f45f Add public view history tracking with admin analytics (#1351)
 - 9a464801 Expand release manager token text areas (#1350)
 - 28b25527 Adjust object tool button padding (#1349)
-
-v0.1.9 (2025-09-15)
--------------------
-
 - 63915233 chore: remove TODO fixtures
 - cf724c25 Adjust release progress controls and skip redundant version commit (#1348)
 - b0f16d3b Hide stale publish logs until release start (#1347)
@@ -682,10 +689,6 @@ v0.1.9 (2025-09-15)
 - 7488e630 chore: remove user address admin field
 - 67f94b2f fix: restore cable size and conduit fill fixtures
 - 38e7051c feat: allow aborting publish process
-
-v0.1.9 (2025-09-13)
--------------------
-
 - 82d46056 chore: ignore SQLite transient files
 - a9ff53ea Handle non-UTF user fixtures
 - 43ac75c3 Use natural keys for module and landing fixtures
@@ -884,10 +887,6 @@ v0.1.9 (2025-09-13)
 - 7fe6a2cf Patch UserDatum mixin globally and test entity inheritance
 - d0f11e65 feat: add release manager credential test
 - 1c7b9eeb Add check flag for switch-role script
-
-v0.1.9 (2025-09-10)
--------------------
-
 - 84de5410 feat: require sudo for reset-screen
 - 1a5eddb9 Add install.bat for Windows
 - fb590a08 fix: enable Raspberry Pi screen
@@ -928,6 +927,7 @@ v0.1.9 (2025-09-10)
 - 0d2c84e9 Configure static files collection
 - b828cf9a Add RFID energy consumption report
 - ee132274 Track invite email send status
+- 80f96da2 feat: auto-commit fixture changes during release
 
 v0.1.8 (2025-09-05)
 -------------------
@@ -956,314 +956,6 @@ v0.1.8 (2025-09-05)
 - eca4d823 Simplify operation effect field
 - 9d3cb09e Set is_published only after successful PyPI publish
 - 6f4ca69a refactor: drop revision tracking from release
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-- 0be25756 refactor: simplify release promotion
-
-v0.1.7 (2025-09-04)
--------------------
-
-
-v0.1.7 (2025-09-04)
--------------------
-
-- ba9bb8b6 fix: avoid merge commit prompts
-- dfb3eb28 feat: rebase release branch before merge
-- 754a697f fix: merge release branch without fast-forward
-- 6912be3a Write fixture hash during env refresh
-- d7940921 fix: avoid checking out missing fixtures hash
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-- 21010340 Skip fixture checks during migration squash
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-- 43cf2a90 restore fixture hash after env refresh
-- 07c27eae Ignore MD5 checksum files and handle missing fixture hash
-- 0a9b7465 Preserve unresolved sigils and log resolution errors
-- 851d2f07 fix: improve release restart and migration squashing
-- 6c06a419 feat: add fixture application check
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-
-v0.1.7 (2025-09-03)
--------------------
-
-- 47ad15bb feat: allow release retry
-- eaec76b1 chore: restore log placeholders
-
-v0.1.11 (2025-09-03)
---------------------
-
-
-v0.1.11 (2025-09-03)
---------------------
-
-
-v0.1.11 (2025-09-03)
---------------------
-
-
-v0.1.11 (2025-09-03)
---------------------
-
-
-v0.1.11 (2025-09-03)
---------------------
-
-
-v0.1.11 (2025-09-03)
---------------------
-
-
-v0.1.11 (2025-09-03)
---------------------
-
-- 248ba818 Add Virtual and Particle node roles
-- d4524bf0 test: cover dist cleanup in build
-- bae58ca7 Add PyPI validation admin action
-
-v0.1.10 (2025-09-03)
---------------------
-
-- 63b1437e fix: persist release progress through reload
-
-v0.1.10 (2025-09-03)
---------------------
-
-
-v0.1.10 (2025-09-03)
---------------------
-
-
-v0.1.10 (2025-09-03)
---------------------
-
-- eb244d43 docs: update features section in README
-
-v0.1.9 (2025-09-03)
--------------------
-
-
-v0.1.9 (2025-09-03)
--------------------
-
-
-v0.1.9 (2025-09-03)
--------------------
-
-
-v0.1.9 (2025-09-03)
--------------------
-
-- 80f96da2 feat: auto-commit fixture changes during release
-
-v0.1.8 (2025-09-03)
--------------------
-
 - 18934039 test: ensure VERSION updated during publish
 - b9d88c7e fix(core): remove duplicate initial migration
 - 9d7e95b6 Handle closed connection and remove test warning
@@ -1273,9 +965,23 @@ v0.1.8 (2025-09-03)
 - 08b35b5c fix: rebase before pushing release metadata
 - f9ab1d04 chore: update release metadata for v0.1.7
 
-v0.1.7 (2025-09-02)
+v0.1.7 (2025-09-04)
 -------------------
 
+- 0be25756 refactor: simplify release promotion
+- ba9bb8b6 fix: avoid merge commit prompts
+- dfb3eb28 feat: rebase release branch before merge
+- 754a697f fix: merge release branch without fast-forward
+- 6912be3a Write fixture hash during env refresh
+- d7940921 fix: avoid checking out missing fixtures hash
+- 21010340 Skip fixture checks during migration squash
+- 43cf2a90 restore fixture hash after env refresh
+- 07c27eae Ignore MD5 checksum files and handle missing fixture hash
+- 0a9b7465 Preserve unresolved sigils and log resolution errors
+- 851d2f07 fix: improve release restart and migration squashing
+- 6c06a419 feat: add fixture application check
+- 47ad15bb feat: allow release retry
+- eaec76b1 chore: restore log placeholders
 - f44c3f87 Delay release fixture until commit
 - d25ba8cd Add app config overrides
 - 7dce0e2f Update VERSION and enforce sync with releases
