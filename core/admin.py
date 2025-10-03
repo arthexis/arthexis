@@ -517,6 +517,7 @@ class PackageRepositoryForm(forms.Form):
 
 @admin.register(Package)
 class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
+    actions = ["create_repository_bulk_action"]
     list_display = (
         "name",
         "description",
@@ -597,6 +598,21 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
     prepare_next_release_action.label = "Prepare next Release"
     prepare_next_release_action.short_description = "Prepare next release"
+
+    @admin.action(description=_("Create GitHub repository"))
+    def create_repository_bulk_action(self, request, queryset):
+        selected = list(queryset[:2])
+        if len(selected) != 1:
+            self.message_user(
+                request,
+                _("Select exactly one package to create a GitHub repository."),
+                messages.WARNING,
+            )
+            return None
+
+        package = selected[0]
+        url = reverse("admin:core_package_create_repository", args=[package.pk])
+        return redirect(url)
 
     @staticmethod
     def _slug_from_repository_url(repository_url: str) -> str:

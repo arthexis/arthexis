@@ -73,3 +73,36 @@ class PackageAdminRepositoryTests(TestCase):
         self.assertTrue(
             any("GitHub repository creation failed" in str(message) for message in messages)
         )
+
+    def test_admin_action_redirects_to_repository_form(self):
+        url = reverse("admin:core_package_changelist")
+        response = self.client.post(
+            url,
+            {
+                "action": "create_repository_bulk_action",
+                "_selected_action": [str(self.package.pk)],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response["Location"],
+            reverse("admin:core_package_create_repository", args=[self.package.pk]),
+        )
+
+    def test_admin_action_requires_single_selection(self):
+        other = Package.objects.create(name="other")
+        url = reverse("admin:core_package_changelist")
+        response = self.client.post(
+            url,
+            {
+                "action": "create_repository_bulk_action",
+                "_selected_action": [str(self.package.pk), str(other.pk)],
+            },
+            follow=True,
+        )
+
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(
+            any("Select exactly one package" in str(message) for message in messages)
+        )
