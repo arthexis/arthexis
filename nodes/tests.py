@@ -69,7 +69,7 @@ class NodeBadgeColorTests(TestCase):
         self.constellation, _ = NodeRole.objects.get_or_create(name="Constellation")
         self.control, _ = NodeRole.objects.get_or_create(name="Control")
 
-    def test_constellation_role_defaults_to_goldenrod(self):
+    def test_constellation_role_defaults_to_red(self):
         node = Node.objects.create(
             hostname="constellation",
             address="10.1.0.1",
@@ -77,7 +77,7 @@ class NodeBadgeColorTests(TestCase):
             mac_address="00:aa:bb:cc:dd:01",
             role=self.constellation,
         )
-        self.assertEqual(node.badge_color, "#daa520")
+        self.assertEqual(node.badge_color, "#dc3545")
 
     def test_control_role_defaults_to_deep_purple(self):
         node = Node.objects.create(

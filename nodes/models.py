@@ -180,7 +180,7 @@ class Node(Entity):
 
     DEFAULT_BADGE_COLOR = "#28a745"
     ROLE_BADGE_COLORS = {
-        "Constellation": "#daa520",  # goldenrod
+        "Constellation": "#dc3545",  # red
         "Control": "#673ab7",  # deep purple
     }
 
