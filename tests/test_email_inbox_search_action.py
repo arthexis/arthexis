@@ -27,21 +27,32 @@ class DummyIMAPSearch:
         pass
 
     def select(self, mailbox):
-        pass
+        return "OK", [b"1", b"2"]
 
     def search(self, charset, *criteria):
         subj = frm = txt = None
         i = 0
         while i < len(criteria):
             key = criteria[i]
+            if isinstance(key, bytes):
+                key = key.decode("utf-8", errors="ignore")
             if key == "SUBJECT":
-                subj = criteria[i + 1].strip('"')
+                value = criteria[i + 1]
+                if isinstance(value, bytes):
+                    value = value.decode("utf-8", errors="ignore")
+                subj = value.strip('"')
                 i += 2
             elif key == "FROM":
-                frm = criteria[i + 1].strip('"')
+                value = criteria[i + 1]
+                if isinstance(value, bytes):
+                    value = value.decode("utf-8", errors="ignore")
+                frm = value.strip('"')
                 i += 2
             elif key == "TEXT":
-                txt = criteria[i + 1].strip('"')
+                value = criteria[i + 1]
+                if isinstance(value, bytes):
+                    value = value.decode("utf-8", errors="ignore")
+                txt = value.strip('"')
                 i += 2
             else:
                 i += 1

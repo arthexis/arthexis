@@ -756,6 +756,8 @@ class EmailInbox(Profile):
                 return True
             return needle.lower() in value.lower()
 
+        from email.header import decode_header
+
         def _get_body(msg):
             if msg.is_multipart():
                 for part in msg.walk():
@@ -770,6 +772,25 @@ class EmailInbox(Profile):
                 return ""
             charset = msg.get_content_charset() or "utf-8"
             return msg.get_payload(decode=True).decode(charset, errors="ignore")
+
+        def _decode_header_value(value):
+            if not value:
+                return ""
+            if isinstance(value, bytes):
+                value = value.decode("utf-8", errors="ignore")
+            try:
+                parts = decode_header(value)
+            except Exception:
+                return value if isinstance(value, str) else ""
+            decoded = []
+            for text, encoding in parts:
+                if isinstance(text, bytes):
+                    decoded.append(
+                        text.decode(encoding or "utf-8", errors="ignore")
+                    )
+                else:
+                    decoded.append(text)
+            return "".join(decoded)
 
         if self.protocol == self.IMAP:
             import imaplib
@@ -803,6 +824,9 @@ class EmailInbox(Profile):
                     criteria = []
                     charset = None
 
+                    def _quote_bytes(raw: bytes) -> bytes:
+                        return b'"' + raw.replace(b"\\", b"\\\\").replace(b'"', b'\\"') + b'"'
+
                     def _append(term: str, value: str):
                         nonlocal charset
                         if not value:
@@ -812,7 +836,16 @@ class EmailInbox(Profile):
                             encoded_value = value
                         except UnicodeEncodeError:
                             charset = charset or "UTF-8"
-                            encoded_value = value.encode("utf-8")
+                            encoded_value = _quote_bytes(value.encode("utf-8"))
+                        else:
+                            # Quote ASCII strings only when they include whitespace to
+                            # avoid breaking atoms while keeping backward-compatible
+                            # behaviour for simple searches.
+                            if any(ch.isspace() for ch in value):
+                                encoded_value = value.replace("\\", "\\\\").replace(
+                                    '"', '\\"'
+                                )
+                                encoded_value = f'"{encoded_value}"'
                         criteria.extend([term, encoded_value])
 
                     _append("SUBJECT", subject)
@@ -838,8 +871,8 @@ class EmailInbox(Profile):
                         continue
                     msg = email.message_from_bytes(msg_data[0][1])
                     body_text = _get_body(msg)
-                    subj_value = msg.get("Subject", "")
-                    from_value = msg.get("From", "")
+                    subj_value = _decode_header_value(msg.get("Subject", ""))
+                    from_value = _decode_header_value(msg.get("From", ""))
                     if not (
                         _matches(subj_value, subject, subject_regex)
                         and _matches(from_value, from_address, sender_regex)
@@ -878,8 +911,8 @@ class EmailInbox(Profile):
         for i in range(count, 0, -1):
             resp, lines, octets = conn.retr(i)
             msg = email.message_from_bytes(b"\n".join(lines))
-            subj = msg.get("Subject", "")
-            frm = msg.get("From", "")
+            subj = _decode_header_value(msg.get("Subject", ""))
+            frm = _decode_header_value(msg.get("From", ""))
             body_text = _get_body(msg)
             if not (
                 _matches(subj, subject, subject_regex)
