@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,8 +20,25 @@ from django.utils import timezone
 from django.utils.formats import date_format
 from django.utils.translation import gettext_lazy as _
 
-from core.auto_upgrade import AUTO_UPGRADE_TASK_NAME
+from core.auto_upgrade import AUTO_UPGRADE_TASK_NAME, AUTO_UPGRADE_TASK_PATH
 from utils import revision
+
+
+AUTO_UPGRADE_LOCK_NAME = "auto_upgrade.lck"
+AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
+AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
+
+
+def _auto_upgrade_mode_file(base_dir: Path) -> Path:
+    return base_dir / "locks" / AUTO_UPGRADE_LOCK_NAME
+
+
+def _auto_upgrade_skip_file(base_dir: Path) -> Path:
+    return base_dir / "locks" / AUTO_UPGRADE_SKIP_LOCK_NAME
+
+
+def _auto_upgrade_log_file(base_dir: Path) -> Path:
+    return base_dir / "logs" / AUTO_UPGRADE_LOG_NAME
 
 
 @dataclass(frozen=True)
@@ -116,6 +134,213 @@ def _auto_upgrade_next_check() -> str:
 
     next_run = now + remaining
     return _format_timestamp(next_run)
+
+
+def _read_auto_upgrade_mode(base_dir: Path) -> dict[str, object]:
+    """Return metadata describing the configured auto-upgrade mode."""
+
+    mode_file = _auto_upgrade_mode_file(base_dir)
+    info: dict[str, object] = {
+        "mode": "version",
+        "enabled": False,
+        "lock_exists": mode_file.exists(),
+        "read_error": False,
+    }
+
+    if not info["lock_exists"]:
+        return info
+
+    try:
+        raw_value = mode_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        info["read_error"] = True
+        return info
+
+    mode = raw_value or "version"
+    info["mode"] = mode
+    info["enabled"] = True
+    return info
+
+
+def _load_auto_upgrade_skip_revisions(base_dir: Path) -> list[str]:
+    """Return a sorted list of revisions blocked from auto-upgrade."""
+
+    skip_file = _auto_upgrade_skip_file(base_dir)
+    try:
+        lines = skip_file.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return []
+    except OSError:
+        return []
+
+    revisions = {line.strip() for line in lines if line.strip()}
+    return sorted(revisions)
+
+
+def _load_auto_upgrade_log_entries(
+    base_dir: Path, *, limit: int = 25
+) -> dict[str, object]:
+    """Return the most recent auto-upgrade log entries."""
+
+    log_file = _auto_upgrade_log_file(base_dir)
+    result: dict[str, object] = {
+        "path": log_file,
+        "entries": [],
+        "error": "",
+    }
+
+    try:
+        with log_file.open("r", encoding="utf-8") as handle:
+            lines = deque((line.rstrip("\n") for line in handle), maxlen=limit)
+    except FileNotFoundError:
+        return result
+    except OSError:
+        result["error"] = str(
+            _("The auto-upgrade log could not be read."))
+        return result
+
+    entries: list[dict[str, str]] = []
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        timestamp_str, _, message = line.partition(" ")
+        message = message.strip()
+        timestamp: datetime | None = None
+        try:
+            timestamp = datetime.fromisoformat(timestamp_str)
+        except ValueError:
+            timestamp = None
+        if not message:
+            message = timestamp_str
+        if timestamp is not None:
+            timestamp_display = _format_timestamp(timestamp)
+        else:
+            timestamp_display = timestamp_str
+        entries.append({
+            "timestamp": timestamp_display,
+            "message": message,
+        })
+
+    result["entries"] = entries
+    return result
+
+
+def _get_auto_upgrade_periodic_task():
+    """Return the configured auto-upgrade periodic task, if available."""
+
+    try:  # pragma: no cover - optional dependency failures
+        from django_celery_beat.models import PeriodicTask
+    except Exception:
+        return None, False, str(_("django-celery-beat is not installed or configured."))
+
+    try:
+        task = (
+            PeriodicTask.objects.select_related(
+                "interval", "crontab", "solar", "clocked"
+            )
+            .only(
+                "enabled",
+                "last_run_at",
+                "start_time",
+                "one_off",
+                "total_run_count",
+                "queue",
+                "expires",
+                "task",
+                "name",
+                "description",
+            )
+            .get(name=AUTO_UPGRADE_TASK_NAME)
+        )
+    except PeriodicTask.DoesNotExist:
+        return None, True, ""
+    except Exception:
+        return None, False, str(_("Auto-upgrade schedule could not be loaded."))
+
+    return task, True, ""
+
+
+def _load_auto_upgrade_schedule() -> dict[str, object]:
+    """Return normalized auto-upgrade scheduling metadata."""
+
+    task, available, error = _get_auto_upgrade_periodic_task()
+    info: dict[str, object] = {
+        "available": available,
+        "configured": bool(task),
+        "enabled": getattr(task, "enabled", False) if task else False,
+        "one_off": getattr(task, "one_off", False) if task else False,
+        "queue": getattr(task, "queue", "") or "",
+        "schedule": "",
+        "start_time": "",
+        "last_run_at": "",
+        "next_run": "",
+        "total_run_count": 0,
+        "description": getattr(task, "description", "") or "",
+        "expires": "",
+        "task": getattr(task, "task", "") or "",
+        "name": getattr(task, "name", AUTO_UPGRADE_TASK_NAME) or AUTO_UPGRADE_TASK_NAME,
+        "error": error,
+    }
+
+    if not task:
+        return info
+
+    info["start_time"] = _format_timestamp(getattr(task, "start_time", None))
+    info["last_run_at"] = _format_timestamp(getattr(task, "last_run_at", None))
+    info["expires"] = _format_timestamp(getattr(task, "expires", None))
+    try:
+        run_count = int(getattr(task, "total_run_count", 0) or 0)
+    except (TypeError, ValueError):
+        run_count = 0
+    info["total_run_count"] = run_count
+
+    try:
+        schedule_obj = task.schedule
+    except Exception:  # pragma: no cover - schedule property may raise
+        schedule_obj = None
+
+    if schedule_obj is not None:
+        try:
+            info["schedule"] = str(schedule_obj)
+        except Exception:  # pragma: no cover - schedule string conversion failed
+            info["schedule"] = ""
+
+    info["next_run"] = _auto_upgrade_next_check()
+    return info
+
+
+def _build_auto_upgrade_report(*, limit: int = 25) -> dict[str, object]:
+    """Assemble the composite auto-upgrade report for the admin view."""
+
+    base_dir = Path(settings.BASE_DIR)
+    mode_info = _read_auto_upgrade_mode(base_dir)
+    log_info = _load_auto_upgrade_log_entries(base_dir, limit=limit)
+    skip_revisions = _load_auto_upgrade_skip_revisions(base_dir)
+    schedule_info = _load_auto_upgrade_schedule()
+
+    mode_value = str(mode_info.get("mode", "version"))
+    is_latest = mode_value.lower() == "latest"
+
+    settings_info = {
+        "enabled": bool(mode_info.get("enabled", False)),
+        "mode": mode_value,
+        "is_latest": is_latest,
+        "lock_exists": bool(mode_info.get("lock_exists", False)),
+        "read_error": bool(mode_info.get("read_error", False)),
+        "mode_file": str(_auto_upgrade_mode_file(base_dir)),
+        "skip_revisions": skip_revisions,
+        "task_name": AUTO_UPGRADE_TASK_NAME,
+        "task_path": AUTO_UPGRADE_TASK_PATH,
+        "log_path": str(log_info.get("path")),
+    }
+
+    return {
+        "settings": settings_info,
+        "schedule": schedule_info,
+        "log_entries": log_info.get("entries", []),
+        "log_error": str(log_info.get("error", "")),
+    }
 
 
 def _resolve_auto_upgrade_namespace(key: str) -> str | None:
@@ -474,6 +699,7 @@ def _system_view(request):
             "title": _("System"),
             "info": info,
             "system_fields": _build_system_fields(info),
+            "auto_upgrade_report": _build_auto_upgrade_report(),
         }
     )
     return TemplateResponse(request, "admin/system.html", context)
@@ -491,3 +717,4 @@ def patch_admin_system_view() -> None:
         return custom + urls
 
     admin.site.get_urls = get_urls
+

@@ -18,6 +18,157 @@
       <p class="help">{% trans "Celery support is not enabled on this node." %}</p>
     {% endif %}
   </div>
+  <div class="module upgrade-report">
+    <h2>{% trans "Upgrade Report" %}</h2>
+    {% with report=auto_upgrade_report %}
+    <div class="upgrade-report-section">
+      <h3>{% trans "Settings" %}</h3>
+      <dl>
+        <dt>{% trans "Auto-upgrade status" %}</dt>
+        <dd>
+          {% if report.settings.enabled %}
+            {% if report.settings.is_latest %}
+              {% trans "Enabled (tracking the latest available revision)" %}
+            {% else %}
+              {% trans "Enabled (tracking release versions)" %}
+            {% endif %}
+          {% else %}
+            {% if report.settings.lock_exists %}
+              {% trans "Disabled (mode file present but unreadable)" %}
+            {% else %}
+              {% trans "Disabled" %}
+            {% endif %}
+          {% endif %}
+        </dd>
+        <dt>{% trans "Mode" %}</dt>
+        <dd><code>{{ report.settings.mode }}</code></dd>
+        <dt>{% trans "Task" %}</dt>
+        <dd>
+          <code>{{ report.settings.task_name }}</code>
+          {% if report.settings.task_path %}
+            — <code>{{ report.settings.task_path }}</code>
+          {% endif %}
+        </dd>
+        <dt>{% trans "Log file" %}</dt>
+        <dd><code>{{ report.settings.log_path }}</code></dd>
+        <dt>{% trans "Blocked revisions" %}</dt>
+        <dd>
+          {% if report.settings.skip_revisions %}
+          <ul>
+            {% for revision in report.settings.skip_revisions %}
+            <li><code>{{ revision }}</code></li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <em>{% trans "No revisions are currently blocked." %}</em>
+          {% endif %}
+        </dd>
+      </dl>
+      {% if report.settings.read_error %}
+        <p class="errornote">{% trans "The auto-upgrade mode could not be read; verify the lock file permissions." %}</p>
+      {% endif %}
+    </div>
+    <div class="upgrade-report-section">
+      <h3>{% trans "Schedule" %}</h3>
+      {% if report.schedule.available %}
+        {% if report.schedule.configured %}
+        <table class="table table-striped">
+          <tbody>
+            <tr>
+              <th scope="row">{% trans "Enabled" %}</th>
+              <td>
+                {% if report.schedule.enabled %}
+                  {% trans "Yes" %}
+                {% else %}
+                  {% trans "No" %}
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "One-off" %}</th>
+              <td>
+                {% if report.schedule.one_off %}
+                  {% trans "Yes" %}
+                {% else %}
+                  {% trans "No" %}
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Queue" %}</th>
+              <td>{{ report.schedule.queue|default:"" }}</td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Schedule" %}</th>
+              <td>{{ report.schedule.schedule|default:"" }}</td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Next run" %}</th>
+              <td>{{ report.schedule.next_run|default:"" }}</td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Last run" %}</th>
+              <td>{{ report.schedule.last_run_at|default:"" }}</td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Start time" %}</th>
+              <td>{{ report.schedule.start_time|default:"" }}</td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Expires" %}</th>
+              <td>{{ report.schedule.expires|default:"" }}</td>
+            </tr>
+            <tr>
+              <th scope="row">{% trans "Run count" %}</th>
+              <td>{{ report.schedule.total_run_count }}</td>
+            </tr>
+            {% if report.schedule.description %}
+            <tr>
+              <th scope="row">{% trans "Description" %}</th>
+              <td>{{ report.schedule.description }}</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+        {% else %}
+          <p class="help">{% trans "The auto-upgrade periodic task has not been created yet." %}</p>
+        {% endif %}
+      {% else %}
+        {% if report.schedule.error %}
+          <p class="help">{{ report.schedule.error }}</p>
+        {% else %}
+          <p class="help">{% trans "Scheduling information is unavailable." %}</p>
+        {% endif %}
+      {% endif %}
+    </div>
+    <div class="upgrade-report-section">
+      <h3>{% trans "Recent activity" %}</h3>
+      {% if report.log_entries %}
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th scope="col">{% trans "Timestamp" %}</th>
+            <th scope="col">{% trans "Message" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in report.log_entries %}
+          <tr>
+            <td>{{ entry.timestamp|default:"" }}</td>
+            <td><code>{{ entry.message }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+        <p class="help">{% trans "No auto-upgrade activity has been recorded yet." %}</p>
+      {% endif %}
+      {% if report.log_error %}
+        <p class="errornote">{{ report.log_error }}</p>
+      {% endif %}
+    </div>
+    {% endwith %}
+  </div>
   <div>
     <table class="system-info-table table table-striped">
       <thead>
