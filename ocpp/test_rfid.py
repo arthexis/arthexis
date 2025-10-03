@@ -479,6 +479,7 @@ class ScannerTemplateTests(TestCase):
         self.assertContains(resp, 'id="rfid-rfid"')
         self.assertContains(resp, 'id="rfid-released"')
         self.assertContains(resp, 'id="rfid-reference"')
+        self.assertContains(resp, 'id="rfid-deep-details"')
 
     def test_basic_fields_for_authenticated_user(self):
         self.client.logout()
@@ -489,6 +490,7 @@ class ScannerTemplateTests(TestCase):
         self.assertNotContains(resp, 'id="rfid-rfid"')
         self.assertNotContains(resp, 'id="rfid-released"')
         self.assertNotContains(resp, 'id="rfid-reference"')
+        self.assertNotContains(resp, 'id="rfid-deep-details"')
         self.assertNotContains(resp, 'Restart &amp; Test Scanner')
 
     def test_deep_read_button_for_staff(self):
@@ -593,13 +595,23 @@ class DeepReadAuthTests(TestCase):
             released=False,
             reference=None,
         )
+        tag.key_a = "A1A2A3A4A5A6"
+        tag.key_b = "B1B2B3B4B5B6"
+        tag.key_a_verified = True
+        tag.key_b_verified = False
         mock_get.return_value = (tag, False)
         reader = self.MockReader()
         enable_deep_read(60)
-        read_rfid(mfrc=reader, cleanup=False)
+        result = read_rfid(mfrc=reader, cleanup=False)
         self.assertGreaterEqual(len(reader.auth_calls), 2)
         self.assertEqual(reader.auth_calls[0], reader.PICC_AUTHENT1A)
         self.assertEqual(reader.auth_calls[1], reader.PICC_AUTHENT1B)
+        self.assertTrue(result.get("deep_read"))
+        self.assertIn("dump", result)
+        self.assertIn("keys", result)
+        self.assertEqual(result["keys"].get("a"), "A1A2A3A4A5A6")
+        self.assertFalse(result["keys"].get("b_verified"))
+        self.assertTrue(any(entry.get("key") == "B" for entry in result["dump"]))
 
 
 class RFIDWiringConfigTests(SimpleTestCase):
