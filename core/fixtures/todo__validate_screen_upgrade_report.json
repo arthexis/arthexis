@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Upgrade Report",
+      "url": "/admin/system/upgrade-report/",
+      "request_details": "Ensure the upgrade report view renders the settings, schedule, and recent activity sections using live upgrade data."
+    }
+  }
+]

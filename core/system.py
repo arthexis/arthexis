@@ -699,10 +699,20 @@ def _system_view(request):
             "title": _("System"),
             "info": info,
             "system_fields": _build_system_fields(info),
-            "auto_upgrade_report": _build_auto_upgrade_report(),
         }
     )
     return TemplateResponse(request, "admin/system.html", context)
+
+
+def _system_upgrade_report_view(request):
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "title": _("Upgrade Report"),
+            "auto_upgrade_report": _build_auto_upgrade_report(),
+        }
+    )
+    return TemplateResponse(request, "admin/system_upgrade_report.html", context)
 
 
 def patch_admin_system_view() -> None:
@@ -713,6 +723,11 @@ def patch_admin_system_view() -> None:
         urls = original_get_urls()
         custom = [
             path("system/", admin.site.admin_view(_system_view), name="system"),
+            path(
+                "system/upgrade-report/",
+                admin.site.admin_view(_system_upgrade_report_view),
+                name="system-upgrade-report",
+            ),
         ]
         return custom + urls
 
