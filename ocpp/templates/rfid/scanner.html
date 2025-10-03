@@ -14,11 +14,8 @@
     {% endif %}
   <p id="{{ prefix }}-status">Scanner ready</p>
   <p>
-    {% if request.user.is_authenticated %}
-      <button id="{{ prefix }}-connect-local">Connect Local Scanner</button>
-    {% endif %}
-    <button id="{{ prefix }}-restart-test">Restart &amp; Test Scanner</button>
     {% if request.user.is_staff %}
+      <button id="{{ prefix }}-connect-local">Connect Local Scanner</button>
       <button id="{{ prefix }}-deep-read">Enable Deep Read</button>
       <a id="{{ prefix }}-configure" href="#" style="display:none; margin-left:1em;"></a>
     {% endif %}
@@ -187,7 +184,6 @@
   const releasedEl = document.getElementById('{{ prefix }}-released');
   const referenceEl = document.getElementById('{{ prefix }}-reference');
   const connectBtn = document.getElementById('{{ prefix }}-connect-local');
-  const restartTestBtn = document.getElementById('{{ prefix }}-restart-test');
   const deepBtn = document.getElementById('{{ prefix }}-deep-read');
   const configureEl = document.getElementById('{{ prefix }}-configure');
   const modeToggleBtn = document.getElementById('{{ prefix }}-mode-toggle');
@@ -283,7 +279,7 @@
 
   function showError(message){
     console.error(message);
-    const defaultMsg = 'RFID reader not detected. Please connect the reader and press Restart & Test Scanner.';
+    const defaultMsg = 'RFID reader not detected. Please connect the reader.';
     if(typeof message === 'string' && message){
       statusEl.textContent = message;
     } else {
@@ -508,23 +504,6 @@
     }
   }
 
-  restartTestBtn.addEventListener('click', async () => {
-    try {
-      await fetch('{{ restart_url }}', {method: 'POST'});
-      const resp = await fetch('{{ test_url }}');
-      const data = await resp.json();
-      let msg = '';
-      if(data.error){
-        msg = 'No local scanner detected.';
-      } else if(data.irq_pin !== undefined){
-        msg = `IRQ pin ${data.irq_pin}.`;
-      }
-      statusEl.textContent = msg || 'Test completed';
-      poll();
-    } catch(err) {
-      statusEl.textContent = 'Test failed';
-    }
-  });
   if(deepBtn){
     deepBtn.addEventListener('click', async () => {
       try {

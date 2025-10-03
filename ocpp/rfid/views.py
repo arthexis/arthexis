@@ -5,18 +5,22 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import redirect_to_login
 from django.contrib.admin.views.decorators import staff_member_required
 from pages.utils import landing
 
-from .scanner import scan_sources, restart_sources, test_sources, enable_deep_read_mode
+from .scanner import scan_sources, enable_deep_read_mode
 from .reader import validate_rfid_value
 from .utils import build_mode_toggle
 
 
-@login_required(login_url="pages:login")
 def scan_next(request):
     """Return the next scanned RFID tag or validate a client-provided value."""
 
+    if request.method != "POST" and not request.user.is_authenticated:
+        return redirect_to_login(
+            request.get_full_path(), reverse("pages:login")
+        )
     if request.method == "POST":
         if not request.user.is_authenticated:
             return JsonResponse({"error": "Authentication required"}, status=401)
@@ -29,23 +33,6 @@ def scan_next(request):
         result = validate_rfid_value(rfid, kind=kind)
     else:
         result = scan_sources(request)
-    status = 500 if result.get("error") else 200
-    return JsonResponse(result, status=status)
-
-
-@login_required(login_url="pages:login")
-@require_POST
-def scan_restart(_request):
-    """Restart the RFID scanner."""
-    result = restart_sources()
-    status = 500 if result.get("error") else 200
-    return JsonResponse(result, status=status)
-
-
-@login_required(login_url="pages:login")
-def scan_test(_request):
-    """Report wiring information for the local RFID scanner."""
-    result = test_sources()
     status = 500 if result.get("error") else 200
     return JsonResponse(result, status=status)
 
@@ -67,12 +54,10 @@ def reader(request):
 
     context = {
         "scan_url": reverse("rfid-scan-next"),
-        "restart_url": reverse("rfid-scan-restart"),
-        "test_url": reverse("rfid-scan-test"),
         "table_mode": table_mode,
         "toggle_url": toggle_url,
         "toggle_label": toggle_label,
-        "show_release_info": False,
+        "show_release_info": request.user.is_staff,
     }
     if request.user.is_staff:
         context["admin_change_url_template"] = reverse(

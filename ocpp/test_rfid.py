@@ -137,6 +137,7 @@ class ScanNextViewTests(TestCase):
     def test_scan_next_post_requires_authentication(
         self, mock_validate, mock_site, mock_node
     ):
+        self.client.logout()
         resp = self.client.post(
             reverse("rfid-scan-next"),
             data=json.dumps({"rfid": "ABCD1234"}),
@@ -432,60 +433,6 @@ class RFIDDetectionScriptTests(SimpleTestCase):
         mock_detect.assert_called_once()
 
 
-class RestartViewTests(TestCase):
-    def setUp(self):
-        User = get_user_model()
-        self.user = User.objects.create_user("restart-user", password="pwd")
-        self.client.force_login(self.user)
-
-    @patch("config.middleware.Node.get_local", return_value=None)
-    @patch("config.middleware.get_site")
-    @patch("ocpp.rfid.views.restart_sources", return_value={"status": "restarted"})
-    def test_restart_endpoint(self, mock_restart, mock_site, mock_node):
-        resp = self.client.post(reverse("rfid-scan-restart"))
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json(), {"status": "restarted"})
-        mock_restart.assert_called_once()
-
-    def test_restart_requires_authentication(self):
-        self.client.logout()
-        resp = self.client.post(reverse("rfid-scan-restart"))
-        self.assertEqual(resp.status_code, 302)
-        self.assertIn(reverse("pages:login"), resp.url)
-
-
-class ScanTestViewTests(TestCase):
-    def setUp(self):
-        User = get_user_model()
-        self.user = User.objects.create_user("scan-test-user", password="pwd")
-        self.client.force_login(self.user)
-
-    @patch("config.middleware.Node.get_local", return_value=None)
-    @patch("config.middleware.get_site")
-    @patch("ocpp.rfid.views.test_sources", return_value={"irq_pin": 7})
-    def test_scan_test_success(self, mock_test, mock_site, mock_node):
-        resp = self.client.get(reverse("rfid-scan-test"))
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json(), {"irq_pin": 7})
-
-    @patch("config.middleware.Node.get_local", return_value=None)
-    @patch("config.middleware.get_site")
-    @patch(
-        "ocpp.rfid.views.test_sources",
-        return_value={"error": "no scanner detected"},
-    )
-    def test_scan_test_error(self, mock_test, mock_site, mock_node):
-        resp = self.client.get(reverse("rfid-scan-test"))
-        self.assertEqual(resp.status_code, 500)
-        self.assertEqual(resp.json(), {"error": "no scanner detected"})
-
-    def test_scan_test_requires_authentication(self):
-        self.client.logout()
-        resp = self.client.get(reverse("rfid-scan-test"))
-        self.assertEqual(resp.status_code, 302)
-        self.assertIn(reverse("pages:login"), resp.url)
-
-
 class RFIDLandingTests(TestCase):
     def test_scanner_view_registered_as_landing(self):
         role, _ = NodeRole.objects.get_or_create(name="Terminal")
@@ -514,6 +461,8 @@ class ScannerTemplateTests(TestCase):
         self.client.force_login(staff)
         resp = self.client.get(self.url)
         self.assertContains(resp, 'id="rfid-configure"')
+        self.assertContains(resp, 'id="rfid-connect-local"')
+        self.assertNotContains(resp, 'Restart &amp; Test Scanner')
 
     def test_redirect_for_anonymous(self):
         self.client.logout()
@@ -540,6 +489,7 @@ class ScannerTemplateTests(TestCase):
         self.assertNotContains(resp, 'id="rfid-rfid"')
         self.assertNotContains(resp, 'id="rfid-released"')
         self.assertNotContains(resp, 'id="rfid-reference"')
+        self.assertNotContains(resp, 'Restart &amp; Test Scanner')
 
     def test_deep_read_button_for_staff(self):
         User = get_user_model()
