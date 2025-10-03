@@ -410,5 +410,7 @@ fi
 
 if command -v gway >/dev/null 2>&1; then
   echo "Detected gway command; running gway upgrade..."
-  gway upgrade
+  if ! gway upgrade; then
+    echo "gway upgrade failed; continuing with suite upgrade" >&2
+  fi
 fi
