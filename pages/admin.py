@@ -4,8 +4,6 @@ from django.contrib import admin, messages
 from django.contrib.sites.admin import SiteAdmin as DjangoSiteAdmin
 from django.contrib.sites.models import Site
 from django import forms
-from django.db import models
-from core.widgets import CopyColorWidget
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import path, reverse
 from django.utils.html import format_html
@@ -58,8 +56,7 @@ class SiteBadgeInline(admin.StackedInline):
     model = SiteBadge
     can_delete = False
     extra = 0
-    formfield_overrides = {models.CharField: {"widget": CopyColorWidget}}
-    fields = ("badge_color", "favicon", "landing_override")
+    fields = ("favicon", "landing_override")
 
 
 class SiteForm(forms.ModelForm):
