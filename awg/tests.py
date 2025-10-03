@@ -90,6 +90,28 @@ class AWGCalculatorTests(TestCase):
         self.assertEqual(lead.values["meters"], "10")
         self.assertEqual(lead.user_agent, "tester")
 
+    def test_power_lead_stores_forwarded_for_ip(self):
+        url = reverse("awg:calculator")
+        data = {
+            "meters": "10",
+            "amps": "40",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "1",
+        }
+        self.client.post(
+            url,
+            data,
+            HTTP_X_FORWARDED_FOR="203.0.113.5, 198.51.100.20",
+            REMOTE_ADDR="198.51.100.3",
+        )
+        lead = PowerLead.objects.get()
+        self.assertEqual(lead.ip_address, "203.0.113.5")
+
     def test_no_cable_found(self):
         url = reverse("awg:calculator")
         data = {

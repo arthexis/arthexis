@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import math
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Literal, Optional, Union
@@ -312,6 +313,21 @@ def find_awg(
 @landing(_lazy("AWG Calculator"))
 def calculator(request):
     """Display the AWG calculator form and results using a template."""
+    def _extract_client_ip() -> str | None:
+        forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        candidates = [value.strip() for value in forwarded.split(",") if value.strip()]
+        remote = request.META.get("REMOTE_ADDR", "").strip()
+        if remote:
+            candidates.append(remote)
+
+        for candidate in candidates:
+            try:
+                ipaddress.ip_address(candidate)
+            except ValueError:
+                continue
+            return candidate
+
+        return None
     form_data = request.POST or request.GET
     form = {k: v for k, v in form_data.items() if v not in (None, "", "None")}
     if request.GET:
@@ -336,7 +352,7 @@ def calculator(request):
             path=request.path,
             referer=request.META.get("HTTP_REFERER", ""),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
-            ip_address=request.META.get("REMOTE_ADDR"),
+            ip_address=_extract_client_ip(),
         )
         max_awg = request.POST.get("max_awg") or None
         conduit_field = request.POST.get("conduit")
