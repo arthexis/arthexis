@@ -303,6 +303,69 @@ class ValidateRfidValueTests(SimpleTestCase):
         self.assertEqual(result, {"error": "RFID value is required"})
 
 
+    @patch("ocpp.rfid.reader.timezone.now")
+    @patch("ocpp.rfid.reader.notify_async")
+    @patch("ocpp.rfid.reader.subprocess.run")
+    @patch("ocpp.rfid.reader.RFID.objects.get_or_create")
+    def test_external_command_success(
+        self, mock_get, mock_run, mock_notify, mock_now
+    ):
+        fake_now = object()
+        mock_now.return_value = fake_now
+        tag = MagicMock()
+        tag.pk = 1
+        tag.label_id = 1
+        tag.allowed = True
+        tag.external_command = "echo ok"
+        tag.color = "B"
+        tag.released = False
+        tag.reference = None
+        tag.kind = RFID.CLASSIC
+        mock_get.return_value = (tag, False)
+        mock_run.return_value = types.SimpleNamespace(returncode=0)
+
+        result = validate_rfid_value("abcd1234")
+
+        mock_run.assert_called_once()
+        run_args, run_kwargs = mock_run.call_args
+        self.assertEqual(run_args[0], "echo ok")
+        self.assertTrue(run_kwargs.get("shell"))
+        env = run_kwargs.get("env", {})
+        self.assertEqual(env.get("RFID_VALUE"), "ABCD1234")
+        self.assertEqual(env.get("RFID_LABEL_ID"), "1")
+        mock_notify.assert_called_once_with("RFID 1 OK", "ABCD1234 B")
+        tag.save.assert_called_once_with(update_fields=["last_seen_on"])
+        self.assertTrue(result["allowed"])
+
+    @patch("ocpp.rfid.reader.timezone.now")
+    @patch("ocpp.rfid.reader.notify_async")
+    @patch("ocpp.rfid.reader.subprocess.run")
+    @patch("ocpp.rfid.reader.RFID.objects.get_or_create")
+    def test_external_command_failure_blocks_tag(
+        self, mock_get, mock_run, mock_notify, mock_now
+    ):
+        fake_now = object()
+        mock_now.return_value = fake_now
+        tag = MagicMock()
+        tag.pk = 2
+        tag.label_id = 2
+        tag.allowed = True
+        tag.external_command = "exit 1"
+        tag.color = "G"
+        tag.released = False
+        tag.reference = None
+        tag.kind = RFID.CLASSIC
+        mock_get.return_value = (tag, False)
+        mock_run.return_value = types.SimpleNamespace(returncode=1)
+
+        result = validate_rfid_value("ffff")
+
+        mock_run.assert_called_once()
+        mock_notify.assert_called_once_with("RFID 2 BAD", "FFFF G")
+        tag.save.assert_called_once_with(update_fields=["last_seen_on"])
+        self.assertFalse(result["allowed"])
+
+
 class CardTypeDetectionTests(TestCase):
     def _mock_ntag_reader(self):
         class MockReader:

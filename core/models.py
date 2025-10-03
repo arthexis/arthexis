@@ -1273,6 +1273,11 @@ class RFID(Entity):
     key_a_verified = models.BooleanField(default=False)
     key_b_verified = models.BooleanField(default=False)
     allowed = models.BooleanField(default=True)
+    external_command = models.TextField(
+        default="",
+        blank=True,
+        help_text="Optional command executed during validation.",
+    )
     BLACK = "B"
     WHITE = "W"
     BLUE = "U"
