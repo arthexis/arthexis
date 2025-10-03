@@ -135,6 +135,8 @@ class NodeFeature(Entity):
             return False
         if node.features.filter(pk=self.pk).exists():
             return True
+        if self.slug == "gway-runner":
+            return Node._has_gway_runner()
         if self.slug == "gui-toast":
             from core.notifications import supports_gui_toast
 
@@ -232,11 +234,14 @@ class Node(Entity):
     RPI_CAMERA_BINARIES = ("rpicam-hello", "rpicam-still", "rpicam-vid")
     AP_ROUTER_SSID = "gelectriic-ap"
     NMCLI_TIMEOUT = 5
+    GWAY_RUNNER_COMMAND = "gway"
+    GWAY_RUNNER_CANDIDATES = ("~/.local/bin/gway", "/usr/local/bin/gway")
     AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {
         "gui-toast",
         "rpi-camera",
         "ap-router",
         "ap-public-wifi",
+        "gway-runner",
     }
     MANUAL_FEATURE_SLUGS = {"clipboard-poll", "screenshot-poll"}
 
@@ -658,6 +663,21 @@ class Node(Entity):
                 return True
         return False
 
+    @classmethod
+    def _find_gway_runner_command(cls) -> str | None:
+        command = shutil.which(cls.GWAY_RUNNER_COMMAND)
+        if command:
+            return command
+        for candidate in cls.GWAY_RUNNER_CANDIDATES:
+            expanded = os.path.expanduser(candidate)
+            if os.path.isfile(expanded) and os.access(expanded, os.X_OK):
+                return expanded
+        return None
+
+    @classmethod
+    def _has_gway_runner(cls) -> bool:
+        return cls._find_gway_runner_command() is not None
+
     def refresh_features(self):
         if not self.pk:
             return
@@ -672,6 +692,8 @@ class Node(Entity):
                 detected_slugs.add(slug)
         if self._has_rpi_camera():
             detected_slugs.add("rpi-camera")
+        if self._has_gway_runner():
+            detected_slugs.add("gway-runner")
         public_mode_lock = locks_dir / "public_wifi_mode.lck"
         if self._hosts_gelectriic_ap():
             if public_mode_lock.exists():
