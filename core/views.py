@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 from . import changelog as changelog_utils
 from .models import Product, EnergyAccount, PackageRelease, Todo
-from .models import RFID
+from .models import RFID, WorldSimulator
 
 
 @staff_member_required
@@ -1361,6 +1361,22 @@ def _todo_iframe_url(request, todo: Todo):
         return relative_url or fallback, _final_context(relative_url)
 
     return fallback, _final_context(fallback)
+
+
+@staff_member_required
+def world_simulator_client(request, pk: int):
+    """Render the built-in Evennia client for the requested simulator."""
+
+    simulator = get_object_or_404(
+        WorldSimulator, pk=pk, is_deleted=False
+    )
+    simulator.schedule_watchdog()
+    context = {
+        "simulator": simulator,
+        "client_url": simulator.client_url,
+        "username": request.user.get_username(),
+    }
+    return render(request, "core/world_simulator_client.html", context)
 
 
 @staff_member_required

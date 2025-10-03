@@ -27,7 +27,9 @@ from io import BytesIO
 from django.core.files.base import ContentFile
 import qrcode
 from django.utils import timezone
+from django.utils.text import slugify
 import uuid
+import psutil
 from pathlib import Path
 from django.core import serializers
 from urllib.parse import urlparse
@@ -2799,3 +2801,192 @@ class TOTPDeviceSettings(models.Model):
     class Meta:
         verbose_name = _("Authenticator device settings")
         verbose_name_plural = _("Authenticator device settings")
+
+
+class WorldSimulator(Entity):
+    """Configuration for managing Evennia-based world simulator instances."""
+
+    name = models.CharField(max_length=150, unique=True)
+    slug = models.SlugField(max_length=160, unique=True, blank=True)
+    description = models.TextField(blank=True, default="")
+    base_path = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text=_("Optional absolute path to an existing Evennia game directory."),
+    )
+    host = models.CharField(
+        max_length=255,
+        default="127.0.0.1",
+        help_text=_("Hostname or IP address where the simulator should listen."),
+    )
+    server_port = models.PositiveIntegerField(
+        default=4000,
+        validators=[MinValueValidator(1), MaxValueValidator(65535)],
+        help_text=_("Telnet port exposed by the Evennia server."),
+    )
+    webclient_port = models.PositiveIntegerField(
+        default=4002,
+        validators=[MinValueValidator(1), MaxValueValidator(65535)],
+        help_text=_("Port used by the Evennia web client."),
+    )
+    watchdog_interval = models.PositiveIntegerField(
+        default=settings.WORLD_SIMULATOR_DEFAULT_WATCHDOG_INTERVAL,
+        validators=[MinValueValidator(5), MaxValueValidator(3600)],
+        help_text=_("Seconds between watchdog checks that ensure Evennia stays online."),
+    )
+    watchdog_enabled = models.BooleanField(
+        default=True,
+        help_text=_("Automatically restart the simulator if it stops."),
+    )
+    last_started_at = models.DateTimeField(null=True, blank=True)
+    last_watchdog_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = _("World simulator")
+        verbose_name_plural = _("World simulators")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            base_slug = slugify(self.name or "world") or "world"
+            slug = base_slug
+            suffix = 1
+            manager = type(self).all_objects
+            while manager.filter(slug=slug).exclude(pk=self.pk).exists():
+                suffix += 1
+                slug = f"{base_slug}-{suffix}"
+            self.slug = slug
+        super().save(*args, **kwargs)
+
+    @property
+    def evennia_binary(self) -> str:
+        """Return the configured Evennia executable name."""
+
+        return getattr(settings, "EVENNIA_EXECUTABLE", "evennia")
+
+    @property
+    def project_root(self) -> Path:
+        """Return the path to the Evennia project directory."""
+
+        base = (self.base_path or "").strip()
+        if base:
+            return Path(base).expanduser()
+        root = getattr(settings, "WORLD_SIMULATOR_ROOT", Path.cwd())
+        return Path(root) / self.slug
+
+    def _pid_path(self, component: str) -> Path:
+        return self.project_root / "server" / "logs" / f"{component}.pid"
+
+    def _read_pid(self, component: str) -> int | None:
+        path = self._pid_path(component)
+        try:
+            value = path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            return None
+        try:
+            return int(value)
+        except ValueError:
+            logger.warning("Invalid PID value in %%s", path)
+            return None
+
+    @staticmethod
+    def _pid_alive(pid: int) -> bool:
+        try:
+            process = psutil.Process(pid)
+        except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
+            return False
+        return process.is_running()
+
+    def is_running(self) -> bool:
+        """Return ``True`` when both the server and portal processes are alive."""
+
+        for component in ("server", "portal"):
+            pid = self._read_pid(component)
+            if not pid or not self._pid_alive(pid):
+                return False
+        return True
+
+    def ensure_initialized(self) -> None:
+        """Create the Evennia project structure if it does not already exist."""
+
+        root = self.project_root
+        config_file = root / "server" / "conf" / "settings.py"
+        if config_file.exists():
+            return
+
+        root.parent.mkdir(parents=True, exist_ok=True)
+        if root.exists() and any(root.iterdir()):
+            # Assume the directory already contains a valid Evennia project.
+            return
+
+        command = [self.evennia_binary, "--init", str(root)]
+        subprocess.run(command, check=True)
+
+    def start(self, ensure_watchdog: bool = True) -> bool:
+        """Start the Evennia processes for this simulator.
+
+        Returns ``True`` when a start command was issued. If Evennia is already
+        running no command is executed and ``False`` is returned instead.
+        """
+
+        self.ensure_initialized()
+        if self.is_running():
+            if ensure_watchdog and self.watchdog_enabled:
+                self.schedule_watchdog()
+            return False
+
+        command = [self.evennia_binary, "start"]
+        subprocess.run(command, cwd=str(self.project_root), check=True)
+        self.last_started_at = timezone.now()
+        self.save(update_fields=["last_started_at"])
+        if ensure_watchdog and self.watchdog_enabled:
+            self.schedule_watchdog()
+        return True
+
+    def run_watchdog(self) -> bool:
+        """Ensure the Evennia processes stay online.
+
+        Returns ``True`` when a restart was attempted.
+        """
+
+        restarted = False
+        if not self.is_running():
+            try:
+                restarted = self.start(ensure_watchdog=False)
+            except Exception:  # pragma: no cover - defensive logging
+                logger.exception("Failed to start Evennia for %s", self)
+        self.last_watchdog_at = timezone.now()
+        self.save(update_fields=["last_watchdog_at"])
+        return restarted
+
+    def schedule_watchdog(self, countdown: int | None = None) -> None:
+        """Schedule the Celery watchdog task for this simulator."""
+
+        if not self.pk or not self.watchdog_enabled:
+            return
+
+        delay = countdown if countdown is not None else self.watchdog_interval
+        if delay <= 0:
+            delay = settings.WORLD_SIMULATOR_DEFAULT_WATCHDOG_INTERVAL
+
+        from core.tasks import world_simulator_watchdog
+
+        world_simulator_watchdog.apply_async(args=(self.pk,), countdown=delay)
+
+    @property
+    def client_url(self) -> str:
+        """Return the URL to the Evennia web client."""
+
+        host = (self.host or "127.0.0.1").strip() or "127.0.0.1"
+        return f"http://{host}:{self.webclient_port}/webclient/"
+
+    @property
+    def status(self) -> str:
+        return "running" if self.is_running() else "stopped"
+
+    def status_display(self) -> str:
+        return _(self.status.capitalize())

@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "World simulator" %} :: {{ simulator.name }}{% endblock %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo;
+    <a href="{% url 'admin:core_worldsimulator_changelist' %}">{% trans 'World simulators' %}</a>
+    &rsaquo;
+    {{ simulator.name }}
+  </div>
+{% endblock %}
+
+{% block content %}
+  <div class="container-fluid" style="max-width: 1200px;">
+    <h1 class="display-6 mb-3">{{ simulator.name }}</h1>
+    <p class="lead">
+      {% blocktrans with username=username %}You are signed in as <strong>{{ username }}</strong>.{% endblocktrans %}
+    </p>
+    <p>
+      {% blocktrans with host=simulator.host port=simulator.webclient_port %}
+        The Evennia web client below connects to {{ host }}:{{ port }}. Keep this page
+        open while exploring the world. The watchdog continues to monitor the
+        simulator in the background.
+      {% endblocktrans %}
+    </p>
+    <div class="mb-3">
+      <a class="btn btn-primary" href="{{ client_url }}" target="_blank" rel="noopener">
+        {% trans "Open client in a new tab" %}
+      </a>
+    </div>
+    <div class="border rounded shadow-sm" style="min-height: 32rem;">
+      <iframe
+        src="{{ client_url }}"
+        title="{% trans 'Evennia web client' %}"
+        style="width: 100%; height: 100%; border: 0;"
+        allowfullscreen
+      ></iframe>
+    </div>
+  </div>
+{% endblock %}

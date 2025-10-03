@@ -680,3 +680,15 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=9, minute=0),
     },
 }
+
+
+_world_root = os.environ.get("WORLD_SIMULATOR_ROOT")
+if _world_root:
+    WORLD_SIMULATOR_ROOT = Path(_world_root)
+else:
+    WORLD_SIMULATOR_ROOT = BASE_DIR / "worlds"
+
+EVENNIA_EXECUTABLE = os.environ.get("EVENNIA_EXECUTABLE", "evennia")
+WORLD_SIMULATOR_DEFAULT_WATCHDOG_INTERVAL = _env_int(
+    "WORLD_SIMULATOR_WATCHDOG_INTERVAL", 60
+)
