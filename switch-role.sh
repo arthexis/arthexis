@@ -20,9 +20,13 @@ CLEAN=false
 LATEST=false
 ENABLE_DATASETTE=false
 CHECK=false
+AUTO_UPGRADE_MODE=""
+
+BASE_DIR="$SCRIPT_DIR"
+LOCK_DIR="$BASE_DIR/locks"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette] [--check] [--satellite|--terminal|--control|--constellation]" >&2
+    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette] [--check] [--auto-upgrade|--no-auto-upgrade] [--satellite|--terminal|--control|--constellation]" >&2
     exit 1
 }
 
@@ -52,6 +56,37 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/0
 EOF_REDIS
 }
 
+run_auto_upgrade_management() {
+    local action="$1"
+    local python_bin=""
+
+    if [ -x "$BASE_DIR/.venv/bin/python" ]; then
+        python_bin="$BASE_DIR/.venv/bin/python"
+    elif command -v python3 >/dev/null 2>&1; then
+        python_bin="$(command -v python3)"
+    else
+        return
+    fi
+
+    if [ "$action" = "enable" ]; then
+        "$python_bin" "$BASE_DIR/manage.py" shell <<'PYCODE' || true
+from core.auto_upgrade import ensure_auto_upgrade_periodic_task
+
+ensure_auto_upgrade_periodic_task()
+PYCODE
+    else
+        "$python_bin" "$BASE_DIR/manage.py" shell <<'PYCODE' || true
+from core.auto_upgrade import AUTO_UPGRADE_TASK_NAME
+try:
+    from django_celery_beat.models import PeriodicTask
+except Exception:
+    pass
+else:
+    PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).delete()
+PYCODE
+    fi
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --service)
@@ -77,6 +112,22 @@ while [[ $# -gt 0 ]]; do
             ;;
         --check)
             CHECK=true
+            shift
+            ;;
+        --auto-upgrade)
+            if [ "$AUTO_UPGRADE_MODE" = "disable" ]; then
+                echo "Cannot combine --auto-upgrade with --no-auto-upgrade" >&2
+                usage
+            fi
+            AUTO_UPGRADE_MODE="enable"
+            shift
+            ;;
+        --no-auto-upgrade)
+            if [ "$AUTO_UPGRADE_MODE" = "enable" ]; then
+                echo "Cannot combine --auto-upgrade with --no-auto-upgrade" >&2
+                usage
+            fi
+            AUTO_UPGRADE_MODE="disable"
             shift
             ;;
         --satellite)
@@ -119,7 +170,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ "$CHECK" = true ]; then
-    LOCK_DIR="$SCRIPT_DIR/locks"
     if [ -f "$LOCK_DIR/role.lck" ]; then
         cat "$LOCK_DIR/role.lck"
     else
@@ -128,12 +178,26 @@ if [ "$CHECK" = true ]; then
     exit 0
 fi
 
+if [ -n "$AUTO_UPGRADE_MODE" ] && [ -z "$NODE_ROLE" ]; then
+    mkdir -p "$LOCK_DIR"
+    if [ "$AUTO_UPGRADE_MODE" = "enable" ]; then
+        if [ "$LATEST" = true ]; then
+            echo "latest" > "$LOCK_DIR/auto_upgrade.lck"
+        else
+            echo "version" > "$LOCK_DIR/auto_upgrade.lck"
+        fi
+        run_auto_upgrade_management enable
+    else
+        rm -f "$LOCK_DIR/auto_upgrade.lck"
+        run_auto_upgrade_management disable
+    fi
+    exit 0
+fi
+
 if [ -z "$NODE_ROLE" ]; then
     usage
 fi
 
-BASE_DIR="$SCRIPT_DIR"
-LOCK_DIR="$BASE_DIR/locks"
 mkdir -p "$LOCK_DIR"
 
 if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
@@ -174,7 +238,9 @@ if [ -n "$SERVICE" ] && systemctl list-unit-files | grep -Fq "${SERVICE}.service
     fi
 fi
 
-rm -f "$LOCK_DIR"/*.lck
+for lock_name in celery.lck lcd_screen.lck control.lck datasette.lck nginx_mode.lck role.lck service.lck; do
+    rm -f "$LOCK_DIR/$lock_name"
+done
 rm -f "$BASE_DIR"/*.role "$BASE_DIR"/.*.role 2>/dev/null || true
 
 if [ "$ENABLE_CELERY" = true ]; then
@@ -207,6 +273,18 @@ echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 if [ -n "$SERVICE" ]; then
     echo "$SERVICE" > "$LOCK_DIR/service.lck"
+fi
+
+if [ "$AUTO_UPGRADE_MODE" = "enable" ]; then
+    if [ "$LATEST" = true ]; then
+        echo "latest" > "$LOCK_DIR/auto_upgrade.lck"
+    else
+        echo "version" > "$LOCK_DIR/auto_upgrade.lck"
+    fi
+    run_auto_upgrade_management enable
+elif [ "$AUTO_UPGRADE_MODE" = "disable" ]; then
+    rm -f "$LOCK_DIR/auto_upgrade.lck"
+    run_auto_upgrade_management disable
 fi
 
 if [ "$UPDATE" = true ]; then
