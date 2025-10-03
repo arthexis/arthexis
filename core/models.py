@@ -2458,6 +2458,7 @@ class PackageRelease(Entity):
     revision = models.CharField(
         max_length=40, blank=True, default=revision_utils.get_revision, editable=False
     )
+    changelog = models.TextField(blank=True, default="")
     pypi_url = models.URLField("PyPI URL", blank=True, editable=False)
     release_on = models.DateTimeField(blank=True, null=True, editable=False)
 

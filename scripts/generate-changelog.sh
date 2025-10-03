@@ -13,23 +13,19 @@ else
   range="HEAD"
 fi
 
-if [ -f CHANGELOG.rst ]; then
-  previous=$(tail -n +7 CHANGELOG.rst)
-else
-  previous=""
-fi
+python3 - "$range" <<'PY'
+import sys
+from pathlib import Path
 
-{
-  echo "Changelog"
-  echo "========="
-  echo
-  echo "Unreleased"
-  echo "----------"
-  echo
-  # Filter out commit subjects that are a single word to keep the changelog informative.
-  git log $range --no-merges --pretty=format:"- %h %s" | awk 'NF > 3'
-  if [ -n "$previous" ]; then
-    echo
-    echo "$previous"
-  fi
-} > CHANGELOG.rst
+from core import changelog
+
+
+range_spec = sys.argv[1] if len(sys.argv) > 1 else "HEAD"
+path = Path("CHANGELOG.rst")
+previous = path.read_text(encoding="utf-8") if path.exists() else None
+sections = changelog.collect_sections(range_spec=range_spec, previous_text=previous)
+content = changelog.render_changelog(sections)
+if not content.endswith("\n"):
+    content += "\n"
+path.write_text(content, encoding="utf-8")
+PY

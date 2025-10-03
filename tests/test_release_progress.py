@@ -342,9 +342,18 @@ class ReleaseProgressViewTests(TestCase):
         session.save()
 
         with mock.patch("core.views.TODO_FIXTURE_DIR", tmp_dir):
-            with mock.patch("core.views.subprocess.run", side_effect=fake_run):
-                url = reverse("release-progress", args=[self.release.pk, "publish"])
-                response = self.client.get(f"{url}?step=4")
+            with mock.patch(
+                "core.views.changelog_utils.extract_release_notes",
+                return_value="- pending change",
+            ):
+                with mock.patch("core.views.PackageRelease.dump_fixture"):
+                    with mock.patch(
+                        "core.views.subprocess.run", side_effect=fake_run
+                    ):
+                        url = reverse(
+                            "release-progress", args=[self.release.pk, "publish"]
+                        )
+                        response = self.client.get(f"{url}?step=4")
 
         self.assertIn(["scripts/generate-changelog.sh"], commands)
         self.assertEqual(response.status_code, 200)
@@ -379,6 +388,7 @@ class ReleaseProgressViewTests(TestCase):
             "Committed TODO fixture tmp_todos_pre_release/todos__create_release_pkg_1_0_1.json",
             log_content,
         )
+        self.assertIn("Recorded changelog notes for v1.0", log_content)
         self.assertEqual(
             Path("VERSION").read_text(encoding="utf-8").strip(),
             self.release.version,
@@ -398,6 +408,8 @@ class ReleaseProgressViewTests(TestCase):
         self.assertIn(
             ["git", "commit", "-m", "chore: add release TODO for pkg"], commands
         )
+        self.release.refresh_from_db()
+        self.assertEqual(self.release.changelog, "- pending change")
 
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     @mock.patch("core.views.release_utils.network_available", return_value=False)
@@ -415,7 +427,7 @@ class ReleaseProgressViewTests(TestCase):
 
         commands: list[list[str]] = []
         fixture_filename = "todos__create_release_pkg_1_0_1.json"
-        changelog_entry = "- abc123 fix fallback generation"
+        changelog_entry = "- abcdef12 Fix fallback generation output (#42)"
 
         def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
             commands.append(cmd)
@@ -425,10 +437,17 @@ class ReleaseProgressViewTests(TestCase):
                 raise err
             if cmd[:3] == ["git", "describe", "--tags"]:
                 return subprocess.CompletedProcess(cmd, 0, stdout="0.1.10\n", stderr="")
-            if cmd[:2] == ["git", "log"]:
-                return subprocess.CompletedProcess(
-                    cmd, 0, stdout=f"{changelog_entry}\n", stderr=""
-                )
+            if (
+                len(cmd) >= 4
+                and cmd[0] == "git"
+                and cmd[1] == "log"
+                and cmd[2] == "0.1.10..HEAD"
+            ):
+                commit = "abcdef1234567890"
+                subject = "Fix fallback generation output (#42)"
+                date = "2025-10-03"
+                stdout = f"{commit}\x00{date}\x00{subject}\n"
+                return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
             if (
                 cmd[:3] == ["git", "diff", "--cached"]
                 and any(part.endswith("CHANGELOG.rst") for part in cmd)
@@ -455,9 +474,18 @@ class ReleaseProgressViewTests(TestCase):
         session.save()
 
         with mock.patch("core.views.TODO_FIXTURE_DIR", tmp_dir):
-            with mock.patch("core.views.subprocess.run", side_effect=fake_run):
-                url = reverse("release-progress", args=[self.release.pk, "publish"])
-                response = self.client.get(f"{url}?step=4")
+            with mock.patch(
+                "core.views.changelog_utils.extract_release_notes",
+                return_value=changelog_entry,
+            ):
+                with mock.patch("core.views.PackageRelease.dump_fixture"):
+                    with mock.patch(
+                        "core.views.subprocess.run", side_effect=fake_run
+                    ):
+                        url = reverse(
+                            "release-progress", args=[self.release.pk, "publish"]
+                        )
+                        response = self.client.get(f"{url}?step=4")
 
         self.assertIn(["scripts/generate-changelog.sh"], commands)
         self.assertEqual(response.status_code, 200)
@@ -486,6 +514,9 @@ class ReleaseProgressViewTests(TestCase):
             log_content,
         )
         self.assertIn("Pre-release actions complete", log_content)
+        self.assertIn("Recorded changelog notes for v1.0", log_content)
+        self.release.refresh_from_db()
+        self.assertEqual(self.release.changelog, changelog_entry)
 
     def test_todo_done_marks_timestamp(self):
         todo = Todo.objects.create(request="Task")

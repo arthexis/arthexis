@@ -31,6 +31,7 @@ from utils.api import api_login_required
 
 logger = logging.getLogger(__name__)
 
+from . import changelog as changelog_utils
 from .models import Product, EnergyAccount, PackageRelease, Todo
 from .models import RFID
 
@@ -153,6 +154,7 @@ def _should_use_python_changelog(exc: OSError) -> bool:
 
 def _generate_changelog_with_python(log_path: Path) -> None:
     _append_log(log_path, "Falling back to Python changelog generator")
+    changelog_path = Path("CHANGELOG.rst")
     describe = subprocess.run(
         ["git", "describe", "--tags", "--abbrev=0"],
         capture_output=True,
@@ -161,35 +163,9 @@ def _generate_changelog_with_python(log_path: Path) -> None:
     )
     start_tag = describe.stdout.strip() if describe.returncode == 0 else ""
     range_spec = f"{start_tag}..HEAD" if start_tag else "HEAD"
-    log_proc = subprocess.run(
-        ["git", "log", range_spec, "--no-merges", "--pretty=format:- %h %s"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    entries = [line for line in log_proc.stdout.splitlines() if line]
-    changelog_path = Path("CHANGELOG.rst")
-    previous_lines: list[str] = []
-    if changelog_path.exists():
-        previous_lines = changelog_path.read_text(encoding="utf-8").splitlines()
-        if len(previous_lines) > 6:
-            previous_lines = previous_lines[6:]
-        else:
-            previous_lines = []
-    lines = [
-        "Changelog",
-        "=========",
-        "",
-        "Unreleased",
-        "----------",
-        "",
-    ]
-    if entries:
-        lines.extend(entries)
-    if previous_lines:
-        lines.append("")
-        lines.extend(previous_lines)
-    content = "\n".join(lines)
+    previous = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else None
+    sections = changelog_utils.collect_sections(range_spec=range_spec, previous_text=previous)
+    content = changelog_utils.render_changelog(sections)
     if not content.endswith("\n"):
         content += "\n"
     changelog_path.write_text(content, encoding="utf-8")
@@ -286,17 +262,10 @@ def _changelog_notes(version: str) -> str:
     path = Path("CHANGELOG.rst")
     if not path.exists():
         return ""
-    lines = path.read_text(encoding="utf-8").splitlines()
-    prefix = f"{version} "
-    for i, line in enumerate(lines):
-        if line.startswith(prefix):
-            j = i + 2
-            items = []
-            while j < len(lines) and lines[j].startswith("- "):
-                items.append(lines[j])
-                j += 1
-            return "\n".join(items)
-    return ""
+    notes = changelog_utils.extract_release_notes(
+        path.read_text(encoding="utf-8"), version
+    )
+    return notes.strip()
 
 
 class PendingTodos(Exception):
@@ -502,6 +471,12 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
         _append_log(
             log_path, "Regenerated CHANGELOG.rst using scripts/generate-changelog.sh"
         )
+    notes = _changelog_notes(release.version)
+    if notes != release.changelog:
+        release.changelog = notes
+        release.save(update_fields=["changelog"])
+        PackageRelease.dump_fixture()
+        _append_log(log_path, f"Recorded changelog notes for v{release.version}")
     subprocess.run(["git", "add", "CHANGELOG.rst"], check=True)
     _append_log(log_path, "Staged CHANGELOG.rst for commit")
     version_path = Path("VERSION")
