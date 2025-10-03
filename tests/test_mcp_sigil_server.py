@@ -148,7 +148,7 @@ class SigilResolverServerURLTests(TestCase):
         self.site.save()
         config = {"host": "0.0.0.0", "port": 8800, "api_keys": ["secret"], "required_scopes": []}
         base_url, issuer_url = resolve_base_urls(config)
-        self.assertEqual(base_url, "https://mcp.example.test:8800")
+        self.assertEqual(base_url, "https://mcp.example.test")
         self.assertEqual(issuer_url, base_url)
 
     def test_resolve_base_urls_falls_back_to_host(self) -> None:
@@ -178,5 +178,5 @@ class SigilResolverServerURLTests(TestCase):
             "mount_path": "/mcp",
         }
         base_url, issuer_url = resolve_base_urls(config)
-        self.assertEqual(base_url, "https://resolver.example.com:8800/mcp")
+        self.assertEqual(base_url, "https://resolver.example.com/mcp")
         self.assertEqual(issuer_url, base_url)

@@ -89,13 +89,17 @@ def _site_base_url(port: int) -> str | None:
     if "://" in domain:
         return domain.rstrip("/")
 
-    scheme = "https"
     normalized_domain = domain
-    if normalized_domain.startswith("localhost") or normalized_domain.startswith("127."):
-        scheme = "http"
-
     host, port_override = _split_host_port(normalized_domain)
-    port_to_use = port_override or port
+    host_for_check = host.strip("[]")
+    is_loopback = host_for_check in {"localhost", "::1"} or host_for_check.startswith("127.")
+
+    scheme = "http" if is_loopback else "https"
+    if is_loopback:
+        port_to_use = port_override or port
+    else:
+        default_port = 443 if scheme == "https" else 80
+        port_to_use = port_override or default_port
 
     return _build_url(scheme, host, port_to_use)
 

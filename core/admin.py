@@ -1800,18 +1800,26 @@ class AssistantProfileAdmin(
         host = config.get("host") or "127.0.0.1"
         port = config.get("port", 8800)
         base_url, issuer_url = resolve_base_urls(config)
+        mount_path = config.get("mount_path") or "/"
+        display_base_url = base_url or f"http://{host}:{port}"
+        display_issuer_url = issuer_url or display_base_url
+        chat_endpoint = f"{display_base_url.rstrip('/')}/api/chat/"
         if isinstance(response, dict):
             response.setdefault("mcp_server_host", host)
             response.setdefault("mcp_server_port", port)
-            response.setdefault("mcp_server_base_url", base_url)
-            response.setdefault("mcp_server_issuer_url", issuer_url)
+            response.setdefault("mcp_server_base_url", display_base_url)
+            response.setdefault("mcp_server_issuer_url", display_issuer_url)
+            response.setdefault("mcp_server_mount_path", mount_path)
+            response.setdefault("mcp_server_chat_endpoint", chat_endpoint)
         else:
             context_data = getattr(response, "context_data", None)
             if context_data is not None:
                 context_data.setdefault("mcp_server_host", host)
                 context_data.setdefault("mcp_server_port", port)
-                context_data.setdefault("mcp_server_base_url", base_url)
-                context_data.setdefault("mcp_server_issuer_url", issuer_url)
+                context_data.setdefault("mcp_server_base_url", display_base_url)
+                context_data.setdefault("mcp_server_issuer_url", display_issuer_url)
+                context_data.setdefault("mcp_server_mount_path", mount_path)
+                context_data.setdefault("mcp_server_chat_endpoint", chat_endpoint)
         return response
 
     def start_server(self, request):
