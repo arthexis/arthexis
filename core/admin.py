@@ -45,6 +45,9 @@ from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
+from reportlab.graphics import renderPDF
+from reportlab.graphics.barcode import qr
+from reportlab.graphics.shapes import Drawing
 from ocpp.models import Transaction
 from ocpp.rfid.utils import build_mode_toggle
 from nodes.models import EmailOutbox
@@ -2685,6 +2688,9 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         card_height = 54 * mm
         margin = 5 * mm
         highlight_height = 20 * mm
+        content_width = card_width - 2 * margin
+        left_section_width = content_width * 0.6
+        right_section_width = content_width - left_section_width
 
         pdf = canvas.Canvas(buffer, pagesize=(card_width, card_height))
         pdf.setTitle("RFID Card Labels")
@@ -2694,12 +2700,16 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             pdf.setFillColor(colors.white)
             pdf.rect(0, 0, card_width, card_height, stroke=0, fill=1)
 
+            left_x = margin
+            right_x = left_x + left_section_width
+            highlight_bottom = card_height - margin - highlight_height
+
             # Highlighted area for the primary card number
             pdf.setFillColor(colors.HexColor("#E6EEF8"))
             pdf.roundRect(
-                margin,
-                card_height - margin - highlight_height,
-                card_width - 2 * margin,
+                left_x,
+                highlight_bottom,
+                left_section_width,
                 highlight_height,
                 6,
                 stroke=0,
@@ -2710,19 +2720,20 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             font_name = "Helvetica-Bold"
             font_size = 28
             pdf.setFont(font_name, font_size)
-            primary_label = str(tag.label_id)
+            label_value = str(tag.label_id or "")
+            primary_label = label_value.zfill(4) if label_value.isdigit() else label_value
             descent = abs(pdfmetrics.getDescent(font_name) / 1000 * font_size)
-            vertical_center = card_height - margin - (highlight_height / 2)
+            vertical_center = highlight_bottom + (highlight_height / 2)
             baseline = vertical_center - (descent / 2)
             pdf.drawCentredString(
-                card_width / 2,
+                left_x + (left_section_width / 2),
                 baseline,
                 primary_label,
             )
 
             pdf.setFont("Helvetica", 11)
             text = pdf.beginText()
-            text.setTextOrigin(margin, card_height - margin - highlight_height - 12)
+            text.setTextOrigin(left_x, highlight_bottom - 16)
             text.setLeading(14)
 
             details = [_("RFID: %s") % tag.rfid]
@@ -2737,6 +2748,25 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                 text.textLine(line)
 
             pdf.drawText(text)
+
+            if tag.rfid:
+                qr_code = qr.QrCodeWidget(str(tag.rfid))
+                qr_bounds = qr_code.getBounds()
+                qr_width = qr_bounds[2] - qr_bounds[0]
+                qr_height = qr_bounds[3] - qr_bounds[1]
+                qr_target_size = min(right_section_width, card_height - 2 * margin)
+                if qr_width and qr_height:
+                    scale = qr_target_size / max(qr_width, qr_height)
+                    drawing = Drawing(
+                        qr_target_size,
+                        qr_target_size,
+                        transform=[scale, 0, 0, scale, 0, 0],
+                    )
+                    drawing.add(qr_code)
+                    qr_x = right_x + (right_section_width - qr_target_size) / 2
+                    qr_y = margin + (card_height - 2 * margin - qr_target_size) / 2
+                    renderPDF.draw(drawing, pdf, qr_x, qr_y)
+
             pdf.showPage()
 
         pdf.save()
