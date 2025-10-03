@@ -74,3 +74,72 @@ class ChangelogBuilderTests(SimpleTestCase):
         self.assertEqual(
             changelog.extract_release_notes(content, "2.0.0"), "- pending change"
         )
+
+    def test_duplicate_release_commits_are_merged(self):
+        commits = [
+            changelog.Commit(sha="a" * 40, date="2025-10-06", subject="Release v1.3.0"),
+            changelog.Commit(
+                sha="b" * 40,
+                date="2025-10-05",
+                subject="Handle changelog duplicate merges (#601)",
+            ),
+            changelog.Commit(sha="c" * 40, date="2025-10-05", subject="Release v1.3.0"),
+            changelog.Commit(
+                sha="d" * 40,
+                date="2025-10-04",
+                subject="Improve release retry messaging (#600)",
+            ),
+        ]
+
+        with mock.patch("core.changelog._read_commits", return_value=commits):
+            sections = changelog.collect_sections(range_spec="HEAD")
+
+        self.assertEqual(len(sections), 2)
+        release = sections[1]
+        self.assertEqual(release.title, "v1.3.0 (2025-10-06)")
+        self.assertEqual(release.version, "1.3.0")
+        self.assertEqual(
+            release.entries,
+            [
+                "- " + "b" * 8 + " Handle changelog duplicate merges (#601)",
+                "- " + "d" * 8 + " Improve release retry messaging (#600)",
+            ],
+        )
+
+    def test_previous_sections_merge_without_duplicates(self):
+        commits = [
+            changelog.Commit(sha="a" * 40, date="2025-10-06", subject="Release v1.3.0"),
+            changelog.Commit(
+                sha="b" * 40,
+                date="2025-10-05",
+                subject="Handle changelog duplicate merges (#601)",
+            ),
+        ]
+
+        previous_text = "\n".join(
+            [
+                "Changelog",
+                "=========",
+                "",
+                "v1.3.0 (2025-10-06)",
+                "-------------------",
+                "",
+                "- " + "b" * 8 + " Handle changelog duplicate merges (#601)",
+                "- " + "c" * 8 + " Backfill missing release notes (#599)",
+                "",
+            ]
+        )
+
+        with mock.patch("core.changelog._read_commits", return_value=commits):
+            sections = changelog.collect_sections(
+                range_spec="HEAD", previous_text=previous_text
+            )
+
+        release = sections[1]
+        self.assertEqual(
+            release.entries,
+            [
+                "- " + "b" * 8 + " Handle changelog duplicate merges (#601)",
+                "- " + "c" * 8 + " Backfill missing release notes (#599)",
+            ],
+        )

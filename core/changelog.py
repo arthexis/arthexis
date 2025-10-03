@@ -74,27 +74,37 @@ def _format_title(version: str, date: Optional[str]) -> str:
 def _sections_from_commits(commits: Iterable[Commit]) -> List[ChangelogSection]:
     unreleased: list[str] = []
     releases: list[ChangelogSection] = []
+    release_map: dict[str, ChangelogSection] = {}
     current_release: ChangelogSection | None = None
 
     for commit in commits:
         version = _extract_release_version(commit.subject)
         if version:
-            section = ChangelogSection(
-                title=_format_title(version, commit.date),
-                entries=[],
-                version=version,
-                date=commit.date,
-            )
-            releases.append(section)
+            section = release_map.get(version)
+            if section is None:
+                section = ChangelogSection(
+                    title=_format_title(version, commit.date),
+                    entries=[],
+                    version=version,
+                    date=commit.date,
+                )
+                releases.append(section)
+                release_map[version] = section
+            else:
+                if commit.date and not section.date:
+                    section.date = commit.date
+                    section.title = _format_title(version, commit.date)
             current_release = section
             continue
         if not _should_include_subject(commit.subject):
             continue
         entry = f"- {commit.sha[:8]} {commit.subject}"
         if current_release is None:
-            unreleased.append(entry)
+            if entry not in unreleased:
+                unreleased.append(entry)
         else:
-            current_release.entries.append(entry)
+            if entry not in current_release.entries:
+                current_release.entries.append(entry)
 
     sections: list[ChangelogSection] = [
         ChangelogSection(title="Unreleased", entries=unreleased, version=None, date=None)
@@ -146,13 +156,50 @@ def _merge_sections(
     old_sections: Iterable[ChangelogSection],
 ) -> List[ChangelogSection]:
     merged = list(new_sections)
-    existing_versions = {section.version for section in merged if section.version}
+    version_to_section: dict[str, ChangelogSection] = {}
+    unreleased_section: ChangelogSection | None = None
+
+    for section in merged:
+        if section.version is None and unreleased_section is None:
+            unreleased_section = section
+        if section.version:
+            version_to_section[section.version] = section
+
     for old in old_sections:
         if old.version is None:
+            if unreleased_section is None:
+                unreleased_section = ChangelogSection(
+                    title=old.title,
+                    entries=list(old.entries),
+                    version=None,
+                    date=None,
+                )
+                merged.insert(0, unreleased_section)
+            else:
+                for entry in old.entries:
+                    if entry not in unreleased_section.entries:
+                        unreleased_section.entries.append(entry)
             continue
-        if old.version in existing_versions:
+
+        existing = version_to_section.get(old.version)
+        if existing is None:
+            copied = ChangelogSection(
+                title=old.title,
+                entries=list(old.entries),
+                version=old.version,
+                date=old.date,
+            )
+            merged.append(copied)
+            version_to_section[old.version] = copied
             continue
-        merged.append(old)
+
+        if old.date and not existing.date:
+            existing.date = old.date
+            existing.title = _format_title(old.version, old.date)
+        for entry in old.entries:
+            if entry not in existing.entries:
+                existing.entries.append(entry)
+
     return merged
 
 
