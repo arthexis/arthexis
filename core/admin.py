@@ -4,8 +4,8 @@ from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
 from django.urls import NoReverseMatch, path, reverse
-from urllib.parse import urlencode
-from django.shortcuts import redirect, render
+from urllib.parse import urlencode, urlparse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.http import (
     HttpResponse,
     JsonResponse,
@@ -48,6 +48,7 @@ from reportlab.pdfbase import pdfmetrics
 from ocpp.models import Transaction
 from ocpp.rfid.utils import build_mode_toggle
 from nodes.models import EmailOutbox
+from .github_helper import GitHubRepositoryError, create_repository_for_package
 from .models import (
     User,
     UserPhoneNumber,
@@ -479,6 +480,41 @@ class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
             )
 
 
+class PackageRepositoryForm(forms.Form):
+    owner_repo = forms.CharField(
+        label=_("Owner/Repository"),
+        help_text=_("Enter the repository slug in the form owner/repository."),
+        widget=forms.TextInput(attrs={"placeholder": "owner/repository"}),
+    )
+    description = forms.CharField(
+        label=_("Description"),
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+    private = forms.BooleanField(
+        label=_("Private repository"),
+        required=False,
+        help_text=_("Mark the repository as private when checked."),
+    )
+
+    def clean_owner_repo(self):
+        value = self.cleaned_data.get("owner_repo", "").strip()
+        if "/" not in value:
+            raise forms.ValidationError(_("Enter the owner/repository slug."))
+        owner, repo = value.split("/", 1)
+        owner = owner.strip()
+        repo = repo.strip()
+        if not owner or not repo:
+            raise forms.ValidationError(_("Enter the owner/repository slug."))
+        if " " in owner or " " in repo:
+            raise forms.ValidationError(
+                _("Owner and repository cannot contain spaces."),
+            )
+        self.cleaned_data["owner"] = owner
+        self.cleaned_data["repo"] = repo
+        return value
+
+
 @admin.register(Package)
 class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     list_display = (
@@ -488,7 +524,7 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "release_manager",
         "is_active",
     )
-    change_actions = ["prepare_next_release_action"]
+    change_actions = ["create_repository_action", "prepare_next_release_action"]
 
     def _prepare(self, request, package):
         from pathlib import Path
@@ -530,12 +566,24 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         urls = super().get_urls()
         custom = [
             path(
+                "<int:object_id>/create-repository/",
+                self.admin_site.admin_view(self.create_repository_view),
+                name="core_package_create_repository",
+            ),
+            path(
                 "prepare-next-release/",
                 self.admin_site.admin_view(self.prepare_next_release_active),
                 name="core_package_prepare_next_release",
             )
         ]
         return custom + urls
+
+    def create_repository_action(self, request, obj):
+        url = reverse("admin:core_package_create_repository", args=[obj.pk])
+        return redirect(url)
+
+    create_repository_action.label = _("Create GitHub repository")
+    create_repository_action.short_description = _("Create GitHub repository")
 
     def prepare_next_release_active(self, request):
         package = Package.objects.filter(is_active=True).first()
@@ -549,6 +597,89 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
     prepare_next_release_action.label = "Prepare next Release"
     prepare_next_release_action.short_description = "Prepare next release"
+
+    @staticmethod
+    def _slug_from_repository_url(repository_url: str) -> str:
+        if not repository_url:
+            return ""
+        if repository_url.startswith("git@"):
+            path = repository_url.partition(":")[2]
+        else:
+            parsed = urlparse(repository_url)
+            path = parsed.path
+        path = path.strip("/")
+        if path.endswith(".git"):
+            path = path[:-4]
+        segments = [segment for segment in path.split("/") if segment]
+        if len(segments) >= 2:
+            return "/".join(segments[-2:])
+        return ""
+
+    def _repository_form_initial(self, package: Package) -> dict[str, object]:
+        initial: dict[str, object] = {"description": package.description}
+        slug = self._slug_from_repository_url(package.repository_url)
+        if slug:
+            initial["owner_repo"] = slug
+        return initial
+
+    def create_repository_view(self, request, object_id: int):
+        package = get_object_or_404(Package, pk=object_id)
+
+        if request.method == "POST":
+            form = PackageRepositoryForm(request.POST)
+            if form.is_valid():
+                description = form.cleaned_data.get("description") or None
+                try:
+                    repository_url = create_repository_for_package(
+                        package,
+                        owner=form.cleaned_data["owner"],
+                        repo=form.cleaned_data["repo"],
+                        private=form.cleaned_data.get("private", False),
+                        description=description,
+                    )
+                except GitHubRepositoryError as exc:
+                    self.message_user(
+                        request,
+                        _("GitHub repository creation failed: %s") % exc,
+                        messages.ERROR,
+                    )
+                except Exception as exc:  # pragma: no cover - defensive guard
+                    logger.exception(
+                        "Unexpected error while creating GitHub repository for %s",
+                        package,
+                    )
+                    self.message_user(
+                        request,
+                        _("GitHub repository creation failed: %s") % exc,
+                        messages.ERROR,
+                    )
+                else:
+                    package.repository_url = repository_url
+                    package.save(update_fields=["repository_url"])
+                    self.message_user(
+                        request,
+                        _("GitHub repository created: %s") % repository_url,
+                        messages.SUCCESS,
+                    )
+                    change_url = reverse(
+                        "admin:core_package_change", args=[package.pk]
+                    )
+                    return redirect(change_url)
+        else:
+            form = PackageRepositoryForm(initial=self._repository_form_initial(package))
+
+        context = self.admin_site.each_context(request)
+        context.update(
+            {
+                "opts": self.model._meta,
+                "original": package,
+                "title": _("Create GitHub repository"),
+                "form": form,
+            }
+        )
+        return TemplateResponse(
+            request, "admin/core/package/create_repository.html", context
+        )
 
 
 class SecurityGroupAdminForm(forms.ModelForm):
