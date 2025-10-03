@@ -1,3 +1,4 @@
+import email
 import imaplib
 import poplib
 import pytest
@@ -35,6 +36,25 @@ class DummyIMAPSelectError(DummyIMAP):
 
     def logout(self):
         self.logout_called = True
+
+
+class DummyIMAPUnicode(DummyIMAP):
+    def __init__(self, host, port):
+        super().__init__(host, port)
+        self.search_args = None
+        self._message = email.message_from_string(
+            "Subject: Café Response\nFrom: sender@example.com\n\nBody"
+        ).as_bytes()
+
+    def select(self, mailbox):
+        return "OK", [b"1"]
+
+    def search(self, charset, *criteria):
+        self.search_args = (charset, criteria)
+        return "OK", [b"1"]
+
+    def fetch(self, mid, parts):
+        return "OK", [(None, self._message)]
 
 
 class DummyPOP:
@@ -119,6 +139,34 @@ class EmailInboxTests(TestCase):
 
         assert "No data in .Sent" in str(excinfo.value)
         assert dummy.logout_called is True
+
+    def test_search_messages_quotes_non_ascii_filters(self):
+        user = User.objects.create(username="imap-unicode")
+        inbox = EmailInbox.objects.create(
+            user=user,
+            host="imap.test",
+            port=993,
+            username="good",
+            password="p",
+            protocol=EmailInbox.IMAP,
+            use_ssl=True,
+        )
+
+        dummy = DummyIMAPUnicode(inbox.host, inbox.port)
+
+        with patch("imaplib.IMAP4_SSL", new=lambda h, p: dummy):
+            results = inbox.search_messages(subject="Café")
+
+        assert len(results) == 1
+        assert results[0]["subject"] == "Café Response"
+        assert dummy.search_args is not None
+        charset, criteria = dummy.search_args
+        assert charset == "UTF-8"
+        assert criteria[0] == "SUBJECT"
+        assert isinstance(criteria[1], bytes)
+        assert criteria[1].startswith(b'"')
+        assert criteria[1].endswith(b'"')
+        assert b"Caf\xc3\xa9" in criteria[1]
 
     def test_string_representation_does_not_duplicate_email_hostname(self):
         user = User.objects.create(username="imap-user")
