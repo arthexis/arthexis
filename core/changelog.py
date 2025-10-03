@@ -176,9 +176,12 @@ def _merge_sections(
                 )
                 merged.insert(0, unreleased_section)
             else:
-                for entry in old.entries:
-                    if entry not in unreleased_section.entries:
-                        unreleased_section.entries.append(entry)
+                # Preserve the freshly generated ``Unreleased`` entries instead of
+                # merging in stale content from the previous changelog text.
+                # The older implementation discarded the previous ``Unreleased``
+                # notes entirely, so keep that behaviour to avoid resurrecting
+                # entries that were already promoted to a tagged release.
+                continue
             continue
 
         existing = version_to_section.get(old.version)
