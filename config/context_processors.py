@@ -5,13 +5,19 @@ from django.http import HttpRequest
 from django.conf import settings
 
 
+DEFAULT_BADGE_COLOR = "#28a745"
+UNKNOWN_BADGE_COLOR = "#6c757d"
+
+
 def site_and_node(request: HttpRequest):
     """Provide current Site and Node based on request host.
 
     Returns a dict with keys ``badge_site`` and ``badge_node``.
     ``badge_site`` is a ``Site`` instance or ``None`` if no match.
     ``badge_node`` is a ``Node`` instance or ``None`` if no match.
-    ``badge_site_color`` and ``badge_node_color`` provide the configured colors.
+    ``badge_site_color`` and ``badge_node_color`` report the palette color used
+    for the corresponding badge. Badges always use green when the entity is
+    known and grey when the value cannot be determined.
     """
     host = request.get_host().split(":")[0]
     site = Site.objects.filter(domain__iexact=host).first()
@@ -42,16 +48,8 @@ def site_and_node(request: HttpRequest):
     except Exception:
         node = None
 
-    site_color = "#28a745"
-    if site:
-        try:
-            site_color = site.badge.badge_color
-        except Exception:
-            pass
-
-    node_color = "#28a745"
-    if node:
-        node_color = node.badge_color
+    site_color = DEFAULT_BADGE_COLOR if site else UNKNOWN_BADGE_COLOR
+    node_color = DEFAULT_BADGE_COLOR if node else UNKNOWN_BADGE_COLOR
 
     site_name = site.name if site else ""
     node_role_name = node.role.name if node and node.role else ""

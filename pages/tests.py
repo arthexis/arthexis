@@ -611,6 +611,20 @@ class AdminBadgesTests(TestCase):
         self.assertContains(resp, f'href="{node_list}"')
         self.assertContains(resp, f'href="{node_change}"')
 
+    def test_badge_colors_use_standard_palette(self):
+        site = Site.objects.get(pk=1)
+        badge, _ = SiteBadge.objects.get_or_create(site=site)
+        badge.badge_color = "#ff0000"
+        badge.save(update_fields=["badge_color"])
+        self.node.badge_color = "#123456"
+        self.node.save(update_fields=["badge_color"])
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertNotContains(resp, "#ff0000")
+        self.assertNotContains(resp, "#123456")
+        self.assertContains(resp, 'style="background-color: #28a745;"', 2)
+
 
 class AdminDashboardAppListTests(TestCase):
     def setUp(self):

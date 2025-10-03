@@ -5,7 +5,6 @@ from django.template.response import TemplateResponse
 from django.utils.html import format_html, format_html_join
 from django import forms
 from django.contrib.admin.widgets import FilteredSelectMultiple
-from core.widgets import CopyColorWidget
 from django.db.models import Count
 from django.conf import settings
 from pathlib import Path
@@ -55,8 +54,7 @@ from core.user_data import EntityModelAdmin
 class NodeAdminForm(forms.ModelForm):
     class Meta:
         model = Node
-        fields = "__all__"
-        widgets = {"badge_color": CopyColorWidget()}
+        exclude = ("badge_color",)
 
 
 class NodeFeatureAssignmentInline(admin.TabularInline):
