@@ -1,0 +1,214 @@
+from __future__ import annotations
+
+"""Utilities for building and parsing the project changelog."""
+
+from dataclasses import dataclass
+import re
+import subprocess
+from typing import Iterable, List, Optional
+
+
+@dataclass(frozen=True)
+class Commit:
+    """A simplified representation of a git commit."""
+
+    sha: str
+    date: str
+    subject: str
+
+
+@dataclass
+class ChangelogSection:
+    """A rendered changelog section."""
+
+    title: str
+    entries: List[str]
+    version: Optional[str] = None
+    date: Optional[str] = None
+
+
+_RE_RELEASE = re.compile(r"^Release v(?P<version>[0-9A-Za-z][0-9A-Za-z.\-_]*)")
+_RE_TITLE_VERSION = re.compile(r"^v(?P<version>[0-9A-Za-z][0-9A-Za-z.\-_]*)")
+_RE_TITLE_DATE = re.compile(r"\((?P<date>\d{4}-\d{2}-\d{2})\)")
+
+
+def _read_commits(range_spec: str) -> List[Commit]:
+    """Return commits for *range_spec* ordered newest first."""
+
+    cmd = [
+        "git",
+        "log",
+        range_spec,
+        "--no-merges",
+        "--date=short",
+        "--pretty=format:%H%x00%ad%x00%s",
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    commits: list[Commit] = []
+    for raw in proc.stdout.splitlines():
+        parts = raw.split("\x00")
+        if len(parts) != 3:
+            continue
+        sha, date, subject = parts
+        commits.append(Commit(sha=sha, date=date, subject=subject))
+    return commits
+
+
+def _extract_release_version(subject: str) -> Optional[str]:
+    match = _RE_RELEASE.match(subject)
+    if match:
+        return match.group("version")
+    return None
+
+
+def _should_include_subject(subject: str) -> bool:
+    return len(subject.split()) > 3
+
+
+def _format_title(version: str, date: Optional[str]) -> str:
+    if date:
+        return f"v{version} ({date})"
+    return f"v{version}"
+
+
+def _sections_from_commits(commits: Iterable[Commit]) -> List[ChangelogSection]:
+    unreleased: list[str] = []
+    releases: list[ChangelogSection] = []
+    current_release: ChangelogSection | None = None
+
+    for commit in commits:
+        version = _extract_release_version(commit.subject)
+        if version:
+            section = ChangelogSection(
+                title=_format_title(version, commit.date),
+                entries=[],
+                version=version,
+                date=commit.date,
+            )
+            releases.append(section)
+            current_release = section
+            continue
+        if not _should_include_subject(commit.subject):
+            continue
+        entry = f"- {commit.sha[:8]} {commit.subject}"
+        if current_release is None:
+            unreleased.append(entry)
+        else:
+            current_release.entries.append(entry)
+
+    sections: list[ChangelogSection] = [
+        ChangelogSection(title="Unreleased", entries=unreleased, version=None, date=None)
+    ]
+    sections.extend(releases)
+    return sections
+
+
+def _parse_sections(text: str) -> List[ChangelogSection]:
+    lines = text.splitlines()
+    sections: list[ChangelogSection] = []
+    i = 0
+    total = len(lines)
+    while i < total:
+        title = lines[i]
+        underline_index = i + 1
+        if underline_index >= total:
+            break
+        underline = lines[underline_index]
+        if set(underline) == {"-"} and len(underline) == len(title):
+            entries: list[str] = []
+            i = underline_index + 1
+            # Skip single blank line immediately after the heading if present.
+            if i < total and lines[i] == "":
+                i += 1
+            while i < total and lines[i] != "":
+                entries.append(lines[i])
+                i += 1
+            version = None
+            date = None
+            match_version = _RE_TITLE_VERSION.match(title)
+            if match_version:
+                version = match_version.group("version")
+                match_date = _RE_TITLE_DATE.search(title)
+                if match_date:
+                    date = match_date.group("date")
+            sections.append(
+                ChangelogSection(title=title, entries=entries, version=version, date=date)
+            )
+            while i < total and lines[i] == "":
+                i += 1
+            continue
+        i += 1
+    return sections
+
+
+def _merge_sections(
+    new_sections: Iterable[ChangelogSection],
+    old_sections: Iterable[ChangelogSection],
+) -> List[ChangelogSection]:
+    merged = list(new_sections)
+    existing_versions = {section.version for section in merged if section.version}
+    for old in old_sections:
+        if old.version is None:
+            continue
+        if old.version in existing_versions:
+            continue
+        merged.append(old)
+    return merged
+
+
+def collect_sections(
+    *, range_spec: str = "HEAD", previous_text: str | None = None
+) -> List[ChangelogSection]:
+    """Return changelog sections for *range_spec*.
+
+    When ``previous_text`` is provided, sections not regenerated in the current run
+    are appended so long as they can be parsed from the existing changelog.
+    """
+
+    commits = _read_commits(range_spec)
+    sections = _sections_from_commits(commits)
+    if previous_text:
+        old_sections = _parse_sections(previous_text)
+        sections = _merge_sections(sections, old_sections)
+    return sections
+
+
+def render_changelog(sections: Iterable[ChangelogSection]) -> str:
+    lines: list[str] = ["Changelog", "=========", ""]
+    for section in sections:
+        lines.append(section.title)
+        lines.append("-" * len(section.title))
+        lines.append("")
+        lines.extend(section.entries)
+        lines.append("")
+    while lines and lines[-1] == "":
+        lines.pop()
+    lines.append("")
+    return "\n".join(lines)
+
+
+def extract_release_notes(text: str, version: str) -> str:
+    """Return the changelog entries matching *version*.
+
+    When no dedicated section for the release exists, the ``Unreleased`` section is
+    returned instead to capture the pending notes for the current release.
+    """
+
+    sections = _parse_sections(text)
+    normalized = version.lstrip("v")
+    for section in sections:
+        if section.version and section.version.lstrip("v") == normalized:
+            return "\n".join(section.entries).strip()
+    for section in sections:
+        if section.version is None:
+            return "\n".join(section.entries).strip()
+    return ""
+
+
+__all__ = [
+    "ChangelogSection",
+    "Commit",
+    "collect_sections",
+    "extract_release_notes",
+    "render_changelog",
+]
