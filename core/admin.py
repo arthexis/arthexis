@@ -77,6 +77,7 @@ from .models import (
     PublicWifiAccess,
     AssistantProfile,
     Todo,
+    WorldSimulator,
     hash_key,
 )
 from .user_data import (
@@ -3044,3 +3045,86 @@ class TodoAdmin(EntityModelAdmin):
         context["show_seed_datum"] = False
         context["show_save_as_copy"] = False
         return context
+
+
+@admin.register(WorldSimulator)
+class WorldSimulatorAdmin(SaveBeforeChangeAction, EntityModelAdmin):
+    list_display = (
+        "name",
+        "host",
+        "webclient_port",
+        "watchdog_enabled",
+        "status_badge",
+        "last_started_at",
+    )
+    readonly_fields = (
+        "slug",
+        "status_badge",
+        "last_started_at",
+        "last_watchdog_at",
+    )
+    search_fields = ("name", "host", "slug")
+    list_filter = ("watchdog_enabled",)
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    "slug",
+                    "description",
+                    "host",
+                    "server_port",
+                    "webclient_port",
+                )
+            },
+        ),
+        (
+            _("Paths and watchdog"),
+            {
+                "fields": (
+                    "base_path",
+                    "watchdog_enabled",
+                    "watchdog_interval",
+                )
+            },
+        ),
+        (
+            _("Status"),
+            {
+                "fields": (
+                    "status_badge",
+                    "last_started_at",
+                    "last_watchdog_at",
+                )
+            },
+        ),
+    )
+    change_actions = ("start_world", "open_client")
+
+    @admin.display(description=_("Status"))
+    def status_badge(self, obj: WorldSimulator) -> str:
+        status = obj.status
+        color = "success" if status == "running" else "danger"
+        label = obj.status_display()
+        return format_html('<span class="badge text-bg-{}">{}</span>', color, label)
+
+    def start_world(self, request, obj: WorldSimulator):
+        from core.tasks import launch_world_simulator
+
+        launch_world_simulator.delay(obj.pk)
+        self.message_user(
+            request,
+            _("World simulator startup requested. The watchdog will keep it online."),
+            level=messages.INFO,
+        )
+
+    start_world.label = _("Start world")
+    start_world.short_description = _("Start the Evennia world simulator")
+
+    def open_client(self, request, obj: WorldSimulator):
+        url = reverse("core:world-simulator-client", args=[obj.pk])
+        return HttpResponseRedirect(url)
+
+    open_client.label = _("Open client")
+    open_client.short_description = _("Open the built-in web client")

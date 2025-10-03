@@ -399,3 +399,50 @@ def run_client_report_schedule(schedule_id: int) -> None:
     except Exception:
         logger.exception("ClientReportSchedule %s failed", schedule_id)
         raise
+
+
+@shared_task
+def launch_world_simulator(simulator_id: int) -> bool:
+    """Start the Evennia processes for the requested simulator."""
+
+    try:
+        from .models import WorldSimulator
+    except Exception:  # pragma: no cover - app not ready
+        logger.warning("World simulator model unavailable; start skipped")
+        return False
+
+    try:
+        simulator = WorldSimulator.objects.get(pk=simulator_id)
+    except WorldSimulator.DoesNotExist:
+        logger.info("World simulator %s no longer exists", simulator_id)
+        return False
+
+    try:
+        started = simulator.start(ensure_watchdog=False)
+    except Exception:
+        logger.exception("Failed to start world simulator %s", simulator_id)
+        raise
+
+    simulator.schedule_watchdog(countdown=1)
+    return started
+
+
+@shared_task
+def world_simulator_watchdog(simulator_id: int) -> bool:
+    """Ensure the requested simulator keeps running."""
+
+    try:
+        from .models import WorldSimulator
+    except Exception:  # pragma: no cover - app not ready
+        logger.warning("World simulator model unavailable; watchdog skipped")
+        return False
+
+    try:
+        simulator = WorldSimulator.objects.get(pk=simulator_id)
+    except WorldSimulator.DoesNotExist:
+        logger.info("World simulator %s removed; watchdog stopping", simulator_id)
+        return False
+
+    restarted = simulator.run_watchdog()
+    simulator.schedule_watchdog()
+    return restarted
