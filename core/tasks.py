@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 from pathlib import Path
 import urllib.error
@@ -217,6 +218,12 @@ def check_github_updates() -> None:
         )
 
     subprocess.run(args, cwd=base_dir, check=True)
+
+    if shutil.which("gway"):
+        try:
+            subprocess.run(["gway", "upgrade"], check=True)
+        except subprocess.CalledProcessError:
+            logger.warning("gway upgrade failed; continuing anyway", exc_info=True)
 
     service_file = base_dir / "locks/service.lck"
     if service_file.exists():
