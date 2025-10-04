@@ -172,7 +172,7 @@ def find_awg(
                 awg_int = int(AWG(awg_size))
                 if force_awg is not None and awg_int != int(AWG(force_awg)):
                     continue
-                if limit_awg is not None and awg_int < int(AWG(limit_awg)):
+                if limit_awg is not None and awg_int > int(AWG(limit_awg)):
                     continue
                 awg_data.setdefault(awg_int, {})[int(line_num)] = {
                     "k": k_ohm,
@@ -194,7 +194,10 @@ def find_awg(
             elif limit_awg is None:
                 sizes = sorted(awg_data.keys(), reverse=True)
             else:
-                sizes = sorted([s for s in awg_data.keys() if s >= int(AWG(limit_awg))])
+                sizes = sorted(
+                    [s for s in awg_data.keys() if s <= int(AWG(limit_awg))],
+                    reverse=True,
+                )
 
             for awg_size in sizes:
                 base = awg_data[awg_size][1]
