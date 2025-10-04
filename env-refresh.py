@@ -14,6 +14,8 @@ from collections import defaultdict
 import tempfile
 import hashlib
 import time
+from weakref import WeakKeyDictionary
+from typing import TYPE_CHECKING
 
 import django
 import importlib.util
@@ -45,6 +47,29 @@ from core.models import PackageRelease
 from core.sigil_builder import generate_model_sigils
 from core.user_data import load_shared_user_fixtures, load_user_fixtures
 from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
+
+
+if TYPE_CHECKING:  # pragma: no cover - typing support
+    from django.db.models import Model
+
+_MODEL_SEED_FIELD_CACHE = WeakKeyDictionary()
+
+
+def _model_defines_seed_flag(model: "type[Model]") -> bool:
+    """Return whether *model* exposes the ``is_seed_data`` field.
+
+    The result is cached per concrete model class to avoid recalculating the
+    introspection for every object in the fixture stream.  A ``WeakKeyDictionary``
+    keeps entries bounded to the lifetime of the model class so dynamically
+    rendered models during the run remain isolated.
+    """
+
+    try:
+        return _MODEL_SEED_FIELD_CACHE[model]
+    except KeyError:
+        has_field = any(field.name == "is_seed_data" for field in model._meta.fields)
+        _MODEL_SEED_FIELD_CACHE[model] = has_field
+        return has_field
 
 
 def _local_app_labels() -> list[str]:
@@ -280,7 +305,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                             and PackageRelease.objects.filter(version=version).exists()
                         ):
                             continue
-                    if any(f.name == "is_seed_data" for f in model._meta.fields):
+                    if _model_defines_seed_flag(model):
                         obj.setdefault("fields", {})["is_seed_data"] = True
                     patched_data.append(obj)
                     model_counts[model._meta.label] += 1
