@@ -89,6 +89,7 @@ class AWGCalculatorTests(TestCase):
         lead = PowerLead.objects.get()
         self.assertEqual(lead.values["meters"], "10")
         self.assertEqual(lead.user_agent, "tester")
+        self.assertEqual(lead.status, PowerLead.Status.OPEN)
 
     def test_power_lead_stores_forwarded_for_ip(self):
         url = reverse("awg:calculator")

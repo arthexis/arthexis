@@ -1653,6 +1653,23 @@ class FavoriteTests(TestCase):
         self.assertGreaterEqual(resp.content.decode().count(url), 1)
         self.assertContains(resp, NodeRole._meta.verbose_name_plural)
 
+    def test_dashboard_shows_open_lead_badge(self):
+        InviteLead.objects.create(email="open1@example.com")
+        InviteLead.objects.create(email="open2@example.com")
+        closed = InviteLead.objects.create(email="closed@example.com")
+        closed.status = InviteLead.Status.CLOSED
+        closed.save(update_fields=["status"])
+        assigned = InviteLead.objects.create(email="assigned@example.com")
+        assigned.status = InviteLead.Status.ASSIGNED
+        assigned.save(update_fields=["status"])
+
+        resp = self.client.get(reverse("admin:index"))
+        content = resp.content.decode()
+
+        self.assertIn('class="lead-open-badge"', content)
+        self.assertIn('title="2 open leads"', content)
+        self.assertIn('aria-label="2 open leads"', content)
+
     def test_dashboard_limits_future_actions_to_top_four(self):
         from pages.templatetags.admin_extras import future_action_items
 

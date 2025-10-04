@@ -38,6 +38,15 @@
                 {% else %}
                   {{ fav.custom_label|default:model.name }}
                 {% endif %}
+                {% lead_open_count app.app_label model.object_name as lead_open_count %}
+                {% if lead_open_count is not None %}
+                  {% blocktranslate count open_count=lead_open_count asvar lead_open_label trimmed %}
+                    {{ open_count }} open lead
+                  {% plural %}
+                    {{ open_count }} open leads
+                  {% endblocktranslate %}
+                  <span class="lead-open-badge" aria-label="{{ lead_open_label }}" title="{{ lead_open_label }}">{{ lead_open_count }}</span>
+                {% endif %}
               </th>
 
               {% if model.admin_url and show_changelinks %}

@@ -236,6 +236,11 @@ class CustomSigil(SigilRoot):
 class Lead(Entity):
     """Common request lead information."""
 
+    class Status(models.TextChoices):
+        OPEN = "open", _("Open")
+        ASSIGNED = "assigned", _("Assigned")
+        CLOSED = "closed", _("Closed")
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
     )
@@ -244,6 +249,16 @@ class Lead(Entity):
     user_agent = models.TextField(blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     created_on = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.OPEN
+    )
+    assign_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="%(app_label)s_%(class)s_assignments",
+    )
 
     class Meta:
         abstract = True
