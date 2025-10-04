@@ -61,7 +61,7 @@ class TOTPDeviceAdminForm(forms.ModelForm):
 
 class TOTPDeviceCalibrationActionForm(ActionForm):
     token = forms.CharField(
-        label=_("One-time password"),
+        label=_("OTP"),
         required=False,
         help_text=_(
             "Enter the current authenticator code when running the"
@@ -69,10 +69,26 @@ class TOTPDeviceCalibrationActionForm(ActionForm):
         ),
     )
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        token_field = self.fields["token"]
+        token_field.widget.attrs.setdefault(
+            "title", _("Enter your one-time password for testing")
+        )
+        existing_classes = token_field.widget.attrs.get("class", "")
+        spacing_class = "totp-token-spacing"
+        if spacing_class not in existing_classes.split():
+            token_field.widget.attrs["class"] = (existing_classes + " " + spacing_class).strip()
+
     def clean(self):
         cleaned_data = super().clean()
         token = cleaned_data.get("token")
         if token is not None:
             cleaned_data["token"] = token.strip()
         return cleaned_data
+
+    class Media:
+        css = {
+            "all": ("teams/css/totp_admin.css",)
+        }
 
