@@ -62,3 +62,34 @@ class PyPITokenTests(TestCase):
         assert "env-token" not in twine_cmd
         assert ["git", "tag", "v0.1.1"] in commands
         assert ["git", "push", "origin", "v0.1.1"] in commands
+
+    def test_publish_raises_when_dist_missing(self):
+        with (
+            mock.patch("core.release.network_available", return_value=False),
+            mock.patch.object(release.Path, "exists", return_value=False),
+        ):
+            with self.assertRaises(release.ReleaseError) as exc:
+                release.publish(version="0.1.1")
+        assert str(exc.exception) == "dist directory not found"
+
+    def test_publish_raises_when_dist_empty(self):
+        with (
+            mock.patch("core.release.network_available", return_value=False),
+            mock.patch.object(release.Path, "exists", return_value=True),
+            mock.patch.object(release.Path, "glob", return_value=[]),
+        ):
+            with self.assertRaises(release.ReleaseError) as exc:
+                release.publish(version="0.1.1")
+        assert str(exc.exception) == "dist directory is empty"
+
+    def test_publish_raises_when_credentials_missing(self):
+        with (
+            mock.patch("core.release.network_available", return_value=False),
+            mock.patch.object(release.Path, "exists", return_value=True),
+            mock.patch.object(
+                release.Path, "glob", return_value=[Path("dist/fake.whl")]
+            ),
+        ):
+            with self.assertRaises(release.ReleaseError) as exc:
+                release.publish(version="0.1.1", creds=release.Credentials())
+        assert str(exc.exception) == "Missing PyPI credentials"
