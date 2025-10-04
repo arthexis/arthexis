@@ -13,6 +13,7 @@ from django.db.models import Model
 from django.conf import settings
 from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
+from django.utils.translation import gettext_lazy as _
 
 from core.models import Lead, RFID, ReleaseManager, Todo
 from core.entity import Entity
@@ -80,10 +81,14 @@ def model_admin_actions(context, app_label, model_name):
         if action_name == "delete_selected" or uses_queryset(func):
             continue
         url = None
+        label = description or _name.replace("_", " ")
         if action_name == "my_profile":
             getter = getattr(model_admin, "get_my_profile_url", None)
             if callable(getter):
                 url = getter(request)
+            label_getter = getattr(model_admin, "get_my_profile_label", None)
+            if callable(label_getter):
+                label = label_getter(request)
         base = f"admin:{model_admin.opts.app_label}_{model_admin.opts.model_name}_"
         if not url:
             try:
@@ -93,7 +98,7 @@ def model_admin_actions(context, app_label, model_name):
                     url = reverse(base + action_name.split("_")[0])
                 except NoReverseMatch:
                     url = reverse(base + "changelist") + f"?action={action_name}"
-        actions.append({"url": url, "label": description or _name.replace("_", " ")})
+        actions.append({"url": url, "label": label})
     return actions
 
 
