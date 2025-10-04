@@ -7,6 +7,7 @@ from glob import glob
 import io
 from contextlib import redirect_stdout
 from pathlib import Path
+import uuid
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -24,7 +25,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 import socket
-from core.models import Brand, Todo, WMICode
+from core.models import Brand, Package, PackageRelease, Todo, WMICode
 from core.user_data import dump_user_fixture
 
 
@@ -232,6 +233,104 @@ class EnvRefreshFixtureTests(TestCase):
         self.assertIn(".", output)
         self.assertIn("nodes.NodeRole: 1", output)
         shutil.rmtree(tmp_dir)
+
+    def test_env_refresh_skips_existing_package_release_versions(self):
+        base_dir = Path(settings.BASE_DIR)
+        tmp_dir = base_dir / f"temp_fixture_pkg_versions_{uuid.uuid4().hex}"
+        fixture_dir = tmp_dir / "fixtures"
+        fixture_dir.mkdir(parents=True, exist_ok=True)
+        package = Package.objects.create(name="Fixture Package")
+        PackageRelease.objects.create(package=package, version="9.9.9")
+        fixture_path = fixture_dir / "duplicate_release.json"
+        fixture_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "model": "core.packagerelease",
+                        "pk": 1000,
+                        "fields": {
+                            "package": package.pk,
+                            "release_manager": None,
+                            "version": "9.9.9",
+                        },
+                    }
+                ]
+            )
+        )
+        rel_path = str(fixture_path.relative_to(base_dir))
+        spec = importlib.util.spec_from_file_location(
+            "env_refresh_pkg_versions", base_dir / "env-refresh.py"
+        )
+        env_refresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(env_refresh)
+        env_refresh._fixture_files = lambda: [rel_path]
+        original_call_command = env_refresh.call_command
+
+        def fake_call_command(name, *args, **kwargs):
+            if name == "loaddata":
+                return call_command(name, *args, **kwargs)
+            return None
+
+        env_refresh.call_command = fake_call_command
+        try:
+            env_refresh.run_database_tasks()
+        finally:
+            env_refresh.call_command = original_call_command
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        self.assertEqual(
+            PackageRelease.objects.filter(version="9.9.9").count(),
+            1,
+        )
+
+    def test_env_refresh_skips_duplicate_package_release_versions_across_fixtures(
+        self,
+    ):
+        base_dir = Path(settings.BASE_DIR)
+        tmp_dir = base_dir / f"temp_fixture_pkg_versions_{uuid.uuid4().hex}"
+        fixture_dir = tmp_dir / "fixtures"
+        fixture_dir.mkdir(parents=True, exist_ok=True)
+        package = Package.objects.create(name="Fixture Package Multi")
+        first = fixture_dir / "pkg_release_a.json"
+        second = fixture_dir / "pkg_release_b.json"
+        fixture_data = {
+            "model": "core.packagerelease",
+            "pk": 2000,
+            "fields": {
+                "package": package.pk,
+                "release_manager": None,
+                "version": "8.8.8",
+            },
+        }
+        first.write_text(json.dumps([fixture_data]))
+        duplicate_data = dict(fixture_data)
+        duplicate_fields = dict(fixture_data["fields"])
+        duplicate_data["pk"] = 2001
+        duplicate_data["fields"] = duplicate_fields
+        second.write_text(json.dumps([duplicate_data]))
+        rel_paths = [str(first.relative_to(base_dir)), str(second.relative_to(base_dir))]
+        spec = importlib.util.spec_from_file_location(
+            "env_refresh_pkg_versions_multi", base_dir / "env-refresh.py"
+        )
+        env_refresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(env_refresh)
+        env_refresh._fixture_files = lambda: rel_paths
+        original_call_command = env_refresh.call_command
+
+        def fake_call_command(name, *args, **kwargs):
+            if name == "loaddata":
+                return call_command(name, *args, **kwargs)
+            return None
+
+        env_refresh.call_command = fake_call_command
+        try:
+            env_refresh.run_database_tasks()
+        finally:
+            env_refresh.call_command = original_call_command
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        versions = list(
+            PackageRelease.objects.filter(version="8.8.8").values_list("pk", flat=True)
+        )
+        self.assertEqual(len(versions), 1)
 
 
 class EnvRefreshNodeTests(TestCase):

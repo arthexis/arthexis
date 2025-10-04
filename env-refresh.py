@@ -219,10 +219,14 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     Site.objects.all().delete()
 
     fixtures = _fixture_files()
+    existing_package_versions = set(
+        PackageRelease.objects.values_list("version", flat=True)
+    )
     if fixtures:
         fixtures.sort(key=_fixture_sort_key)
         with tempfile.TemporaryDirectory() as tmpdir:
             patched: dict[int, list[str]] = {}
+            fixture_package_versions: dict[str, set[str]] = {}
             user_pk_map: dict[int, int] = {}
             model_counts: dict[str, int] = defaultdict(int)
             for name in fixtures:
@@ -231,6 +235,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                 with source.open() as f:
                     data = json.load(f)
                 patched_data: list[dict] = []
+                pending_package_versions: set[str] = set()
                 for obj in data:
                     model_label = obj.get("model", "")
                     try:
@@ -275,11 +280,15 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                                 continue
                     if model is PackageRelease:
                         version = obj.get("fields", {}).get("version")
-                        if (
-                            version
-                            and PackageRelease.objects.filter(version=version).exists()
+                        if not version:
+                            pass
+                        elif (
+                            version in existing_package_versions
+                            or version in pending_package_versions
                         ):
                             continue
+                        else:
+                            pending_package_versions.add(version)
                     if any(f.name == "is_seed_data" for f in model._meta.fields):
                         obj.setdefault("fields", {})["is_seed_data"] = True
                     patched_data.append(obj)
@@ -289,6 +298,8 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     json.dump(patched_data, f)
                 if patched_data:
                     patched.setdefault(priority, []).append(str(dest))
+                    if pending_package_versions:
+                        fixture_package_versions[str(dest)] = set(pending_package_versions)
             post_save.disconnect(_create_landings, sender=Module)
             try:
                 for priority in sorted(patched):
@@ -299,6 +310,9 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                             print(f"Skipping fixture {fixture} due to: {exc}")
                         else:
                             print(".", end="", flush=True)
+                            existing_package_versions.update(
+                                fixture_package_versions.get(fixture, set())
+                            )
                 for module in Module.objects.all():
                     module.create_landings()
                 Landing.objects.update(is_seed_data=True)
