@@ -2743,6 +2743,87 @@ class SimulatorAdminTests(TransactionTestCase):
         charger = await database_sync_to_async(Charger.objects.get)(charger_id="NEST")
         self.assertEqual(charger.last_path, "/foo/NEST/")
 
+    async def test_authorize_requires_rfid_accepts_known_account(self):
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id="AUTHREQ", require_rfid=True
+        )
+        User = get_user_model()
+        user = await database_sync_to_async(User.objects.create_user)(
+            username="authuser", password="pwd"
+        )
+        account = await database_sync_to_async(EnergyAccount.objects.create)(
+            user=user, name="Authorized"
+        )
+        await database_sync_to_async(EnergyCredit.objects.create)(
+            account=account, amount_kw=10
+        )
+        tag = await database_sync_to_async(RFID.objects.create)(rfid="CAFE01")
+        await database_sync_to_async(account.rfids.add)(tag)
+
+        communicator = WebsocketCommunicator(application, "/AUTHREQ/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        message_id = "auth-1"
+        await communicator.send_json_to(
+            [2, message_id, "Authorize", {"idTag": "CAFE01"}]
+        )
+        response = await communicator.receive_json_from()
+        self.assertEqual(response[0], 3)
+        self.assertEqual(response[1], message_id)
+        self.assertEqual(response[2], {"idTagInfo": {"status": "Accepted"}})
+
+        await communicator.disconnect()
+
+    async def test_authorize_requires_rfid_rejects_unknown_account(self):
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id="AUTHINV", require_rfid=True
+        )
+
+        communicator = WebsocketCommunicator(application, "/AUTHINV/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        message_id = "auth-2"
+        await communicator.send_json_to(
+            [2, message_id, "Authorize", {"idTag": "DEAD00"}]
+        )
+        response = await communicator.receive_json_from()
+        self.assertEqual(response[0], 3)
+        self.assertEqual(response[1], message_id)
+        self.assertEqual(response[2], {"idTagInfo": {"status": "Invalid"}})
+
+        await communicator.disconnect()
+
+    async def test_authorize_without_requirement_records_rfid(self):
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id="AUTHOPT", require_rfid=False
+        )
+        tag = await database_sync_to_async(RFID.objects.create)(rfid="BEEF02")
+        old_seen = timezone.now() - timedelta(days=1)
+        await database_sync_to_async(RFID.objects.filter(pk=tag.pk).update)(
+            last_seen_on=old_seen
+        )
+
+        communicator = WebsocketCommunicator(application, "/AUTHOPT/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        message_id = "auth-3"
+        await communicator.send_json_to(
+            [2, message_id, "Authorize", {"idTag": "BEEF02"}]
+        )
+        response = await communicator.receive_json_from()
+        self.assertEqual(response[0], 3)
+        self.assertEqual(response[1], message_id)
+        self.assertEqual(response[2], {"idTagInfo": {"status": "Accepted"}})
+
+        updated_tag = await database_sync_to_async(RFID.objects.get)(rfid="BEEF02")
+        self.assertIsNotNone(updated_tag.last_seen_on)
+        self.assertGreater(updated_tag.last_seen_on, old_seen)
+
+        await communicator.disconnect()
+
     async def test_rfid_required_rejects_invalid(self):
         await database_sync_to_async(Charger.objects.create)(
             charger_id="RFID", require_rfid=True
