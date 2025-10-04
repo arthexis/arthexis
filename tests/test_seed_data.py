@@ -217,8 +217,11 @@ class EnvRefreshFixtureTests(TestCase):
         env_refresh._fixture_files = lambda: [rel_path]
         from django.core.management import call_command as django_call
 
+        loaded_fixtures: list[str] = []
+
         def fake_call_command(name, *args, **kwargs):
             if name == "loaddata":
+                loaded_fixtures.extend(args)
                 django_call(name, *args, **kwargs)
             # ignore other commands
 
@@ -231,6 +234,52 @@ class EnvRefreshFixtureTests(TestCase):
         self.assertTrue(role.is_seed_data)
         self.assertIn(".", output)
         self.assertIn("nodes.NodeRole: 1", output)
+        self.assertEqual(len(loaded_fixtures), 1)
+        self.assertNotEqual(loaded_fixtures[0], str(fixture_path))
+        shutil.rmtree(tmp_dir)
+
+    def test_env_refresh_passthrough_fixture_without_changes(self):
+        base_dir = Path(settings.BASE_DIR)
+        tmp_dir = base_dir / "temp_fixture_passthrough"
+        fixture_dir = tmp_dir / "fixtures"
+        fixture_dir.mkdir(parents=True, exist_ok=True)
+        fixture_path = fixture_dir / "sample_passthrough.json"
+        fixture_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "model": "nodes.noderole",
+                        "pk": 1000,
+                        "fields": {"name": "Passthrough Role", "is_seed_data": True},
+                    }
+                ]
+            )
+        )
+        rel_path = str(fixture_path.relative_to(base_dir))
+        spec = importlib.util.spec_from_file_location(
+            "env_refresh", base_dir / "env-refresh.py"
+        )
+        env_refresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(env_refresh)
+        env_refresh._fixture_files = lambda: [rel_path]
+        from django.core.management import call_command as django_call
+
+        loaded_fixtures: list[str] = []
+
+        def fake_call_command(name, *args, **kwargs):
+            if name == "loaddata":
+                loaded_fixtures.extend(args)
+                django_call(name, *args, **kwargs)
+            # ignore other commands
+
+        env_refresh.call_command = fake_call_command
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            env_refresh.run_database_tasks()
+        role = NodeRole.all_objects.get(pk=1000)
+        self.assertTrue(role.is_seed_data)
+        self.assertEqual(len(loaded_fixtures), 1)
+        self.assertEqual(loaded_fixtures[0], str(fixture_path))
         shutil.rmtree(tmp_dir)
 
 
