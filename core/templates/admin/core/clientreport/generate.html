@@ -4,6 +4,15 @@
 <h1>Client Report</h1>
 <form method="post" id="report-form" class="client-report-form">
   {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="errorlist nonfield">
+      <ul>
+        {% for error in form.non_field_errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
   <fieldset class="report-section" aria-describedby="id_period-help">
     <legend class="section-title">Reporting period</legend>
     <div class="form-group">
@@ -11,6 +20,13 @@
       <div class="option-list">
         {{ form.period }}
       </div>
+      {% if form.period.errors %}
+        <ul class="errorlist">
+          {% for error in form.period.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
       {% if form.period.help_text %}
         <p class="help-text" id="id_period-help">{{ form.period.help_text }}</p>
       {% endif %}
@@ -19,6 +35,13 @@
       <div class="form-group">
         {{ form.start.label_tag }}
         {{ form.start }}
+        {% if form.start.errors %}
+          <ul class="errorlist">
+            {% for error in form.start.errors %}
+              <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
         {% if form.start.help_text %}
           <p class="help-text" id="id_start-help">{{ form.start.help_text }}</p>
         {% endif %}
@@ -26,6 +49,13 @@
       <div class="form-group">
         {{ form.end.label_tag }}
         {{ form.end }}
+        {% if form.end.errors %}
+          <ul class="errorlist">
+            {% for error in form.end.errors %}
+              <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
         {% if form.end.help_text %}
           <p class="help-text" id="id_end-help">{{ form.end.help_text }}</p>
         {% endif %}
@@ -43,6 +73,13 @@
           {% trans "Last week" %}
         </button>
       </div>
+      {% if form.week.errors %}
+        <ul class="errorlist">
+          {% for error in form.week.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
       {% if form.week.help_text %}
         <p class="help-text" id="id_week-help">{{ form.week.help_text }}</p>
       {% endif %}
@@ -50,6 +87,13 @@
     <div class="form-group" id="month-field">
       {{ form.month.label_tag }}
       {{ form.month }}
+      {% if form.month.errors %}
+        <ul class="errorlist">
+          {% for error in form.month.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
       {% if form.month.help_text %}
         <p class="help-text" id="id_month-help">{{ form.month.help_text }}</p>
       {% endif %}
@@ -63,6 +107,13 @@
     <div class="form-group">
       {{ form.owner.label_tag }}
       {{ form.owner }}
+      {% if form.owner.errors %}
+        <ul class="errorlist">
+          {% for error in form.owner.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
       {% if form.owner.help_text %}
         <p class="help-text" id="id_owner-help">{{ form.owner.help_text }}</p>
       {% endif %}
@@ -70,6 +121,13 @@
     <div class="form-group">
       {{ form.destinations.label_tag }}
       {{ form.destinations }}
+      {% if form.destinations.errors %}
+        <ul class="errorlist">
+          {% for error in form.destinations.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
       {% if form.destinations.help_text %}
         <p class="help-text" id="id_destinations-help">{{ form.destinations.help_text }}</p>
       {% endif %}
@@ -77,6 +135,13 @@
     <div class="form-group">
       {{ form.recurrence.label_tag }}
       {{ form.recurrence }}
+      {% if form.recurrence.errors %}
+        <ul class="errorlist">
+          {% for error in form.recurrence.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
       {% if form.recurrence.help_text %}
         <p class="help-text" id="id_recurrence-help">{{ form.recurrence.help_text }}</p>
       {% endif %}
@@ -86,6 +151,13 @@
         {{ form.disable_emails }}
         {{ form.disable_emails.label_tag }}
       </div>
+      {% if form.disable_emails.errors %}
+        <ul class="errorlist">
+          {% for error in form.disable_emails.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
       {% if form.disable_emails.help_text %}
         <p class="help-text" id="id_disable_emails-help">{{ form.disable_emails.help_text }}</p>
       {% endif %}
