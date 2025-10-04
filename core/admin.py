@@ -197,6 +197,27 @@ class SaveBeforeChangeAction(DjangoObjectActions):
 class ProfileAdminMixin:
     """Reusable actions for profile-bound admin classes."""
 
+    def _get_user_profile_info(self, request):
+        user = getattr(request, "user", None)
+        if not getattr(user, "is_authenticated", False):
+            return user, None, 0
+
+        queryset = self.model._default_manager.filter(user=user)
+        profiles = list(queryset[:2])
+        if not profiles:
+            return user, None, 0
+        if len(profiles) == 1:
+            return user, profiles[0], 1
+        return user, profiles[0], 2
+
+    def get_my_profile_label(self, request):
+        _user, profile, profile_count = self._get_user_profile_info(request)
+        if profile_count == 0:
+            return _("Active Profile (Unset)")
+        if profile_count == 1 and profile is not None:
+            return _("Active Profile (%(name)s)") % {"name": str(profile)}
+        return _("Active Profile")
+
     def _resolve_my_profile_target(self, request):
         opts = self.model._meta
         changelist_url = reverse(
@@ -210,7 +231,7 @@ class ProfileAdminMixin:
                 messages.ERROR,
             )
 
-        profile = self.model._default_manager.filter(user=user).first()
+        _user, profile, profile_count = self._get_user_profile_info(request)
         if profile is not None:
             permission_check = getattr(self, "has_view_or_change_permission", None)
             has_permission = (
@@ -230,7 +251,7 @@ class ProfileAdminMixin:
                 messages.ERROR,
             )
 
-        if self.has_add_permission(request):
+        if profile_count == 0 and self.has_add_permission(request):
             add_url = reverse(f"admin:{opts.app_label}_{opts.model_name}_add")
             params = {}
             user_id = getattr(user, "pk", None)
