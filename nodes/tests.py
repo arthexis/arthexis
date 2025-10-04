@@ -1984,6 +1984,22 @@ class NetMessagePropagationTests(TestCase):
         self.assertFalse(msg.complete)
 
     @patch("requests.post")
+    @patch("core.notifications.notify", return_value=False)
+    def test_propagate_respects_target_limit(
+        self, mock_notify, mock_post
+    ):
+        msg = NetMessage.objects.create(
+            subject="s", body="b", reach=self.role, target_limit=2
+        )
+        with patch.object(Node, "get_local", return_value=self.local), patch(
+            "random.shuffle", side_effect=lambda seq: None
+        ):
+            msg.propagate()
+
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertEqual(msg.propagated_to.count(), 2)
+
+    @patch("requests.post")
     @patch("core.notifications.notify", return_value=True)
     def test_propagate_prunes_old_local_messages(self, mock_notify, mock_post):
         old_local = NetMessage.objects.create(
