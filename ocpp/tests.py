@@ -3282,6 +3282,48 @@ class ChargePointSimulatorTests(TransactionTestCase):
             server.close()
             await server.wait_closed()
 
+    async def test_handle_csms_call_logs_unsupported_action(self):
+        cfg = SimulatorConfig(cp_path="SIMLOG/")
+        sim = ChargePointSimulator(cfg)
+        store.clear_log(cfg.cp_path, log_type="simulator")
+        store.logs["simulator"][cfg.cp_path] = []
+        sent_frames: list[str] = []
+
+        async def send(payload: str) -> None:
+            sent_frames.append(payload)
+
+        async def recv():
+            return None
+
+        try:
+            handled = await sim._handle_csms_call(
+                [2, "msg1", "Reset", {}],
+                send,
+                recv,
+            )
+            self.assertTrue(handled)
+            logs = store.get_logs(cfg.cp_path, log_type="simulator")
+            self.assertTrue(
+                any(
+                    "Received unsupported action 'Reset'" in entry
+                    for entry in logs
+                ),
+                logs,
+            )
+            self.assertTrue(sent_frames, "Expected a CallError response from simulator")
+            frame = json.loads(sent_frames[-1])
+            self.assertEqual(frame[0], 4)
+            self.assertEqual(frame[1], "msg1")
+            self.assertEqual(frame[2], "NotSupported")
+            self.assertIn("Simulator does not implement Reset", frame[3])
+            self.assertNotIn(sim, store.simulators.values())
+        finally:
+            store.clear_log(cfg.cp_path, log_type="simulator")
+            store.logs["simulator"].pop(cfg.cp_path, None)
+            for key, value in list(store.simulators.items()):
+                if value is sim:
+                    store.simulators.pop(key, None)
+
     async def test_door_open_event_sends_notifications(self):
         status_payloads = []
 
