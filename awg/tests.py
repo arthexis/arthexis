@@ -1,5 +1,12 @@
+import os
 from datetime import time
 from decimal import Decimal
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
+# Import the root test configuration to initialise Django and prepare the
+# database schema for these standalone tests.
+import tests.conftest  # noqa: F401
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -14,6 +21,7 @@ from .models import (
     EnergyTariff,
     PowerLead,
 )
+from .views import find_conduit
 
 
 class AWGCalculatorTests(TestCase):
@@ -197,6 +205,18 @@ class AWGCalculatorTests(TestCase):
 
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(seen, {2, 3})
+
+    def test_find_conduit_prefers_larger_trade_size_with_tie_capacity(self):
+        desired_cables = 2
+        ConduitFill.objects.create(
+            trade_size="3/4",
+            conduit="emt",
+            awg_8=desired_cables,
+        )
+
+        result = find_conduit("8", desired_cables, conduit="emt")
+
+        self.assertEqual(result["size_inch"], "1")
 
     def test_odd_awg_displays_even_preference(self):
         CableSize.objects.create(
