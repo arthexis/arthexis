@@ -1,0 +1,8 @@
+.actions select + .totp-token-spacing {
+  margin-left: 0.75rem;
+}
+
+td .totp-token-spacing {
+  margin-left: 0.75rem;
+}
+
