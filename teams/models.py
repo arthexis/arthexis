@@ -96,6 +96,9 @@ class AssistantProfile(CoreAssistantProfile):
 
 
 class TOTPDevice(CoreTOTPDevice):
+    supports_user_datum = True
+    supports_seed_datum = True
+
     class Meta:
         proxy = True
         app_label = "teams"

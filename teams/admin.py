@@ -29,6 +29,14 @@ from core.models import (
     OdooProfile as CoreOdooProfile,
     AssistantProfile as CoreAssistantProfile,
 )
+from core.user_data import (
+    UserDatumAdminMixin,
+    delete_user_fixture,
+    dump_user_fixture,
+    _fixture_path,
+    _resolve_fixture_user,
+    _user_allows_user_data,
+)
 from nodes.admin import EmailOutboxAdmin
 from nodes.models import EmailOutbox as CoreEmailOutbox
 
@@ -111,11 +119,12 @@ except NotRegistered:
 
 
 @admin.register(TOTPDevice)
-class TOTPDeviceAdminProxy(CoreTOTPDeviceAdmin):
+class TOTPDeviceAdminProxy(UserDatumAdminMixin, CoreTOTPDeviceAdmin):
     raw_id_fields = ()
     form = TOTPDeviceAdminForm
     action_form = TOTPDeviceCalibrationActionForm
-    actions = CoreTOTPDeviceAdmin.actions + ("calibrate_device",)
+    actions = tuple(CoreTOTPDeviceAdmin.actions or ()) + ("calibrate_device",)
+    change_form_template = "admin/user_datum_change_form.html"
 
     def get_fieldsets(self, request, obj=None):
         fieldsets = super().get_fieldsets(request, obj=obj)
@@ -191,4 +200,41 @@ class TOTPDeviceAdminProxy(CoreTOTPDeviceAdmin):
                 _("Token rejected. The device was not calibrated."),
                 level=messages.ERROR,
             )
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+
+        obj.is_seed_data = request.POST.get("_seed_datum") == "on"
+
+        if getattr(self, "_skip_entity_user_datum", False):
+            return
+
+        target_user = _resolve_fixture_user(obj, request.user)
+        allow_user_data = _user_allows_user_data(target_user)
+
+        if request.POST.get("_user_datum") == "on":
+            if allow_user_data:
+                if not obj.is_user_data:
+                    obj.is_user_data = True
+                dump_user_fixture(obj, target_user)
+                if target_user is None:
+                    target_user = _resolve_fixture_user(obj, None)
+                if target_user is not None:
+                    path = _fixture_path(target_user, obj)
+                    self.message_user(
+                        request,
+                        _("User datum saved to %(path)s") % {"path": path},
+                    )
+            else:
+                if obj.is_user_data:
+                    obj.is_user_data = False
+                    delete_user_fixture(obj, target_user)
+                self.message_user(
+                    request,
+                    _("User data is not available for this account."),
+                    level=messages.WARNING,
+                )
+        elif obj.is_user_data:
+            obj.is_user_data = False
+            delete_user_fixture(obj, target_user)
 
