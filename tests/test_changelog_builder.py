@@ -1,5 +1,6 @@
 from django.test import SimpleTestCase
 from unittest import mock
+import subprocess
 
 from core import changelog
 
@@ -143,3 +144,38 @@ class ChangelogBuilderTests(SimpleTestCase):
                 "- " + "c" * 8 + " Backfill missing release notes (#599)",
             ],
         )
+
+    def test_determine_range_spec_uses_previous_tag_for_exact_match(self):
+        def fake_run(cmd, capture_output=False, text=False, check=False):
+            if cmd == ["git", "describe", "--tags", "--exact-match", "HEAD"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="v0.1.14\n", stderr="")
+            if cmd == ["git", "rev-parse", "--verify", "HEAD^"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            if cmd == ["git", "describe", "--tags", "--abbrev=0", "HEAD^"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="v0.1.13\n", stderr="")
+            raise AssertionError(f"Unexpected command: {cmd}")
+
+        with mock.patch("core.changelog.subprocess.run", side_effect=fake_run):
+            self.assertEqual(changelog.determine_range_spec(), "v0.1.13..HEAD")
+
+    def test_determine_range_spec_without_previous_tag(self):
+        def fake_run(cmd, capture_output=False, text=False, check=False):
+            if cmd == ["git", "describe", "--tags", "--exact-match", "HEAD"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="v0.1.0\n", stderr="")
+            if cmd == ["git", "rev-parse", "--verify", "HEAD^"]:
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+            raise AssertionError(f"Unexpected command: {cmd}")
+
+        with mock.patch("core.changelog.subprocess.run", side_effect=fake_run):
+            self.assertEqual(changelog.determine_range_spec(), "HEAD")
+
+    def test_determine_range_spec_without_exact_match(self):
+        def fake_run(cmd, capture_output=False, text=False, check=False):
+            if cmd == ["git", "describe", "--tags", "--exact-match", "HEAD"]:
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+            if cmd == ["git", "describe", "--tags", "--abbrev=0"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="v0.1.13\n", stderr="")
+            raise AssertionError(f"Unexpected command: {cmd}")
+
+        with mock.patch("core.changelog.subprocess.run", side_effect=fake_run):
+            self.assertEqual(changelog.determine_range_spec(), "v0.1.13..HEAD")
