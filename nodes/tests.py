@@ -1056,6 +1056,123 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertEqual(message.filter_installed_version, "1.0.0")
         self.assertEqual(message.filter_installed_revision, "rev123")
 
+    def test_net_message_updates_existing_record(self):
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_key = (
+            key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
+        sender = Node.objects.create(
+            hostname="sender-update",
+            address="10.0.0.50",
+            port=8010,
+            mac_address="00:11:22:33:44:fe",
+            public_key=public_key,
+        )
+        existing_reach, _ = NodeRole.objects.get_or_create(name="Terminal")
+        new_reach, _ = NodeRole.objects.get_or_create(name="Control")
+        old_filter_node = Node.objects.create(
+            hostname="legacy-filter",
+            address="10.0.0.60",
+            port=8020,
+            mac_address="00:11:22:33:44:fd",
+        )
+        new_filter_node = Node.objects.create(
+            hostname="new-filter",
+            address="10.0.0.61",
+            port=8021,
+            mac_address="00:11:22:33:44:fc",
+        )
+        old_feature = NodeFeature.objects.create(
+            slug=f"legacy-feature-{uuid.uuid4().hex}", display="Legacy Feature"
+        )
+        new_feature = NodeFeature.objects.create(
+            slug=f"new-feature-{uuid.uuid4().hex}", display="New Feature"
+        )
+        old_filter_role = NodeRole.objects.create(
+            name=f"LegacyRole-{uuid.uuid4().hex}"
+        )
+        new_filter_role = NodeRole.objects.create(name=f"NewRole-{uuid.uuid4().hex}")
+        origin_node = Node.objects.create(
+            hostname="origin-node",
+            address="10.0.0.70",
+            port=8030,
+            mac_address="00:11:22:33:44:fb",
+        )
+        msg_uuid = uuid.uuid4()
+        original = NetMessage.objects.create(
+            uuid=msg_uuid,
+            subject="old subject",
+            body="old body",
+            reach=existing_reach,
+            filter_node=old_filter_node,
+            filter_node_feature=old_feature,
+            filter_node_role=old_filter_role,
+            filter_current_relation=Node.Relation.PEER,
+            filter_installed_version="0.9.0",
+            filter_installed_revision="oldrev",
+        )
+        payload = {
+            "uuid": str(msg_uuid),
+            "subject": "updated subject",
+            "body": "updated body",
+            "seen": [str(uuid.uuid4()), str(uuid.uuid4())],
+            "sender": str(sender.uuid),
+            "origin": str(origin_node.uuid),
+            "reach": new_reach.name,
+            "filter_node": str(new_filter_node.uuid),
+            "filter_node_feature": new_feature.slug,
+            "filter_node_role": new_filter_role.name,
+            "filter_current_relation": Node.Relation.DOWNSTREAM.value,
+            "filter_installed_version": "2.0.0",
+            "filter_installed_revision": "newrev",
+        }
+        payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        signature = key.sign(
+            payload_json.encode(), padding.PKCS1v15(), hashes.SHA256()
+        )
+        with patch.object(NetMessage, "propagate") as mock_propagate:
+            response = self.client.post(
+                reverse("net-message"),
+                data=payload_json,
+                content_type="application/json",
+                HTTP_X_SIGNATURE=base64.b64encode(signature).decode(),
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(
+                NetMessage.objects.filter(uuid=msg_uuid).values_list(
+                    "pk", flat=True
+                )
+            ),
+            [original.pk],
+        )
+        original.refresh_from_db()
+        self.assertEqual(original.subject, payload["subject"])
+        self.assertEqual(original.body, payload["body"])
+        self.assertEqual(original.reach, new_reach)
+        self.assertEqual(original.node_origin, origin_node)
+        self.assertEqual(original.filter_node, new_filter_node)
+        self.assertEqual(original.filter_node_feature, new_feature)
+        self.assertEqual(original.filter_node_role, new_filter_role)
+        self.assertEqual(
+            original.filter_current_relation, payload["filter_current_relation"]
+        )
+        self.assertEqual(
+            original.filter_installed_version, payload["filter_installed_version"]
+        )
+        self.assertEqual(
+            original.filter_installed_revision, payload["filter_installed_revision"]
+        )
+        mock_propagate.assert_called_once()
+        self.assertEqual(
+            mock_propagate.call_args.kwargs["seen"], payload["seen"]
+        )
+
     def test_clipboard_polling_creates_task(self):
         feature, _ = NodeFeature.objects.get_or_create(
             slug="clipboard-poll", defaults={"display": "Clipboard Poll"}
