@@ -2019,6 +2019,78 @@ class NetMessagePropagationTests(TestCase):
         self.assertTrue(NetMessage.objects.filter(pk=msg.pk).exists())
 
 
+class NetMessageSignatureTests(TestCase):
+    def setUp(self):
+        self.role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.local = Node.objects.create(
+            hostname="local",  # noqa: S106 - hostname in tests
+            address="10.0.0.1",
+            port=8001,
+            mac_address="00:11:22:33:44:55",
+            role=self.role,
+            public_endpoint="local",
+        )
+        self.remote = Node.objects.create(
+            hostname="remote",
+            address="10.0.0.2",
+            port=8002,
+            mac_address="00:11:22:33:44:66",
+            role=self.role,
+            public_endpoint="remote",
+        )
+
+    def test_propagate_includes_signature_header(self):
+        with TemporaryDirectory() as tmp:
+            base_path = Path(tmp)
+            security_dir = base_path / "security"
+            security_dir.mkdir()
+            private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            pem_data = private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            (security_dir / self.local.public_endpoint).write_bytes(pem_data)
+            self.local.base_path = str(base_path)
+            self.local.save(update_fields=["base_path"])
+
+            captured_headers: list[dict[str, str]] = []
+
+            def fake_post(url, data=None, headers=None, timeout=None):  # noqa: ARG001
+                captured_headers.append(dict(headers or {}))
+                return MagicMock()
+
+            with (
+                patch("core.notifications.notify", return_value=False),
+                patch.object(Node, "get_local", return_value=self.local),
+                patch("requests.post", side_effect=fake_post) as mock_post,
+            ):
+                msg_one = NetMessage.objects.create(
+                    subject="sig",
+                    body="first",
+                    reach=self.role,
+                    target_limit=1,
+                )
+                msg_one.propagate()
+
+                msg_two = NetMessage.objects.create(
+                    subject="sig",
+                    body="second",
+                    reach=self.role,
+                    target_limit=1,
+                )
+                msg_two.propagate()
+
+            self.assertEqual(mock_post.call_count, 2)
+
+        self.assertGreaterEqual(len(captured_headers), 2)
+        signature_one = captured_headers[0].get("X-Signature")
+        signature_two = captured_headers[1].get("X-Signature")
+        self.assertTrue(signature_one)
+        self.assertTrue(signature_two)
+        self.assertNotEqual(signature_one, signature_two)
+
+
 class NodeActionTests(TestCase):
     def setUp(self):
         self.client = Client()
