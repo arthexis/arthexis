@@ -13,7 +13,7 @@ from django.conf import settings
 from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
 
-from core.models import ReleaseManager, Todo
+from core.models import Lead, ReleaseManager, Todo
 from core.entity import Entity
 
 register = template.Library()
@@ -193,6 +193,44 @@ def model_db_status(context, app_label: str, model_name: str) -> bool:
     except LookupError:
         return False
     return model._meta.db_table in tables
+
+
+@register.simple_tag(takes_context=True)
+def lead_open_count(context, app_label: str, model_name: str):
+    """Return the number of open leads for the given model."""
+
+    cache = context.setdefault("_lead_open_counts", {})
+    cache_key = f"{app_label}.{model_name}".lower()
+    if cache_key in cache:
+        return cache[cache_key]
+
+    try:
+        model = apps.get_model(app_label, model_name)
+    except LookupError:
+        cache[cache_key] = None
+        return None
+
+    concrete = model._meta.concrete_model
+    if not issubclass(concrete, Lead):
+        cache[cache_key] = None
+        return None
+
+    concrete_key = concrete._meta.label_lower
+    if concrete_key in cache:
+        count = cache[concrete_key]
+    else:
+        try:
+            open_value = concrete.Status.OPEN
+        except AttributeError:
+            count = None
+        else:
+            count = (
+                concrete._default_manager.filter(status=open_value).count()
+            )
+        cache[concrete_key] = count
+
+    cache[cache_key] = count
+    return count
 
 
 @register.simple_tag(takes_context=True)
