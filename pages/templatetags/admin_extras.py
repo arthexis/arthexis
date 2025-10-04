@@ -8,12 +8,13 @@ from django.apps import apps
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
+from django.db.models import Count, Q
 from django.db.models import Model
 from django.conf import settings
 from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
 
-from core.models import Lead, ReleaseManager, Todo
+from core.models import Lead, RFID, ReleaseManager, Todo
 from core.entity import Entity
 
 register = template.Library()
@@ -231,6 +232,25 @@ def lead_open_count(context, app_label: str, model_name: str):
 
     cache[cache_key] = count
     return count
+
+
+@register.simple_tag(takes_context=True)
+def rfid_release_stats(context):
+    """Return release statistics for the RFID model."""
+
+    cache_key = "_rfid_release_stats"
+    stats = context.get(cache_key)
+    if stats is None:
+        counts = RFID.objects.aggregate(
+            total=Count("pk"),
+            released=Count("pk", filter=Q(released=True)),
+        )
+        stats = {
+            "released": counts.get("released") or 0,
+            "total": counts.get("total") or 0,
+        }
+        context[cache_key] = stats
+    return stats
 
 
 @register.simple_tag(takes_context=True)

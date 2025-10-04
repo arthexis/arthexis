@@ -45,6 +45,7 @@ from core.models import (
     InviteLead,
     Package,
     Reference,
+    RFID,
     ReleaseManager,
     Todo,
     TOTPDeviceSettings,
@@ -71,6 +72,7 @@ from datetime import (
 from django.core import mail
 from django.utils import timezone
 from django.utils.text import slugify
+from django.utils.translation import gettext
 from django_otp import DEVICE_ID_SESSION_KEY
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
@@ -1669,6 +1671,18 @@ class FavoriteTests(TestCase):
         self.assertIn('class="lead-open-badge"', content)
         self.assertIn('title="2 open leads"', content)
         self.assertIn('aria-label="2 open leads"', content)
+
+    def test_dashboard_shows_rfid_release_badge(self):
+        RFID.objects.create(rfid="RFID0001", released=True)
+        RFID.objects.create(rfid="RFID0002", released=False)
+
+        resp = self.client.get(reverse("admin:index"))
+
+        released_label = gettext("Released")
+        registered_label = gettext("Registered")
+        expected = f"[1 {released_label}] / [2 {registered_label}]"
+
+        self.assertContains(resp, expected)
 
     def test_dashboard_limits_future_actions_to_top_four(self):
         from pages.templatetags.admin_extras import future_action_items

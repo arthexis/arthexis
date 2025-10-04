@@ -38,6 +38,19 @@
                 {% else %}
                   {{ fav.custom_label|default:model.name }}
                 {% endif %}
+                {% if model.object_name == 'RFID' %}
+                  {% rfid_release_stats as rfid_stats %}
+                  {% if rfid_stats %}
+                    {% blocktranslate with released=rfid_stats.released registered=rfid_stats.total asvar rfid_badge_label trimmed %}
+                      {{ released }} released RFIDs out of {{ registered }} registered RFIDs
+                    {% endblocktranslate %}
+                    <span class="rfid-release-stats" aria-label="{{ rfid_badge_label }}" title="{{ rfid_badge_label }}">
+                      <span class="rfid-release-badge">[{{ rfid_stats.released }} {% translate 'Released' %}]</span>
+                      <span class="rfid-release-separator" aria-hidden="true">/</span>
+                      <span class="rfid-release-badge">[{{ rfid_stats.total }} {% translate 'Registered' %}]</span>
+                    </span>
+                  {% endif %}
+                {% endif %}
                 {% lead_open_count app.app_label model.object_name as lead_open_count %}
                 {% if lead_open_count is not None %}
                   {% blocktranslate count open_count=lead_open_count asvar lead_open_label trimmed %}
