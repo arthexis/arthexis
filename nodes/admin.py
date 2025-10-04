@@ -1115,10 +1115,10 @@ class NetMessageAdmin(EntityModelAdmin):
         "subject",
         "body",
         "filter_node",
-        "filter_node_role",
+        "filter_node_role_display",
         "node_origin",
         "created",
-        "target_limit",
+        "target_limit_display",
         "complete",
     )
     search_fields = ("subject", "body")
@@ -1184,3 +1184,11 @@ class NetMessageAdmin(EntityModelAdmin):
         self.message_user(request, f"{queryset.count()} messages sent")
 
     send_messages.short_description = "Send selected messages"
+
+    @admin.display(description="Role", ordering="filter_node_role")
+    def filter_node_role_display(self, obj):
+        return obj.filter_node_role
+
+    @admin.display(description="TL", ordering="target_limit")
+    def target_limit_display(self, obj):
+        return obj.target_limit or ""
