@@ -95,6 +95,20 @@ def _release_log_name(package_name: str, version: str) -> str:
     return f"pr.{package_name}.v{version}.log"
 
 
+def _sync_with_origin_main(log_path: Path) -> None:
+    """Ensure the current branch is rebased onto ``origin/main``."""
+
+    try:
+        subprocess.run(["git", "fetch", "origin", "main"], check=True)
+        _append_log(log_path, "Fetched latest changes from origin/main")
+        subprocess.run(["git", "rebase", "origin/main"], check=True)
+        _append_log(log_path, "Rebased current branch onto origin/main")
+    except subprocess.CalledProcessError as exc:
+        subprocess.run(["git", "rebase", "--abort"], check=False)
+        _append_log(log_path, "Rebase onto origin/main failed; aborted rebase")
+        raise Exception("Rebase onto main failed") from exc
+
+
 def _clean_repo() -> None:
     """Return the git repository to a clean state."""
     subprocess.run(["git", "reset", "--hard"], check=False)
@@ -456,6 +470,7 @@ def _step_changelog_docs(release, ctx, log_path: Path) -> None:
 
 def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Execute pre-release actions")
+    _sync_with_origin_main(log_path)
     try:
         subprocess.run(["scripts/generate-changelog.sh"], check=True)
     except OSError as exc:
@@ -542,15 +557,7 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
 
     _append_log(log_path, "Generating build files")
     try:
-        try:
-            subprocess.run(["git", "fetch", "origin", "main"], check=True)
-            _append_log(log_path, "Fetched latest changes from origin/main")
-            subprocess.run(["git", "rebase", "origin/main"], check=True)
-            _append_log(log_path, "Rebased current branch onto origin/main")
-        except subprocess.CalledProcessError as exc:
-            subprocess.run(["git", "rebase", "--abort"], check=False)
-            _append_log(log_path, "Rebase onto origin/main failed; aborted rebase")
-            raise Exception("Rebase onto main failed") from exc
+        _sync_with_origin_main(log_path)
         release_utils.promote(
             package=release.to_package(),
             version=release.version,

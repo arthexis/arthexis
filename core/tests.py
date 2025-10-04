@@ -52,7 +52,12 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import IntegrityError
 from .backends import LocalhostAdminBackend
-from core.views import _step_check_version, _step_promote_build, _step_publish
+from core.views import (
+    _step_check_version,
+    _step_pre_release_actions,
+    _step_promote_build,
+    _step_publish,
+)
 from core import views as core_views
 from core import public_wifi
 
@@ -829,6 +834,41 @@ class ReleaseProcessTests(TestCase):
         dump_fixture.assert_not_called()
         run.assert_any_call(["git", "reset", "--hard"], check=False)
         run.assert_any_call(["git", "clean", "-fd"], check=False)
+
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    @mock.patch("core.views._ensure_release_todo")
+    @mock.patch("core.views._sync_with_origin_main")
+    @mock.patch("core.views.subprocess.run")
+    def test_pre_release_syncs_with_main(
+        self, run, sync_main, ensure_todo, dump_fixture
+    ):
+        import subprocess as sp
+
+        def fake_run(cmd, check=True, capture_output=False, text=False):
+            if capture_output:
+                return sp.CompletedProcess(cmd, 0, stdout="", stderr="")
+            if cmd[:2] == ["git", "diff"]:
+                return sp.CompletedProcess(cmd, 1)
+            return sp.CompletedProcess(cmd, 0)
+
+        run.side_effect = fake_run
+        ensure_todo.return_value = (
+            mock.Mock(request="Create release pkg 1.0.1", url="", request_details=""),
+            Path("core/fixtures/todos__next_release.json"),
+        )
+
+        version_path = Path("VERSION")
+        original_version = version_path.read_text(encoding="utf-8")
+
+        try:
+            _step_pre_release_actions(self.release, {}, Path("rel.log"))
+        finally:
+            version_path.write_text(original_version, encoding="utf-8")
+
+        sync_main.assert_called_once_with(Path("rel.log"))
+        run.assert_any_call(["git", "add", "CHANGELOG.rst"], check=True)
+        run.assert_any_call(["git", "add", "VERSION"], check=True)
+        ensure_todo.assert_called_once()
 
     @mock.patch("core.views.subprocess.run")
     @mock.patch("core.views.PackageRelease.dump_fixture")
