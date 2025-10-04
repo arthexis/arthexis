@@ -7,6 +7,21 @@ import pytest
 import core.tasks as tasks
 
 
+class CommandRecorder:
+    def __init__(self):
+        self.calls: list[tuple[tuple, dict]] = []
+
+    def __call__(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return types.SimpleNamespace(returncode=0)
+
+    def find(self, executable: str):
+        for args, kwargs in self.calls:
+            if args and args[0] and args[0][0] == executable:
+                return args, kwargs
+        return None
+
+
 def _setup_tmp(monkeypatch, tmp_path):
     core_dir = tmp_path / "core"
     core_dir.mkdir()
@@ -21,10 +36,8 @@ def test_no_upgrade_triggers_startup(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.0")
 
-    def fake_run(*args, **kwargs):
-        return types.SimpleNamespace(returncode=0)
-
-    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    run_recorder = CommandRecorder()
+    monkeypatch.setattr(tasks.subprocess, "run", run_recorder)
     monkeypatch.setattr(tasks.subprocess, "check_output", lambda *a, **k: b"1.0")
 
     scheduled = []
@@ -49,6 +62,12 @@ def test_no_upgrade_triggers_startup(monkeypatch, tmp_path):
 
     assert called.get("x")
     assert scheduled == []
+    assert run_recorder.calls
+    fetch_args, fetch_kwargs = run_recorder.calls[0]
+    assert fetch_args[0][:3] == ["git", "fetch", "origin"]
+    assert fetch_kwargs.get("cwd") == base
+    assert fetch_kwargs.get("check") is True
+    assert run_recorder.find("./upgrade.sh") is None
 
 
 @pytest.mark.role("Constellation")
@@ -56,13 +75,8 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.0")
 
-    run_calls = []
-
-    def fake_run(args, cwd=None, check=None):
-        run_calls.append(args)
-        return types.SimpleNamespace(returncode=0)
-
-    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    run_recorder = CommandRecorder()
+    monkeypatch.setattr(tasks.subprocess, "run", run_recorder)
     monkeypatch.setattr(tasks.subprocess, "check_output", lambda *a, **k: b"2.0")
 
     notify_calls = []
@@ -92,7 +106,17 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
         and _matches_upgrade_stamp(body)
         for subject, body in notify_calls
     )
-    assert any("upgrade.sh" in cmd[0] for cmd in run_calls)
+    upgrade_call = run_recorder.find("./upgrade.sh")
+    assert upgrade_call is not None
+    upgrade_args, upgrade_kwargs = upgrade_call
+    assert upgrade_args[0] == ["./upgrade.sh", "--no-restart"]
+    assert upgrade_kwargs.get("cwd") == base
+    assert upgrade_kwargs.get("check") is True
+    fetch_call = run_recorder.calls[0]
+    fetch_args, fetch_kwargs = fetch_call
+    assert fetch_args[0][:3] == ["git", "fetch", "origin"]
+    assert fetch_kwargs.get("cwd") == base
+    assert fetch_kwargs.get("check") is True
     assert scheduled
     first_call = scheduled[0]
     assert first_call["kwargs"].get("countdown") == tasks.AUTO_UPGRADE_HEALTH_DELAY_SECONDS
@@ -144,6 +168,7 @@ def test_verify_auto_upgrade_health_reverts_and_records_revision(
     final_call = run_calls[-1]
     assert final_call["args"] == ["./upgrade.sh", "--revert"]
     assert final_call["cwd"] == base
+    assert final_call["check"] is True
 
     skip_file = locks / tasks.AUTO_UPGRADE_SKIP_LOCK_NAME
     assert skip_file.exists()
@@ -169,13 +194,8 @@ def test_check_github_updates_skips_blocked_revision(monkeypatch, tmp_path):
 
     monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
 
-    run_calls = []
-
-    def fake_run(args, cwd=None, check=None):
-        run_calls.append(args)
-        return types.SimpleNamespace(returncode=0)
-
-    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    run_recorder = CommandRecorder()
+    monkeypatch.setattr(tasks.subprocess, "run", run_recorder)
 
     scheduled = []
 
@@ -199,8 +219,12 @@ def test_check_github_updates_skips_blocked_revision(monkeypatch, tmp_path):
 
     assert called.get("x")
     assert scheduled == []
-    assert run_calls and run_calls[0][0] == "git"
-    assert all(cmd[0] != "./upgrade.sh" for cmd in run_calls)
+    assert run_recorder.calls
+    fetch_args, fetch_kwargs = run_recorder.calls[0]
+    assert fetch_args[0][:3] == ["git", "fetch", "origin"]
+    assert fetch_kwargs.get("cwd") == base
+    assert fetch_kwargs.get("check") is True
+    assert run_recorder.find("./upgrade.sh") is None
 
 
 def _matches_upgrade_stamp(body: str) -> bool:
