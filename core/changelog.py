@@ -206,6 +206,60 @@ def _merge_sections(
     return merged
 
 
+def _resolve_start_tag(explicit: str | None = None) -> Optional[str]:
+    """Return the most recent tag that should seed the changelog range."""
+
+    if explicit:
+        return explicit
+
+    exact = subprocess.run(
+        ["git", "describe", "--tags", "--exact-match", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if exact.returncode == 0:
+        has_parent = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD^"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if has_parent.returncode == 0:
+            previous = subprocess.run(
+                ["git", "describe", "--tags", "--abbrev=0", "HEAD^"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if previous.returncode == 0:
+                tag = previous.stdout.strip()
+                if tag:
+                    return tag
+        return None
+
+    describe = subprocess.run(
+        ["git", "describe", "--tags", "--abbrev=0"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if describe.returncode == 0:
+        tag = describe.stdout.strip()
+        if tag:
+            return tag
+    return None
+
+
+def determine_range_spec(start_tag: str | None = None) -> str:
+    """Return the git range specification to build the changelog."""
+
+    resolved = _resolve_start_tag(start_tag)
+    if resolved:
+        return f"{resolved}..HEAD"
+    return "HEAD"
+
+
 def collect_sections(
     *, range_spec: str = "HEAD", previous_text: str | None = None
 ) -> List[ChangelogSection]:
@@ -258,6 +312,7 @@ def extract_release_notes(text: str, version: str) -> str:
 __all__ = [
     "ChangelogSection",
     "Commit",
+    "determine_range_spec",
     "collect_sections",
     "extract_release_notes",
     "render_changelog",

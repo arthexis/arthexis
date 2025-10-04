@@ -435,7 +435,12 @@ class ReleaseProgressViewTests(TestCase):
                 err = OSError(193, "%1 is not a valid Win32 application")
                 err.winerror = 193  # type: ignore[attr-defined]
                 raise err
-            if cmd[:3] == ["git", "describe", "--tags"]:
+            if cmd[:4] == ["git", "describe", "--tags", "--exact-match"]:
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+            if (
+                len(cmd) >= 4
+                and cmd[:4] == ["git", "describe", "--tags", "--abbrev=0"]
+            ):
                 return subprocess.CompletedProcess(cmd, 0, stdout="0.1.10\n", stderr="")
             if (
                 len(cmd) >= 4
