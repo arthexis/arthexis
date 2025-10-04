@@ -40,9 +40,20 @@ class TOTPDeviceAdminForm(forms.ModelForm):
             if settings_obj is None:
                 settings_obj = TOTPDeviceSettings(device=instance)
             settings_obj.issuer = issuer
-            settings_obj.save()
+            if settings_obj.pk:
+                settings_obj.save(
+                    update_fields=["issuer", "is_seed_data", "is_user_data"]
+                )
+            else:
+                settings_obj.save()
         elif settings_obj is not None:
-            settings_obj.delete()
+            settings_obj.issuer = ""
+            if settings_obj.is_seed_data or settings_obj.is_user_data:
+                settings_obj.save(
+                    update_fields=["issuer", "is_seed_data", "is_user_data"]
+                )
+            else:
+                settings_obj.delete()
 
     def save(self, commit=True):
         instance = super().save(commit=commit)

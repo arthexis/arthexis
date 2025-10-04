@@ -3224,6 +3224,8 @@ class TOTPDeviceSettings(models.Model):
         default="",
         help_text=_("Label shown in authenticator apps. Leave blank to use Arthexis."),
     )
+    is_seed_data = models.BooleanField(default=False)
+    is_user_data = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = _("Authenticator device settings")
