@@ -22,6 +22,7 @@ from teams.models import OdooProfile, SecurityGroup
 from django.contrib.sites.models import Site
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.management import call_command
 import socket
 from core.models import Brand, Todo, WMICode
@@ -204,7 +205,12 @@ class EnvRefreshFixtureTests(TestCase):
                         "model": "nodes.noderole",
                         "pk": 999,
                         "fields": {"name": "Fixture Role"},
-                    }
+                    },
+                    {
+                        "model": "auth.group",
+                        "pk": 777,
+                        "fields": {"name": "Fixture Group"},
+                    },
                 ]
             )
         )
@@ -232,6 +238,8 @@ class EnvRefreshFixtureTests(TestCase):
         output = buf.getvalue()
         role = NodeRole.all_objects.get(pk=999)
         self.assertTrue(role.is_seed_data)
+        group = Group.objects.get(pk=777)
+        self.assertFalse(hasattr(group, "is_seed_data"))
         self.assertIn(".", output)
         self.assertIn("nodes.NodeRole: 1", output)
         self.assertEqual(len(loaded_fixtures), 1)
