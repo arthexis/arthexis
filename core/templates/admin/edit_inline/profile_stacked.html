@@ -238,6 +238,9 @@
       }
       const row = event.target;
       if (row && group.contains(row)) {
+        if (row.dataset.visibilityInitialized === "true") {
+          delete row.dataset.visibilityInitialized;
+        }
         initializeInline(row);
       }
     });
