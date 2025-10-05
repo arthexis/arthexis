@@ -4,6 +4,14 @@ Changelog
 Unreleased
 ----------
 
+- 198f7c86 chore: remove TODO fixtures
+- c03a6e1c feat: retry twine uploads with user guidance (#2053)
+- 89927b8a Add Discord support for social profiles (#2052)
+
+v0.1.14 (2025-10-05)
+--------------------
+
+- e5a3ced2 chore: add release TODO for arthexis
 - 0d94e5b2 chore: remove TODO fixtures
 - c048144a Use non-breaking space between model actions (#2051)
 - 0eb9fc6e Adjust admin model action commas (#2050)
