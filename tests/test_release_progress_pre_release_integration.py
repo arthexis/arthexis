@@ -137,6 +137,9 @@ EOF
         check=True,
     )
 
+    core_views._step_check_todos(release, {"todos_ack": True}, log_path)
+    commands.clear()
+
     release.version = "1.2.1"
     release.save(update_fields=["version"])
 
@@ -152,7 +155,7 @@ EOF
     changelog_text = Path("CHANGELOG.rst").read_text(encoding="utf-8")
     assert "Fix fallback integration coverage (#42)" in changelog_text
 
-    fixture_two = todo_fixture_dir / "todos__create_release_pkg_1_2_2.json"
+    fixture_two = todo_fixture_dir / "todos__create_release_pkg_1_2_1.json"
     assert fixture_two.exists()
 
     second_diff = subprocess.run(

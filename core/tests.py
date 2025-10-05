@@ -868,7 +868,7 @@ class ReleaseProcessTests(TestCase):
         sync_main.assert_called_once_with(Path("rel.log"))
         run.assert_any_call(["git", "add", "CHANGELOG.rst"], check=True)
         run.assert_any_call(["git", "add", "VERSION"], check=True)
-        ensure_todo.assert_called_once()
+        ensure_todo.assert_called_once_with(self.release, previous_version=mock.ANY)
 
     @mock.patch("core.views.subprocess.run")
     @mock.patch("core.views.PackageRelease.dump_fixture")

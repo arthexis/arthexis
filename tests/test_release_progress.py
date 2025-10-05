@@ -411,6 +411,24 @@ class ReleaseProgressViewTests(TestCase):
         self.release.refresh_from_db()
         self.assertEqual(self.release.changelog, "- pending change")
 
+    def test_ensure_release_todo_uses_release_version_when_bumped(self):
+        self.release.version = "0.9.1"
+        self.release.save(update_fields=["version"])
+
+        tmp_dir = Path("tmp_todos_version_bumped")
+        tmp_dir.mkdir(exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(tmp_dir, ignore_errors=True))
+
+        with mock.patch("core.views.TODO_FIXTURE_DIR", tmp_dir):
+            todo, fixture_path = core_views._ensure_release_todo(
+                self.release, previous_version="0.9.0"
+            )
+
+        expected_request = "Create release pkg 0.9.1"
+        self.assertEqual(todo.request, expected_request)
+        data = json.loads(fixture_path.read_text(encoding="utf-8"))
+        self.assertEqual(data[0]["fields"]["request"], expected_request)
+
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     @mock.patch("core.views.release_utils.network_available", return_value=False)
     def test_pre_release_python_fallback(self, net, git_clean):
