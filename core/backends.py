@@ -2,7 +2,9 @@
 
 import contextlib
 import ipaddress
+import os
 import socket
+import subprocess
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -11,7 +13,7 @@ from django.core.exceptions import DisallowedHost
 from django.http.request import split_domain_port
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
-from .models import EnergyAccount
+from .models import EnergyAccount, RFID
 from . import temp_passwords
 
 
@@ -71,9 +73,36 @@ class RFIDBackend:
     def authenticate(self, request, rfid=None, **kwargs):
         if not rfid:
             return None
+        rfid_value = str(rfid).strip().upper()
+        if not rfid_value:
+            return None
+
+        tag = RFID.objects.filter(rfid=rfid_value).first()
+        if not tag or not tag.allowed:
+            return None
+
+        command = (tag.external_command or "").strip()
+        if command:
+            env = os.environ.copy()
+            env["RFID_VALUE"] = rfid_value
+            env["RFID_LABEL_ID"] = str(tag.pk)
+            try:
+                completed = subprocess.run(
+                    command,
+                    shell=True,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                )
+            except Exception:
+                return None
+            if completed.returncode != 0:
+                return None
+
         account = (
             EnergyAccount.objects.filter(
-                rfids__rfid=rfid.upper(), rfids__allowed=True, user__isnull=False
+                rfids__pk=tag.pk, rfids__allowed=True, user__isnull=False
             )
             .select_related("user")
             .first()
