@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
-from core.models import EnergyAccount, RFID
+from core.models import RFID
+from core.rfid_import_export import account_column_for_field, parse_accounts
 import csv
 
 
@@ -20,18 +21,29 @@ class Command(BaseCommand):
             default="all",
             help="Import only RFIDs with this released state (default: all)",
         )
+        parser.add_argument(
+            "--account-field",
+            choices=["id", "name"],
+            default="id",
+            help=(
+                "Read energy accounts from the specified field (default: id). "
+                "Use 'name' to link accounts by their names, creating missing ones."
+            ),
+        )
 
     def handle(self, *args, **options):
         path = options["path"]
         color_filter = options["color"].upper()
         released_filter = options["released"]
+        account_field = options["account_field"]
         try:
             with open(path, newline="", encoding="utf-8") as fh:
                 reader = csv.DictReader(fh)
                 count = 0
                 for row in reader:
                     rfid = row.get("rfid", "").strip()
-                    energy_accounts = row.get("energy_accounts", "").strip()
+                    accounts_column = account_column_for_field(account_field)
+                    energy_accounts = row.get(accounts_column, "")
                     custom_label = row.get("custom_label", "").strip()
                     allowed = row.get("allowed", "True").strip().lower() != "false"
                     color = row.get("color", RFID.BLACK).strip().upper() or RFID.BLACK
@@ -53,11 +65,14 @@ class Command(BaseCommand):
                             "released": released,
                         },
                     )
-                    if energy_accounts:
-                        ids = [int(a) for a in energy_accounts.split(",") if a]
-                        tag.energy_accounts.set(
-                            EnergyAccount.objects.filter(id__in=ids)
-                        )
+                    row_context = {
+                        accounts_column: energy_accounts,
+                        "energy_accounts": row.get("energy_accounts", ""),
+                        "energy_account_names": row.get("energy_account_names", ""),
+                    }
+                    accounts = parse_accounts(row_context, account_field)
+                    if accounts:
+                        tag.energy_accounts.set(accounts)
                     else:
                         tag.energy_accounts.clear()
                     count += 1
