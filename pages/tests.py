@@ -2236,6 +2236,22 @@ class DatasetteTests(TestCase):
         finally:
             lock_file.unlink(missing_ok=True)
 
+    def test_admin_home_includes_datasette_button_when_enabled(self):
+        lock_dir = Path(settings.BASE_DIR) / "locks"
+        lock_dir.mkdir(exist_ok=True)
+        lock_file = lock_dir / "datasette.lck"
+        try:
+            lock_file.touch()
+            self.user.is_staff = True
+            self.user.is_superuser = True
+            self.user.save()
+            self.client.force_login(self.user)
+            resp = self.client.get(reverse("admin:index"))
+            self.assertContains(resp, 'href="/data/"')
+            self.assertContains(resp, ">Datasette<")
+        finally:
+            lock_file.unlink(missing_ok=True)
+
 
 class UserStorySubmissionTests(TestCase):
     def setUp(self):

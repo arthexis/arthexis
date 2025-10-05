@@ -48,6 +48,7 @@ def nav_links(request):
         modules = []
 
     valid_modules = []
+    datasette_enabled = False
     current_module = None
     for module in modules:
         landings = []
@@ -82,6 +83,7 @@ def nav_links(request):
 
     datasette_lock = Path(settings.BASE_DIR) / "locks" / "datasette.lck"
     if datasette_lock.exists():
+        datasette_enabled = True
         datasette_module = SimpleNamespace(
             menu_label="Data",
             path="/data/",
@@ -121,4 +123,5 @@ def nav_links(request):
         "nav_modules": valid_modules,
         "favicon_url": favicon_url,
         "header_references": header_references,
+        "datasette_enabled": datasette_enabled,
     }
