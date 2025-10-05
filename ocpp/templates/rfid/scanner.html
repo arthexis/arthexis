@@ -273,6 +273,7 @@
   let lastLocalAt = 0;
   const historyEntries = tableMode ? new Map() : null;
   let deepReadActive = false;
+  let lastDeepDetailsRfid = null;
 
   if(modeToggleBtn){
     const toggleTarget = modeToggleBtn.getAttribute('data-toggle-url') || modeToggleBtn.getAttribute('href');
@@ -351,6 +352,7 @@
   }
 
   function clearDeepDetails(){
+    lastDeepDetailsRfid = null;
     if(!deepDetailsEl){
       return;
     }
@@ -383,21 +385,35 @@
     }
   }
 
-  function updateDeepDetails(data){
+  function normalizeRfidValue(value){
+    if(value === undefined || value === null){
+      return null;
+    }
+    const text = String(value);
+    return text ? text : null;
+  }
+
+  function updateDeepDetails(data, rfidValue){
     if(!deepDetailsEl || tableMode){
       return;
     }
+    const normalizedRfid = normalizeRfidValue(rfidValue);
     const dumpEntries = Array.isArray(data && data.dump) ? data.dump : [];
     const hasDump = dumpEntries.length > 0;
     const isDeep = Boolean(data && data.deep_read);
     if(!isDeep && !hasDump){
-      clearDeepDetails();
+      if(normalizedRfid && lastDeepDetailsRfid && normalizedRfid !== lastDeepDetailsRfid){
+        clearDeepDetails();
+      }
       return;
     }
     if(isDeep){
       setDeepReadState(true, {updateStatus: false, clearDetails: false});
     }
     deepDetailsEl.style.display = 'block';
+    if(normalizedRfid){
+      lastDeepDetailsRfid = normalizedRfid;
+    }
     const keys = (data && data.keys) || {};
     if(keyAEl){
       const keyAValue = keys.a !== undefined ? keys.a : keys.key_a;
@@ -513,9 +529,12 @@
       return;
     }
     if(!data.rfid){
-      clearDeepDetails();
+      if(typeof data.status === 'string' && data.status){
+        statusEl.textContent = data.status;
+      }
       return;
     }
+    const rfidValue = normalizeRfidValue(data.rfid);
     const labelValue = data.label_id === undefined || data.label_id === null ? '' : data.label_id;
     if(labelEl){ labelEl.textContent = labelValue; }
     if(kindEl){ kindEl.textContent = data.kind || ''; }
@@ -537,7 +556,7 @@
       configureEl.href = adminTemplate ? adminTemplate.replace('0', labelValue) : '#';
       configureEl.style.display = 'inline';
     }
-    updateDeepDetails(data);
+    updateDeepDetails(data, rfidValue);
     if(deepBtn && data.deep_read){
       setDeepReadState(true, {updateStatus: false, clearDetails: false});
     }
