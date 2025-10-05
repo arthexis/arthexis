@@ -1796,6 +1796,15 @@ class FavoriteTests(TestCase):
         self.assertContains(resp, f'title="{badge_label}"')
         self.assertContains(resp, f'aria-label="{badge_label}"')
 
+    def test_nav_sidebar_hides_dashboard_badges(self):
+        InviteLead.objects.create(email="open@example.com")
+        RFID.objects.create(rfid="RFID0003", released=True, allowed=True)
+
+        resp = self.client.get(reverse("admin:teams_invitelead_changelist"))
+
+        self.assertNotContains(resp, "lead-open-badge")
+        self.assertNotContains(resp, "rfid-release-badge")
+
     def test_dashboard_limits_future_actions_to_top_four(self):
         from pages.templatetags.admin_extras import future_action_items
 
