@@ -23,6 +23,53 @@ def test_build_requires_clean_repo_without_stash(monkeypatch, release_sandbox):
         release.build(version="1.2.3", stash=False)
 
 
+@pytest.mark.parametrize(
+    "twine, expected_message",
+    [
+        (False, "Release v1.2.3"),
+        (True, "PyPI Release v1.2.3"),
+    ],
+)
+def test_build_git_commit_messages(monkeypatch, release_sandbox, twine, expected_message):
+    monkeypatch.setattr(release, "_git_clean", lambda: True)
+    monkeypatch.setattr(release, "_git_has_staged_changes", lambda: True)
+
+    commands: list[list[str]] = []
+
+    def fake_run(cmd, check=True):
+        commands.append(list(cmd))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(release, "_run", fake_run)
+
+    release.build(version="1.2.3", git=True, twine=twine)
+
+    assert commands == [
+        ["git", "add", "VERSION", "pyproject.toml"],
+        ["git", "commit", "-m", expected_message],
+        ["git", "push"],
+    ]
+
+
+def test_build_creates_and_pushes_tag(monkeypatch, release_sandbox):
+    monkeypatch.setattr(release, "_git_clean", lambda: True)
+
+    commands: list[list[str]] = []
+
+    def fake_run(cmd, check=True):
+        commands.append(list(cmd))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(release, "_run", fake_run)
+
+    release.build(version="1.2.3", git=False, tag=True)
+
+    assert commands == [
+        ["git", "tag", "v1.2.3"],
+        ["git", "push", "origin", "v1.2.3"],
+    ]
+
+
 def test_build_stashes_and_restores_when_requested(monkeypatch, release_sandbox):
     monkeypatch.setattr(release, "_git_clean", lambda: False)
 
