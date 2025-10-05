@@ -15,6 +15,7 @@ from unittest import mock
 from unittest.mock import patch
 from pathlib import Path
 import subprocess
+import types
 from glob import glob
 from datetime import datetime, timedelta, timezone as datetime_timezone
 import tempfile
@@ -326,6 +327,43 @@ class RFIDLoginTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 401)
+
+    @patch("core.backends.subprocess.run")
+    def test_rfid_login_external_command_success(self, mock_run):
+        tag = self.account.rfids.first()
+        tag.external_command = "echo ok"
+        tag.save(update_fields=["external_command"])
+        mock_run.return_value = types.SimpleNamespace(returncode=0)
+
+        response = self.client.post(
+            reverse("rfid-login"),
+            data={"rfid": "CARD123"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        run_args, run_kwargs = mock_run.call_args
+        self.assertEqual(run_args[0], "echo ok")
+        self.assertTrue(run_kwargs.get("shell"))
+        env = run_kwargs.get("env", {})
+        self.assertEqual(env.get("RFID_VALUE"), "CARD123")
+        self.assertEqual(env.get("RFID_LABEL_ID"), str(tag.pk))
+
+    @patch("core.backends.subprocess.run")
+    def test_rfid_login_external_command_failure(self, mock_run):
+        tag = self.account.rfids.first()
+        tag.external_command = "exit 1"
+        tag.save(update_fields=["external_command"])
+        mock_run.return_value = types.SimpleNamespace(returncode=1)
+
+        response = self.client.post(
+            reverse("rfid-login"),
+            data={"rfid": "CARD123"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 401)
+        mock_run.assert_called_once()
 
 
 class RFIDBatchApiTests(TestCase):
