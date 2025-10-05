@@ -49,6 +49,57 @@ class ChangelogBuilderTests(SimpleTestCase):
         )
         self.assertEqual(sections[2].version, "1.1.0")
 
+    def test_release_detection_tolerates_missing_v_prefix(self):
+        commits = [
+            changelog.Commit(
+                sha="a" * 40,
+                date="2025-10-08",
+                subject="Add admin polish for release flow (#610)",
+            ),
+            changelog.Commit(
+                sha="b" * 40,
+                date="2025-10-07",
+                subject="pre-release commit 1.4.0",
+            ),
+            changelog.Commit(
+                sha="c" * 40,
+                date="2025-10-06",
+                subject="Improve changelog robustness (#609)",
+            ),
+            changelog.Commit(
+                sha="d" * 40,
+                date="2025-10-05",
+                subject="release v1.3.0",
+            ),
+            changelog.Commit(
+                sha="e" * 40,
+                date="2025-10-04",
+                subject="Tighten release logging (#608)",
+            ),
+        ]
+
+        with mock.patch("core.changelog._read_commits", return_value=commits):
+            sections = changelog.collect_sections(range_spec="HEAD")
+
+        self.assertEqual(len(sections), 3)
+        unreleased, current, previous = sections
+        self.assertEqual(
+            unreleased.entries,
+            ["- " + "a" * 8 + " Add admin polish for release flow (#610)"],
+        )
+        self.assertEqual(current.title, "v1.4.0 (2025-10-07)")
+        self.assertEqual(current.version, "1.4.0")
+        self.assertEqual(
+            current.entries,
+            ["- " + "c" * 8 + " Improve changelog robustness (#609)"],
+        )
+        self.assertEqual(previous.title, "v1.3.0 (2025-10-05)")
+        self.assertEqual(previous.version, "1.3.0")
+        self.assertEqual(
+            previous.entries,
+            ["- " + "e" * 8 + " Tighten release logging (#608)"],
+        )
+
     def test_extract_release_notes_falls_back_to_unreleased(self):
         release_title = "v1.1.0 (2025-10-02)"
         content = "\n".join(
