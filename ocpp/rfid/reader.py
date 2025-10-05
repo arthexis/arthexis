@@ -207,7 +207,7 @@ def read_rfid(
                         selected = False
                     rfid = "".join(f"{x:02X}" for x in uid_bytes)
                     kind = RFID.NTAG215 if len(uid_bytes) > 5 else RFID.CLASSIC
-                    defaults = {"kind": kind}
+                    defaults = {"kind": kind, "allowed": True, "released": False}
                     tag, created = RFID.objects.get_or_create(
                         rfid=rfid, defaults=defaults
                     )
@@ -371,7 +371,9 @@ def validate_rfid_value(value: object, *, kind: str | None = None) -> dict:
         if candidate in {choice[0] for choice in RFID.KIND_CHOICES}:
             normalized_kind = candidate
 
-    defaults = {"kind": normalized_kind} if normalized_kind else {}
+    defaults = {"allowed": True, "released": False}
+    if normalized_kind:
+        defaults["kind"] = normalized_kind
 
     try:
         tag, created = RFID.objects.get_or_create(

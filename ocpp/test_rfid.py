@@ -254,7 +254,9 @@ class ValidateRfidValueTests(SimpleTestCase):
 
         result = validate_rfid_value("abcd1234")
 
-        mock_get.assert_called_once_with(rfid="ABCD1234", defaults={})
+        mock_get.assert_called_once_with(
+            rfid="ABCD1234", defaults={"allowed": True, "released": False}
+        )
         tag.save.assert_called_once_with(update_fields=["last_seen_on"])
         self.assertIs(tag.last_seen_on, fake_now)
         mock_notify.assert_called_once_with("RFID 1 OK", "ABCD1234 B")
@@ -280,7 +282,12 @@ class ValidateRfidValueTests(SimpleTestCase):
         result = validate_rfid_value("abcd", kind=RFID.NTAG215)
 
         mock_get.assert_called_once_with(
-            rfid="ABCD", defaults={"kind": RFID.NTAG215}
+            rfid="ABCD",
+            defaults={
+                "allowed": True,
+                "released": False,
+                "kind": RFID.NTAG215,
+            },
         )
         tag.save.assert_called_once_with(update_fields=["kind", "last_seen_on"])
         self.assertIs(tag.last_seen_on, fake_now)
