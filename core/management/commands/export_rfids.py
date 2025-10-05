@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
 from core.models import RFID
+from core.rfid_import_export import account_column_for_field, serialize_accounts
 import csv
 
 
@@ -22,22 +23,37 @@ class Command(BaseCommand):
             default="all",
             help="Filter RFIDs by released state (default: all)",
         )
+        parser.add_argument(
+            "--account-field",
+            choices=["id", "name"],
+            default="id",
+            help=(
+                "Include energy accounts using the selected field (default: id). "
+                "Use 'name' to export the related account names."
+            ),
+        )
 
     def handle(self, *args, **options):
         path = options["path"]
         qs = RFID.objects.all()
         color = options["color"].upper()
         released = options["released"]
+        account_field = options["account_field"]
         if color != "ALL":
             qs = qs.filter(color=color)
         if released != "all":
             qs = qs.filter(released=(released == "true"))
         qs = qs.order_by("rfid")
+        accounts_column = account_column_for_field(account_field)
+
+        def format_accounts(tag):
+            return serialize_accounts(tag, account_field)
+
         rows = (
             (
                 t.rfid,
                 t.custom_label,
-                ",".join(str(a.id) for a in t.energy_accounts.all()),
+                format_accounts(t),
                 str(t.allowed),
                 t.color,
                 str(t.released),
@@ -51,7 +67,7 @@ class Command(BaseCommand):
                     [
                         "rfid",
                         "custom_label",
-                        "energy_accounts",
+                        accounts_column,
                         "allowed",
                         "color",
                         "released",
@@ -64,7 +80,7 @@ class Command(BaseCommand):
                 [
                     "rfid",
                     "custom_label",
-                    "energy_accounts",
+                    accounts_column,
                     "allowed",
                     "color",
                     "released",

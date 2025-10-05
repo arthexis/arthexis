@@ -8,6 +8,7 @@ django.setup()
 from django.test import Client, TestCase, RequestFactory, override_settings
 from django.urls import reverse
 from django.http import HttpRequest
+import csv
 import json
 from decimal import Decimal
 from unittest import mock
@@ -22,6 +23,7 @@ from urllib.parse import quote
 from django.utils import timezone
 from django.contrib.auth.models import Permission
 from django.contrib.messages import get_messages
+from tablib import Dataset
 from .models import (
     User,
     UserPhoneNumber,
@@ -43,6 +45,7 @@ from django.contrib.admin.sites import AdminSite
 from core.admin import (
     PackageReleaseAdmin,
     PackageAdmin,
+    RFIDResource,
     UserAdmin,
     USER_PROFILE_INLINES,
 )
@@ -745,6 +748,103 @@ class RFIDFixtureTests(TestCase):
         tag = RFID.objects.get(rfid="FFFFFFFF")
         self.assertIn(account, tag.energy_accounts.all())
         self.assertEqual(tag.energy_accounts.count(), 1)
+
+
+class RFIDImportExportCommandTests(TestCase):
+    def test_export_supports_account_names(self):
+        account = EnergyAccount.objects.create(name="PRIMARY")
+        tag = RFID.objects.create(rfid="CARD500")
+        tag.energy_accounts.add(account)
+
+        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        temp_file.close()
+        rows = []
+        try:
+            call_command("export_rfids", temp_file.name, account_field="name")
+            with open(temp_file.name, newline="", encoding="utf-8") as fh:
+                reader = csv.DictReader(fh)
+                rows = list(reader)
+        finally:
+            os.unlink(temp_file.name)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["energy_account_names"], "PRIMARY")
+
+    def test_import_creates_missing_account_by_name(self):
+        temp_file = tempfile.NamedTemporaryFile("w", newline="", delete=False)
+        try:
+            writer = csv.writer(temp_file)
+            writer.writerow(
+                [
+                    "rfid",
+                    "custom_label",
+                    "energy_account_names",
+                    "allowed",
+                    "color",
+                    "released",
+                ]
+            )
+            writer.writerow(
+                [
+                    "NAMETAG001",
+                    "",
+                    "Imported Account",
+                    "true",
+                    RFID.WHITE,
+                    "true",
+                ]
+            )
+            temp_file.flush()
+        finally:
+            temp_file.close()
+
+        try:
+            call_command("import_rfids", temp_file.name, account_field="name")
+        finally:
+            os.unlink(temp_file.name)
+
+        account = EnergyAccount.objects.get(name="IMPORTED ACCOUNT")
+        tag = RFID.objects.get(rfid="NAMETAG001")
+        self.assertIsNone(account.user)
+        self.assertTrue(tag.energy_accounts.filter(pk=account.pk).exists())
+
+    def test_admin_export_supports_account_names(self):
+        account = EnergyAccount.objects.create(name="PRIMARY")
+        tag = RFID.objects.create(rfid="CARD501")
+        tag.energy_accounts.add(account)
+
+        resource = RFIDResource(account_field="name")
+        dataset = resource.export(queryset=RFID.objects.order_by("rfid"))
+
+        self.assertIn("energy_account_names", dataset.headers)
+        self.assertEqual(dataset.dict[0]["energy_account_names"], "PRIMARY")
+
+    def test_admin_import_creates_missing_account_by_name(self):
+        resource = RFIDResource(account_field="name")
+        headers = resource.get_export_headers()
+        dataset = Dataset()
+        dataset.headers = headers
+        row = {header: "" for header in headers}
+        row.update(
+            {
+                "label_id": "200",
+                "rfid": "NAMETAG002",
+                "custom_label": "",
+                "energy_account_names": "Imported Admin Account",
+                "allowed": "true",
+                "color": RFID.BLACK,
+                "kind": RFID.CLASSIC,
+                "released": "false",
+            }
+        )
+        dataset.append([row[h] for h in headers])
+
+        result = resource.import_data(dataset, dry_run=False)
+        self.assertFalse(result.has_errors())
+
+        account = EnergyAccount.objects.get(name="IMPORTED ADMIN ACCOUNT")
+        tag = RFID.objects.get(rfid="NAMETAG002")
+        self.assertTrue(tag.energy_accounts.filter(pk=account.pk).exists())
 
 
 class RFIDKeyVerificationFlagTests(TestCase):

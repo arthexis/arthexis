@@ -26,6 +26,11 @@ from django.contrib.auth.admin import (
 import logging
 from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
+from import_export.forms import (
+    ConfirmImportForm,
+    ImportForm,
+    SelectableFieldsExportForm,
+)
 from import_export.widgets import ForeignKeyWidget
 from django.contrib.auth.models import Group
 from django.templatetags.static import static
@@ -94,6 +99,11 @@ from .user_data import (
     _user_allows_user_data,
 )
 from .widgets import OdooProductWidget, RFIDDataWidget
+from .rfid_import_export import (
+    account_column_for_field,
+    parse_accounts,
+    serialize_accounts,
+)
 from .mcp import process as mcp_process
 from .mcp.server import resolve_base_urls
 
@@ -2691,12 +2701,83 @@ class ProductAdmin(EntityModelAdmin):
         )
 
 
+class RFIDImportForm(ImportForm):
+    account_field = forms.ChoiceField(
+        choices=(
+            ("id", _("Energy account IDs")),
+            ("name", _("Energy account names")),
+        ),
+        initial="id",
+        label=_("Energy accounts"),
+        required=False,
+    )
+
+    field_order = ["resource", "import_file", "format", "account_field"]
+
+    def __init__(self, formats, resources, **kwargs):
+        super().__init__(formats, resources, **kwargs)
+        self.fields["account_field"].initial = (
+            self.data.get("account_field")
+            if hasattr(self, "data") and self.data
+            else "id"
+        )
+
+
+class RFIDExportForm(SelectableFieldsExportForm):
+    account_field = forms.ChoiceField(
+        choices=(
+            ("id", _("Energy account IDs")),
+            ("name", _("Energy account names")),
+        ),
+        initial="id",
+        label=_("Energy accounts"),
+        required=False,
+    )
+
+    field_order = ["resource", "format", "account_field"]
+
+    def __init__(self, formats, resources, **kwargs):
+        super().__init__(formats, resources, **kwargs)
+        if hasattr(self, "data") and self.data:
+            self.fields["account_field"].initial = self.data.get("account_field", "id")
+
+
+class RFIDConfirmImportForm(ConfirmImportForm):
+    account_field = forms.CharField(widget=forms.HiddenInput(), required=False)
+
+    def clean_account_field(self):
+        value = (self.cleaned_data.get("account_field") or "id").lower()
+        if value not in {"id", "name"}:
+            return "id"
+        return value
+
+
 class RFIDResource(resources.ModelResource):
+    energy_accounts = fields.Field(column_name="energy_accounts", readonly=True)
     reference = fields.Field(
         column_name="reference",
         attribute="reference",
         widget=ForeignKeyWidget(Reference, "value"),
     )
+
+    def __init__(self, *args, account_field: str = "id", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.account_field = account_field
+        account_column = account_column_for_field(account_field)
+        self.fields["energy_accounts"].column_name = account_column
+
+    def dehydrate_energy_accounts(self, obj):
+        return serialize_accounts(obj, self.account_field)
+
+    def after_save_instance(self, instance, row, **kwargs):
+        super().after_save_instance(instance, row, **kwargs)
+        if kwargs.get("dry_run"):
+            return
+        accounts = parse_accounts(row, self.account_field)
+        if accounts:
+            instance.energy_accounts.set(accounts)
+        else:
+            instance.energy_accounts.clear()
 
     class Meta:
         model = RFID
@@ -2704,6 +2785,20 @@ class RFIDResource(resources.ModelResource):
             "label_id",
             "rfid",
             "custom_label",
+            "energy_accounts",
+            "reference",
+            "external_command",
+            "allowed",
+            "color",
+            "kind",
+            "released",
+            "last_seen_on",
+        )
+        export_order = (
+            "label_id",
+            "rfid",
+            "custom_label",
+            "energy_accounts",
             "reference",
             "external_command",
             "allowed",
@@ -2769,6 +2864,9 @@ class CopyRFIDForm(forms.Form):
 class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     change_list_template = "admin/core/rfid/change_list.html"
     resource_class = RFIDResource
+    import_form_class = RFIDImportForm
+    confirm_form_class = RFIDConfirmImportForm
+    export_form_class = RFIDExportForm
     list_display = (
         "label",
         "rfid",
@@ -2786,6 +2884,39 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     actions = ["scan_rfids", "print_card_labels", "copy_rfids"]
     readonly_fields = ("added_on", "last_seen_on")
     form = RFIDForm
+
+    def get_import_resource_kwargs(self, request, form=None, **kwargs):
+        resource_kwargs = super().get_import_resource_kwargs(
+            request, form=form, **kwargs
+        )
+        account_field = "id"
+        if form and hasattr(form, "cleaned_data"):
+            account_field = form.cleaned_data.get("account_field") or "id"
+        resource_kwargs["account_field"] = (
+            "name" if account_field == "name" else "id"
+        )
+        return resource_kwargs
+
+    def get_confirm_form_initial(self, request, import_form):
+        initial = super().get_confirm_form_initial(request, import_form)
+        if import_form and hasattr(import_form, "cleaned_data"):
+            initial["account_field"] = (
+                import_form.cleaned_data.get("account_field") or "id"
+            )
+        return initial
+
+    def get_export_resource_kwargs(self, request, **kwargs):
+        export_form = kwargs.get("export_form")
+        resource_kwargs = super().get_export_resource_kwargs(request, **kwargs)
+        account_field = "id"
+        if export_form and hasattr(export_form, "cleaned_data"):
+            account_field = (
+                export_form.cleaned_data.get("account_field") or "id"
+            )
+        resource_kwargs["account_field"] = (
+            "name" if account_field == "name" else "id"
+        )
+        return resource_kwargs
 
     def label(self, obj):
         return obj.label_id
