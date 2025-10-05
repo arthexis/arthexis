@@ -7,12 +7,5 @@
             <a href="{{ public_key_url }}">{% trans "Download public key" %}</a>
         </li>
     {% endif %}
-    {% for action in node_actions %}
-        <li>
-            <a href="{% url 'admin:nodes_node_action' object_id action.slug %}">
-                {{ action.display_name }}
-            </a>
-        </li>
-    {% endfor %}
     {{ block.super }}
 {% endblock %}
