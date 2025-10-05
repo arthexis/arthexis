@@ -24,12 +24,203 @@ AUTO_UPGRADE_MODE=""
 
 BASE_DIR="$SCRIPT_DIR"
 LOCK_DIR="$BASE_DIR/locks"
+DB_FILE="$BASE_DIR/db.sqlite3"
 
 usage() {
     echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette|--no-datasette] [--check] [--auto-upgrade|--no-auto-upgrade] [--satellite|--terminal|--control|--constellation]" >&2
     exit 1
 }
 
+ensure_datasette_package() {
+    if [ -x "$BASE_DIR/.venv/bin/pip" ]; then
+        "$BASE_DIR/.venv/bin/pip" install datasette
+    elif command -v pip3 >/dev/null 2>&1; then
+        pip3 install datasette
+    fi
+}
+
+detect_service_port() {
+    local service_name="$1"
+    local nginx_mode="$2"
+    local port=""
+
+    if [ -n "$service_name" ]; then
+        local service_file="/etc/systemd/system/${service_name}.service"
+        if [ -f "$service_file" ]; then
+            port=$(grep -Eo '0\.0\.0\.0:([0-9]+)' "$service_file" | sed -E 's/.*:([0-9]+)/\1/' | tail -n1)
+        fi
+    fi
+
+    if [ -z "$port" ]; then
+        local nginx_conf="/etc/nginx/conf.d/arthexis-${nginx_mode}.conf"
+        if [ -f "$nginx_conf" ]; then
+            port=$(grep -E 'proxy_pass http://127\.0\.0\.1:[0-9]+' "$nginx_conf" | head -n1 | sed -E 's/.*127\.0\.0\.1:([0-9]+).*/\1/')
+        fi
+    fi
+
+    if [ -z "$port" ]; then
+        if [ "$nginx_mode" = "public" ]; then
+            port=8000
+        else
+            port=8888
+        fi
+    fi
+
+    echo "$port"
+}
+
+update_nginx_for_datasette() {
+    local nginx_conf="$1"
+    local datasette_port="$2"
+    local action="$3"
+
+    if [ ! -f "$nginx_conf" ]; then
+        return 0
+    fi
+
+    if [ "$action" = "enable" ]; then
+        sudo python3 - "$nginx_conf" "$datasette_port" <<'PYCODE'
+import sys
+import textwrap
+from pathlib import Path
+
+nginx_conf = Path(sys.argv[1])
+datasette_port = sys.argv[2]
+content = nginx_conf.read_text()
+
+block = textwrap.dedent(
+    f"""
+    location /data/ {{
+        auth_request /datasette-auth/;
+        error_page 401 =302 /login/?next=$request_uri;
+        proxy_pass http://127.0.0.1:{datasette_port}/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }}
+"""
+).strip("\n")
+
+indented_block = textwrap.indent(block, "    ")
+
+import re
+
+pattern = re.compile(r"\n\s*location /data/\s*\{.*?\n\s*\}", re.DOTALL)
+
+def update_port(match):
+    section = match.group(0)
+    return re.sub(
+        r"(proxy_pass http://127\.0\.0\.1:)([0-9]+)(/;)",
+        lambda m: f"{m.group(1)}{datasette_port}{m.group(3)}",
+        section,
+    )
+
+new_content, count = pattern.subn(update_port, content, count=1)
+
+if count:
+    content = new_content
+else:
+    marker = "location /mcp/ {"
+    marker_index = content.find(marker)
+    if marker_index != -1:
+        close_index = content.find("}", marker_index)
+        if close_index != -1:
+            newline_index = content.find("\n", close_index)
+            if newline_index == -1:
+                newline_index = close_index + 1
+            insertion_point = newline_index
+            content = content[:insertion_point] + "\n" + indented_block + "\n" + content[insertion_point:]
+        else:
+            content = content.rstrip() + "\n" + indented_block + "\n"
+    else:
+        content = content.rstrip() + "\n" + indented_block + "\n"
+
+if not content.endswith("\n"):
+    content += "\n"
+
+nginx_conf.write_text(content)
+PYCODE
+    else
+        sudo python3 - "$nginx_conf" <<'PYCODE'
+import sys
+import re
+from pathlib import Path
+
+nginx_conf = Path(sys.argv[1])
+content = nginx_conf.read_text()
+
+pattern = re.compile(r"\n\s*location /data/\s*\{.*?\n\s*\}", re.DOTALL)
+content, _ = pattern.subn("\n", content)
+
+content = content.rstrip() + "\n"
+nginx_conf.write_text(content)
+PYCODE
+    fi
+
+    if command -v nginx >/dev/null 2>&1; then
+        sudo nginx -t
+        sudo systemctl reload nginx || echo "Warning: nginx reload failed"
+    fi
+}
+
+ensure_datasette_service() {
+    local service_name="$1"
+    local nginx_mode="$2"
+    local main_port="$3"
+
+    local nginx_conf="/etc/nginx/conf.d/arthexis-${nginx_mode}.conf"
+    local datasette_port=$((main_port + 1))
+
+    ensure_datasette_package
+    update_nginx_for_datasette "$nginx_conf" "$datasette_port" enable
+
+    if [ -n "$service_name" ]; then
+        local datasette_service="datasette-$service_name"
+        local service_file="/etc/systemd/system/${datasette_service}.service"
+        sudo bash -c "cat > '$service_file'" <<SERVICEEOF
+[Unit]
+Description=Datasette for $service_name
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$BASE_DIR
+ExecStart=$BASE_DIR/.venv/bin/datasette serve $DB_FILE --host 127.0.0.1 --port $datasette_port --setting base_url /data/
+Restart=always
+User=$(id -un)
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+        sudo systemctl daemon-reload
+        sudo systemctl enable "$datasette_service" || true
+    fi
+}
+
+disable_datasette_service() {
+    local service_name="$1"
+    local nginx_mode="$2"
+
+    if [ -n "$service_name" ]; then
+        local datasette_service="datasette-$service_name"
+        if systemctl list-unit-files | grep -Fq "${datasette_service}.service"; then
+            sudo systemctl stop "$datasette_service" || true
+            sudo systemctl disable "$datasette_service" || true
+            local service_file="/etc/systemd/system/${datasette_service}.service"
+            if [ -f "$service_file" ]; then
+                sudo rm "$service_file"
+            fi
+            sudo systemctl daemon-reload
+        fi
+    fi
+
+    local nginx_conf="/etc/nginx/conf.d/arthexis-${nginx_mode}.conf"
+    update_nginx_for_datasette "$nginx_conf" "" disable
+}
 require_nginx() {
     if ! command -v nginx >/dev/null 2>&1; then
         echo "Nginx is required for the $1 role but is not installed." >&2
@@ -211,8 +402,6 @@ fi
 if [ "$REQUIRES_REDIS" = true ]; then
     require_redis "$NODE_ROLE"
 fi
-
-DB_FILE="$BASE_DIR/db.sqlite3"
 if [ "$CLEAN" = true ] && [ -f "$DB_FILE" ]; then
     BACKUP_DIR="$BASE_DIR/backups"
     mkdir -p "$BACKUP_DIR"
@@ -258,19 +447,10 @@ if [ "$ENABLE_CONTROL" = true ]; then
 fi
 if [ "$ENABLE_DATASETTE" = true ]; then
     touch "$LOCK_DIR/datasette.lck"
+    MAIN_SERVICE_PORT=$(detect_service_port "$SERVICE" "$NGINX_MODE")
+    ensure_datasette_service "$SERVICE" "$NGINX_MODE" "$MAIN_SERVICE_PORT"
 else
-    if [ -n "$SERVICE" ]; then
-        DATASETTE_SERVICE="datasette-$SERVICE"
-        if systemctl list-unit-files | grep -Fq "${DATASETTE_SERVICE}.service"; then
-            sudo systemctl stop "$DATASETTE_SERVICE" || true
-            sudo systemctl disable "$DATASETTE_SERVICE" || true
-            DATASETTE_SERVICE_FILE="/etc/systemd/system/${DATASETTE_SERVICE}.service"
-            if [ -f "$DATASETTE_SERVICE_FILE" ]; then
-                sudo rm "$DATASETTE_SERVICE_FILE"
-            fi
-            sudo systemctl daemon-reload
-        fi
-    fi
+    disable_datasette_service "$SERVICE" "$NGINX_MODE"
 fi
 
 echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"

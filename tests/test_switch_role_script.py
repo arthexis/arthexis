@@ -16,6 +16,12 @@ def test_switch_role_script_controls_datasette_service():
     assert 'systemctl start "datasette-$SERVICE"' in content
 
 
+def test_switch_role_script_installs_datasette_package():
+    script_path = Path(__file__).resolve().parent.parent / "switch-role.sh"
+    content = script_path.read_text()
+    assert '"$BASE_DIR/.venv/bin/pip" install datasette' in content
+
+
 def test_switch_role_script_includes_check_flag():
     script_path = Path(__file__).resolve().parent.parent / "switch-role.sh"
     content = script_path.read_text()
