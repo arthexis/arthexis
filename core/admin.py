@@ -1183,7 +1183,17 @@ class SocialProfileInlineForm(ProfileFormMixin, forms.ModelForm):
 
     class Meta:
         model = SocialProfile
-        fields = ("network", "handle", "domain", "did")
+        fields = (
+            "network",
+            "handle",
+            "domain",
+            "did",
+            "application_id",
+            "public_key",
+            "guild_id",
+            "bot_token",
+            "default_channel_id",
+        )
 
 
 class EmailOutboxAdminForm(MaskedPasswordFormMixin, forms.ModelForm):
@@ -1348,13 +1358,35 @@ PROFILE_INLINE_CONFIG = {
         "form": SocialProfileInlineForm,
         "fieldsets": (
             (
+                _("Network"),
+                {
+                    "fields": ("network",),
+                },
+            ),
+            (
                 _("Configuration: Bluesky"),
                 {
-                    "fields": ("network", "handle", "domain", "did"),
+                    "fields": ("handle", "domain", "did"),
                     "description": _(
                         "1. Set your Bluesky handle to the domain managed by Arthexis. "
                         "2. Publish a _atproto TXT record or /.well-known/atproto-did file pointing to the DID below. "
                         "3. Save once Bluesky confirms the domain matches the DID."
+                    ),
+                },
+            ),
+            (
+                _("Configuration: Discord"),
+                {
+                    "fields": (
+                        "application_id",
+                        "public_key",
+                        "guild_id",
+                        "bot_token",
+                        "default_channel_id",
+                    ),
+                    "description": _(
+                        "Provide the Discord application and guild identifiers plus a bot token so Arthexis can control the bot. "
+                        "The public key verifies interaction requests and the default channel is optional."
                     ),
                 },
             ),
@@ -1606,21 +1638,39 @@ class EmailCollectorAdmin(EntityModelAdmin):
 class SocialProfileAdmin(
     ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
 ):
-    list_display = ("owner", "network", "handle", "domain")
+    list_display = ("owner", "network", "handle", "domain", "guild_id")
     list_filter = ("network",)
-    search_fields = ("handle", "domain", "did")
+    search_fields = ("handle", "domain", "did", "application_id", "guild_id")
     changelist_actions = ["my_profile"]
     change_actions = ["my_profile_action"]
     fieldsets = (
         (_("Owner"), {"fields": ("user", "group")}),
+        (_("Network"), {"fields": ("network",)}),
         (
             _("Configuration: Bluesky"),
             {
-                "fields": ("network", "handle", "domain", "did"),
+                "fields": ("handle", "domain", "did"),
                 "description": _(
                     "Link Arthexis to Bluesky by using a verified domain handle. "
                     "Publish a _atproto TXT record or /.well-known/atproto-did file "
                     "that returns the DID stored here before saving."
+                ),
+            },
+        ),
+        (
+            _("Configuration: Discord"),
+            {
+                "fields": (
+                    "application_id",
+                    "public_key",
+                    "guild_id",
+                    "bot_token",
+                    "default_channel_id",
+                ),
+                "description": _(
+                    "Store the Discord application and guild identifiers plus the bot token "
+                    "used for automation. The public key verifies interaction callbacks and the "
+                    "default channel is optional."
                 ),
             },
         ),

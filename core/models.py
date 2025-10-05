@@ -1179,19 +1179,30 @@ class SocialProfile(Profile):
 
     class Network(models.TextChoices):
         BLUESKY = "bluesky", _("Bluesky")
+        DISCORD = "discord", _("Discord")
 
-    profile_fields = ("handle", "domain", "did")
+    profile_fields = (
+        "handle",
+        "domain",
+        "did",
+        "application_id",
+        "public_key",
+        "guild_id",
+        "bot_token",
+        "default_channel_id",
+    )
 
     network = models.CharField(
         max_length=32,
         choices=Network.choices,
         default=Network.BLUESKY,
         help_text=_(
-            "Select the social network you want to connect. Only Bluesky is supported at the moment."
+            "Select the social network you want to connect. Bluesky and Discord are supported."
         ),
     )
     handle = models.CharField(
         max_length=253,
+        blank=True,
         help_text=_(
             "Bluesky handle that should resolve to Arthexis. Use the verified domain (for example arthexis.com)."
         ),
@@ -1199,6 +1210,7 @@ class SocialProfile(Profile):
     )
     domain = models.CharField(
         max_length=253,
+        blank=True,
         help_text=_(
             "Domain that hosts the Bluesky verification. Publish a _atproto TXT record or a /.well-known/atproto-did file with the DID below."
         ),
@@ -1212,27 +1224,74 @@ class SocialProfile(Profile):
         ),
         validators=[social_did_validator],
     )
+    application_id = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text=_("Discord application ID used to control the bot."),
+    )
+    public_key = models.CharField(
+        max_length=128,
+        blank=True,
+        help_text=_("Discord public key used to verify interaction requests."),
+    )
+    guild_id = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text=_("Discord guild (server) identifier where the bot should operate."),
+    )
+    bot_token = SigilShortAutoField(
+        max_length=255,
+        blank=True,
+        help_text=_("Discord bot token required for authenticated actions."),
+    )
+    default_channel_id = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text=_("Optional Discord channel identifier used for default messaging."),
+    )
 
     def clean(self):
         super().clean()
+        errors = {}
         if self.network == self.Network.BLUESKY:
-            errors = {}
             if not self.handle:
                 errors["handle"] = _("Provide the handle that should point to this domain.")
             if not self.domain:
                 errors["domain"] = _("A verified domain is required for Bluesky handles.")
-            if errors:
-                raise ValidationError(errors)
+        elif self.network == self.Network.DISCORD:
+            if not self.application_id:
+                errors["application_id"] = _("Provide the Discord application ID for the bot.")
+            if not self.guild_id:
+                errors["guild_id"] = _("Provide the Discord guild identifier where the bot will operate.")
+            if not self.bot_token:
+                errors["bot_token"] = _("Provide the Discord bot token so Arthexis can control the bot.")
+        if errors:
+            raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
         if self.handle:
             self.handle = self.handle.strip().lower()
         if self.domain:
             self.domain = self.domain.strip().lower()
+        if self.did:
+            self.did = self.did.strip()
+        for attr in ("application_id", "public_key", "guild_id", "default_channel_id"):
+            value = getattr(self, attr)
+            if value:
+                setattr(self, attr, value.strip())
         super().save(*args, **kwargs)
 
     def __str__(self):  # pragma: no cover - simple representation
-        handle = (self.resolve_sigils("handle") or self.handle or self.domain or "").strip()
+        handle = (
+            self.resolve_sigils("handle")
+            or self.handle
+            or self.domain
+            or self.resolve_sigils("guild_id")
+            or self.guild_id
+            or self.resolve_sigils("application_id")
+            or self.application_id
+            or ""
+        ).strip()
         network = (self.resolve_sigils("network") or self.network or "").strip()
 
         if handle.startswith("@"):
@@ -1253,10 +1312,14 @@ class SocialProfile(Profile):
         verbose_name_plural = _("Social Identities")
         constraints = [
             models.UniqueConstraint(
-                fields=["network", "handle"], name="socialprofile_network_handle"
+                fields=["network", "handle"],
+                condition=~Q(handle=""),
+                name="socialprofile_network_handle",
             ),
             models.UniqueConstraint(
-                fields=["network", "domain"], name="socialprofile_network_domain"
+                fields=["network", "domain"],
+                condition=~Q(domain=""),
+                name="socialprofile_network_domain",
             ),
             models.CheckConstraint(
                 check=(
