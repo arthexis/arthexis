@@ -8,7 +8,7 @@ from django.urls import reverse
 
 import core.tasks
 from core.admin import WorldSimulatorAdmin
-from core.models import WorldSimulator
+from core.models import WorldSimulator, WorldSimulatorClientSession
 from core.tasks import launch_world_simulator, world_simulator_watchdog
 
 
@@ -93,6 +93,14 @@ def test_world_simulator_client_view(monkeypatch):
 
     simulator = WorldSimulator.objects.create(name="Viewer World")
 
+    session = WorldSimulatorClientSession(session_key="abc123", account_username="viewer")
+
+    monkeypatch.setattr(
+        WorldSimulator,
+        "prepare_client_session",
+        lambda self, u: session,
+        raising=False,
+    )
     monkeypatch.setattr(
         core.tasks.world_simulator_watchdog,
         "apply_async",
@@ -103,3 +111,5 @@ def test_world_simulator_client_view(monkeypatch):
 
     assert response.status_code == 200
     assert simulator.client_url in response.content.decode()
+    assert "automatically authenticated" in response.content.decode()
+    assert response.cookies["sessionid"].value == "abc123"

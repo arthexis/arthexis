@@ -17,8 +17,19 @@
   <div class="container-fluid" style="max-width: 1200px;">
     <h1 class="display-6 mb-3">{{ simulator.name }}</h1>
     <p class="lead">
-      {% blocktrans with username=username %}You are signed in as <strong>{{ username }}</strong>.{% endblocktrans %}
+      {% blocktrans with username=username %}You are signed in to Arthexis as <strong>{{ username }}</strong>.{% endblocktrans %}
     </p>
+    {% if account_username %}
+      <p>
+        {% blocktrans with account=account_username %}
+          You are automatically authenticated in Evennia as <strong>{{ account }}</strong>.
+        {% endblocktrans %}
+      </p>
+    {% else %}
+      <div class="alert alert-warning" role="alert">
+        {% trans "We could not prepare an automatic login for the Evennia client. You may need to sign in manually." %}
+      </div>
+    {% endif %}
     <p>
       {% blocktrans with host=simulator.host port=simulator.webclient_port %}
         The Evennia web client below connects to {{ host }}:{{ port }}. Keep this page

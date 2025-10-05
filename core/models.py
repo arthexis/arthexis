@@ -36,6 +36,9 @@ from urllib.parse import urlparse
 from utils import revision as revision_utils
 from typing import Type
 from defusedxml import xmlrpc as defused_xmlrpc
+import sys
+import json
+from dataclasses import dataclass
 
 defused_xmlrpc.monkey_patch()
 xmlrpc_client = defused_xmlrpc.xmlrpc_client
@@ -2803,6 +2806,14 @@ class TOTPDeviceSettings(models.Model):
         verbose_name_plural = _("Authenticator device settings")
 
 
+@dataclass(frozen=True)
+class WorldSimulatorClientSession:
+    """Details about a prepared Evennia login session."""
+
+    session_key: str
+    account_username: str
+
+
 class WorldSimulator(Entity):
     """Configuration for managing Evennia-based world simulator instances."""
 
@@ -2878,6 +2889,49 @@ class WorldSimulator(Entity):
         root = getattr(settings, "WORLD_SIMULATOR_ROOT", Path.cwd())
         return Path(root) / self.slug
 
+    def _account_username_for(self, user) -> str:
+        """Return a sanitized Evennia account username for ``user``."""
+
+        username = getattr(user, "get_username", None)
+        if callable(username):
+            username = username()
+        else:
+            username = getattr(user, "username", "")
+        normalized = re.sub(r"[^0-9A-Za-z_\-]+", "-", username or "").strip("-")
+        if not normalized:
+            normalized = f"user-{getattr(user, 'pk', '') or secrets.token_hex(4)}"
+        candidate = normalized[:48]
+        return candidate or "user"
+
+    @property
+    def session_cookie_domain(self) -> str | None:
+        """Return the cookie domain used for Evennia sessions."""
+
+        host = (self.host or "").strip()
+        if not host:
+            return None
+        return host.split(":", 1)[0]
+
+    def _run_evennia_python(self, script: str, *args: str) -> subprocess.CompletedProcess:
+        """Execute Python code within the Evennia environment."""
+
+        env = os.environ.copy()
+        env.setdefault("DJANGO_SETTINGS_MODULE", "server.conf.settings")
+        pythonpath = env.get("PYTHONPATH", "")
+        paths = [str(self.project_root)]
+        if pythonpath:
+            paths.append(pythonpath)
+        env["PYTHONPATH"] = os.pathsep.join(paths)
+        command = [sys.executable, "-c", script, str(self.project_root), *args]
+        return subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=str(self.project_root),
+            env=env,
+        )
+
     def _pid_path(self, component: str) -> Path:
         return self.project_root / "server" / "logs" / f"{component}.pid"
 
@@ -2925,6 +2979,108 @@ class WorldSimulator(Entity):
 
         command = [self.evennia_binary, "--init", str(root)]
         subprocess.run(command, check=True)
+
+    def prepare_client_session(self, user) -> WorldSimulatorClientSession | None:
+        """Ensure ``user`` has an authenticated Evennia session."""
+
+        self.ensure_initialized()
+        username = self._account_username_for(user)
+        email = getattr(user, "email", "") or ""
+        display = getattr(user, "get_full_name", None)
+        if callable(display):
+            display = display().strip()
+        else:
+            display = ""
+        if not display:
+            display = username
+
+        script = """
+import json
+import os
+import secrets
+import sys
+from pathlib import Path
+
+game_root = Path(sys.argv[1])
+username = sys.argv[2]
+email = sys.argv[3]
+display_name = sys.argv[4]
+expiry = int(sys.argv[5])
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "server.conf.settings")
+if str(game_root) not in sys.path:
+    sys.path.insert(0, str(game_root))
+
+import django
+django.setup()
+
+from django.contrib.sessions.backends.db import SessionStore
+from django.core import management
+from django.db import OperationalError
+from evennia.accounts.models import AccountDB
+
+try:
+    account, created = AccountDB.objects.get_or_create(username=username)
+except OperationalError:
+    management.call_command("migrate", interactive=False, verbosity=0)
+    account, created = AccountDB.objects.get_or_create(username=username)
+
+updated = False
+if email and account.email != email:
+    account.email = email
+    updated = True
+
+if hasattr(account, "db_display_name") and account.db_display_name != display_name:
+    account.db_display_name = display_name
+    updated = True
+
+if created:
+    account.set_password(secrets.token_urlsafe(16))
+    updated = True
+
+if updated:
+    account.save()
+
+session = SessionStore()
+session["webclient_authenticated_uid"] = account.id
+session["webclient_authenticated_nonce"] = 0
+session["website_authenticated_uid"] = account.id
+session.set_expiry(expiry)
+session.create()
+
+print(json.dumps({
+    "session_key": session.session_key,
+    "account_username": account.username,
+}))
+"""
+
+        try:
+            result = self._run_evennia_python(
+                script,
+                username,
+                email,
+                display,
+                str(int(settings.SESSION_COOKIE_AGE)),
+            )
+        except subprocess.CalledProcessError:
+            logger.exception("Failed to prepare Evennia session for %%s", user)
+            return None
+
+        payload = (result.stdout or "").strip()
+        if not payload:
+            return None
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            logger.warning("Invalid Evennia session payload for %s: %s", user, payload)
+            return None
+
+        session_key = data.get("session_key")
+        account_username = data.get("account_username") or username
+        if not session_key:
+            return None
+
+        return WorldSimulatorClientSession(session_key=session_key, account_username=account_username)
 
     def start(self, ensure_watchdog: bool = True) -> bool:
         """Start the Evennia processes for this simulator.

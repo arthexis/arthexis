@@ -1370,13 +1370,33 @@ def world_simulator_client(request, pk: int):
     simulator = get_object_or_404(
         WorldSimulator, pk=pk, is_deleted=False
     )
+    session = simulator.prepare_client_session(request.user)
     simulator.schedule_watchdog()
     context = {
         "simulator": simulator,
         "client_url": simulator.client_url,
         "username": request.user.get_username(),
+        "account_username": session.account_username if session else None,
     }
-    return render(request, "core/world_simulator_client.html", context)
+    response = render(request, "core/world_simulator_client.html", context)
+    if session:
+        cookie_kwargs: dict[str, object] = {
+            "httponly": True,
+            "path": "/webclient/",
+        }
+        domain = simulator.session_cookie_domain
+        if domain:
+            cookie_kwargs["domain"] = domain
+        secure = simulator.client_url.lower().startswith("https://")
+        cookie_kwargs["secure"] = secure
+        cookie_kwargs["samesite"] = "None" if secure else "Lax"
+        response.set_cookie(
+            "sessionid",
+            session.session_key,
+            max_age=getattr(settings, "SESSION_COOKIE_AGE", 1209600),
+            **cookie_kwargs,
+        )
+    return response
 
 
 @staff_member_required
