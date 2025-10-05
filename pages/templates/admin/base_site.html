@@ -3,8 +3,16 @@
 {% block title %}{% if title %}{{ title }} | {% endif %}{{ site_title|default:_('Django site admin') }}{% endblock %}
 {% block extrahead %}
 {{ block.super }}
-{% if badge_node and badge_node.role and badge_node.role.name == "Control" %}
+{% if badge_node and badge_node.role %}
+  {% if badge_node.role.name == "Control" %}
 <link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_control.txt' %}">
+  {% elif badge_node.role.name == "Constellation" %}
+<link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_arthexis.txt' %}">
+  {% elif badge_node.role.name == "Satellite" %}
+<link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_satellite.txt' %}">
+  {% else %}
+<link rel="icon" href="data:image/png;base64,{% include 'admin/favicon.txt' %}">
+  {% endif %}
 {% elif current_site_domain == "arthexis.com" %}
 <link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_arthexis.txt' %}">
 {% else %}
