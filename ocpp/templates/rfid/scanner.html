@@ -361,6 +361,13 @@
     if(deepBlocksEl){ deepBlocksEl.innerHTML = ''; }
   }
 
+  function deepReadStatusText(enabled){
+    if(enabled){
+      return 'Deep Read enabled. Hold the card on the reader a bit longer to complete the read.';
+    }
+    return 'Deep Read disabled.';
+  }
+
   function setDeepReadState(enabled, options){
     const opts = Object.assign({updateStatus: true, clearDetails: true}, options || {});
     deepReadActive = Boolean(enabled);
@@ -369,7 +376,7 @@
       deepBtn.setAttribute('aria-pressed', deepReadActive ? 'true' : 'false');
     }
     if(opts.updateStatus){
-      statusEl.textContent = deepReadActive ? 'Deep read enabled' : 'Deep read disabled';
+      statusEl.textContent = deepReadStatusText(deepReadActive);
     }
     if(!deepReadActive && opts.clearDetails){
       clearDeepDetails();
@@ -746,7 +753,7 @@
         }
         const enabled = Boolean(data.enabled);
         setDeepReadState(enabled, {updateStatus: false});
-        statusEl.textContent = data.status || (enabled ? 'Deep read enabled' : 'Deep read disabled');
+        statusEl.textContent = data.status || deepReadStatusText(enabled);
       } catch(err){
         const message = err && err.message ? err.message : 'Deep read failed';
         statusEl.textContent = message;
