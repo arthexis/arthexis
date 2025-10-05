@@ -231,7 +231,7 @@ clear_wifi_secrets() {
 
     local idx
     for idx in 0 1 2 3; do
-        nmcli connection modify "$conn_name" "wifi-sec.wep-key${idx}" "" >/dev/null 2>&1 || true
+        nmcli connection modify "$conn_name" "-wifi-sec.wep-key${idx}" >/dev/null 2>&1 || true
     done
 }
 
