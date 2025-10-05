@@ -104,7 +104,7 @@ class OdooQuoteReportAdminActionTests(TestCase):
         self.factory = RequestFactory()
         self.admin = default_site._registry[OdooProfile]
 
-    def test_generate_quote_report_action_redirects(self):
+    def test_quote_report_action_redirects(self):
         request = self.factory.get("/admin/core/odooprofile/")
         request.user = self.user
         response = self.admin.generate_quote_report(request, OdooProfile.objects.none())

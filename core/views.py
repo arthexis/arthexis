@@ -72,7 +72,7 @@ def odoo_quote_report(request):
 
     profile = getattr(request.user, "odoo_profile", None)
     context = {
-        "title": _("Generate Quote Report"),
+        "title": _("Quote Report"),
         "profile": profile,
         "error": None,
         "template_stats": [],
