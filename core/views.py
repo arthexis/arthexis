@@ -24,6 +24,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import errno
 import subprocess
+from typing import Sequence
 
 from django.template.loader import get_template
 from django.test import signals
@@ -388,6 +389,34 @@ def _format_path(path: Path) -> str:
         return str(path.resolve().relative_to(Path.cwd()))
     except ValueError:
         return str(path)
+
+
+def _git_stdout(args: Sequence[str]) -> str:
+    proc = subprocess.run(args, check=True, capture_output=True, text=True)
+    return (proc.stdout or "").strip()
+
+
+def _ensure_origin_main_unchanged(log_path: Path) -> None:
+    """Verify that ``origin/main`` has not advanced during the release."""
+
+    try:
+        subprocess.run(["git", "fetch", "origin", "main"], check=True)
+        _append_log(log_path, "Fetched latest changes from origin/main")
+        origin_main = _git_stdout(["git", "rev-parse", "origin/main"])
+        merge_base = _git_stdout(["git", "merge-base", "HEAD", "origin/main"])
+    except subprocess.CalledProcessError as exc:
+        details = (getattr(exc, "stderr", "") or getattr(exc, "stdout", "") or str(exc)).strip()
+        if details:
+            _append_log(log_path, f"Failed to verify origin/main status: {details}")
+        else:  # pragma: no cover - defensive fallback
+            _append_log(log_path, "Failed to verify origin/main status")
+        raise Exception("Unable to verify origin/main status") from exc
+
+    if origin_main != merge_base:
+        _append_log(log_path, "origin/main advanced during release; restart required")
+        raise Exception("origin/main changed during release; restart required")
+
+    _append_log(log_path, "origin/main unchanged since last sync")
 
 
 def _next_patch_version(version: str) -> str:
@@ -833,7 +862,7 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
 
     _append_log(log_path, "Generating build files")
     try:
-        _sync_with_origin_main(log_path)
+        _ensure_origin_main_unchanged(log_path)
         release_utils.promote(
             package=release.to_package(),
             version=release.version,
