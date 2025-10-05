@@ -9,7 +9,7 @@ from http import HTTPStatus
 from django.conf import settings
 from django.urls import Resolver404, resolve
 
-from .models import ViewHistory
+from .models import Landing, LandingLead, ViewHistory
 
 
 logger = logging.getLogger(__name__)
@@ -78,6 +78,10 @@ class ViewHistoryMiddleware:
         if not error_message and status_code >= HTTPStatus.BAD_REQUEST:
             error_message = status_text or f"HTTP {status_code}"
 
+        landing = None
+        if status_code < HTTPStatus.BAD_REQUEST:
+            landing = self._resolve_landing(request)
+
         try:
             ViewHistory.objects.create(
                 path=full_path,
@@ -93,6 +97,54 @@ class ViewHistoryMiddleware:
             )
         else:
             self._update_user_last_visit_ip(request)
+
+        if landing is not None:
+            self._record_landing_lead(request, landing)
+
+    def _resolve_landing(self, request):
+        path = request.path
+        if not path:
+            return None
+        try:
+            return (
+                Landing.objects.filter(
+                    path=path,
+                    enabled=True,
+                    is_deleted=False,
+                )
+                .select_related("module", "module__application", "module__node_role")
+                .first()
+            )
+        except Exception:  # pragma: no cover - best effort logging
+            logger.debug(
+                "Failed to resolve Landing for %s", path, exc_info=True
+            )
+            return None
+
+    def _record_landing_lead(self, request, landing):
+        if request.method.upper() != "GET":
+            return
+
+        referer = request.META.get("HTTP_REFERER", "") or ""
+        user_agent = request.META.get("HTTP_USER_AGENT", "") or ""
+        ip_address = self._extract_client_ip(request) or None
+        user = getattr(request, "user", None)
+        if not getattr(user, "is_authenticated", False):
+            user = None
+
+        try:
+            LandingLead.objects.create(
+                landing=landing,
+                user=user,
+                path=request.get_full_path(),
+                referer=referer,
+                user_agent=user_agent,
+                ip_address=ip_address,
+            )
+        except Exception:  # pragma: no cover - best effort logging
+            logger.debug(
+                "Failed to record LandingLead for %s", landing.path, exc_info=True
+            )
 
     def _resolve_view_name(self, request) -> str:
         match = getattr(request, "resolver_match", None)

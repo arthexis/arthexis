@@ -24,6 +24,7 @@ from pages.models import (
     SiteBadge,
     Favorite,
     ViewHistory,
+    LandingLead,
     UserManual,
     UserStory,
 )
@@ -747,6 +748,51 @@ class ViewHistoryLoggingTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         user.refresh_from_db()
         self.assertEqual(user.last_visit_ip_address, "203.0.113.5")
+
+    def test_landing_visit_records_lead(self):
+        role = NodeRole.objects.create(name="landing-role")
+        application = Application.objects.create(
+            name="landing-tests-app", description=""
+        )
+        module = Module.objects.create(
+            node_role=role,
+            application=application,
+            path="/",
+            menu="Landing",
+        )
+        landing = module.landings.get(path="/")
+        landing.label = "Home Landing"
+        landing.save(update_fields=["label"])
+
+        resp = self.client.get(
+            reverse("pages:index"), HTTP_REFERER="https://example.com/ref"
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        lead = LandingLead.objects.latest("created_on")
+        self.assertEqual(lead.landing, landing)
+        self.assertEqual(lead.path, "/")
+        self.assertEqual(lead.referer, "https://example.com/ref")
+
+    def test_disabled_landing_does_not_record_lead(self):
+        role = NodeRole.objects.create(name="landing-role-disabled")
+        application = Application.objects.create(
+            name="landing-disabled-app", description=""
+        )
+        module = Module.objects.create(
+            node_role=role,
+            application=application,
+            path="/",
+            menu="Landing",
+        )
+        landing = module.landings.get(path="/")
+        landing.enabled = False
+        landing.save(update_fields=["enabled"])
+
+        resp = self.client.get(reverse("pages:index"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(LandingLead.objects.exists())
 
 
 class ViewHistoryAdminTests(TestCase):

@@ -1,5 +1,6 @@
 from django.db import models
 from core.entity import Entity
+from core.models import Lead
 from django.contrib.sites.models import Site
 from nodes.models import NodeRole
 from django.apps import apps as django_apps
@@ -221,6 +222,19 @@ class Landing(Entity):
         if existing:
             self.pk = existing.pk
         super().save(*args, **kwargs)
+
+
+class LandingLead(Lead):
+    landing = models.ForeignKey(
+        "pages.Landing", on_delete=models.CASCADE, related_name="leads"
+    )
+
+    class Meta:
+        verbose_name = _("Landing Lead")
+        verbose_name_plural = _("Landing Leads")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.landing.label} ({self.path})"
 
 
 class RoleLandingManager(models.Manager):
