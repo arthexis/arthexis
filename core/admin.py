@@ -1391,6 +1391,18 @@ PROFILE_INLINE_CONFIG = {
                 },
             ),
         ),
+        "fieldset_visibility": (
+            {
+                "name": _("Configuration: Bluesky"),
+                "field": "network",
+                "values": (SocialProfile.Network.BLUESKY,),
+            },
+            {
+                "name": _("Configuration: Discord"),
+                "field": "network",
+                "values": (SocialProfile.Network.DISCORD,),
+            },
+        ),
     },
     ReleaseManager: {
         "form": ReleaseManagerInlineForm,
@@ -1431,6 +1443,7 @@ def _build_profile_inline(model, owner_field):
         "verbose_name": verbose_name,
         "verbose_name_plural": verbose_name_plural,
         "template": "admin/edit_inline/profile_stacked.html",
+        "fieldset_visibility": tuple(config.get("fieldset_visibility", ())),
     }
     if "fieldsets" in config:
         attrs["fieldsets"] = config["fieldsets"]
