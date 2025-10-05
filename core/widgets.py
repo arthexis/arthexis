@@ -113,6 +113,7 @@ class RFIDDataWidget(forms.Textarea):
 
     class Media:
         css = {"all": ["core/rfid_data_widget.css"]}
+        js = ["core/rfid_data_widget.js"]
 
     def format_value(self, value):  # noqa: D401 - inherits docs
         if value in ({}, []):
@@ -158,6 +159,7 @@ class RFIDDataWidget(forms.Textarea):
                 continue
 
             bytes_: list[str] = []
+            raw_bytes: list[int] = []
             valid = True
             for raw in list(data)[:16]:
                 try:
@@ -166,12 +168,22 @@ class RFIDDataWidget(forms.Textarea):
                     valid = False
                     break
                 byte_value = max(0, min(255, byte_value))
+                raw_bytes.append(byte_value)
                 bytes_.append(f"{byte_value:02X}")
             if not valid:
                 continue
 
             if len(bytes_) < 16:
                 bytes_.extend(["--"] * (16 - len(bytes_)))
+                raw_bytes.extend([0] * (16 - len(raw_bytes)))
+
+            text_chars: list[str] = []
+            for byte_value in raw_bytes:
+                if 32 <= byte_value <= 126:
+                    text_chars.append(chr(byte_value))
+                else:
+                    text_chars.append("·")
+            text_value = "".join(text_chars)
 
             entries.append(
                 {
@@ -181,6 +193,7 @@ class RFIDDataWidget(forms.Textarea):
                     "key": entry.get("key"),
                     "bytes": bytes_,
                     "is_trailer": block % 4 == 3,
+                    "text_value": text_value,
                 }
             )
 

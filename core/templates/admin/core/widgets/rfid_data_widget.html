@@ -3,31 +3,60 @@
   <div class="rfid-data-widget__grid">
     {% if widget.sectors %}
       {% for sector in widget.sectors %}
-        <table class="rfid-data-widget__sector" aria-label="{% blocktrans %}Sector {{ sector.sector }}{% endblocktrans %}">
-          <caption class="rfid-data-widget__sector-title">
-            {% blocktrans with number=sector.sector %}Sector {{ number }}{% endblocktrans %}
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">{% translate "Block" %}</th>
-              <th scope="col">{% translate "Key" %}</th>
-              {% for header in widget.byte_headers %}
-                <th scope="col">{{ header }}</th>
-              {% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for block in sector.blocks %}
-              <tr class="rfid-data-widget__block{% if block.is_trailer %} rfid-data-widget__block--trailer{% endif %}">
-                <th scope="row">{{ block.block }}</th>
-                <td class="rfid-data-widget__key">{% if block.key %}{{ block.key }}{% else %}&mdash;{% endif %}</td>
-                {% for byte in block.bytes %}
-                  <td>{{ byte }}</td>
+        <div class="rfid-data-widget__sector-wrapper">
+          <table class="rfid-data-widget__sector" aria-label="{% blocktrans %}Sector {{ sector.sector }}{% endblocktrans %}">
+            <caption class="rfid-data-widget__sector-title">
+              {% blocktrans with number=sector.sector %}Sector {{ number }}{% endblocktrans %}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{% translate "Block" %}</th>
+                <th scope="col">{% translate "Key" %}</th>
+                {% for header in widget.byte_headers %}
+                  <th scope="col">{{ header }}</th>
                 {% endfor %}
               </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {% for block in sector.blocks %}
+                <tr class="rfid-data-widget__block{% if block.is_trailer %} rfid-data-widget__block--trailer{% endif %}" data-block="{{ block.block }}">
+                  <th scope="row">{{ block.block }}</th>
+                  <td class="rfid-data-widget__key">{% if block.key %}{{ block.key }}{% else %}&mdash;{% endif %}</td>
+                  {% for byte in block.bytes %}
+                    <td data-byte-index="{{ forloop.counter0 }}">{{ byte }}</td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <table class="rfid-data-widget__text" aria-label="{% blocktrans %}Sector {{ sector.sector }} text register{% endblocktrans %}">
+            <caption class="rfid-data-widget__sector-title">
+              {% blocktrans with number=sector.sector %}Sector {{ number }} text{% endblocktrans %}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">{% translate "Block" %}</th>
+                <th scope="col">{% translate "Text" %}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for block in sector.blocks %}
+                <tr>
+                  <th scope="row">{{ block.block }}</th>
+                  <td>
+                    <textarea
+                      class="rfid-data-widget__text-input"
+                      data-block="{{ block.block }}"
+                      maxlength="16"
+                      rows="1"
+                      spellcheck="false"
+                    >{% firstof block.text_value '' %}</textarea>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       {% endfor %}
     {% else %}
       <p class="rfid-data-widget__empty{% if widget.has_parse_error %} rfid-data-widget__empty--error{% endif %}">

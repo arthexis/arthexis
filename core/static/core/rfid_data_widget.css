@@ -8,13 +8,24 @@
   gap: 1rem;
 }
 
+.rfid-data-widget__sector-wrapper {
+  display: grid;
+  gap: 0.75rem;
+}
+
 @media (min-width: 768px) {
   .rfid-data-widget__grid {
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+  }
+
+  .rfid-data-widget__sector-wrapper {
+    grid-template-columns: minmax(320px, 1fr) minmax(180px, 0.6fr);
+    align-items: start;
   }
 }
 
-.rfid-data-widget__sector {
+.rfid-data-widget__sector,
+.rfid-data-widget__text {
   border-collapse: collapse;
   width: 100%;
   font-family: ui-monospace, SFMono-Regular, SFMono, Menlo, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -32,7 +43,8 @@
   background: var(--darkened-bg, rgba(0, 0, 0, 0.05));
 }
 
-.rfid-data-widget__sector thead th {
+.rfid-data-widget__sector thead th,
+.rfid-data-widget__text thead th {
   position: sticky;
   top: 0;
   background: var(--body-bg);
@@ -44,7 +56,9 @@
 }
 
 .rfid-data-widget__sector th,
-.rfid-data-widget__sector td {
+.rfid-data-widget__sector td,
+.rfid-data-widget__text th,
+.rfid-data-widget__text td {
   border-bottom: 1px solid var(--hairline-color);
   border-right: 1px solid var(--hairline-color);
   padding: 0.35rem 0.5rem;
@@ -52,19 +66,28 @@
   white-space: nowrap;
 }
 
-.rfid-data-widget__sector tbody th {
+.rfid-data-widget__sector tbody th,
+.rfid-data-widget__text tbody th {
   font-weight: 600;
   text-align: left;
 }
 
 .rfid-data-widget__sector tbody tr:last-child th,
-.rfid-data-widget__sector tbody tr:last-child td {
+.rfid-data-widget__sector tbody tr:last-child td,
+.rfid-data-widget__text tbody tr:last-child th,
+.rfid-data-widget__text tbody tr:last-child td {
   border-bottom: none;
 }
 
 .rfid-data-widget__sector thead tr th:last-child,
-.rfid-data-widget__sector tbody tr td:last-child {
+.rfid-data-widget__sector tbody tr td:last-child,
+.rfid-data-widget__text thead tr th:last-child,
+.rfid-data-widget__text tbody tr td:last-child {
   border-right: none;
+}
+
+.rfid-data-widget__text td {
+  text-align: left;
 }
 
 .rfid-data-widget__key {
@@ -105,4 +128,21 @@
 .rfid-data-widget__input {
   width: 100%;
   font-family: ui-monospace, SFMono-Regular, SFMono, Menlo, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.rfid-data-widget__text-input {
+  width: 100%;
+  min-height: 2rem;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, SFMono, Menlo, Consolas, "Liberation Mono", "Courier New", monospace;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid var(--hairline-color);
+  border-radius: 0.25rem;
+  background-color: var(--darkened-bg, rgba(0, 0, 0, 0.02));
+  color: inherit;
+}
+
+.rfid-data-widget__text-input:focus {
+  outline: 2px solid var(--selected-row, rgba(60, 118, 244, 0.35));
+  outline-offset: 1px;
 }
