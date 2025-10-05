@@ -43,7 +43,7 @@ def test_verify_success(monkeypatch):
     assert profile.verify() is True
     profile.refresh_from_db()
     assert profile.odoo_uid == 42
-    assert profile.name == "Odoo User"
+    assert profile.name == "u0@db"
     assert profile.email == "user@example.com"
     assert profile.verified_on is not None
 
@@ -88,3 +88,22 @@ def test_execute_failure_marks_unverified(monkeypatch):
         pass
     profile.refresh_from_db()
     assert profile.verified_on is None
+
+
+def test_profile_string_resolves_sigil_values(monkeypatch):
+    user = User.objects.create(username="u3")
+
+    def fake_resolve(self, field):
+        return {"username": "resolved-user", "database": "resolved-db"}.get(field, "")
+
+    monkeypatch.setattr(OdooProfile, "resolve_sigils", fake_resolve)
+    profile = OdooProfile.objects.create(
+        user=user,
+        host="http://test",
+        database="[ODOO.DATABASE]",
+        username="[ODOO.USERNAME]",
+        password="secret",
+    )
+    profile.refresh_from_db()
+    assert profile.name == "resolved-user@resolved-db"
+    assert str(profile) == "resolved-user@resolved-db"

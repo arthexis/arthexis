@@ -569,6 +569,24 @@ class OdooProfile(Profile):
         self.name = ""
         self.email = ""
 
+    def _resolved_field_value(self, field: str) -> str:
+        """Return the resolved value for ``field`` falling back to raw data."""
+
+        resolved = self.resolve_sigils(field)
+        if resolved:
+            return resolved
+        value = getattr(self, field, "")
+        return value or ""
+
+    def _display_identifier(self) -> str:
+        """Return the display label for this profile."""
+
+        username = self._resolved_field_value("username")
+        database = self._resolved_field_value("database")
+        if username and database:
+            return f"{username}@{database}"
+        return username or database or ""
+
     def save(self, *args, **kwargs):
         if self.pk:
             old = type(self).all_objects.get(pk=self.pk)
@@ -579,6 +597,15 @@ class OdooProfile(Profile):
                 or old.host != self.host
             ):
                 self._clear_verification()
+        computed_name = self._display_identifier()
+        update_fields = kwargs.get("update_fields")
+        update_fields_set = set(update_fields) if update_fields is not None else None
+        if computed_name != self.name:
+            self.name = computed_name
+            if update_fields_set is not None:
+                update_fields_set.add("name")
+        if update_fields_set is not None:
+            kwargs["update_fields"] = list(update_fields_set)
         super().save(*args, **kwargs)
 
     @property
@@ -603,7 +630,6 @@ class OdooProfile(Profile):
             {"fields": ["name", "email"]},
         )[0]
         self.odoo_uid = uid
-        self.name = info.get("name", "")
         self.email = info.get("email", "")
         self.verified_on = timezone.now()
         self.save(update_fields=["odoo_uid", "name", "email", "verified_on"])
@@ -637,6 +663,9 @@ class OdooProfile(Profile):
             raise
 
     def __str__(self):  # pragma: no cover - simple representation
+        label = self._display_identifier()
+        if label:
+            return label
         owner = self.owner_display()
         return f"{owner} @ {self.host}" if owner else self.host
 
