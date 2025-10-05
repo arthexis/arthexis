@@ -700,9 +700,28 @@
 
   if(deepBtn){
     deepBtn.addEventListener('click', async () => {
+      const headers = {
+        'Accept': 'application/json',
+      };
+      const csrf = getCookie('csrftoken');
+      if(csrf){
+        headers['X-CSRFToken'] = csrf;
+      }
       try {
-        await fetch('{{ deep_read_url|default:"" }}', {method: 'POST'});
-        statusEl.textContent = 'Deep read enabled for 60 seconds';
+        const response = await fetch('{{ deep_read_url|default:"" }}', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers,
+        });
+        if(!response.ok){
+          throw new Error('Request failed');
+        }
+        const data = await response.json().catch(() => ({status: null}));
+        if(data.error){
+          throw new Error(data.error);
+        }
+        const timeout = data.timeout || 60;
+        statusEl.textContent = `Deep read enabled for ${timeout} seconds`;
       } catch(err){
         statusEl.textContent = 'Deep read failed';
       }
