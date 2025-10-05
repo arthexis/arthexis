@@ -96,6 +96,64 @@ class PyPITokenTests(TestCase):
                 release.publish(version="0.1.1", creds=release.Credentials())
         assert str(exc.exception) == "Missing PyPI credentials"
 
+    def test_publish_raises_when_version_already_available(self):
+        response = mock.Mock()
+        response.ok = True
+        response.json.return_value = {"releases": {"0.1.1": [{}]}}
+
+        primary = release.RepositoryTarget(
+            name="PyPI",
+            verify_availability=True,
+            credentials=release.Credentials(token="pypi-token"),
+        )
+
+        with (
+            mock.patch("core.release.network_available", return_value=True),
+            mock.patch.object(release.Path, "exists", return_value=True),
+            mock.patch.object(
+                release.Path, "glob", return_value=[Path("dist/fake.whl")]
+            ),
+            mock.patch("requests.get", return_value=response) as request_get,
+            mock.patch("core.release.subprocess.run") as run,
+        ):
+            run.return_value.returncode = 0
+            run.return_value.stdout = ""
+            run.return_value.stderr = ""
+            with self.assertRaises(release.ReleaseError) as exc:
+                release.publish(version="0.1.1", repositories=[primary])
+
+        assert str(exc.exception) == "Version 0.1.1 already on PyPI"
+        request_get.assert_called_once_with("https://pypi.org/pypi/arthexis/json")
+        response.json.assert_called_once()
+
+    def test_publish_skips_availability_check_when_disabled(self):
+        response = mock.Mock()
+        response.ok = True
+        response.json.return_value = {"releases": {"0.1.1": [{}]}}
+
+        primary = release.RepositoryTarget(
+            name="PyPI",
+            verify_availability=False,
+            credentials=release.Credentials(token="pypi-token"),
+        )
+
+        with (
+            mock.patch("core.release.network_available", return_value=True),
+            mock.patch.object(release.Path, "exists", return_value=True),
+            mock.patch.object(
+                release.Path, "glob", return_value=[Path("dist/fake.whl")]
+            ),
+            mock.patch("requests.get", return_value=response) as request_get,
+            mock.patch("core.release.subprocess.run") as run,
+        ):
+            run.return_value.returncode = 0
+            run.return_value.stdout = ""
+            run.return_value.stderr = ""
+            uploaded = release.publish(version="0.1.1", repositories=[primary])
+
+        assert request_get.call_count == 0
+        assert uploaded == ["PyPI"]
+
     def test_publish_supports_multiple_repositories(self):
         primary = release.RepositoryTarget(
             name="PyPI",
