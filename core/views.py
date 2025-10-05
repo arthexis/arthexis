@@ -1,16 +1,18 @@
 import json
 import logging
 import shutil
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as datetime_timezone
 
 import requests
 from django.conf import settings
+from django.contrib.admin.sites import site as admin_site
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, login
 from django.contrib import messages
 from django.contrib.sites.models import Site
 from django.http import Http404, JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
+from django.template.response import TemplateResponse
 from django.utils import timezone
 from django.utils.text import slugify
 from django.utils.translation import gettext as _
@@ -32,7 +34,7 @@ from utils.api import api_login_required
 logger = logging.getLogger(__name__)
 
 from . import changelog as changelog_utils
-from .models import Product, EnergyAccount, PackageRelease, Todo
+from .models import OdooProfile, Product, EnergyAccount, PackageRelease, Todo
 from .models import RFID
 
 
@@ -61,6 +63,272 @@ def odoo_products(request):
         return JsonResponse({"detail": "Unable to fetch products"}, status=502)
     items = [{"id": p.get("id"), "name": p.get("name", "")} for p in products]
     return JsonResponse(items, safe=False)
+
+
+@staff_member_required
+def odoo_quote_report(request):
+    """Display a consolidated quote report from the user's Odoo instance."""
+
+    profile = getattr(request.user, "odoo_profile", None)
+    context = {
+        "title": _("Generate Quote Report"),
+        "profile": profile,
+        "error": None,
+        "template_stats": [],
+        "quotes": [],
+        "recent_products": [],
+        "installed_modules": [],
+        "profile_url": "",
+    }
+
+    profile_admin = admin_site._registry.get(OdooProfile)
+    if profile_admin is not None:
+        try:
+            context["profile_url"] = profile_admin.get_my_profile_url(request)
+        except Exception:  # pragma: no cover - defensive fallback
+            context["profile_url"] = ""
+
+    if not profile or not profile.is_verified:
+        context["error"] = _(
+            "Configure and verify your Odoo employee credentials before generating the report."
+        )
+        return TemplateResponse(
+            request, "admin/core/odoo_quote_report.html", context
+        )
+
+    def _parse_datetime(value):
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            text = str(value)
+            try:
+                dt = datetime.fromisoformat(text)
+            except ValueError:
+                text_iso = text.replace(" ", "T")
+                try:
+                    dt = datetime.fromisoformat(text_iso)
+                except ValueError:
+                    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+                        try:
+                            dt = datetime.strptime(text, fmt)
+                            break
+                        except ValueError:
+                            continue
+                    else:
+                        return None
+        if timezone.is_naive(dt):
+            tzinfo = getattr(timezone, "utc", datetime_timezone.utc)
+            dt = timezone.make_aware(dt, tzinfo)
+        return dt
+
+    try:
+        templates = profile.execute(
+            "sale.order.template",
+            "search_read",
+            [[]],
+            {"fields": ["name"], "order": "name asc"},
+        )
+        template_usage = profile.execute(
+            "sale.order",
+            "read_group",
+            [[("sale_order_template_id", "!=", False)]],
+            ["sale_order_template_id"],
+            {"lazy": False},
+        )
+
+        usage_map = {}
+        for entry in template_usage:
+            template_info = entry.get("sale_order_template_id")
+            if not template_info:
+                continue
+            template_id = template_info[0]
+            usage_map[template_id] = entry.get(
+                "sale_order_template_id_count", 0
+            )
+
+        context["template_stats"] = [
+            {
+                "id": template.get("id"),
+                "name": template.get("name", ""),
+                "quote_count": usage_map.get(template.get("id"), 0),
+            }
+            for template in templates
+        ]
+
+        ninety_days_ago = timezone.now() - timedelta(days=90)
+        quotes = profile.execute(
+            "sale.order",
+            "search_read",
+            [
+                [
+                    ("create_date", ">=", ninety_days_ago.strftime("%Y-%m-%d %H:%M:%S")),
+                    ("state", "!=", "cancel"),
+                    ("quote_sent", "=", False),
+                ]
+            ],
+            {
+                "fields": [
+                    "name",
+                    "amount_total",
+                    "partner_id",
+                    "activity_type_id",
+                    "activity_summary",
+                    "tag_ids",
+                    "create_date",
+                    "currency_id",
+                ],
+                "order": "create_date desc",
+            },
+        )
+
+        tag_ids = set()
+        currency_ids = set()
+        for quote in quotes:
+            tag_ids.update(quote.get("tag_ids") or [])
+            currency_info = quote.get("currency_id")
+            if (
+                isinstance(currency_info, (list, tuple))
+                and len(currency_info) >= 1
+                and currency_info[0]
+            ):
+                currency_ids.add(currency_info[0])
+
+        tag_map: dict[int, str] = {}
+        if tag_ids:
+            tag_records = profile.execute(
+                "sale.order.tag",
+                "read",
+                list(tag_ids),
+                {"fields": ["name"]},
+            )
+            for tag in tag_records:
+                tag_id = tag.get("id")
+                if tag_id is not None:
+                    tag_map[tag_id] = tag.get("name", "")
+
+        currency_map: dict[int, dict[str, str]] = {}
+        if currency_ids:
+            currency_records = profile.execute(
+                "res.currency",
+                "read",
+                list(currency_ids),
+                {"fields": ["name", "symbol"]},
+            )
+            for currency in currency_records:
+                currency_id = currency.get("id")
+                if currency_id is not None:
+                    currency_map[currency_id] = {
+                        "name": currency.get("name", ""),
+                        "symbol": currency.get("symbol", ""),
+                    }
+
+        prepared_quotes = []
+        for quote in quotes:
+            partner = quote.get("partner_id")
+            customer = ""
+            if isinstance(partner, (list, tuple)) and len(partner) >= 2:
+                customer = partner[1]
+
+            activity_type = quote.get("activity_type_id")
+            activity_name = ""
+            if isinstance(activity_type, (list, tuple)) and len(activity_type) >= 2:
+                activity_name = activity_type[1]
+
+            activity_summary = quote.get("activity_summary") or ""
+            activity_value = activity_summary or activity_name
+
+            quote_tags = [
+                tag_map.get(tag_id, str(tag_id))
+                for tag_id in quote.get("tag_ids") or []
+            ]
+
+            currency_info = quote.get("currency_id")
+            currency_label = ""
+            if isinstance(currency_info, (list, tuple)) and currency_info:
+                currency_id = currency_info[0]
+                currency_details = currency_map.get(currency_id, {})
+                currency_label = (
+                    currency_details.get("symbol")
+                    or currency_details.get("name")
+                    or (currency_info[1] if len(currency_info) >= 2 else "")
+                )
+
+            amount_total = quote.get("amount_total") or 0
+            if currency_label:
+                total_display = f"{currency_label}{amount_total:,.2f}"
+            else:
+                total_display = f"{amount_total:,.2f}"
+
+            prepared_quotes.append(
+                {
+                    "name": quote.get("name", ""),
+                    "customer": customer,
+                    "activity": activity_value,
+                    "tags": quote_tags,
+                    "create_date": _parse_datetime(quote.get("create_date")),
+                    "total": amount_total,
+                    "total_display": total_display,
+                }
+            )
+
+        context["quotes"] = prepared_quotes
+
+        products = profile.execute(
+            "product.product",
+            "search_read",
+            [[]],
+            {
+                "fields": ["name", "default_code", "write_date", "create_date"],
+                "limit": 10,
+                "order": "write_date desc, create_date desc",
+            },
+        )
+        context["recent_products"] = [
+            {
+                "name": product.get("name", ""),
+                "default_code": product.get("default_code", ""),
+                "create_date": _parse_datetime(product.get("create_date")),
+                "write_date": _parse_datetime(product.get("write_date")),
+            }
+            for product in products
+        ]
+
+        modules = profile.execute(
+            "ir.module.module",
+            "search_read",
+            [[("state", "=", "installed")]],
+            {
+                "fields": ["name", "shortdesc", "latest_version", "author"],
+                "order": "name asc",
+            },
+        )
+        context["installed_modules"] = [
+            {
+                "name": module.get("name", ""),
+                "shortdesc": module.get("shortdesc", ""),
+                "latest_version": module.get("latest_version", ""),
+                "author": module.get("author", ""),
+            }
+            for module in modules
+        ]
+
+    except Exception:
+        logger.exception(
+            "Failed to build Odoo quote report for user %s (profile_id=%s)",
+            getattr(request.user, "pk", None),
+            getattr(profile, "pk", None),
+        )
+        context["error"] = _("Unable to generate the quote report from Odoo.")
+        return TemplateResponse(
+            request,
+            "admin/core/odoo_quote_report.html",
+            context,
+            status=502,
+        )
+
+    return TemplateResponse(request, "admin/core/odoo_quote_report.html", context)
 
 
 @require_GET

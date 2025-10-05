@@ -1639,7 +1639,7 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
     readonly_fields = ("verified_on", "odoo_uid", "name", "email")
     actions = ["verify_credentials"]
     change_actions = ["verify_credentials_action", "my_profile_action"]
-    changelist_actions = ["my_profile"]
+    changelist_actions = ["my_profile", "generate_quote_report"]
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
         ("Configuration", {"fields": ("host", "database")}),
@@ -1674,6 +1674,12 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
 
     verify_credentials_action.label = "Test credentials"
     verify_credentials_action.short_description = "Test credentials"
+
+    def generate_quote_report(self, request, queryset=None):
+        return HttpResponseRedirect(reverse("odoo-quote-report"))
+
+    generate_quote_report.label = _("Generate Quote Report")
+    generate_quote_report.short_description = _("Generate Quote Report")
 
 
 @admin.register(OpenPayProfile)
