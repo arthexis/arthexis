@@ -1,0 +1,46 @@
+{% load i18n %}
+<div class="rfid-data-widget">
+  <div class="rfid-data-widget__grid">
+    {% if widget.sectors %}
+      {% for sector in widget.sectors %}
+        <table class="rfid-data-widget__sector" aria-label="{% blocktrans %}Sector {{ sector.sector }}{% endblocktrans %}">
+          <caption class="rfid-data-widget__sector-title">
+            {% blocktrans with number=sector.sector %}Sector {{ number }}{% endblocktrans %}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{% translate "Block" %}</th>
+              <th scope="col">{% translate "Key" %}</th>
+              {% for header in widget.byte_headers %}
+                <th scope="col">{{ header }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for block in sector.blocks %}
+              <tr class="rfid-data-widget__block{% if block.is_trailer %} rfid-data-widget__block--trailer{% endif %}">
+                <th scope="row">{{ block.block }}</th>
+                <td class="rfid-data-widget__key">{% if block.key %}{{ block.key }}{% else %}&mdash;{% endif %}</td>
+                {% for byte in block.bytes %}
+                  <td>{{ byte }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endfor %}
+    {% else %}
+      <p class="rfid-data-widget__empty{% if widget.has_parse_error %} rfid-data-widget__empty--error{% endif %}">
+        {% if widget.has_parse_error %}
+          {% translate "Unable to display block data. Showing raw JSON below." %}
+        {% else %}
+          {% translate "No block data available." %}
+        {% endif %}
+      </p>
+    {% endif %}
+  </div>
+  <details class="rfid-data-widget__raw"{% if widget.has_parse_error %} open{% endif %}>
+    <summary>{% translate "Raw data" %}</summary>
+    <textarea name="{{ widget.name }}"{% include "django/forms/widgets/attrs.html" %}>{{ widget.value|default_if_none:'' }}</textarea>
+  </details>
+</div>

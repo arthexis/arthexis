@@ -92,7 +92,7 @@ from .user_data import (
     _resolve_fixture_user,
     _user_allows_user_data,
 )
-from .widgets import OdooProductWidget
+from .widgets import OdooProductWidget, RFIDDataWidget
 from .mcp import process as mcp_process
 from .mcp.server import resolve_base_urls
 
@@ -2666,6 +2666,7 @@ class RFIDForm(forms.ModelForm):
             can_change_related=True,
             can_view_related=True,
         )
+        self.fields["data"].widget = RFIDDataWidget()
 
 
 @admin.register(RFID)
