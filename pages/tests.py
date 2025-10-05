@@ -2012,6 +2012,46 @@ class AdminActionListTests(TestCase):
                 labels = {action["label"] for action in actions}
                 self.assertIn("Active Profile", labels)
 
+    def test_generate_quote_report_link_available(self):
+        from pages.templatetags.admin_extras import model_admin_actions
+
+        request = self.factory.get("/")
+        request.user = self.user
+        context = {"request": request}
+
+        actions = model_admin_actions(context, "core", "OdooProfile")
+        labels = {action["label"] for action in actions}
+        self.assertIn("Generate Quote Report", labels)
+        url = next(
+            action["url"]
+            for action in actions
+            if action["label"] == "Generate Quote Report"
+        )
+        self.assertEqual(
+            url,
+            reverse(
+                "admin:core_odooprofile_actions",
+                kwargs={"tool": "generate_quote_report"},
+            ),
+        )
+
+    def test_send_net_message_link_available(self):
+        from pages.templatetags.admin_extras import model_admin_actions
+
+        request = self.factory.get("/")
+        request.user = self.user
+        context = {"request": request}
+
+        actions = model_admin_actions(context, "nodes", "NetMessage")
+        labels = {action["label"] for action in actions}
+        self.assertIn("Send Net Message", labels)
+        url = next(
+            action["url"]
+            for action in actions
+            if action["label"] == "Send Net Message"
+        )
+        self.assertEqual(url, reverse("admin:nodes_netmessage_send"))
+
 
 class AdminModelGraphViewTests(TestCase):
     def setUp(self):

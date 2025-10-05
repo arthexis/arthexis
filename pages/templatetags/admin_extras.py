@@ -75,20 +75,29 @@ def model_admin_actions(context, app_label, model_name):
         return finder.found
 
     actions = []
+    seen = set()
+
+    def add_action(action_name, func, label, url):
+        if not url:
+            return
+        actions.append({"url": url, "label": label})
+        seen.add(action_name)
+
     for action_name, (func, _name, description) in model_admin.get_actions(
         request
     ).items():
         if action_name == "delete_selected" or uses_queryset(func):
             continue
         url = None
-        label = description or _name.replace("_", " ")
+        label = getattr(
+            func,
+            "label",
+            description or _name.replace("_", " "),
+        )
         if action_name == "my_profile":
             getter = getattr(model_admin, "get_my_profile_url", None)
             if callable(getter):
                 url = getter(request)
-            label_getter = getattr(model_admin, "get_my_profile_label", None)
-            if callable(label_getter):
-                label = label_getter(request)
         base = f"admin:{model_admin.opts.app_label}_{model_admin.opts.model_name}_"
         if not url:
             try:
@@ -98,7 +107,47 @@ def model_admin_actions(context, app_label, model_name):
                     url = reverse(base + action_name.split("_")[0])
                 except NoReverseMatch:
                     url = reverse(base + "changelist") + f"?action={action_name}"
-        actions.append({"url": url, "label": label})
+        add_action(action_name, func, label, url)
+
+    changelist_getter = getattr(model_admin, "get_changelist_actions", None)
+    if callable(changelist_getter):
+        try:
+            changelist_actions = changelist_getter(request)
+        except TypeError:
+            changelist_actions = changelist_getter()
+        for action_name in changelist_actions or []:
+            if action_name in seen:
+                continue
+            func = getattr(model_admin, action_name, None)
+            if func is None or uses_queryset(func):
+                continue
+            label = getattr(
+                func,
+                "label",
+                getattr(
+                    func,
+                    "short_description",
+                    action_name.replace("_", " "),
+                ),
+            )
+            url = None
+            tools_view_name = getattr(model_admin, "tools_view_name", None)
+            if tools_view_name:
+                try:
+                    url = reverse(tools_view_name, kwargs={"tool": action_name})
+                except NoReverseMatch:
+                    url = None
+            if not url:
+                base = f"admin:{model_admin.opts.app_label}_{model_admin.opts.model_name}_"
+                try:
+                    url = reverse(base + action_name)
+                except NoReverseMatch:
+                    try:
+                        url = reverse(base + action_name.split("_")[0])
+                    except NoReverseMatch:
+                        url = reverse(base + "changelist") + f"?action={action_name}"
+            add_action(action_name, func, label, url)
+
     return actions
 
 
