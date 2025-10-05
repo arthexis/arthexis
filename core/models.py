@@ -2473,8 +2473,8 @@ class ClientReport(Entity):
     disable_emails = models.BooleanField(default=False)
 
     class Meta:
-        verbose_name = "Client Report"
-        verbose_name_plural = "Client Reports"
+        verbose_name = "Consumer Report"
+        verbose_name_plural = "Consumer Reports"
         db_table = "core_client_report"
         ordering = ["-created_on"]
 
