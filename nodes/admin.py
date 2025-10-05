@@ -9,7 +9,7 @@ from django.contrib.admin.widgets import FilteredSelectMultiple
 from django.db.models import Count
 from django.conf import settings
 from pathlib import Path
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from urllib.parse import urlsplit, urlunsplit
@@ -273,6 +273,7 @@ class NodeAdmin(EntityModelAdmin):
         ),
     )
     actions = [
+        "update_selected_nodes",
         "register_visitor",
         "run_task",
         "take_screenshots",
@@ -307,6 +308,11 @@ class NodeAdmin(EntityModelAdmin):
                 self.admin_site.admin_view(self.public_key),
                 name="nodes_node_public_key",
             ),
+            path(
+                "update-selected/progress/",
+                self.admin_site.admin_view(self.update_selected_progress),
+                name="nodes_node_update_selected_progress",
+            ),
         ]
         return custom + urls
 
@@ -329,6 +335,238 @@ class NodeAdmin(EntityModelAdmin):
     @admin.action(description="Register Visitor Node")
     def register_visitor(self, request, queryset=None):
         return self.register_visitor_view(request)
+
+    @admin.action(description=_("Update selected nodes"))
+    def update_selected_nodes(self, request, queryset):
+        node_ids = list(queryset.values_list("pk", flat=True))
+        if not node_ids:
+            self.message_user(request, _("No nodes selected."), messages.INFO)
+            return None
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Update selected nodes"),
+            "nodes": list(queryset),
+            "node_ids": node_ids,
+            "progress_url": reverse("admin:nodes_node_update_selected_progress"),
+        }
+        return TemplateResponse(
+            request, "admin/nodes/node/update_selected.html", context
+        )
+
+    def update_selected_progress(self, request):
+        if request.method != "POST":
+            return JsonResponse({"detail": "POST required"}, status=405)
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        try:
+            node_id = int(request.POST.get("node_id", ""))
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "Invalid node id"}, status=400)
+        node = self.get_queryset(request).filter(pk=node_id).first()
+        if not node:
+            return JsonResponse({"detail": "Node not found"}, status=404)
+
+        local_result = self._refresh_local_information(node)
+        remote_result = self._push_remote_information(node)
+
+        status = "success"
+        if not local_result.get("ok") and not remote_result.get("ok"):
+            status = "error"
+        elif not local_result.get("ok") or not remote_result.get("ok"):
+            status = "partial"
+
+        return JsonResponse(
+            {
+                "node": str(node),
+                "status": status,
+                "local": local_result,
+                "remote": remote_result,
+            }
+        )
+
+    def _refresh_local_information(self, node):
+        if node.is_local:
+            try:
+                _, created = Node.register_current()
+            except Exception as exc:  # pragma: no cover - unexpected errors
+                return {"ok": False, "message": str(exc)}
+            return {
+                "ok": True,
+                "created": created,
+                "message": "Local node registration refreshed.",
+            }
+
+        last_error = ""
+        for url in self._iter_remote_urls(node, "/nodes/info/"):
+            try:
+                response = requests.get(url, timeout=5)
+            except RequestException as exc:
+                last_error = str(exc)
+                continue
+            if not response.ok:
+                last_error = f"{response.status_code} {response.reason}"
+                continue
+            try:
+                payload = response.json()
+            except ValueError:
+                last_error = "Invalid JSON response"
+                continue
+            updated = self._apply_remote_node_info(node, payload)
+            message = (
+                "Remote information applied."
+                if updated
+                else "Remote information fetched (no changes)."
+            )
+            return {
+                "ok": True,
+                "url": url,
+                "updated_fields": updated,
+                "message": message,
+            }
+        return {"ok": False, "message": last_error or "Unable to reach remote node."}
+
+    def _apply_remote_node_info(self, node, payload):
+        changed = []
+        field_map = {
+            "hostname": payload.get("hostname"),
+            "address": payload.get("address"),
+            "public_key": payload.get("public_key"),
+        }
+        port_value = payload.get("port")
+        if port_value is not None:
+            try:
+                port_value = int(port_value)
+            except (TypeError, ValueError):
+                port_value = None
+        field_map["port"] = port_value
+        mac_address = payload.get("mac_address")
+        if mac_address:
+            field_map["mac_address"] = str(mac_address).lower()
+
+        for field, value in field_map.items():
+            if value is None:
+                continue
+            if getattr(node, field) != value:
+                setattr(node, field, value)
+                changed.append(field)
+
+        node.last_seen = timezone.now()
+        if "last_seen" not in changed:
+            changed.append("last_seen")
+        node.save(update_fields=changed)
+        return changed
+
+    def _push_remote_information(self, node):
+        if node.is_local:
+            return {
+                "ok": True,
+                "message": "Local node does not require remote update.",
+            }
+
+        local_node = Node.get_local()
+        if local_node is None:
+            try:
+                local_node, _ = Node.register_current()
+            except Exception as exc:  # pragma: no cover - unexpected errors
+                return {"ok": False, "message": str(exc)}
+
+        security_dir = Path(local_node.base_path or settings.BASE_DIR) / "security"
+        priv_path = security_dir / f"{local_node.public_endpoint}"
+        if not priv_path.exists():
+            return {
+                "ok": False,
+                "message": "Local node private key not found.",
+            }
+        try:
+            private_key = serialization.load_pem_private_key(
+                priv_path.read_bytes(), password=None
+            )
+        except Exception as exc:  # pragma: no cover - unexpected errors
+            return {"ok": False, "message": f"Failed to load private key: {exc}"}
+
+        token = uuid.uuid4().hex
+        try:
+            signature = private_key.sign(
+                token.encode(),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+        except Exception as exc:  # pragma: no cover - unexpected errors
+            return {"ok": False, "message": f"Failed to sign payload: {exc}"}
+
+        payload = {
+            "hostname": local_node.hostname,
+            "address": local_node.address,
+            "port": local_node.port,
+            "mac_address": local_node.mac_address,
+            "public_key": local_node.public_key,
+            "token": token,
+            "signature": base64.b64encode(signature).decode(),
+        }
+        if local_node.installed_version:
+            payload["installed_version"] = local_node.installed_version
+        if local_node.installed_revision:
+            payload["installed_revision"] = local_node.installed_revision
+
+        payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        headers = {"Content-Type": "application/json"}
+
+        last_error = ""
+        for url in self._iter_remote_urls(node, "/nodes/register/"):
+            try:
+                response = requests.post(
+                    url,
+                    data=payload_json,
+                    headers=headers,
+                    timeout=5,
+                )
+            except RequestException as exc:
+                last_error = str(exc)
+                continue
+            if response.ok:
+                return {"ok": True, "url": url, "message": "Remote updated."}
+            last_error = f"{response.status_code} {response.text}"
+        return {"ok": False, "message": last_error or "Unable to reach remote node."}
+
+    def _iter_remote_urls(self, node, path):
+        host_candidates = []
+        for attr in ("public_endpoint", "address", "hostname"):
+            value = getattr(node, attr, "") or ""
+            value = value.strip()
+            if value and value not in host_candidates:
+                host_candidates.append(value)
+
+        port = node.port or 8000
+        normalized_path = path if path.startswith("/") else f"/{path}"
+        seen = set()
+
+        for host in host_candidates:
+            formatted_host = host
+            if ":" in host and not host.startswith("["):
+                formatted_host = f"[{host}]"
+
+            candidates = []
+            if port == 80:
+                candidates = [
+                    f"http://{formatted_host}{normalized_path}",
+                    f"https://{formatted_host}{normalized_path}",
+                ]
+            elif port == 443:
+                candidates = [
+                    f"https://{formatted_host}{normalized_path}",
+                    f"http://{formatted_host}:{port}{normalized_path}",
+                ]
+            else:
+                candidates = [
+                    f"http://{formatted_host}:{port}{normalized_path}",
+                    f"https://{formatted_host}:{port}{normalized_path}",
+                ]
+
+            for candidate in candidates:
+                if candidate not in seen:
+                    seen.add(candidate)
+                    yield candidate
 
     def register_visitor_view(self, request):
         """Exchange registration data with the visiting node."""

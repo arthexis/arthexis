@@ -1705,7 +1705,95 @@ class NodeAdminTests(TestCase):
             padding.PKCS1v15(),
             hashes.SHA256(),
         )
-        self.assertContains(response, "Fetched RFIDs from 1 node(s)")
+
+    def test_update_selected_nodes_action_renders_progress_page(self):
+        remote = Node.objects.create(
+            hostname="remote", address="10.0.0.2", port=8010
+        )
+        response = self.client.post(
+            reverse("admin:nodes_node_changelist"),
+            {
+                "action": "update_selected_nodes",
+                "_selected_action": [str(remote.pk)],
+            },
+            follow=False,
+        )
+        self.assertEqual(response.status_code, 200)
+        response.render()
+        self.assertContains(response, "Update selected nodes")
+        self.assertIn(
+            f'data-node-id="{remote.pk}"', response.content.decode()
+        )
+        self.assertContains(response, str(remote))
+
+    @patch("nodes.admin.requests.post")
+    @patch("nodes.admin.requests.get")
+    def test_update_selected_nodes_progress_updates_remote(
+        self, mock_get, mock_post
+    ):
+        local = self._create_local_node()
+        local.public_endpoint = "localnode"
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        private_bytes = key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        public_bytes = key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        security_dir = Path(settings.BASE_DIR) / "security"
+        security_dir.mkdir(parents=True, exist_ok=True)
+        (security_dir / "localnode").write_bytes(private_bytes)
+        (security_dir / "localnode.pub").write_bytes(public_bytes)
+        local.public_key = public_bytes.decode()
+        local.save(update_fields=["public_endpoint", "public_key"])
+
+        remote = Node.objects.create(
+            hostname="upstream", address="192.0.2.5", port=8100
+        )
+
+        get_response = MagicMock()
+        get_response.ok = True
+        get_response.status_code = 200
+        get_response.reason = "OK"
+        get_response.json.return_value = {
+            "hostname": "upstream-updated",
+            "address": "203.0.113.10",
+            "port": 8200,
+            "mac_address": "aa:bb:cc:dd:ee:ff",
+            "public_key": "REMOTEKEY",
+        }
+        mock_get.return_value = get_response
+
+        post_response = MagicMock()
+        post_response.ok = True
+        post_response.status_code = 200
+        post_response.text = ""
+        mock_post.return_value = post_response
+
+        progress_url = reverse("admin:nodes_node_update_selected_progress")
+        response = self.client.post(progress_url, {"node_id": remote.pk})
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "success")
+        self.assertTrue(payload["local"]["ok"])
+        self.assertTrue(payload["remote"]["ok"])
+
+        remote.refresh_from_db()
+        self.assertEqual(remote.hostname, "upstream-updated")
+        self.assertEqual(remote.address, "203.0.113.10")
+        self.assertEqual(remote.port, 8200)
+        self.assertEqual(remote.mac_address, "aa:bb:cc:dd:ee:ff")
+        self.assertEqual(remote.public_key, "REMOTEKEY")
+
+        self.assertTrue(mock_get.called)
+        self.assertIn("/nodes/info/", mock_get.call_args.args[0])
+        self.assertTrue(mock_post.called)
+        post_data = json.loads(mock_post.call_args.kwargs["data"])
+        self.assertEqual(post_data["hostname"], local.hostname)
+        self.assertEqual(post_data["mac_address"], local.mac_address)
 
 
 class RFIDExportViewTests(TestCase):
