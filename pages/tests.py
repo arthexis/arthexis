@@ -2107,7 +2107,7 @@ class AdminActionListTests(TestCase):
                 labels = {action["label"] for action in actions}
                 self.assertIn("Active Profile", labels)
 
-    def test_generate_quote_report_link_available(self):
+    def test_quote_report_link_available(self):
         from pages.templatetags.admin_extras import model_admin_actions
 
         request = self.factory.get("/")
@@ -2116,11 +2116,11 @@ class AdminActionListTests(TestCase):
 
         actions = model_admin_actions(context, "core", "OdooProfile")
         labels = {action["label"] for action in actions}
-        self.assertIn("Generate Quote Report", labels)
+        self.assertIn("Quote Report", labels)
         url = next(
             action["url"]
             for action in actions
-            if action["label"] == "Generate Quote Report"
+            if action["label"] == "Quote Report"
         )
         self.assertEqual(
             url,

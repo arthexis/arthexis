@@ -1742,8 +1742,8 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
     def generate_quote_report(self, request, queryset=None):
         return HttpResponseRedirect(reverse("odoo-quote-report"))
 
-    generate_quote_report.label = _("Generate Quote Report")
-    generate_quote_report.short_description = _("Generate Quote Report")
+    generate_quote_report.label = _("Quote Report")
+    generate_quote_report.short_description = _("Quote Report")
 
 
 @admin.register(OpenPayProfile)

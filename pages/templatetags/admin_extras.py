@@ -132,6 +132,17 @@ def model_admin_actions(context, app_label, model_name):
             )
             url = None
             tools_view_name = getattr(model_admin, "tools_view_name", None)
+            if not tools_view_name:
+                initializer = getattr(model_admin, "_get_action_urls", None)
+                if callable(initializer):
+                    try:
+                        initializer()
+                    except Exception:  # pragma: no cover - defensive
+                        tools_view_name = None
+                    else:
+                        tools_view_name = getattr(
+                            model_admin, "tools_view_name", None
+                        )
             if tools_view_name:
                 try:
                     url = reverse(tools_view_name, kwargs={"tool": action_name})
