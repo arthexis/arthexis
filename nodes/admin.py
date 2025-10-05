@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.contrib.admin import helpers
 from django.urls import NoReverseMatch, path, reverse
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
@@ -1103,12 +1104,29 @@ class ContentSampleAdmin(EntityModelAdmin):
 
 @admin.register(NetMessage)
 class NetMessageAdmin(EntityModelAdmin):
+    class QuickSendForm(forms.ModelForm):
+        class Meta:
+            model = NetMessage
+            fields = [
+                "subject",
+                "body",
+                "filter_node",
+                "filter_node_feature",
+                "filter_node_role",
+                "filter_current_relation",
+                "filter_installed_version",
+                "filter_installed_revision",
+                "target_limit",
+            ]
+            widgets = {"body": forms.Textarea(attrs={"rows": 4})}
+
     class NetMessageAdminForm(forms.ModelForm):
         class Meta:
             model = NetMessage
             fields = "__all__"
             widgets = {"body": forms.Textarea(attrs={"rows": 4})}
 
+    change_list_template = "admin/nodes/netmessage/change_list.html"
     form = NetMessageAdminForm
     change_form_template = "admin/nodes/netmessage/change_form.html"
     list_display = (
@@ -1153,6 +1171,92 @@ class NetMessageAdmin(EntityModelAdmin):
             },
         ),
     )
+    quick_send_fieldsets = (
+        (None, {"fields": ("subject", "body")}),
+        (
+            _("Filters"),
+            {
+                "fields": (
+                    "filter_node",
+                    "filter_node_feature",
+                    "filter_node_role",
+                    "filter_current_relation",
+                    "filter_installed_version",
+                    "filter_installed_revision",
+                )
+            },
+        ),
+        (
+            _("Propagation"),
+            {
+                "fields": (
+                    "target_limit",
+                )
+            },
+        ),
+    )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        opts = self.model._meta
+        custom_urls = [
+            path(
+                "send/",
+                self.admin_site.admin_view(self.send_tool_view),
+                name=f"{opts.app_label}_{opts.model_name}_send",
+            )
+        ]
+        return custom_urls + urls
+
+    def send_tool_view(self, request):
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+
+        form_class = self.QuickSendForm
+        if request.method == "POST":
+            form = form_class(request.POST)
+            if form.is_valid():
+                obj = form.save(commit=False)
+                obj.pk = None
+                previous_skip_flag = getattr(self, "_skip_entity_user_datum", False)
+                self._skip_entity_user_datum = True
+                try:
+                    self.save_model(request, obj, form, change=False)
+                    self.save_related(request, form, formsets=[], change=False)
+                finally:
+                    self._skip_entity_user_datum = previous_skip_flag
+                self.log_addition(
+                    request,
+                    obj,
+                    self.construct_change_message(request, form, None),
+                )
+                obj.propagate()
+                self.message_user(
+                    request,
+                    _("Net Message sent to the network."),
+                    level=messages.SUCCESS,
+                )
+                changelist_url = reverse(
+                    f"admin:{self.model._meta.app_label}_"
+                    f"{self.model._meta.model_name}_changelist"
+                )
+                return redirect(changelist_url)
+        else:
+            form = form_class()
+
+        admin_form = helpers.AdminForm(form, self.quick_send_fieldsets, {})
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Send Net Message"),
+            "adminform": admin_form,
+            "media": self.media + form.media,
+        }
+        return TemplateResponse(
+            request,
+            "admin/nodes/netmessage/send.html",
+            context,
+        )
 
     def get_changeform_initial_data(self, request):
         initial = super().get_changeform_initial_data(request)
