@@ -1507,6 +1507,7 @@ class UserManualAdminFormTests(TestCase):
             "description": self.manual.description,
             "languages": self.manual.languages,
             "content_html": self.manual.content_html,
+            "pdf_orientation": self.manual.pdf_orientation,
         }
         upload = SimpleUploadedFile("manual.pdf", b"PDF data")
         form = form_class(data=payload, files={"content_pdf": upload}, instance=self.manual)
@@ -1525,6 +1526,7 @@ class UserManualAdminFormTests(TestCase):
             "description": self.manual.description,
             "languages": self.manual.languages,
             "content_html": self.manual.content_html,
+            "pdf_orientation": self.manual.pdf_orientation,
         }
         form = form_class(data=payload, files={}, instance=self.manual)
         self.assertTrue(form.is_valid(), form.errors.as_json())

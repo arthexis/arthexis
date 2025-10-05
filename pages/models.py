@@ -395,6 +395,10 @@ class RoleLanding(Entity):
             )
 
 class UserManual(Entity):
+    class PdfOrientation(models.TextChoices):
+        LANDSCAPE = "landscape", _("Landscape")
+        PORTRAIT = "portrait", _("Portrait")
+
     slug = models.SlugField(unique=True)
     title = models.CharField(max_length=200)
     description = models.CharField(max_length=200)
@@ -406,6 +410,12 @@ class UserManual(Entity):
     )
     content_html = models.TextField()
     content_pdf = models.TextField(help_text="Base64 encoded PDF")
+    pdf_orientation = models.CharField(
+        max_length=10,
+        choices=PdfOrientation.choices,
+        default=PdfOrientation.LANDSCAPE,
+        help_text=_("Orientation used when rendering the PDF download."),
+    )
 
     class Meta:
         db_table = "man_usermanual"
