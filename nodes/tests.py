@@ -40,7 +40,6 @@ from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from django.conf import settings
 from django.utils import timezone
 from dns import resolver as dns_resolver
-from .actions import NodeAction
 from . import dns as dns_utils
 from selenium.common.exceptions import WebDriverException
 from .classifiers import run_default_classifiers
@@ -2310,81 +2309,6 @@ class NetMessageSignatureTests(TestCase):
         self.assertTrue(signature_one)
         self.assertTrue(signature_two)
         self.assertNotEqual(signature_one, signature_two)
-
-
-class NodeActionTests(TestCase):
-    def setUp(self):
-        self.client = Client()
-        User = get_user_model()
-        self.admin = User.objects.create_superuser(
-            username="action-admin", password="adminpass", email="admin@example.com"
-        )
-        self.client.force_login(self.admin)
-
-    def test_registry_and_local_execution(self):
-        hostname = socket.gethostname()
-        node = Node.objects.create(
-            hostname=hostname,
-            address="127.0.0.1",
-            port=8000,
-            mac_address=Node.get_current_mac(),
-        )
-
-        class DummyAction(NodeAction):
-            display_name = "Dummy Action"
-
-            def execute(self, node, **kwargs):
-                DummyAction.executed = node
-
-        try:
-            DummyAction.executed = None
-            DummyAction.run()
-            self.assertEqual(DummyAction.executed, node)
-            self.assertIn("dummyaction", NodeAction.registry)
-        finally:
-            NodeAction.registry.pop("dummyaction", None)
-
-    def test_remote_not_supported(self):
-        node = Node.objects.create(
-            hostname="remote",
-            address="10.0.0.1",
-            port=8000,
-            mac_address="00:11:22:33:44:bb",
-        )
-
-        class DummyAction(NodeAction):
-            def execute(self, node, **kwargs):
-                pass
-
-        try:
-            with self.assertRaises(NotImplementedError):
-                DummyAction.run(node)
-        finally:
-            NodeAction.registry.pop("dummyaction", None)
-
-    def test_admin_change_view_lists_actions(self):
-        hostname = socket.gethostname()
-        node = Node.objects.create(
-            hostname=hostname,
-            address="127.0.0.1",
-            port=8000,
-            mac_address=Node.get_current_mac(),
-        )
-
-        class DummyAction(NodeAction):
-            display_name = "Dummy Action"
-
-            def execute(self, node, **kwargs):
-                pass
-
-        try:
-            url = reverse("admin:nodes_node_change", args=[node.pk])
-            response = self.client.get(url)
-            self.assertContains(response, "Dummy Action")
-        finally:
-            NodeAction.registry.pop("dummyaction", None)
-
-
 class StartupNotificationTests(TestCase):
     def test_startup_notification_uses_hostname_and_revision(self):
         from nodes.apps import _startup_notification

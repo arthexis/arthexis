@@ -28,7 +28,6 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from .classifiers import run_default_classifiers, suppress_default_classifiers
 from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
-from .actions import NodeAction
 from .reports import (
     collect_celery_log_entries,
     collect_scheduled_tasks,
@@ -297,11 +296,6 @@ class NodeAdmin(EntityModelAdmin):
                 "register-visitor/",
                 self.admin_site.admin_view(self.register_visitor_view),
                 name="nodes_node_register_visitor",
-            ),
-            path(
-                "<int:node_id>/action/<str:action>/",
-                self.admin_site.admin_view(self.action_view),
-                name="nodes_node_action",
             ),
             path(
                 "<int:node_id>/public-key/",
@@ -804,7 +798,6 @@ class NodeAdmin(EntityModelAdmin):
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}
-        extra_context["node_actions"] = NodeAction.get_actions()
         if object_id:
             extra_context["public_key_url"] = reverse(
                 "admin:nodes_node_public_key", args=[object_id]
@@ -812,31 +805,6 @@ class NodeAdmin(EntityModelAdmin):
         return super().changeform_view(
             request, object_id, form_url, extra_context=extra_context
         )
-
-    def action_view(self, request, node_id, action):
-        node = self.get_object(request, node_id)
-        action_cls = NodeAction.registry.get(action)
-        if not node or not action_cls:
-            self.message_user(request, "Unknown node action", messages.ERROR)
-            return redirect("..")
-        try:
-            result = action_cls.run(node)
-            if hasattr(result, "status_code"):
-                return result
-            self.message_user(
-                request,
-                f"{action_cls.display_name} executed successfully",
-                messages.SUCCESS,
-            )
-        except NotImplementedError:
-            self.message_user(
-                request,
-                "Remote node actions are not yet implemented",
-                messages.WARNING,
-            )
-        except Exception as exc:  # pragma: no cover - unexpected errors
-            self.message_user(request, str(exc), messages.ERROR)
-        return redirect(reverse("admin:nodes_node_change", args=[node_id]))
 
 
 @admin.register(EmailOutbox)
