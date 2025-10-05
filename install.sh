@@ -22,11 +22,11 @@ CLEAN=false
 ENABLE_CONTROL=false
 NODE_ROLE="Terminal"
 REQUIRES_REDIS=false
-ENABLE_DATASETTE=false
+ENABLE_DATASETTE=true
 START_SERVICES=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--terminal] [--control] [--constellation] [--celery] [--lcd-screen|--no-lcd-screen] [--datasette] [--clean] [--start]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--terminal] [--control] [--constellation] [--celery] [--lcd-screen|--no-lcd-screen] [--datasette|--no-datasette] [--clean] [--start]" >&2
     exit 1
 }
 
@@ -162,6 +162,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --datasette)
             ENABLE_DATASETTE=true
+            shift
+            ;;
+        --no-datasette)
+            ENABLE_DATASETTE=false
             shift
             ;;
         --lcd-screen)
