@@ -607,7 +607,7 @@ class DeepReadViewTests(TestCase):
     @patch("config.middleware.get_site")
     @patch(
         "ocpp.rfid.views.enable_deep_read_mode",
-        return_value={"status": "deep", "timeout": 60},
+        return_value={"status": "deep read enabled", "enabled": True},
     )
     def test_enable_deep_read(self, mock_enable, mock_site, mock_node):
         User = get_user_model()
@@ -615,7 +615,9 @@ class DeepReadViewTests(TestCase):
         self.client.force_login(staff)
         resp = self.client.post(reverse("rfid-scan-deep"))
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json(), {"status": "deep", "timeout": 60})
+        self.assertEqual(
+            resp.json(), {"status": "deep read enabled", "enabled": True}
+        )
         mock_enable.assert_called_once()
 
     def test_forbidden_for_anonymous(self):

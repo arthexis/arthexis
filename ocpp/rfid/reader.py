@@ -16,7 +16,7 @@ from .constants import (
 )
 
 
-_deep_read_until: float = 0.0
+_deep_read_enabled: bool = False
 
 _HEX_RE = re.compile(r"^[0-9A-F]+$")
 
@@ -73,10 +73,20 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
     return result
 
 
-def enable_deep_read(duration: float = 60) -> None:
-    """Enable deep read mode for ``duration`` seconds."""
-    global _deep_read_until
-    _deep_read_until = time.time() + duration
+def enable_deep_read(duration: float | None = None) -> bool:
+    """Enable deep read mode until it is explicitly disabled."""
+
+    global _deep_read_enabled
+    _deep_read_enabled = True
+    return _deep_read_enabled
+
+
+def toggle_deep_read() -> bool:
+    """Toggle deep read mode and return the new state."""
+
+    global _deep_read_enabled
+    _deep_read_enabled = not _deep_read_enabled
+    return _deep_read_enabled
 
 
 def read_rfid(
@@ -143,9 +153,7 @@ def read_rfid(
                         created=created,
                         kind=kind,
                     )
-                    deep_read_active = (
-                        tag.kind == RFID.CLASSIC and time.time() < _deep_read_until
-                    )
+                    deep_read_active = tag.kind == RFID.CLASSIC and _deep_read_enabled
                     if deep_read_active:
                         keys = {}
                         if hasattr(tag, "key_a"):
