@@ -1201,10 +1201,21 @@ class SocialProfile(Profile):
         super().save(*args, **kwargs)
 
     def __str__(self):  # pragma: no cover - simple representation
-        handle = self.handle or self.domain
-        label = f"{self.get_network_display()} ({handle})" if handle else self.get_network_display()
+        handle = (self.resolve_sigils("handle") or self.handle or self.domain or "").strip()
+        network = (self.resolve_sigils("network") or self.network or "").strip()
+
+        if handle.startswith("@"):
+            handle = handle[1:]
+
+        if handle and network:
+            return f"{handle}@{network}"
+        if handle:
+            return handle
+        if network:
+            return network
+
         owner = self.owner_display()
-        return f"{owner} – {label}" if owner else label
+        return owner or super().__str__()
 
     class Meta:
         verbose_name = _("Social Identity")
