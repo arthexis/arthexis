@@ -456,7 +456,15 @@ if [[ $RUN_AP == true ]]; then
         else
             nmcli connection down eth0-shared >/dev/null 2>&1 || true
         fi
-        nmcli connection up "$AP_NAME"
+        if ! nmcli connection up "$AP_NAME" ifname wlan0; then
+            echo "Failed to activate access point connection '$AP_NAME' on wlan0." >&2
+            exit 1
+        fi
+        active_ap_device=$(nmcli -g GENERAL.DEVICES connection show "$AP_NAME" 2>/dev/null | tr -d '\n')
+        if [[ ",$active_ap_device," != *,wlan0,* ]]; then
+            echo "Access point '$AP_NAME' is not bound to wlan0 (device: '${active_ap_device:-none}')." >&2
+            exit 1
+        fi
         if command -v iptables >/dev/null 2>&1; then
             iptables -C INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT 2>/dev/null || \
                 iptables -A INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT
