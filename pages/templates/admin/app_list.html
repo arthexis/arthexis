@@ -66,7 +66,7 @@
                 {% model_admin_actions app.app_label model.object_name as extra_actions %}
                 <td class="actions">
                   {% for action in extra_actions %}
-                    <a href="{{ action.url }}" class="actionlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{{ action.label }}</a>{% if not forloop.last %}, {% endif %}
+                    <a href="{{ action.url }}" class="actionlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{{ action.label }}</a>{% if not forloop.last %}&nbsp;{% endif %}
                   {% endfor %}
                 </td>
               {% else %}
