@@ -179,8 +179,15 @@ def _generate_changelog_with_python(log_path: Path) -> None:
     _append_log(log_path, "Regenerated CHANGELOG.rst using Python fallback")
 
 
-def _ensure_release_todo(release) -> tuple[Todo, Path]:
+def _ensure_release_todo(
+    release, *, previous_version: str | None = None
+) -> tuple[Todo, Path]:
+    previous_version = (previous_version or "").strip()
     target_version = _next_patch_version(release.version)
+    if previous_version:
+        incremented_previous = _next_patch_version(previous_version)
+        if incremented_previous == release.version:
+            target_version = release.version
     request = f"Create release {release.package.name} {target_version}"
     try:
         url = reverse("admin:core_packagerelease_changelist")
@@ -488,6 +495,12 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     subprocess.run(["git", "add", "CHANGELOG.rst"], check=True)
     _append_log(log_path, "Staged CHANGELOG.rst for commit")
     version_path = Path("VERSION")
+    previous_version_text = ""
+    if version_path.exists():
+        previous_version_text = version_path.read_text(encoding="utf-8").strip()
+    repo_version_before_sync = getattr(
+        release, "_repo_version_before_sync", previous_version_text
+    )
     version_path.write_text(f"{release.version}\n", encoding="utf-8")
     _append_log(log_path, f"Updated VERSION file to {release.version}")
     subprocess.run(["git", "add", "VERSION"], check=True)
@@ -518,7 +531,9 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
         _append_log(log_path, "Unstaged CHANGELOG.rst")
         subprocess.run(["git", "reset", "HEAD", "VERSION"], check=False)
         _append_log(log_path, "Unstaged VERSION file")
-    todo, fixture_path = _ensure_release_todo(release)
+    todo, fixture_path = _ensure_release_todo(
+        release, previous_version=repo_version_before_sync
+    )
     fixture_display = _format_path(fixture_path)
     _append_log(log_path, f"Added TODO: {todo.request}")
     _append_log(log_path, f"Wrote TODO fixture {fixture_display}")
@@ -897,6 +912,12 @@ def release_progress(request, pk: int, action: str):
     session_key = f"release_publish_{pk}"
     lock_path = Path("locks") / f"release_publish_{pk}.json"
     restart_path = Path("locks") / f"release_publish_{pk}.restarts"
+
+    version_path = Path("VERSION")
+    repo_version_before_sync = ""
+    if version_path.exists():
+        repo_version_before_sync = version_path.read_text(encoding="utf-8").strip()
+    setattr(release, "_repo_version_before_sync", repo_version_before_sync)
 
     if not release.is_current:
         if release.is_published:
