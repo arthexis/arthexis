@@ -192,13 +192,16 @@ def read_rfid(
                                     else:
                                         r, data = (mfrc.MI_OK, read_status)
                                     if r == mfrc.MI_OK and data is not None:
-                                        entry = {"block": block, "data": data}
+                                        entry = {"block": block, "data": list(data)}
                                         if used_key:
                                             entry["key"] = used_key
                                         dump.append(entry)
                             except Exception:
                                 continue
                         result["dump"] = dump
+                        if getattr(tag, "data", None) != dump:
+                            tag.data = [dict(entry) for entry in dump]
+                            tag.save(update_fields=["data"])
                     return result
             if not use_irq and poll_interval:
                 time.sleep(poll_interval)

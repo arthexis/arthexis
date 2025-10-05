@@ -664,6 +664,8 @@ class DeepReadAuthTests(TestCase):
         tag.key_b = "B1B2B3B4B5B6"
         tag.key_a_verified = True
         tag.key_b_verified = False
+        tag.data = []
+        tag.save = MagicMock()
         mock_get.return_value = (tag, False)
         reader = self.MockReader()
         enable_deep_read(60)
@@ -677,6 +679,13 @@ class DeepReadAuthTests(TestCase):
         self.assertEqual(result["keys"].get("a"), "A1A2A3A4A5A6")
         self.assertFalse(result["keys"].get("b_verified"))
         self.assertTrue(any(entry.get("key") == "B" for entry in result["dump"]))
+        self.assertEqual(tag.data, result["dump"])
+        self.assertTrue(
+            any(
+                "data" in set(kwargs.get("update_fields", []) or [])
+                for _args, kwargs in tag.save.call_args_list
+            )
+        )
 
 
 class RFIDWiringConfigTests(SimpleTestCase):
