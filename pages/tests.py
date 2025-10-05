@@ -1736,16 +1736,19 @@ class FavoriteTests(TestCase):
         self.assertIn('aria-label="2 open leads"', content)
 
     def test_dashboard_shows_rfid_release_badge(self):
-        RFID.objects.create(rfid="RFID0001", released=True)
-        RFID.objects.create(rfid="RFID0002", released=False)
+        RFID.objects.create(rfid="RFID0001", released=True, allowed=True)
+        RFID.objects.create(rfid="RFID0002", released=True, allowed=False)
 
         resp = self.client.get(reverse("admin:index"))
 
-        released_label = gettext("Released")
-        registered_label = gettext("Registered")
-        expected = f"[1 {released_label}] / [2 {registered_label}]"
+        expected = "1 / 2"
+        badge_label = gettext(
+            "%(released_allowed)s released and allowed RFIDs out of %(registered)s registered RFIDs"
+        ) % {"released_allowed": 1, "registered": 2}
 
         self.assertContains(resp, expected)
+        self.assertContains(resp, f'title="{badge_label}"')
+        self.assertContains(resp, f'aria-label="{badge_label}"')
 
     def test_dashboard_limits_future_actions_to_top_four(self):
         from pages.templatetags.admin_extras import future_action_items
