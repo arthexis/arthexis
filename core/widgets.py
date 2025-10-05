@@ -1,3 +1,6 @@
+from collections import OrderedDict
+from typing import Any
+
 from django import forms
 from django.forms.widgets import ClearableFileInput
 import json
@@ -92,3 +95,106 @@ class AdminBase64FileWidget(ClearableFileInput):
         widget_context["download_name"] = self.download_name or f"{name}.bin"
         widget_context["content_type"] = self.content_type
         return context
+
+
+class RFIDDataWidget(forms.Textarea):
+    """Render RFID block dumps as a readable grid while keeping raw JSON editable."""
+
+    template_name = "admin/core/widgets/rfid_data_widget.html"
+
+    def __init__(self, attrs: dict[str, Any] | None = None) -> None:
+        default_attrs = {
+            "class": "vLargeTextField rfid-data-widget__input",
+            "rows": 8,
+        }
+        if attrs:
+            default_attrs.update(attrs)
+        super().__init__(attrs=default_attrs)
+
+    class Media:
+        css = {"all": ["core/rfid_data_widget.css"]}
+
+    def format_value(self, value):  # noqa: D401 - inherits docs
+        if value in ({}, []):
+            return "[]"
+        if value is None:
+            return "[]"
+        if isinstance(value, str):
+            return value
+        try:
+            return json.dumps(value, indent=2, sort_keys=True)
+        except (TypeError, ValueError):
+            try:
+                return json.dumps(list(value), indent=2, sort_keys=True)
+            except Exception:
+                return "[]"
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        parsed_entries = self._parse_entries(value)
+        context["widget"]["sectors"] = self._build_sectors(parsed_entries)
+        context["widget"]["has_parse_error"] = bool(
+            context["widget"].get("value") and not parsed_entries
+        )
+        context["widget"]["byte_headers"] = [f"{index:02X}" for index in range(16)]
+        return context
+
+    def _parse_entries(self, value: Any) -> list[dict[str, Any]]:
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except Exception:
+                return []
+        if not isinstance(value, list):
+            return []
+
+        entries: list[dict[str, Any]] = []
+        for entry in value:
+            if not isinstance(entry, dict):
+                continue
+            block = entry.get("block")
+            data = entry.get("data")
+            if not isinstance(block, int) or not isinstance(data, (list, tuple)):
+                continue
+
+            bytes_: list[str] = []
+            valid = True
+            for raw in list(data)[:16]:
+                try:
+                    byte_value = int(raw)
+                except (TypeError, ValueError):
+                    valid = False
+                    break
+                byte_value = max(0, min(255, byte_value))
+                bytes_.append(f"{byte_value:02X}")
+            if not valid:
+                continue
+
+            if len(bytes_) < 16:
+                bytes_.extend(["--"] * (16 - len(bytes_)))
+
+            entries.append(
+                {
+                    "block": block,
+                    "sector": block // 4,
+                    "offset": block % 4,
+                    "key": entry.get("key"),
+                    "bytes": bytes_,
+                    "is_trailer": block % 4 == 3,
+                }
+            )
+
+        return sorted(entries, key=lambda item: item["block"])
+
+    def _build_sectors(self, entries: list[dict[str, Any]]):
+        sectors: OrderedDict[int, dict[str, Any]] = OrderedDict()
+        for entry in entries:
+            sector_key = entry["sector"]
+            sector = sectors.setdefault(
+                sector_key,
+                {"sector": sector_key, "blocks": []},
+            )
+            sector["blocks"].append(entry)
+        for sector in sectors.values():
+            sector["blocks"].sort(key=lambda block: block["offset"])
+        return list(sectors.values())
