@@ -2887,15 +2887,21 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         context["media"] = self.media + form.media
         return TemplateResponse(request, "admin/core/rfid/copy.html", context)
 
-    def print_card_labels(self, request, queryset):
+    def _render_card_labels(
+        self,
+        request,
+        queryset,
+        empty_message,
+        redirect_url,
+    ):
         queryset = queryset.select_related("reference").order_by("label_id")
         if not queryset.exists():
             self.message_user(
                 request,
-                _("Select at least one RFID to print labels."),
+                empty_message,
                 level=messages.WARNING,
             )
-            return HttpResponseRedirect(request.get_full_path())
+            return HttpResponseRedirect(redirect_url)
 
         buffer = BytesIO()
         card_width = 85.6 * mm
@@ -2990,7 +2996,35 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         response["Content-Disposition"] = "attachment; filename=rfid-card-labels.pdf"
         return response
 
+    def print_card_labels(self, request, queryset):
+        return self._render_card_labels(
+            request,
+            queryset,
+            _("Select at least one RFID to print labels."),
+            request.get_full_path(),
+        )
+
     print_card_labels.short_description = _("Print Card Labels")
+
+    def get_changelist_actions(self, request):
+        parent = getattr(super(), "get_changelist_actions", None)
+        actions = []
+        if callable(parent):
+            parent_actions = parent(request)
+            if parent_actions:
+                actions.extend(parent_actions)
+        actions.append("print_valid_card_labels")
+        return actions
+
+    def print_valid_card_labels(self, request):
+        queryset = self.get_queryset(request).filter(allowed=True, released=True)
+        changelist_url = reverse("admin:core_rfid_changelist")
+        return self._render_card_labels(
+            request,
+            queryset,
+            _("No RFID cards marked as valid are available to print."),
+            changelist_url,
+        )
 
     def get_urls(self):
         urls = super().get_urls()
@@ -2999,6 +3033,11 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                 "report/",
                 self.admin_site.admin_view(self.report_view),
                 name="core_rfid_report",
+            ),
+            path(
+                "print-valid-labels/",
+                self.admin_site.admin_view(self.print_valid_card_labels),
+                name="core_rfid_print_valid_card_labels",
             ),
             path(
                 "scan/",
