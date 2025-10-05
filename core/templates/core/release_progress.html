@@ -310,6 +310,9 @@
     {% if release.pypi_url %}
     <p><a href="{{ release.pypi_url }}" target="_blank" rel="noopener">{{ release.pypi_url }}</a></p>
     {% endif %}
+    {% if release.github_url %}
+    <p><a href="{{ release.github_url }}" target="_blank" rel="noopener">{{ release.github_url }}</a></p>
+    {% endif %}
     <div>
       <input type="text" id="logpath" value="{{ log_path }}" readonly>
       <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('logpath').value)">{% trans 'Copy log path' %}</button>

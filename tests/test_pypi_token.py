@@ -1,4 +1,6 @@
 import os
+import subprocess
+import sys
 from pathlib import Path
 from unittest import mock
 
@@ -93,3 +95,50 @@ class PyPITokenTests(TestCase):
             with self.assertRaises(release.ReleaseError) as exc:
                 release.publish(version="0.1.1", creds=release.Credentials())
         assert str(exc.exception) == "Missing PyPI credentials"
+
+    def test_publish_supports_multiple_repositories(self):
+        primary = release.RepositoryTarget(
+            name="PyPI",
+            verify_availability=True,
+            credentials=release.Credentials(token="pypi-token"),
+        )
+        secondary = release.RepositoryTarget(
+            name="GitHub Packages",
+            repository_url="https://upload.github.com/pypi/",
+            credentials=release.Credentials(
+                username="octocat", password="gh-token"
+            ),
+        )
+        package = release.Package(
+            name="pkg",
+            description="desc",
+            author="author",
+            email="author@example.com",
+            python_requires=">=3.10",
+            license="GPL",
+        )
+
+        def fake_run(cmd, capture_output=False, text=False, check=True):
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with (
+            mock.patch("core.release.network_available", return_value=False),
+            mock.patch.object(release.Path, "exists", return_value=True),
+            mock.patch.object(
+                release.Path, "glob", return_value=[Path("dist/fake.whl")]
+            ),
+            mock.patch("core.release.subprocess.run", side_effect=fake_run) as run,
+        ):
+            release.publish(
+                package=package,
+                version="0.1.1",
+                repositories=[primary, secondary],
+            )
+
+        commands = [call.args[0] for call in run.call_args_list]
+        twine_commands = [cmd for cmd in commands if "twine" in cmd]
+        assert len(twine_commands) == 2
+        assert twine_commands[0][:4] == [sys.executable, "-m", "twine", "upload"]
+        assert "--repository-url" not in twine_commands[0]
+        assert "--repository-url" in twine_commands[1]
+        assert "https://upload.github.com/pypi/" in twine_commands[1]

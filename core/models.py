@@ -32,7 +32,7 @@ from django.utils.dateparse import parse_datetime
 import uuid
 from pathlib import Path
 from django.core import serializers
-from urllib.parse import urlparse
+from urllib.parse import quote_plus, urlparse
 from utils import revision as revision_utils
 from typing import Any, Type
 from defusedxml import xmlrpc as defused_xmlrpc
@@ -48,6 +48,7 @@ from .release import (
     Package as ReleasePackage,
     Credentials,
     DEFAULT_PACKAGE,
+    RepositoryTarget,
 )
 
 
@@ -2861,6 +2862,7 @@ class ReleaseManager(Profile):
         "github_token",
         "pypi_password",
         "pypi_url",
+        "secondary_pypi_url",
     )
     pypi_username = SigilShortAutoField("PyPI username", max_length=100, blank=True)
     pypi_token = SigilShortAutoField("PyPI token", max_length=200, blank=True)
@@ -2874,6 +2876,15 @@ class ReleaseManager(Profile):
     )
     pypi_password = SigilShortAutoField("PyPI password", max_length=200, blank=True)
     pypi_url = SigilShortAutoField("PyPI URL", max_length=200, blank=True)
+    secondary_pypi_url = SigilShortAutoField(
+        "Secondary PyPI URL",
+        max_length=200,
+        blank=True,
+        help_text=(
+            "Optional secondary repository upload endpoint."
+            " Leave blank to disable mirrored uploads."
+        ),
+    )
 
     class Meta:
         verbose_name = "Release Manager"
@@ -2997,6 +3008,7 @@ class PackageRelease(Entity):
     )
     changelog = models.TextField(blank=True, default="")
     pypi_url = models.URLField("PyPI URL", blank=True, editable=False)
+    github_url = models.URLField("GitHub URL", blank=True, editable=False)
     release_on = models.DateTimeField(blank=True, null=True, editable=False)
 
     class Meta:
@@ -3041,6 +3053,104 @@ class PackageRelease(Entity):
         if manager and manager.github_token:
             return manager.github_token
         return os.environ.get("GITHUB_TOKEN")
+
+    def build_publish_targets(self) -> list[RepositoryTarget]:
+        """Return repository targets for publishing this release."""
+
+        manager = self.release_manager or self.package.release_manager
+        targets: list[RepositoryTarget] = []
+
+        primary_url = ""
+        if manager and manager.pypi_url:
+            primary_url = manager.pypi_url.strip()
+        if not primary_url:
+            env_primary = os.environ.get("PYPI_REPOSITORY_URL", "")
+            primary_url = env_primary.strip()
+
+        primary_creds = self.to_credentials()
+        targets.append(
+            RepositoryTarget(
+                name="PyPI",
+                repository_url=primary_url or None,
+                credentials=primary_creds,
+                verify_availability=True,
+            )
+        )
+
+        secondary_url = ""
+        if manager and getattr(manager, "secondary_pypi_url", ""):
+            secondary_url = manager.secondary_pypi_url.strip()
+        if not secondary_url:
+            env_secondary = os.environ.get("PYPI_SECONDARY_URL", "")
+            secondary_url = env_secondary.strip()
+        if not secondary_url:
+            return targets
+
+        def _clone_credentials(creds: Credentials | None) -> Credentials | None:
+            if creds is None or not creds.has_auth():
+                return None
+            return Credentials(
+                token=creds.token,
+                username=creds.username,
+                password=creds.password,
+            )
+
+        github_token = self.get_github_token()
+        github_username = None
+        if manager and manager.pypi_username:
+            github_username = manager.pypi_username.strip() or None
+        env_secondary_username = os.environ.get("PYPI_SECONDARY_USERNAME")
+        env_secondary_password = os.environ.get("PYPI_SECONDARY_PASSWORD")
+        if not github_username:
+            github_username = (
+                os.environ.get("GITHUB_USERNAME")
+                or os.environ.get("GITHUB_ACTOR")
+                or (env_secondary_username.strip() if env_secondary_username else None)
+            )
+
+        password_candidate = github_token or (
+            env_secondary_password.strip() if env_secondary_password else None
+        )
+
+        secondary_creds: Credentials | None = None
+        if github_username and password_candidate:
+            secondary_creds = Credentials(
+                username=github_username,
+                password=password_candidate,
+            )
+        else:
+            secondary_creds = _clone_credentials(primary_creds)
+
+        if secondary_creds and secondary_creds.has_auth():
+            name = "GitHub Packages" if github_token else "Secondary repository"
+            targets.append(
+                RepositoryTarget(
+                    name=name,
+                    repository_url=secondary_url,
+                    credentials=secondary_creds,
+                )
+            )
+
+        return targets
+
+    def github_package_url(self) -> str | None:
+        """Return the GitHub Packages URL for this release if determinable."""
+
+        repo_url = self.package.repository_url
+        if not repo_url:
+            return None
+        parsed = urlparse(repo_url)
+        if "github.com" not in parsed.netloc.lower():
+            return None
+        path = parsed.path.strip("/")
+        if not path:
+            return None
+        if path.endswith(".git"):
+            path = path[: -len(".git")]
+        return (
+            f"https://github.com/{path}/pkgs/pypi/{self.package.name}"
+            f"/versions?version={quote_plus(self.version)}"
+        )
 
     @property
     def migration_number(self) -> int:
