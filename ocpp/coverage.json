@@ -1,0 +1,119 @@
+{
+  "coverage": {
+    "cp_to_csms": {
+      "count": 10,
+      "percent": 100.0,
+      "supported": [
+        "Authorize",
+        "BootNotification",
+        "DataTransfer",
+        "DiagnosticsStatusNotification",
+        "FirmwareStatusNotification",
+        "Heartbeat",
+        "MeterValues",
+        "StartTransaction",
+        "StatusNotification",
+        "StopTransaction"
+      ],
+      "total": 10
+    },
+    "csms_to_cp": {
+      "count": 6,
+      "percent": 31.58,
+      "supported": [
+        "ChangeAvailability",
+        "DataTransfer",
+        "RemoteStartTransaction",
+        "RemoteStopTransaction",
+        "Reset",
+        "TriggerMessage"
+      ],
+      "total": 19
+    },
+    "overall": {
+      "count": 16,
+      "percent": 57.14,
+      "supported": [
+        "Authorize",
+        "BootNotification",
+        "ChangeAvailability",
+        "DataTransfer",
+        "DiagnosticsStatusNotification",
+        "FirmwareStatusNotification",
+        "GetConfiguration",
+        "Heartbeat",
+        "MeterValues",
+        "RemoteStartTransaction",
+        "RemoteStopTransaction",
+        "Reset",
+        "StartTransaction",
+        "StatusNotification",
+        "StopTransaction",
+        "TriggerMessage"
+      ],
+      "total": 28
+    }
+  },
+  "implemented": {
+    "cp_to_csms": [
+      "Authorize",
+      "BootNotification",
+      "DataTransfer",
+      "DiagnosticsStatusNotification",
+      "FirmwareStatusNotification",
+      "GetConfiguration",
+      "Heartbeat",
+      "MeterValues",
+      "RemoteStartTransaction",
+      "RemoteStopTransaction",
+      "Reset",
+      "StartTransaction",
+      "StatusNotification",
+      "StopTransaction",
+      "TriggerMessage"
+    ],
+    "csms_to_cp": [
+      "ChangeAvailability",
+      "DataTransfer",
+      "RemoteStartTransaction",
+      "RemoteStopTransaction",
+      "Reset",
+      "TriggerMessage"
+    ]
+  },
+  "spec": {
+    "cp_to_csms": [
+      "Authorize",
+      "BootNotification",
+      "DataTransfer",
+      "DiagnosticsStatusNotification",
+      "FirmwareStatusNotification",
+      "Heartbeat",
+      "MeterValues",
+      "StartTransaction",
+      "StatusNotification",
+      "StopTransaction"
+    ],
+    "csms_to_cp": [
+      "CancelReservation",
+      "ChangeAvailability",
+      "ChangeConfiguration",
+      "ClearCache",
+      "ClearChargingProfile",
+      "DataTransfer",
+      "GetCompositeSchedule",
+      "GetConfiguration",
+      "GetDiagnostics",
+      "GetLocalListVersion",
+      "RemoteStartTransaction",
+      "RemoteStopTransaction",
+      "ReserveNow",
+      "Reset",
+      "SendLocalList",
+      "SetChargingProfile",
+      "TriggerMessage",
+      "UnlockConnector",
+      "UpdateFirmware"
+    ]
+  }
+}
