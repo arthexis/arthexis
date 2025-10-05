@@ -5,6 +5,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence
@@ -111,6 +112,61 @@ class TestsFailed(ReleaseError):
 
 def _run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=check)
+
+
+_RETRYABLE_TWINE_ERRORS = (
+    "connectionreseterror",
+    "connection aborted",
+    "protocolerror",
+    "forcibly closed by the remote host",
+    "remote host closed the connection",
+)
+
+
+def _is_retryable_twine_error(output: str) -> bool:
+    normalized = output.lower()
+    return any(marker in normalized for marker in _RETRYABLE_TWINE_ERRORS)
+
+
+def _upload_with_retries(
+    cmd: list[str],
+    *,
+    repository: str,
+    retries: int = 3,
+    cooldown: float = 3.0,
+) -> None:
+    last_output = ""
+    for attempt in range(1, retries + 1):
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        stdout = proc.stdout or ""
+        stderr = proc.stderr or ""
+        if stdout:
+            sys.stdout.write(stdout)
+        if stderr:
+            sys.stderr.write(stderr)
+        if proc.returncode == 0:
+            return
+
+        combined = (stdout + stderr).strip()
+        last_output = combined or f"Twine exited with code {proc.returncode}"
+
+        if attempt < retries and _is_retryable_twine_error(combined):
+            time.sleep(cooldown)
+            continue
+
+        if _is_retryable_twine_error(combined):
+            raise ReleaseError(
+                "Twine upload to {repo} failed after {attempts} attempts due to a network interruption. "
+                "Check your internet connection, wait a moment, then rerun the release command. "
+                "If uploads continue to fail, manually run `python -m twine upload dist/*` once the network "
+                "stabilizes or contact the release manager for assistance.\n\nLast error:\n{error}".format(
+                    repo=repository, attempts=attempt, error=last_output
+                )
+            )
+
+        raise ReleaseError(last_output)
+
+    raise ReleaseError(last_output)
 
 
 def _git_clean() -> bool:
@@ -315,7 +371,7 @@ def build(
             cmd += creds.twine_args()
         except ValueError:
             raise ReleaseError("Missing PyPI credentials")
-        _run(cmd)
+        _upload_with_retries(cmd, repository="PyPI")
 
     if stashed:
         _run(["git", "stash", "pop"], check=False)
@@ -423,9 +479,7 @@ def publish(
             label = "PyPI" if index == 0 else target.name
             raise ReleaseError(f"Missing credentials for {label}") from exc
         cmd = target.build_command(files) + auth_args
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        if proc.returncode != 0:
-            raise ReleaseError(proc.stdout + proc.stderr)
+        _upload_with_retries(cmd, repository=target.name)
         uploaded.append(target.name)
 
     tag_name = f"v{version}"

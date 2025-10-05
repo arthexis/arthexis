@@ -202,6 +202,12 @@ def _prepare_release_environment(monkeypatch, *, version: str) -> list[list[str]
 
     monkeypatch.setattr(release, "_run", fake_run)
 
+    def fake_subprocess_run(cmd, capture_output=False, text=False, check=True):
+        calls.append(list(cmd))
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(release.subprocess, "run", fake_subprocess_run)
+
     fake_requests = types.ModuleType("requests")
 
     def fake_get(url):
@@ -240,3 +246,81 @@ def test_build_twine_allows_force_upload(monkeypatch, release_sandbox, _dist_art
     assert "/tmp/dist/arthexis-1.2.3-py3-none-any.whl" in upload_cmd
     assert "/tmp/dist/arthexis-1.2.3.tar.gz" in upload_cmd
     assert upload_cmd[-4:] == ["--username", "__token__", "--password", "fake-token"]
+
+
+def test_build_twine_retries_connection_errors(monkeypatch, release_sandbox, _dist_artifacts):
+    monkeypatch.setattr(release, "_git_clean", lambda: True)
+    monkeypatch.setattr(release, "_write_pyproject", lambda *a, **k: None)
+    monkeypatch.setitem(sys.modules, "build", types.ModuleType("build"))
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, check=True):
+        calls.append(list(cmd))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(release, "_run", fake_run)
+
+    twine_attempts: list[list[str]] = []
+
+    def fake_subprocess_run(cmd, capture_output=False, text=False, check=True):
+        calls.append(list(cmd))
+        if "twine" in cmd:
+            twine_attempts.append(list(cmd))
+            if len(twine_attempts) < 3:
+                return subprocess.CompletedProcess(
+                    cmd,
+                    1,
+                    stdout="",
+                    stderr="ConnectionResetError: network interruption",
+                )
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(release.subprocess, "run", fake_subprocess_run)
+    monkeypatch.setattr(release.time, "sleep", lambda *args, **kwargs: None)
+
+    release.build(
+        version="1.2.3",
+        dist=True,
+        twine=True,
+        force=True,
+        creds=release.Credentials(token="fake-token"),
+    )
+
+    assert len(twine_attempts) == 3
+    assert calls[0] == [sys.executable, "-m", "build"]
+
+
+def test_build_twine_retries_and_guides_user(monkeypatch, release_sandbox, _dist_artifacts):
+    monkeypatch.setattr(release, "_git_clean", lambda: True)
+    monkeypatch.setattr(release, "_write_pyproject", lambda *a, **k: None)
+    monkeypatch.setitem(sys.modules, "build", types.ModuleType("build"))
+
+    def fake_run(cmd, check=True):
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(release, "_run", fake_run)
+
+    def fake_subprocess_run(cmd, capture_output=False, text=False, check=True):
+        return subprocess.CompletedProcess(
+            cmd,
+            1,
+            stdout="",
+            stderr="urllib3.exceptions.ProtocolError: Connection aborted.",
+        )
+
+    monkeypatch.setattr(release.subprocess, "run", fake_subprocess_run)
+    monkeypatch.setattr(release.time, "sleep", lambda *args, **kwargs: None)
+
+    with pytest.raises(release.ReleaseError) as excinfo:
+        release.build(
+            version="1.2.3",
+            dist=True,
+            twine=True,
+            force=True,
+            creds=release.Credentials(token="fake-token"),
+        )
+
+    message = str(excinfo.value)
+    assert "failed after 3 attempts" in message
+    assert "Check your internet connection" in message
