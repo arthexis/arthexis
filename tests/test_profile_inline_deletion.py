@@ -59,6 +59,7 @@ class ProfileInlineDeletionTests(TestCase):
                 "github_token": "gh-token",
                 "pypi_password": "pypi-pass",
                 "pypi_url": "https://upload.pypi.org/legacy/",
+                "secondary_pypi_url": "https://pypi.example.com/simple/",
             }
         if model is AssistantProfile:
             # ``issue_key`` handles creation and hashing; scopes get filled below.
@@ -99,6 +100,7 @@ class ProfileInlineDeletionTests(TestCase):
                 "github_token": "",
                 "pypi_password": "",
                 "pypi_url": "",
+                "secondary_pypi_url": "",
                 "user_datum": "",
             }
         if model is AssistantProfile:

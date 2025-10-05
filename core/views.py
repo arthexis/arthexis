@@ -641,19 +641,44 @@ def _step_release_manager_approval(release, ctx, log_path: Path) -> None:
 def _step_publish(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
 
-    _append_log(log_path, "Uploading distribution")
+    targets = release.build_publish_targets()
+    repo_labels = []
+    for target in targets:
+        label = target.name
+        if target.repository_url:
+            label = f"{label} ({target.repository_url})"
+        repo_labels.append(label)
+    if repo_labels:
+        _append_log(
+            log_path,
+            "Uploading distribution" if len(repo_labels) == 1 else "Uploading distribution to: " + ", ".join(repo_labels),
+        )
+    else:
+        _append_log(log_path, "Uploading distribution")
     release_utils.publish(
         package=release.to_package(),
         version=release.version,
         creds=release.to_credentials(),
+        repositories=targets,
     )
     release.pypi_url = (
         f"https://pypi.org/project/{release.package.name}/{release.version}/"
     )
+    github_url = ""
+    for target in targets[1:]:
+        if target.repository_url and "github.com" in target.repository_url:
+            github_url = release.github_package_url() or ""
+            break
+    if github_url:
+        release.github_url = github_url
+    else:
+        release.github_url = ""
     release.release_on = timezone.now()
-    release.save(update_fields=["pypi_url", "release_on"])
+    release.save(update_fields=["pypi_url", "github_url", "release_on"])
     PackageRelease.dump_fixture()
     _append_log(log_path, f"Recorded PyPI URL: {release.pypi_url}")
+    if release.github_url:
+        _append_log(log_path, f"Recorded GitHub URL: {release.github_url}")
     _append_log(log_path, "Upload complete")
 
 

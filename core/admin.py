@@ -440,7 +440,7 @@ class ReleaseManagerAdminForm(forms.ModelForm):
 @admin.register(ReleaseManager)
 class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
     form = ReleaseManagerAdminForm
-    list_display = ("owner", "pypi_username", "pypi_url")
+    list_display = ("owner", "pypi_username", "pypi_url", "secondary_pypi_url")
     actions = ["test_credentials"]
     change_actions = ["test_credentials_action", "my_profile_action"]
     changelist_actions = ["my_profile"]
@@ -455,6 +455,7 @@ class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
                     "pypi_password",
                     "github_token",
                     "pypi_url",
+                    "secondary_pypi_url",
                 )
             },
         ),
@@ -1367,6 +1368,7 @@ PROFILE_INLINE_CONFIG = {
             "github_token",
             "pypi_password",
             "pypi_url",
+            "secondary_pypi_url",
         ),
     },
     AssistantProfile: {
@@ -3051,6 +3053,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "package_link",
         "is_current",
         "pypi_url",
+        "github_url",
         "release_on",
         "revision_short",
         "published_status",
@@ -3059,7 +3062,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     actions = ["publish_release", "validate_releases"]
     change_actions = ["publish_release_action"]
     changelist_actions = ["refresh_from_pypi", "prepare_next_release"]
-    readonly_fields = ("pypi_url", "release_on", "is_current", "revision")
+    readonly_fields = ("pypi_url", "github_url", "release_on", "is_current", "revision")
     fields = (
         "package",
         "release_manager",
@@ -3067,6 +3070,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "revision",
         "is_current",
         "pypi_url",
+        "github_url",
         "release_on",
     )
 

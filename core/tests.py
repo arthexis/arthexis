@@ -920,17 +920,25 @@ class ReleaseProcessTests(TestCase):
     @mock.patch("core.views.release_utils.publish")
     def test_publish_sets_pypi_url(self, publish, dump_fixture, now):
         now.return_value = datetime(2025, 3, 4, 5, 6, tzinfo=datetime_timezone.utc)
+        publish.return_value = ["PyPI"]
         _step_publish(self.release, {}, Path("rel.log"))
         self.release.refresh_from_db()
         self.assertEqual(
             self.release.pypi_url,
             f"https://pypi.org/project/{self.package.name}/{self.release.version}/",
         )
+        self.assertEqual(self.release.github_url, "")
         self.assertEqual(
             self.release.release_on,
             datetime(2025, 3, 4, 5, 6, tzinfo=datetime_timezone.utc),
         )
         dump_fixture.assert_called_once()
+        publish.assert_called_once()
+        kwargs = publish.call_args.kwargs
+        self.assertIn("repositories", kwargs)
+        repositories = kwargs["repositories"]
+        self.assertEqual(len(repositories), 1)
+        self.assertEqual(repositories[0].name, "PyPI")
 
     @mock.patch("core.views.PackageRelease.dump_fixture")
     @mock.patch("core.views.release_utils.publish", side_effect=Exception("boom"))
@@ -939,8 +947,41 @@ class ReleaseProcessTests(TestCase):
             _step_publish(self.release, {}, Path("rel.log"))
         self.release.refresh_from_db()
         self.assertEqual(self.release.pypi_url, "")
+        self.assertEqual(self.release.github_url, "")
         self.assertIsNone(self.release.release_on)
         dump_fixture.assert_not_called()
+
+    @mock.patch("core.views.timezone.now")
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    @mock.patch("core.views.release_utils.publish")
+    def test_publish_records_github_url_when_configured(
+        self, publish, dump_fixture, now
+    ):
+        now.return_value = datetime(2025, 3, 4, 6, 7, tzinfo=datetime_timezone.utc)
+        user = User.objects.create_superuser("release-owner", "owner@example.com", "pw")
+        manager = ReleaseManager.objects.create(
+            user=user,
+            pypi_username="octocat",
+            pypi_token="primary-token",
+            github_token="gh-token",
+            secondary_pypi_url="https://upload.github.com/pypi/",
+        )
+        self.release.release_manager = manager
+        self.release.save(update_fields=["release_manager"])
+        self.package.repository_url = "https://github.com/example/project"
+        self.package.save(update_fields=["repository_url"])
+        publish.return_value = ["PyPI", "GitHub Packages"]
+
+        _step_publish(self.release, {}, Path("rel.log"))
+
+        self.release.refresh_from_db()
+        self.assertTrue(self.release.github_url)
+        self.assertIn("github.com/example/project", self.release.github_url)
+        args, kwargs = publish.call_args
+        repositories = kwargs.get("repositories")
+        self.assertEqual(len(repositories), 2)
+        self.assertEqual(repositories[0].name, "PyPI")
+        self.assertEqual(repositories[1].name, "GitHub Packages")
 
     def test_new_todo_does_not_reset_pending_flow(self):
         user = User.objects.create_superuser("admin", "admin@example.com", "pw")
