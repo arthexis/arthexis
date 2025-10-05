@@ -1977,7 +1977,12 @@ class RFID(Entity):
         while attempts < max_attempts:
             attempts += 1
             label_id = cls.next_scan_label()
-            create_kwargs = {"label_id": label_id, "rfid": normalized}
+            create_kwargs = {
+                "label_id": label_id,
+                "rfid": normalized,
+                "allowed": True,
+                "released": False,
+            }
             if kind:
                 create_kwargs["kind"] = kind
             try:

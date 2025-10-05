@@ -88,6 +88,13 @@ class AdminRfidScanNextTests(TestCase):
         created = RFID.objects.get(rfid="1122AABB")
         self.assertEqual(created.label_id, 30)
 
+    def test_scan_defaults_to_allowed_and_unreleased(self):
+        self.post_scan({"rfid": "A1B2C3D4"})
+
+        tag = RFID.objects.get(rfid="A1B2C3D4")
+        self.assertTrue(tag.allowed)
+        self.assertFalse(tag.released)
+
 
 class AdminRfidCopyActionTests(TestCase):
     def setUp(self):
