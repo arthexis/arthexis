@@ -1,6 +1,6 @@
 from .background_reader import get_next_tag, is_configured, start, stop
 from .irq_wiring_check import check_irq_pin
-from .reader import enable_deep_read
+from .reader import toggle_deep_read
 
 
 def scan_sources(request=None):
@@ -36,8 +36,9 @@ def test_sources():
 
 
 def enable_deep_read_mode(duration: float = 60) -> dict:
-    """Put the RFID reader into deep read mode for ``duration`` seconds."""
+    """Toggle the RFID reader deep read mode and report the new state."""
     if not is_configured():
         return {"error": "no scanner available"}
-    enable_deep_read(duration)
-    return {"status": "deep read enabled", "timeout": duration}
+    enabled = toggle_deep_read()
+    status = "deep read enabled" if enabled else "deep read disabled"
+    return {"status": status, "enabled": enabled}

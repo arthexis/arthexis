@@ -272,6 +272,7 @@
   let lastLocalValue = null;
   let lastLocalAt = 0;
   const historyEntries = tableMode ? new Map() : null;
+  let deepReadActive = false;
 
   if(modeToggleBtn){
     const toggleTarget = modeToggleBtn.getAttribute('data-toggle-url') || modeToggleBtn.getAttribute('href');
@@ -360,6 +361,21 @@
     if(deepBlocksEl){ deepBlocksEl.innerHTML = ''; }
   }
 
+  function setDeepReadState(enabled, options){
+    const opts = Object.assign({updateStatus: true, clearDetails: true}, options || {});
+    deepReadActive = Boolean(enabled);
+    if(deepBtn){
+      deepBtn.textContent = deepReadActive ? 'Disable Deep Read' : 'Enable Deep Read';
+      deepBtn.setAttribute('aria-pressed', deepReadActive ? 'true' : 'false');
+    }
+    if(opts.updateStatus){
+      statusEl.textContent = deepReadActive ? 'Deep read enabled' : 'Deep read disabled';
+    }
+    if(!deepReadActive && opts.clearDetails){
+      clearDeepDetails();
+    }
+  }
+
   function updateDeepDetails(data){
     if(!deepDetailsEl || tableMode){
       return;
@@ -370,6 +386,9 @@
     if(!isDeep && !hasDump){
       clearDeepDetails();
       return;
+    }
+    if(isDeep){
+      setDeepReadState(true, {updateStatus: false, clearDetails: false});
     }
     deepDetailsEl.style.display = 'block';
     const keys = (data && data.keys) || {};
@@ -512,6 +531,9 @@
       configureEl.style.display = 'inline';
     }
     updateDeepDetails(data);
+    if(deepBtn && data.deep_read){
+      setDeepReadState(true, {updateStatus: false, clearDetails: false});
+    }
     const okText = data.allowed === undefined ? '' : (data.allowed ? 'OK' : 'BAD');
     const statusMsg = okText ? `RFID ${labelValue} ${okText}` : `RFID ${labelValue}`;
     statusEl.textContent = data.created ? `Created ${statusMsg}` : statusMsg;
@@ -699,6 +721,7 @@
   }
 
   if(deepBtn){
+    setDeepReadState(false, {updateStatus: false, clearDetails: false});
     deepBtn.addEventListener('click', async () => {
       const headers = {
         'Accept': 'application/json',
@@ -707,6 +730,7 @@
       if(csrf){
         headers['X-CSRFToken'] = csrf;
       }
+      deepBtn.disabled = true;
       try {
         const response = await fetch('{{ deep_read_url|default:"" }}', {
           method: 'POST',
@@ -716,14 +740,18 @@
         if(!response.ok){
           throw new Error('Request failed');
         }
-        const data = await response.json().catch(() => ({status: null}));
+        const data = await response.json().catch(() => ({}));
         if(data.error){
           throw new Error(data.error);
         }
-        const timeout = data.timeout || 60;
-        statusEl.textContent = `Deep read enabled for ${timeout} seconds`;
+        const enabled = Boolean(data.enabled);
+        setDeepReadState(enabled, {updateStatus: false});
+        statusEl.textContent = data.status || (enabled ? 'Deep read enabled' : 'Deep read disabled');
       } catch(err){
-        statusEl.textContent = 'Deep read failed';
+        const message = err && err.message ? err.message : 'Deep read failed';
+        statusEl.textContent = message;
+      } finally {
+        deepBtn.disabled = false;
       }
     });
   }

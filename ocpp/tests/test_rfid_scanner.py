@@ -70,16 +70,22 @@ def test_test_sources_handles_configuration(configured):
         assert result == {"error": "no scanner available"}
 
 
-@pytest.mark.parametrize("configured", [True, False])
-def test_enable_deep_read_mode(configured):
-    duration = 30
+@pytest.mark.parametrize(
+    "configured, toggled, expected",
+    [
+        (True, True, {"status": "deep read enabled", "enabled": True}),
+        (True, False, {"status": "deep read disabled", "enabled": False}),
+        (False, True, {"error": "no scanner available"}),
+    ],
+)
+def test_enable_deep_read_mode(configured, toggled, expected):
     with patch("ocpp.rfid.scanner.is_configured", return_value=configured), patch(
-        "ocpp.rfid.scanner.enable_deep_read"
-    ) as mock_enable:
-        result = scanner.enable_deep_read_mode(duration)
+        "ocpp.rfid.scanner.toggle_deep_read", return_value=toggled
+    ) as mock_toggle:
+        result = scanner.enable_deep_read_mode()
     if configured:
-        mock_enable.assert_called_once_with(duration)
-        assert result == {"status": "deep read enabled", "timeout": duration}
+        mock_toggle.assert_called_once_with()
+        assert result == expected
     else:
-        mock_enable.assert_not_called()
-        assert result == {"error": "no scanner available"}
+        mock_toggle.assert_not_called()
+        assert result == expected
