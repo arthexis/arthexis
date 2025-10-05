@@ -661,6 +661,52 @@ class PublicWifiUtilitiesTests(TestCase):
             if allow_file.exists():
                 self.assertNotIn("aa:bb:cc:dd:ee:ff", allow_file.read_text())
 
+    def test_allow_mac_configures_drop_rule(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            executed_rules = []
+
+            def fake_run(args, **kwargs):
+                from types import SimpleNamespace
+
+                if args[0] != "iptables":
+                    return subprocess.run(args, **kwargs)
+                command = args[1:]
+                if command[:2] == ["-C", "FORWARD"] and "--mac-source" in command:
+                    return SimpleNamespace(returncode=1, stdout="")
+                if command[:2] == ["-C", "FORWARD"] and "-o" in command and "DROP" in command:
+                    return SimpleNamespace(returncode=1, stdout="")
+                if command[0] in {"-A", "-I", "-D"}:
+                    executed_rules.append(command)
+                    return SimpleNamespace(returncode=0, stdout="")
+                return SimpleNamespace(returncode=0, stdout="")
+
+            with override_settings(BASE_DIR=base):
+                with patch("core.public_wifi._iptables_available", return_value=True):
+                    with patch("core.public_wifi.subprocess.run", side_effect=fake_run):
+                        public_wifi.grant_public_access(self.user, "AA:BB:CC:DD:EE:FF")
+
+            self.assertIn(
+                ["-A", "FORWARD", "-i", "wlan0", "-o", "wlan1", "-j", "DROP"],
+                executed_rules,
+            )
+            self.assertIn(
+                [
+                    "-I",
+                    "FORWARD",
+                    "1",
+                    "-i",
+                    "wlan0",
+                    "-m",
+                    "mac",
+                    "--mac-source",
+                    "aa:bb:cc:dd:ee:ff",
+                    "-j",
+                    "ACCEPT",
+                ],
+                executed_rules,
+            )
+
 
 class LiveSubscriptionTests(TestCase):
     def setUp(self):

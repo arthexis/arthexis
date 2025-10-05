@@ -81,6 +81,45 @@ def _run_iptables(args: list[str]) -> None:
         logger.exception("iptables command failed: %s", " ".join(args))
 
 
+def _ensure_wlan0_drop_rule() -> None:
+    if not _iptables_available():
+        return
+    check_args = [
+        "-C",
+        "FORWARD",
+        "-i",
+        "wlan0",
+        "-o",
+        "wlan1",
+        "-j",
+        "DROP",
+    ]
+    try:
+        result = subprocess.run(
+            ["iptables", *check_args],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=2,
+        )
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("iptables check failed for wlan0 drop rule")
+        result = None
+    if result is None or result.returncode != 0:
+        _run_iptables(
+            [
+                "-A",
+                "FORWARD",
+                "-i",
+                "wlan0",
+                "-o",
+                "wlan1",
+                "-j",
+                "DROP",
+            ]
+        )
+
+
 def _load_allowlist() -> set[str]:
     path = _allowlist_path()
     if not path.exists():
@@ -112,6 +151,7 @@ def allow_mac(mac: str) -> None:
         allowlist.add(mac)
         _save_allowlist(allowlist)
     if _iptables_available():
+        _ensure_wlan0_drop_rule()
         check_args = [
             "-C",
             "FORWARD",
