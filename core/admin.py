@@ -2827,7 +2827,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
 
     def report_view(self, request):
         context = self.admin_site.each_context(request)
-        context["report"] = ClientReport.build_rows()
+        context["report"] = ClientReport.build_rows(for_display=True)
         return TemplateResponse(request, "admin/core/rfid/report.html", context)
 
     def scan_view(self, request):
