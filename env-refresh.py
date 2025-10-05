@@ -14,6 +14,8 @@ from collections import defaultdict
 import tempfile
 import hashlib
 import time
+from weakref import WeakKeyDictionary
+from typing import TYPE_CHECKING
 
 import django
 import importlib.util
@@ -45,6 +47,29 @@ from core.models import PackageRelease
 from core.sigil_builder import generate_model_sigils
 from core.user_data import load_shared_user_fixtures, load_user_fixtures
 from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
+
+
+if TYPE_CHECKING:  # pragma: no cover - typing support
+    from django.db.models import Model
+
+_MODEL_SEED_FIELD_CACHE = WeakKeyDictionary()
+
+
+def _model_defines_seed_flag(model: "type[Model]") -> bool:
+    """Return whether *model* exposes the ``is_seed_data`` field.
+
+    The result is cached per concrete model class to avoid recalculating the
+    introspection for every object in the fixture stream.  A ``WeakKeyDictionary``
+    keeps entries bounded to the lifetime of the model class so dynamically
+    rendered models during the run remain isolated.
+    """
+
+    try:
+        return _MODEL_SEED_FIELD_CACHE[model]
+    except KeyError:
+        has_field = any(field.name == "is_seed_data" for field in model._meta.fields)
+        _MODEL_SEED_FIELD_CACHE[model] = has_field
+        return has_field
 
 
 def _local_app_labels() -> list[str]:
@@ -231,11 +256,13 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                 with source.open() as f:
                     data = json.load(f)
                 patched_data: list[dict] = []
+                modified = False
                 for obj in data:
                     model_label = obj.get("model", "")
                     try:
                         model = apps.get_model(model_label)
                     except LookupError:
+                        modified = True
                         continue
                     # Update existing users instead of loading duplicates and
                     # record their primary key mapping for later references.
@@ -253,10 +280,15 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                             for field, value in obj.get("fields", {}).items():
                                 setattr(existing, field, value)
                             existing.save()
+                            modified = True
                             continue
-                    fields = obj.get("fields", {})
+                    fields = obj.setdefault("fields", {})
                     if "user" in fields and isinstance(fields["user"], int):
-                        fields["user"] = user_pk_map.get(fields["user"], fields["user"])
+                        original_user = fields["user"]
+                        mapped_user = user_pk_map.get(original_user, original_user)
+                        if mapped_user != original_user:
+                            fields["user"] = mapped_user
+                            modified = True
                     if model_label == "core.sigilroot":
                         content_type = fields.get("content_type")
                         app_label: str | None = None
@@ -272,6 +304,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                                 print(
                                     f"Skipping SigilRoot '{prefix}' (missing app '{app_label}')"
                                 )
+                                modified = True
                                 continue
                     if model is PackageRelease:
                         version = obj.get("fields", {}).get("version")
@@ -279,16 +312,25 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                             version
                             and PackageRelease.objects.filter(version=version).exists()
                         ):
+                            modified = True
                             continue
-                    if any(f.name == "is_seed_data" for f in model._meta.fields):
+                    if _model_defines_seed_flag(model):
                         obj.setdefault("fields", {})["is_seed_data"] = True
+                    if any(f.name == "is_seed_data" for f in model._meta.fields):
+                        if fields.get("is_seed_data") is not True:
+                            fields["is_seed_data"] = True
+                            modified = True
                     patched_data.append(obj)
                     model_counts[model._meta.label] += 1
-                dest = Path(tmpdir, Path(name).name)
-                with dest.open("w") as f:
-                    json.dump(patched_data, f)
+                if modified:
+                    dest = Path(tmpdir, Path(name).name)
+                    with dest.open("w") as f:
+                        json.dump(patched_data, f)
+                    target = str(dest)
+                else:
+                    target = str(source)
                 if patched_data:
-                    patched.setdefault(priority, []).append(str(dest))
+                    patched.setdefault(priority, []).append(target)
             post_save.disconnect(_create_landings, sender=Module)
             try:
                 for priority in sorted(patched):

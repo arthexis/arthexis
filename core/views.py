@@ -1,16 +1,18 @@
 import json
 import logging
 import shutil
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as datetime_timezone
 
 import requests
 from django.conf import settings
+from django.contrib.admin.sites import site as admin_site
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, login
 from django.contrib import messages
 from django.contrib.sites.models import Site
 from django.http import Http404, JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
+from django.template.response import TemplateResponse
 from django.utils import timezone
 from django.utils.text import slugify
 from django.utils.translation import gettext as _
@@ -22,6 +24,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import errno
 import subprocess
+from typing import Sequence
 
 from django.template.loader import get_template
 from django.test import signals
@@ -32,7 +35,7 @@ from utils.api import api_login_required
 logger = logging.getLogger(__name__)
 
 from . import changelog as changelog_utils
-from .models import Product, EnergyAccount, PackageRelease, Todo
+from .models import OdooProfile, Product, EnergyAccount, PackageRelease, Todo
 from .models import RFID
 
 
@@ -61,6 +64,272 @@ def odoo_products(request):
         return JsonResponse({"detail": "Unable to fetch products"}, status=502)
     items = [{"id": p.get("id"), "name": p.get("name", "")} for p in products]
     return JsonResponse(items, safe=False)
+
+
+@staff_member_required
+def odoo_quote_report(request):
+    """Display a consolidated quote report from the user's Odoo instance."""
+
+    profile = getattr(request.user, "odoo_profile", None)
+    context = {
+        "title": _("Generate Quote Report"),
+        "profile": profile,
+        "error": None,
+        "template_stats": [],
+        "quotes": [],
+        "recent_products": [],
+        "installed_modules": [],
+        "profile_url": "",
+    }
+
+    profile_admin = admin_site._registry.get(OdooProfile)
+    if profile_admin is not None:
+        try:
+            context["profile_url"] = profile_admin.get_my_profile_url(request)
+        except Exception:  # pragma: no cover - defensive fallback
+            context["profile_url"] = ""
+
+    if not profile or not profile.is_verified:
+        context["error"] = _(
+            "Configure and verify your Odoo employee credentials before generating the report."
+        )
+        return TemplateResponse(
+            request, "admin/core/odoo_quote_report.html", context
+        )
+
+    def _parse_datetime(value):
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            text = str(value)
+            try:
+                dt = datetime.fromisoformat(text)
+            except ValueError:
+                text_iso = text.replace(" ", "T")
+                try:
+                    dt = datetime.fromisoformat(text_iso)
+                except ValueError:
+                    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+                        try:
+                            dt = datetime.strptime(text, fmt)
+                            break
+                        except ValueError:
+                            continue
+                    else:
+                        return None
+        if timezone.is_naive(dt):
+            tzinfo = getattr(timezone, "utc", datetime_timezone.utc)
+            dt = timezone.make_aware(dt, tzinfo)
+        return dt
+
+    try:
+        templates = profile.execute(
+            "sale.order.template",
+            "search_read",
+            [[]],
+            {"fields": ["name"], "order": "name asc"},
+        )
+        template_usage = profile.execute(
+            "sale.order",
+            "read_group",
+            [[("sale_order_template_id", "!=", False)]],
+            ["sale_order_template_id"],
+            {"lazy": False},
+        )
+
+        usage_map = {}
+        for entry in template_usage:
+            template_info = entry.get("sale_order_template_id")
+            if not template_info:
+                continue
+            template_id = template_info[0]
+            usage_map[template_id] = entry.get(
+                "sale_order_template_id_count", 0
+            )
+
+        context["template_stats"] = [
+            {
+                "id": template.get("id"),
+                "name": template.get("name", ""),
+                "quote_count": usage_map.get(template.get("id"), 0),
+            }
+            for template in templates
+        ]
+
+        ninety_days_ago = timezone.now() - timedelta(days=90)
+        quotes = profile.execute(
+            "sale.order",
+            "search_read",
+            [
+                [
+                    ("create_date", ">=", ninety_days_ago.strftime("%Y-%m-%d %H:%M:%S")),
+                    ("state", "!=", "cancel"),
+                    ("quote_sent", "=", False),
+                ]
+            ],
+            {
+                "fields": [
+                    "name",
+                    "amount_total",
+                    "partner_id",
+                    "activity_type_id",
+                    "activity_summary",
+                    "tag_ids",
+                    "create_date",
+                    "currency_id",
+                ],
+                "order": "create_date desc",
+            },
+        )
+
+        tag_ids = set()
+        currency_ids = set()
+        for quote in quotes:
+            tag_ids.update(quote.get("tag_ids") or [])
+            currency_info = quote.get("currency_id")
+            if (
+                isinstance(currency_info, (list, tuple))
+                and len(currency_info) >= 1
+                and currency_info[0]
+            ):
+                currency_ids.add(currency_info[0])
+
+        tag_map: dict[int, str] = {}
+        if tag_ids:
+            tag_records = profile.execute(
+                "sale.order.tag",
+                "read",
+                list(tag_ids),
+                {"fields": ["name"]},
+            )
+            for tag in tag_records:
+                tag_id = tag.get("id")
+                if tag_id is not None:
+                    tag_map[tag_id] = tag.get("name", "")
+
+        currency_map: dict[int, dict[str, str]] = {}
+        if currency_ids:
+            currency_records = profile.execute(
+                "res.currency",
+                "read",
+                list(currency_ids),
+                {"fields": ["name", "symbol"]},
+            )
+            for currency in currency_records:
+                currency_id = currency.get("id")
+                if currency_id is not None:
+                    currency_map[currency_id] = {
+                        "name": currency.get("name", ""),
+                        "symbol": currency.get("symbol", ""),
+                    }
+
+        prepared_quotes = []
+        for quote in quotes:
+            partner = quote.get("partner_id")
+            customer = ""
+            if isinstance(partner, (list, tuple)) and len(partner) >= 2:
+                customer = partner[1]
+
+            activity_type = quote.get("activity_type_id")
+            activity_name = ""
+            if isinstance(activity_type, (list, tuple)) and len(activity_type) >= 2:
+                activity_name = activity_type[1]
+
+            activity_summary = quote.get("activity_summary") or ""
+            activity_value = activity_summary or activity_name
+
+            quote_tags = [
+                tag_map.get(tag_id, str(tag_id))
+                for tag_id in quote.get("tag_ids") or []
+            ]
+
+            currency_info = quote.get("currency_id")
+            currency_label = ""
+            if isinstance(currency_info, (list, tuple)) and currency_info:
+                currency_id = currency_info[0]
+                currency_details = currency_map.get(currency_id, {})
+                currency_label = (
+                    currency_details.get("symbol")
+                    or currency_details.get("name")
+                    or (currency_info[1] if len(currency_info) >= 2 else "")
+                )
+
+            amount_total = quote.get("amount_total") or 0
+            if currency_label:
+                total_display = f"{currency_label}{amount_total:,.2f}"
+            else:
+                total_display = f"{amount_total:,.2f}"
+
+            prepared_quotes.append(
+                {
+                    "name": quote.get("name", ""),
+                    "customer": customer,
+                    "activity": activity_value,
+                    "tags": quote_tags,
+                    "create_date": _parse_datetime(quote.get("create_date")),
+                    "total": amount_total,
+                    "total_display": total_display,
+                }
+            )
+
+        context["quotes"] = prepared_quotes
+
+        products = profile.execute(
+            "product.product",
+            "search_read",
+            [[]],
+            {
+                "fields": ["name", "default_code", "write_date", "create_date"],
+                "limit": 10,
+                "order": "write_date desc, create_date desc",
+            },
+        )
+        context["recent_products"] = [
+            {
+                "name": product.get("name", ""),
+                "default_code": product.get("default_code", ""),
+                "create_date": _parse_datetime(product.get("create_date")),
+                "write_date": _parse_datetime(product.get("write_date")),
+            }
+            for product in products
+        ]
+
+        modules = profile.execute(
+            "ir.module.module",
+            "search_read",
+            [[("state", "=", "installed")]],
+            {
+                "fields": ["name", "shortdesc", "latest_version", "author"],
+                "order": "name asc",
+            },
+        )
+        context["installed_modules"] = [
+            {
+                "name": module.get("name", ""),
+                "shortdesc": module.get("shortdesc", ""),
+                "latest_version": module.get("latest_version", ""),
+                "author": module.get("author", ""),
+            }
+            for module in modules
+        ]
+
+    except Exception:
+        logger.exception(
+            "Failed to build Odoo quote report for user %s (profile_id=%s)",
+            getattr(request.user, "pk", None),
+            getattr(profile, "pk", None),
+        )
+        context["error"] = _("Unable to generate the quote report from Odoo.")
+        return TemplateResponse(
+            request,
+            "admin/core/odoo_quote_report.html",
+            context,
+            status=502,
+        )
+
+    return TemplateResponse(request, "admin/core/odoo_quote_report.html", context)
 
 
 @require_GET
@@ -95,6 +364,20 @@ def _release_log_name(package_name: str, version: str) -> str:
     return f"pr.{package_name}.v{version}.log"
 
 
+def _sync_with_origin_main(log_path: Path) -> None:
+    """Ensure the current branch is rebased onto ``origin/main``."""
+
+    try:
+        subprocess.run(["git", "fetch", "origin", "main"], check=True)
+        _append_log(log_path, "Fetched latest changes from origin/main")
+        subprocess.run(["git", "rebase", "origin/main"], check=True)
+        _append_log(log_path, "Rebased current branch onto origin/main")
+    except subprocess.CalledProcessError as exc:
+        subprocess.run(["git", "rebase", "--abort"], check=False)
+        _append_log(log_path, "Rebase onto origin/main failed; aborted rebase")
+        raise Exception("Rebase onto main failed") from exc
+
+
 def _clean_repo() -> None:
     """Return the git repository to a clean state."""
     subprocess.run(["git", "reset", "--hard"], check=False)
@@ -106,6 +389,34 @@ def _format_path(path: Path) -> str:
         return str(path.resolve().relative_to(Path.cwd()))
     except ValueError:
         return str(path)
+
+
+def _git_stdout(args: Sequence[str]) -> str:
+    proc = subprocess.run(args, check=True, capture_output=True, text=True)
+    return (proc.stdout or "").strip()
+
+
+def _ensure_origin_main_unchanged(log_path: Path) -> None:
+    """Verify that ``origin/main`` has not advanced during the release."""
+
+    try:
+        subprocess.run(["git", "fetch", "origin", "main"], check=True)
+        _append_log(log_path, "Fetched latest changes from origin/main")
+        origin_main = _git_stdout(["git", "rev-parse", "origin/main"])
+        merge_base = _git_stdout(["git", "merge-base", "HEAD", "origin/main"])
+    except subprocess.CalledProcessError as exc:
+        details = (getattr(exc, "stderr", "") or getattr(exc, "stdout", "") or str(exc)).strip()
+        if details:
+            _append_log(log_path, f"Failed to verify origin/main status: {details}")
+        else:  # pragma: no cover - defensive fallback
+            _append_log(log_path, "Failed to verify origin/main status")
+        raise Exception("Unable to verify origin/main status") from exc
+
+    if origin_main != merge_base:
+        _append_log(log_path, "origin/main advanced during release; restart required")
+        raise Exception("origin/main changed during release; restart required")
+
+    _append_log(log_path, "origin/main unchanged since last sync")
 
 
 def _next_patch_version(version: str) -> str:
@@ -155,14 +466,7 @@ def _should_use_python_changelog(exc: OSError) -> bool:
 def _generate_changelog_with_python(log_path: Path) -> None:
     _append_log(log_path, "Falling back to Python changelog generator")
     changelog_path = Path("CHANGELOG.rst")
-    describe = subprocess.run(
-        ["git", "describe", "--tags", "--abbrev=0"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    start_tag = describe.stdout.strip() if describe.returncode == 0 else ""
-    range_spec = f"{start_tag}..HEAD" if start_tag else "HEAD"
+    range_spec = changelog_utils.determine_range_spec()
     previous = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else None
     sections = changelog_utils.collect_sections(range_spec=range_spec, previous_text=previous)
     content = changelog_utils.render_changelog(sections)
@@ -172,8 +476,15 @@ def _generate_changelog_with_python(log_path: Path) -> None:
     _append_log(log_path, "Regenerated CHANGELOG.rst using Python fallback")
 
 
-def _ensure_release_todo(release) -> tuple[Todo, Path]:
+def _ensure_release_todo(
+    release, *, previous_version: str | None = None
+) -> tuple[Todo, Path]:
+    previous_version = (previous_version or "").strip()
     target_version = _next_patch_version(release.version)
+    if previous_version:
+        incremented_previous = _next_patch_version(previous_version)
+        if incremented_previous == release.version:
+            target_version = release.version
     request = f"Create release {release.package.name} {target_version}"
     try:
         url = reverse("admin:core_packagerelease_changelist")
@@ -456,6 +767,7 @@ def _step_changelog_docs(release, ctx, log_path: Path) -> None:
 
 def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Execute pre-release actions")
+    _sync_with_origin_main(log_path)
     try:
         subprocess.run(["scripts/generate-changelog.sh"], check=True)
     except OSError as exc:
@@ -480,6 +792,12 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     subprocess.run(["git", "add", "CHANGELOG.rst"], check=True)
     _append_log(log_path, "Staged CHANGELOG.rst for commit")
     version_path = Path("VERSION")
+    previous_version_text = ""
+    if version_path.exists():
+        previous_version_text = version_path.read_text(encoding="utf-8").strip()
+    repo_version_before_sync = getattr(
+        release, "_repo_version_before_sync", previous_version_text
+    )
     version_path.write_text(f"{release.version}\n", encoding="utf-8")
     _append_log(log_path, f"Updated VERSION file to {release.version}")
     subprocess.run(["git", "add", "VERSION"], check=True)
@@ -510,7 +828,9 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
         _append_log(log_path, "Unstaged CHANGELOG.rst")
         subprocess.run(["git", "reset", "HEAD", "VERSION"], check=False)
         _append_log(log_path, "Unstaged VERSION file")
-    todo, fixture_path = _ensure_release_todo(release)
+    todo, fixture_path = _ensure_release_todo(
+        release, previous_version=repo_version_before_sync
+    )
     fixture_display = _format_path(fixture_path)
     _append_log(log_path, f"Added TODO: {todo.request}")
     _append_log(log_path, f"Wrote TODO fixture {fixture_display}")
@@ -542,15 +862,7 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
 
     _append_log(log_path, "Generating build files")
     try:
-        try:
-            subprocess.run(["git", "fetch", "origin", "main"], check=True)
-            _append_log(log_path, "Fetched latest changes from origin/main")
-            subprocess.run(["git", "rebase", "origin/main"], check=True)
-            _append_log(log_path, "Rebased current branch onto origin/main")
-        except subprocess.CalledProcessError as exc:
-            subprocess.run(["git", "rebase", "--abort"], check=False)
-            _append_log(log_path, "Rebase onto origin/main failed; aborted rebase")
-            raise Exception("Rebase onto main failed") from exc
+        _ensure_origin_main_unchanged(log_path)
         release_utils.promote(
             package=release.to_package(),
             version=release.version,
@@ -641,19 +953,44 @@ def _step_release_manager_approval(release, ctx, log_path: Path) -> None:
 def _step_publish(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
 
-    _append_log(log_path, "Uploading distribution")
+    targets = release.build_publish_targets()
+    repo_labels = []
+    for target in targets:
+        label = target.name
+        if target.repository_url:
+            label = f"{label} ({target.repository_url})"
+        repo_labels.append(label)
+    if repo_labels:
+        _append_log(
+            log_path,
+            "Uploading distribution" if len(repo_labels) == 1 else "Uploading distribution to: " + ", ".join(repo_labels),
+        )
+    else:
+        _append_log(log_path, "Uploading distribution")
     release_utils.publish(
         package=release.to_package(),
         version=release.version,
         creds=release.to_credentials(),
+        repositories=targets,
     )
     release.pypi_url = (
         f"https://pypi.org/project/{release.package.name}/{release.version}/"
     )
+    github_url = ""
+    for target in targets[1:]:
+        if target.repository_url and "github.com" in target.repository_url:
+            github_url = release.github_package_url() or ""
+            break
+    if github_url:
+        release.github_url = github_url
+    else:
+        release.github_url = ""
     release.release_on = timezone.now()
-    release.save(update_fields=["pypi_url", "release_on"])
+    release.save(update_fields=["pypi_url", "github_url", "release_on"])
     PackageRelease.dump_fixture()
     _append_log(log_path, f"Recorded PyPI URL: {release.pypi_url}")
+    if release.github_url:
+        _append_log(log_path, f"Recorded GitHub URL: {release.github_url}")
     _append_log(log_path, "Upload complete")
 
 
@@ -872,6 +1209,12 @@ def release_progress(request, pk: int, action: str):
     session_key = f"release_publish_{pk}"
     lock_path = Path("locks") / f"release_publish_{pk}.json"
     restart_path = Path("locks") / f"release_publish_{pk}.restarts"
+
+    version_path = Path("VERSION")
+    repo_version_before_sync = ""
+    if version_path.exists():
+        repo_version_before_sync = version_path.read_text(encoding="utf-8").strip()
+    setattr(release, "_repo_version_before_sync", repo_version_before_sync)
 
     if not release.is_current:
         if release.is_published:

@@ -401,10 +401,18 @@ class UserDatumAdminMixin(admin.ModelAdmin):
     def render_change_form(
         self, request, context, add=False, change=False, form_url="", obj=None
     ):
-        context["show_user_datum"] = issubclass(self.model, Entity)
-        context["show_seed_datum"] = issubclass(self.model, Entity)
-        context["show_save_as_copy"] = issubclass(self.model, Entity) or hasattr(
-            self.model, "clone"
+        supports_user_datum = issubclass(self.model, Entity) or getattr(
+            self.model, "supports_user_datum", False
+        )
+        supports_seed_datum = issubclass(self.model, Entity) or getattr(
+            self.model, "supports_seed_datum", supports_user_datum
+        )
+        context["show_user_datum"] = supports_user_datum
+        context["show_seed_datum"] = supports_seed_datum
+        context["show_save_as_copy"] = (
+            issubclass(self.model, Entity)
+            or getattr(self.model, "supports_save_as_copy", False)
+            or hasattr(self.model, "clone")
         )
         if obj is not None:
             context["is_user_datum"] = getattr(obj, "is_user_data", False)

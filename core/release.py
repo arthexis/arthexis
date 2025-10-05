@@ -5,6 +5,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence
@@ -52,12 +53,33 @@ class Credentials:
     username: Optional[str] = None
     password: Optional[str] = None
 
+    def has_auth(self) -> bool:
+        return bool(self.token) or bool(self.username and self.password)
+
     def twine_args(self) -> list[str]:
         if self.token:
             return ["--username", "__token__", "--password", self.token]
         if self.username and self.password:
             return ["--username", self.username, "--password", self.password]
         raise ValueError("Missing PyPI credentials")
+
+
+@dataclass
+class RepositoryTarget:
+    """Configuration for uploading a distribution to a repository."""
+
+    name: str
+    repository_url: Optional[str] = None
+    credentials: Optional[Credentials] = None
+    verify_availability: bool = False
+    extra_args: Sequence[str] = ()
+
+    def build_command(self, files: Sequence[str]) -> list[str]:
+        cmd = [sys.executable, "-m", "twine", "upload", *self.extra_args]
+        if self.repository_url:
+            cmd += ["--repository-url", self.repository_url]
+        cmd += list(files)
+        return cmd
 
 
 DEFAULT_PACKAGE = Package(
@@ -90,6 +112,61 @@ class TestsFailed(ReleaseError):
 
 def _run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=check)
+
+
+_RETRYABLE_TWINE_ERRORS = (
+    "connectionreseterror",
+    "connection aborted",
+    "protocolerror",
+    "forcibly closed by the remote host",
+    "remote host closed the connection",
+)
+
+
+def _is_retryable_twine_error(output: str) -> bool:
+    normalized = output.lower()
+    return any(marker in normalized for marker in _RETRYABLE_TWINE_ERRORS)
+
+
+def _upload_with_retries(
+    cmd: list[str],
+    *,
+    repository: str,
+    retries: int = 3,
+    cooldown: float = 3.0,
+) -> None:
+    last_output = ""
+    for attempt in range(1, retries + 1):
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        stdout = proc.stdout or ""
+        stderr = proc.stderr or ""
+        if stdout:
+            sys.stdout.write(stdout)
+        if stderr:
+            sys.stderr.write(stderr)
+        if proc.returncode == 0:
+            return
+
+        combined = (stdout + stderr).strip()
+        last_output = combined or f"Twine exited with code {proc.returncode}"
+
+        if attempt < retries and _is_retryable_twine_error(combined):
+            time.sleep(cooldown)
+            continue
+
+        if _is_retryable_twine_error(combined):
+            raise ReleaseError(
+                "Twine upload to {repo} failed after {attempts} attempts due to a network interruption. "
+                "Check your internet connection, wait a moment, then rerun the release command. "
+                "If uploads continue to fail, manually run `python -m twine upload dist/*` once the network "
+                "stabilizes or contact the release manager for assistance.\n\nLast error:\n{error}".format(
+                    repo=repository, attempts=attempt, error=last_output
+                )
+            )
+
+        raise ReleaseError(last_output)
+
+    raise ReleaseError(last_output)
 
 
 def _git_clean() -> bool:
@@ -294,7 +371,7 @@ def build(
             cmd += creds.twine_args()
         except ValueError:
             raise ReleaseError("Missing PyPI credentials")
-        _run(cmd)
+        _upload_with_retries(cmd, repository="PyPI")
 
     if stashed:
         _run(["git", "stash", "pop"], check=False)
@@ -329,9 +406,48 @@ def publish(
     package: Package = DEFAULT_PACKAGE,
     version: str,
     creds: Optional[Credentials] = None,
-) -> None:
-    """Upload the existing distribution to PyPI."""
-    if network_available():
+    repositories: Optional[Sequence[RepositoryTarget]] = None,
+) -> list[str]:
+    """Upload the existing distribution to one or more repositories."""
+
+    def _resolve_primary_credentials(target: RepositoryTarget) -> Credentials:
+        if target.credentials is not None:
+            try:
+                target.credentials.twine_args()
+            except ValueError as exc:
+                raise ReleaseError(f"Missing credentials for {target.name}") from exc
+            return target.credentials
+
+        candidate = (
+            creds
+            or _manager_credentials()
+            or Credentials(
+                token=os.environ.get("PYPI_API_TOKEN"),
+                username=os.environ.get("PYPI_USERNAME"),
+                password=os.environ.get("PYPI_PASSWORD"),
+            )
+        )
+        if candidate is None or not candidate.has_auth():
+            raise ReleaseError("Missing PyPI credentials")
+        try:
+            candidate.twine_args()
+        except ValueError as exc:  # pragma: no cover - validated above
+            raise ReleaseError("Missing PyPI credentials") from exc
+        target.credentials = candidate
+        return candidate
+
+    repository_targets: list[RepositoryTarget]
+    if repositories is None:
+        primary = RepositoryTarget(name="PyPI", verify_availability=True)
+        repository_targets = [primary]
+    else:
+        repository_targets = list(repositories)
+        if not repository_targets:
+            raise ReleaseError("No repositories configured")
+
+    primary = repository_targets[0]
+
+    if network_available() and primary.verify_availability:
         try:  # pragma: no cover - requests optional
             import requests  # type: ignore
         except Exception:
@@ -340,29 +456,33 @@ def publish(
             resp = requests.get(f"https://pypi.org/pypi/{package.name}/json")
             if resp.ok and version in resp.json().get("releases", {}):
                 raise ReleaseError(f"Version {version} already on PyPI")
+
     if not Path("dist").exists():
         raise ReleaseError("dist directory not found")
-    creds = (
-        creds
-        or _manager_credentials()
-        or Credentials(
-            token=os.environ.get("PYPI_API_TOKEN"),
-            username=os.environ.get("PYPI_USERNAME"),
-            password=os.environ.get("PYPI_PASSWORD"),
-        )
-    )
     files = sorted(str(p) for p in Path("dist").glob("*"))
     if not files:
         raise ReleaseError("dist directory is empty")
-    cmd = [sys.executable, "-m", "twine", "upload", *files]
-    try:
-        cmd += creds.twine_args()
-    except ValueError:
-        raise ReleaseError("Missing PyPI credentials")
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise ReleaseError(proc.stdout + proc.stderr)
+
+    primary_credentials = _resolve_primary_credentials(primary)
+
+    uploaded: list[str] = []
+    for index, target in enumerate(repository_targets):
+        creds_obj = target.credentials
+        if creds_obj is None:
+            if index == 0:
+                creds_obj = primary_credentials
+            else:
+                raise ReleaseError(f"Missing credentials for {target.name}")
+        try:
+            auth_args = creds_obj.twine_args()
+        except ValueError as exc:
+            label = "PyPI" if index == 0 else target.name
+            raise ReleaseError(f"Missing credentials for {label}") from exc
+        cmd = target.build_command(files) + auth_args
+        _upload_with_retries(cmd, repository=target.name)
+        uploaded.append(target.name)
 
     tag_name = f"v{version}"
     _run(["git", "tag", tag_name])
     _run(["git", "push", "origin", tag_name])
+    return uploaded

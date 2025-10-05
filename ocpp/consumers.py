@@ -295,23 +295,16 @@ class CSMSConsumer(AsyncWebsocketConsumer):
 
         def _ensure() -> CoreRFID:
             now = timezone.now()
-            tag, created = CoreRFID.objects.get_or_create(
-                rfid=normalized,
-                defaults={"allowed": True, "last_seen_on": now},
-            )
-            if created:
-                updates = []
-                if not tag.allowed:
-                    tag.allowed = True
-                    updates.append("allowed")
-                if tag.last_seen_on != now:
-                    tag.last_seen_on = now
-                    updates.append("last_seen_on")
-                if updates:
-                    tag.save(update_fields=updates)
-            else:
+            tag, _created = CoreRFID.register_scan(normalized)
+            updates = []
+            if not tag.allowed:
+                tag.allowed = True
+                updates.append("allowed")
+            if tag.last_seen_on != now:
                 tag.last_seen_on = now
-                tag.save(update_fields=["last_seen_on"])
+                updates.append("last_seen_on")
+            if updates:
+                tag.save(update_fields=updates)
             return tag
 
         return await database_sync_to_async(_ensure)()
@@ -1447,8 +1440,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 account = await self._get_account(id_tag)
                 if id_tag:
                     if self.charger.require_rfid:
-                        await database_sync_to_async(CoreRFID.objects.get_or_create)(
-                            rfid=id_tag.upper()
+                        await database_sync_to_async(CoreRFID.register_scan)(
+                            id_tag.upper()
                         )
                     else:
                         await self._ensure_rfid_seen(id_tag)

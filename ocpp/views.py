@@ -569,11 +569,13 @@ def dashboard(request):
     """Landing page listing all known chargers and their status."""
     node = Node.get_local()
     role = node.role if node else None
-    is_constellation = bool(role and role.name == "Constellation")
-    if not request.user.is_authenticated and not is_constellation:
+    role_name = role.name if role else ""
+    allow_anonymous_roles = {"Constellation", "Satellite"}
+    if not request.user.is_authenticated and role_name not in allow_anonymous_roles:
         return redirect_to_login(
             request.get_full_path(), login_url=reverse("pages:login")
         )
+    is_constellation = role_name == "Constellation"
     chargers = []
     for charger in _visible_chargers(request.user):
         tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)

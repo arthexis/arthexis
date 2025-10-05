@@ -38,6 +38,7 @@ import json
 import uuid
 import requests
 import datetime
+from django.db import IntegrityError, transaction
 import calendar
 import re
 from django_object_actions import DjangoObjectActions
@@ -92,7 +93,7 @@ from .user_data import (
     _resolve_fixture_user,
     _user_allows_user_data,
 )
-from .widgets import OdooProductWidget
+from .widgets import OdooProductWidget, RFIDDataWidget
 from .mcp import process as mcp_process
 from .mcp.server import resolve_base_urls
 
@@ -197,6 +198,27 @@ class SaveBeforeChangeAction(DjangoObjectActions):
 class ProfileAdminMixin:
     """Reusable actions for profile-bound admin classes."""
 
+    def _get_user_profile_info(self, request):
+        user = getattr(request, "user", None)
+        if not getattr(user, "is_authenticated", False):
+            return user, None, 0
+
+        queryset = self.model._default_manager.filter(user=user)
+        profiles = list(queryset[:2])
+        if not profiles:
+            return user, None, 0
+        if len(profiles) == 1:
+            return user, profiles[0], 1
+        return user, profiles[0], 2
+
+    def get_my_profile_label(self, request):
+        _user, profile, profile_count = self._get_user_profile_info(request)
+        if profile_count == 0:
+            return _("Active Profile (Unset)")
+        if profile_count == 1 and profile is not None:
+            return _("Active Profile (%(name)s)") % {"name": str(profile)}
+        return _("Active Profile")
+
     def _resolve_my_profile_target(self, request):
         opts = self.model._meta
         changelist_url = reverse(
@@ -210,7 +232,7 @@ class ProfileAdminMixin:
                 messages.ERROR,
             )
 
-        profile = self.model._default_manager.filter(user=user).first()
+        _user, profile, profile_count = self._get_user_profile_info(request)
         if profile is not None:
             permission_check = getattr(self, "has_view_or_change_permission", None)
             has_permission = (
@@ -230,7 +252,7 @@ class ProfileAdminMixin:
                 messages.ERROR,
             )
 
-        if self.has_add_permission(request):
+        if profile_count == 0 and self.has_add_permission(request):
             add_url = reverse(f"admin:{opts.app_label}_{opts.model_name}_add")
             params = {}
             user_id = getattr(user, "pk", None)
@@ -419,7 +441,7 @@ class ReleaseManagerAdminForm(forms.ModelForm):
 @admin.register(ReleaseManager)
 class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
     form = ReleaseManagerAdminForm
-    list_display = ("owner", "pypi_username", "pypi_url")
+    list_display = ("owner", "pypi_username", "pypi_url", "secondary_pypi_url")
     actions = ["test_credentials"]
     change_actions = ["test_credentials_action", "my_profile_action"]
     changelist_actions = ["my_profile"]
@@ -434,6 +456,7 @@ class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
                     "pypi_password",
                     "github_token",
                     "pypi_url",
+                    "secondary_pypi_url",
                 )
             },
         ),
@@ -1161,7 +1184,17 @@ class SocialProfileInlineForm(ProfileFormMixin, forms.ModelForm):
 
     class Meta:
         model = SocialProfile
-        fields = ("network", "handle", "domain", "did")
+        fields = (
+            "network",
+            "handle",
+            "domain",
+            "did",
+            "application_id",
+            "public_key",
+            "guild_id",
+            "bot_token",
+            "default_channel_id",
+        )
 
 
 class EmailOutboxAdminForm(MaskedPasswordFormMixin, forms.ModelForm):
@@ -1326,9 +1359,15 @@ PROFILE_INLINE_CONFIG = {
         "form": SocialProfileInlineForm,
         "fieldsets": (
             (
+                _("Network"),
+                {
+                    "fields": ("network",),
+                },
+            ),
+            (
                 _("Configuration: Bluesky"),
                 {
-                    "fields": ("network", "handle", "domain", "did"),
+                    "fields": ("handle", "domain", "did"),
                     "description": _(
                         "1. Set your Bluesky handle to the domain managed by Arthexis. "
                         "2. Publish a _atproto TXT record or /.well-known/atproto-did file pointing to the DID below. "
@@ -1336,6 +1375,34 @@ PROFILE_INLINE_CONFIG = {
                     ),
                 },
             ),
+            (
+                _("Configuration: Discord"),
+                {
+                    "fields": (
+                        "application_id",
+                        "public_key",
+                        "guild_id",
+                        "bot_token",
+                        "default_channel_id",
+                    ),
+                    "description": _(
+                        "Provide the Discord application and guild identifiers plus a bot token so Arthexis can control the bot. "
+                        "The public key verifies interaction requests and the default channel is optional."
+                    ),
+                },
+            ),
+        ),
+        "fieldset_visibility": (
+            {
+                "name": _("Configuration: Bluesky"),
+                "field": "network",
+                "values": (SocialProfile.Network.BLUESKY,),
+            },
+            {
+                "name": _("Configuration: Discord"),
+                "field": "network",
+                "values": (SocialProfile.Network.DISCORD,),
+            },
         ),
     },
     ReleaseManager: {
@@ -1346,6 +1413,7 @@ PROFILE_INLINE_CONFIG = {
             "github_token",
             "pypi_password",
             "pypi_url",
+            "secondary_pypi_url",
         ),
     },
     AssistantProfile: {
@@ -1376,6 +1444,7 @@ def _build_profile_inline(model, owner_field):
         "verbose_name": verbose_name,
         "verbose_name_plural": verbose_name_plural,
         "template": "admin/edit_inline/profile_stacked.html",
+        "fieldset_visibility": tuple(config.get("fieldset_visibility", ())),
     }
     if "fieldsets" in config:
         attrs["fieldsets"] = config["fieldsets"]
@@ -1583,21 +1652,39 @@ class EmailCollectorAdmin(EntityModelAdmin):
 class SocialProfileAdmin(
     ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
 ):
-    list_display = ("owner", "network", "handle", "domain")
+    list_display = ("owner", "network", "handle", "domain", "guild_id")
     list_filter = ("network",)
-    search_fields = ("handle", "domain", "did")
+    search_fields = ("handle", "domain", "did", "application_id", "guild_id")
     changelist_actions = ["my_profile"]
     change_actions = ["my_profile_action"]
     fieldsets = (
         (_("Owner"), {"fields": ("user", "group")}),
+        (_("Network"), {"fields": ("network",)}),
         (
             _("Configuration: Bluesky"),
             {
-                "fields": ("network", "handle", "domain", "did"),
+                "fields": ("handle", "domain", "did"),
                 "description": _(
                     "Link Arthexis to Bluesky by using a verified domain handle. "
                     "Publish a _atproto TXT record or /.well-known/atproto-did file "
                     "that returns the DID stored here before saving."
+                ),
+            },
+        ),
+        (
+            _("Configuration: Discord"),
+            {
+                "fields": (
+                    "application_id",
+                    "public_key",
+                    "guild_id",
+                    "bot_token",
+                    "default_channel_id",
+                ),
+                "description": _(
+                    "Store the Discord application and guild identifiers plus the bot token "
+                    "used for automation. The public key verifies interaction callbacks and the "
+                    "default channel is optional."
                 ),
             },
         ),
@@ -1616,7 +1703,7 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
     readonly_fields = ("verified_on", "odoo_uid", "name", "email")
     actions = ["verify_credentials"]
     change_actions = ["verify_credentials_action", "my_profile_action"]
-    changelist_actions = ["my_profile"]
+    changelist_actions = ["my_profile", "generate_quote_report"]
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
         ("Configuration", {"fields": ("host", "database")}),
@@ -1651,6 +1738,12 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
 
     verify_credentials_action.label = "Test credentials"
     verify_credentials_action.short_description = "Test credentials"
+
+    def generate_quote_report(self, request, queryset=None):
+        return HttpResponseRedirect(reverse("odoo-quote-report"))
+
+    generate_quote_report.label = _("Generate Quote Report")
+    generate_quote_report.short_description = _("Generate Quote Report")
 
 
 @admin.register(OpenPayProfile)
@@ -2155,7 +2248,7 @@ class EnergyAccountAdmin(EntityModelAdmin):
                 account = EnergyAccount.objects.create(user=user, name=username.upper())
                 rfid_val = form.cleaned_data["rfid"].upper()
                 if rfid_val:
-                    tag, _ = RFID.objects.get_or_create(rfid=rfid_val)
+                    tag, _ = RFID.register_scan(rfid_val)
                     account.rfids.add(tag)
                 vehicle_vin = form.cleaned_data["vehicle_id"]
                 if vehicle_vin:
@@ -2643,6 +2736,33 @@ class RFIDForm(forms.ModelForm):
             can_change_related=True,
             can_view_related=True,
         )
+        self.fields["data"].widget = RFIDDataWidget()
+
+
+class CopyRFIDForm(forms.Form):
+    """Simple form to capture the new RFID value when copying a tag."""
+
+    rfid = forms.CharField(
+        label=_("New RFID value"),
+        max_length=RFID._meta.get_field("rfid").max_length,
+        help_text=_("Enter the hexadecimal value for the new card."),
+    )
+
+    def clean_rfid(self):
+        value = (self.cleaned_data.get("rfid") or "").strip()
+        field = RFID._meta.get_field("rfid")
+        try:
+            cleaned = field.clean(value, None)
+        except ValidationError as exc:
+            raise forms.ValidationError(exc.messages)
+        normalized = (cleaned or "").strip().upper()
+        if not normalized:
+            raise forms.ValidationError(_("RFID value is required."))
+        if RFID.objects.filter(rfid=normalized).exists():
+            raise forms.ValidationError(
+                _("An RFID with this value already exists.")
+            )
+        return normalized
 
 
 @admin.register(RFID)
@@ -2663,7 +2783,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     search_fields = ("label_id", "rfid", "custom_label")
     autocomplete_fields = ["energy_accounts"]
     raw_id_fields = ["reference"]
-    actions = ["scan_rfids", "print_card_labels"]
+    actions = ["scan_rfids", "print_card_labels", "copy_rfids"]
     readonly_fields = ("added_on", "last_seen_on")
     form = RFIDForm
 
@@ -2677,6 +2797,95 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         return redirect("admin:core_rfid_scan")
 
     scan_rfids.short_description = "Scan RFIDs"
+
+    @admin.action(description=_("Copy RFID"))
+    def copy_rfids(self, request, queryset):
+        if queryset.count() != 1:
+            self.message_user(
+                request,
+                _("Select exactly one RFID to copy."),
+                level=messages.ERROR,
+            )
+            return None
+
+        source = (
+            queryset.select_related("reference")
+            .prefetch_related("energy_accounts")
+            .first()
+        )
+        if source is None:
+            self.message_user(
+                request,
+                _("Unable to find the selected RFID."),
+                level=messages.ERROR,
+            )
+            return None
+
+        if "apply" in request.POST:
+            form = CopyRFIDForm(request.POST)
+            if form.is_valid():
+                new_rfid = form.cleaned_data["rfid"]
+                label_id = RFID.next_copy_label(source)
+                data_value = source.data or []
+                copied_data = (
+                    json.loads(json.dumps(data_value)) if data_value else []
+                )
+                create_kwargs = {
+                    "label_id": label_id,
+                    "rfid": new_rfid,
+                    "custom_label": source.custom_label,
+                    "key_a": source.key_a,
+                    "key_b": source.key_b,
+                    "key_a_verified": source.key_a_verified,
+                    "key_b_verified": source.key_b_verified,
+                    "allowed": source.allowed,
+                    "external_command": source.external_command,
+                    "color": source.color,
+                    "kind": source.kind,
+                    "reference": source.reference,
+                    "released": source.released,
+                    "data": copied_data,
+                }
+                try:
+                    with transaction.atomic():
+                        new_tag = RFID.objects.create(**create_kwargs)
+                except IntegrityError:
+                    form.add_error(
+                        None, _("Unable to copy RFID. Please try again.")
+                    )
+                else:
+                    new_tag.energy_accounts.set(source.energy_accounts.all())
+                    self.message_user(
+                        request,
+                        _(
+                            "Copied RFID %(source_label)s to %(new_label)s "
+                            "(%(rfid)s)."
+                        )
+                        % {
+                            "source_label": source.label_id,
+                            "new_label": new_tag.label_id,
+                            "rfid": new_tag.rfid,
+                        },
+                        level=messages.SUCCESS,
+                    )
+                    return HttpResponseRedirect(
+                        reverse("admin:core_rfid_change", args=[new_tag.pk])
+                    )
+        else:
+            form = CopyRFIDForm()
+
+        context = self.admin_site.each_context(request)
+        context.update(
+            {
+                "opts": self.model._meta,
+                "form": form,
+                "source": source,
+                "action": "copy_rfids",
+                "title": _("Copy RFID"),
+            }
+        )
+        context["media"] = self.media + form.media
+        return TemplateResponse(request, "admin/core/rfid/copy.html", context)
 
     def print_card_labels(self, request, queryset):
         queryset = queryset.select_related("reference").order_by("label_id")
@@ -2806,7 +3015,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
 
     def report_view(self, request):
         context = self.admin_site.each_context(request)
-        context["report"] = ClientReport.build_rows()
+        context["report"] = ClientReport.build_rows(for_display=True)
         return TemplateResponse(request, "admin/core/rfid/report.html", context)
 
     def scan_view(self, request):
@@ -3030,6 +3239,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "package_link",
         "is_current",
         "pypi_url",
+        "github_url",
         "release_on",
         "revision_short",
         "published_status",
@@ -3038,7 +3248,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     actions = ["publish_release", "validate_releases"]
     change_actions = ["publish_release_action"]
     changelist_actions = ["refresh_from_pypi", "prepare_next_release"]
-    readonly_fields = ("pypi_url", "release_on", "is_current", "revision")
+    readonly_fields = ("pypi_url", "github_url", "release_on", "is_current", "revision")
     fields = (
         "package",
         "release_manager",
@@ -3046,6 +3256,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "revision",
         "is_current",
         "pypi_url",
+        "github_url",
         "release_on",
     )
 

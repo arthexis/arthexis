@@ -3,7 +3,7 @@ from django.contrib.auth.models import (
     Group,
     UserManager as DjangoUserManager,
 )
-from django.db import DatabaseError, models
+from django.db import DatabaseError, IntegrityError, connections, models, transaction
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.conf import settings
@@ -28,12 +28,14 @@ from io import BytesIO
 from django.core.files.base import ContentFile
 import qrcode
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 import uuid
 from pathlib import Path
 from django.core import serializers
-from urllib.parse import urlparse
+from django.core.management.color import no_style
+from urllib.parse import quote_plus, urlparse
 from utils import revision as revision_utils
-from typing import Type
+from typing import Any, Type
 from defusedxml import xmlrpc as defused_xmlrpc
 import requests
 
@@ -47,6 +49,7 @@ from .release import (
     Package as ReleasePackage,
     Credentials,
     DEFAULT_PACKAGE,
+    RepositoryTarget,
 )
 
 
@@ -569,6 +572,24 @@ class OdooProfile(Profile):
         self.name = ""
         self.email = ""
 
+    def _resolved_field_value(self, field: str) -> str:
+        """Return the resolved value for ``field`` falling back to raw data."""
+
+        resolved = self.resolve_sigils(field)
+        if resolved:
+            return resolved
+        value = getattr(self, field, "")
+        return value or ""
+
+    def _display_identifier(self) -> str:
+        """Return the display label for this profile."""
+
+        username = self._resolved_field_value("username")
+        database = self._resolved_field_value("database")
+        if username and database:
+            return f"{username}@{database}"
+        return username or database or ""
+
     def save(self, *args, **kwargs):
         if self.pk:
             old = type(self).all_objects.get(pk=self.pk)
@@ -579,6 +600,15 @@ class OdooProfile(Profile):
                 or old.host != self.host
             ):
                 self._clear_verification()
+        computed_name = self._display_identifier()
+        update_fields = kwargs.get("update_fields")
+        update_fields_set = set(update_fields) if update_fields is not None else None
+        if computed_name != self.name:
+            self.name = computed_name
+            if update_fields_set is not None:
+                update_fields_set.add("name")
+        if update_fields_set is not None:
+            kwargs["update_fields"] = list(update_fields_set)
         super().save(*args, **kwargs)
 
     @property
@@ -603,7 +633,6 @@ class OdooProfile(Profile):
             {"fields": ["name", "email"]},
         )[0]
         self.odoo_uid = uid
-        self.name = info.get("name", "")
         self.email = info.get("email", "")
         self.verified_on = timezone.now()
         self.save(update_fields=["odoo_uid", "name", "email", "verified_on"])
@@ -637,6 +666,9 @@ class OdooProfile(Profile):
             raise
 
     def __str__(self):  # pragma: no cover - simple representation
+        label = self._display_identifier()
+        if label:
+            return label
         owner = self.owner_display()
         return f"{owner} @ {self.host}" if owner else self.host
 
@@ -1148,19 +1180,30 @@ class SocialProfile(Profile):
 
     class Network(models.TextChoices):
         BLUESKY = "bluesky", _("Bluesky")
+        DISCORD = "discord", _("Discord")
 
-    profile_fields = ("handle", "domain", "did")
+    profile_fields = (
+        "handle",
+        "domain",
+        "did",
+        "application_id",
+        "public_key",
+        "guild_id",
+        "bot_token",
+        "default_channel_id",
+    )
 
     network = models.CharField(
         max_length=32,
         choices=Network.choices,
         default=Network.BLUESKY,
         help_text=_(
-            "Select the social network you want to connect. Only Bluesky is supported at the moment."
+            "Select the social network you want to connect. Bluesky and Discord are supported."
         ),
     )
     handle = models.CharField(
         max_length=253,
+        blank=True,
         help_text=_(
             "Bluesky handle that should resolve to Arthexis. Use the verified domain (for example arthexis.com)."
         ),
@@ -1168,6 +1211,7 @@ class SocialProfile(Profile):
     )
     domain = models.CharField(
         max_length=253,
+        blank=True,
         help_text=_(
             "Domain that hosts the Bluesky verification. Publish a _atproto TXT record or a /.well-known/atproto-did file with the DID below."
         ),
@@ -1181,40 +1225,102 @@ class SocialProfile(Profile):
         ),
         validators=[social_did_validator],
     )
+    application_id = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text=_("Discord application ID used to control the bot."),
+    )
+    public_key = models.CharField(
+        max_length=128,
+        blank=True,
+        help_text=_("Discord public key used to verify interaction requests."),
+    )
+    guild_id = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text=_("Discord guild (server) identifier where the bot should operate."),
+    )
+    bot_token = SigilShortAutoField(
+        max_length=255,
+        blank=True,
+        help_text=_("Discord bot token required for authenticated actions."),
+    )
+    default_channel_id = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text=_("Optional Discord channel identifier used for default messaging."),
+    )
 
     def clean(self):
         super().clean()
+        errors = {}
         if self.network == self.Network.BLUESKY:
-            errors = {}
             if not self.handle:
                 errors["handle"] = _("Provide the handle that should point to this domain.")
             if not self.domain:
                 errors["domain"] = _("A verified domain is required for Bluesky handles.")
-            if errors:
-                raise ValidationError(errors)
+        elif self.network == self.Network.DISCORD:
+            if not self.application_id:
+                errors["application_id"] = _("Provide the Discord application ID for the bot.")
+            if not self.guild_id:
+                errors["guild_id"] = _("Provide the Discord guild identifier where the bot will operate.")
+            if not self.bot_token:
+                errors["bot_token"] = _("Provide the Discord bot token so Arthexis can control the bot.")
+        if errors:
+            raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
         if self.handle:
             self.handle = self.handle.strip().lower()
         if self.domain:
             self.domain = self.domain.strip().lower()
+        if self.did:
+            self.did = self.did.strip()
+        for attr in ("application_id", "public_key", "guild_id", "default_channel_id"):
+            value = getattr(self, attr)
+            if value:
+                setattr(self, attr, value.strip())
         super().save(*args, **kwargs)
 
     def __str__(self):  # pragma: no cover - simple representation
-        handle = self.handle or self.domain
-        label = f"{self.get_network_display()} ({handle})" if handle else self.get_network_display()
+        handle = (
+            self.resolve_sigils("handle")
+            or self.handle
+            or self.domain
+            or self.resolve_sigils("guild_id")
+            or self.guild_id
+            or self.resolve_sigils("application_id")
+            or self.application_id
+            or ""
+        ).strip()
+        network = (self.resolve_sigils("network") or self.network or "").strip()
+
+        if handle.startswith("@"):
+            handle = handle[1:]
+
+        if handle and network:
+            return f"{handle}@{network}"
+        if handle:
+            return handle
+        if network:
+            return network
+
         owner = self.owner_display()
-        return f"{owner} – {label}" if owner else label
+        return owner or super().__str__()
 
     class Meta:
         verbose_name = _("Social Identity")
         verbose_name_plural = _("Social Identities")
         constraints = [
             models.UniqueConstraint(
-                fields=["network", "handle"], name="socialprofile_network_handle"
+                fields=["network", "handle"],
+                condition=~Q(handle=""),
+                name="socialprofile_network_handle",
             ),
             models.UniqueConstraint(
-                fields=["network", "domain"], name="socialprofile_network_domain"
+                fields=["network", "domain"],
+                condition=~Q(domain=""),
+                name="socialprofile_network_domain",
             ),
             models.CheckConstraint(
                 check=(
@@ -1719,6 +1825,8 @@ class RFID(Entity):
         (RED, "Red"),
         (GREEN, "Green"),
     ]
+    SCAN_LABEL_STEP = 10
+    COPY_LABEL_STEP = 1
     color = models.CharField(
         max_length=1,
         choices=COLOR_CHOICES,
@@ -1792,6 +1900,97 @@ class RFID(Entity):
 
     def __str__(self):  # pragma: no cover - simple representation
         return str(self.label_id)
+
+    @classmethod
+    def next_scan_label(
+        cls, *, step: int | None = None, start: int | None = None
+    ) -> int:
+        """Return the next label id for RFID tags created by scanning."""
+
+        step_value = step or cls.SCAN_LABEL_STEP
+        if step_value <= 0:
+            raise ValueError("step must be a positive integer")
+        start_value = start if start is not None else step_value
+
+        labels_qs = (
+            cls.objects.order_by("-label_id").values_list("label_id", flat=True)
+        )
+        max_label = 0
+        last_multiple = 0
+        for value in labels_qs.iterator():
+            if value is None:
+                continue
+            if max_label == 0:
+                max_label = value
+            if value >= start_value and value % step_value == 0:
+                last_multiple = value
+                break
+        if last_multiple:
+            candidate = last_multiple + step_value
+        else:
+            candidate = start_value
+        if max_label:
+            while candidate <= max_label:
+                candidate += step_value
+        return candidate
+
+    @classmethod
+    def next_copy_label(
+        cls, source: "RFID", *, step: int | None = None
+    ) -> int:
+        """Return the next label id when copying ``source`` to a new card."""
+
+        step_value = step or cls.COPY_LABEL_STEP
+        if step_value <= 0:
+            raise ValueError("step must be a positive integer")
+        base_label = (source.label_id or 0) + step_value
+        candidate = base_label if base_label > 0 else step_value
+        while cls.objects.filter(label_id=candidate).exists():
+            candidate += step_value
+        return candidate
+
+    @classmethod
+    def _reset_label_sequence(cls) -> None:
+        """Ensure the PK sequence is at or above the current max label id."""
+
+        connection = connections[cls.objects.db]
+        reset_sql = connection.ops.sequence_reset_sql(no_style(), [cls])
+        if not reset_sql:
+            return
+        with connection.cursor() as cursor:
+            for statement in reset_sql:
+                cursor.execute(statement)
+
+    @classmethod
+    def register_scan(
+        cls, rfid: str, *, kind: str | None = None
+    ) -> tuple["RFID", bool]:
+        """Return or create an RFID that was detected via scanning."""
+
+        normalized = (rfid or "").upper()
+        existing = cls.objects.filter(rfid=normalized).first()
+        if existing:
+            return existing, False
+
+        attempts = 0
+        max_attempts = 10
+        while attempts < max_attempts:
+            attempts += 1
+            label_id = cls.next_scan_label()
+            create_kwargs = {"label_id": label_id, "rfid": normalized}
+            if kind:
+                create_kwargs["kind"] = kind
+            try:
+                with transaction.atomic():
+                    tag = cls.objects.create(**create_kwargs)
+                    cls._reset_label_sequence()
+            except IntegrityError:
+                existing = cls.objects.filter(rfid=normalized).first()
+                if existing:
+                    return existing, False
+            else:
+                return tag, True
+        raise IntegrityError("Unable to allocate label id for scanned RFID")
 
     @staticmethod
     def get_account_by_rfid(value):
@@ -2431,8 +2630,8 @@ class ClientReport(Entity):
     disable_emails = models.BooleanField(default=False)
 
     class Meta:
-        verbose_name = "Client Report"
-        verbose_name_plural = "Client Reports"
+        verbose_name = "Consumer Report"
+        verbose_name_plural = "Consumer Reports"
         db_table = "core_client_report"
         ordering = ["-created_on"]
 
@@ -2451,7 +2650,7 @@ class ClientReport(Entity):
         return cls.objects.create(
             start_date=start_date,
             end_date=end_date,
-            data={"rows": rows},
+            data={"rows": rows, "schema": "session-list/v1"},
             owner=owner,
             schedule=schedule,
             recipients=list(recipients or []),
@@ -2499,8 +2698,7 @@ class ClientReport(Entity):
         return export, html_content
 
     @staticmethod
-    def build_rows(start_date=None, end_date=None):
-        from collections import defaultdict
+    def build_rows(start_date=None, end_date=None, *, for_display: bool = False):
         from ocpp.models import Transaction
 
         qs = Transaction.objects.exclude(rfid="")
@@ -2516,24 +2714,87 @@ class ClientReport(Entity):
                 end_date + timedelta(days=1), time.min, tzinfo=pytimezone.utc
             )
             qs = qs.filter(start_time__lt=end_dt)
-        data = defaultdict(lambda: {"kw": 0.0, "count": 0})
-        for tx in qs:
-            data[tx.rfid]["kw"] += tx.kw
-            data[tx.rfid]["count"] += 1
-        rows = []
-        for rfid_uid, stats in sorted(data.items()):
-            tag = RFID.objects.filter(rfid=rfid_uid).first()
-            if tag:
-                account = tag.energy_accounts.first()
-                if account:
-                    subject = account.name
-                else:
-                    subject = str(tag.label_id)
+
+        transactions = list(
+            qs.select_related("account").order_by("-start_time", "-pk")
+        )
+        rfid_values = {tx.rfid for tx in transactions if tx.rfid}
+        tag_map: dict[str, RFID] = {}
+        if rfid_values:
+            tag_map = {
+                tag.rfid: tag
+                for tag in RFID.objects.filter(rfid__in=rfid_values).prefetch_related(
+                    "energy_accounts"
+                )
+            }
+
+        rows: list[dict[str, Any]] = []
+        for tx in transactions:
+            energy = tx.kw
+            if energy <= 0:
+                continue
+
+            subject = None
+            if tx.account and getattr(tx.account, "name", None):
+                subject = tx.account.name
             else:
-                subject = rfid_uid
+                tag = tag_map.get(tx.rfid)
+                if tag:
+                    account = next(iter(tag.energy_accounts.all()), None)
+                    if account:
+                        subject = account.name
+                    else:
+                        subject = str(tag.label_id)
+
+            if subject is None:
+                subject = tx.rfid
+
+            start_value = tx.start_time
+            end_value = tx.stop_time
+            if not for_display:
+                start_value = start_value.isoformat()
+                end_value = end_value.isoformat() if end_value else None
+
             rows.append(
-                {"subject": subject, "kw": stats["kw"], "count": stats["count"]}
+                {
+                    "subject": subject,
+                    "rfid": tx.rfid,
+                    "kw": energy,
+                    "start": start_value,
+                    "end": end_value,
+                }
             )
+
+        return rows
+
+    @property
+    def rows_for_display(self):
+        rows = self.data.get("rows", [])
+        if self.data.get("schema") == "session-list/v1":
+            parsed: list[dict[str, Any]] = []
+            for row in rows:
+                item = dict(row)
+                start_val = row.get("start")
+                end_val = row.get("end")
+
+                if start_val:
+                    start_dt = parse_datetime(start_val)
+                    if start_dt and timezone.is_naive(start_dt):
+                        start_dt = timezone.make_aware(start_dt, timezone.utc)
+                    item["start"] = start_dt
+                else:
+                    item["start"] = None
+
+                if end_val:
+                    end_dt = parse_datetime(end_val)
+                    if end_dt and timezone.is_naive(end_dt):
+                        end_dt = timezone.make_aware(end_dt, timezone.utc)
+                    item["end"] = end_dt
+                else:
+                    item["end"] = None
+
+                parsed.append(item)
+            return parsed
         return rows
 
 
@@ -2758,6 +3019,7 @@ class ReleaseManager(Profile):
         "github_token",
         "pypi_password",
         "pypi_url",
+        "secondary_pypi_url",
     )
     pypi_username = SigilShortAutoField("PyPI username", max_length=100, blank=True)
     pypi_token = SigilShortAutoField("PyPI token", max_length=200, blank=True)
@@ -2771,6 +3033,15 @@ class ReleaseManager(Profile):
     )
     pypi_password = SigilShortAutoField("PyPI password", max_length=200, blank=True)
     pypi_url = SigilShortAutoField("PyPI URL", max_length=200, blank=True)
+    secondary_pypi_url = SigilShortAutoField(
+        "Secondary PyPI URL",
+        max_length=200,
+        blank=True,
+        help_text=(
+            "Optional secondary repository upload endpoint."
+            " Leave blank to disable mirrored uploads."
+        ),
+    )
 
     class Meta:
         verbose_name = "Release Manager"
@@ -2894,6 +3165,7 @@ class PackageRelease(Entity):
     )
     changelog = models.TextField(blank=True, default="")
     pypi_url = models.URLField("PyPI URL", blank=True, editable=False)
+    github_url = models.URLField("GitHub URL", blank=True, editable=False)
     release_on = models.DateTimeField(blank=True, null=True, editable=False)
 
     class Meta:
@@ -2938,6 +3210,104 @@ class PackageRelease(Entity):
         if manager and manager.github_token:
             return manager.github_token
         return os.environ.get("GITHUB_TOKEN")
+
+    def build_publish_targets(self) -> list[RepositoryTarget]:
+        """Return repository targets for publishing this release."""
+
+        manager = self.release_manager or self.package.release_manager
+        targets: list[RepositoryTarget] = []
+
+        primary_url = ""
+        if manager and manager.pypi_url:
+            primary_url = manager.pypi_url.strip()
+        if not primary_url:
+            env_primary = os.environ.get("PYPI_REPOSITORY_URL", "")
+            primary_url = env_primary.strip()
+
+        primary_creds = self.to_credentials()
+        targets.append(
+            RepositoryTarget(
+                name="PyPI",
+                repository_url=primary_url or None,
+                credentials=primary_creds,
+                verify_availability=True,
+            )
+        )
+
+        secondary_url = ""
+        if manager and getattr(manager, "secondary_pypi_url", ""):
+            secondary_url = manager.secondary_pypi_url.strip()
+        if not secondary_url:
+            env_secondary = os.environ.get("PYPI_SECONDARY_URL", "")
+            secondary_url = env_secondary.strip()
+        if not secondary_url:
+            return targets
+
+        def _clone_credentials(creds: Credentials | None) -> Credentials | None:
+            if creds is None or not creds.has_auth():
+                return None
+            return Credentials(
+                token=creds.token,
+                username=creds.username,
+                password=creds.password,
+            )
+
+        github_token = self.get_github_token()
+        github_username = None
+        if manager and manager.pypi_username:
+            github_username = manager.pypi_username.strip() or None
+        env_secondary_username = os.environ.get("PYPI_SECONDARY_USERNAME")
+        env_secondary_password = os.environ.get("PYPI_SECONDARY_PASSWORD")
+        if not github_username:
+            github_username = (
+                os.environ.get("GITHUB_USERNAME")
+                or os.environ.get("GITHUB_ACTOR")
+                or (env_secondary_username.strip() if env_secondary_username else None)
+            )
+
+        password_candidate = github_token or (
+            env_secondary_password.strip() if env_secondary_password else None
+        )
+
+        secondary_creds: Credentials | None = None
+        if github_username and password_candidate:
+            secondary_creds = Credentials(
+                username=github_username,
+                password=password_candidate,
+            )
+        else:
+            secondary_creds = _clone_credentials(primary_creds)
+
+        if secondary_creds and secondary_creds.has_auth():
+            name = "GitHub Packages" if github_token else "Secondary repository"
+            targets.append(
+                RepositoryTarget(
+                    name=name,
+                    repository_url=secondary_url,
+                    credentials=secondary_creds,
+                )
+            )
+
+        return targets
+
+    def github_package_url(self) -> str | None:
+        """Return the GitHub Packages URL for this release if determinable."""
+
+        repo_url = self.package.repository_url
+        if not repo_url:
+            return None
+        parsed = urlparse(repo_url)
+        if "github.com" not in parsed.netloc.lower():
+            return None
+        path = parsed.path.strip("/")
+        if not path:
+            return None
+        if path.endswith(".git"):
+            path = path[: -len(".git")]
+        return (
+            f"https://github.com/{path}/pkgs/pypi/{self.package.name}"
+            f"/versions?version={quote_plus(self.version)}"
+        )
 
     @property
     def migration_number(self) -> int:
@@ -3224,6 +3594,8 @@ class TOTPDeviceSettings(models.Model):
         default="",
         help_text=_("Label shown in authenticator apps. Leave blank to use Arthexis."),
     )
+    is_seed_data = models.BooleanField(default=False)
+    is_user_data = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = _("Authenticator device settings")

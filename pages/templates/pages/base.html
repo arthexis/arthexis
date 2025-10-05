@@ -578,48 +578,85 @@
       window.addEventListener('load', syncDebugToolbarTheme);
     </script>
     <script>
-      document.querySelectorAll('.nav-item.dropdown').forEach(item => {
-        const link = item.querySelector('.nav-link');
-        const menu = item.querySelector('.dropdown-menu');
-        let clickOpen = false;
+      (function() {
+        const dropdownItems = Array.from(document.querySelectorAll('.nav-item.dropdown'));
+        if (!dropdownItems.length) {
+          return;
+        }
 
-        const show = () => {
-          item.classList.add('show');
-          menu.classList.add('show');
-        };
-        const hide = () => {
+        const hideItem = item => {
+          const menu = item.querySelector('.dropdown-menu');
           item.classList.remove('show');
-          menu.classList.remove('show');
+          if (menu) {
+            menu.classList.remove('show');
+          }
+          item.dataset.clickOpen = 'false';
         };
 
-        link.addEventListener('click', e => {
-          e.preventDefault();
-          e.stopPropagation();
-          show();
-          clickOpen = true;
+        const showItem = item => {
+          const menu = item.querySelector('.dropdown-menu');
+          item.classList.add('show');
+          if (menu) {
+            menu.classList.add('show');
+          }
+        };
+
+        const closeOthers = current => {
+          dropdownItems.forEach(other => {
+            if (other !== current) {
+              hideItem(other);
+            }
+          });
+        };
+
+        dropdownItems.forEach(item => {
+          const link = item.querySelector('.nav-link');
+          const menu = item.querySelector('.dropdown-menu');
+          if (!link || !menu) {
+            return;
+          }
+
+          item.dataset.clickOpen = 'false';
+
+          link.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const isAlreadyOpen = item.classList.contains('show') && item.dataset.clickOpen === 'true';
+            closeOthers(item);
+
+            if (isAlreadyOpen) {
+              hideItem(item);
+            } else {
+              showItem(item);
+              item.dataset.clickOpen = 'true';
+            }
+          });
+
+          if (window.matchMedia('(hover: hover)').matches) {
+            item.addEventListener('mouseenter', () => {
+              if (item.dataset.clickOpen !== 'true') {
+                closeOthers(item);
+                showItem(item);
+              }
+            });
+            item.addEventListener('mouseleave', () => {
+              if (item.dataset.clickOpen !== 'true') {
+                hideItem(item);
+              }
+            });
+          }
         });
 
-        if (window.matchMedia('(hover: hover)').matches) {
-          item.addEventListener('mouseenter', () => {
-            if (!clickOpen) {
-              show();
+        document.addEventListener('click', event => {
+          dropdownItems.forEach(item => {
+            if (item.classList.contains('show') && !item.contains(event.target)) {
+              hideItem(item);
             }
           });
-          item.addEventListener('mouseleave', () => {
-            if (!clickOpen) {
-              hide();
-            }
-          });
-        }
-
-      document.addEventListener('click', e => {
-        if (clickOpen && !item.contains(e.target)) {
-          clickOpen = false;
-          hide();
-        }
-      });
-    });
-      </script>
+        });
+      })();
+    </script>
       <script>
         document.querySelectorAll('.user-info-trigger').forEach(btn => {
           const tooltip = btn.querySelector('.user-info-tooltip');

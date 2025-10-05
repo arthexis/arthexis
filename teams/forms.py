@@ -40,9 +40,20 @@ class TOTPDeviceAdminForm(forms.ModelForm):
             if settings_obj is None:
                 settings_obj = TOTPDeviceSettings(device=instance)
             settings_obj.issuer = issuer
-            settings_obj.save()
+            if settings_obj.pk:
+                settings_obj.save(
+                    update_fields=["issuer", "is_seed_data", "is_user_data"]
+                )
+            else:
+                settings_obj.save()
         elif settings_obj is not None:
-            settings_obj.delete()
+            settings_obj.issuer = ""
+            if settings_obj.is_seed_data or settings_obj.is_user_data:
+                settings_obj.save(
+                    update_fields=["issuer", "is_seed_data", "is_user_data"]
+                )
+            else:
+                settings_obj.delete()
 
     def save(self, commit=True):
         instance = super().save(commit=commit)
@@ -61,7 +72,7 @@ class TOTPDeviceAdminForm(forms.ModelForm):
 
 class TOTPDeviceCalibrationActionForm(ActionForm):
     token = forms.CharField(
-        label=_("One-time password"),
+        label=_("OTP"),
         required=False,
         help_text=_(
             "Enter the current authenticator code when running the"
@@ -69,10 +80,26 @@ class TOTPDeviceCalibrationActionForm(ActionForm):
         ),
     )
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        token_field = self.fields["token"]
+        token_field.widget.attrs.setdefault(
+            "title", _("Enter your one-time password for testing")
+        )
+        existing_classes = token_field.widget.attrs.get("class", "")
+        spacing_class = "totp-token-spacing"
+        if spacing_class not in existing_classes.split():
+            token_field.widget.attrs["class"] = (existing_classes + " " + spacing_class).strip()
+
     def clean(self):
         cleaned_data = super().clean()
         token = cleaned_data.get("token")
         if token is not None:
             cleaned_data["token"] = token.strip()
         return cleaned_data
+
+    class Media:
+        css = {
+            "all": ("teams/css/totp_admin.css",)
+        }
 

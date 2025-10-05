@@ -1,16 +1,62 @@
 {% extends "admin/base_site.html" %}
+{% load tz i18n %}
 {% block content %}
-<h1>RFID Client Report</h1>
-<table class="adminlist">
-  <thead>
-    <tr><th>RFID/Account</th><th>Sessions</th><th>Total kWh</th></tr>
-  </thead>
-  <tbody>
-  {% for row in report %}
-    <tr><td>{{ row.subject }}</td><td>{{ row.count }}</td><td>{{ row.kw|floatformat:2 }}</td></tr>
-  {% empty %}
-    <tr><td colspan="3">No data available.</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
+<h1>RFID Consumer Report</h1>
+{% if report %}
+  {% with first=report|first %}
+    {% if first.start %}
+      <table class="adminlist">
+        <thead>
+          <tr>
+            <th>{% trans "RFID / Account" %}</th>
+            <th>{% trans "Session start" %}</th>
+            <th>{% trans "Session end" %}</th>
+            <th>{% trans "Energy (kWh)" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report %}
+            <tr>
+              <td>
+                <strong>{{ row.subject }}</strong>
+              </td>
+              <td>
+                {% if row.start %}
+                  <time datetime="{{ row.start|date:'c' }}">{{ row.start|localtime|date:"Y-m-d H:i" }}</time>
+                {% else %}
+                  {% trans "Unavailable" %}
+                {% endif %}
+              </td>
+              <td>
+                {% if row.end %}
+                  <time datetime="{{ row.end|date:'c' }}">{{ row.end|localtime|date:"Y-m-d H:i" }}</time>
+                {% else %}
+                  {% trans "In progress" %}
+                {% endif %}
+              </td>
+              <td>{{ row.kw|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">{% trans "No data available." %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <table class="adminlist">
+        <thead>
+          <tr><th>{% trans "RFID/Account" %}</th><th>{% trans "Sessions" %}</th><th>{% trans "Total kWh" %}</th></tr>
+        </thead>
+        <tbody>
+          {% for row in report %}
+            <tr><td>{{ row.subject }}</td><td>{{ row.count }}</td><td>{{ row.kw|floatformat:2 }}</td></tr>
+          {% empty %}
+            <tr><td colspan="3">{% trans "No data available." %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  {% endwith %}
+{% else %}
+  <p class="quiet">{% trans "No data available." %}</p>
+{% endif %}
 {% endblock %}

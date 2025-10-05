@@ -379,6 +379,70 @@ class CSMSConsumerTests(TransactionTestCase):
             store.transactions.pop(store_key, None)
         self.assertNotIn(store_key, store.transactions)
 
+    async def test_connection_logs_subprotocol(self):
+        pending_key = store.pending_key("PROT1")
+        original_connections = dict(store.connections)
+        original_ip_connections = {
+            ip: set(consumers) for ip, consumers in store.ip_connections.items()
+        }
+        original_logs = {
+            key: list(entries)
+            for key, entries in store.logs.get("charger", {}).items()
+        }
+        original_log_names = dict(store.log_names.get("charger", {}))
+        store.connections.clear()
+        store.ip_connections.clear()
+        store.clear_log(pending_key, log_type="charger")
+
+        communicator_with_protocol = ClientWebsocketCommunicator(
+            application, "/PROT1/", subprotocols=["ocpp1.6"]
+        )
+        communicator_with_protocol.scope["path"] = (
+            communicator_with_protocol.scope.get("path", "").rstrip("/")
+        )
+        communicator_without_protocol = ClientWebsocketCommunicator(
+            application, "/PROT1/"
+        )
+        communicator_without_protocol.scope["path"] = (
+            communicator_without_protocol.scope.get("path", "").rstrip("/")
+        )
+
+        try:
+            accepted, negotiated = await communicator_with_protocol.connect()
+            logs = store.get_logs(pending_key, log_type="charger")
+            self.assertTrue(accepted, negotiated)
+            self.assertEqual(negotiated, "ocpp1.6")
+            self.assertTrue(
+                any("Connected (subprotocol=ocpp1.6)" in entry for entry in logs),
+                logs,
+            )
+
+            accepted_without, negotiated_without = await communicator_without_protocol.connect()
+            logs = store.get_logs(pending_key, log_type="charger")
+            self.assertTrue(accepted_without, logs)
+            self.assertIsNone(negotiated_without)
+            self.assertTrue(
+                any("Connected (subprotocol=none)" in entry for entry in logs),
+                logs,
+            )
+        finally:
+            with suppress(Exception):
+                await communicator_without_protocol.disconnect()
+            with suppress(Exception):
+                await communicator_with_protocol.disconnect()
+            store.connections.clear()
+            store.connections.update(original_connections)
+            store.ip_connections.clear()
+            for ip, consumers in original_ip_connections.items():
+                store.ip_connections[ip] = set(consumers)
+            store.logs.setdefault("charger", {})
+            store.logs["charger"].clear()
+            for key, entries in original_logs.items():
+                store.logs["charger"][key] = list(entries)
+            store.log_names.setdefault("charger", {})
+            store.log_names["charger"].clear()
+            store.log_names["charger"].update(original_log_names)
+
     async def test_rfid_recorded(self):
         await database_sync_to_async(Charger.objects.create)(charger_id="RFIDREC")
         communicator = WebsocketCommunicator(application, "/RFIDREC/?cid=RFIDREC")
@@ -3281,6 +3345,48 @@ class ChargePointSimulatorTests(TransactionTestCase):
             await sim.stop()
             server.close()
             await server.wait_closed()
+
+    async def test_handle_csms_call_logs_unsupported_action(self):
+        cfg = SimulatorConfig(cp_path="SIMLOG/")
+        sim = ChargePointSimulator(cfg)
+        store.clear_log(cfg.cp_path, log_type="simulator")
+        store.logs["simulator"][cfg.cp_path] = []
+        sent_frames: list[str] = []
+
+        async def send(payload: str) -> None:
+            sent_frames.append(payload)
+
+        async def recv():
+            return None
+
+        try:
+            handled = await sim._handle_csms_call(
+                [2, "msg1", "Reset", {}],
+                send,
+                recv,
+            )
+            self.assertTrue(handled)
+            logs = store.get_logs(cfg.cp_path, log_type="simulator")
+            self.assertTrue(
+                any(
+                    "Received unsupported action 'Reset'" in entry
+                    for entry in logs
+                ),
+                logs,
+            )
+            self.assertTrue(sent_frames, "Expected a CallError response from simulator")
+            frame = json.loads(sent_frames[-1])
+            self.assertEqual(frame[0], 4)
+            self.assertEqual(frame[1], "msg1")
+            self.assertEqual(frame[2], "NotSupported")
+            self.assertIn("Simulator does not implement Reset", frame[3])
+            self.assertNotIn(sim, store.simulators.values())
+        finally:
+            store.clear_log(cfg.cp_path, log_type="simulator")
+            store.logs["simulator"].pop(cfg.cp_path, None)
+            for key, value in list(store.simulators.items()):
+                if value is sim:
+                    store.simulators.pop(key, None)
 
     async def test_door_open_event_sends_notifications(self):
         status_payloads = []

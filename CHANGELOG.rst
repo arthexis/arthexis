@@ -4,6 +4,104 @@ Changelog
 Unreleased
 ----------
 
+- 198f7c86 chore: remove TODO fixtures
+- c03a6e1c feat: retry twine uploads with user guidance (#2053)
+- 89927b8a Add Discord support for social profiles (#2052)
+
+v0.1.14 (2025-10-05)
+--------------------
+
+- e5a3ced2 chore: add release TODO for arthexis
+- 0d94e5b2 chore: remove TODO fixtures
+- c048144a Use non-breaking space between model actions (#2051)
+- 0eb9fc6e Adjust admin model action commas (#2050)
+- fa68f30b Keep admin dashboard actions inline with comma separators (#2049)
+- 152e723a Move dashboard actions into model action links (#2048)
+- bfed9f27 Hide dashboard badges in admin sidebar (#2047)
+- f15b35c6 Add admin action and dashboard link for Odoo quote report (#2046)
+- 88d02266 Make Control admin favicon star transparent (#2045)
+- d0bb267f Rename client reports to consumer reports (#2044)
+- 7b0189c5 Add RFID block grid widget to admin (#2043)
+- 3123f030 Configure nginx maintenance fallback (#2040)
+- 80291451 Improve RFID deep read feedback (#2039)
+- 7858c4d2 Make control favicon star larger (#2038)
+- 3d77b61d feat: auto-start MCP server when assistant profiles are active (#2037)
+- f67b9db1 Improve RFID deep read key verification (#2036)
+- 7476ef52 Store RFID deep read data on tag (#2035)
+- b3625f8b Keep deep read data visible between scans (#2034)
+- 701435b5 Ensure switch-role re-enables Datasette (#2033)
+- 8e01f25d Improve deep read status messaging in RFID scanner (#2032)
+- 4cd4ff17 Default Datasette on with opt-out flag (#2031)
+- 3e2484a0 Add AWG calculator translations (#2030)
+- 9ee27f39 Toggle RFID deep read mode (#2029)
+- 1ba26393 feat: align favicons with role branding (#2028)
+- 7a58074b Fix release TODO version when VERSION already bumped (#2027)
+- 92989712 Remove halo from Constellation and Control favicons (#2026)
+- 8abfd2ac Add admin action to update node information (#2025)
+- f0a74f26 Improve node admin relation visibility and guidance (#2024)
+- 86e388db Add tests for release twine force handling (#2023)
+- f2cc8c21 Add tests for release build git workflows (#2022)
+- 58ef5eba Add publish tests for PyPI availability guard (#2021)
+- beb23da0 Simplify RFID admin badge counts (#2020)
+- ebef261b Update constellation and control favicons (#2019)
+- 6a74f897 Ensure only one navbar dropdown is open (#2018)
+- 26e863d4 Fix deep read activation to send CSRF token (#2017)
+- e345504c chore: refresh coverage badge (#2016)
+- 4fe2b6a7 Add OCPP 2.1 call direction list (#2015)
+- 6af6a1c6 Support dual repository release uploads (#2013)
+- 17dc95e9 Update OCPP 1.6 coverage metrics (#2012)
+- 3b9d1ae8 Add quick send action for net messages (#2011)
+- 4b8582b7 Show client report sessions and surface results first (#2010)
+- af481d84 Format social profiles as handle@network (#2009)
+- 86e00e26 Adjust Odoo profile display label (#2008)
+- f11bc950 fix: detect pre-release commits in changelog (#2007)
+- d4368710 feat: assign role landings for ocpp dashboards (#2006)
+- 85f856f0 Add integration test for pre-release actions (#2005)
+- 84be6d9f test: assert systemctl probe in lcd check command (#2004)
+- a173229d Fix admin report breadcrumbs (#2003)
+- 245f6692 Test NetMessage updates existing record (#2002)
+- f36748b3 Refine release task tests to capture upgrade command details (#2001)
+- 1c7600a9 Add test ensuring NetMessage propagate honors target limit (#2000)
+- 4027e631 Add signature header coverage for net message propagation (#1999)
+- ce8b29c4 Enable user data support for TOTP devices (#1998)
+- d766361a style(admin): shrink dashboard badge vertical padding (#1997)
+- 41cdcf35 Adjust TOTP calibration token field styling (#1996)
+- 102cf27c Fix changelog generator range when HEAD is tagged (#1995)
+- de22e23e Add tests for always-on RFID watcher thread (#1993)
+- 8e6eab0c Add tests for RFID watch management command (#1994)
+- a5c60b04 fix(release): sync branch before pre-release actions (#1992)
+- 5b30c4fd chore: add release TODO for arthexis
+- 2e45f8ea chore: remove TODO fixtures
+- abe600a2 chore: update coverage badge (#1991)
+- 786ae72b Validate clean repo before bumping version (#1990)
+- d1c867bc Add subprotocol logging test for CSMS consumer (#1989)
+- 98d99e0b Cache seed data flag detection during env refresh (#1988)
+- e9c62cfb Add simulator CallError logging test (#1987)
+- a6889665 Optimize fixture patching to avoid unnecessary writes (#1985)
+- c5893a99 Adjust admin profile link labels and targets (#1984)
+- bbdd3487 Add tie-break coverage for find_conduit (#1982)
+- 79da5743 Add publish failure tests for dist and credentials (#1980)
+- 8f258f9c Add release promote commit behavior tests (#1981)
+- 742a1235 Add RFID release badge to admin dashboard (#1979)
+- 662c7cfe Add tests for OCPP Authorize RFID handling (#1978)
+- 8520a246 Shorten NetMessage admin column labels (#1977)
+- ff4069f4 Add email transaction models and tests (#1976)
+- b532e862 Show client report form validation errors (#1975)
+- 957e10d3 Add lead status tracking and dashboard badges (#1974)
+- b011cffb Remove dark theme seed datum border accents (#1973)
+- 5bb09cdc Add Register from Odoo toolbar link to Product admin (#1972)
+- 92a8ee0a Add QR code and layout updates to RFID card labels (#1971)
+- a05889ce Move upgrade report to dedicated admin view (#1970)
+- 2c313e35 Add OpenPay profile model and admin (#1969)
+- ae90e60b Handle fallback decoding for unknown header charsets (#1968)
+- 9215e726 Improve seed datum visibility in dark mode (#1967)
+- 14988778 Fix PowerLead IP address capture (#1966)
+- 8218d4e4 Fix IMAP search encoding handling for email inbox (#1965)
+- c8e2f624 Align MCP profile instructions with production deployment (#1964)
+- c4c7ead5 Add content classifiers and automatic tagging (#1962)
+- 44e93470 refactor: standardize admin badge colors (#1963)
+- 08b34c1d Fix duplicate release sections in changelog (#1958)
+- 94f9865a Add auto-upgrade report to system admin view (#1961)
 - bbc2efd1 Add admin action to launch GitHub repository creation (#1957)
 - 063e8859 Add external command validation for RFID tags (#1956)
 - f6015cf8 Add helper to create GitHub repositories (#1954)
@@ -125,6 +223,7 @@ v0.1.13 (2025-09-30)
 v0.1.12 (2025-09-27)
 --------------------
 
+- cca12ad1 chore: remove TODO fixtures
 - 178608c0 chore: add release TODO for arthexis
 - bd9e1c39 chore: remove TODO fixtures
 - 371434d7 Log GetConfiguration timeouts from admin action (#1843)
@@ -201,6 +300,8 @@ v0.1.12 (2025-09-27)
 v0.1.11 (2025-09-26)
 --------------------
 
+- 72ac58b2 chore: remove TODO fixtures
+- 69d60a66 Fix release TODO acknowledgment persistence (#1770)
 - abdfded9 chore: add release TODO for arthexis
 - b3871614 Align EVCS scan default subnet with controller config (#1740)
 - 755c47c3 fix: support changelog generation without bash (#1769)
@@ -881,12 +982,6 @@ v0.1.9 (2025-09-17)
 - 13684360 Restrict datasette access and add navbar link
 - 650e9a7a Include version and revision in sqlite backups
 - e8725fe7 Ensure admin change actions render and fix release manager tests
-- 372717f1 Add base translation files for French and Russian
-- aca01ee3 Rename RFID admin action
-- bf25c17e Add test for birthday greetings task
-- 7fe6a2cf Patch UserDatum mixin globally and test entity inheritance
-- d0f11e65 feat: add release manager credential test
-- 1c7b9eeb Add check flag for switch-role script
 - 84de5410 feat: require sudo for reset-screen
 - 1a5eddb9 Add install.bat for Windows
 - fb590a08 fix: enable Raspberry Pi screen
@@ -928,6 +1023,22 @@ v0.1.9 (2025-09-17)
 - b828cf9a Add RFID energy consumption report
 - ee132274 Track invite email send status
 - 80f96da2 feat: auto-commit fixture changes during release
+- 372717f1 Add base translation files for French and Russian
+- aca01ee3 Rename RFID admin action
+- bf25c17e Add test for birthday greetings task
+- 7fe6a2cf Patch UserDatum mixin globally and test entity inheritance
+- d0f11e65 feat: add release manager credential test
+- 1c7b9eeb Add check flag for switch-role script
+
+vwork (2025-09-10)
+------------------
+
+- 372717f1 Add base translation files for French and Russian
+- aca01ee3 Rename RFID admin action
+- bf25c17e Add test for birthday greetings task
+- 7fe6a2cf Patch UserDatum mixin globally and test entity inheritance
+- d0f11e65 feat: add release manager credential test
+- 1c7b9eeb Add check flag for switch-role script
 
 v0.1.8 (2025-09-05)
 -------------------

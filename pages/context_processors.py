@@ -8,22 +8,29 @@ from core.models import Reference
 from core.reference_utils import filter_visible_references
 from .models import Module
 
-_favicon_path = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data" / "favicon.txt"
-_control_favicon_path = (
-    Path(settings.BASE_DIR) / "pages" / "fixtures" / "data" / "favicon_control.txt"
-)
+_FAVICON_DIR = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data"
+_FAVICON_FILENAMES = {
+    "default": "favicon.txt",
+    "Constellation": "favicon_constellation.txt",
+    "Control": "favicon_control.txt",
+    "Satellite": "favicon_satellite.txt",
+}
 
-try:
-    _DEFAULT_FAVICON = f"data:image/png;base64,{_favicon_path.read_text().strip()}"
-except OSError:
-    _DEFAULT_FAVICON = ""
 
-try:
-    _CONTROL_FAVICON = (
-        f"data:image/png;base64,{_control_favicon_path.read_text().strip()}"
-    )
-except OSError:
-    _CONTROL_FAVICON = _DEFAULT_FAVICON
+def _load_favicon(filename: str) -> str:
+    path = _FAVICON_DIR / filename
+    try:
+        return f"data:image/png;base64,{path.read_text().strip()}"
+    except OSError:
+        return ""
+
+
+_DEFAULT_FAVICON = _load_favicon(_FAVICON_FILENAMES["default"])
+_ROLE_FAVICONS = {
+    role: (_load_favicon(filename) or _DEFAULT_FAVICON)
+    for role, filename in _FAVICON_FILENAMES.items()
+    if role != "default"
+}
 
 
 def nav_links(request):
@@ -41,6 +48,7 @@ def nav_links(request):
         modules = []
 
     valid_modules = []
+    datasette_enabled = False
     current_module = None
     for module in modules:
         landings = []
@@ -75,6 +83,7 @@ def nav_links(request):
 
     datasette_lock = Path(settings.BASE_DIR) / "locks" / "datasette.lck"
     if datasette_lock.exists():
+        datasette_enabled = True
         datasette_module = SimpleNamespace(
             menu_label="Data",
             path="/data/",
@@ -95,10 +104,8 @@ def nav_links(request):
             except Exception:
                 pass
         if not favicon_url:
-            if node and getattr(node.role, "name", "") == "Control":
-                favicon_url = _CONTROL_FAVICON
-            else:
-                favicon_url = _DEFAULT_FAVICON
+            role_name = getattr(getattr(node, "role", None), "name", "")
+            favicon_url = _ROLE_FAVICONS.get(role_name, _DEFAULT_FAVICON) or _DEFAULT_FAVICON
 
     header_refs_qs = (
         Reference.objects.filter(show_in_header=True)
@@ -116,4 +123,5 @@ def nav_links(request):
         "nav_modules": valid_modules,
         "favicon_url": favicon_url,
         "header_references": header_references,
+        "datasette_enabled": datasette_enabled,
     }

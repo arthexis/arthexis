@@ -9,6 +9,12 @@ fi
 
 VERSION="$1"
 
+# Ensure the repository is clean before making any changes.
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Working tree or index is dirty; please commit or stash changes before releasing." >&2
+  exit 1
+fi
+
 echo "$VERSION" > VERSION
 
 python scripts/capture_migration_state.py "$VERSION"

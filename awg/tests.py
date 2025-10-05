@@ -1,3 +1,4 @@
+import os
 from datetime import time
 from decimal import Decimal
 
@@ -22,6 +23,7 @@ from .models import (
     EnergyTariff,
     PowerLead,
 )
+from .views import find_conduit
 
 
 class AWGCalculatorTests(TestCase):

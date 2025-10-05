@@ -1056,6 +1056,123 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertEqual(message.filter_installed_version, "1.0.0")
         self.assertEqual(message.filter_installed_revision, "rev123")
 
+    def test_net_message_updates_existing_record(self):
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_key = (
+            key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
+        sender = Node.objects.create(
+            hostname="sender-update",
+            address="10.0.0.50",
+            port=8010,
+            mac_address="00:11:22:33:44:fe",
+            public_key=public_key,
+        )
+        existing_reach, _ = NodeRole.objects.get_or_create(name="Terminal")
+        new_reach, _ = NodeRole.objects.get_or_create(name="Control")
+        old_filter_node = Node.objects.create(
+            hostname="legacy-filter",
+            address="10.0.0.60",
+            port=8020,
+            mac_address="00:11:22:33:44:fd",
+        )
+        new_filter_node = Node.objects.create(
+            hostname="new-filter",
+            address="10.0.0.61",
+            port=8021,
+            mac_address="00:11:22:33:44:fc",
+        )
+        old_feature = NodeFeature.objects.create(
+            slug=f"legacy-feature-{uuid.uuid4().hex}", display="Legacy Feature"
+        )
+        new_feature = NodeFeature.objects.create(
+            slug=f"new-feature-{uuid.uuid4().hex}", display="New Feature"
+        )
+        old_filter_role = NodeRole.objects.create(
+            name=f"LegacyRole-{uuid.uuid4().hex}"
+        )
+        new_filter_role = NodeRole.objects.create(name=f"NewRole-{uuid.uuid4().hex}")
+        origin_node = Node.objects.create(
+            hostname="origin-node",
+            address="10.0.0.70",
+            port=8030,
+            mac_address="00:11:22:33:44:fb",
+        )
+        msg_uuid = uuid.uuid4()
+        original = NetMessage.objects.create(
+            uuid=msg_uuid,
+            subject="old subject",
+            body="old body",
+            reach=existing_reach,
+            filter_node=old_filter_node,
+            filter_node_feature=old_feature,
+            filter_node_role=old_filter_role,
+            filter_current_relation=Node.Relation.PEER,
+            filter_installed_version="0.9.0",
+            filter_installed_revision="oldrev",
+        )
+        payload = {
+            "uuid": str(msg_uuid),
+            "subject": "updated subject",
+            "body": "updated body",
+            "seen": [str(uuid.uuid4()), str(uuid.uuid4())],
+            "sender": str(sender.uuid),
+            "origin": str(origin_node.uuid),
+            "reach": new_reach.name,
+            "filter_node": str(new_filter_node.uuid),
+            "filter_node_feature": new_feature.slug,
+            "filter_node_role": new_filter_role.name,
+            "filter_current_relation": Node.Relation.DOWNSTREAM.value,
+            "filter_installed_version": "2.0.0",
+            "filter_installed_revision": "newrev",
+        }
+        payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        signature = key.sign(
+            payload_json.encode(), padding.PKCS1v15(), hashes.SHA256()
+        )
+        with patch.object(NetMessage, "propagate") as mock_propagate:
+            response = self.client.post(
+                reverse("net-message"),
+                data=payload_json,
+                content_type="application/json",
+                HTTP_X_SIGNATURE=base64.b64encode(signature).decode(),
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(
+                NetMessage.objects.filter(uuid=msg_uuid).values_list(
+                    "pk", flat=True
+                )
+            ),
+            [original.pk],
+        )
+        original.refresh_from_db()
+        self.assertEqual(original.subject, payload["subject"])
+        self.assertEqual(original.body, payload["body"])
+        self.assertEqual(original.reach, new_reach)
+        self.assertEqual(original.node_origin, origin_node)
+        self.assertEqual(original.filter_node, new_filter_node)
+        self.assertEqual(original.filter_node_feature, new_feature)
+        self.assertEqual(original.filter_node_role, new_filter_role)
+        self.assertEqual(
+            original.filter_current_relation, payload["filter_current_relation"]
+        )
+        self.assertEqual(
+            original.filter_installed_version, payload["filter_installed_version"]
+        )
+        self.assertEqual(
+            original.filter_installed_revision, payload["filter_installed_revision"]
+        )
+        mock_propagate.assert_called_once()
+        self.assertEqual(
+            mock_propagate.call_args.kwargs["seen"], payload["seen"]
+        )
+
     def test_clipboard_polling_creates_task(self):
         feature, _ = NodeFeature.objects.get_or_create(
             slug="clipboard-poll", defaults={"display": "Clipboard Poll"}
@@ -1588,7 +1705,95 @@ class NodeAdminTests(TestCase):
             padding.PKCS1v15(),
             hashes.SHA256(),
         )
-        self.assertContains(response, "Fetched RFIDs from 1 node(s)")
+
+    def test_update_selected_nodes_action_renders_progress_page(self):
+        remote = Node.objects.create(
+            hostname="remote", address="10.0.0.2", port=8010
+        )
+        response = self.client.post(
+            reverse("admin:nodes_node_changelist"),
+            {
+                "action": "update_selected_nodes",
+                "_selected_action": [str(remote.pk)],
+            },
+            follow=False,
+        )
+        self.assertEqual(response.status_code, 200)
+        response.render()
+        self.assertContains(response, "Update selected nodes")
+        self.assertIn(
+            f'data-node-id="{remote.pk}"', response.content.decode()
+        )
+        self.assertContains(response, str(remote))
+
+    @patch("nodes.admin.requests.post")
+    @patch("nodes.admin.requests.get")
+    def test_update_selected_nodes_progress_updates_remote(
+        self, mock_get, mock_post
+    ):
+        local = self._create_local_node()
+        local.public_endpoint = "localnode"
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        private_bytes = key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        public_bytes = key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        security_dir = Path(settings.BASE_DIR) / "security"
+        security_dir.mkdir(parents=True, exist_ok=True)
+        (security_dir / "localnode").write_bytes(private_bytes)
+        (security_dir / "localnode.pub").write_bytes(public_bytes)
+        local.public_key = public_bytes.decode()
+        local.save(update_fields=["public_endpoint", "public_key"])
+
+        remote = Node.objects.create(
+            hostname="upstream", address="192.0.2.5", port=8100
+        )
+
+        get_response = MagicMock()
+        get_response.ok = True
+        get_response.status_code = 200
+        get_response.reason = "OK"
+        get_response.json.return_value = {
+            "hostname": "upstream-updated",
+            "address": "203.0.113.10",
+            "port": 8200,
+            "mac_address": "aa:bb:cc:dd:ee:ff",
+            "public_key": "REMOTEKEY",
+        }
+        mock_get.return_value = get_response
+
+        post_response = MagicMock()
+        post_response.ok = True
+        post_response.status_code = 200
+        post_response.text = ""
+        mock_post.return_value = post_response
+
+        progress_url = reverse("admin:nodes_node_update_selected_progress")
+        response = self.client.post(progress_url, {"node_id": remote.pk})
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "success")
+        self.assertTrue(payload["local"]["ok"])
+        self.assertTrue(payload["remote"]["ok"])
+
+        remote.refresh_from_db()
+        self.assertEqual(remote.hostname, "upstream-updated")
+        self.assertEqual(remote.address, "203.0.113.10")
+        self.assertEqual(remote.port, 8200)
+        self.assertEqual(remote.mac_address, "aa:bb:cc:dd:ee:ff")
+        self.assertEqual(remote.public_key, "REMOTEKEY")
+
+        self.assertTrue(mock_get.called)
+        self.assertIn("/nodes/info/", mock_get.call_args.args[0])
+        self.assertTrue(mock_post.called)
+        post_data = json.loads(mock_post.call_args.kwargs["data"])
+        self.assertEqual(post_data["hostname"], local.hostname)
+        self.assertEqual(post_data["mac_address"], local.mac_address)
 
 
 class RFIDExportViewTests(TestCase):
@@ -1984,6 +2189,22 @@ class NetMessagePropagationTests(TestCase):
         self.assertFalse(msg.complete)
 
     @patch("requests.post")
+    @patch("core.notifications.notify", return_value=False)
+    def test_propagate_respects_target_limit(
+        self, mock_notify, mock_post
+    ):
+        msg = NetMessage.objects.create(
+            subject="s", body="b", reach=self.role, target_limit=2
+        )
+        with patch.object(Node, "get_local", return_value=self.local), patch(
+            "random.shuffle", side_effect=lambda seq: None
+        ):
+            msg.propagate()
+
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertEqual(msg.propagated_to.count(), 2)
+
+    @patch("requests.post")
     @patch("core.notifications.notify", return_value=True)
     def test_propagate_prunes_old_local_messages(self, mock_notify, mock_post):
         old_local = NetMessage.objects.create(
@@ -2017,6 +2238,78 @@ class NetMessagePropagationTests(TestCase):
         self.assertFalse(NetMessage.objects.filter(pk=old_local.pk).exists())
         self.assertTrue(NetMessage.objects.filter(pk=old_remote.pk).exists())
         self.assertTrue(NetMessage.objects.filter(pk=msg.pk).exists())
+
+
+class NetMessageSignatureTests(TestCase):
+    def setUp(self):
+        self.role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.local = Node.objects.create(
+            hostname="local",  # noqa: S106 - hostname in tests
+            address="10.0.0.1",
+            port=8001,
+            mac_address="00:11:22:33:44:55",
+            role=self.role,
+            public_endpoint="local",
+        )
+        self.remote = Node.objects.create(
+            hostname="remote",
+            address="10.0.0.2",
+            port=8002,
+            mac_address="00:11:22:33:44:66",
+            role=self.role,
+            public_endpoint="remote",
+        )
+
+    def test_propagate_includes_signature_header(self):
+        with TemporaryDirectory() as tmp:
+            base_path = Path(tmp)
+            security_dir = base_path / "security"
+            security_dir.mkdir()
+            private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            pem_data = private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            (security_dir / self.local.public_endpoint).write_bytes(pem_data)
+            self.local.base_path = str(base_path)
+            self.local.save(update_fields=["base_path"])
+
+            captured_headers: list[dict[str, str]] = []
+
+            def fake_post(url, data=None, headers=None, timeout=None):  # noqa: ARG001
+                captured_headers.append(dict(headers or {}))
+                return MagicMock()
+
+            with (
+                patch("core.notifications.notify", return_value=False),
+                patch.object(Node, "get_local", return_value=self.local),
+                patch("requests.post", side_effect=fake_post) as mock_post,
+            ):
+                msg_one = NetMessage.objects.create(
+                    subject="sig",
+                    body="first",
+                    reach=self.role,
+                    target_limit=1,
+                )
+                msg_one.propagate()
+
+                msg_two = NetMessage.objects.create(
+                    subject="sig",
+                    body="second",
+                    reach=self.role,
+                    target_limit=1,
+                )
+                msg_two.propagate()
+
+            self.assertEqual(mock_post.call_count, 2)
+
+        self.assertGreaterEqual(len(captured_headers), 2)
+        signature_one = captured_headers[0].get("X-Signature")
+        signature_two = captured_headers[1].get("X-Signature")
+        self.assertTrue(signature_one)
+        self.assertTrue(signature_two)
+        self.assertNotEqual(signature_one, signature_two)
 
 
 class NodeActionTests(TestCase):

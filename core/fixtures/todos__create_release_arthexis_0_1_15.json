@@ -2,7 +2,7 @@
   {
     "model": "core.todo",
     "fields": {
-      "request": "Create release arthexis 0.1.14",
+      "request": "Create release arthexis 0.1.15",
       "url": "/admin/core/packagerelease/",
       "request_details": ""
     }

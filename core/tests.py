@@ -52,7 +52,12 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import IntegrityError
 from .backends import LocalhostAdminBackend
-from core.views import _step_check_version, _step_promote_build, _step_publish
+from core.views import (
+    _step_check_version,
+    _step_pre_release_actions,
+    _step_promote_build,
+    _step_publish,
+)
 from core import views as core_views
 from core import public_wifi
 
@@ -464,6 +469,27 @@ class RFIDValidationTests(TestCase):
             tag.full_clean()
 
 
+class RFIDLabelSequenceTests(TestCase):
+    def test_next_scan_label_starts_at_ten(self):
+        self.assertEqual(RFID.next_scan_label(), 10)
+
+    def test_next_scan_label_skips_non_multiples(self):
+        RFID.objects.create(label_id=21, rfid="SEQTEST21")
+
+        self.assertEqual(RFID.next_scan_label(), 30)
+
+    def test_next_copy_label_increments_by_one(self):
+        source = RFID.objects.create(label_id=40, rfid="SEQTEST40")
+
+        self.assertEqual(RFID.next_copy_label(source), 41)
+
+    def test_next_copy_label_skips_existing(self):
+        source = RFID.objects.create(label_id=50, rfid="SEQTEST50")
+        RFID.objects.create(label_id=51, rfid="SEQTEST51")
+
+        self.assertEqual(RFID.next_copy_label(source), 52)
+
+
 class RFIDAssignmentTests(TestCase):
     def setUp(self):
         self.user1 = User.objects.create_user(username="user1", password="x")
@@ -824,28 +850,116 @@ class ReleaseProcessTests(TestCase):
     @mock.patch("core.views.PackageRelease.dump_fixture")
     @mock.patch("core.views.release_utils.promote", side_effect=Exception("boom"))
     def test_promote_cleans_repo_on_failure(self, promote, dump_fixture, run):
+        import subprocess as sp
+
+        def fake_run(cmd, check=True, capture_output=False, text=False):
+            if capture_output:
+                stdout = ""
+                if cmd[:3] == ["git", "rev-parse", "origin/main"]:
+                    stdout = "abc123\n"
+                elif cmd[:4] == ["git", "merge-base", "HEAD", "origin/main"]:
+                    stdout = "abc123\n"
+                return sp.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+            return sp.CompletedProcess(cmd, 0)
+
+        run.side_effect = fake_run
         with self.assertRaises(Exception):
             _step_promote_build(self.release, {}, Path("rel.log"))
         dump_fixture.assert_not_called()
         run.assert_any_call(["git", "reset", "--hard"], check=False)
         run.assert_any_call(["git", "clean", "-fd"], check=False)
 
-    @mock.patch("core.views.subprocess.run")
     @mock.patch("core.views.PackageRelease.dump_fixture")
-    @mock.patch("core.views.release_utils.promote")
-    def test_promote_rebases_and_pushes_main(self, promote, dump_fixture, run):
+    @mock.patch("core.views._ensure_release_todo")
+    @mock.patch("core.views._sync_with_origin_main")
+    @mock.patch("core.views.subprocess.run")
+    def test_pre_release_syncs_with_main(
+        self, run, sync_main, ensure_todo, dump_fixture
+    ):
         import subprocess as sp
 
         def fake_run(cmd, check=True, capture_output=False, text=False):
             if capture_output:
                 return sp.CompletedProcess(cmd, 0, stdout="", stderr="")
+            if cmd[:2] == ["git", "diff"]:
+                return sp.CompletedProcess(cmd, 1)
+            return sp.CompletedProcess(cmd, 0)
+
+        run.side_effect = fake_run
+        ensure_todo.return_value = (
+            mock.Mock(request="Create release pkg 1.0.1", url="", request_details=""),
+            Path("core/fixtures/todos__next_release.json"),
+        )
+
+        version_path = Path("VERSION")
+        original_version = version_path.read_text(encoding="utf-8")
+
+        try:
+            _step_pre_release_actions(self.release, {}, Path("rel.log"))
+        finally:
+            version_path.write_text(original_version, encoding="utf-8")
+
+        sync_main.assert_called_once_with(Path("rel.log"))
+        run.assert_any_call(["git", "add", "CHANGELOG.rst"], check=True)
+        run.assert_any_call(["git", "add", "VERSION"], check=True)
+        ensure_todo.assert_called_once_with(self.release, previous_version=mock.ANY)
+
+    @mock.patch("core.views.subprocess.run")
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    @mock.patch("core.views.release_utils.promote")
+    def test_promote_verifies_origin_and_pushes_main(self, promote, dump_fixture, run):
+        import subprocess as sp
+
+        def fake_run(cmd, check=True, capture_output=False, text=False):
+            if capture_output:
+                stdout = ""
+                if cmd[:3] == ["git", "rev-parse", "origin/main"]:
+                    stdout = "abc123\n"
+                elif cmd[:4] == ["git", "merge-base", "HEAD", "origin/main"]:
+                    stdout = "abc123\n"
+                return sp.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
             return sp.CompletedProcess(cmd, 0)
 
         run.side_effect = fake_run
         _step_promote_build(self.release, {}, Path("rel.log"))
         run.assert_any_call(["git", "fetch", "origin", "main"], check=True)
-        run.assert_any_call(["git", "rebase", "origin/main"], check=True)
+        run.assert_any_call(
+            ["git", "rev-parse", "origin/main"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        run.assert_any_call(
+            ["git", "merge-base", "HEAD", "origin/main"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         run.assert_any_call(["git", "push"], check=True)
+
+    @mock.patch("core.views.subprocess.run")
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    @mock.patch("core.views.release_utils.promote")
+    def test_promote_aborts_if_origin_advances(self, promote, dump_fixture, run):
+        import subprocess as sp
+
+        def fake_run(cmd, check=True, capture_output=False, text=False):
+            if capture_output:
+                if cmd[:3] == ["git", "rev-parse", "origin/main"]:
+                    return sp.CompletedProcess(cmd, 0, stdout="new\n", stderr="")
+                if cmd[:4] == ["git", "merge-base", "HEAD", "origin/main"]:
+                    return sp.CompletedProcess(cmd, 0, stdout="old\n", stderr="")
+                return sp.CompletedProcess(cmd, 0, stdout="", stderr="")
+            return sp.CompletedProcess(cmd, 0)
+
+        run.side_effect = fake_run
+
+        with self.assertRaises(Exception):
+            _step_promote_build(self.release, {}, Path("rel.log"))
+
+        promote.assert_not_called()
+        run.assert_any_call(["git", "reset", "--hard"], check=False)
+        run.assert_any_call(["git", "clean", "-fd"], check=False)
 
     @mock.patch("core.views.subprocess.run")
     @mock.patch("core.views.PackageRelease.dump_fixture")
@@ -854,7 +968,12 @@ class ReleaseProcessTests(TestCase):
 
         def fake_run(cmd, check=True, capture_output=False, text=False):
             if capture_output:
-                return sp.CompletedProcess(cmd, 0, stdout="", stderr="")
+                stdout = ""
+                if cmd[:3] == ["git", "rev-parse", "origin/main"]:
+                    stdout = "abc123\n"
+                elif cmd[:4] == ["git", "merge-base", "HEAD", "origin/main"]:
+                    stdout = "abc123\n"
+                return sp.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
             return sp.CompletedProcess(cmd, 0)
 
         run.side_effect = fake_run
@@ -880,17 +999,25 @@ class ReleaseProcessTests(TestCase):
     @mock.patch("core.views.release_utils.publish")
     def test_publish_sets_pypi_url(self, publish, dump_fixture, now):
         now.return_value = datetime(2025, 3, 4, 5, 6, tzinfo=datetime_timezone.utc)
+        publish.return_value = ["PyPI"]
         _step_publish(self.release, {}, Path("rel.log"))
         self.release.refresh_from_db()
         self.assertEqual(
             self.release.pypi_url,
             f"https://pypi.org/project/{self.package.name}/{self.release.version}/",
         )
+        self.assertEqual(self.release.github_url, "")
         self.assertEqual(
             self.release.release_on,
             datetime(2025, 3, 4, 5, 6, tzinfo=datetime_timezone.utc),
         )
         dump_fixture.assert_called_once()
+        publish.assert_called_once()
+        kwargs = publish.call_args.kwargs
+        self.assertIn("repositories", kwargs)
+        repositories = kwargs["repositories"]
+        self.assertEqual(len(repositories), 1)
+        self.assertEqual(repositories[0].name, "PyPI")
 
     @mock.patch("core.views.PackageRelease.dump_fixture")
     @mock.patch("core.views.release_utils.publish", side_effect=Exception("boom"))
@@ -899,8 +1026,41 @@ class ReleaseProcessTests(TestCase):
             _step_publish(self.release, {}, Path("rel.log"))
         self.release.refresh_from_db()
         self.assertEqual(self.release.pypi_url, "")
+        self.assertEqual(self.release.github_url, "")
         self.assertIsNone(self.release.release_on)
         dump_fixture.assert_not_called()
+
+    @mock.patch("core.views.timezone.now")
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    @mock.patch("core.views.release_utils.publish")
+    def test_publish_records_github_url_when_configured(
+        self, publish, dump_fixture, now
+    ):
+        now.return_value = datetime(2025, 3, 4, 6, 7, tzinfo=datetime_timezone.utc)
+        user = User.objects.create_superuser("release-owner", "owner@example.com", "pw")
+        manager = ReleaseManager.objects.create(
+            user=user,
+            pypi_username="octocat",
+            pypi_token="primary-token",
+            github_token="gh-token",
+            secondary_pypi_url="https://upload.github.com/pypi/",
+        )
+        self.release.release_manager = manager
+        self.release.save(update_fields=["release_manager"])
+        self.package.repository_url = "https://github.com/example/project"
+        self.package.save(update_fields=["repository_url"])
+        publish.return_value = ["PyPI", "GitHub Packages"]
+
+        _step_publish(self.release, {}, Path("rel.log"))
+
+        self.release.refresh_from_db()
+        self.assertTrue(self.release.github_url)
+        self.assertIn("github.com/example/project", self.release.github_url)
+        args, kwargs = publish.call_args
+        repositories = kwargs.get("repositories")
+        self.assertEqual(len(repositories), 2)
+        self.assertEqual(repositories[0].name, "PyPI")
+        self.assertEqual(repositories[1].name, "GitHub Packages")
 
     def test_new_todo_does_not_reset_pending_flow(self):
         user = User.objects.create_superuser("admin", "admin@example.com", "pw")

@@ -27,7 +27,10 @@ class ChangelogSection:
     date: Optional[str] = None
 
 
-_RE_RELEASE = re.compile(r"^Release v(?P<version>[0-9A-Za-z][0-9A-Za-z.\-_]*)")
+_RE_RELEASE = re.compile(
+    r"^(?:pre-release commit|Release)\s+v?(?P<version>[0-9A-Za-z][0-9A-Za-z.\-_]*)",
+    re.IGNORECASE,
+)
 _RE_TITLE_VERSION = re.compile(r"^v(?P<version>[0-9A-Za-z][0-9A-Za-z.\-_]*)")
 _RE_TITLE_DATE = re.compile(r"\((?P<date>\d{4}-\d{2}-\d{2})\)")
 
@@ -156,6 +159,7 @@ def _merge_sections(
     old_sections: Iterable[ChangelogSection],
 ) -> List[ChangelogSection]:
     merged = list(new_sections)
+    old_sections_list = list(old_sections)
     version_to_section: dict[str, ChangelogSection] = {}
     unreleased_section: ChangelogSection | None = None
 
@@ -165,7 +169,15 @@ def _merge_sections(
         if section.version:
             version_to_section[section.version] = section
 
-    for old in old_sections:
+    first_release_version: str | None = None
+    for old in old_sections_list:
+        if old.version:
+            first_release_version = old.version
+            break
+
+    reopened_latest_version = False
+
+    for old in old_sections_list:
         if old.version is None:
             if unreleased_section is None:
                 unreleased_section = ChangelogSection(
@@ -186,6 +198,17 @@ def _merge_sections(
 
         existing = version_to_section.get(old.version)
         if existing is None:
+            if (
+                first_release_version
+                and old.version == first_release_version
+                and not reopened_latest_version
+                and unreleased_section is not None
+            ):
+                for entry in old.entries:
+                    if entry not in unreleased_section.entries:
+                        unreleased_section.entries.append(entry)
+                reopened_latest_version = True
+                continue
             copied = ChangelogSection(
                 title=old.title,
                 entries=list(old.entries),
@@ -204,6 +227,60 @@ def _merge_sections(
                 existing.entries.append(entry)
 
     return merged
+
+
+def _resolve_start_tag(explicit: str | None = None) -> Optional[str]:
+    """Return the most recent tag that should seed the changelog range."""
+
+    if explicit:
+        return explicit
+
+    exact = subprocess.run(
+        ["git", "describe", "--tags", "--exact-match", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if exact.returncode == 0:
+        has_parent = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD^"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if has_parent.returncode == 0:
+            previous = subprocess.run(
+                ["git", "describe", "--tags", "--abbrev=0", "HEAD^"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if previous.returncode == 0:
+                tag = previous.stdout.strip()
+                if tag:
+                    return tag
+        return None
+
+    describe = subprocess.run(
+        ["git", "describe", "--tags", "--abbrev=0"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if describe.returncode == 0:
+        tag = describe.stdout.strip()
+        if tag:
+            return tag
+    return None
+
+
+def determine_range_spec(start_tag: str | None = None) -> str:
+    """Return the git range specification to build the changelog."""
+
+    resolved = _resolve_start_tag(start_tag)
+    if resolved:
+        return f"{resolved}..HEAD"
+    return "HEAD"
 
 
 def collect_sections(
@@ -258,6 +335,7 @@ def extract_release_notes(text: str, version: str) -> str:
 __all__ = [
     "ChangelogSection",
     "Commit",
+    "determine_range_spec",
     "collect_sections",
     "extract_release_notes",
     "render_changelog",

@@ -1,0 +1,44 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block extrahead %}
+  {{ block.super }}
+  {{ media }}
+{% endblock %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
+    <a href="{% url 'admin:app_list' opts.app_label %}">{{ opts.app_config.verbose_name }}</a> ›
+    <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a> ›
+    {% trans 'Send Net Message' %}
+  </div>
+{% endblock %}
+
+{% block content %}
+  <h1>{% trans 'Send Net Message' %}</h1>
+  <form method="post" action="">
+    {% csrf_token %}
+    {{ adminform.form.non_field_errors }}
+    {% for fieldset in adminform %}
+      <fieldset class="module aligned{% if fieldset.classes %} {{ fieldset.classes }}{% endif %}">
+        {% if fieldset.name %}<h2>{{ fieldset.name }}</h2>{% endif %}
+        {% for line in fieldset %}
+          {% for field in line %}
+            <div class="form-row{% if field.errors %} errors{% endif %}">
+              {{ field.errors }}
+              {{ field.field.label_tag }} {{ field.field }}
+              {% if field.field.help_text %}
+                <p class="help">{{ field.field.help_text }}</p>
+              {% endif %}
+            </div>
+          {% endfor %}
+        {% endfor %}
+      </fieldset>
+    {% endfor %}
+    <div class="submit-row">
+      <a href="{% url opts|admin_urlname:'changelist' %}" class="button cancel-link">{% trans 'Cancel' %}</a>
+      <button type="submit" class="button default">{% trans 'Send message' %}</button>
+    </div>
+  </form>
+{% endblock %}

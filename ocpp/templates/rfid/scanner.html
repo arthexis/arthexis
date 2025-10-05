@@ -272,6 +272,8 @@
   let lastLocalValue = null;
   let lastLocalAt = 0;
   const historyEntries = tableMode ? new Map() : null;
+  let deepReadActive = false;
+  let lastDeepDetailsRfid = null;
 
   if(modeToggleBtn){
     const toggleTarget = modeToggleBtn.getAttribute('data-toggle-url') || modeToggleBtn.getAttribute('href');
@@ -350,6 +352,7 @@
   }
 
   function clearDeepDetails(){
+    lastDeepDetailsRfid = null;
     if(!deepDetailsEl){
       return;
     }
@@ -360,18 +363,57 @@
     if(deepBlocksEl){ deepBlocksEl.innerHTML = ''; }
   }
 
-  function updateDeepDetails(data){
+  function deepReadStatusText(enabled){
+    if(enabled){
+      return 'Deep Read enabled. Hold the card on the reader a bit longer to complete the read.';
+    }
+    return 'Deep Read disabled.';
+  }
+
+  function setDeepReadState(enabled, options){
+    const opts = Object.assign({updateStatus: true, clearDetails: true}, options || {});
+    deepReadActive = Boolean(enabled);
+    if(deepBtn){
+      deepBtn.textContent = deepReadActive ? 'Disable Deep Read' : 'Enable Deep Read';
+      deepBtn.setAttribute('aria-pressed', deepReadActive ? 'true' : 'false');
+    }
+    if(opts.updateStatus){
+      statusEl.textContent = deepReadStatusText(deepReadActive);
+    }
+    if(!deepReadActive && opts.clearDetails){
+      clearDeepDetails();
+    }
+  }
+
+  function normalizeRfidValue(value){
+    if(value === undefined || value === null){
+      return null;
+    }
+    const text = String(value);
+    return text ? text : null;
+  }
+
+  function updateDeepDetails(data, rfidValue){
     if(!deepDetailsEl || tableMode){
       return;
     }
+    const normalizedRfid = normalizeRfidValue(rfidValue);
     const dumpEntries = Array.isArray(data && data.dump) ? data.dump : [];
     const hasDump = dumpEntries.length > 0;
     const isDeep = Boolean(data && data.deep_read);
     if(!isDeep && !hasDump){
-      clearDeepDetails();
+      if(normalizedRfid && lastDeepDetailsRfid && normalizedRfid !== lastDeepDetailsRfid){
+        clearDeepDetails();
+      }
       return;
     }
+    if(isDeep){
+      setDeepReadState(true, {updateStatus: false, clearDetails: false});
+    }
     deepDetailsEl.style.display = 'block';
+    if(normalizedRfid){
+      lastDeepDetailsRfid = normalizedRfid;
+    }
     const keys = (data && data.keys) || {};
     if(keyAEl){
       const keyAValue = keys.a !== undefined ? keys.a : keys.key_a;
@@ -487,9 +529,12 @@
       return;
     }
     if(!data.rfid){
-      clearDeepDetails();
+      if(typeof data.status === 'string' && data.status){
+        statusEl.textContent = data.status;
+      }
       return;
     }
+    const rfidValue = normalizeRfidValue(data.rfid);
     const labelValue = data.label_id === undefined || data.label_id === null ? '' : data.label_id;
     if(labelEl){ labelEl.textContent = labelValue; }
     if(kindEl){ kindEl.textContent = data.kind || ''; }
@@ -511,7 +556,10 @@
       configureEl.href = adminTemplate ? adminTemplate.replace('0', labelValue) : '#';
       configureEl.style.display = 'inline';
     }
-    updateDeepDetails(data);
+    updateDeepDetails(data, rfidValue);
+    if(deepBtn && data.deep_read){
+      setDeepReadState(true, {updateStatus: false, clearDetails: false});
+    }
     const okText = data.allowed === undefined ? '' : (data.allowed ? 'OK' : 'BAD');
     const statusMsg = okText ? `RFID ${labelValue} ${okText}` : `RFID ${labelValue}`;
     statusEl.textContent = data.created ? `Created ${statusMsg}` : statusMsg;
@@ -520,17 +568,25 @@
     }
   }
 
-  async function poll(){
+  async function requestScanData(){
     try {
       const resp = await fetch('{{ scan_url }}');
       const data = await resp.json();
       if(data.error){
         showError(data.error);
-      } else {
-        updateFromData(data);
+        return null;
       }
+      updateFromData(data);
+      return data;
     } catch(err){
       showError(err);
+    }
+    return null;
+  }
+
+  async function poll(){
+    try {
+      await requestScanData();
     } finally {
       setTimeout(poll, 200);
     }
@@ -699,12 +755,55 @@
   }
 
   if(deepBtn){
+    setDeepReadState(false, {updateStatus: false, clearDetails: false});
     deepBtn.addEventListener('click', async () => {
+      const enabling = !deepReadActive;
+      const headers = {
+        'Accept': 'application/json',
+      };
+      const csrf = getCookie('csrftoken');
+      if(csrf){
+        headers['X-CSRFToken'] = csrf;
+      }
+      deepBtn.disabled = true;
       try {
-        await fetch('{{ deep_read_url|default:"" }}', {method: 'POST'});
-        statusEl.textContent = 'Deep read enabled for 60 seconds';
+        let detectionData = null;
+        if(enabling){
+          statusEl.textContent = 'Detecting RFID before deep read...';
+          detectionData = await requestScanData();
+          if(detectionData && detectionData.rfid){
+            const hasLabelId = detectionData.label_id !== undefined && detectionData.label_id !== null && detectionData.label_id !== '';
+            const detectedId = hasLabelId ? detectionData.label_id : detectionData.rfid;
+            const labelText = detectedId ? ` ${detectedId}` : '';
+            statusEl.textContent = `RFID${labelText} detected. Keep holding the card steady for deep read.`;
+          } else {
+            statusEl.textContent = 'Deep read enabled. Hold the card on the reader a bit longer to complete the read.';
+          }
+        }
+        const response = await fetch('{{ deep_read_url|default:"" }}', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers,
+        });
+        if(!response.ok){
+          throw new Error('Request failed');
+        }
+        const data = await response.json().catch(() => ({}));
+        if(data.error){
+          throw new Error(data.error);
+        }
+        const enabled = Boolean(data.enabled);
+        setDeepReadState(enabled, {updateStatus: false});
+        if(!enabling || !enabled){
+          statusEl.textContent = data.status || deepReadStatusText(enabled);
+        } else if(!detectionData || !detectionData.rfid){
+          statusEl.textContent = data.status || deepReadStatusText(enabled);
+        }
       } catch(err){
-        statusEl.textContent = 'Deep read failed';
+        const message = err && err.message ? err.message : 'Deep read failed';
+        statusEl.textContent = message;
+      } finally {
+        deepBtn.disabled = false;
       }
     });
   }

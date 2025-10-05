@@ -1,3 +1,5 @@
+from unittest import mock
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
@@ -69,3 +71,33 @@ class SocialProfileTests(TestCase):
 
         with self.assertRaises(ValidationError):
             duplicate.full_clean()
+
+    def test_str_returns_handle_and_network(self):
+        profile = SocialProfile(
+            user=self.user,
+            handle="example.com",
+            domain="example.com",
+        )
+        profile.full_clean()
+        profile.save()
+
+        self.assertEqual(str(profile), "example.com@bluesky")
+
+    def test_str_resolves_sigils(self):
+        profile = SocialProfile(
+            user=self.user,
+            handle="example.com",
+            domain="example.com",
+        )
+        profile.full_clean()
+        profile.save()
+
+        with mock.patch.object(
+            profile,
+            "resolve_sigils",
+            side_effect=["resolved", "sigil-net"],
+        ) as resolver:
+            self.assertEqual(str(profile), "resolved@sigil-net")
+            resolver.assert_has_calls(
+                [mock.call("handle"), mock.call("network")]
+            )

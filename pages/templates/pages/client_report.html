@@ -1,7 +1,86 @@
 {% extends "pages/base.html" %}
-{% load i18n %}
+{% load i18n tz %}
 {% block content %}
-<h1>{% trans "Client Report" %}</h1>
+<h1>{% trans "Consumer Report" %}</h1>
+{% if report %}
+  <section class="report-results" id="client-report-results">
+    <h2>{% blocktrans with start=report.start_date end=report.end_date %}Report from {{ start }} to {{ end }}{% endblocktrans %}</h2>
+    {% with rows=report.rows_for_display %}
+      {% if rows %}
+        {% with first=rows|first %}
+          {% if first.start %}
+            <table class="client-report-table">
+              <thead>
+                <tr>
+                  <th scope="col">{% trans "RFID / Account" %}</th>
+                  <th scope="col">{% trans "Session start" %}</th>
+                  <th scope="col">{% trans "Session end" %}</th>
+                  <th scope="col">{% trans "Energy (kWh)" %}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in rows %}
+                  <tr>
+                    <td data-label="{% trans "RFID / Account" %}">
+                      <span class="report-subject">{{ row.subject }}</span>
+                    </td>
+                    <td data-label="{% trans "Session start" %}">
+                      {% if row.start %}
+                        <time datetime="{{ row.start|date:'c' }}">{{ row.start|localtime|date:"M j, Y H:i" }}</time>
+                      {% else %}
+                        <span class="report-missing">{% trans "Unavailable" %}</span>
+                      {% endif %}
+                    </td>
+                    <td data-label="{% trans "Session end" %}">
+                      {% if row.end %}
+                        <time datetime="{{ row.end|date:'c' }}">{{ row.end|localtime|date:"M j, Y H:i" }}</time>
+                      {% else %}
+                        <span class="report-missing">{% trans "In progress" %}</span>
+                      {% endif %}
+                    </td>
+                    <td data-label="{% trans "Energy (kWh)" %}">{{ row.kw|floatformat:2 }}</td>
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td colspan="4">{% trans "No data available." %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <table class="client-report-table">
+              <thead>
+                <tr>
+                  <th scope="col">{% trans "RFID/Account" %}</th>
+                  <th scope="col">{% trans "Sessions" %}</th>
+                  <th scope="col">{% trans "Total kWh" %}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in rows %}
+                  <tr>
+                    <td data-label="{% trans "RFID/Account" %}">{{ row.subject }}</td>
+                    <td data-label="{% trans "Sessions" %}">{{ row.count }}</td>
+                    <td data-label="{% trans "Total kWh" %}">{{ row.kw|floatformat:2 }}</td>
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td colspan="3">{% trans "No data available." %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endif %}
+        {% endwith %}
+      {% else %}
+        <p class="empty-state">{% trans "No data available." %}</p>
+      {% endif %}
+    {% endwith %}
+    {% if schedule %}
+      <p class="success">{% blocktrans with freq=schedule.get_periodicity_display %}Next run scheduled ({{ freq }}){% endblocktrans %}</p>
+    {% endif %}
+  </section>
+{% endif %}
 {% if not request.user.is_authenticated %}
   <div class="notification warning" role="alert">
     {% if login_url %}
@@ -115,24 +194,6 @@
     </button>
   </div>
 </form>
-{% if report %}
-  <h2>Report from {{ report.start_date }} to {{ report.end_date }}</h2>
-  <table>
-    <thead>
-      <tr><th>RFID/Account</th><th>Sessions</th><th>Total kWh</th></tr>
-    </thead>
-    <tbody>
-      {% for row in report.data.rows %}
-        <tr><td>{{ row.subject }}</td><td>{{ row.count }}</td><td>{{ row.kw|floatformat:2 }}</td></tr>
-      {% empty %}
-        <tr><td colspan="3">No data available.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% if schedule %}
-    <p class="success">Next run scheduled ({{ schedule.get_periodicity_display }})</p>
-  {% endif %}
-{% endif %}
 <script>
   const periodRadios = document.querySelectorAll('input[name="period"]');
   const rangeFields = document.getElementById('range-fields');
@@ -216,6 +277,19 @@
   });
 </script>
 <style>
+  .report-results {
+    margin-bottom: 2.5rem;
+    padding: 1.75rem;
+    border-radius: 1rem;
+    background: var(--form-bg, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--hairline-color, rgba(0, 0, 0, 0.1));
+  }
+
+  .report-results h2 {
+    margin-top: 0;
+    margin-bottom: 1.25rem;
+  }
+
   .client-report-form {
     display: flex;
     flex-direction: column;
@@ -364,6 +438,73 @@
 
     #generate-report-button {
       width: 100%;
+    }
+  }
+
+  .client-report-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+  }
+
+  .client-report-table th,
+  .client-report-table td {
+    border: 1px solid var(--hairline-color, rgba(0, 0, 0, 0.12));
+    padding: 0.75rem 1rem;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .client-report-table th {
+    background: rgba(255, 255, 255, 0.05);
+    font-weight: 600;
+  }
+
+  .report-subject {
+    display: block;
+    font-weight: 600;
+  }
+
+  .report-missing {
+    color: var(--body-quiet-color, #6b7280);
+  }
+
+  .empty-state {
+    margin: 0;
+    color: var(--body-quiet-color, #6b7280);
+  }
+
+  @media (max-width: 48rem) {
+    .client-report-table thead {
+      display: none;
+    }
+
+    .client-report-table tr {
+      display: block;
+      border-bottom: 1px solid var(--hairline-color, rgba(0, 0, 0, 0.1));
+      margin-bottom: 1rem;
+    }
+
+    .client-report-table td {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      border: none;
+      border-bottom: 1px solid var(--hairline-color, rgba(0, 0, 0, 0.06));
+    }
+
+    .client-report-table td:last-child {
+      border-bottom: none;
+    }
+
+    .client-report-table td::before {
+      content: attr(data-label);
+      font-weight: 600;
+      color: inherit;
+    }
+
+    .report-subject {
+      font-size: 1rem;
     }
   }
 </style>

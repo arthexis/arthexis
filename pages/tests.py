@@ -18,10 +18,13 @@ from django.core.exceptions import DisallowedHost
 import socket
 from pages.models import (
     Application,
+    Landing,
     Module,
+    RoleLanding,
     SiteBadge,
     Favorite,
     ViewHistory,
+    LandingLead,
     UserManual,
     UserStory,
 )
@@ -47,6 +50,7 @@ from core.models import (
     Reference,
     RFID,
     ReleaseManager,
+    SecurityGroup,
     Todo,
     TOTPDeviceSettings,
 )
@@ -746,6 +750,51 @@ class ViewHistoryLoggingTests(TestCase):
         user.refresh_from_db()
         self.assertEqual(user.last_visit_ip_address, "203.0.113.5")
 
+    def test_landing_visit_records_lead(self):
+        role = NodeRole.objects.create(name="landing-role")
+        application = Application.objects.create(
+            name="landing-tests-app", description=""
+        )
+        module = Module.objects.create(
+            node_role=role,
+            application=application,
+            path="/",
+            menu="Landing",
+        )
+        landing = module.landings.get(path="/")
+        landing.label = "Home Landing"
+        landing.save(update_fields=["label"])
+
+        resp = self.client.get(
+            reverse("pages:index"), HTTP_REFERER="https://example.com/ref"
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        lead = LandingLead.objects.latest("created_on")
+        self.assertEqual(lead.landing, landing)
+        self.assertEqual(lead.path, "/")
+        self.assertEqual(lead.referer, "https://example.com/ref")
+
+    def test_disabled_landing_does_not_record_lead(self):
+        role = NodeRole.objects.create(name="landing-role-disabled")
+        application = Application.objects.create(
+            name="landing-disabled-app", description=""
+        )
+        module = Module.objects.create(
+            node_role=role,
+            application=application,
+            path="/",
+            menu="Landing",
+        )
+        landing = module.landings.get(path="/")
+        landing.enabled = False
+        landing.save(update_fields=["enabled"])
+
+        resp = self.client.get(reverse("pages:index"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(LandingLead.objects.exists())
+
 
 class ViewHistoryAdminTests(TestCase):
     def setUp(self):
@@ -1010,6 +1059,113 @@ class NavAppsTests(TestCase):
         Module.objects.create(node_role=role, application=app, path="/core/")
         resp = self.client.get(reverse("pages:index"))
         self.assertNotContains(resp, 'href="/core/"')
+
+
+class RoleLandingRedirectTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
+        )
+        self.node, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={"hostname": "localhost", "address": "127.0.0.1"},
+        )
+        self.ocpp_app, _ = Application.objects.get_or_create(name="ocpp")
+        self.user_model = get_user_model()
+
+    def _ensure_landing(
+        self, role: NodeRole, landing_path: str, label: str
+    ) -> Landing:
+        module, _ = Module.objects.get_or_create(
+            node_role=role,
+            application=self.ocpp_app,
+            defaults={"path": "/ocpp/", "menu": "Chargers"},
+        )
+        if module.path != "/ocpp/":
+            module.path = "/ocpp/"
+            module.save(update_fields=["path"])
+        landing, _ = Landing.objects.get_or_create(
+            module=module,
+            path=landing_path,
+            defaults={
+                "label": label,
+                "enabled": True,
+                "description": "",
+            },
+        )
+        if landing.label != label or not landing.enabled or landing.description:
+            landing.label = label
+            landing.enabled = True
+            landing.description = ""
+            landing.save(update_fields=["label", "enabled", "description"])
+        return landing
+
+    def _configure_role_landing(
+        self, role_name: str, landing_path: str, label: str, priority: int = 0
+    ) -> str:
+        role, _ = NodeRole.objects.get_or_create(name=role_name)
+        self.node.role = role
+        self.node.save(update_fields=["role"])
+        landing = self._ensure_landing(role, landing_path, label)
+        RoleLanding.objects.update_or_create(
+            node_role=role,
+            defaults={"landing": landing, "is_deleted": False, "priority": priority},
+        )
+        return landing_path
+
+    def test_satellite_redirects_to_dashboard(self):
+        target = self._configure_role_landing(
+            "Satellite", "/ocpp/", "CPMS Online Dashboard"
+        )
+        resp = self.client.get(reverse("pages:index"))
+        self.assertRedirects(resp, target, fetch_redirect_response=False)
+
+    def test_control_redirects_to_rfid(self):
+        target = self._configure_role_landing(
+            "Control", "/ocpp/rfid/", "RFID Tag Validator"
+        )
+        resp = self.client.get(reverse("pages:index"))
+        self.assertRedirects(resp, target, fetch_redirect_response=False)
+
+    def test_security_group_redirect_takes_priority(self):
+        self._configure_role_landing("Control", "/ocpp/rfid/", "RFID Tag Validator")
+        role = self.node.role
+        group = SecurityGroup.objects.create(name="Operators")
+        group_landing = self._ensure_landing(role, "/ocpp/group/", "Group Landing")
+        RoleLanding.objects.update_or_create(
+            security_group=group,
+            defaults={"landing": group_landing, "priority": 5, "is_deleted": False},
+        )
+        user = self.user_model.objects.create_user("group-user")
+        user.groups.add(group)
+        self.client.force_login(user)
+        resp = self.client.get(reverse("pages:index"))
+        self.assertRedirects(
+            resp, group_landing.path, fetch_redirect_response=False
+        )
+
+    def test_user_redirect_overrides_group_with_higher_priority(self):
+        self._configure_role_landing("Control", "/ocpp/rfid/", "RFID Tag Validator")
+        role = self.node.role
+        group = SecurityGroup.objects.create(name="Operators")
+        group_landing = self._ensure_landing(role, "/ocpp/group/", "Group Landing")
+        RoleLanding.objects.update_or_create(
+            security_group=group,
+            defaults={"landing": group_landing, "priority": 3, "is_deleted": False},
+        )
+        user = self.user_model.objects.create_user("priority-user")
+        user.groups.add(group)
+        user_landing = self._ensure_landing(role, "/ocpp/user/", "User Landing")
+        RoleLanding.objects.update_or_create(
+            user=user,
+            defaults={"landing": user_landing, "priority": 10, "is_deleted": False},
+        )
+        self.client.force_login(user)
+        resp = self.client.get(reverse("pages:index"))
+        self.assertRedirects(
+            resp, user_landing.path, fetch_redirect_response=False
+        )
 
 
 class ConstellationNavTests(TestCase):
@@ -1351,6 +1507,7 @@ class UserManualAdminFormTests(TestCase):
             "description": self.manual.description,
             "languages": self.manual.languages,
             "content_html": self.manual.content_html,
+            "pdf_orientation": self.manual.pdf_orientation,
         }
         upload = SimpleUploadedFile("manual.pdf", b"PDF data")
         form = form_class(data=payload, files={"content_pdf": upload}, instance=self.manual)
@@ -1369,6 +1526,7 @@ class UserManualAdminFormTests(TestCase):
             "description": self.manual.description,
             "languages": self.manual.languages,
             "content_html": self.manual.content_html,
+            "pdf_orientation": self.manual.pdf_orientation,
         }
         form = form_class(data=payload, files={}, instance=self.manual)
         self.assertTrue(form.is_valid(), form.errors.as_json())
@@ -1543,7 +1701,7 @@ class FaviconTests(TestCase):
             )
             self.assertContains(resp, b64)
 
-    def test_control_nodes_use_purple_favicon(self):
+    def test_control_nodes_use_silver_favicon(self):
         with override_settings(MEDIA_ROOT=self.tmpdir):
             role, _ = NodeRole.objects.get_or_create(name="Control")
             Node.objects.update_or_create(
@@ -1561,6 +1719,52 @@ class FaviconTests(TestCase):
             b64 = (
                 Path(settings.BASE_DIR)
                 .joinpath("pages", "fixtures", "data", "favicon_control.txt")
+                .read_text()
+                .strip()
+            )
+            self.assertContains(resp, b64)
+
+    def test_constellation_nodes_use_goldenrod_favicon(self):
+        with override_settings(MEDIA_ROOT=self.tmpdir):
+            role, _ = NodeRole.objects.get_or_create(name="Constellation")
+            Node.objects.update_or_create(
+                mac_address=Node.get_current_mac(),
+                defaults={
+                    "hostname": "localhost",
+                    "address": "127.0.0.1",
+                    "role": role,
+                },
+            )
+            Site.objects.update_or_create(
+                id=1, defaults={"domain": "testserver", "name": ""}
+            )
+            resp = self.client.get(reverse("pages:index"))
+            b64 = (
+                Path(settings.BASE_DIR)
+                .joinpath("pages", "fixtures", "data", "favicon_constellation.txt")
+                .read_text()
+                .strip()
+            )
+            self.assertContains(resp, b64)
+
+    def test_satellite_nodes_use_silver_favicon(self):
+        with override_settings(MEDIA_ROOT=self.tmpdir):
+            role, _ = NodeRole.objects.get_or_create(name="Satellite")
+            Node.objects.update_or_create(
+                mac_address=Node.get_current_mac(),
+                defaults={
+                    "hostname": "localhost",
+                    "address": "127.0.0.1",
+                    "role": role,
+                },
+            )
+            Site.objects.update_or_create(
+                id=1, defaults={"domain": "testserver", "name": ""}
+            )
+            resp = self.client.get(reverse("pages:index"))
+            b64 = (
+                Path(settings.BASE_DIR)
+                .joinpath("pages", "fixtures", "data", "favicon_satellite.txt")
                 .read_text()
                 .strip()
             )
@@ -1673,16 +1877,28 @@ class FavoriteTests(TestCase):
         self.assertIn('aria-label="2 open leads"', content)
 
     def test_dashboard_shows_rfid_release_badge(self):
-        RFID.objects.create(rfid="RFID0001", released=True)
-        RFID.objects.create(rfid="RFID0002", released=False)
+        RFID.objects.create(rfid="RFID0001", released=True, allowed=True)
+        RFID.objects.create(rfid="RFID0002", released=True, allowed=False)
 
         resp = self.client.get(reverse("admin:index"))
 
-        released_label = gettext("Released")
-        registered_label = gettext("Registered")
-        expected = f"[1 {released_label}] / [2 {registered_label}]"
+        expected = "1 / 2"
+        badge_label = gettext(
+            "%(released_allowed)s released and allowed RFIDs out of %(registered)s registered RFIDs"
+        ) % {"released_allowed": 1, "registered": 2}
 
         self.assertContains(resp, expected)
+        self.assertContains(resp, f'title="{badge_label}"')
+        self.assertContains(resp, f'aria-label="{badge_label}"')
+
+    def test_nav_sidebar_hides_dashboard_badges(self):
+        InviteLead.objects.create(email="open@example.com")
+        RFID.objects.create(rfid="RFID0003", released=True, allowed=True)
+
+        resp = self.client.get(reverse("admin:teams_invitelead_changelist"))
+
+        self.assertNotContains(resp, "lead-open-badge")
+        self.assertNotContains(resp, "rfid-release-badge")
 
     def test_dashboard_limits_future_actions_to_top_four(self):
         from pages.templatetags.admin_extras import future_action_items
@@ -1891,6 +2107,46 @@ class AdminActionListTests(TestCase):
                 labels = {action["label"] for action in actions}
                 self.assertIn("Active Profile", labels)
 
+    def test_generate_quote_report_link_available(self):
+        from pages.templatetags.admin_extras import model_admin_actions
+
+        request = self.factory.get("/")
+        request.user = self.user
+        context = {"request": request}
+
+        actions = model_admin_actions(context, "core", "OdooProfile")
+        labels = {action["label"] for action in actions}
+        self.assertIn("Generate Quote Report", labels)
+        url = next(
+            action["url"]
+            for action in actions
+            if action["label"] == "Generate Quote Report"
+        )
+        self.assertEqual(
+            url,
+            reverse(
+                "admin:core_odooprofile_actions",
+                kwargs={"tool": "generate_quote_report"},
+            ),
+        )
+
+    def test_send_net_message_link_available(self):
+        from pages.templatetags.admin_extras import model_admin_actions
+
+        request = self.factory.get("/")
+        request.user = self.user
+        context = {"request": request}
+
+        actions = model_admin_actions(context, "nodes", "NetMessage")
+        labels = {action["label"] for action in actions}
+        self.assertIn("Send Net Message", labels)
+        url = next(
+            action["url"]
+            for action in actions
+            if action["label"] == "Send Net Message"
+        )
+        self.assertEqual(url, reverse("admin:nodes_netmessage_send"))
+
 
 class AdminModelGraphViewTests(TestCase):
     def setUp(self):
@@ -1979,6 +2235,22 @@ class DatasetteTests(TestCase):
             lock_file.touch()
             resp = self.client.get(reverse("pages:index"))
             self.assertContains(resp, 'href="/data/"')
+        finally:
+            lock_file.unlink(missing_ok=True)
+
+    def test_admin_home_includes_datasette_button_when_enabled(self):
+        lock_dir = Path(settings.BASE_DIR) / "locks"
+        lock_dir.mkdir(exist_ok=True)
+        lock_file = lock_dir / "datasette.lck"
+        try:
+            lock_file.touch()
+            self.user.is_staff = True
+            self.user.is_superuser = True
+            self.user.save()
+            self.client.force_login(self.user)
+            resp = self.client.get(reverse("admin:index"))
+            self.assertContains(resp, 'href="/data/"')
+            self.assertContains(resp, ">Datasette<")
         finally:
             lock_file.unlink(missing_ok=True)
 
