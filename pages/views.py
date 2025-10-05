@@ -41,7 +41,12 @@ from django.core.exceptions import PermissionDenied
 from django.utils.text import slugify
 from django.core.validators import EmailValidator
 from django.db.models import Q
-from core.models import InviteLead, ClientReport, ClientReportSchedule
+from core.models import (
+    InviteLead,
+    ClientReport,
+    ClientReportSchedule,
+    SecurityGroup,
+)
 
 try:  # pragma: no cover - optional dependency guard
     from graphviz import Digraph
@@ -419,18 +424,38 @@ def index(request):
             return redirect(landing.path)
     node = Node.get_local()
     role = node.role if node else None
+    landing_filters = Q()
     if role:
+        landing_filters |= Q(node_role=role)
+    user = getattr(request, "user", None)
+    if user and user.is_authenticated:
+        landing_filters |= Q(user=user)
+        user_group_ids = list(user.groups.values_list("pk", flat=True))
+        if user_group_ids:
+            security_group_ids = list(
+                SecurityGroup.objects.filter(pk__in=user_group_ids).values_list(
+                    "pk", flat=True
+                )
+            )
+            if security_group_ids:
+                landing_filters |= Q(security_group_id__in=security_group_ids)
+    if landing_filters:
         role_landing = (
-            RoleLanding.objects.filter(node_role=role)
+            RoleLanding.objects.filter(
+                landing_filters,
+                is_deleted=False,
+                landing__enabled=True,
+                landing__is_deleted=False,
+            )
             .select_related("landing")
+            .order_by("-priority", "-pk")
             .first()
         )
-        if role_landing and role_landing.landing:
+        if role_landing and role_landing.landing_id:
             landing_obj = role_landing.landing
-            if landing_obj.enabled and not landing_obj.is_deleted:
-                target_path = landing_obj.path
-                if target_path and target_path != request.path:
-                    return redirect(target_path)
+            target_path = landing_obj.path
+            if target_path and target_path != request.path:
+                return redirect(target_path)
     app = (
         Module.objects.filter(node_role=role, is_default=True)
         .select_related("application")
