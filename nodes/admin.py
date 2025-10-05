@@ -1237,8 +1237,7 @@ class NetMessageAdmin(EntityModelAdmin):
                     level=messages.SUCCESS,
                 )
                 changelist_url = reverse(
-                    f"admin:{self.model._meta.app_label}_"
-                    f"{self.model._meta.model_name}_changelist"
+                    f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist"
                 )
                 return redirect(changelist_url)
         else:
