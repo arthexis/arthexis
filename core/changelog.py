@@ -159,6 +159,7 @@ def _merge_sections(
     old_sections: Iterable[ChangelogSection],
 ) -> List[ChangelogSection]:
     merged = list(new_sections)
+    old_sections_list = list(old_sections)
     version_to_section: dict[str, ChangelogSection] = {}
     unreleased_section: ChangelogSection | None = None
 
@@ -168,7 +169,15 @@ def _merge_sections(
         if section.version:
             version_to_section[section.version] = section
 
-    for old in old_sections:
+    first_release_version: str | None = None
+    for old in old_sections_list:
+        if old.version:
+            first_release_version = old.version
+            break
+
+    reopened_latest_version = False
+
+    for old in old_sections_list:
         if old.version is None:
             if unreleased_section is None:
                 unreleased_section = ChangelogSection(
@@ -189,6 +198,17 @@ def _merge_sections(
 
         existing = version_to_section.get(old.version)
         if existing is None:
+            if (
+                first_release_version
+                and old.version == first_release_version
+                and not reopened_latest_version
+                and unreleased_section is not None
+            ):
+                for entry in old.entries:
+                    if entry not in unreleased_section.entries:
+                        unreleased_section.entries.append(entry)
+                reopened_latest_version = True
+                continue
             copied = ChangelogSection(
                 title=old.title,
                 entries=list(old.entries),
