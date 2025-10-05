@@ -196,6 +196,97 @@ class ChangelogBuilderTests(SimpleTestCase):
             ],
         )
 
+    def test_retry_release_reopens_latest_section(self):
+        previous_text = "\n".join(
+            [
+                "Changelog",
+                "=========",
+                "",
+                "v1.3.0 (2025-10-06)",
+                "-------------------",
+                "",
+                "- " + "b" * 8 + " Handle changelog duplicate merges (#601)",
+                "- " + "c" * 8 + " Improve release retry messaging (#600)",
+                "",
+            ]
+        )
+
+        commits_without_release = [
+            changelog.Commit(
+                sha="d" * 40,
+                date="2025-10-07",
+                subject="Add retry fallback coverage (#603)",
+            ),
+            changelog.Commit(
+                sha="b" * 40,
+                date="2025-10-05",
+                subject="Handle changelog duplicate merges (#601)",
+            ),
+            changelog.Commit(
+                sha="c" * 40,
+                date="2025-10-04",
+                subject="Improve release retry messaging (#600)",
+            ),
+        ]
+
+        with mock.patch(
+            "core.changelog._read_commits", return_value=commits_without_release
+        ):
+            reopened_sections = changelog.collect_sections(
+                range_spec="HEAD", previous_text=previous_text
+            )
+
+        self.assertEqual(len(reopened_sections), 1)
+        unreleased = reopened_sections[0]
+        self.assertIsNone(unreleased.version)
+        self.assertEqual(
+            unreleased.entries,
+            [
+                "- " + "d" * 8 + " Add retry fallback coverage (#603)",
+                "- " + "b" * 8 + " Handle changelog duplicate merges (#601)",
+                "- " + "c" * 8 + " Improve release retry messaging (#600)",
+            ],
+        )
+
+        reopened_text = changelog.render_changelog(reopened_sections)
+
+        commits_with_release = [
+            changelog.Commit(sha="a" * 40, date="2025-10-08", subject="Release v1.3.0"),
+            changelog.Commit(
+                sha="d" * 40,
+                date="2025-10-07",
+                subject="Add retry fallback coverage (#603)",
+            ),
+            changelog.Commit(
+                sha="b" * 40,
+                date="2025-10-05",
+                subject="Handle changelog duplicate merges (#601)",
+            ),
+            changelog.Commit(
+                sha="c" * 40,
+                date="2025-10-04",
+                subject="Improve release retry messaging (#600)",
+            ),
+        ]
+
+        with mock.patch("core.changelog._read_commits", return_value=commits_with_release):
+            retry_sections = changelog.collect_sections(
+                range_spec="HEAD", previous_text=reopened_text
+            )
+
+        self.assertEqual(len(retry_sections), 2)
+        retry_unreleased, retry_release = retry_sections
+        self.assertEqual(retry_unreleased.entries, [])
+        self.assertEqual(retry_release.title, "v1.3.0 (2025-10-08)")
+        self.assertEqual(
+            retry_release.entries,
+            [
+                "- " + "d" * 8 + " Add retry fallback coverage (#603)",
+                "- " + "b" * 8 + " Handle changelog duplicate merges (#601)",
+                "- " + "c" * 8 + " Improve release retry messaging (#600)",
+            ],
+        )
+
     def test_determine_range_spec_uses_previous_tag_for_exact_match(self):
         def fake_run(cmd, capture_output=False, text=False, check=False):
             if cmd == ["git", "describe", "--tags", "--exact-match", "HEAD"]:
