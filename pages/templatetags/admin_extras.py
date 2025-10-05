@@ -248,10 +248,12 @@ def rfid_release_stats(context):
     if stats is None:
         counts = RFID.objects.aggregate(
             total=Count("pk"),
-            released=Count("pk", filter=Q(released=True)),
+            released_allowed=Count(
+                "pk", filter=Q(released=True, allowed=True)
+            ),
         )
         stats = {
-            "released": counts.get("released") or 0,
+            "released_allowed": counts.get("released_allowed") or 0,
             "total": counts.get("total") or 0,
         }
         context[cache_key] = stats
