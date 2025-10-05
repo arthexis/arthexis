@@ -110,3 +110,25 @@ class ManualTests(TestCase):
             response["Content-Disposition"],
             'attachment; filename="test-manual.pdf"',
         )
+
+    def test_manual_detail_includes_word_wrap_styles(self):
+        manual = UserManual.objects.get(slug="test-manual")
+        manual.pdf_orientation = UserManual.PdfOrientation.PORTRAIT
+        manual.save()
+
+        response = self.client.get(reverse("pages:manual-detail", args=[manual.slug]))
+        self.assertContains(response, "manual-content")
+        self.assertContains(response, "overflow-wrap: anywhere;")
+        self.assertContains(response, "size: portrait;")
+
+    def test_admin_manual_detail_uses_orientation_styles(self):
+        manual = UserManual.objects.get(slug="test-manual")
+        manual.pdf_orientation = UserManual.PdfOrientation.PORTRAIT
+        manual.save()
+
+        response = self.client.get(
+            reverse("django-admindocs-manual-detail", args=[manual.slug])
+        )
+        self.assertContains(response, "manual-content")
+        self.assertContains(response, "overflow-wrap: anywhere;")
+        self.assertContains(response, "size: portrait;")
