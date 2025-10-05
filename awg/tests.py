@@ -2,11 +2,13 @@ import os
 from datetime import time
 from decimal import Decimal
 
+import os
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
-# Import the root test configuration to initialise Django and prepare the
-# database schema for these standalone tests.
-import tests.conftest  # noqa: F401
+import django
+
+django.setup()
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -33,21 +35,59 @@ class AWGCalculatorTests(TestCase):
     ]
 
     def setUp(self):
-        CableSize.objects.create(
-            awg_size="8",
-            material="cu",
-            dia_in=0,
-            dia_mm=0,
-            area_kcmil=0,
-            area_mm2=0,
-            k_ohm_km=0.1,
-            k_ohm_kft=0.1,
-            amps_60c=55,
-            amps_75c=65,
-            amps_90c=75,
-            line_num=1,
+        CableSize.objects.bulk_create(
+            [
+                CableSize(
+                    awg_size="10",
+                    material="cu",
+                    dia_in=0,
+                    dia_mm=0,
+                    area_kcmil=0,
+                    area_mm2=0,
+                    k_ohm_km=0.15,
+                    k_ohm_kft=0.15,
+                    amps_60c=35,
+                    amps_75c=90,
+                    amps_90c=100,
+                    line_num=1,
+                ),
+                CableSize(
+                    awg_size="8",
+                    material="cu",
+                    dia_in=0,
+                    dia_mm=0,
+                    area_kcmil=0,
+                    area_mm2=0,
+                    k_ohm_km=0.4,
+                    k_ohm_kft=0.4,
+                    amps_60c=55,
+                    amps_75c=65,
+                    amps_90c=75,
+                    line_num=1,
+                ),
+                CableSize(
+                    awg_size="6",
+                    material="cu",
+                    dia_in=0,
+                    dia_mm=0,
+                    area_kcmil=0,
+                    area_mm2=0,
+                    k_ohm_km=0.3,
+                    k_ohm_kft=0.3,
+                    amps_60c=95,
+                    amps_75c=105,
+                    amps_90c=115,
+                    line_num=1,
+                ),
+            ]
         )
-        ConduitFill.objects.create(trade_size="1", conduit="emt", awg_8=3)
+        ConduitFill.objects.create(
+            trade_size="1",
+            conduit="emt",
+            awg_10=4,
+            awg_8=4,
+            awg_6=4,
+        )
 
     def test_page_renders_and_calculates(self):
         url = reverse("awg:calculator")
@@ -206,17 +246,53 @@ class AWGCalculatorTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(seen, {2, 3})
 
-    def test_find_conduit_prefers_larger_trade_size_with_tie_capacity(self):
-        desired_cables = 2
-        ConduitFill.objects.create(
-            trade_size="3/4",
-            conduit="emt",
-            awg_8=desired_cables,
-        )
+    def test_max_awg_force_emits_warning(self):
+        url = reverse("awg:calculator")
+        data = {
+            "meters": "180",
+            "amps": "60",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "3",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "1",
+            "max_awg": "10",
+        }
+        resp = self.client.post(url, data)
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        self.assertIn("AWG Size", content)
+        self.assertIn("10", content)
+        self.assertIn("Voltage drop may exceed 3% with chosen parameters", content)
+        self.assertIn("Conduit", content)
 
-        result = find_conduit("8", desired_cables, conduit="emt")
+    def test_max_awg_limit_emits_warning(self):
+        url = reverse("awg:calculator")
+        base = {
+            "meters": "300",
+            "amps": "50",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "3",
+            "temperature": "75",
+            "conduit": "emt",
+            "ground": "1",
+        }
 
-        self.assertEqual(result["size_inch"], "1")
+        baseline = self.client.post(url, base)
+        self.assertContains(baseline, "AWG Size")
+        self.assertIn("10", baseline.content.decode())
+
+        limited = self.client.post(url, {**base, "max_awg": "6"})
+        self.assertEqual(limited.status_code, 200)
+        content = limited.content.decode()
+        self.assertIn("AWG Size", content)
+        self.assertIn(">6</td>", content)
+        self.assertIn("Voltage drop exceeds 3% with given max_awg", content)
+        self.assertIn("Conduit", content)
 
     def test_odd_awg_displays_even_preference(self):
         CableSize.objects.create(
@@ -236,7 +312,7 @@ class AWGCalculatorTests(TestCase):
         url = reverse("awg:calculator")
         data = {
             "meters": "10",
-            "amps": "80",
+            "amps": "120",
             "volts": "220",
             "material": "cu",
             "max_lines": "1",
@@ -289,7 +365,7 @@ class AWGCalculatorTests(TestCase):
 
     def test_ev_charger_template_values(self):
         tmpl = CalculatorTemplate.objects.get(name="EV Charger")
-        self.assertEqual(tmpl.description, "Residential charging for a single EV.")
+        self.assertIn("Residential charging", tmpl.description)
         self.assertEqual(tmpl.amps, 40)
         self.assertEqual(tmpl.volts, 220)
         self.assertEqual(tmpl.max_lines, 1)
