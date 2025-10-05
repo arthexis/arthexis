@@ -143,9 +143,33 @@ msgstr "AWG Máximo:"
 msgid "Ground:"
 msgstr "Tierra:"
 
+#: awg/templates/awg/calculator.html:74
+msgid "Maybe"
+msgstr "Quizá"
+
+#: awg/templates/awg/calculator.html:75 core/templates/admin/system.html:44
+#: core/templates/admin/system_upgrade_report.html:74
+#: core/templates/admin/system_upgrade_report.html:84 pages/models.py:407
+msgid "Yes"
+msgstr "Sí"
+
+#: awg/templates/awg/calculator.html:76 core/templates/admin/system.html:46
+#: core/templates/admin/system_upgrade_report.html:76
+#: core/templates/admin/system_upgrade_report.html:86 pages/models.py:407
+msgid "No"
+msgstr "No"
+
 #: awg/templates/awg/calculator.html:73
 msgid "Max Lines:"
 msgstr "Máximo de Líneas:"
+
+#: awg/templates/awg/calculator.html:94
+msgid ""
+"This application will suggest a common correct sizing of cable, considering "
+"voltage drop and standard gauge sizes. Consult a professional electrician or "
+"your local electrical code before choosing the right cable for your "
+"electrical projects."
+msgstr "Esta aplicación sugerirá un dimensionamiento correcto habitual del cable, considerando la caída de voltaje y calibres estándar. Consulte a un electricista profesional o el código eléctrico local antes de elegir el cable adecuado para sus proyectos eléctricos."
 
 #: awg/templates/awg/calculator.html:86
 msgid "Calculate"
