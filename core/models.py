@@ -28,12 +28,13 @@ from io import BytesIO
 from django.core.files.base import ContentFile
 import qrcode
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 import uuid
 from pathlib import Path
 from django.core import serializers
 from urllib.parse import urlparse
 from utils import revision as revision_utils
-from typing import Type
+from typing import Any, Type
 from defusedxml import xmlrpc as defused_xmlrpc
 import requests
 
@@ -2491,7 +2492,7 @@ class ClientReport(Entity):
         return cls.objects.create(
             start_date=start_date,
             end_date=end_date,
-            data={"rows": rows},
+            data={"rows": rows, "schema": "session-list/v1"},
             owner=owner,
             schedule=schedule,
             recipients=list(recipients or []),
@@ -2539,8 +2540,7 @@ class ClientReport(Entity):
         return export, html_content
 
     @staticmethod
-    def build_rows(start_date=None, end_date=None):
-        from collections import defaultdict
+    def build_rows(start_date=None, end_date=None, *, for_display: bool = False):
         from ocpp.models import Transaction
 
         qs = Transaction.objects.exclude(rfid="")
@@ -2556,24 +2556,87 @@ class ClientReport(Entity):
                 end_date + timedelta(days=1), time.min, tzinfo=pytimezone.utc
             )
             qs = qs.filter(start_time__lt=end_dt)
-        data = defaultdict(lambda: {"kw": 0.0, "count": 0})
-        for tx in qs:
-            data[tx.rfid]["kw"] += tx.kw
-            data[tx.rfid]["count"] += 1
-        rows = []
-        for rfid_uid, stats in sorted(data.items()):
-            tag = RFID.objects.filter(rfid=rfid_uid).first()
-            if tag:
-                account = tag.energy_accounts.first()
-                if account:
-                    subject = account.name
-                else:
-                    subject = str(tag.label_id)
+
+        transactions = list(
+            qs.select_related("account").order_by("-start_time", "-pk")
+        )
+        rfid_values = {tx.rfid for tx in transactions if tx.rfid}
+        tag_map: dict[str, RFID] = {}
+        if rfid_values:
+            tag_map = {
+                tag.rfid: tag
+                for tag in RFID.objects.filter(rfid__in=rfid_values).prefetch_related(
+                    "energy_accounts"
+                )
+            }
+
+        rows: list[dict[str, Any]] = []
+        for tx in transactions:
+            energy = tx.kw
+            if energy <= 0:
+                continue
+
+            subject = None
+            if tx.account and getattr(tx.account, "name", None):
+                subject = tx.account.name
             else:
-                subject = rfid_uid
+                tag = tag_map.get(tx.rfid)
+                if tag:
+                    account = next(iter(tag.energy_accounts.all()), None)
+                    if account:
+                        subject = account.name
+                    else:
+                        subject = str(tag.label_id)
+
+            if subject is None:
+                subject = tx.rfid
+
+            start_value = tx.start_time
+            end_value = tx.stop_time
+            if not for_display:
+                start_value = start_value.isoformat()
+                end_value = end_value.isoformat() if end_value else None
+
             rows.append(
-                {"subject": subject, "kw": stats["kw"], "count": stats["count"]}
+                {
+                    "subject": subject,
+                    "rfid": tx.rfid,
+                    "kw": energy,
+                    "start": start_value,
+                    "end": end_value,
+                }
             )
+
+        return rows
+
+    @property
+    def rows_for_display(self):
+        rows = self.data.get("rows", [])
+        if self.data.get("schema") == "session-list/v1":
+            parsed: list[dict[str, Any]] = []
+            for row in rows:
+                item = dict(row)
+                start_val = row.get("start")
+                end_val = row.get("end")
+
+                if start_val:
+                    start_dt = parse_datetime(start_val)
+                    if start_dt and timezone.is_naive(start_dt):
+                        start_dt = timezone.make_aware(start_dt, timezone.utc)
+                    item["start"] = start_dt
+                else:
+                    item["start"] = None
+
+                if end_val:
+                    end_dt = parse_datetime(end_val)
+                    if end_dt and timezone.is_naive(end_dt):
+                        end_dt = timezone.make_aware(end_dt, timezone.utc)
+                    item["end"] = end_dt
+                else:
+                    item["end"] = None
+
+                parsed.append(item)
+            return parsed
         return rows
 
 
