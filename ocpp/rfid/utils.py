@@ -18,10 +18,10 @@ def build_mode_toggle(
     params._mutable = True
     if table_mode:
         params.pop("mode", None)
-        toggle_label = "Switch to Single Mode"
+        toggle_label = "Single Mode"
     else:
         params["mode"] = "table"
-        toggle_label = "Switch to Table Mode"
+        toggle_label = "Table Mode"
 
     toggle_url = base_path or request.path
     toggle_query = params.urlencode()

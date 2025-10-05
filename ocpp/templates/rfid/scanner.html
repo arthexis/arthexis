@@ -1,7 +1,12 @@
 {% with prefix=prefix|default:"rfid" %}
   <div id="{{ prefix }}-scanner">
-    {% if toggle_url or admin_view_url or public_view_url %}
+    {% if toggle_url or admin_view_url or public_view_url or request.user.is_staff %}
       <div class="rfid-mode-toggle">
+        {% if request.user.is_staff %}
+          <button id="{{ prefix }}-connect-local" class="button" type="button">Local Scanner</button>
+          <button id="{{ prefix }}-deep-read" class="button" type="button" aria-pressed="false">Deep Read</button>
+          <a id="{{ prefix }}-configure" class="button" href="#" style="display:none;"></a>
+        {% endif %}
         {% if toggle_url %}
           <a id="{{ prefix }}-mode-toggle" class="button" href="{{ toggle_url }}" data-toggle-url="{{ toggle_url }}">{{ toggle_label }}</a>
         {% endif %}
@@ -13,13 +18,6 @@
       </div>
     {% endif %}
   <p id="{{ prefix }}-status">Scanner ready</p>
-  <p>
-    {% if request.user.is_staff %}
-      <button id="{{ prefix }}-connect-local">Connect Local Scanner</button>
-      <button id="{{ prefix }}-deep-read">Enable Deep Read</button>
-      <a id="{{ prefix }}-configure" href="#" style="display:none; margin-left:1em;"></a>
-    {% endif %}
-  </p>
   {% if table_mode %}
     <div class="rfid-table-mode">
       <table class="rfid-history" id="{{ prefix }}-history">
@@ -103,6 +101,7 @@
   flex-wrap: wrap;
   gap: 0.75em;
   margin-bottom: 1em;
+  align-items: center;
 }
 
 #{{ prefix }}-scanner .rfid-mode-toggle .button {
@@ -114,10 +113,20 @@
   color: var(--rfid-header-text);
   border: 1px solid var(--rfid-table-border);
   transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 
 #{{ prefix }}-scanner .rfid-mode-toggle .button:hover {
   background: var(--rfid-row-hover-bg);
+}
+
+#{{ prefix }}-scanner .rfid-mode-toggle .button.is-active {
+  background: var(--rfid-row-hover-bg);
+  border-color: var(--rfid-row-hover-bg);
+  color: var(--rfid-row-text);
 }
 
 #{{ prefix }}-scanner .rfid-mode-toggle .button.secondary {
@@ -374,7 +383,8 @@
     const opts = Object.assign({updateStatus: true, clearDetails: true}, options || {});
     deepReadActive = Boolean(enabled);
     if(deepBtn){
-      deepBtn.textContent = deepReadActive ? 'Disable Deep Read' : 'Enable Deep Read';
+      deepBtn.textContent = 'Deep Read';
+      deepBtn.classList.toggle('is-active', deepReadActive);
       deepBtn.setAttribute('aria-pressed', deepReadActive ? 'true' : 'false');
     }
     if(opts.updateStatus){
@@ -717,7 +727,7 @@
       }
       if(connectBtn){
         connectBtn.disabled = false;
-        connectBtn.textContent = 'Connect Local Scanner';
+        connectBtn.textContent = 'Local Scanner';
       }
       if(localConnected){
         statusEl.textContent = 'Local scanner disconnected';
@@ -746,7 +756,7 @@
           localConnected = false;
           if(connectBtn){
             connectBtn.disabled = false;
-            connectBtn.textContent = 'Connect Local Scanner';
+            connectBtn.textContent = 'Local Scanner';
           }
           showError('Local scanner disconnected');
         }
