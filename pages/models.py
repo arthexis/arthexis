@@ -223,6 +223,52 @@ class Landing(Entity):
         super().save(*args, **kwargs)
 
 
+class RoleLandingManager(models.Manager):
+    def get_by_natural_key(self, role: str, module_path: str, path: str):
+        return self.get(
+            node_role__name=role,
+            landing__module__path=module_path,
+            landing__path=path,
+        )
+
+
+class RoleLanding(Entity):
+    node_role = models.OneToOneField(
+        NodeRole,
+        on_delete=models.CASCADE,
+        related_name="default_landing",
+    )
+    landing = models.ForeignKey(
+        Landing,
+        on_delete=models.CASCADE,
+        related_name="role_defaults",
+    )
+
+    objects = RoleLandingManager()
+
+    class Meta:
+        verbose_name = _("Default Landing")
+        verbose_name_plural = _("Default Landings")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        role_name = self.node_role.name if self.node_role_id else "?"
+        landing_path = self.landing.path if self.landing_id else "?"
+        return f"{role_name} → {landing_path}"
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        role_name = None
+        if getattr(self, "node_role_id", None):
+            role_name = self.node_role.name
+        landing_key = (None, None)
+        if getattr(self, "landing_id", None):
+            landing_key = (
+                self.landing.module.path if self.landing.module_id else None,
+                self.landing.path,
+            )
+        return (role_name,) + landing_key
+
+    natural_key.dependencies = ["nodes.NodeRole", "pages.Landing"]
+
 class UserManual(Entity):
     slug = models.SlugField(unique=True)
     title = models.CharField(max_length=200)

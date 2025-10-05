@@ -4,9 +4,9 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
 from django.contrib.admin.views.decorators import staff_member_required
+from nodes.models import Node
 from pages.utils import landing
 
 from .scanner import scan_sources, enable_deep_read_mode
@@ -17,12 +17,16 @@ from .utils import build_mode_toggle
 def scan_next(request):
     """Return the next scanned RFID tag or validate a client-provided value."""
 
-    if request.method != "POST" and not request.user.is_authenticated:
+    node = Node.get_local()
+    role_name = node.role.name if node and node.role else ""
+    allow_anonymous = role_name == "Control"
+
+    if request.method != "POST" and not request.user.is_authenticated and not allow_anonymous:
         return redirect_to_login(
             request.get_full_path(), reverse("pages:login")
         )
     if request.method == "POST":
-        if not request.user.is_authenticated:
+        if not request.user.is_authenticated and not allow_anonymous:
             return JsonResponse({"error": "Authentication required"}, status=401)
         try:
             payload = json.loads(request.body.decode("utf-8") or "{}")
@@ -47,9 +51,17 @@ def scan_deep(_request):
 
 
 @landing("RFID Tag Validator")
-@login_required(login_url="pages:login")
 def reader(request):
     """Public page to scan RFID tags."""
+    node = Node.get_local()
+    role_name = node.role.name if node and node.role else ""
+    allow_anonymous = role_name == "Control"
+
+    if not request.user.is_authenticated and not allow_anonymous:
+        return redirect_to_login(
+            request.get_full_path(), reverse("pages:login")
+        )
+
     table_mode, toggle_url, toggle_label = build_mode_toggle(request)
 
     context = {

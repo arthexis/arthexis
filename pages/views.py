@@ -85,7 +85,7 @@ from .forms import (
     AuthenticatorLoginForm,
     UserStoryForm,
 )
-from .models import Module, UserManual, UserStory
+from .models import Module, RoleLanding, UserManual, UserStory
 
 
 logger = logging.getLogger(__name__)
@@ -419,6 +419,18 @@ def index(request):
             return redirect(landing.path)
     node = Node.get_local()
     role = node.role if node else None
+    if role:
+        role_landing = (
+            RoleLanding.objects.filter(node_role=role)
+            .select_related("landing")
+            .first()
+        )
+        if role_landing and role_landing.landing:
+            landing_obj = role_landing.landing
+            if landing_obj.enabled and not landing_obj.is_deleted:
+                target_path = landing_obj.path
+                if target_path and target_path != request.path:
+                    return redirect(target_path)
     app = (
         Module.objects.filter(node_role=role, is_default=True)
         .select_related("application")
