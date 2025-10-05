@@ -14,18 +14,15 @@ LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
-PUBLIC_WIFI_LOCK="$LOCK_DIR/public_wifi_mode.lck"
-PUBLIC_WIFI_ALLOW="$LOCK_DIR/public_wifi_allow.list"
 mkdir -p "$LOCK_DIR"
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--public] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet N[/P]]
+Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet N[/P]]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --no-firewall   Skip firewall port validation.
   --unsafe        Allow modification of the active internet connection.
-  --public        Configure an open access point without internet sharing.
   --interactive, -i  Collect user decisions for each step before executing.
   --no-watchdog   Skip installing the WiFi watchdog service.
   --vnc           Require validating that a VNC service is enabled.
@@ -39,7 +36,6 @@ FORCE_PASSWORD=false
 SKIP_FIREWALL=false
 INTERACTIVE=false
 UNSAFE=false
-PUBLIC_MODE=false
 INSTALL_WATCHDOG=true
 REQUIRE_VNC=false
 VNC_OPTION_SET=false
@@ -136,9 +132,6 @@ while [[ $# -gt 0 ]]; do
         --unsafe)
             UNSAFE=true
             ;;
-        --public)
-            PUBLIC_MODE=true
-            ;;
         -i|--interactive)
             INTERACTIVE=true
             ;;
@@ -165,11 +158,6 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
-
-if [[ $PUBLIC_MODE == true && $FORCE_PASSWORD == true ]]; then
-    echo "Warning: --password ignored in public mode." >&2
-    FORCE_PASSWORD=false
-fi
 
 if [[ $EUID -ne 0 ]]; then
     echo "This script must be run as root" >&2
@@ -359,27 +347,23 @@ fi
 EXISTING_PASS=""
 WIFI_PASS=""
 if [[ $SKIP_AP == false ]]; then
-    if [[ $PUBLIC_MODE == true ]]; then
-        WIFI_PASS=""
+    EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null || true)"
+    if [[ -z "$EXISTING_PASS" && "$AP_NAME" != "$DEFAULT_AP_NAME" ]]; then
+        EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$DEFAULT_AP_NAME" 2>/dev/null || true)"
+    fi
+    if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
+        while true; do
+            read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
+            read -rsp "Confirm password: " WIFI_PASS2; echo
+            if [[ "$WIFI_PASS1" == "$WIFI_PASS2" && -n "$WIFI_PASS1" ]]; then
+                WIFI_PASS="$WIFI_PASS1"
+                break
+            else
+                echo "Passwords do not match or are empty." >&2
+            fi
+        done
     else
-        EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$AP_NAME" 2>/dev/null || true)"
-        if [[ -z "$EXISTING_PASS" && "$AP_NAME" != "$DEFAULT_AP_NAME" ]]; then
-            EXISTING_PASS="$(nmcli -s -g 802-11-wireless-security.psk connection show "$DEFAULT_AP_NAME" 2>/dev/null || true)"
-        fi
-        if [[ -z "$EXISTING_PASS" || $FORCE_PASSWORD == true ]]; then
-            while true; do
-                read -rsp "Enter WiFi password for '$AP_NAME': " WIFI_PASS1; echo
-                read -rsp "Confirm password: " WIFI_PASS2; echo
-                if [[ "$WIFI_PASS1" == "$WIFI_PASS2" && -n "$WIFI_PASS1" ]]; then
-                    WIFI_PASS="$WIFI_PASS1"
-                    break
-                else
-                    echo "Passwords do not match or are empty." >&2
-                fi
-            done
-        else
-            WIFI_PASS="$EXISTING_PASS"
-        fi
+        WIFI_PASS="$EXISTING_PASS"
     fi
 fi
 
@@ -422,10 +406,7 @@ if [[ $RUN_AP == true ]]; then
             nmcli connection delete "$con"
         done
 
-        security_args=(wifi-sec.key-mgmt none)
-        if [[ $PUBLIC_MODE == false ]]; then
-            security_args=(wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS")
-        fi
+        security_args=(wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$WIFI_PASS")
 
         if nmcli -t -f NAME connection show | grep -Fxq "$AP_NAME"; then
             nmcli connection modify "$AP_NAME" \
@@ -441,9 +422,6 @@ if [[ $RUN_AP == true ]]; then
                 ipv6.never-default yes \
                 connection.autoconnect yes \
                 connection.autoconnect-priority 0
-            if [[ $PUBLIC_MODE == true ]]; then
-                nmcli connection modify "$AP_NAME" -wifi-sec.psk >/dev/null 2>&1 || true
-            fi
         else
             nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" \
                 connection.interface-name wlan0 autoconnect yes connection.autoconnect-priority 0 \
@@ -451,11 +429,7 @@ if [[ $RUN_AP == true ]]; then
                 ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
                 wifi.band bg "${security_args[@]}"
         fi
-        if [[ $PUBLIC_MODE == false ]]; then
-            nmcli connection up eth0-shared || true
-        else
-            nmcli connection down eth0-shared >/dev/null 2>&1 || true
-        fi
+        nmcli connection up eth0-shared || true
         if ! nmcli connection up "$AP_NAME" ifname wlan0; then
             echo "Failed to activate access point connection '$AP_NAME' on wlan0." >&2
             exit 1
@@ -468,37 +442,9 @@ if [[ $RUN_AP == true ]]; then
         if command -v iptables >/dev/null 2>&1; then
             iptables -C INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT 2>/dev/null || \
                 iptables -A INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT
-            if [[ $PUBLIC_MODE == true ]]; then
-                iptables -C FORWARD -i wlan0 -j DROP 2>/dev/null || \
-                    iptables -I FORWARD 1 -i wlan0 -j DROP
-                touch "$PUBLIC_WIFI_LOCK"
-                if [[ -f "$PUBLIC_WIFI_ALLOW" ]]; then
-                    while IFS= read -r mac; do
-                        [[ -z "$mac" ]] && continue
-                        iptables -C FORWARD -i wlan0 -m mac --mac-source "$mac" -j ACCEPT 2>/dev/null || \
-                            iptables -I FORWARD 1 -i wlan0 -m mac --mac-source "$mac" -j ACCEPT
-                    done < "$PUBLIC_WIFI_ALLOW"
-                fi
-            else
-                while iptables -C FORWARD -i wlan0 -j DROP 2>/dev/null; do
-                    iptables -D FORWARD -i wlan0 -j DROP
-                done
-                rm -f "$PUBLIC_WIFI_LOCK"
-                if [[ -f "$PUBLIC_WIFI_ALLOW" ]]; then
-                    while IFS= read -r mac; do
-                        [[ -z "$mac" ]] && continue
-                        while iptables -C FORWARD -i wlan0 -m mac --mac-source "$mac" -j ACCEPT 2>/dev/null; do
-                            iptables -D FORWARD -i wlan0 -m mac --mac-source "$mac" -j ACCEPT || break
-                        done
-                    done < "$PUBLIC_WIFI_ALLOW"
-                fi
-            fi
-        else
-            if [[ $PUBLIC_MODE == true ]]; then
-                touch "$PUBLIC_WIFI_LOCK"
-            else
-                rm -f "$PUBLIC_WIFI_LOCK"
-            fi
+            while iptables -C FORWARD -i wlan0 -j DROP 2>/dev/null; do
+                iptables -D FORWARD -i wlan0 -j DROP
+            done
         fi
         if ! nmcli -t -f NAME connection show --active | grep -Fxq "$AP_NAME"; then
             echo "Access point $AP_NAME failed to start." >&2
