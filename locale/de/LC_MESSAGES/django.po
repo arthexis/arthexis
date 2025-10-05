@@ -37,3 +37,229 @@ msgstr "Zeitstempel der Ladestation"
 msgid "Select a connector to view live chart data."
 msgstr "Wählen Sie einen Anschluss aus, um Live-Diagrammdaten anzuzeigen."
 
+#: awg/templates/awg/calculator.html:3
+msgid "AWG Calculator"
+msgstr "AWG-Rechner"
+
+#: awg/templates/awg/calculator.html:11
+msgid "Cable & Conduit Calculator"
+msgstr "Kabel- und Rohrleitungsrechner"
+
+#: awg/templates/awg/calculator.html:17
+msgid "Meters:"
+msgstr "Meter:"
+
+#: awg/templates/awg/calculator.html:21
+msgid "Amps:"
+msgstr "Ampere:"
+
+#: awg/templates/awg/calculator.html:25
+msgid "Volts:"
+msgstr "Volt:"
+
+#: awg/templates/awg/calculator.html:29
+msgid "Material:"
+msgstr "Material:"
+
+#: awg/templates/awg/calculator.html:32
+msgid "Copper (cu)"
+msgstr "Kupfer (Cu)"
+
+#: awg/templates/awg/calculator.html:33
+msgid "Aluminum (al)"
+msgstr "Aluminium (Al)"
+
+#: awg/templates/awg/calculator.html:37
+msgid "Phases:"
+msgstr "Phasen:"
+
+#: awg/templates/awg/calculator.html:40
+msgid "AC Two Phases (2)"
+msgstr "AC zweiphasig (2)"
+
+#: awg/templates/awg/calculator.html:41
+msgid "AC Single Phase (1)"
+msgstr "AC einphasig (1)"
+
+#: awg/templates/awg/calculator.html:42
+msgid "AC Three Phases (3)"
+msgstr "AC dreiphasig (3)"
+
+#: awg/templates/awg/calculator.html:48
+msgid "Temperature:"
+msgstr "Temperatur:"
+
+#: awg/templates/awg/calculator.html:51
+msgid "60C (140F)"
+msgstr "60°C (140°F)"
+
+#: awg/templates/awg/calculator.html:52
+msgid "75C (167F)"
+msgstr "75°C (167°F)"
+
+#: awg/templates/awg/calculator.html:53
+msgid "90C (194F)"
+msgstr "90°C (194°F)"
+
+#: awg/templates/awg/calculator.html:57
+msgid "Conduit:"
+msgstr "Rohrleitung:"
+
+#: awg/templates/awg/calculator.html:60
+msgid "EMT"
+msgstr "EMT"
+
+#: awg/templates/awg/calculator.html:61
+msgid "IMC"
+msgstr "IMC"
+
+#: awg/templates/awg/calculator.html:62
+msgid "RMC"
+msgstr "RMC"
+
+#: awg/templates/awg/calculator.html:63
+msgid "FMC"
+msgstr "FMC"
+
+#: awg/templates/awg/calculator.html:67
+msgid "Max AWG:"
+msgstr "Max. AWG:"
+
+#: awg/templates/awg/calculator.html:71
+msgid "Ground:"
+msgstr "Erdung:"
+
+#: awg/templates/awg/calculator.html:74
+msgid "Maybe"
+msgstr "Vielleicht"
+
+#: awg/templates/awg/calculator.html:75 core/templates/admin/system.html:44
+#: core/templates/admin/system_upgrade_report.html:74
+#: core/templates/admin/system_upgrade_report.html:84 pages/models.py:407
+msgid "Yes"
+msgstr "Ja"
+
+#: awg/templates/awg/calculator.html:76 core/templates/admin/system.html:46
+#: core/templates/admin/system_upgrade_report.html:76
+#: core/templates/admin/system_upgrade_report.html:86 pages/models.py:407
+msgid "No"
+msgstr "Nein"
+
+#: awg/templates/awg/calculator.html:80
+msgid "Max Lines:"
+msgstr "Max. Leiter:"
+
+#: awg/templates/awg/calculator.html:94
+msgid ""
+"This application will suggest a common correct sizing of cable, considering "
+"voltage drop and standard gauge sizes. Consult a professional electrician or "
+"your local electrical code before choosing the right cable for your "
+"electrical projects."
+msgstr "Diese Anwendung schlägt eine gebräuchliche korrekte Kabeldimensionierung vor, unter Berücksichtigung des Spannungsfalls und standardmäßiger Leiterquerschnitte. Konsultieren Sie vor der Auswahl des richtigen Kabels für Ihre Elektroprojekte eine Elektrofachkraft oder die örtlichen Vorschriften."
+
+#: awg/templates/awg/calculator.html:98
+msgid "Calculate"
+msgstr "Berechnen"
+
+#: awg/templates/awg/calculator.html:102
+msgid "Or try a pre-loaded template:"
+msgstr "Oder probieren Sie eine vorkonfigurierte Vorlage aus:"
+
+#: awg/templates/awg/calculator.html:115 core/views.py:295
+#, python-format
+msgid "Error: %(error)s"
+msgstr "Fehler: %(error)s"
+
+#: awg/templates/awg/calculator.html:117
+msgid "No Suitable Cable Found"
+msgstr "Kein geeignetes Kabel gefunden"
+
+#: awg/templates/awg/calculator.html:118
+#, python-format
+msgid ""
+"No cable was found that meets the requirements within a 3%% voltage drop."
+"<br>Try adjusting the <b>cable size, amps, length, or material</b> and try "
+"again."
+msgstr "Es wurde kein Kabel gefunden, das die Anforderungen mit einem Spannungsfall von 3%% erfüllt.<br>Passen Sie <b>Kabelgröße, Ampere, Länge oder Material</b> an und versuchen Sie es erneut."
+
+#: awg/templates/awg/calculator.html:121
+msgid "Calculator Results"
+msgstr "Rechenergebnisse"
+
+#: awg/templates/awg/calculator.html:124
+msgid "AWG Size"
+msgstr "AWG-Größe"
+
+#: awg/templates/awg/calculator.html:125
+msgid "Lines"
+msgstr "Leitungen"
+
+#: awg/templates/awg/calculator.html:126
+msgid "Total Cables"
+msgstr "Gesamtanzahl Kabel"
+
+#: awg/templates/awg/calculator.html:127
+msgid "Total Length (m)"
+msgstr "Gesamtlänge (m)"
+
+#: awg/templates/awg/calculator.html:128
+msgid "Voltage Drop"
+msgstr "Spannungsfall"
+
+#: awg/templates/awg/calculator.html:129
+msgid "Voltage at End"
+msgstr "Spannung am Ende"
+
+#: awg/templates/awg/calculator.html:130
+msgid "Temperature Rating"
+msgstr "Temperaturklasse"
+
+#: awg/templates/awg/calculator.html:132
+msgid "Conduit"
+msgstr "Rohrleitung"
+
+#: awg/templates/awg/calculator.html:142
+msgid "Calculate Again"
+msgstr "Erneut berechnen"
+
+#: awg/views.py:146
+#, python-format
+msgid "Minimum load for this calculator is 15 Amps.  Yours: amps=%(amps)s."
+msgstr "Die Mindestlast für diesen Rechner beträgt 15 Ampere. Ihre Eingabe: ampere=%(amps)s."
+
+#: awg/views.py:149
+#, python-format
+msgid ""
+"Max. load allowed is 546 A (cu) or 430 A (al). Yours: amps=%(amps)s "
+"material=%(material)s"
+msgstr "Die maximal zulässige Last beträgt 546 A (Cu) bzw. 430 A (Al). Ihre Eingabe: ampere=%(amps)s material=%(material)s"
+
+#: awg/views.py:151
+msgid "Consider at least 1 meter of cable."
+msgstr "Berücksichtigen Sie mindestens 1 Meter Kabel."
+
+#: awg/views.py:153
+#, python-format
+msgid "Volt range supported must be between 110-460. Yours: volts=%(volts)s"
+msgstr "Der unterstützte Spannungsbereich liegt zwischen 110-460. Ihre Eingabe: volt=%(volts)s"
+
+#: awg/views.py:156
+msgid "Material must be 'cu' (copper) or 'al' (aluminum)."
+msgstr "Das Material muss 'cu' (Kupfer) oder 'al' (Aluminium) sein."
+
+#: awg/views.py:159
+msgid "AC phases 1, 2 or 3 to calculate for. DC not supported."
+msgstr "Für die Berechnung werden AC-Phasen 1, 2 oder 3 unterstützt. DC wird nicht unterstützt."
+
+#: awg/views.py:162
+msgid "Temperature must be 60, 75 or 90"
+msgstr "Die Temperatur muss 60, 75 oder 90 betragen"
+
+#: awg/views.py:272
+msgid "Voltage drop may exceed 3% with chosen parameters"
+msgstr "Der Spannungsfall kann mit den gewählten Parametern 3 % überschreiten"
+
+#: awg/views.py:275
+msgid "Voltage drop exceeds 3% with given max_awg"
+msgstr "Der Spannungsfall überschreitet 3 % mit dem angegebenen max_awg"
+
