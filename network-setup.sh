@@ -202,6 +202,35 @@ slugify() {
     echo "$input" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
 }
 
+# Clear any saved WiFi secrets so the connection can run as an open network
+# when switching an existing AP profile into public mode. NetworkManager keeps
+# legacy WEP keys around even after changing the key management setting to
+# "none" which results in the activation prompt that surfaced in the bug
+# report. Explicitly blanking those properties prevents the prompt and lets the
+# AP come up without credentials.
+clear_wifi_secrets() {
+    local conn_name="$1"
+
+    nmcli connection modify "$conn_name" wifi-sec.key-mgmt none >/dev/null 2>&1 || true
+    nmcli connection modify "$conn_name" wifi-sec.auth-alg open >/dev/null 2>&1 || true
+
+    local -a remove_props=(
+        wifi-sec.psk
+        wifi-sec.wep-key-type
+        wifi-sec.wep-key-flags
+        wifi-sec.wep-tx-keyidx
+    )
+    local prop
+    for prop in "${remove_props[@]}"; do
+        nmcli connection modify "$conn_name" "-$prop" >/dev/null 2>&1 || true
+    done
+
+    local idx
+    for idx in 0 1 2 3; do
+        nmcli connection modify "$conn_name" "-wifi-sec.wep-key${idx}" >/dev/null 2>&1 || true
+    done
+}
+
 # Find an existing access point connection that should be reused when
 # --ap is not explicitly provided. Preference order:
 #   1. An active wlan0 connection whose name contains "-ap".
