@@ -1,4 +1,6 @@
 import subprocess
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -112,3 +114,82 @@ def test_promote_requires_clean_repo(monkeypatch, release_sandbox):
 
     with pytest.raises(release.ReleaseError):
         release.promote(version="1.2.3")
+
+
+class _FakeResponse:
+    def __init__(self, version: str):
+        self.ok = True
+        self._version = version
+
+    def json(self) -> dict[str, dict[str, list[object]]]:
+        return {"releases": {self._version: [{}]}}
+
+
+@pytest.fixture
+def _dist_artifacts(monkeypatch):
+    fake_files = [
+        Path("/tmp/dist/arthexis-1.2.3-py3-none-any.whl"),
+        Path("/tmp/dist/arthexis-1.2.3.tar.gz"),
+    ]
+    original_glob = Path.glob
+
+    def fake_glob(self, pattern):
+        if str(self) == "dist":
+            return iter(fake_files)
+        return original_glob(self, pattern)
+
+    monkeypatch.setattr(Path, "glob", fake_glob)
+    return fake_files
+
+
+def _prepare_release_environment(monkeypatch, *, version: str) -> list[list[str]]:
+    monkeypatch.setattr(release, "_git_clean", lambda: True)
+    monkeypatch.setattr(release, "_write_pyproject", lambda *a, **k: None)
+    monkeypatch.setitem(sys.modules, "build", types.ModuleType("build"))
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, check=True):
+        calls.append(list(cmd))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(release, "_run", fake_run)
+
+    fake_requests = types.ModuleType("requests")
+
+    def fake_get(url):
+        return _FakeResponse(version)
+
+    fake_requests.get = fake_get  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "requests", fake_requests)
+
+    return calls
+
+
+def test_build_twine_checks_existing_versions(monkeypatch, release_sandbox, _dist_artifacts):
+    calls = _prepare_release_environment(monkeypatch, version="1.2.3")
+
+    with pytest.raises(release.ReleaseError) as excinfo:
+        release.build(version="1.2.3", dist=True, twine=True)
+
+    assert "Version 1.2.3 already on PyPI" in str(excinfo.value)
+    assert calls == [[sys.executable, "-m", "build"]]
+
+
+def test_build_twine_allows_force_upload(monkeypatch, release_sandbox, _dist_artifacts):
+    calls = _prepare_release_environment(monkeypatch, version="1.2.3")
+
+    release.build(
+        version="1.2.3",
+        dist=True,
+        twine=True,
+        force=True,
+        creds=release.Credentials(token="fake-token"),
+    )
+
+    assert calls[0] == [sys.executable, "-m", "build"]
+    upload_cmd = calls[1]
+    assert upload_cmd[:4] == [sys.executable, "-m", "twine", "upload"]
+    assert "/tmp/dist/arthexis-1.2.3-py3-none-any.whl" in upload_cmd
+    assert "/tmp/dist/arthexis-1.2.3.tar.gz" in upload_cmd
+    assert upload_cmd[-4:] == ["--username", "__token__", "--password", "fake-token"]
