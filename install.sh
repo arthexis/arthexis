@@ -323,6 +323,13 @@ sudo mkdir -p /etc/nginx/conf.d
 # Remove existing nginx configs for arthexis* (run in root shell to expand wildcard)
 sudo sh -c 'rm -f /etc/nginx/conf.d/arthexis-*.conf'
 
+FALLBACK_SRC_DIR="$BASE_DIR/config/data/nginx/maintenance"
+FALLBACK_DEST_DIR="/usr/share/arthexis-fallback"
+if [ -d "$FALLBACK_SRC_DIR" ]; then
+    sudo mkdir -p "$FALLBACK_DEST_DIR"
+    sudo cp -r "$FALLBACK_SRC_DIR"/. "$FALLBACK_DEST_DIR"/
+fi
+
 if [ "$NGINX_MODE" = "public" ]; then
     sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
 # Redirect all HTTP traffic to HTTPS
@@ -337,6 +344,18 @@ server {
     listen 443 ssl;
     server_name arthexis.com *.arthexis.com;
 
+    error_page 500 502 503 504 /maintenance/index.html;
+
+    location = /maintenance/index.html {
+        root /usr/share/arthexis-fallback;
+        add_header Cache-Control "no-store";
+    }
+
+    location /maintenance/ {
+        alias /usr/share/arthexis-fallback/;
+        add_header Cache-Control "no-store";
+    }
+
     ssl_certificate /etc/letsencrypt/live/arthexis.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/arthexis.com/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
@@ -345,6 +364,7 @@ server {
     # Default proxy to web app
     location / {
         proxy_pass http://127.0.0.1:PORT_PLACEHOLDER;
+        proxy_intercept_errors on;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -393,8 +413,22 @@ server {
     listen 8000;
     listen 8080;
     server_name _;
+
+    error_page 500 502 503 504 /maintenance/index.html;
+
+    location = /maintenance/index.html {
+        root /usr/share/arthexis-fallback;
+        add_header Cache-Control "no-store";
+    }
+
+    location /maintenance/ {
+        alias /usr/share/arthexis-fallback/;
+        add_header Cache-Control "no-store";
+    }
+
     location / {
         proxy_pass http://127.0.0.1:PORT_PLACEHOLDER;
+        proxy_intercept_errors on;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
