@@ -18,7 +18,9 @@ from django.core.exceptions import DisallowedHost
 import socket
 from pages.models import (
     Application,
+    Landing,
     Module,
+    RoleLanding,
     SiteBadge,
     Favorite,
     ViewHistory,
@@ -1010,6 +1012,67 @@ class NavAppsTests(TestCase):
         Module.objects.create(node_role=role, application=app, path="/core/")
         resp = self.client.get(reverse("pages:index"))
         self.assertNotContains(resp, 'href="/core/"')
+
+
+class RoleLandingRedirectTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
+        )
+        self.node, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={"hostname": "localhost", "address": "127.0.0.1"},
+        )
+        self.ocpp_app, _ = Application.objects.get_or_create(name="ocpp")
+
+    def _configure_role_landing(
+        self, role_name: str, landing_path: str, label: str
+    ) -> str:
+        role, _ = NodeRole.objects.get_or_create(name=role_name)
+        self.node.role = role
+        self.node.save(update_fields=["role"])
+        module, _ = Module.objects.get_or_create(
+            node_role=role,
+            application=self.ocpp_app,
+            defaults={"path": "/ocpp/", "menu": "Chargers"},
+        )
+        if module.path != "/ocpp/":
+            module.path = "/ocpp/"
+            module.save(update_fields=["path"])
+        landing, _ = Landing.objects.get_or_create(
+            module=module,
+            path=landing_path,
+            defaults={
+                "label": label,
+                "enabled": True,
+                "description": "",
+            },
+        )
+        if landing.label != label or not landing.enabled or landing.description:
+            landing.label = label
+            landing.enabled = True
+            landing.description = ""
+            landing.save(update_fields=["label", "enabled", "description"])
+        RoleLanding.objects.update_or_create(
+            node_role=role,
+            defaults={"landing": landing, "is_deleted": False},
+        )
+        return landing_path
+
+    def test_satellite_redirects_to_dashboard(self):
+        target = self._configure_role_landing(
+            "Satellite", "/ocpp/", "CPMS Online Dashboard"
+        )
+        resp = self.client.get(reverse("pages:index"))
+        self.assertRedirects(resp, target, fetch_redirect_response=False)
+
+    def test_control_redirects_to_rfid(self):
+        target = self._configure_role_landing(
+            "Control", "/ocpp/rfid/", "RFID Tag Validator"
+        )
+        resp = self.client.get(reverse("pages:index"))
+        self.assertRedirects(resp, target, fetch_redirect_response=False)
 
 
 class ConstellationNavTests(TestCase):

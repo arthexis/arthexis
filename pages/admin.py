@@ -29,6 +29,7 @@ from .models import (
     SiteProxy,
     Module,
     Landing,
+    RoleLanding,
     Favorite,
     ViewHistory,
     UserManual,
@@ -185,6 +186,23 @@ class ModuleAdmin(EntityModelAdmin):
     list_filter = ("node_role", "application")
     fields = ("node_role", "application", "path", "menu", "is_default", "favicon")
     inlines = [LandingInline]
+
+
+@admin.register(RoleLanding)
+class RoleLandingAdmin(EntityModelAdmin):
+    list_display = ("node_role", "landing_path", "landing_label", "is_seed_data")
+    list_filter = ("node_role",)
+    search_fields = ("node_role__name", "landing__path", "landing__label")
+    fields = ("node_role", "landing")
+    list_select_related = ("node_role", "landing", "landing__module")
+
+    @admin.display(description="Landing Path")
+    def landing_path(self, obj):
+        return obj.landing.path if obj.landing_id else ""
+
+    @admin.display(description="Landing Label")
+    def landing_label(self, obj):
+        return obj.landing.label if obj.landing_id else ""
 
 
 @admin.register(UserManual)
