@@ -50,6 +50,7 @@ from core.models import (
     Reference,
     RFID,
     ReleaseManager,
+    SecurityGroup,
     Todo,
     TOTPDeviceSettings,
 )
@@ -1071,13 +1072,11 @@ class RoleLandingRedirectTests(TestCase):
             defaults={"hostname": "localhost", "address": "127.0.0.1"},
         )
         self.ocpp_app, _ = Application.objects.get_or_create(name="ocpp")
+        self.user_model = get_user_model()
 
-    def _configure_role_landing(
-        self, role_name: str, landing_path: str, label: str
-    ) -> str:
-        role, _ = NodeRole.objects.get_or_create(name=role_name)
-        self.node.role = role
-        self.node.save(update_fields=["role"])
+    def _ensure_landing(
+        self, role: NodeRole, landing_path: str, label: str
+    ) -> Landing:
         module, _ = Module.objects.get_or_create(
             node_role=role,
             application=self.ocpp_app,
@@ -1100,9 +1099,18 @@ class RoleLandingRedirectTests(TestCase):
             landing.enabled = True
             landing.description = ""
             landing.save(update_fields=["label", "enabled", "description"])
+        return landing
+
+    def _configure_role_landing(
+        self, role_name: str, landing_path: str, label: str, priority: int = 0
+    ) -> str:
+        role, _ = NodeRole.objects.get_or_create(name=role_name)
+        self.node.role = role
+        self.node.save(update_fields=["role"])
+        landing = self._ensure_landing(role, landing_path, label)
         RoleLanding.objects.update_or_create(
             node_role=role,
-            defaults={"landing": landing, "is_deleted": False},
+            defaults={"landing": landing, "is_deleted": False, "priority": priority},
         )
         return landing_path
 
@@ -1119,6 +1127,45 @@ class RoleLandingRedirectTests(TestCase):
         )
         resp = self.client.get(reverse("pages:index"))
         self.assertRedirects(resp, target, fetch_redirect_response=False)
+
+    def test_security_group_redirect_takes_priority(self):
+        self._configure_role_landing("Control", "/ocpp/rfid/", "RFID Tag Validator")
+        role = self.node.role
+        group = SecurityGroup.objects.create(name="Operators")
+        group_landing = self._ensure_landing(role, "/ocpp/group/", "Group Landing")
+        RoleLanding.objects.update_or_create(
+            security_group=group,
+            defaults={"landing": group_landing, "priority": 5, "is_deleted": False},
+        )
+        user = self.user_model.objects.create_user("group-user")
+        user.groups.add(group)
+        self.client.force_login(user)
+        resp = self.client.get(reverse("pages:index"))
+        self.assertRedirects(
+            resp, group_landing.path, fetch_redirect_response=False
+        )
+
+    def test_user_redirect_overrides_group_with_higher_priority(self):
+        self._configure_role_landing("Control", "/ocpp/rfid/", "RFID Tag Validator")
+        role = self.node.role
+        group = SecurityGroup.objects.create(name="Operators")
+        group_landing = self._ensure_landing(role, "/ocpp/group/", "Group Landing")
+        RoleLanding.objects.update_or_create(
+            security_group=group,
+            defaults={"landing": group_landing, "priority": 3, "is_deleted": False},
+        )
+        user = self.user_model.objects.create_user("priority-user")
+        user.groups.add(group)
+        user_landing = self._ensure_landing(role, "/ocpp/user/", "User Landing")
+        RoleLanding.objects.update_or_create(
+            user=user,
+            defaults={"landing": user_landing, "priority": 10, "is_deleted": False},
+        )
+        self.client.force_login(user)
+        resp = self.client.get(reverse("pages:index"))
+        self.assertRedirects(
+            resp, user_landing.path, fetch_redirect_response=False
+        )
 
 
 class ConstellationNavTests(TestCase):
