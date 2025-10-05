@@ -27,7 +27,10 @@ class ChangelogSection:
     date: Optional[str] = None
 
 
-_RE_RELEASE = re.compile(r"^Release v(?P<version>[0-9A-Za-z][0-9A-Za-z.\-_]*)")
+_RE_RELEASE = re.compile(
+    r"^(?:pre-release commit|Release)\s+v?(?P<version>[0-9A-Za-z][0-9A-Za-z.\-_]*)",
+    re.IGNORECASE,
+)
 _RE_TITLE_VERSION = re.compile(r"^v(?P<version>[0-9A-Za-z][0-9A-Za-z.\-_]*)")
 _RE_TITLE_DATE = re.compile(r"\((?P<date>\d{4}-\d{2}-\d{2})\)")
 

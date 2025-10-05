@@ -4,6 +4,26 @@ Changelog
 Unreleased
 ----------
 
+- d4368710 feat: assign role landings for ocpp dashboards (#2006)
+- 85f856f0 Add integration test for pre-release actions (#2005)
+- 84be6d9f test: assert systemctl probe in lcd check command (#2004)
+- a173229d Fix admin report breadcrumbs (#2003)
+- 245f6692 Test NetMessage updates existing record (#2002)
+- f36748b3 Refine release task tests to capture upgrade command details (#2001)
+- 1c7600a9 Add test ensuring NetMessage propagate honors target limit (#2000)
+- 4027e631 Add signature header coverage for net message propagation (#1999)
+- ce8b29c4 Enable user data support for TOTP devices (#1998)
+- d766361a style(admin): shrink dashboard badge vertical padding (#1997)
+- 41cdcf35 Adjust TOTP calibration token field styling (#1996)
+- 102cf27c Fix changelog generator range when HEAD is tagged (#1995)
+- de22e23e Add tests for always-on RFID watcher thread (#1993)
+- 8e6eab0c Add tests for RFID watch management command (#1994)
+- a5c60b04 fix(release): sync branch before pre-release actions (#1992)
+- 5b30c4fd chore: add release TODO for arthexis
+
+v0.1.14 (2025-10-03)
+--------------------
+
 - 2e45f8ea chore: remove TODO fixtures
 - abe600a2 chore: update coverage badge (#1991)
 - 786ae72b Validate clean repo before bumping version (#1990)
@@ -156,6 +176,7 @@ v0.1.13 (2025-09-30)
 v0.1.12 (2025-09-27)
 --------------------
 
+- cca12ad1 chore: remove TODO fixtures
 - 178608c0 chore: add release TODO for arthexis
 - bd9e1c39 chore: remove TODO fixtures
 - 371434d7 Log GetConfiguration timeouts from admin action (#1843)
@@ -232,6 +253,8 @@ v0.1.12 (2025-09-27)
 v0.1.11 (2025-09-26)
 --------------------
 
+- 72ac58b2 chore: remove TODO fixtures
+- 69d60a66 Fix release TODO acknowledgment persistence (#1770)
 - abdfded9 chore: add release TODO for arthexis
 - b3871614 Align EVCS scan default subnet with controller config (#1740)
 - 755c47c3 fix: support changelog generation without bash (#1769)
@@ -912,12 +935,6 @@ v0.1.9 (2025-09-17)
 - 13684360 Restrict datasette access and add navbar link
 - 650e9a7a Include version and revision in sqlite backups
 - e8725fe7 Ensure admin change actions render and fix release manager tests
-- 372717f1 Add base translation files for French and Russian
-- aca01ee3 Rename RFID admin action
-- bf25c17e Add test for birthday greetings task
-- 7fe6a2cf Patch UserDatum mixin globally and test entity inheritance
-- d0f11e65 feat: add release manager credential test
-- 1c7b9eeb Add check flag for switch-role script
 - 84de5410 feat: require sudo for reset-screen
 - 1a5eddb9 Add install.bat for Windows
 - fb590a08 fix: enable Raspberry Pi screen
@@ -959,6 +976,22 @@ v0.1.9 (2025-09-17)
 - b828cf9a Add RFID energy consumption report
 - ee132274 Track invite email send status
 - 80f96da2 feat: auto-commit fixture changes during release
+- 372717f1 Add base translation files for French and Russian
+- aca01ee3 Rename RFID admin action
+- bf25c17e Add test for birthday greetings task
+- 7fe6a2cf Patch UserDatum mixin globally and test entity inheritance
+- d0f11e65 feat: add release manager credential test
+- 1c7b9eeb Add check flag for switch-role script
+
+vwork (2025-09-10)
+------------------
+
+- 372717f1 Add base translation files for French and Russian
+- aca01ee3 Rename RFID admin action
+- bf25c17e Add test for birthday greetings task
+- 7fe6a2cf Patch UserDatum mixin globally and test entity inheritance
+- d0f11e65 feat: add release manager credential test
+- 1c7b9eeb Add check flag for switch-role script
 
 v0.1.8 (2025-09-05)
 -------------------
