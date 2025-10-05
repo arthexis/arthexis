@@ -214,6 +214,27 @@ slugify() {
     echo "$input" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
 }
 
+# Clear any saved WiFi secrets so the connection can run as an open network
+# when switching an existing AP profile into public mode. NetworkManager keeps
+# legacy WEP keys around even after changing the key management setting to
+# "none" which results in the activation prompt that surfaced in the bug
+# report. Explicitly blanking those properties prevents the prompt and lets the
+# AP come up without credentials.
+clear_wifi_secrets() {
+    local conn_name="$1"
+
+    nmcli connection modify "$conn_name" wifi-sec.key-mgmt none >/dev/null 2>&1 || true
+    nmcli connection modify "$conn_name" wifi-sec.auth-alg open >/dev/null 2>&1 || true
+    nmcli connection modify "$conn_name" wifi-sec.psk "" >/dev/null 2>&1 || true
+    nmcli connection modify "$conn_name" wifi-sec.wep-key-type "" >/dev/null 2>&1 || true
+    nmcli connection modify "$conn_name" wifi-sec.wep-key-flags 0 >/dev/null 2>&1 || true
+
+    local idx
+    for idx in 0 1 2 3; do
+        nmcli connection modify "$conn_name" "-wifi-sec.wep-key${idx}" >/dev/null 2>&1 || true
+    done
+}
+
 # Find an existing access point connection that should be reused when
 # --ap is not explicitly provided. Preference order:
 #   1. An active wlan0 connection whose name contains "-ap".
@@ -441,15 +462,16 @@ if [[ $RUN_AP == true ]]; then
                 ipv6.never-default yes \
                 connection.autoconnect yes \
                 connection.autoconnect-priority 0
-            if [[ $PUBLIC_MODE == true ]]; then
-                nmcli connection modify "$AP_NAME" -wifi-sec.psk >/dev/null 2>&1 || true
-            fi
         else
             nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" \
                 connection.interface-name wlan0 autoconnect yes connection.autoconnect-priority 0 \
                 ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
                 ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
                 wifi.band bg "${security_args[@]}"
+        fi
+        if [[ $PUBLIC_MODE == true ]]; then
+            nmcli connection modify "$AP_NAME" -wifi-sec.psk >/dev/null 2>&1 || true
+            clear_wifi_secrets "$AP_NAME"
         fi
         if [[ $PUBLIC_MODE == false ]]; then
             nmcli connection up eth0-shared || true
