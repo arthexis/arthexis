@@ -347,3 +347,10 @@ class CoreConfig(AppConfig):
             dispatch_uid="core.github_issue_reporter",
             weak=False,
         )
+
+        try:
+            from .mcp.auto_start import schedule_auto_start
+
+            schedule_auto_start()
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("Failed to schedule MCP auto-start")
