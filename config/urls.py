@@ -139,6 +139,11 @@ urlpatterns = [
         core_views.odoo_products,
         name="odoo-products",
     ),
+    path(
+        "admin/core/odoo-quote-report/",
+        core_views.odoo_quote_report,
+        name="odoo-quote-report",
+    ),
     path("admin/", admin.site.urls),
     path("i18n/setlang/", csrf_exempt(set_language), name="set_language"),
     path("api/", include("core.workgroup_urls")),
