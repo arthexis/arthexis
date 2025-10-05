@@ -3,7 +3,7 @@ from django.contrib.auth.models import (
     Group,
     UserManager as DjangoUserManager,
 )
-from django.db import DatabaseError, IntegrityError, models, transaction
+from django.db import DatabaseError, IntegrityError, connections, models, transaction
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.conf import settings
@@ -32,6 +32,7 @@ from django.utils.dateparse import parse_datetime
 import uuid
 from pathlib import Path
 from django.core import serializers
+from django.core.management.color import no_style
 from urllib.parse import quote_plus, urlparse
 from utils import revision as revision_utils
 from typing import Any, Type
@@ -1949,6 +1950,18 @@ class RFID(Entity):
         return candidate
 
     @classmethod
+    def _reset_label_sequence(cls) -> None:
+        """Ensure the PK sequence is at or above the current max label id."""
+
+        connection = connections[cls.objects.db]
+        reset_sql = connection.ops.sequence_reset_sql(no_style(), [cls])
+        if not reset_sql:
+            return
+        with connection.cursor() as cursor:
+            for statement in reset_sql:
+                cursor.execute(statement)
+
+    @classmethod
     def register_scan(
         cls, rfid: str, *, kind: str | None = None
     ) -> tuple["RFID", bool]:
@@ -1970,6 +1983,7 @@ class RFID(Entity):
             try:
                 with transaction.atomic():
                     tag = cls.objects.create(**create_kwargs)
+                    cls._reset_label_sequence()
             except IntegrityError:
                 existing = cls.objects.filter(rfid=normalized).first()
                 if existing:
