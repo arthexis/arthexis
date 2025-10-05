@@ -675,8 +675,67 @@ class DeepReadAuthTests(TestCase):
         self.assertIn("dump", result)
         self.assertIn("keys", result)
         self.assertEqual(result["keys"].get("a"), "A1A2A3A4A5A6")
-        self.assertFalse(result["keys"].get("b_verified"))
+        self.assertTrue(result["keys"].get("b_verified"))
+        self.assertTrue(tag.key_b_verified)
         self.assertTrue(any(entry.get("key") == "B" for entry in result["dump"]))
+
+    @patch("core.notifications.notify_async")
+    @patch("core.models.RFID.objects.get_or_create")
+    def test_heuristic_verifies_unverified_keys(self, mock_get, mock_notify):
+        tag = MagicMock(
+            label_id=1,
+            pk=1,
+            allowed=True,
+            color="B",
+            released=False,
+            reference=None,
+        )
+        tag.key_a = "111111111111"
+        tag.key_b = "FFFFFFFFFFFF"
+        tag.key_a_verified = False
+        tag.key_b_verified = True
+        tag.save = MagicMock()
+        mock_get.return_value = (tag, False)
+
+        class HeuristicReader:
+            MI_OK = 1
+            MI_ERR = 2
+            PICC_REQIDL = 0
+            PICC_AUTHENT1A = 0x60
+            PICC_AUTHENT1B = 0x61
+
+            def __init__(self):
+                self.auth_calls: list[tuple[int, str]] = []
+
+            def MFRC522_Request(self, _):
+                return (self.MI_OK, None)
+
+            def MFRC522_Anticoll(self):
+                return (self.MI_OK, [0x01, 0x02, 0x03, 0x04])
+
+            def MFRC522_Auth(self, mode, block, key, uid):
+                key_hex = "".join(f"{value:02X}" for value in key)
+                self.auth_calls.append((mode, key_hex))
+                if mode == self.PICC_AUTHENT1A and key_hex == "A0A1A2A3A4A5":
+                    return self.MI_OK
+                return self.MI_ERR
+
+            def MFRC522_Read(self, block):
+                return (self.MI_OK, list(range(16)))
+
+        reader = HeuristicReader()
+        enable_deep_read(60)
+        result = read_rfid(mfrc=reader, cleanup=False)
+
+        self.assertIn((reader.PICC_AUTHENT1A, "A0A1A2A3A4A5"), reader.auth_calls)
+        self.assertEqual(result["keys"].get("a"), "A0A1A2A3A4A5")
+        self.assertTrue(result["keys"].get("a_verified"))
+        self.assertEqual(tag.key_a, "A0A1A2A3A4A5")
+        self.assertTrue(tag.key_a_verified)
+        self.assertIn(
+            call(update_fields=["key_a", "key_a_verified"]),
+            tag.save.call_args_list,
+        )
 
 
 class RFIDWiringConfigTests(SimpleTestCase):
