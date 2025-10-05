@@ -225,9 +225,17 @@ clear_wifi_secrets() {
 
     nmcli connection modify "$conn_name" wifi-sec.key-mgmt none >/dev/null 2>&1 || true
     nmcli connection modify "$conn_name" wifi-sec.auth-alg open >/dev/null 2>&1 || true
-    nmcli connection modify "$conn_name" wifi-sec.psk "" >/dev/null 2>&1 || true
-    nmcli connection modify "$conn_name" wifi-sec.wep-key-type "" >/dev/null 2>&1 || true
-    nmcli connection modify "$conn_name" wifi-sec.wep-key-flags 0 >/dev/null 2>&1 || true
+
+    local -a remove_props=(
+        wifi-sec.psk
+        wifi-sec.wep-key-type
+        wifi-sec.wep-key-flags
+        wifi-sec.wep-tx-keyidx
+    )
+    local prop
+    for prop in "${remove_props[@]}"; do
+        nmcli connection modify "$conn_name" "-$prop" >/dev/null 2>&1 || true
+    done
 
     local idx
     for idx in 0 1 2 3; do
