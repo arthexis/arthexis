@@ -190,8 +190,8 @@ class ReaderNotificationTests(TestCase):
         return MockReader()
 
     @patch("ocpp.rfid.reader.notify_async")
-    @patch("core.models.RFID.objects.get_or_create")
-    def test_notify_on_allowed_tag(self, mock_get, mock_notify):
+    @patch("ocpp.rfid.reader.RFID.register_scan")
+    def test_notify_on_allowed_tag(self, mock_register, mock_notify):
         reference = MagicMock(value="https://example.com")
         tag = MagicMock(
             label_id=1,
@@ -201,7 +201,7 @@ class ReaderNotificationTests(TestCase):
             released=False,
             reference=reference,
         )
-        mock_get.return_value = (tag, False)
+        mock_register.return_value = (tag, False)
 
         reader = self._mock_reader()
         result = read_rfid(mfrc=reader, cleanup=False)
@@ -214,8 +214,8 @@ class ReaderNotificationTests(TestCase):
         self.assertTrue(getattr(reader, "stop_called", False))
 
     @patch("ocpp.rfid.reader.notify_async")
-    @patch("core.models.RFID.objects.get_or_create")
-    def test_notify_on_disallowed_tag(self, mock_get, mock_notify):
+    @patch("ocpp.rfid.reader.RFID.register_scan")
+    def test_notify_on_disallowed_tag(self, mock_register, mock_notify):
         tag = MagicMock(
             label_id=2,
             pk=2,
@@ -224,7 +224,7 @@ class ReaderNotificationTests(TestCase):
             released=False,
             reference=None,
         )
-        mock_get.return_value = (tag, False)
+        mock_register.return_value = (tag, False)
 
         reader = self._mock_reader()
         result = read_rfid(mfrc=reader, cleanup=False)
@@ -238,8 +238,8 @@ class ReaderNotificationTests(TestCase):
 class ValidateRfidValueTests(SimpleTestCase):
     @patch("ocpp.rfid.reader.timezone.now")
     @patch("ocpp.rfid.reader.notify_async")
-    @patch("ocpp.rfid.reader.RFID.objects.get_or_create")
-    def test_creates_new_tag(self, mock_get, mock_notify, mock_now):
+    @patch("ocpp.rfid.reader.RFID.register_scan")
+    def test_creates_new_tag(self, mock_register, mock_notify, mock_now):
         fake_now = object()
         mock_now.return_value = fake_now
         tag = MagicMock()
@@ -250,11 +250,11 @@ class ValidateRfidValueTests(SimpleTestCase):
         tag.released = False
         tag.reference = None
         tag.kind = RFID.CLASSIC
-        mock_get.return_value = (tag, True)
+        mock_register.return_value = (tag, True)
 
         result = validate_rfid_value("abcd1234")
 
-        mock_get.assert_called_once_with(rfid="ABCD1234", defaults={})
+        mock_register.assert_called_once_with("ABCD1234", kind=None)
         tag.save.assert_called_once_with(update_fields=["last_seen_on"])
         self.assertIs(tag.last_seen_on, fake_now)
         mock_notify.assert_called_once_with("RFID 1 OK", "ABCD1234 B")
@@ -263,8 +263,8 @@ class ValidateRfidValueTests(SimpleTestCase):
 
     @patch("ocpp.rfid.reader.timezone.now")
     @patch("ocpp.rfid.reader.notify_async")
-    @patch("ocpp.rfid.reader.RFID.objects.get_or_create")
-    def test_updates_existing_tag_kind(self, mock_get, mock_notify, mock_now):
+    @patch("ocpp.rfid.reader.RFID.register_scan")
+    def test_updates_existing_tag_kind(self, mock_register, mock_notify, mock_now):
         fake_now = object()
         mock_now.return_value = fake_now
         tag = MagicMock()
@@ -275,13 +275,11 @@ class ValidateRfidValueTests(SimpleTestCase):
         tag.released = True
         tag.reference = None
         tag.kind = RFID.CLASSIC
-        mock_get.return_value = (tag, False)
+        mock_register.return_value = (tag, False)
 
         result = validate_rfid_value("abcd", kind=RFID.NTAG215)
 
-        mock_get.assert_called_once_with(
-            rfid="ABCD", defaults={"kind": RFID.NTAG215}
-        )
+        mock_register.assert_called_once_with("ABCD", kind=RFID.NTAG215)
         tag.save.assert_called_once_with(update_fields=["kind", "last_seen_on"])
         self.assertIs(tag.last_seen_on, fake_now)
         self.assertEqual(tag.kind, RFID.NTAG215)
@@ -306,9 +304,9 @@ class ValidateRfidValueTests(SimpleTestCase):
     @patch("ocpp.rfid.reader.timezone.now")
     @patch("ocpp.rfid.reader.notify_async")
     @patch("ocpp.rfid.reader.subprocess.run")
-    @patch("ocpp.rfid.reader.RFID.objects.get_or_create")
+    @patch("ocpp.rfid.reader.RFID.register_scan")
     def test_external_command_success(
-        self, mock_get, mock_run, mock_notify, mock_now
+        self, mock_register, mock_run, mock_notify, mock_now
     ):
         fake_now = object()
         mock_now.return_value = fake_now
@@ -321,7 +319,7 @@ class ValidateRfidValueTests(SimpleTestCase):
         tag.released = False
         tag.reference = None
         tag.kind = RFID.CLASSIC
-        mock_get.return_value = (tag, False)
+        mock_register.return_value = (tag, False)
         mock_run.return_value = types.SimpleNamespace(returncode=0)
 
         result = validate_rfid_value("abcd1234")
@@ -340,9 +338,9 @@ class ValidateRfidValueTests(SimpleTestCase):
     @patch("ocpp.rfid.reader.timezone.now")
     @patch("ocpp.rfid.reader.notify_async")
     @patch("ocpp.rfid.reader.subprocess.run")
-    @patch("ocpp.rfid.reader.RFID.objects.get_or_create")
+    @patch("ocpp.rfid.reader.RFID.register_scan")
     def test_external_command_failure_blocks_tag(
-        self, mock_get, mock_run, mock_notify, mock_now
+        self, mock_register, mock_run, mock_notify, mock_now
     ):
         fake_now = object()
         mock_now.return_value = fake_now
@@ -355,7 +353,7 @@ class ValidateRfidValueTests(SimpleTestCase):
         tag.released = False
         tag.reference = None
         tag.kind = RFID.CLASSIC
-        mock_get.return_value = (tag, False)
+        mock_register.return_value = (tag, False)
         mock_run.return_value = types.SimpleNamespace(returncode=1)
 
         result = validate_rfid_value("ffff")
@@ -391,8 +389,8 @@ class CardTypeDetectionTests(TestCase):
         return MockReader()
 
     @patch("ocpp.rfid.reader.notify_async")
-    @patch("core.models.RFID.objects.get_or_create")
-    def test_detects_ntag215(self, mock_get, _mock_notify):
+    @patch("ocpp.rfid.reader.RFID.register_scan")
+    def test_detects_ntag215(self, mock_register, _mock_notify):
         tag = MagicMock(
             pk=1,
             label_id=1,
@@ -402,7 +400,7 @@ class CardTypeDetectionTests(TestCase):
             reference=None,
             kind=RFID.NTAG215,
         )
-        mock_get.return_value = (tag, True)
+        mock_register.return_value = (tag, True)
         reader = self._mock_ntag_reader()
         result = read_rfid(mfrc=reader, cleanup=False)
         self.assertEqual(result["kind"], RFID.NTAG215)
@@ -650,8 +648,8 @@ class DeepReadAuthTests(TestCase):
             return (self.MI_OK, [0] * 16)
 
     @patch("core.notifications.notify_async")
-    @patch("core.models.RFID.objects.get_or_create")
-    def test_auth_tries_key_a_then_b(self, mock_get, mock_notify):
+    @patch("ocpp.rfid.reader.RFID.register_scan")
+    def test_auth_tries_key_a_then_b(self, mock_register, mock_notify):
         tag = MagicMock(
             label_id=1,
             pk=1,
@@ -666,7 +664,7 @@ class DeepReadAuthTests(TestCase):
         tag.key_b_verified = False
         tag.data = []
         tag.save = MagicMock()
-        mock_get.return_value = (tag, False)
+        mock_register.return_value = (tag, False)
         reader = self.MockReader()
         enable_deep_read(60)
         result = read_rfid(mfrc=reader, cleanup=False)
@@ -689,8 +687,10 @@ class DeepReadAuthTests(TestCase):
         )
 
     @patch("core.notifications.notify_async")
-    @patch("core.models.RFID.objects.get_or_create")
-    def test_heuristic_verifies_unverified_keys(self, mock_get, mock_notify):
+    @patch("ocpp.rfid.reader.RFID.register_scan")
+    def test_heuristic_verifies_unverified_keys(
+        self, mock_register, mock_notify
+    ):
         tag = MagicMock(
             label_id=1,
             pk=1,
@@ -704,7 +704,7 @@ class DeepReadAuthTests(TestCase):
         tag.key_a_verified = False
         tag.key_b_verified = True
         tag.save = MagicMock()
-        mock_get.return_value = (tag, False)
+        mock_register.return_value = (tag, False)
 
         class HeuristicReader:
             MI_OK = 1

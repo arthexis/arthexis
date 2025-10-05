@@ -38,6 +38,7 @@ import json
 import uuid
 import requests
 import datetime
+from django.db import IntegrityError, transaction
 import calendar
 import re
 from django_object_actions import DjangoObjectActions
@@ -2247,7 +2248,7 @@ class EnergyAccountAdmin(EntityModelAdmin):
                 account = EnergyAccount.objects.create(user=user, name=username.upper())
                 rfid_val = form.cleaned_data["rfid"].upper()
                 if rfid_val:
-                    tag, _ = RFID.objects.get_or_create(rfid=rfid_val)
+                    tag, _ = RFID.register_scan(rfid_val)
                     account.rfids.add(tag)
                 vehicle_vin = form.cleaned_data["vehicle_id"]
                 if vehicle_vin:
@@ -2738,6 +2739,32 @@ class RFIDForm(forms.ModelForm):
         self.fields["data"].widget = RFIDDataWidget()
 
 
+class CopyRFIDForm(forms.Form):
+    """Simple form to capture the new RFID value when copying a tag."""
+
+    rfid = forms.CharField(
+        label=_("New RFID value"),
+        max_length=RFID._meta.get_field("rfid").max_length,
+        help_text=_("Enter the hexadecimal value for the new card."),
+    )
+
+    def clean_rfid(self):
+        value = (self.cleaned_data.get("rfid") or "").strip()
+        field = RFID._meta.get_field("rfid")
+        try:
+            cleaned = field.clean(value, None)
+        except ValidationError as exc:
+            raise forms.ValidationError(exc.messages)
+        normalized = (cleaned or "").strip().upper()
+        if not normalized:
+            raise forms.ValidationError(_("RFID value is required."))
+        if RFID.objects.filter(rfid=normalized).exists():
+            raise forms.ValidationError(
+                _("An RFID with this value already exists.")
+            )
+        return normalized
+
+
 @admin.register(RFID)
 class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     change_list_template = "admin/core/rfid/change_list.html"
@@ -2756,7 +2783,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     search_fields = ("label_id", "rfid", "custom_label")
     autocomplete_fields = ["energy_accounts"]
     raw_id_fields = ["reference"]
-    actions = ["scan_rfids", "print_card_labels"]
+    actions = ["scan_rfids", "print_card_labels", "copy_rfids"]
     readonly_fields = ("added_on", "last_seen_on")
     form = RFIDForm
 
@@ -2770,6 +2797,95 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         return redirect("admin:core_rfid_scan")
 
     scan_rfids.short_description = "Scan RFIDs"
+
+    @admin.action(description=_("Copy RFID"))
+    def copy_rfids(self, request, queryset):
+        if queryset.count() != 1:
+            self.message_user(
+                request,
+                _("Select exactly one RFID to copy."),
+                level=messages.ERROR,
+            )
+            return None
+
+        source = (
+            queryset.select_related("reference")
+            .prefetch_related("energy_accounts")
+            .first()
+        )
+        if source is None:
+            self.message_user(
+                request,
+                _("Unable to find the selected RFID."),
+                level=messages.ERROR,
+            )
+            return None
+
+        if "apply" in request.POST:
+            form = CopyRFIDForm(request.POST)
+            if form.is_valid():
+                new_rfid = form.cleaned_data["rfid"]
+                label_id = RFID.next_copy_label(source)
+                data_value = source.data or []
+                copied_data = (
+                    json.loads(json.dumps(data_value)) if data_value else []
+                )
+                create_kwargs = {
+                    "label_id": label_id,
+                    "rfid": new_rfid,
+                    "custom_label": source.custom_label,
+                    "key_a": source.key_a,
+                    "key_b": source.key_b,
+                    "key_a_verified": source.key_a_verified,
+                    "key_b_verified": source.key_b_verified,
+                    "allowed": source.allowed,
+                    "external_command": source.external_command,
+                    "color": source.color,
+                    "kind": source.kind,
+                    "reference": source.reference,
+                    "released": source.released,
+                    "data": copied_data,
+                }
+                try:
+                    with transaction.atomic():
+                        new_tag = RFID.objects.create(**create_kwargs)
+                except IntegrityError:
+                    form.add_error(
+                        None, _("Unable to copy RFID. Please try again.")
+                    )
+                else:
+                    new_tag.energy_accounts.set(source.energy_accounts.all())
+                    self.message_user(
+                        request,
+                        _(
+                            "Copied RFID %(source_label)s to %(new_label)s "
+                            "(%(rfid)s)."
+                        )
+                        % {
+                            "source_label": source.label_id,
+                            "new_label": new_tag.label_id,
+                            "rfid": new_tag.rfid,
+                        },
+                        level=messages.SUCCESS,
+                    )
+                    return HttpResponseRedirect(
+                        reverse("admin:core_rfid_change", args=[new_tag.pk])
+                    )
+        else:
+            form = CopyRFIDForm()
+
+        context = self.admin_site.each_context(request)
+        context.update(
+            {
+                "opts": self.model._meta,
+                "form": form,
+                "source": source,
+                "action": "copy_rfids",
+                "title": _("Copy RFID"),
+            }
+        )
+        context["media"] = self.media + form.media
+        return TemplateResponse(request, "admin/core/rfid/copy.html", context)
 
     def print_card_labels(self, request, queryset):
         queryset = queryset.select_related("reference").order_by("label_id")

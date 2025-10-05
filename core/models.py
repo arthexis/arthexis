@@ -3,7 +3,7 @@ from django.contrib.auth.models import (
     Group,
     UserManager as DjangoUserManager,
 )
-from django.db import DatabaseError, models
+from django.db import DatabaseError, IntegrityError, models, transaction
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.conf import settings
@@ -1824,6 +1824,8 @@ class RFID(Entity):
         (RED, "Red"),
         (GREEN, "Green"),
     ]
+    SCAN_LABEL_STEP = 10
+    COPY_LABEL_STEP = 1
     color = models.CharField(
         max_length=1,
         choices=COLOR_CHOICES,
@@ -1897,6 +1899,84 @@ class RFID(Entity):
 
     def __str__(self):  # pragma: no cover - simple representation
         return str(self.label_id)
+
+    @classmethod
+    def next_scan_label(
+        cls, *, step: int | None = None, start: int | None = None
+    ) -> int:
+        """Return the next label id for RFID tags created by scanning."""
+
+        step_value = step or cls.SCAN_LABEL_STEP
+        if step_value <= 0:
+            raise ValueError("step must be a positive integer")
+        start_value = start if start is not None else step_value
+
+        labels_qs = (
+            cls.objects.order_by("-label_id").values_list("label_id", flat=True)
+        )
+        max_label = 0
+        last_multiple = 0
+        for value in labels_qs.iterator():
+            if value is None:
+                continue
+            if max_label == 0:
+                max_label = value
+            if value >= start_value and value % step_value == 0:
+                last_multiple = value
+                break
+        if last_multiple:
+            candidate = last_multiple + step_value
+        else:
+            candidate = start_value
+        if max_label:
+            while candidate <= max_label:
+                candidate += step_value
+        return candidate
+
+    @classmethod
+    def next_copy_label(
+        cls, source: "RFID", *, step: int | None = None
+    ) -> int:
+        """Return the next label id when copying ``source`` to a new card."""
+
+        step_value = step or cls.COPY_LABEL_STEP
+        if step_value <= 0:
+            raise ValueError("step must be a positive integer")
+        base_label = (source.label_id or 0) + step_value
+        candidate = base_label if base_label > 0 else step_value
+        while cls.objects.filter(label_id=candidate).exists():
+            candidate += step_value
+        return candidate
+
+    @classmethod
+    def register_scan(
+        cls, rfid: str, *, kind: str | None = None
+    ) -> tuple["RFID", bool]:
+        """Return or create an RFID that was detected via scanning."""
+
+        normalized = (rfid or "").upper()
+        existing = cls.objects.filter(rfid=normalized).first()
+        if existing:
+            return existing, False
+
+        attempts = 0
+        max_attempts = 10
+        while attempts < max_attempts:
+            attempts += 1
+            label_id = cls.next_scan_label()
+            create_kwargs = {"label_id": label_id, "rfid": normalized}
+            if kind:
+                create_kwargs["kind"] = kind
+            try:
+                with transaction.atomic():
+                    tag = cls.objects.create(**create_kwargs)
+            except IntegrityError:
+                existing = cls.objects.filter(rfid=normalized).first()
+                if existing:
+                    return existing, False
+            else:
+                return tag, True
+        raise IntegrityError("Unable to allocate label id for scanned RFID")
 
     @staticmethod
     def get_account_by_rfid(value):
