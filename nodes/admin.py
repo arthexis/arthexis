@@ -1487,6 +1487,28 @@ class NetMessageAdmin(EntityModelAdmin):
         ),
     )
 
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if self.has_add_permission(request):
+            action = getattr(self, "send", None)
+            if action is not None and "send" not in actions:
+                actions["send"] = (
+                    action,
+                    "send",
+                    getattr(action, "short_description", _("Send Net Message")),
+                )
+        return actions
+
+    def send(self, request, queryset=None):
+        return redirect(
+            reverse(
+                f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_send"
+            )
+        )
+
+    send.label = _("Send Net Message")
+    send.short_description = _("Send Net Message")
+
     def get_urls(self):
         urls = super().get_urls()
         opts = self.model._meta
