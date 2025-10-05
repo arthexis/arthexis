@@ -18,7 +18,7 @@ REQUIRES_REDIS=false
 UPDATE=false
 CLEAN=false
 LATEST=false
-ENABLE_DATASETTE=false
+ENABLE_DATASETTE=true
 CHECK=false
 AUTO_UPGRADE_MODE=""
 
@@ -26,7 +26,7 @@ BASE_DIR="$SCRIPT_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette] [--check] [--auto-upgrade|--no-auto-upgrade] [--satellite|--terminal|--control|--constellation]" >&2
+    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette|--no-datasette] [--check] [--auto-upgrade|--no-auto-upgrade] [--satellite|--terminal|--control|--constellation]" >&2
     exit 1
 }
 
@@ -108,6 +108,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --datasette)
             ENABLE_DATASETTE=true
+            shift
+            ;;
+        --no-datasette)
+            ENABLE_DATASETTE=false
             shift
             ;;
         --check)
