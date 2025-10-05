@@ -59,7 +59,17 @@ from core.user_data import EntityModelAdmin
 class NodeAdminForm(forms.ModelForm):
     class Meta:
         model = Node
-        exclude = ("badge_color",)
+        exclude = ("badge_color", "features")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        enable_public = self.fields.get("enable_public_api")
+        if enable_public:
+            enable_public.label = _("Enable public admin access")
+            enable_public.help_text = _(
+                "Expose the admin API through this node's public endpoint. "
+                "Only enable when trusted peers require administrative access."
+            )
 
 
 class NodeFeatureAssignmentInline(admin.TabularInline):
@@ -217,12 +227,51 @@ class NodeAdmin(EntityModelAdmin):
         "address",
         "port",
         "role",
+        "relation",
         "last_seen",
     )
     search_fields = ("hostname", "address", "mac_address")
     change_list_template = "admin/nodes/node/change_list.html"
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
+    fieldsets = (
+        (
+            _("Node"),
+            {
+                "fields": (
+                    "hostname",
+                    "address",
+                    "mac_address",
+                    "port",
+                    "role",
+                    "current_relation",
+                )
+            },
+        ),
+        (
+            _("Public endpoint"),
+            {
+                "fields": (
+                    "public_endpoint",
+                    "public_key",
+                )
+            },
+        ),
+        (
+            _("Installation"),
+            {
+                "fields": (
+                    "base_path",
+                    "installed_version",
+                    "installed_revision",
+                )
+            },
+        ),
+        (
+            _("Public admin"),
+            {"fields": ("enable_public_api",)},
+        ),
+    )
     actions = [
         "register_visitor",
         "run_task",
@@ -230,6 +279,10 @@ class NodeAdmin(EntityModelAdmin):
         "fetch_rfids",
     ]
     inlines = [NodeFeatureAssignmentInline]
+
+    @admin.display(description=_("Relation"), ordering="current_relation")
+    def relation(self, obj):
+        return obj.get_current_relation_display()
 
     def get_urls(self):
         urls = super().get_urls()
