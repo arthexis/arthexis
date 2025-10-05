@@ -207,10 +207,7 @@ def read_rfid(
                         selected = False
                     rfid = "".join(f"{x:02X}" for x in uid_bytes)
                     kind = RFID.NTAG215 if len(uid_bytes) > 5 else RFID.CLASSIC
-                    defaults = {"kind": kind}
-                    tag, created = RFID.objects.get_or_create(
-                        rfid=rfid, defaults=defaults
-                    )
+                    tag, created = RFID.register_scan(rfid, kind=kind)
                     result = _build_tag_response(
                         tag,
                         rfid,
@@ -371,12 +368,8 @@ def validate_rfid_value(value: object, *, kind: str | None = None) -> dict:
         if candidate in {choice[0] for choice in RFID.KIND_CHOICES}:
             normalized_kind = candidate
 
-    defaults = {"kind": normalized_kind} if normalized_kind else {}
-
     try:
-        tag, created = RFID.objects.get_or_create(
-            rfid=normalized, defaults=defaults
-        )
+        tag, created = RFID.register_scan(normalized, kind=normalized_kind)
     except ValidationError as exc:
         return {"error": "; ".join(exc.messages)}
     except Exception as exc:  # pragma: no cover - defensive fallback

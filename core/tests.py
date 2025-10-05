@@ -469,6 +469,27 @@ class RFIDValidationTests(TestCase):
             tag.full_clean()
 
 
+class RFIDLabelSequenceTests(TestCase):
+    def test_next_scan_label_starts_at_ten(self):
+        self.assertEqual(RFID.next_scan_label(), 10)
+
+    def test_next_scan_label_skips_non_multiples(self):
+        RFID.objects.create(label_id=21, rfid="SEQTEST21")
+
+        self.assertEqual(RFID.next_scan_label(), 30)
+
+    def test_next_copy_label_increments_by_one(self):
+        source = RFID.objects.create(label_id=40, rfid="SEQTEST40")
+
+        self.assertEqual(RFID.next_copy_label(source), 41)
+
+    def test_next_copy_label_skips_existing(self):
+        source = RFID.objects.create(label_id=50, rfid="SEQTEST50")
+        RFID.objects.create(label_id=51, rfid="SEQTEST51")
+
+        self.assertEqual(RFID.next_copy_label(source), 52)
+
+
 class RFIDAssignmentTests(TestCase):
     def setUp(self):
         self.user1 = User.objects.create_user(username="user1", password="x")
