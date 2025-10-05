@@ -829,6 +829,19 @@ class ReleaseProcessTests(TestCase):
     @mock.patch("core.views.PackageRelease.dump_fixture")
     @mock.patch("core.views.release_utils.promote", side_effect=Exception("boom"))
     def test_promote_cleans_repo_on_failure(self, promote, dump_fixture, run):
+        import subprocess as sp
+
+        def fake_run(cmd, check=True, capture_output=False, text=False):
+            if capture_output:
+                stdout = ""
+                if cmd[:3] == ["git", "rev-parse", "origin/main"]:
+                    stdout = "abc123\n"
+                elif cmd[:4] == ["git", "merge-base", "HEAD", "origin/main"]:
+                    stdout = "abc123\n"
+                return sp.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+            return sp.CompletedProcess(cmd, 0)
+
+        run.side_effect = fake_run
         with self.assertRaises(Exception):
             _step_promote_build(self.release, {}, Path("rel.log"))
         dump_fixture.assert_not_called()
@@ -873,19 +886,59 @@ class ReleaseProcessTests(TestCase):
     @mock.patch("core.views.subprocess.run")
     @mock.patch("core.views.PackageRelease.dump_fixture")
     @mock.patch("core.views.release_utils.promote")
-    def test_promote_rebases_and_pushes_main(self, promote, dump_fixture, run):
+    def test_promote_verifies_origin_and_pushes_main(self, promote, dump_fixture, run):
         import subprocess as sp
 
         def fake_run(cmd, check=True, capture_output=False, text=False):
             if capture_output:
-                return sp.CompletedProcess(cmd, 0, stdout="", stderr="")
+                stdout = ""
+                if cmd[:3] == ["git", "rev-parse", "origin/main"]:
+                    stdout = "abc123\n"
+                elif cmd[:4] == ["git", "merge-base", "HEAD", "origin/main"]:
+                    stdout = "abc123\n"
+                return sp.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
             return sp.CompletedProcess(cmd, 0)
 
         run.side_effect = fake_run
         _step_promote_build(self.release, {}, Path("rel.log"))
         run.assert_any_call(["git", "fetch", "origin", "main"], check=True)
-        run.assert_any_call(["git", "rebase", "origin/main"], check=True)
+        run.assert_any_call(
+            ["git", "rev-parse", "origin/main"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        run.assert_any_call(
+            ["git", "merge-base", "HEAD", "origin/main"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         run.assert_any_call(["git", "push"], check=True)
+
+    @mock.patch("core.views.subprocess.run")
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    @mock.patch("core.views.release_utils.promote")
+    def test_promote_aborts_if_origin_advances(self, promote, dump_fixture, run):
+        import subprocess as sp
+
+        def fake_run(cmd, check=True, capture_output=False, text=False):
+            if capture_output:
+                if cmd[:3] == ["git", "rev-parse", "origin/main"]:
+                    return sp.CompletedProcess(cmd, 0, stdout="new\n", stderr="")
+                if cmd[:4] == ["git", "merge-base", "HEAD", "origin/main"]:
+                    return sp.CompletedProcess(cmd, 0, stdout="old\n", stderr="")
+                return sp.CompletedProcess(cmd, 0, stdout="", stderr="")
+            return sp.CompletedProcess(cmd, 0)
+
+        run.side_effect = fake_run
+
+        with self.assertRaises(Exception):
+            _step_promote_build(self.release, {}, Path("rel.log"))
+
+        promote.assert_not_called()
+        run.assert_any_call(["git", "reset", "--hard"], check=False)
+        run.assert_any_call(["git", "clean", "-fd"], check=False)
 
     @mock.patch("core.views.subprocess.run")
     @mock.patch("core.views.PackageRelease.dump_fixture")
@@ -894,7 +947,12 @@ class ReleaseProcessTests(TestCase):
 
         def fake_run(cmd, check=True, capture_output=False, text=False):
             if capture_output:
-                return sp.CompletedProcess(cmd, 0, stdout="", stderr="")
+                stdout = ""
+                if cmd[:3] == ["git", "rev-parse", "origin/main"]:
+                    stdout = "abc123\n"
+                elif cmd[:4] == ["git", "merge-base", "HEAD", "origin/main"]:
+                    stdout = "abc123\n"
+                return sp.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
             return sp.CompletedProcess(cmd, 0)
 
         run.side_effect = fake_run
