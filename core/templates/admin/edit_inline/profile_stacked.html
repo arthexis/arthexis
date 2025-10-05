@@ -1,4 +1,4 @@
-{% load i18n admin_urls %}
+{% load i18n admin_urls form_extras %}
 <div class="js-inline-admin-formset inline-group"
      id="{{ inline_admin_formset.formset.prefix }}-group"
      data-inline-type="stacked"
@@ -50,6 +50,14 @@
       color: inherit;
     }
 
+    [data-inline-prefix="{{ inline_admin_formset.formset.prefix }}"] .profile-fieldset-visibility {
+      display: block;
+    }
+
+    [data-inline-prefix="{{ inline_admin_formset.formset.prefix }}"] .is-hidden-by-visibility {
+      display: none !important;
+    }
+
   </style>
   {% if inline_admin_formset.is_collapsible %}<details><summary>{% endif %}
   <h2 id="{{ inline_admin_formset.formset.prefix }}-heading" class="inline-heading">
@@ -84,7 +92,17 @@
 
   {% with parent_counter=forloop.counter0 %}
     {% for fieldset in inline_admin_form %}
-      {% include "admin/includes/fieldset.html" with heading_level=4 prefix=fieldset.formset.prefix id_prefix=parent_counter id_suffix=forloop.counter0 %}
+      {% resolve_fieldset_visibility fieldset inline_admin_form.model_admin.fieldset_visibility as fieldset_visibility %}
+      {% if fieldset_visibility %}
+        <div class="profile-fieldset-visibility"
+             data-visibility-field="{{ fieldset_visibility.field }}"
+             {% if fieldset_visibility.mode %}data-visibility-mode="{{ fieldset_visibility.mode }}"{% endif %}
+             {% if fieldset_visibility.values %}data-visibility-values="{{ fieldset_visibility.values|join:' ' }}"{% endif %}>
+          {% include "admin/includes/fieldset.html" with heading_level=4 prefix=fieldset.formset.prefix id_prefix=parent_counter id_suffix=forloop.counter0 %}
+        </div>
+      {% else %}
+        {% include "admin/includes/fieldset.html" with heading_level=4 prefix=fieldset.formset.prefix id_prefix=parent_counter id_suffix=forloop.counter0 %}
+      {% endif %}
     {% endfor %}
   {% endwith %}
 
@@ -94,3 +112,134 @@
   {% if inline_admin_formset.is_collapsible %}</details>{% endif %}
 </fieldset>
 </div>
+<script>
+  (function () {
+    const group = document.getElementById("{{ inline_admin_formset.formset.prefix }}-group");
+    if (!group || group.dataset.visibilityInitialized === "true") {
+      return;
+    }
+    group.dataset.visibilityInitialized = "true";
+
+    const HIDDEN_CLASS = "is-hidden-by-visibility";
+
+    function parseValues(valueAttr) {
+      if (!valueAttr) {
+        return [];
+      }
+      return valueAttr.split(/\s+/).filter(Boolean);
+    }
+
+    function getInputs(container, fieldName) {
+      const selector = `[name$="-${fieldName}"]`;
+      const matches = Array.from(container.querySelectorAll(selector));
+      if (!matches.length) {
+        return [];
+      }
+      if (matches[0].type === "radio") {
+        return matches;
+      }
+      return [matches[0]];
+    }
+
+    function currentValue(inputs) {
+      if (!inputs.length) {
+        return "";
+      }
+      const input = inputs[0];
+      if (input.tagName === "SELECT") {
+        return input.value;
+      }
+      if (input.type === "radio") {
+        const checked = inputs.find((node) => node.checked);
+        return checked ? checked.value : "";
+      }
+      if (input.type === "checkbox") {
+        return input.checked ? "true" : "false";
+      }
+      return input.value;
+    }
+
+    function attachController(inline, fieldName, wrappers) {
+      const inputs = getInputs(inline, fieldName);
+      if (!inputs.length) {
+        return;
+      }
+
+      const update = () => {
+        const value = currentValue(inputs);
+        wrappers.forEach((wrapper) => {
+          const values = parseValues(wrapper.dataset.visibilityValues || "");
+          const mode = (wrapper.dataset.visibilityMode || "show").toLowerCase();
+          const matches = !values.length || values.includes(value);
+          const shouldShow = mode === "hide" ? !matches : matches;
+          wrapper.classList.toggle(HIDDEN_CLASS, !shouldShow);
+        });
+      };
+
+      inputs.forEach((input) => {
+        const handler = () => update();
+        input.addEventListener("change", handler);
+        if (
+          input.tagName !== "SELECT" &&
+          input.type !== "radio" &&
+          input.type !== "checkbox"
+        ) {
+          input.addEventListener("input", handler);
+        }
+      });
+
+      update();
+    }
+
+    function initializeInline(inline) {
+      if (!inline || inline.dataset.visibilityInitialized === "true") {
+        return;
+      }
+
+      const wrappers = Array.from(
+        inline.querySelectorAll("[data-visibility-field]")
+      );
+
+      if (!wrappers.length) {
+        inline.dataset.visibilityInitialized = "true";
+        return;
+      }
+
+      const grouped = new Map();
+
+      wrappers.forEach((wrapper) => {
+        const fieldName = wrapper.dataset.visibilityField;
+        if (!fieldName) {
+          return;
+        }
+        if (!grouped.has(fieldName)) {
+          grouped.set(fieldName, []);
+        }
+        grouped.get(fieldName).push(wrapper);
+      });
+
+      grouped.forEach((wrapperList, fieldName) => {
+        attachController(inline, fieldName, wrapperList);
+      });
+
+      inline.dataset.visibilityInitialized = "true";
+    }
+
+    group.querySelectorAll(".inline-related").forEach((inline) => {
+      initializeInline(inline);
+    });
+
+    document.addEventListener("formset:added", (event) => {
+      if (
+        !event.detail ||
+        event.detail.formsetName !== "{{ inline_admin_formset.formset.prefix }}"
+      ) {
+        return;
+      }
+      const row = event.target;
+      if (row && group.contains(row)) {
+        initializeInline(row);
+      }
+    });
+  })();
+</script>
