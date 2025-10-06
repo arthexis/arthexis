@@ -4,6 +4,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/helpers/logging.sh
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/nginx_maintenance.sh
+. "$SCRIPT_DIR/scripts/helpers/nginx_maintenance.sh"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -21,13 +23,14 @@ LATEST=false
 ENABLE_DATASETTE=true
 CHECK=false
 AUTO_UPGRADE_MODE=""
+REFRESH_MAINTENANCE=false
 
 BASE_DIR="$SCRIPT_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 DB_FILE="$BASE_DIR/db.sqlite3"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette|--no-datasette] [--check] [--auto-upgrade|--no-auto-upgrade] [--satellite|--terminal|--control|--constellation]" >&2
+    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette|--no-datasette] [--check] [--auto-upgrade|--no-auto-upgrade] [--refresh-maintenance] [--satellite|--terminal|--control|--constellation]" >&2
     exit 1
 }
 
@@ -309,6 +312,10 @@ while [[ $# -gt 0 ]]; do
             CHECK=true
             shift
             ;;
+        --refresh-maintenance)
+            REFRESH_MAINTENANCE=true
+            shift
+            ;;
         --auto-upgrade)
             if [ "$AUTO_UPGRADE_MODE" = "disable" ]; then
                 echo "Cannot combine --auto-upgrade with --no-auto-upgrade" >&2
@@ -363,6 +370,19 @@ while [[ $# -gt 0 ]]; do
     esac
 
 done
+
+if [ "$REFRESH_MAINTENANCE" = true ]; then
+    if [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || [ "$UPDATE" = true ] || \
+       [ "$CLEAN" = true ] || [ "$LATEST" = true ] || [ "$CHECK" = true ] || \
+       [ -n "$AUTO_UPGRADE_MODE" ] || [ "$ENABLE_DATASETTE" = false ] || \
+       [ "$ENABLE_CELERY" = true ] || [ "$ENABLE_LCD_SCREEN" = true ] || \
+       [ "$ENABLE_CONTROL" = true ] || [ "$REQUIRES_REDIS" = true ]; then
+        echo "--refresh-maintenance cannot be combined with other options" >&2
+        usage
+    fi
+    arthexis_refresh_nginx_maintenance "$BASE_DIR"
+    exit 0
+fi
 
 if [ "$CHECK" = true ]; then
     if [ -f "$LOCK_DIR/role.lck" ]; then
@@ -469,6 +489,10 @@ if [ "$AUTO_UPGRADE_MODE" = "enable" ]; then
 elif [ "$AUTO_UPGRADE_MODE" = "disable" ]; then
     rm -f "$LOCK_DIR/auto_upgrade.lck"
     run_auto_upgrade_management disable
+fi
+
+if command -v nginx >/dev/null 2>&1; then
+    arthexis_refresh_nginx_maintenance "$BASE_DIR" "/etc/nginx/conf.d/arthexis-${NGINX_MODE}.conf"
 fi
 
 if [ "$UPDATE" = true ]; then

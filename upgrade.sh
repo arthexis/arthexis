@@ -4,10 +4,14 @@ set -e
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/nginx_maintenance.sh
+. "$BASE_DIR/scripts/helpers/nginx_maintenance.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 cd "$BASE_DIR"
+
+LOCK_DIR="$BASE_DIR/locks"
 
 BACKUP_DIR="$BASE_DIR/backups"
 
@@ -269,6 +273,12 @@ if [ $VENV_PRESENT -eq 0 ]; then
   exit 0
 fi
 
+if command -v nginx >/dev/null 2>&1; then
+  arthexis_refresh_nginx_maintenance "$BASE_DIR" \
+    "/etc/nginx/conf.d/arthexis-internal.conf" \
+    "/etc/nginx/conf.d/arthexis-public.conf"
+fi
+
 # Remove existing database if requested
 if [ "$CLEAN" -eq 1 ]; then
   if ! confirm_database_deletion "Running upgrade with --clean"; then
@@ -290,7 +300,6 @@ FAILOVER_CREATED=1 ./env-refresh.sh $ENV_ARGS
 # Reload personal user data fixtures
 
 # Migrate existing systemd unit to dedicated Celery services if needed
-LOCK_DIR="$BASE_DIR/locks"
 if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
   SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
