@@ -1289,6 +1289,7 @@ def release_progress(request, pk: int, action: str):
     session_key = f"release_publish_{pk}"
     lock_path = Path("locks") / f"release_publish_{pk}.json"
     restart_path = Path("locks") / f"release_publish_{pk}.restarts"
+    log_dir = Path(settings.LOG_DIR)
 
     version_path = Path("VERSION")
     repo_version_before_sync = ""
@@ -1306,7 +1307,6 @@ def release_progress(request, pk: int, action: str):
                 lock_path.unlink()
             if restart_path.exists():
                 restart_path.unlink()
-            log_dir = Path("logs")
             pattern = f"pr.{release.package.name}.v{previous_version}*.log"
             for log_file in log_dir.glob(pattern):
                 log_file.unlink()
@@ -1329,7 +1329,6 @@ def release_progress(request, pk: int, action: str):
         request.session.pop(session_key, None)
         if lock_path.exists():
             lock_path.unlink()
-        log_dir = Path("logs")
         pattern = f"pr.{release.package.name}.v{release.version}*.log"
         for f in log_dir.glob(pattern):
             f.unlink()
@@ -1414,7 +1413,7 @@ def release_progress(request, pk: int, action: str):
             "started": ctx.get("started", False),
         }
         step_count = 0
-    log_path = Path("logs") / log_name
+    log_path = log_dir / log_name
     ctx.setdefault("log", log_name)
     ctx.setdefault("paused", False)
     ctx.setdefault("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE)
