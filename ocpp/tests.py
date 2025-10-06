@@ -4274,6 +4274,64 @@ class LiveUpdateViewTests(TestCase):
         self.assertEqual(resp.context["request"].live_update_interval, 5)
         self.assertContains(resp, "setInterval(() => location.reload()")
 
+    def test_dashboard_aggregate_shows_charging_when_all_connectors_busy(self):
+        aggregate = Charger.objects.create(
+            charger_id="DASHAGG-CHG", last_status="Available"
+        )
+        conn1 = Charger.objects.create(
+            charger_id=aggregate.charger_id, connector_id=1, last_status="Charging"
+        )
+        conn2 = Charger.objects.create(
+            charger_id=aggregate.charger_id, connector_id=2, last_status="Charging"
+        )
+
+        resp = self.client.get(reverse("ocpp-dashboard"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNotNone(resp.context)
+        context = resp.context
+        charging_label = force_str(STATUS_BADGE_MAP["charging"][0])
+        aggregate_entry = next(
+            item
+            for item in context["chargers"]
+            if item["charger"].charger_id == aggregate.charger_id
+            and item["charger"].connector_id is None
+        )
+        self.assertEqual(aggregate_entry["state"], charging_label)
+
+        # Ensure connector rows remain untouched
+        connector_states = {
+            item["charger"].connector_id: item["state"]
+            for item in context["chargers"]
+            if item["charger"].charger_id == aggregate.charger_id
+            and item["charger"].connector_id is not None
+        }
+        self.assertEqual(connector_states[conn1.connector_id], charging_label)
+        self.assertEqual(connector_states[conn2.connector_id], charging_label)
+
+    def test_dashboard_aggregate_shows_available_when_any_connector_free(self):
+        aggregate = Charger.objects.create(
+            charger_id="DASHAGG-AVL", last_status="Charging"
+        )
+        Charger.objects.create(
+            charger_id=aggregate.charger_id, connector_id=1, last_status="Charging"
+        )
+        Charger.objects.create(
+            charger_id=aggregate.charger_id, connector_id=2, last_status="Available"
+        )
+
+        resp = self.client.get(reverse("ocpp-dashboard"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNotNone(resp.context)
+        context = resp.context
+        available_label = force_str(STATUS_BADGE_MAP["available"][0])
+        aggregate_entry = next(
+            item
+            for item in context["chargers"]
+            if item["charger"].charger_id == aggregate.charger_id
+            and item["charger"].connector_id is None
+        )
+        self.assertEqual(aggregate_entry["state"], available_label)
+
     def test_cp_simulator_includes_interval(self):
         resp = self.client.get(reverse("cp-simulator"))
         self.assertEqual(resp.context["request"].live_update_interval, 5)
