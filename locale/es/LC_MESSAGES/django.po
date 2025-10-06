@@ -535,9 +535,15 @@ msgstr ""
 msgid "Django administration"
 msgstr ""
 
-#: pages/templates/admin/index.html:109
+#: pages/templates/admin/index.html:209
 msgid "Future actions"
 msgstr "Acciones futuras"
+
+#: pages/templates/admin/index.html:240
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:4
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:29
+msgid "Public site traffic"
+msgstr "Tráfico del sitio público"
 
 #: pages/templates/admin/index.html:140
 #: pages/templates/admin/index.html:150
