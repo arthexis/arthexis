@@ -1094,8 +1094,14 @@ class ReleaseProcessTests(TestCase):
             version_path.write_text(original_version, encoding="utf-8")
 
         sync_main.assert_called_once_with(Path("rel.log"))
+        release_fixtures = sorted(
+            str(path) for path in Path("core/fixtures").glob("releases__*.json")
+        )
+        if release_fixtures:
+            run.assert_any_call(["git", "add", *release_fixtures], check=True)
         run.assert_any_call(["git", "add", "CHANGELOG.rst"], check=True)
         run.assert_any_call(["git", "add", "VERSION"], check=True)
+        run.assert_any_call(["git", "diff", "--cached", "--quiet"], check=False)
         ensure_todo.assert_called_once_with(self.release, previous_version=mock.ANY)
 
     @mock.patch("core.views.subprocess.run")

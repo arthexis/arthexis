@@ -789,11 +789,26 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
             log_path, "Regenerated CHANGELOG.rst using scripts/generate-changelog.sh"
         )
     notes = _changelog_notes(release.version)
+    staged_release_fixtures: list[Path] = []
     if notes != release.changelog:
         release.changelog = notes
         release.save(update_fields=["changelog"])
         PackageRelease.dump_fixture()
         _append_log(log_path, f"Recorded changelog notes for v{release.version}")
+        release_fixture_paths = sorted(
+            Path("core/fixtures").glob("releases__*.json")
+        )
+        if release_fixture_paths:
+            subprocess.run(
+                ["git", "add", *[str(path) for path in release_fixture_paths]],
+                check=True,
+            )
+            staged_release_fixtures = release_fixture_paths
+            formatted = ", ".join(_format_path(path) for path in release_fixture_paths)
+            _append_log(
+                log_path,
+                "Staged release fixtures " + formatted,
+            )
     subprocess.run(["git", "add", "CHANGELOG.rst"], check=True)
     _append_log(log_path, "Staged CHANGELOG.rst for commit")
     version_path = Path("VERSION")
@@ -807,18 +822,7 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     _append_log(log_path, f"Updated VERSION file to {release.version}")
     subprocess.run(["git", "add", "VERSION"], check=True)
     _append_log(log_path, "Staged VERSION for commit")
-    diff = subprocess.run(
-        [
-            "git",
-            "diff",
-            "--cached",
-            "--quiet",
-            "--",
-            "CHANGELOG.rst",
-            "VERSION",
-        ],
-        check=False,
-    )
+    diff = subprocess.run(["git", "diff", "--cached", "--quiet"], check=False)
     if diff.returncode != 0:
         subprocess.run(
             ["git", "commit", "-m", f"pre-release commit {release.version}"],
@@ -833,6 +837,9 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
         _append_log(log_path, "Unstaged CHANGELOG.rst")
         subprocess.run(["git", "reset", "HEAD", "VERSION"], check=False)
         _append_log(log_path, "Unstaged VERSION file")
+        for path in staged_release_fixtures:
+            subprocess.run(["git", "reset", "HEAD", str(path)], check=False)
+            _append_log(log_path, f"Unstaged release fixture {_format_path(path)}")
     todo, fixture_path = _ensure_release_todo(
         release, previous_version=repo_version_before_sync
     )
