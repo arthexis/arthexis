@@ -646,14 +646,16 @@ def check_pypi_readiness(
             continue
         checked_urls.add(url)
         try:
-            resp = requests.get(url, timeout=10)
+            resp = requests.head(url, timeout=10, allow_redirects=True)
         except Exception as exc:  # pragma: no cover - network failure
             add("error", f"Failed to reach upload endpoint {url}: {exc}")
             continue
-        if resp.ok:
+
+        acceptable_statuses = {403, 405}
+        if resp.ok or resp.status_code in acceptable_statuses:
             add(
                 "success",
-                f"Upload endpoint {url} responded with status {resp.status_code}",
+                f"Upload endpoint {url} reachable (status {resp.status_code})",
             )
         else:
             add(
