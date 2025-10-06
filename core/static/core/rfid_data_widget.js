@@ -31,14 +31,55 @@
     }
     const cells = row.querySelectorAll("td[data-byte-index]");
     cells.forEach((cell, index) => {
-      const hasValue = index < bytes.length;
-      if (!hasValue) {
-        cell.textContent = "--";
+      const button = cell.querySelector("[data-edit-block]");
+      if (!button) {
+        return;
+      }
+      if (!Array.isArray(bytes) || index >= bytes.length) {
+        button.textContent = "--";
         return;
       }
       const byte = normalizeByte(bytes[index]);
-      cell.textContent = byte.toString(16).toUpperCase().padStart(2, "0");
+      button.textContent = byte.toString(16).toUpperCase().padStart(2, "0");
     });
+  }
+
+  function formatBytesToHex(bytes) {
+    return Array.from({ length: 16 }, (_, index) => {
+      const byte = normalizeByte(bytes[index]);
+      return byte.toString(16).toUpperCase().padStart(2, "0");
+    }).join(" ");
+  }
+
+  function parseHexInput(value) {
+    const matches = (value || "").match(/[0-9a-fA-F]{2}/g) || [];
+    const bytes = [];
+    for (let index = 0; index < 16; index += 1) {
+      if (index < matches.length) {
+        bytes.push(normalizeByte(Number.parseInt(matches[index], 16)));
+      } else {
+        bytes.push(0);
+      }
+    }
+    return bytes;
+  }
+
+  function parseTextInput(value) {
+    const characters = Array.from(value || "").slice(0, 16);
+    const bytes = [];
+    for (let index = 0; index < 16; index += 1) {
+      if (index < characters.length) {
+        const codePoint = characters[index].codePointAt(0);
+        if (typeof codePoint === "number") {
+          bytes.push(normalizeByte(codePoint));
+        } else {
+          bytes.push(0);
+        }
+      } else {
+        bytes.push(0);
+      }
+    }
+    return bytes;
   }
 
   function parseRawEntries(rawValue) {
@@ -96,68 +137,263 @@
       }
     });
 
-    const textInputs = widgetEl.querySelectorAll(".rfid-data-widget__text-input");
+    const textButtons = new Map();
+    widgetEl.querySelectorAll(".rfid-data-widget__value--text[data-edit-block]").forEach((button) => {
+      const blockNumber = Number.parseInt(button.dataset.editBlock || "", 10);
+      if (!Number.isNaN(blockNumber)) {
+        textButtons.set(blockNumber, button);
+      }
+    });
 
-    function refreshFromState() {
-      textInputs.forEach((input) => {
-        const blockNumber = Number.parseInt(input.dataset.block || "", 10);
-        if (Number.isNaN(blockNumber)) {
-          input.value = "";
-          return;
-        }
-        const info = state.map.get(blockNumber);
-        if (!info) {
-          input.value = "";
-          updateHexRow(blockRows.get(blockNumber), []);
-          return;
-        }
-        input.value = formatBytesToText(info.entry.data);
-        updateHexRow(blockRows.get(blockNumber), info.entry.data);
-      });
+    const keyButtons = new Map();
+    widgetEl.querySelectorAll(".rfid-data-widget__key [data-edit-block]").forEach((button) => {
+      const blockNumber = Number.parseInt(button.dataset.editBlock || "", 10);
+      if (!Number.isNaN(blockNumber)) {
+        keyButtons.set(blockNumber, button);
+      }
+    });
+
+    const modalEl = widgetEl.querySelector("[data-rfid-modal]");
+    const dialogEl = modalEl ? modalEl.querySelector(".rfid-data-widget__modal-dialog") : null;
+    const hexField = modalEl ? modalEl.querySelector("[data-rfid-modal-hex]") : null;
+    const textField = modalEl ? modalEl.querySelector("[data-rfid-modal-text]") : null;
+    const keyField = modalEl ? modalEl.querySelector("[data-rfid-modal-key]") : null;
+    const keyContainer = modalEl ? modalEl.querySelector("[data-rfid-modal-key-container]") : null;
+    const saveButton = modalEl ? modalEl.querySelector("[data-rfid-modal-save]") : null;
+    const dismissButtons = modalEl ? modalEl.querySelectorAll("[data-rfid-modal-dismiss]") : [];
+    const titleBlockEl = modalEl ? modalEl.querySelector("[data-rfid-modal-block]") : null;
+    const metaEl = modalEl ? modalEl.querySelector("[data-rfid-modal-meta]") : null;
+
+    const sectorLabel = modalEl ? modalEl.dataset.sectorLabel || "Sector" : "Sector";
+    const blockLabel = modalEl ? modalEl.dataset.blockLabel || "Block" : "Block";
+    const offsetLabel = modalEl ? modalEl.dataset.offsetLabel || "Offset" : "Offset";
+
+    let activeBlock = null;
+    let draftBytes = new Array(16).fill(0);
+    let draftKey = "";
+    let restoreFocus = null;
+
+    if (dialogEl && !dialogEl.hasAttribute("tabindex")) {
+      dialogEl.setAttribute("tabindex", "-1");
     }
 
-    textInputs.forEach((input) => {
-      const blockNumber = Number.parseInt(input.dataset.block || "", 10);
-      if (Number.isNaN(blockNumber)) {
+    function ensureBlock(blockNumber) {
+      let info = state.map.get(blockNumber);
+      if (info) {
+        return info;
+      }
+      const entry = {
+        block: blockNumber,
+        data: Array.from({ length: 16 }, () => 0),
+      };
+      state.entries.push(entry);
+      info = { entry, index: state.entries.length - 1 };
+      state.map.set(blockNumber, info);
+      return info;
+    }
+
+    function shouldShowKey(blockNumber) {
+      const row = blockRows.get(blockNumber);
+      return Boolean(row && row.classList.contains("rfid-data-widget__block--trailer"));
+    }
+
+    function updateKeyDisplay(blockNumber) {
+      const button = keyButtons.get(blockNumber);
+      if (!button) {
         return;
       }
       const info = state.map.get(blockNumber);
-      if (info) {
-        input.value = formatBytesToText(info.entry.data);
-        updateHexRow(blockRows.get(blockNumber), info.entry.data);
+      if (info && typeof info.entry.key === "string" && info.entry.key.trim() !== "") {
+        button.textContent = info.entry.key;
+      } else {
+        button.textContent = "—";
+      }
+    }
+
+    function updateTextDisplay(blockNumber) {
+      const button = textButtons.get(blockNumber);
+      if (!button) {
+        return;
+      }
+      const info = state.map.get(blockNumber);
+      if (!info) {
+        button.textContent = "················";
+        return;
+      }
+      button.textContent = formatBytesToText(info.entry.data);
+    }
+
+    function updateBlockDisplay(blockNumber) {
+      const info = state.map.get(blockNumber);
+      const bytes = info ? info.entry.data : [];
+      updateHexRow(blockRows.get(blockNumber), bytes);
+      updateTextDisplay(blockNumber);
+      updateKeyDisplay(blockNumber);
+    }
+
+    function refreshFromState() {
+      blockRows.forEach((_, blockNumber) => {
+        updateBlockDisplay(blockNumber);
+      });
+    }
+
+    function openEditor(blockNumber, options) {
+      if (!modalEl || !hexField || !textField) {
+        return;
+      }
+      const { focusKey = false } = options || {};
+      const info = ensureBlock(blockNumber);
+      activeBlock = blockNumber;
+      draftBytes = Array.isArray(info.entry.data) ? info.entry.data.slice(0, 16) : new Array(16).fill(0);
+      draftKey = typeof info.entry.key === "string" ? info.entry.key : "";
+      const sector = Math.trunc(blockNumber / 4);
+      const offset = blockNumber % 4;
+
+      hexField.value = formatBytesToHex(draftBytes);
+      textField.value = formatBytesToText(draftBytes);
+
+      if (keyContainer && keyField) {
+        const showKey = shouldShowKey(blockNumber);
+        keyContainer.hidden = !showKey;
+        if (showKey) {
+          keyField.value = draftKey;
+        } else {
+          keyField.value = "";
+        }
       }
 
-      input.addEventListener("input", () => {
-        const current = state.map.get(blockNumber);
-        if (!current) {
+      if (titleBlockEl) {
+        titleBlockEl.textContent = String(blockNumber);
+      }
+      if (metaEl) {
+        metaEl.textContent = `${sectorLabel} ${sector} · ${blockLabel} ${blockNumber} (${offsetLabel} ${offset})`;
+      }
+
+      modalEl.hidden = false;
+
+      const initialFocus =
+        focusKey && keyField && keyContainer && !keyContainer.hidden ? keyField : hexField;
+
+      window.requestAnimationFrame(() => {
+        const target = initialFocus;
+        if (target && typeof target.focus === "function") {
+          target.focus();
+          if (typeof target.select === "function") {
+            target.select();
+          }
+        }
+      });
+    }
+
+    function closeEditor() {
+      if (!modalEl) {
+        return;
+      }
+      modalEl.hidden = true;
+      activeBlock = null;
+      draftBytes = new Array(16).fill(0);
+      draftKey = "";
+      if (restoreFocus && typeof restoreFocus.focus === "function") {
+        restoreFocus.focus();
+      }
+      restoreFocus = null;
+    }
+
+    if (hexField) {
+      hexField.addEventListener("input", () => {
+        if (activeBlock === null) {
           return;
         }
-        const existingBytes = current.entry.data.slice();
-        const characters = Array.from(input.value).slice(0, 16);
-        while (characters.length < 16) {
-          characters.push("·");
+        draftBytes = parseHexInput(hexField.value);
+        if (textField) {
+          textField.value = formatBytesToText(draftBytes);
         }
-        const updatedBytes = characters.map((character, index) => {
-          if (character === "·") {
-            return existingBytes[index] ?? 0;
-          }
-          const codePoint = character.codePointAt(0);
-          if (typeof codePoint !== "number") {
-            return existingBytes[index] ?? 0;
-          }
-          return normalizeByte(codePoint);
-        });
-        current.entry.data = updatedBytes;
-        state.entries[current.index] = current.entry;
-        input.value = formatBytesToText(updatedBytes);
-        updateHexRow(blockRows.get(blockNumber), updatedBytes);
-        syncRawInput(rawInput, state);
       });
+    }
+
+    if (textField) {
+      textField.addEventListener("input", () => {
+        if (activeBlock === null) {
+          return;
+        }
+        draftBytes = parseTextInput(textField.value);
+        if (hexField) {
+          hexField.value = formatBytesToHex(draftBytes);
+        }
+      });
+    }
+
+    if (keyField) {
+      keyField.addEventListener("input", () => {
+        if (activeBlock === null) {
+          return;
+        }
+        draftKey = keyField.value;
+      });
+    }
+
+    if (saveButton) {
+      saveButton.addEventListener("click", () => {
+        if (activeBlock === null) {
+          return;
+        }
+        const info = ensureBlock(activeBlock);
+        info.entry.data = draftBytes.slice();
+        if (keyField && keyContainer && !keyContainer.hidden) {
+          const trimmed = draftKey.trim();
+          if (trimmed) {
+            info.entry.key = trimmed;
+          } else {
+            delete info.entry.key;
+          }
+        } else {
+          delete info.entry.key;
+        }
+        state.entries[info.index] = info.entry;
+        state.map.set(activeBlock, info);
+        syncRawInput(rawInput, state);
+        updateBlockDisplay(activeBlock);
+        closeEditor();
+      });
+    }
+
+    dismissButtons.forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        closeEditor();
+      });
+    });
+
+    if (modalEl) {
+      modalEl.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && activeBlock !== null) {
+          event.preventDefault();
+          closeEditor();
+        }
+      });
+    }
+
+    widgetEl.addEventListener("click", (event) => {
+      const trigger = event.target.closest("[data-edit-block]");
+      if (!trigger || !widgetEl.contains(trigger)) {
+        return;
+      }
+      event.preventDefault();
+      const blockNumber = Number.parseInt(trigger.dataset.editBlock || "", 10);
+      if (Number.isNaN(blockNumber)) {
+        return;
+      }
+      restoreFocus = trigger;
+      const focusKey = trigger.dataset.editKey === "true";
+      openEditor(blockNumber, { focusKey });
     });
 
     function handleRawInputChange() {
       state = parseRawEntries(rawInput.value);
       refreshFromState();
+      if (activeBlock !== null) {
+        closeEditor();
+      }
     }
 
     rawInput.addEventListener("change", handleRawInputChange);
