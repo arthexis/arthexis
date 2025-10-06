@@ -4,6 +4,14 @@ Changelog
 Unreleased
 ----------
 
+- 93fdf264 chore: remove TODO fixtures
+- 42602b8d Stage release fixtures before building (#2103)
+- b3719cf5 chore(deps): bump requests from 2.32.4 to 2.32.5 (#2089)
+- 533699fe chore: add release TODO for arthexis
+
+v0.1.14 (2025-10-05)
+--------------------
+
 - 54064c84 chore: remove TODO fixtures
 - c93d406e Sync release check with origin (#2102)
 - d8b805cb chore(deps): bump mcp from 1.14.0 to 1.16.0 (#2088)
@@ -13,10 +21,6 @@ Unreleased
 - 48d11ed2 chore(deps): bump docutils from 0.22 to 0.22.2 (#2092)
 - 7713c7db chore(deps): bump billiard from 4.2.1 to 4.2.2 (#2093)
 - 03a7891c chore: add release TODO for arthexis
-
-v0.1.14 (2025-10-05)
---------------------
-
 - 73abf957 chore: remove TODO fixtures
 - b96b051f Add translations for admin dashboard labels (#2099)
 - 88319c9e Fix release script to commit generated artifacts (#2100)
