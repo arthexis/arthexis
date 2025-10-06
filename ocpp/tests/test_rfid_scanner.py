@@ -71,21 +71,43 @@ def test_test_sources_handles_configuration(configured):
 
 
 @pytest.mark.parametrize(
-    "configured, toggled, expected",
+    "configured, toggled, queued_tag, expected",
     [
-        (True, True, {"status": "deep read enabled", "enabled": True}),
-        (True, False, {"status": "deep read disabled", "enabled": False}),
-        (False, True, {"error": "no scanner available"}),
+        (
+            True,
+            True,
+            {"rfid": "123", "label_id": "abc", "deep_read": True},
+            {
+                "status": "deep read enabled",
+                "enabled": True,
+                "scan": {"rfid": "123", "label_id": "abc", "deep_read": True},
+            },
+        ),
+        (
+            True,
+            False,
+            {"rfid": "123", "label_id": "abc"},
+            {"status": "deep read disabled", "enabled": False},
+        ),
+        (False, True, {"rfid": "123"}, {"error": "no scanner available"}),
     ],
 )
-def test_enable_deep_read_mode(configured, toggled, expected):
+def test_enable_deep_read_mode(configured, toggled, queued_tag, expected):
     with patch("ocpp.rfid.scanner.is_configured", return_value=configured), patch(
         "ocpp.rfid.scanner.toggle_deep_read", return_value=toggled
-    ) as mock_toggle:
+    ) as mock_toggle, patch(
+        "ocpp.rfid.scanner.get_next_tag", return_value=queued_tag
+    ) as mock_get_next:
         result = scanner.enable_deep_read_mode()
-    if configured:
-        mock_toggle.assert_called_once_with()
-        assert result == expected
-    else:
+    if not configured:
         mock_toggle.assert_not_called()
+        mock_get_next.assert_not_called()
         assert result == expected
+        return
+
+    mock_toggle.assert_called_once_with()
+    if toggled:
+        mock_get_next.assert_called_once_with()
+    else:
+        mock_get_next.assert_not_called()
+    assert result == expected
