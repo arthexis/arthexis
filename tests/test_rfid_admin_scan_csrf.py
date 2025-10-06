@@ -2,6 +2,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -144,3 +145,54 @@ class AdminRfidCopyActionTests(TestCase):
         self.assertEqual(response.status_code, 302)
         copied = RFID.objects.get(rfid="FEEDC0DE")
         self.assertEqual(copied.label_id, 32)
+
+
+class AdminRfidUserDataActionTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="userdataadmin",
+            email="userdataadmin@example.com",
+            password="password",
+        )
+        self.temp_dir = TemporaryDirectory()
+        self.user.data_path = self.temp_dir.name
+        self.user.save(update_fields=["data_path"])
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.url = reverse("admin:core_rfid_changelist")
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_toggle_user_data_action_creates_and_removes_fixture(self):
+        tag = RFID.objects.create(rfid="44556677")
+        fixture_path = (
+            Path(self.temp_dir.name)
+            / self.user.username
+            / f"core_rfid_{tag.pk}.json"
+        )
+
+        response = self.client.post(
+            self.url,
+            data={
+                "action": "toggle_selected_user_data",
+                "_selected_action": [tag.pk],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        tag.refresh_from_db()
+        self.assertTrue(tag.is_user_data)
+        self.assertTrue(fixture_path.exists())
+
+        response = self.client.post(
+            self.url,
+            data={
+                "action": "toggle_selected_user_data",
+                "_selected_action": [tag.pk],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        tag.refresh_from_db()
+        self.assertFalse(tag.is_user_data)
+        self.assertFalse(fixture_path.exists())
