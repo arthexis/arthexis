@@ -2391,15 +2391,13 @@ class ProductAdmin(EntityModelAdmin):
             "product.product",
             "search_read",
             [domain],
-            {
-                "fields": [
-                    "name",
-                    "default_code",
-                    "barcode",
-                    "description_sale",
-                ],
-                "limit": 50,
-            },
+            fields=[
+                "name",
+                "default_code",
+                "barcode",
+                "description_sale",
+            ],
+            limit=50,
         )
 
     @admin.action(description="Fetch Odoo Product")
@@ -2586,15 +2584,13 @@ class ProductAdmin(EntityModelAdmin):
                 "product.product",
                 "search_read",
                 [[]],
-                {
-                    "fields": [
-                        "name",
-                        "description_sale",
-                        "list_price",
-                        "standard_price",
-                    ],
-                    "limit": 0,
-                },
+                fields=[
+                    "name",
+                    "description_sale",
+                    "list_price",
+                    "standard_price",
+                ],
+                limit=0,
             )
         except Exception:
             context["error"] = _("Unable to fetch products from Odoo.")
