@@ -24,7 +24,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import errno
 import subprocess
-from typing import Sequence
+from typing import Optional, Sequence
 
 from django.template.loader import get_template
 from django.test import signals
@@ -652,6 +652,12 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
     from packaging.version import InvalidVersion, Version
 
+    sync_error: Optional[Exception] = None
+    try:
+        _sync_with_origin_main(log_path)
+    except Exception as exc:
+        sync_error = exc
+
     if not release_utils._git_clean():
         proc = subprocess.run(
             ["git", "status", "--porcelain"],
@@ -697,6 +703,9 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
         subprocess.run(["git", "add", *fixture_files], check=True)
         subprocess.run(["git", "commit", "-m", "chore: update fixtures"], check=True)
         _append_log(log_path, "Fixture changes committed")
+
+    if sync_error is not None:
+        raise sync_error
 
     version_path = Path("VERSION")
     if version_path.exists():
