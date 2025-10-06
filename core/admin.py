@@ -48,6 +48,7 @@ import calendar
 import re
 from django_object_actions import DjangoObjectActions
 from reportlab.lib import colors
+from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
@@ -3086,57 +3087,80 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             return HttpResponseRedirect(redirect_url)
 
         buffer = BytesIO()
-        card_width = 85.6 * mm
-        card_height = 54 * mm
-        margin = 5 * mm
-        highlight_height = 20 * mm
+        base_card_width = 85.6 * mm
+        base_card_height = 54 * mm
+        columns = 3
+        rows = 4
+        labels_per_page = columns * rows
+        page_margin_x = 12 * mm
+        page_margin_y = 12 * mm
+        column_spacing = 6 * mm
+        row_spacing = 6 * mm
+        page_size = landscape(letter)
+        page_width, page_height = page_size
+
+        available_width = (
+            page_width - (2 * page_margin_x) - (columns - 1) * column_spacing
+        )
+        available_height = (
+            page_height - (2 * page_margin_y) - (rows - 1) * row_spacing
+        )
+        scale_x = available_width / (columns * base_card_width)
+        scale_y = available_height / (rows * base_card_height)
+        scale = min(scale_x, scale_y, 1)
+
+        card_width = base_card_width * scale
+        card_height = base_card_height * scale
+        margin = 5 * mm * scale
+        highlight_height = 20 * mm * scale
         content_width = card_width - 2 * margin
         left_section_width = content_width * 0.6
         right_section_width = content_width - left_section_width
 
-        pdf = canvas.Canvas(buffer, pagesize=(card_width, card_height))
-        pdf.setTitle("RFID Card Labels")
+        def draw_label(pdf_canvas, tag, origin_x, origin_y):
+            pdf_canvas.saveState()
+            pdf_canvas.translate(origin_x, origin_y)
 
-        for tag in queryset:
-            pdf.setPageSize((card_width, card_height))
-            pdf.setFillColor(colors.white)
-            pdf.rect(0, 0, card_width, card_height, stroke=0, fill=1)
+            pdf_canvas.setFillColor(colors.white)
+            pdf_canvas.rect(0, 0, card_width, card_height, stroke=0, fill=1)
+            pdf_canvas.setStrokeColor(colors.HexColor("#D9D9D9"))
+            pdf_canvas.setLineWidth(max(0.3, 0.5 * scale))
+            pdf_canvas.rect(0, 0, card_width, card_height, stroke=1, fill=0)
 
             left_x = margin
             right_x = left_x + left_section_width
             highlight_bottom = card_height - margin - highlight_height
 
-            # Highlighted area for the primary card number
-            pdf.setFillColor(colors.HexColor("#E6EEF8"))
-            pdf.roundRect(
+            pdf_canvas.setFillColor(colors.HexColor("#E6EEF8"))
+            pdf_canvas.roundRect(
                 left_x,
                 highlight_bottom,
                 left_section_width,
                 highlight_height,
-                6,
+                6 * scale,
                 stroke=0,
                 fill=1,
             )
 
-            pdf.setFillColor(colors.HexColor("#1A1A1A"))
+            pdf_canvas.setFillColor(colors.HexColor("#1A1A1A"))
             font_name = "Helvetica-Bold"
-            font_size = 28
-            pdf.setFont(font_name, font_size)
+            font_size = max(6, 28 * scale)
+            pdf_canvas.setFont(font_name, font_size)
             label_value = str(tag.label_id or "")
             primary_label = label_value.zfill(4) if label_value.isdigit() else label_value
             descent = abs(pdfmetrics.getDescent(font_name) / 1000 * font_size)
             vertical_center = highlight_bottom + (highlight_height / 2)
             baseline = vertical_center - (descent / 2)
-            pdf.drawCentredString(
+            pdf_canvas.drawCentredString(
                 left_x + (left_section_width / 2),
                 baseline,
                 primary_label,
             )
 
-            pdf.setFont("Helvetica", 11)
-            text = pdf.beginText()
-            text.setTextOrigin(left_x, highlight_bottom - 16)
-            text.setLeading(14)
+            pdf_canvas.setFont("Helvetica", max(5, 11 * scale))
+            text = pdf_canvas.beginText()
+            text.setTextOrigin(left_x, highlight_bottom - 16 * scale)
+            text.setLeading(max(6, 14 * scale))
 
             details = [_("RFID: %s") % tag.rfid]
             if tag.custom_label:
@@ -3149,7 +3173,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             for line in details:
                 text.textLine(line)
 
-            pdf.drawText(text)
+            pdf_canvas.drawText(text)
 
             if tag.rfid:
                 qr_code = qr.QrCodeWidget(str(tag.rfid))
@@ -3158,16 +3182,42 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                 qr_height = qr_bounds[3] - qr_bounds[1]
                 qr_target_size = min(right_section_width, card_height - 2 * margin)
                 if qr_width and qr_height:
-                    scale = qr_target_size / max(qr_width, qr_height)
+                    qr_scale = qr_target_size / max(qr_width, qr_height)
                     drawing = Drawing(
                         qr_target_size,
                         qr_target_size,
-                        transform=[scale, 0, 0, scale, 0, 0],
+                        transform=[qr_scale, 0, 0, qr_scale, 0, 0],
                     )
                     drawing.add(qr_code)
                     qr_x = right_x + (right_section_width - qr_target_size) / 2
                     qr_y = margin + (card_height - 2 * margin - qr_target_size) / 2
-                    renderPDF.draw(drawing, pdf, qr_x, qr_y)
+                    renderPDF.draw(drawing, pdf_canvas, qr_x, qr_y)
+
+            pdf_canvas.restoreState()
+
+        pdf = canvas.Canvas(buffer, pagesize=page_size)
+        pdf.setTitle("RFID Card Labels")
+
+        tags = list(queryset)
+        total_tags = len(tags)
+
+        for page_start in range(0, total_tags, labels_per_page):
+            pdf.setPageSize(page_size)
+            pdf.setFillColor(colors.white)
+            pdf.rect(0, 0, page_width, page_height, stroke=0, fill=1)
+            subset = tags[page_start : page_start + labels_per_page]
+
+            for index, tag in enumerate(subset):
+                column = index % columns
+                row = index // columns
+                x = page_margin_x + column * (card_width + column_spacing)
+                y = (
+                    page_height
+                    - page_margin_y
+                    - card_height
+                    - row * (card_height + row_spacing)
+                )
+                draw_label(pdf, tag, x, y)
 
             pdf.showPage()
 
