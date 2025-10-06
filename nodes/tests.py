@@ -3130,7 +3130,7 @@ class NodeFeatureTests(TestCase):
         )
 
     @patch("nodes.models.Node._hosts_gelectriic_ap", return_value=True)
-    def test_ap_public_wifi_detection(self, mock_hosts):
+    def test_ap_router_detection_with_public_mode_lock(self, mock_hosts):
         control_role, _ = NodeRole.objects.get_or_create(name="Control")
         router = NodeFeature.objects.create(slug="ap-router", display="AP Router")
         router.roles.add(control_role)
@@ -3154,10 +3154,10 @@ class NodeFeatureTests(TestCase):
                 )
                 node.refresh_features()
         self.assertTrue(
-            NodeFeatureAssignment.objects.filter(node=node, feature=public).exists()
+            NodeFeatureAssignment.objects.filter(node=node, feature=router).exists()
         )
         self.assertFalse(
-            NodeFeatureAssignment.objects.filter(node=node, feature=router).exists()
+            NodeFeatureAssignment.objects.filter(node=node, feature=public).exists()
         )
 
     @patch("nodes.models.Node._hosts_gelectriic_ap", side_effect=[True, False])

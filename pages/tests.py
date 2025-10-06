@@ -502,9 +502,7 @@ class InvitationTests(TestCase):
     )
     def test_invitation_login_grants_public_wifi_access(self, mock_resolve, mock_grant):
         control_role, _ = NodeRole.objects.get_or_create(name="Control")
-        feature = NodeFeature.objects.create(
-            slug="ap-public-wifi", display="AP Public Wi-Fi"
-        )
+        feature = NodeFeature.objects.create(slug="ap-router", display="AP Router")
         feature.roles.add(control_role)
         node = Node.objects.create(
             hostname="control",

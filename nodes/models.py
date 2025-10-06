@@ -699,12 +699,8 @@ class Node(Entity):
             detected_slugs.add("rpi-camera")
         if self._has_gway_runner():
             detected_slugs.add("gway-runner")
-        public_mode_lock = locks_dir / "public_wifi_mode.lck"
         if self._hosts_gelectriic_ap():
-            if public_mode_lock.exists():
-                detected_slugs.add("ap-public-wifi")
-            else:
-                detected_slugs.add("ap-router")
+            detected_slugs.add("ap-router")
         try:
             from core.notifications import supports_gui_toast
         except Exception:
