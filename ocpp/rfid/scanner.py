@@ -41,4 +41,9 @@ def enable_deep_read_mode(duration: float = 60) -> dict:
         return {"error": "no scanner available"}
     enabled = toggle_deep_read()
     status = "deep read enabled" if enabled else "deep read disabled"
-    return {"status": status, "enabled": enabled}
+    response: dict[str, object] = {"status": status, "enabled": enabled}
+    if enabled:
+        tag = get_next_tag()
+        if tag is not None:
+            response["scan"] = tag
+    return response

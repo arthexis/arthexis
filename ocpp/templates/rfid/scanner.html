@@ -776,20 +776,10 @@
         headers['X-CSRFToken'] = csrf;
       }
       deepBtn.disabled = true;
+      if(enabling){
+        statusEl.textContent = 'Attempting deep read...';
+      }
       try {
-        let detectionData = null;
-        if(enabling){
-          statusEl.textContent = 'Detecting RFID before deep read...';
-          detectionData = await requestScanData();
-          if(detectionData && detectionData.rfid){
-            const hasLabelId = detectionData.label_id !== undefined && detectionData.label_id !== null && detectionData.label_id !== '';
-            const detectedId = hasLabelId ? detectionData.label_id : detectionData.rfid;
-            const labelText = detectedId ? ` ${detectedId}` : '';
-            statusEl.textContent = `RFID${labelText} detected. Keep holding the card steady for deep read.`;
-          } else {
-            statusEl.textContent = 'Deep read enabled. Hold the card on the reader a bit longer to complete the read.';
-          }
-        }
         const response = await fetch('{{ deep_read_url|default:"" }}', {
           method: 'POST',
           credentials: 'same-origin',
@@ -804,9 +794,14 @@
         }
         const enabled = Boolean(data.enabled);
         setDeepReadState(enabled, {updateStatus: false});
-        if(!enabling || !enabled){
-          statusEl.textContent = data.status || deepReadStatusText(enabled);
-        } else if(!detectionData || !detectionData.rfid){
+        if(enabled && data.scan){
+          updateFromData(data.scan);
+          const hasStatus = typeof data.scan.status === 'string' && data.scan.status;
+          const hasRfid = Boolean(data.scan.rfid) || Boolean(data.scan.error);
+          if(!hasStatus && !hasRfid){
+            statusEl.textContent = data.status || deepReadStatusText(enabled);
+          }
+        } else {
           statusEl.textContent = data.status || deepReadStatusText(enabled);
         }
       } catch(err){

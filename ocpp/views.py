@@ -324,13 +324,47 @@ def _landing_page_translations() -> dict[str, dict[str, str]]:
     return catalog
 
 
+def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:
+    """Return an aggregate badge for the charger when summarising connectors."""
+
+    if charger.connector_id is not None:
+        return None
+
+    siblings = (
+        Charger.objects.filter(charger_id=charger.charger_id)
+        .exclude(pk=charger.pk)
+        .exclude(connector_id__isnull=True)
+    )
+    statuses = [
+        (sibling.last_status or "").strip().casefold()
+        for sibling in siblings
+        if (sibling.last_status or "").strip()
+    ]
+    if not statuses:
+        return None
+
+    if any(status == "available" for status in statuses):
+        return STATUS_BADGE_MAP["available"]
+
+    if all(status == "charging" for status in statuses):
+        return STATUS_BADGE_MAP["charging"]
+
+    return None
+
+
 def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
     """Return human readable state and color for a charger."""
 
     status_value = (charger.last_status or "").strip()
+    normalized_status = status_value.casefold() if status_value else ""
+
+    aggregate_state = _aggregate_dashboard_state(charger)
+    if aggregate_state is not None and normalized_status in {"", "available", "charging"}:
+        return aggregate_state
+
     has_session = bool(tx_obj)
     if status_value:
-        key = status_value.lower()
+        key = normalized_status
         label, color = STATUS_BADGE_MAP.get(key, (status_value, "#0d6efd"))
         error_code = (charger.last_error_code or "").strip()
         error_code_lower = error_code.lower()

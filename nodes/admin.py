@@ -326,7 +326,7 @@ class NodeAdmin(EntityModelAdmin):
         }
         return render(request, "admin/nodes/node/register_remote.html", context)
 
-    @admin.action(description="Register Visitor Node")
+    @admin.action(description="Register Visitor")
     def register_visitor(self, request, queryset=None):
         return self.register_visitor_view(request)
 
@@ -575,7 +575,7 @@ class NodeAdmin(EntityModelAdmin):
         context = {
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
-            "title": _("Register Visitor Node"),
+            "title": _("Register Visitor"),
             "token": token,
             "info_url": reverse("node-info"),
             "register_url": reverse("register-node"),
