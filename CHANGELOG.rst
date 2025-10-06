@@ -4,13 +4,48 @@ Changelog
 Unreleased
 ----------
 
-- 198f7c86 chore: remove TODO fixtures
-- c03a6e1c feat: retry twine uploads with user guidance (#2053)
-- 89927b8a Add Discord support for social profiles (#2052)
+- 410c4da2 chore: remove TODO fixtures
+- 11b5df49 Rename register visitor admin action (#2098)
+- ed5029ab Adjust dashboard aggregate status badges (#2097)
+- 0adfdf36 Fix RFID deep read to run without preliminary scan (#2095)
+- fbf82705 Tighten RFID text field spacing (#2096)
+- 854c9e69 chore: add dependabot configuration (#2079)
+- 2f0fceab Enforce Wi-Fi lease firewall gating (#2078)
+- 69ce0bc2 chore: remove reset migrations command (#2077)
+- b9464240 Add editable text register to RFID data widget (#2076)
+- d03cbf00 Adjust RFID scanner action buttons (#2075)
+- 572c0b4c Remove NodeAction framework from node admin (#2074)
+- e54fe95d Remove public AP mode from network setup script (#2072)
+- d7a0271b Run RFID external command during authentication (#2073)
+- a850e07a Purge WEP secrets when enabling public AP (#2071)
+- 9b20d678 Clear stored WiFi secrets when switching to public AP (#2070)
+- 354424c0 Ensure public AP binds to wlan0 (#2069)
+- b1f4046d Support RFID import/export by energy account name (#2068)
+- 9b9028f3 Add admin shortcut to print labels for valid RFIDs (#2067)
+- be97f70e Expose Odoo quote report tool on the dashboard (#2065)
+- 0f03e597 Ensure scanned RFIDs default to allowed (#2066)
+- 6ebc435b Fix quick send changelist redirect (#2014)
+- 4c23e1a9 Add AWG limit warning tests and adjust solver (#1983)
+- 814a19b4 chore: remove coverage workflow (#1945)
+- 98bc005e Add PDF orientation controls for user manuals (#2064)
+- 2eab65a6 Fix RFID scan registration sequence handling (#2063)
+- 9d7d7b8e Handle changelog retries without duplicate sections (#2062)
+- 1f7d3ccb feat: adjust RFID label sequencing and copy action (#2061)
+- 6b1ae19e Add Datasette admin shortcut and document home row guidance (#2060)
+- d8611860 Allow security group and user default landings with priority (#2059)
+- fce3a9cc Fix visibility initialization for new profile inlines (#2058)
+- ad1e0fed Handle release promotion rebase conflicts (#2057)
+- 88500d5e Add dynamic social profile fieldset visibility (#2056)
+- 93600429 Adjust seed datum label weight (#2055)
+- 36271139 Add landing leads tracking for Experience landings (#2054)
+- fd8d188a chore: add release TODO for arthexis
 
 v0.1.14 (2025-10-05)
 --------------------
 
+- 198f7c86 chore: remove TODO fixtures
+- c03a6e1c feat: retry twine uploads with user guidance (#2053)
+- 89927b8a Add Discord support for social profiles (#2052)
 - e5a3ced2 chore: add release TODO for arthexis
 - 0d94e5b2 chore: remove TODO fixtures
 - c048144a Use non-breaking space between model actions (#2051)
