@@ -358,16 +358,21 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
     status_value = (charger.last_status or "").strip()
     normalized_status = status_value.casefold() if status_value else ""
 
+    error_code = (charger.last_error_code or "").strip()
+    error_code_lower = error_code.lower()
+
     aggregate_state = _aggregate_dashboard_state(charger)
-    if aggregate_state is not None and normalized_status in {"", "available", "charging"}:
+    if (
+        aggregate_state is not None
+        and normalized_status in {"", "available", "charging"}
+        and (not error_code or error_code_lower in ERROR_OK_VALUES)
+    ):
         return aggregate_state
 
     has_session = bool(tx_obj)
     if status_value:
         key = normalized_status
         label, color = STATUS_BADGE_MAP.get(key, (status_value, "#0d6efd"))
-        error_code = (charger.last_error_code or "").strip()
-        error_code_lower = error_code.lower()
         if (
             has_session
             and error_code_lower in ERROR_OK_VALUES
