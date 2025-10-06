@@ -4,12 +4,16 @@ Changelog
 Unreleased
 ----------
 
-- 54885cda chore: remove TODO fixtures
-- fc05178b chore: add release TODO for arthexis
+- 73abf957 chore: remove TODO fixtures
+- b96b051f Add translations for admin dashboard labels (#2099)
+- 88319c9e Fix release script to commit generated artifacts (#2100)
+- 8532b292 chore: add release TODO for arthexis
 
 v0.1.14 (2025-10-05)
 --------------------
 
+- 54885cda chore: remove TODO fixtures
+- fc05178b chore: add release TODO for arthexis
 - 410c4da2 chore: remove TODO fixtures
 - 11b5df49 Rename register visitor admin action (#2098)
 - ed5029ab Adjust dashboard aggregate status badges (#2097)
