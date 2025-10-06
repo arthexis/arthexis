@@ -106,6 +106,7 @@ from .rfid_import_export import (
 )
 from .mcp import process as mcp_process
 from .mcp.server import resolve_base_urls
+from . import release as release_utils
 
 logger = logging.getLogger(__name__)
 
@@ -3411,8 +3412,8 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "published_status",
     )
     list_display_links = ("version",)
-    actions = ["publish_release", "validate_releases"]
-    change_actions = ["publish_release_action"]
+    actions = ["publish_release", "validate_releases", "test_pypi_connection"]
+    change_actions = ["publish_release_action", "test_pypi_connection_action"]
     changelist_actions = ["refresh_from_pypi", "prepare_next_release"]
     readonly_fields = ("pypi_url", "github_url", "release_on", "is_current", "revision")
     fields = (
@@ -3561,6 +3562,44 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
     publish_release_action.label = "Publish selected Release"
     publish_release_action.short_description = "Publish this release"
+
+    def _emit_pypi_check_messages(
+        self, request, release, result: release_utils.PyPICheckResult
+    ) -> None:
+        level_map = {
+            "success": messages.SUCCESS,
+            "warning": messages.WARNING,
+            "error": messages.ERROR,
+        }
+        prefix = f"{release}: "
+        for level, message in result.messages:
+            self.message_user(request, prefix + message, level_map.get(level, messages.INFO))
+        if result.ok:
+            self.message_user(
+                request,
+                f"{release}: PyPI connectivity check passed",
+                messages.SUCCESS,
+            )
+
+    @admin.action(description="Test PyPI connectivity")
+    def test_pypi_connection(self, request, queryset):
+        if not queryset:
+            self.message_user(
+                request,
+                "Select at least one release to test",
+                messages.ERROR,
+            )
+            return
+        for release in queryset:
+            result = release_utils.check_pypi_readiness(release=release)
+            self._emit_pypi_check_messages(request, release, result)
+
+    def test_pypi_connection_action(self, request, obj):
+        result = release_utils.check_pypi_readiness(release=obj)
+        self._emit_pypi_check_messages(request, obj, result)
+
+    test_pypi_connection_action.label = "Test PyPI connectivity"
+    test_pypi_connection_action.short_description = "Test PyPI connectivity"
 
     @admin.action(description="Validate selected Releases")
     def validate_releases(self, request, queryset):

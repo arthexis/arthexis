@@ -350,6 +350,20 @@ from . import release as release_utils
 TODO_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
 
 
+DIRTY_COMMIT_DEFAULT_MESSAGE = "chore: commit pending changes"
+
+
+DIRTY_STATUS_LABELS = {
+    "A": _("Added"),
+    "C": _("Copied"),
+    "D": _("Deleted"),
+    "M": _("Modified"),
+    "R": _("Renamed"),
+    "U": _("Updated"),
+    "??": _("Untracked"),
+}
+
+
 def _append_log(path: Path, message: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
@@ -390,6 +404,34 @@ def _format_path(path: Path) -> str:
 def _git_stdout(args: Sequence[str]) -> str:
     proc = subprocess.run(args, check=True, capture_output=True, text=True)
     return (proc.stdout or "").strip()
+
+
+def _collect_dirty_files() -> list[dict[str, str]]:
+    proc = subprocess.run(
+        ["git", "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    dirty: list[dict[str, str]] = []
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            continue
+        status_code = line[:2]
+        status = status_code.strip() or status_code
+        path = line[3:]
+        dirty.append(
+            {
+                "path": path,
+                "status": status,
+                "status_label": DIRTY_STATUS_LABELS.get(status, status),
+            }
+        )
+    return dirty
+
+
+def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
+    return (exc.stderr or exc.stdout or str(exc)).strip() or str(exc)
 
 
 def _ensure_origin_main_unchanged(log_path: Path) -> None:
@@ -583,6 +625,10 @@ class ApprovalRequired(Exception):
     """Raised when release manager approval is required before continuing."""
 
 
+class DirtyRepository(Exception):
+    """Raised when the Git workspace has uncommitted changes."""
+
+
 def _format_condition_failure(todo: Todo, result) -> str:
     """Return a localized error message for a failed TODO condition."""
 
@@ -659,50 +705,72 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
         sync_error = exc
 
     if not release_utils._git_clean():
-        proc = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-        )
-        files = [line[3:] for line in proc.stdout.splitlines()]
+        dirty_entries = _collect_dirty_files()
+        files = [entry["path"] for entry in dirty_entries]
         fixture_files = [
             f
             for f in files
             if "fixtures" in Path(f).parts and Path(f).suffix == ".json"
         ]
-        if not files or len(fixture_files) != len(files):
-            raise Exception("Git repository is not clean")
-
-        summary = []
-        for f in fixture_files:
-            path = Path(f)
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-            except Exception:
-                count = 0
-                models: list[str] = []
-            else:
-                if isinstance(data, list):
-                    count = len(data)
-                    models = sorted(
-                        {obj.get("model", "") for obj in data if isinstance(obj, dict)}
-                    )
-                elif isinstance(data, dict):
-                    count = 1
-                    models = [data.get("model", "")]
-                else:  # pragma: no cover - unexpected structure
+        if files and len(fixture_files) == len(files):
+            summary = []
+            for f in fixture_files:
+                path = Path(f)
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                except Exception:
                     count = 0
-                    models = []
-            summary.append({"path": f, "count": count, "models": models})
+                    models: list[str] = []
+                else:
+                    if isinstance(data, list):
+                        count = len(data)
+                        models = sorted(
+                            {
+                                obj.get("model", "")
+                                for obj in data
+                                if isinstance(obj, dict)
+                            }
+                        )
+                    elif isinstance(data, dict):
+                        count = 1
+                        models = [data.get("model", "")]
+                    else:  # pragma: no cover - unexpected structure
+                        count = 0
+                        models = []
+                summary.append({"path": f, "count": count, "models": models})
 
-        ctx["fixtures"] = summary
-        _append_log(
-            log_path,
-            "Committing fixture changes: " + ", ".join(fixture_files),
-        )
-        subprocess.run(["git", "add", *fixture_files], check=True)
-        subprocess.run(["git", "commit", "-m", "chore: update fixtures"], check=True)
-        _append_log(log_path, "Fixture changes committed")
+            ctx["fixtures"] = summary
+            _append_log(
+                log_path,
+                "Committing fixture changes: " + ", ".join(fixture_files),
+            )
+            subprocess.run(["git", "add", *fixture_files], check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "chore: update fixtures"], check=True
+            )
+            _append_log(log_path, "Fixture changes committed")
+            ctx.pop("dirty_files", None)
+            ctx.pop("dirty_commit_error", None)
+        else:
+            ctx["dirty_files"] = dirty_entries
+            ctx.setdefault("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE)
+            ctx.pop("fixtures", None)
+            ctx.pop("dirty_commit_error", None)
+            if dirty_entries:
+                details = ", ".join(entry["path"] for entry in dirty_entries)
+            else:
+                details = ""
+            message = "Git repository has uncommitted changes"
+            if details:
+                message += f": {details}"
+            if ctx.get("dirty_log_message") != message:
+                _append_log(log_path, message)
+                ctx["dirty_log_message"] = message
+            raise DirtyRepository()
+    else:
+        ctx.pop("dirty_files", None)
+        ctx.pop("dirty_commit_error", None)
+        ctx.pop("dirty_log_message", None)
 
     if sync_error is not None:
         raise sync_error
@@ -1349,6 +1417,44 @@ def release_progress(request, pk: int, action: str):
     log_path = Path("logs") / log_name
     ctx.setdefault("log", log_name)
     ctx.setdefault("paused", False)
+    ctx.setdefault("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE)
+
+    dirty_action = request.GET.get("dirty_action")
+    if dirty_action and ctx.get("dirty_files"):
+        if dirty_action == "discard":
+            _clean_repo()
+            remaining = _collect_dirty_files()
+            if remaining:
+                ctx["dirty_files"] = remaining
+                ctx.pop("dirty_commit_error", None)
+            else:
+                ctx.pop("dirty_files", None)
+                ctx.pop("dirty_commit_error", None)
+                ctx.pop("dirty_log_message", None)
+                _append_log(log_path, "Discarded local changes before publish")
+        elif dirty_action == "commit":
+            message = request.GET.get("dirty_message", "").strip()
+            if not message:
+                message = ctx.get("dirty_commit_message") or DIRTY_COMMIT_DEFAULT_MESSAGE
+            ctx["dirty_commit_message"] = message
+            try:
+                subprocess.run(["git", "add", "--all"], check=True)
+                subprocess.run(["git", "commit", "-m", message], check=True)
+            except subprocess.CalledProcessError as exc:
+                ctx["dirty_commit_error"] = _format_subprocess_error(exc)
+            else:
+                ctx.pop("dirty_commit_error", None)
+                remaining = _collect_dirty_files()
+                if remaining:
+                    ctx["dirty_files"] = remaining
+                else:
+                    ctx.pop("dirty_files", None)
+                    ctx.pop("dirty_log_message", None)
+                _append_log(
+                    log_path,
+                    _("Committed pending changes: %(message)s")
+                    % {"message": message},
+                )
 
     if (
         ctx.get("started")
@@ -1385,6 +1491,8 @@ def release_progress(request, pk: int, action: str):
                 pass
             except ApprovalRequired:
                 pass
+            except DirtyRepository:
+                pass
             except Exception as exc:  # pragma: no cover - best effort logging
                 _append_log(log_path, f"{name} failed: {exc}")
                 ctx["error"] = str(exc)
@@ -1415,6 +1523,9 @@ def release_progress(request, pk: int, action: str):
     )
     has_pending_todos = bool(ctx.get("todos") and not ctx.get("todos_ack"))
     if has_pending_todos:
+        next_step = None
+    dirty_files = ctx.get("dirty_files")
+    if dirty_files:
         next_step = None
     awaiting_approval = bool(ctx.get("awaiting_approval"))
     approval_credentials_missing = bool(ctx.get("approval_credentials_missing"))
@@ -1522,6 +1633,9 @@ def release_progress(request, pk: int, action: str):
         "cert_log": ctx.get("cert_log"),
         "fixtures": fixtures_summary,
         "todos": ctx.get("todos"),
+        "dirty_files": dirty_files,
+        "dirty_commit_message": ctx.get("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE),
+        "dirty_commit_error": ctx.get("dirty_commit_error"),
         "restart_count": restart_count,
         "started": ctx.get("started", False),
         "paused": paused,

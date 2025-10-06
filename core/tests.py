@@ -961,11 +961,28 @@ class ReleaseProcessTests(TestCase):
             package=self.package, version="1.0.0"
         )
 
+    @mock.patch("core.views._collect_dirty_files")
     @mock.patch("core.views._sync_with_origin_main")
     @mock.patch("core.views.release_utils._git_clean", return_value=False)
-    def test_step_check_requires_clean_repo(self, git_clean, sync_main):
-        with self.assertRaises(Exception):
-            _step_check_version(self.release, {}, Path("rel.log"))
+    def test_step_check_requires_clean_repo(
+        self, git_clean, sync_main, collect_dirty
+    ):
+        collect_dirty.return_value = [
+            {"path": "core/models.py", "status": "M", "status_label": "Modified"}
+        ]
+        ctx: dict = {}
+        with self.assertRaises(core_views.DirtyRepository):
+            _step_check_version(self.release, ctx, Path("rel.log"))
+        self.assertEqual(
+            ctx["dirty_files"],
+            [
+                {
+                    "path": "core/models.py",
+                    "status": "M",
+                    "status_label": "Modified",
+                }
+            ],
+        )
         sync_main.assert_called_once_with(Path("rel.log"))
 
     @mock.patch("core.views._sync_with_origin_main")
@@ -1479,7 +1496,12 @@ class PackageReleaseAdminActionTests(TestCase):
         self.factory = RequestFactory()
         self.site = AdminSite()
         self.admin = PackageReleaseAdmin(PackageRelease, self.site)
-        self.admin.message_user = lambda *args, **kwargs: None
+        self.messages = []
+
+        def _capture_message(request, message, level=messages.INFO):
+            self.messages.append((message, level))
+
+        self.admin.message_user = _capture_message
         self.package = Package.objects.create(name="pkg")
         self.package.is_active = True
         self.package.save(update_fields=["is_active"])
@@ -1570,6 +1592,75 @@ class PackageReleaseAdminActionTests(TestCase):
             PackageRelease.objects.filter(version="1.0.0").exists()
         )
         dump.assert_called_once()
+
+    @mock.patch("core.admin.release_utils.check_pypi_readiness")
+    def test_test_pypi_connection_action_reports_messages(self, check):
+        check.return_value = types.SimpleNamespace(
+            ok=True,
+            messages=[
+                ("success", "Twine available"),
+                ("warning", "Offline mode enabled; skipping network connectivity checks"),
+            ],
+        )
+
+        self.admin.test_pypi_connection(
+            self.request, PackageRelease.objects.filter(pk=self.release.pk)
+        )
+
+        self.assertIn(
+            (f"{self.release}: Twine available", messages.SUCCESS),
+            self.messages,
+        )
+        self.assertIn(
+            (
+                f"{self.release}: Offline mode enabled; skipping network connectivity checks",
+                messages.WARNING,
+            ),
+            self.messages,
+        )
+        self.assertIn(
+            (f"{self.release}: PyPI connectivity check passed", messages.SUCCESS),
+            self.messages,
+        )
+
+    @mock.patch("core.admin.release_utils.check_pypi_readiness")
+    def test_test_pypi_connection_handles_errors(self, check):
+        check.return_value = types.SimpleNamespace(
+            ok=False, messages=[("error", "Missing PyPI credentials")]
+        )
+
+        self.admin.test_pypi_connection(
+            self.request, PackageRelease.objects.filter(pk=self.release.pk)
+        )
+
+        self.assertIn(
+            (f"{self.release}: Missing PyPI credentials", messages.ERROR),
+            self.messages,
+        )
+        self.assertNotIn(
+            (f"{self.release}: PyPI connectivity check passed", messages.SUCCESS),
+            self.messages,
+        )
+
+    @mock.patch("core.admin.release_utils.check_pypi_readiness")
+    def test_test_pypi_connection_action_button(self, check):
+        check.return_value = types.SimpleNamespace(
+            ok=True, messages=[("success", "Twine available")]
+        )
+
+        self.admin.test_pypi_connection_action(self.request, self.release)
+
+        self.assertIn(
+            (f"{self.release}: PyPI connectivity check passed", messages.SUCCESS),
+            self.messages,
+        )
+
+    def test_test_pypi_connection_requires_selection(self):
+        self.admin.test_pypi_connection(self.request, PackageRelease.objects.none())
+
+        self.assertIn(
+            ("Select at least one release to test", messages.ERROR), self.messages
+        )
 
 
 class PackageActiveTests(TestCase):

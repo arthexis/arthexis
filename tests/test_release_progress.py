@@ -148,6 +148,79 @@ class ReleaseProgressViewTests(TestCase):
             response = self.client.get(f"{url}?step=1")
         self.assertEqual(response.status_code, 200)
 
+    @mock.patch("core.views._collect_dirty_files")
+    @mock.patch("core.views._sync_with_origin_main")
+    @mock.patch("core.views.release_utils._git_clean", return_value=False)
+    def test_dirty_repo_requires_resolution(self, git_clean, sync_main, collect):
+        collect.return_value = [
+            {"path": "core/models.py", "status": "M", "status_label": "Modified"}
+        ]
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        self.client.get(f"{url}?start=1&step=0")
+        response = self.client.get(f"{url}?step=0")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["dirty_files"],
+            [
+                {
+                    "path": "core/models.py",
+                    "status": "M",
+                    "status_label": "Modified",
+                }
+            ],
+        )
+        self.assertIsNone(response.context["next_step"])
+
+    @mock.patch("core.views.subprocess.run")
+    @mock.patch("core.views._collect_dirty_files")
+    @mock.patch("core.views._sync_with_origin_main")
+    @mock.patch("core.views.release_utils._git_clean")
+    def test_dirty_repo_commit_action(
+        self, git_clean, sync_main, collect, run
+    ):
+        git_clean.side_effect = [False, True]
+        collect.side_effect = [
+            [{"path": "core/models.py", "status": "M", "status_label": "Modified"}],
+            [],
+        ]
+
+        def fake_run(cmd, check=False, capture_output=False, text=False, **kwargs):
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        run.side_effect = fake_run
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        self.client.get(f"{url}?start=1&step=0")
+        response = self.client.get(
+            f"{url}?step=0&dirty_action=commit&dirty_message=Workspace%20cleanup"
+        )
+        self.assertEqual(response.status_code, 200)
+        run.assert_any_call(["git", "add", "--all"], check=True)
+        run.assert_any_call(
+            ["git", "commit", "-m", "Workspace cleanup"], check=True
+        )
+        self.assertFalse(response.context["dirty_files"])
+        self.assertEqual(response.context["current_step"], 1)
+
+    @mock.patch("core.views._clean_repo")
+    @mock.patch("core.views._collect_dirty_files")
+    @mock.patch("core.views._sync_with_origin_main")
+    @mock.patch("core.views.release_utils._git_clean")
+    def test_dirty_repo_discard_action(
+        self, git_clean, sync_main, collect, clean_repo
+    ):
+        git_clean.side_effect = [False, True]
+        collect.side_effect = [
+            [{"path": "core/models.py", "status": "M", "status_label": "Modified"}],
+            [],
+        ]
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        self.client.get(f"{url}?start=1&step=0")
+        response = self.client.get(f"{url}?step=0&dirty_action=discard")
+        self.assertEqual(response.status_code, 200)
+        clean_repo.assert_called_once()
+        self.assertFalse(response.context["dirty_files"])
+        self.assertEqual(response.context["current_step"], 1)
+
     def test_todos_must_be_acknowledged(self):
         todo = Todo.objects.create(request="Do something", url="/admin/")
         url = reverse("release-progress", args=[self.release.pk, "publish"])

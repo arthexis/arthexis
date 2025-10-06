@@ -15,6 +15,11 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # pragma: no cover - fallback when missing
     toml = None  # type: ignore
 
+try:  # pragma: no cover - optional dependency
+    import requests  # type: ignore
+except Exception:  # pragma: no cover - fallback when missing
+    requests = None  # type: ignore
+
 from config.offline import requires_network, network_available
 
 
@@ -447,15 +452,10 @@ def publish(
 
     primary = repository_targets[0]
 
-    if network_available() and primary.verify_availability:
-        try:  # pragma: no cover - requests optional
-            import requests  # type: ignore
-        except Exception:
-            requests = None  # type: ignore
-        if requests is not None:
-            resp = requests.get(f"https://pypi.org/pypi/{package.name}/json")
-            if resp.ok and version in resp.json().get("releases", {}):
-                raise ReleaseError(f"Version {version} already on PyPI")
+    if network_available() and primary.verify_availability and requests is not None:
+        resp = requests.get(f"https://pypi.org/pypi/{package.name}/json")
+        if resp.ok and version in resp.json().get("releases", {}):
+            raise ReleaseError(f"Version {version} already on PyPI")
 
     if not Path("dist").exists():
         raise ReleaseError("dist directory not found")
@@ -486,3 +486,179 @@ def publish(
     _run(["git", "tag", tag_name])
     _run(["git", "push", "origin", tag_name])
     return uploaded
+
+
+@dataclass
+class PyPICheckResult:
+    ok: bool
+    messages: list[tuple[str, str]]
+
+
+def check_pypi_readiness(
+    *,
+    release: Optional["PackageRelease"] = None,
+    package: Optional[Package] = None,
+    creds: Optional[Credentials] = None,
+    repositories: Optional[Sequence[RepositoryTarget]] = None,
+) -> PyPICheckResult:
+    """Validate connectivity and credentials required for PyPI uploads."""
+
+    messages: list[tuple[str, str]] = []
+    has_error = False
+
+    def add(level: str, message: str) -> None:
+        nonlocal has_error
+        messages.append((level, message))
+        if level == "error":
+            has_error = True
+
+    release_manager = None
+    if release is not None:
+        package = release.to_package()
+        repositories = release.build_publish_targets()
+        creds = release.to_credentials()
+        release_manager = release.release_manager or release.package.release_manager
+        add("success", f"Checking PyPI configuration for {release}")
+
+    if package is None:
+        package = DEFAULT_PACKAGE
+
+    if repositories is None:
+        repositories = [RepositoryTarget(name="PyPI", verify_availability=True)]
+    else:
+        repositories = list(repositories)
+
+    if not repositories:
+        add("error", "No repositories configured for upload")
+        return PyPICheckResult(ok=False, messages=messages)
+
+    if release_manager is not None:
+        if release_manager.pypi_token or (
+            release_manager.pypi_username and release_manager.pypi_password
+        ):
+            add(
+                "success",
+                f"Release manager '{release_manager}' has PyPI credentials configured",
+            )
+        else:
+            add(
+                "warning",
+                f"Release manager '{release_manager}' is missing PyPI credentials",
+            )
+    else:
+        add(
+            "warning",
+            "No release manager configured for PyPI uploads; falling back to environment",
+        )
+
+    env_creds = Credentials(
+        token=os.environ.get("PYPI_API_TOKEN"),
+        username=os.environ.get("PYPI_USERNAME"),
+        password=os.environ.get("PYPI_PASSWORD"),
+    )
+    if not env_creds.has_auth():
+        env_creds = None
+
+    primary = repositories[0]
+    candidate = primary.credentials
+    credential_source = "repository"
+    if candidate is None and creds is not None and creds.has_auth():
+        candidate = creds
+        credential_source = "release manager"
+    if candidate is None and env_creds is not None:
+        candidate = env_creds
+        credential_source = "environment"
+
+    if candidate is None:
+        add(
+            "error",
+            "Missing PyPI credentials. Configure a token or username/password for the release manager or environment.",
+        )
+    else:
+        try:
+            candidate.twine_args()
+        except ValueError as exc:
+            add("error", f"Invalid PyPI credentials: {exc}")
+        else:
+            auth_kind = "API token" if candidate.token else "username/password"
+            if credential_source == "release manager":
+                add("success", f"Using {auth_kind} provided by the release manager")
+            elif credential_source == "environment":
+                add("success", f"Using {auth_kind} from environment variables")
+            elif credential_source == "repository":
+                add("success", f"Using {auth_kind} supplied by repository target configuration")
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "twine", "--version"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except FileNotFoundError:
+        add("error", "Twine is not installed. Install it with `pip install twine`.")
+    except subprocess.CalledProcessError as exc:
+        output = (exc.stdout or "") + (exc.stderr or "")
+        add(
+            "error",
+            f"Twine version check failed: {output.strip() or exc.returncode}",
+        )
+    else:
+        version_info = (proc.stdout or proc.stderr or "").strip()
+        if version_info:
+            add("success", f"Twine available: {version_info}")
+        else:
+            add("success", "Twine version check succeeded")
+
+    if not network_available():
+        add(
+            "warning",
+            "Offline mode enabled; skipping network connectivity checks",
+        )
+        return PyPICheckResult(ok=not has_error, messages=messages)
+
+    if requests is None:
+        add("warning", "requests library unavailable; skipping network checks")
+        return PyPICheckResult(ok=not has_error, messages=messages)
+
+    try:
+        resp = requests.get(
+            f"https://pypi.org/pypi/{package.name}/json", timeout=10
+        )
+    except Exception as exc:  # pragma: no cover - network failure
+        add("error", f"Failed to reach PyPI JSON API: {exc}")
+    else:
+        if resp.ok:
+            add(
+                "success",
+                f"PyPI JSON API reachable for project '{package.name}'",
+            )
+        else:
+            add(
+                "error",
+                f"PyPI JSON API returned status {resp.status_code} for '{package.name}'",
+            )
+
+    checked_urls: set[str] = set()
+    for target in repositories:
+        url = target.repository_url or "https://upload.pypi.org/legacy/"
+        if url in checked_urls:
+            continue
+        checked_urls.add(url)
+        try:
+            resp = requests.get(url, timeout=10)
+        except Exception as exc:  # pragma: no cover - network failure
+            add("error", f"Failed to reach upload endpoint {url}: {exc}")
+            continue
+        if resp.ok:
+            add(
+                "success",
+                f"Upload endpoint {url} responded with status {resp.status_code}",
+            )
+        else:
+            add(
+                "error",
+                f"Upload endpoint {url} returned status {resp.status_code}",
+            )
+
+    return PyPICheckResult(ok=not has_error, messages=messages)
