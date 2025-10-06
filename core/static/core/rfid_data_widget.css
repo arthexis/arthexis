@@ -130,24 +130,124 @@
   font-family: ui-monospace, SFMono-Regular, SFMono, Menlo, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
-.rfid-data-widget__text-input {
+.rfid-data-widget__value {
+  display: inline-block;
   width: 100%;
-  min-height: 0;
-  height: 1.5rem;
-  resize: none;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  color: var(--link-fg, #79aec8);
+  font: inherit;
+  text-align: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.rfid-data-widget__value:hover,
+.rfid-data-widget__value:focus-visible {
+  text-decoration-thickness: 2px;
+}
+
+.rfid-data-widget__value:focus-visible {
+  outline: 2px solid var(--selected-row, rgba(60, 118, 244, 0.35));
+  outline-offset: 2px;
+}
+
+.rfid-data-widget__value--text {
   font-family: ui-monospace, SFMono-Regular, SFMono, Menlo, Consolas, "Liberation Mono", "Courier New", monospace;
-  padding: 0.15rem 0.35rem;
-  border: 1px solid var(--hairline-color);
-  border-radius: 0.25rem;
-  background-color: var(--darkened-bg, rgba(0, 0, 0, 0.02));
-  color: inherit;
+  text-align: left;
 }
 
 .rfid-data-widget__text td {
   vertical-align: middle;
 }
 
-.rfid-data-widget__text-input:focus {
-  outline: 2px solid var(--selected-row, rgba(60, 118, 244, 0.35));
-  outline-offset: 1px;
+.rfid-data-widget__modal[hidden] {
+  display: none;
+}
+
+.rfid-data-widget__modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.rfid-data-widget__modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.rfid-data-widget__modal-dialog {
+  position: relative;
+  width: min(34rem, 100%);
+  max-height: calc(100vh - 3rem);
+  overflow: auto;
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  background: var(--body-bg);
+  color: var(--body-fg);
+  box-shadow: 0 1.25rem 2.5rem rgba(0, 0, 0, 0.35);
+  display: grid;
+  gap: 1rem;
+}
+
+.rfid-data-widget__modal-header {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.rfid-data-widget__modal-title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.rfid-data-widget__modal-meta {
+  margin: 0;
+  color: var(--body-quiet-color);
+  font-size: 0.9rem;
+}
+
+.rfid-data-widget__modal-subtitle {
+  margin: 0;
+  color: var(--body-quiet-color);
+}
+
+.rfid-data-widget__modal-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.rfid-data-widget__modal-label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.rfid-data-widget__modal-input {
+  width: 100%;
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--hairline-color);
+  background: var(--darkened-bg, rgba(0, 0, 0, 0.02));
+  color: inherit;
+}
+
+.rfid-data-widget__modal-help {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--body-quiet-color);
+}
+
+.rfid-data-widget__modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
 }
