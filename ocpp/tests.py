@@ -4332,6 +4332,30 @@ class LiveUpdateViewTests(TestCase):
         )
         self.assertEqual(aggregate_entry["state"], available_label)
 
+    def test_dashboard_aggregate_uses_connection_when_status_missing(self):
+        aggregate = Charger.objects.create(
+            charger_id="DASHAGG-CONN", last_status="Charging"
+        )
+        connector = Charger.objects.create(
+            charger_id=aggregate.charger_id,
+            connector_id=1,
+        )
+        store.set_connection(connector.charger_id, connector.connector_id, object())
+        self.addCleanup(
+            lambda: store.pop_connection(connector.charger_id, connector.connector_id)
+        )
+
+        resp = self.client.get(reverse("ocpp-dashboard"))
+        self.assertEqual(resp.status_code, 200)
+        available_label = force_str(STATUS_BADGE_MAP["available"][0])
+        aggregate_entry = next(
+            item
+            for item in resp.context["chargers"]
+            if item["charger"].charger_id == aggregate.charger_id
+            and item["charger"].connector_id is None
+        )
+        self.assertEqual(aggregate_entry["state"], available_label)
+
     def test_cp_simulator_includes_interval(self):
         resp = self.client.get(reverse("cp-simulator"))
         self.assertEqual(resp.context["request"].live_update_interval, 5)

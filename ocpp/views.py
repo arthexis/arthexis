@@ -324,6 +324,19 @@ def _landing_page_translations() -> dict[str, dict[str, str]]:
     return catalog
 
 
+def _has_active_session(tx_obj) -> bool:
+    """Return whether the provided transaction-like object is active."""
+
+    if isinstance(tx_obj, (list, tuple, set)):
+        return any(_has_active_session(item) for item in tx_obj)
+    if not tx_obj:
+        return False
+    if isinstance(tx_obj, dict):
+        return tx_obj.get("stop_time") is None
+    stop_time = getattr(tx_obj, "stop_time", None)
+    return stop_time is None
+
+
 def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:
     """Return an aggregate badge for the charger when summarising connectors."""
 
@@ -335,11 +348,25 @@ def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:
         .exclude(pk=charger.pk)
         .exclude(connector_id__isnull=True)
     )
-    statuses = [
-        (sibling.last_status or "").strip().casefold()
-        for sibling in siblings
-        if (sibling.last_status or "").strip()
-    ]
+    statuses: list[str] = []
+    for sibling in siblings:
+        status_value = (sibling.last_status or "").strip()
+        if status_value:
+            statuses.append(status_value.casefold())
+            continue
+        tx_obj = store.get_transaction(sibling.charger_id, sibling.connector_id)
+        if not tx_obj:
+            tx_obj = (
+                Transaction.objects.filter(charger=sibling, stop_time__isnull=True)
+                .order_by("-start_time")
+                .first()
+            )
+        if _has_active_session(tx_obj):
+            statuses.append("charging")
+            continue
+        if store.is_connected(sibling.charger_id, sibling.connector_id):
+            statuses.append("available")
+
     if not statuses:
         return None
 
@@ -362,7 +389,7 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
     if aggregate_state is not None and normalized_status in {"", "available", "charging"}:
         return aggregate_state
 
-    has_session = bool(tx_obj)
+    has_session = _has_active_session(tx_obj)
     if status_value:
         key = normalized_status
         label, color = STATUS_BADGE_MAP.get(key, (status_value, "#0d6efd"))
