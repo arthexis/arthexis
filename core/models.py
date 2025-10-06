@@ -642,14 +642,16 @@ class OdooProfile(Profile):
         """Execute an Odoo RPC call, invalidating credentials on failure."""
         try:
             client = xmlrpc_client.ServerProxy(f"{self.host}/xmlrpc/2/object")
+            call_args = list(args)
+            call_kwargs = dict(kwargs)
             return client.execute_kw(
                 self.database,
                 self.odoo_uid,
                 self.password,
                 model,
                 method,
-                args,
-                kwargs,
+                call_args,
+                call_kwargs,
             )
         except Exception:
             logger.exception(
