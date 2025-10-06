@@ -4,14 +4,23 @@ Changelog
 Unreleased
 ----------
 
-- 73abf957 chore: remove TODO fixtures
-- b96b051f Add translations for admin dashboard labels (#2099)
-- 88319c9e Fix release script to commit generated artifacts (#2100)
-- 8532b292 chore: add release TODO for arthexis
+- 54064c84 chore: remove TODO fixtures
+- c93d406e Sync release check with origin (#2102)
+- d8b805cb chore(deps): bump mcp from 1.14.0 to 1.16.0 (#2088)
+- 97447aec chore(deps): bump graphviz from 0.20.3 to 0.21 (#2090)
+- 20394ec2 chore(deps): bump cffi from 1.17.1 to 2.0.0 (#2091)
+- abaad2bf Fix Odoo product registration RPC kwargs handling (#2101)
+- 48d11ed2 chore(deps): bump docutils from 0.22 to 0.22.2 (#2092)
+- 7713c7db chore(deps): bump billiard from 4.2.1 to 4.2.2 (#2093)
+- 03a7891c chore: add release TODO for arthexis
 
 v0.1.14 (2025-10-05)
 --------------------
 
+- 73abf957 chore: remove TODO fixtures
+- b96b051f Add translations for admin dashboard labels (#2099)
+- 88319c9e Fix release script to commit generated artifacts (#2100)
+- 8532b292 chore: add release TODO for arthexis
 - 54885cda chore: remove TODO fixtures
 - fc05178b chore: add release TODO for arthexis
 - 410c4da2 chore: remove TODO fixtures
