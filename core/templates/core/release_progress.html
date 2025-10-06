@@ -32,6 +32,46 @@
   .progress-actions button {
     min-width: 8rem;
   }
+  .dirty-changes {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    border: 1px solid var(--hairline-color);
+    border-radius: 6px;
+    background: var(--body-bg);
+  }
+  .dirty-changes table {
+    width: 100%;
+    margin-top: 0.75rem;
+    border-collapse: collapse;
+  }
+  .dirty-changes th,
+  .dirty-changes td {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid var(--hairline-color);
+    text-align: left;
+  }
+  .dirty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    align-items: flex-end;
+  }
+  .dirty-actions form {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .dirty-actions input[type="text"] {
+    min-width: 16rem;
+    padding: 0.35rem 0.5rem;
+  }
+  .dirty-error {
+    margin-top: 0.75rem;
+    color: var(--error-fg, #ba2121);
+    font-weight: 600;
+  }
   .progress-steps {
     margin: 0 0 1.5rem;
     padding-left: 1.5rem;
@@ -220,6 +260,47 @@
       {% endfor %}
       </tbody>
     </table>
+    {% endif %}
+    {% if dirty_files %}
+    <div class="dirty-changes">
+      <h2>{% trans 'Uncommitted changes detected' %}</h2>
+      <p>{% trans 'The repository must be clean before continuing. Review the files below, then discard or commit them.' %}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>{% trans 'Status' %}</th>
+            <th>{% trans 'Path' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for file in dirty_files %}
+          <tr>
+            <td>
+              {{ file.status_label }}
+              {% if file.status_label != file.status %}
+              ({{ file.status }})
+              {% endif %}
+            </td>
+            <td>{{ file.path }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <div class="dirty-actions">
+        <form method="get">
+          <input type="hidden" name="step" value="{{ current_step }}">
+          <button type="submit" name="dirty_action" value="discard">🧹 {% trans 'Discard local changes' %}</button>
+        </form>
+        <form method="get">
+          <input type="hidden" name="step" value="{{ current_step }}">
+          <input type="text" name="dirty_message" value="{{ dirty_commit_message }}" aria-label="{% trans 'Commit message' %}">
+          <button type="submit" name="dirty_action" value="commit">💾 {% trans 'Commit changes and continue' %}</button>
+        </form>
+      </div>
+      {% if dirty_commit_error %}
+      <p class="dirty-error">{{ dirty_commit_error }}</p>
+      {% endif %}
+    </div>
     {% endif %}
     {% if todos %}
     <h2>{% trans 'Pending TODOs' %}</h2>
