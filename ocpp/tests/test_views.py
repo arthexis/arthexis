@@ -7,12 +7,16 @@ import django
 
 django.setup()
 
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.shortcuts import resolve_url
 from django.test import Client, TestCase
 from django.urls import reverse
 from urllib.parse import quote
 from unittest.mock import patch
 
 from nodes.models import Node, NodeRole
+from ocpp.models import Charger
 
 
 class DashboardAccessTests(TestCase):
@@ -79,4 +83,27 @@ class RfidAccessTests(TestCase):
         expected_next_scan = quote(reverse("rfid-scan-next"))
         self.assertRedirects(
             scan_response, f"{login_url}?next={expected_next_scan}", fetch_redirect_response=False
+        )
+
+
+class ChargerAccessTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.charger = Charger.objects.create(charger_id="C1", public_display=True)
+        owner = get_user_model().objects.create_user(
+            username="owner",
+            email="owner@example.com",
+            password="test-password",
+        )
+        self.charger.owner_users.add(owner)
+
+    def test_restricted_charger_redirects_to_login(self):
+        path = reverse("charger-page", args=[self.charger.charger_id])
+        response = self.client.get(path)
+        login_url = resolve_url(settings.LOGIN_URL)
+        expected_next = quote(path)
+        self.assertRedirects(
+            response,
+            f"{login_url}?next={expected_next}",
+            fetch_redirect_response=False,
         )
