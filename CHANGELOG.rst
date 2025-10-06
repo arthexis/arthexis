@@ -4,6 +4,12 @@ Changelog
 Unreleased
 ----------
 
+- 54885cda chore: remove TODO fixtures
+- fc05178b chore: add release TODO for arthexis
+
+v0.1.14 (2025-10-05)
+--------------------
+
 - 410c4da2 chore: remove TODO fixtures
 - 11b5df49 Rename register visitor admin action (#2098)
 - ed5029ab Adjust dashboard aggregate status badges (#2097)
@@ -39,10 +45,6 @@ Unreleased
 - 93600429 Adjust seed datum label weight (#2055)
 - 36271139 Add landing leads tracking for Experience landings (#2054)
 - fd8d188a chore: add release TODO for arthexis
-
-v0.1.14 (2025-10-05)
---------------------
-
 - 198f7c86 chore: remove TODO fixtures
 - c03a6e1c feat: retry twine uploads with user guidance (#2053)
 - 89927b8a Add Discord support for social profiles (#2052)
