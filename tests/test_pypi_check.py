@@ -40,15 +40,17 @@ class PyPICheckReadinessTests(TestCase):
             version="1.2.3",
         )
 
+    @mock.patch("core.release.requests.head")
     @mock.patch("core.release.requests.get")
     @mock.patch("core.release.subprocess.run")
     @mock.patch("core.release.network_available", return_value=True)
-    def test_successful_check(self, network_available, run, get):
+    def test_successful_check(self, network_available, run, get, head):
         run.return_value = SimpleNamespace(stdout="twine version 6.1.0", stderr="")
         api_response = SimpleNamespace(ok=True, status_code=200)
         api_response.json = lambda: {"releases": {}}
         upload_response = SimpleNamespace(ok=True, status_code=200)
-        get.side_effect = [api_response, upload_response]
+        get.return_value = api_response
+        head.return_value = upload_response
 
         result = release_utils.check_pypi_readiness(release=self.release)
 
@@ -58,19 +60,22 @@ class PyPICheckReadinessTests(TestCase):
         self.assertTrue(
             any("PyPI JSON API reachable" in message for message in levels)
         )
-        self.assertEqual(get.call_count, 2)
+        self.assertEqual(get.call_count, 1)
+        self.assertEqual(head.call_count, 1)
 
+    @mock.patch("core.release.requests.head")
     @mock.patch("core.release.requests.get")
     @mock.patch("core.release.subprocess.run")
     @mock.patch("core.release.network_available", return_value=True)
-    def test_missing_credentials_reports_error(self, network_available, run, get):
+    def test_missing_credentials_reports_error(self, network_available, run, get, head):
         self.manager.pypi_token = ""
         self.manager.save(update_fields=["pypi_token"])
         run.return_value = SimpleNamespace(stdout="twine version 6.1.0", stderr="")
         api_response = SimpleNamespace(ok=True, status_code=200)
         api_response.json = lambda: {"releases": {}}
         upload_response = SimpleNamespace(ok=True, status_code=200)
-        get.side_effect = [api_response, upload_response]
+        get.return_value = api_response
+        head.return_value = upload_response
 
         result = release_utils.check_pypi_readiness(release=self.release)
 
@@ -79,11 +84,12 @@ class PyPICheckReadinessTests(TestCase):
             any(level == "error" and "Missing PyPI credentials" in message for level, message in result.messages)
         )
 
+    @mock.patch("core.release.requests.head")
     @mock.patch("core.release.requests.get")
     @mock.patch("core.release.subprocess.run")
     @mock.patch("core.release.network_available", return_value=True)
     def test_environment_credentials_used_when_available(
-        self, network_available, run, get
+        self, network_available, run, get, head
     ):
         self.manager.pypi_token = ""
         self.manager.save(update_fields=["pypi_token"])
@@ -91,7 +97,8 @@ class PyPICheckReadinessTests(TestCase):
         api_response = SimpleNamespace(ok=True, status_code=200)
         api_response.json = lambda: {"releases": {}}
         upload_response = SimpleNamespace(ok=True, status_code=200)
-        get.side_effect = [api_response, upload_response]
+        get.return_value = api_response
+        head.return_value = upload_response
 
         with mock.patch.dict(os.environ, {"PYPI_API_TOKEN": "env-token"}, clear=False):
             result = release_utils.check_pypi_readiness(release=self.release)
@@ -100,6 +107,30 @@ class PyPICheckReadinessTests(TestCase):
         self.assertTrue(
             any(
                 level == "success" and "environment variables" in message
+                for level, message in result.messages
+            )
+        )
+
+    @mock.patch("core.release.requests.head")
+    @mock.patch("core.release.requests.get")
+    @mock.patch("core.release.subprocess.run")
+    @mock.patch("core.release.network_available", return_value=True)
+    def test_upload_endpoint_forbidden_still_counts_as_success(
+        self, network_available, run, get, head
+    ):
+        run.return_value = SimpleNamespace(stdout="twine version 6.1.0", stderr="")
+        api_response = SimpleNamespace(ok=True, status_code=200)
+        api_response.json = lambda: {"releases": {}}
+        forbidden_response = SimpleNamespace(ok=False, status_code=403)
+        get.return_value = api_response
+        head.return_value = forbidden_response
+
+        result = release_utils.check_pypi_readiness(release=self.release)
+
+        self.assertTrue(result.ok)
+        self.assertTrue(
+            any(
+                level == "success" and "Upload endpoint" in message
                 for level, message in result.messages
             )
         )
