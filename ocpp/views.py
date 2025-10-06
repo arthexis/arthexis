@@ -3,10 +3,10 @@ import uuid
 from datetime import datetime, timedelta, timezone as dt_timezone
 from types import SimpleNamespace
 
-from django.http import JsonResponse, Http404
+from django.http import Http404, HttpResponse, JsonResponse
 from django.http.request import split_domain_port
 from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import get_object_or_404, render, resolve_url
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
@@ -188,11 +188,31 @@ def _visible_chargers(user):
     return Charger.visible_for_user(user).prefetch_related("owner_users", "owner_groups")
 
 
-def _ensure_charger_access(user, charger: Charger):
-    """Raise 404 when the user cannot view the charger."""
+def _ensure_charger_access(
+    user,
+    charger: Charger,
+    *,
+    request=None,
+) -> HttpResponse | None:
+    """Ensure ``user`` may view ``charger``.
 
-    if not charger.is_visible_to(user):
-        raise Http404("Charger not found")
+    Returns a redirect to the login page when authentication is required,
+    otherwise raises :class:`~django.http.Http404` if the charger should not be
+    visible to the user.
+    """
+
+    if charger.is_visible_to(user):
+        return None
+    if (
+        request is not None
+        and not getattr(user, "is_authenticated", False)
+        and charger.has_owner_scope()
+    ):
+        return redirect_to_login(
+            request.get_full_path(),
+            login_url=resolve_url(settings.LOGIN_URL),
+        )
+    raise Http404("Charger not found")
 
 
 def _transaction_rfid_details(
@@ -507,7 +527,11 @@ def charger_list(request):
 @api_login_required
 def charger_detail(request, cid, connector=None):
     charger, connector_slug = _get_charger(cid, connector)
-    _ensure_charger_access(request.user, charger)
+    access_response = _ensure_charger_access(
+        request.user, charger, request=request
+    )
+    if access_response is not None:
+        return access_response
 
     sessions: list[tuple[Charger, Transaction]] = []
     tx_obj = store.get_transaction(cid, charger.connector_id)
@@ -737,7 +761,11 @@ def cp_simulator(request):
 def charger_page(request, cid, connector=None):
     """Public landing page for a charger displaying usage guidance or progress."""
     charger, connector_slug = _get_charger(cid, connector)
-    _ensure_charger_access(request.user, charger)
+    access_response = _ensure_charger_access(
+        request.user, charger, request=request
+    )
+    if access_response is not None:
+        return access_response
     rfid_cache: dict[str, dict[str, str | None]] = {}
     overview = _connector_overview(
         charger, request.user, rfid_cache=rfid_cache
@@ -810,7 +838,11 @@ def charger_page(request, cid, connector=None):
 @login_required
 def charger_status(request, cid, connector=None):
     charger, connector_slug = _get_charger(cid, connector)
-    _ensure_charger_access(request.user, charger)
+    access_response = _ensure_charger_access(
+        request.user, charger, request=request
+    )
+    if access_response is not None:
+        return access_response
     session_id = request.GET.get("session")
     sessions = _live_sessions(charger)
     live_tx = None
@@ -1029,7 +1061,11 @@ def charger_status(request, cid, connector=None):
 @login_required
 def charger_session_search(request, cid, connector=None):
     charger, connector_slug = _get_charger(cid, connector)
-    _ensure_charger_access(request.user, charger)
+    access_response = _ensure_charger_access(
+        request.user, charger, request=request
+    )
+    if access_response is not None:
+        return access_response
     date_str = request.GET.get("date")
     date_view = request.GET.get("dates", "charger").lower()
     if date_view not in {"charger", "received"}:
@@ -1105,7 +1141,11 @@ def charger_log_page(request, cid, connector=None):
     status_url = None
     if log_type == "charger":
         charger, connector_slug = _get_charger(cid, connector)
-        _ensure_charger_access(request.user, charger)
+        access_response = _ensure_charger_access(
+            request.user, charger, request=request
+        )
+        if access_response is not None:
+            return access_response
         log_key = store.identity_key(cid, charger.connector_id)
         overview = _connector_overview(charger, request.user)
         connector_links = [
@@ -1166,7 +1206,11 @@ def dispatch_action(request, cid, connector=None):
                 charger_id=cid, connector_id=connector_value
             )
 
-    _ensure_charger_access(request.user, charger_obj)
+    access_response = _ensure_charger_access(
+        request.user, charger_obj, request=request
+    )
+    if access_response is not None:
+        return access_response
     ws = store.get_connection(cid, connector_value)
     if ws is None:
         return JsonResponse({"detail": "no connection"}, status=404)
