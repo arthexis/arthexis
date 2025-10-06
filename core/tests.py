@@ -961,11 +961,28 @@ class ReleaseProcessTests(TestCase):
             package=self.package, version="1.0.0"
         )
 
+    @mock.patch("core.views._collect_dirty_files")
     @mock.patch("core.views._sync_with_origin_main")
     @mock.patch("core.views.release_utils._git_clean", return_value=False)
-    def test_step_check_requires_clean_repo(self, git_clean, sync_main):
-        with self.assertRaises(Exception):
-            _step_check_version(self.release, {}, Path("rel.log"))
+    def test_step_check_requires_clean_repo(
+        self, git_clean, sync_main, collect_dirty
+    ):
+        collect_dirty.return_value = [
+            {"path": "core/models.py", "status": "M", "status_label": "Modified"}
+        ]
+        ctx: dict = {}
+        with self.assertRaises(core_views.DirtyRepository):
+            _step_check_version(self.release, ctx, Path("rel.log"))
+        self.assertEqual(
+            ctx["dirty_files"],
+            [
+                {
+                    "path": "core/models.py",
+                    "status": "M",
+                    "status_label": "Modified",
+                }
+            ],
+        )
         sync_main.assert_called_once_with(Path("rel.log"))
 
     @mock.patch("core.views._sync_with_origin_main")
