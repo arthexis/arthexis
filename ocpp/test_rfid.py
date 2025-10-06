@@ -320,7 +320,9 @@ class ValidateRfidValueTests(SimpleTestCase):
         tag.reference = None
         tag.kind = RFID.CLASSIC
         mock_register.return_value = (tag, False)
-        mock_run.return_value = types.SimpleNamespace(returncode=0)
+        mock_run.return_value = types.SimpleNamespace(
+            returncode=0, stdout="ok\n", stderr=""
+        )
 
         result = validate_rfid_value("abcd1234")
 
@@ -334,6 +336,12 @@ class ValidateRfidValueTests(SimpleTestCase):
         mock_notify.assert_called_once_with("RFID 1 OK", "ABCD1234 B")
         tag.save.assert_called_once_with(update_fields=["last_seen_on"])
         self.assertTrue(result["allowed"])
+        output = result.get("command_output")
+        self.assertIsInstance(output, dict)
+        self.assertEqual(output.get("stdout"), "ok\n")
+        self.assertEqual(output.get("stderr"), "")
+        self.assertEqual(output.get("returncode"), 0)
+        self.assertEqual(output.get("error"), "")
 
     @patch("ocpp.rfid.reader.timezone.now")
     @patch("ocpp.rfid.reader.notify_async")
@@ -354,7 +362,9 @@ class ValidateRfidValueTests(SimpleTestCase):
         tag.reference = None
         tag.kind = RFID.CLASSIC
         mock_register.return_value = (tag, False)
-        mock_run.return_value = types.SimpleNamespace(returncode=1)
+        mock_run.return_value = types.SimpleNamespace(
+            returncode=1, stdout="", stderr="failure"
+        )
 
         result = validate_rfid_value("ffff")
 
@@ -362,6 +372,12 @@ class ValidateRfidValueTests(SimpleTestCase):
         mock_notify.assert_called_once_with("RFID 2 BAD", "FFFF G")
         tag.save.assert_called_once_with(update_fields=["last_seen_on"])
         self.assertFalse(result["allowed"])
+        output = result.get("command_output")
+        self.assertIsInstance(output, dict)
+        self.assertEqual(output.get("returncode"), 1)
+        self.assertEqual(output.get("stdout"), "")
+        self.assertEqual(output.get("stderr"), "failure")
+        self.assertEqual(output.get("error"), "")
 
 
 class CardTypeDetectionTests(TestCase):
