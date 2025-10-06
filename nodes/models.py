@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from copy import deepcopy
 from dataclasses import dataclass
 from django.db import models
 from django.db.utils import DatabaseError
@@ -31,7 +32,9 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from django.contrib.auth import get_user_model
+from django.core import serializers
 from django.core.mail import get_connection
+from django.core.serializers.base import DeserializationError
 from core import mailer
 import logging
 
@@ -328,6 +331,8 @@ class Node(Entity):
                 update_fields.append("role")
             if update_fields:
                 node.save(update_fields=update_fields)
+            else:
+                node.refresh_features()
             created = False
         else:
             node = cls.objects.create(**defaults)
@@ -1285,6 +1290,7 @@ class NetMessage(Entity):
     )
     subject = models.CharField(max_length=64, blank=True)
     body = models.CharField(max_length=256, blank=True)
+    attachments = models.JSONField(blank=True, null=True)
     filter_node = models.ForeignKey(
         "Node",
         on_delete=models.SET_NULL,
@@ -1354,6 +1360,7 @@ class NetMessage(Entity):
         body: str,
         reach: NodeRole | str | None = None,
         seen: list[str] | None = None,
+        attachments: list[dict[str, object]] | None = None,
     ):
         role = None
         if reach:
@@ -1361,15 +1368,69 @@ class NetMessage(Entity):
                 role = reach
             else:
                 role = NodeRole.objects.filter(name=reach).first()
+        else:
+            role = NodeRole.objects.filter(name="Terminal").first()
         origin = Node.get_local()
+        normalized_attachments = cls.normalize_attachments(attachments)
         msg = cls.objects.create(
             subject=subject[:64],
             body=body[:256],
             reach=role,
             node_origin=origin,
+            attachments=normalized_attachments or None,
         )
+        if normalized_attachments:
+            msg.apply_attachments(normalized_attachments)
         msg.propagate(seen=seen or [])
         return msg
+
+    @staticmethod
+    def normalize_attachments(
+        attachments: object,
+    ) -> list[dict[str, object]]:
+        if not attachments or not isinstance(attachments, list):
+            return []
+        normalized: list[dict[str, object]] = []
+        for item in attachments:
+            if not isinstance(item, dict):
+                continue
+            model_label = item.get("model")
+            fields = item.get("fields")
+            if not isinstance(model_label, str) or not isinstance(fields, dict):
+                continue
+            normalized_item: dict[str, object] = {
+                "model": model_label,
+                "fields": deepcopy(fields),
+            }
+            if "pk" in item:
+                normalized_item["pk"] = item["pk"]
+            normalized.append(normalized_item)
+        return normalized
+
+    def apply_attachments(
+        self, attachments: list[dict[str, object]] | None = None
+    ) -> None:
+        payload = attachments if attachments is not None else self.attachments or []
+        if not payload:
+            return
+        try:
+            objects = list(
+                serializers.deserialize(
+                    "python", deepcopy(payload), ignorenonexistent=True
+                )
+            )
+        except DeserializationError:
+            logger.exception("Failed to deserialize attachments for NetMessage %s", self.pk)
+            return
+        for obj in objects:
+            try:
+                obj.save()
+            except Exception:
+                logger.exception(
+                    "Failed to save attachment %s for NetMessage %s",
+                    getattr(obj, "object", obj),
+                    self.pk,
+                )
 
     def propagate(self, seen: list[str] | None = None):
         from core.notifications import notify
@@ -1523,6 +1584,8 @@ class NetMessage(Entity):
                 "sender": local_id,
                 "origin": origin_uuid,
             }
+            if self.attachments:
+                payload["attachments"] = self.attachments
             if self.filter_node:
                 payload["filter_node"] = str(self.filter_node.uuid)
             if self.filter_node_feature:

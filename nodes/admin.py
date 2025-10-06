@@ -1369,6 +1369,7 @@ class NetMessageAdmin(EntityModelAdmin):
             fields = [
                 "subject",
                 "body",
+                "attachments",
                 "filter_node",
                 "filter_node_feature",
                 "filter_node_role",
@@ -1418,6 +1419,7 @@ class NetMessageAdmin(EntityModelAdmin):
                 )
             },
         ),
+        ("Attachments", {"fields": ("attachments",)}),
         (
             "Propagation",
             {

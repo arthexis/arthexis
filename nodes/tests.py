@@ -1172,6 +1172,71 @@ class NodeRegisterCurrentTests(TestCase):
             mock_propagate.call_args.kwargs["seen"], payload["seen"]
         )
 
+    def test_net_message_applies_attachments(self):
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_key = (
+            key.public_key()
+            .public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
+        sender = Node.objects.create(
+            hostname="sender-attachments",
+            address="10.0.0.100",
+            port=8050,
+            mac_address="00:11:22:33:44:ab",
+            public_key=public_key,
+        )
+        existing_role = NodeRole.objects.create(
+            name="AttachmentExisting", description="old"
+        )
+        attachments = [
+            {
+                "model": "nodes.noderole",
+                "fields": {
+                    "name": "AttachmentNew",
+                    "description": "created via attachment",
+                },
+            },
+            {
+                "model": "nodes.noderole",
+                "pk": existing_role.pk,
+                "fields": {
+                    "name": existing_role.name,
+                    "description": "updated via attachment",
+                },
+            },
+        ]
+        msg_uuid = uuid.uuid4()
+        payload = {
+            "uuid": str(msg_uuid),
+            "subject": "attachments",
+            "body": "process",
+            "seen": [],
+            "sender": str(sender.uuid),
+            "origin": str(sender.uuid),
+            "attachments": attachments,
+        }
+        payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        signature = key.sign(
+            payload_json.encode(), padding.PKCS1v15(), hashes.SHA256()
+        )
+        response = self.client.post(
+            reverse("net-message"),
+            data=payload_json,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=base64.b64encode(signature).decode(),
+        )
+        self.assertEqual(response.status_code, 200)
+        expected = NetMessage.normalize_attachments(attachments)
+        message = NetMessage.objects.get(uuid=msg_uuid)
+        self.assertEqual(message.attachments, expected)
+        self.assertTrue(NodeRole.objects.filter(name="AttachmentNew").exists())
+        existing_role.refresh_from_db()
+        self.assertEqual(existing_role.description, "updated via attachment")
+
     def test_clipboard_polling_creates_task(self):
         feature, _ = NodeFeature.objects.get_or_create(
             slug="clipboard-poll", defaults={"display": "Clipboard Poll"}
@@ -2110,6 +2175,39 @@ class NetMessageBroadcastStringReachTests(TestCase):
         called_args = mock_propagate.call_args
         self.assertIn("seen", called_args.kwargs)
         self.assertIs(called_args.kwargs["seen"], seen)
+
+    def test_broadcast_applies_attachments(self):
+        role = NodeRole.objects.create(name="Terminal")
+        local = Node.objects.create(
+            hostname="terminal-local",
+            address="10.10.0.1",
+            port=8010,
+            mac_address="00:aa:bb:cc:dd:ff",
+            role=role,
+            public_endpoint="terminal-local",
+        )
+        attachments = [
+            {
+                "model": "nodes.noderole",
+                "fields": {"name": "attachment-role", "description": "desc"},
+            }
+        ]
+        expected = NetMessage.normalize_attachments(attachments)
+        with (
+            patch.object(Node, "get_local", return_value=local),
+            patch.object(NetMessage, "propagate") as mock_propagate,
+            patch.object(NetMessage, "apply_attachments") as mock_apply,
+        ):
+            msg = NetMessage.broadcast(
+                "Subject",
+                "Body",
+                reach="Terminal",
+                seen=None,
+                attachments=attachments,
+            )
+        self.assertEqual(msg.attachments, expected)
+        mock_apply.assert_called_once_with(expected)
+        mock_propagate.assert_called_once_with(seen=[])
 
 
 class NetMessagePropagationTests(TestCase):
