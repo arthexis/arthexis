@@ -33,6 +33,16 @@ msgstr "Tedesco"
 msgid "Charger timestamps"
 msgstr "Timestamp del caricatore"
 
+#: pages/templates/admin/index.html:209
+msgid "Future actions"
+msgstr "Azioni future"
+
+#: pages/templates/admin/index.html:240
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:4
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:29
+msgid "Public site traffic"
+msgstr "Traffico del sito pubblico"
+
 #: ocpp/templates/ocpp/charger_status.html:132
 msgid "Select a connector to view live chart data."
 msgstr "Seleziona un connettore per visualizzare i dati del grafico in tempo reale."
