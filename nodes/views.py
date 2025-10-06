@@ -530,6 +530,7 @@ def net_message(request):
     msg_uuid = data.get("uuid")
     subject = data.get("subject", "")
     body = data.get("body", "")
+    attachments = NetMessage.normalize_attachments(data.get("attachments"))
     reach_name = data.get("reach")
     reach_role = None
     if reach_name:
@@ -569,6 +570,7 @@ def net_message(request):
             "body": body[:256],
             "reach": reach_role,
             "node_origin": origin_node,
+            "attachments": attachments or None,
             "filter_node": filter_node,
             "filter_node_feature": filter_feature,
             "filter_node_role": filter_role,
@@ -587,6 +589,9 @@ def net_message(request):
         if msg.node_origin_id is None and origin_node:
             msg.node_origin = origin_node
             update_fields.append("node_origin")
+        if attachments and msg.attachments != attachments:
+            msg.attachments = attachments
+            update_fields.append("attachments")
         field_updates = {
             "filter_node": filter_node,
             "filter_node_feature": filter_feature,
@@ -600,6 +605,8 @@ def net_message(request):
                 setattr(msg, field, value)
                 update_fields.append(field)
         msg.save(update_fields=update_fields)
+    if attachments:
+        msg.apply_attachments(attachments)
     msg.propagate(seen=seen)
     return JsonResponse({"status": "propagated", "complete": msg.complete})
 
