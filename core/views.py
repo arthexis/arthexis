@@ -51,7 +51,8 @@ def odoo_products(request):
             "product.product",
             "search_read",
             [[]],
-            {"fields": ["name"], "limit": 50},
+            fields=["name"],
+            limit=50,
         )
     except Exception:
         logger.exception(
@@ -129,14 +130,15 @@ def odoo_quote_report(request):
             "sale.order.template",
             "search_read",
             [[]],
-            {"fields": ["name"], "order": "name asc"},
+            fields=["name"],
+            order="name asc",
         )
         template_usage = profile.execute(
             "sale.order",
             "read_group",
             [[("sale_order_template_id", "!=", False)]],
             ["sale_order_template_id"],
-            {"lazy": False},
+            lazy=False,
         )
 
         usage_map = {}
@@ -169,19 +171,17 @@ def odoo_quote_report(request):
                     ("quote_sent", "=", False),
                 ]
             ],
-            {
-                "fields": [
-                    "name",
-                    "amount_total",
-                    "partner_id",
-                    "activity_type_id",
-                    "activity_summary",
-                    "tag_ids",
-                    "create_date",
-                    "currency_id",
-                ],
-                "order": "create_date desc",
-            },
+            fields=[
+                "name",
+                "amount_total",
+                "partner_id",
+                "activity_type_id",
+                "activity_summary",
+                "tag_ids",
+                "create_date",
+                "currency_id",
+            ],
+            order="create_date desc",
         )
 
         tag_ids = set()
@@ -202,7 +202,7 @@ def odoo_quote_report(request):
                 "sale.order.tag",
                 "read",
                 list(tag_ids),
-                {"fields": ["name"]},
+                fields=["name"],
             )
             for tag in tag_records:
                 tag_id = tag.get("id")
@@ -215,7 +215,7 @@ def odoo_quote_report(request):
                 "res.currency",
                 "read",
                 list(currency_ids),
-                {"fields": ["name", "symbol"]},
+                fields=["name", "symbol"],
             )
             for currency in currency_records:
                 currency_id = currency.get("id")
@@ -280,11 +280,9 @@ def odoo_quote_report(request):
             "product.product",
             "search_read",
             [[]],
-            {
-                "fields": ["name", "default_code", "write_date", "create_date"],
-                "limit": 10,
-                "order": "write_date desc, create_date desc",
-            },
+            fields=["name", "default_code", "write_date", "create_date"],
+            limit=10,
+            order="write_date desc, create_date desc",
         )
         context["recent_products"] = [
             {
@@ -300,10 +298,8 @@ def odoo_quote_report(request):
             "ir.module.module",
             "search_read",
             [[("state", "=", "installed")]],
-            {
-                "fields": ["name", "shortdesc", "latest_version", "author"],
-                "order": "name asc",
-            },
+            fields=["name", "shortdesc", "latest_version", "author"],
+            order="name asc",
         )
         context["installed_modules"] = [
             {
