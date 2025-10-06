@@ -24,7 +24,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import errno
 import subprocess
-from typing import Sequence
+from typing import Optional, Sequence
 
 from django.template.loader import get_template
 from django.test import signals
@@ -656,6 +656,12 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
     from packaging.version import InvalidVersion, Version
 
+    sync_error: Optional[Exception] = None
+    try:
+        _sync_with_origin_main(log_path)
+    except Exception as exc:
+        sync_error = exc
+
     if not release_utils._git_clean():
         proc = subprocess.run(
             ["git", "status", "--porcelain"],
@@ -701,6 +707,9 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
         subprocess.run(["git", "add", *fixture_files], check=True)
         subprocess.run(["git", "commit", "-m", "chore: update fixtures"], check=True)
         _append_log(log_path, "Fixture changes committed")
+
+    if sync_error is not None:
+        raise sync_error
 
     version_path = Path("VERSION")
     if version_path.exists():
@@ -784,11 +793,26 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
             log_path, "Regenerated CHANGELOG.rst using scripts/generate-changelog.sh"
         )
     notes = _changelog_notes(release.version)
+    staged_release_fixtures: list[Path] = []
     if notes != release.changelog:
         release.changelog = notes
         release.save(update_fields=["changelog"])
         PackageRelease.dump_fixture()
         _append_log(log_path, f"Recorded changelog notes for v{release.version}")
+        release_fixture_paths = sorted(
+            Path("core/fixtures").glob("releases__*.json")
+        )
+        if release_fixture_paths:
+            subprocess.run(
+                ["git", "add", *[str(path) for path in release_fixture_paths]],
+                check=True,
+            )
+            staged_release_fixtures = release_fixture_paths
+            formatted = ", ".join(_format_path(path) for path in release_fixture_paths)
+            _append_log(
+                log_path,
+                "Staged release fixtures " + formatted,
+            )
     subprocess.run(["git", "add", "CHANGELOG.rst"], check=True)
     _append_log(log_path, "Staged CHANGELOG.rst for commit")
     version_path = Path("VERSION")
@@ -802,18 +826,7 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     _append_log(log_path, f"Updated VERSION file to {release.version}")
     subprocess.run(["git", "add", "VERSION"], check=True)
     _append_log(log_path, "Staged VERSION for commit")
-    diff = subprocess.run(
-        [
-            "git",
-            "diff",
-            "--cached",
-            "--quiet",
-            "--",
-            "CHANGELOG.rst",
-            "VERSION",
-        ],
-        check=False,
-    )
+    diff = subprocess.run(["git", "diff", "--cached", "--quiet"], check=False)
     if diff.returncode != 0:
         subprocess.run(
             ["git", "commit", "-m", f"pre-release commit {release.version}"],
@@ -828,6 +841,9 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
         _append_log(log_path, "Unstaged CHANGELOG.rst")
         subprocess.run(["git", "reset", "HEAD", "VERSION"], check=False)
         _append_log(log_path, "Unstaged VERSION file")
+        for path in staged_release_fixtures:
+            subprocess.run(["git", "reset", "HEAD", str(path)], check=False)
+            _append_log(log_path, f"Unstaged release fixture {_format_path(path)}")
     todo, fixture_path = _ensure_release_todo(
         release, previous_version=repo_version_before_sync
     )

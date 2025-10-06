@@ -961,14 +961,19 @@ class ReleaseProcessTests(TestCase):
             package=self.package, version="1.0.0"
         )
 
+    @mock.patch("core.views._sync_with_origin_main")
     @mock.patch("core.views.release_utils._git_clean", return_value=False)
-    def test_step_check_requires_clean_repo(self, git_clean):
+    def test_step_check_requires_clean_repo(self, git_clean, sync_main):
         with self.assertRaises(Exception):
             _step_check_version(self.release, {}, Path("rel.log"))
+        sync_main.assert_called_once_with(Path("rel.log"))
 
+    @mock.patch("core.views._sync_with_origin_main")
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     @mock.patch("core.views.release_utils.network_available", return_value=False)
-    def test_step_check_keeps_repo_clean(self, network_available, git_clean):
+    def test_step_check_keeps_repo_clean(
+        self, network_available, git_clean, sync_main
+    ):
         version_path = Path("VERSION")
         original = version_path.read_text(encoding="utf-8")
         _step_check_version(self.release, {}, Path("rel.log"))
@@ -979,12 +984,14 @@ class ReleaseProcessTests(TestCase):
         )
         self.assertFalse(proc.stdout.strip())
         self.assertEqual(version_path.read_text(encoding="utf-8"), original)
+        sync_main.assert_called_once_with(Path("rel.log"))
 
     @mock.patch("core.views.requests.get")
+    @mock.patch("core.views._sync_with_origin_main")
     @mock.patch("core.views.release_utils.network_available", return_value=True)
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     def test_step_check_ignores_yanked_release(
-        self, git_clean, network_available, requests_get
+        self, git_clean, network_available, sync_main, requests_get
     ):
         response = mock.Mock()
         response.ok = True
@@ -1000,12 +1007,14 @@ class ReleaseProcessTests(TestCase):
         self.release.version = "0.1.12"
         _step_check_version(self.release, {}, Path("rel.log"))
         requests_get.assert_called_once()
+        sync_main.assert_called_once_with(Path("rel.log"))
 
     @mock.patch("core.views.requests.get")
+    @mock.patch("core.views._sync_with_origin_main")
     @mock.patch("core.views.release_utils.network_available", return_value=True)
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     def test_step_check_blocks_available_release(
-        self, git_clean, network_available, requests_get
+        self, git_clean, network_available, sync_main, requests_get
     ):
         response = mock.Mock()
         response.ok = True
@@ -1023,6 +1032,7 @@ class ReleaseProcessTests(TestCase):
             _step_check_version(self.release, {}, Path("rel.log"))
         self.assertIn("already on PyPI", str(exc.exception))
         requests_get.assert_called_once()
+        sync_main.assert_called_once_with(Path("rel.log"))
 
     @mock.patch("core.models.PackageRelease.dump_fixture")
     def test_save_does_not_dump_fixture(self, dump):
@@ -1084,8 +1094,14 @@ class ReleaseProcessTests(TestCase):
             version_path.write_text(original_version, encoding="utf-8")
 
         sync_main.assert_called_once_with(Path("rel.log"))
+        release_fixtures = sorted(
+            str(path) for path in Path("core/fixtures").glob("releases__*.json")
+        )
+        if release_fixtures:
+            run.assert_any_call(["git", "add", *release_fixtures], check=True)
         run.assert_any_call(["git", "add", "CHANGELOG.rst"], check=True)
         run.assert_any_call(["git", "add", "VERSION"], check=True)
+        run.assert_any_call(["git", "diff", "--cached", "--quiet"], check=False)
         ensure_todo.assert_called_once_with(self.release, previous_version=mock.ANY)
 
     @mock.patch("core.views.subprocess.run")
