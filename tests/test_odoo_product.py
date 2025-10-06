@@ -34,7 +34,11 @@ class OdooProductTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), [{"id": 5, "name": "Prod"}])
         mock_exec.assert_called_once_with(
-            "product.product", "search_read", [[]], {"fields": ["name"], "limit": 50}
+            "product.product",
+            "search_read",
+            [[]],
+            fields=["name"],
+            limit=50,
         )
 
     def test_product_admin_form_uses_widget(self):
@@ -116,15 +120,13 @@ class ProductAdminFetchWizardTests(TestCase):
             "product.product",
             "search_read",
             [[("name", "ilike", "Wid")]],
-            {
-                "fields": [
-                    "name",
-                    "default_code",
-                    "barcode",
-                    "description_sale",
-                ],
-                "limit": 50,
-            },
+            fields=[
+                "name",
+                "default_code",
+                "barcode",
+                "description_sale",
+            ],
+            limit=50,
         )
         content = response.render().content.decode()
         self.assertIn("Widget", content)
@@ -164,15 +166,13 @@ class ProductAdminFetchWizardTests(TestCase):
             "product.product",
             "search_read",
             [[]],
-            {
-                "fields": [
-                    "name",
-                    "default_code",
-                    "barcode",
-                    "description_sale",
-                ],
-                "limit": 50,
-            },
+            fields=[
+                "name",
+                "default_code",
+                "barcode",
+                "description_sale",
+            ],
+            limit=50,
         )
         product = Product.objects.get()
         self.assertEqual(product.name, "Imported")
@@ -228,15 +228,13 @@ class ProductAdminRegisterFromOdooTests(TestCase):
             "product.product",
             "search_read",
             [[]],
-            {
-                "fields": [
-                    "name",
-                    "description_sale",
-                    "list_price",
-                    "standard_price",
-                ],
-                "limit": 0,
-            },
+            fields=[
+                "name",
+                "description_sale",
+                "list_price",
+                "standard_price",
+            ],
+            limit=0,
         )
 
     @patch.object(OdooProfile, "execute")

@@ -90,6 +90,54 @@ def test_execute_failure_marks_unverified(monkeypatch):
     assert profile.verified_on is None
 
 
+def test_execute_passes_kwargs(monkeypatch):
+    user = User.objects.create(username="u5")
+    profile = OdooProfile.objects.create(
+        user=user,
+        host="http://test",
+        database="db",
+        username="u5",
+        password="p",
+    )
+    profile.odoo_uid = 99
+    profile.verified_on = timezone.now()
+    profile.save()
+
+    captured: dict[str, object] = {}
+
+    class CaptureModels:
+        def execute_kw(self, db, uid, password, model, method, args, kwargs):
+            captured.update(
+                {
+                    "db": db,
+                    "uid": uid,
+                    "password": password,
+                    "model": model,
+                    "method": method,
+                    "args": args,
+                    "kwargs": kwargs,
+                }
+            )
+            return []
+
+    def fake_proxy(url):
+        return CaptureModels()
+
+    monkeypatch.setattr(xmlrpc_client, "ServerProxy", fake_proxy)
+
+    result = profile.execute(
+        "product.product",
+        "search_read",
+        [[]],
+        fields=["name"],
+        limit=5,
+    )
+
+    assert result == []
+    assert captured["args"] == [[[]]]
+    assert captured["kwargs"] == {"fields": ["name"], "limit": 5}
+
+
 def test_profile_string_resolves_sigil_values(monkeypatch):
     user = User.objects.create(username="u3")
 
