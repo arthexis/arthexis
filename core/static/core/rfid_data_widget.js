@@ -64,16 +64,25 @@
     return bytes;
   }
 
-  function parseTextInput(value) {
+  function parseTextInput(value, previousBytes) {
     const characters = Array.from(value || "").slice(0, 16);
     const bytes = [];
     for (let index = 0; index < 16; index += 1) {
       if (index < characters.length) {
-        const codePoint = characters[index].codePointAt(0);
-        if (typeof codePoint === "number") {
-          bytes.push(normalizeByte(codePoint));
+        const character = characters[index];
+        if (
+          character === "·" &&
+          Array.isArray(previousBytes) &&
+          index < previousBytes.length
+        ) {
+          bytes.push(normalizeByte(previousBytes[index]));
         } else {
-          bytes.push(0);
+          const codePoint = character.codePointAt(0);
+          if (typeof codePoint === "number") {
+            bytes.push(normalizeByte(codePoint));
+          } else {
+            bytes.push(0);
+          }
         }
       } else {
         bytes.push(0);
@@ -316,7 +325,7 @@
         if (activeBlock === null) {
           return;
         }
-        draftBytes = parseTextInput(textField.value);
+        draftBytes = parseTextInput(textField.value, draftBytes);
         if (hexField) {
           hexField.value = formatBytesToHex(draftBytes);
         }
