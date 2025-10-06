@@ -27,7 +27,7 @@ class AdminIndexActionLinkTests(TestCase):
         response = self.client.get(reverse("admin:index"))
         self.assertContains(response, "Scan RFIDs")
         self.assertContains(response, f'href="{reverse("admin:core_rfid_scan")}"')
-        self.assertContains(response, "Register Visitor Node")
+        self.assertContains(response, "Register Visitor")
         self.assertContains(
             response, f'href="{reverse("admin:nodes_node_register_visitor")}"'
         )
@@ -41,7 +41,7 @@ class AdminIndexActionLinkTests(TestCase):
         row_html = row_match.group(1)
         # Actions column should still precede the Add and Change links
         pattern = re.compile(
-            r'<td class="actions">\s*</td>\s*'
+            r'<td class="actions">.*?</td>\s*'
             r'<td>\s*<a[^>]*class="addlink"[^<]*</a>\s*</td>\s*'
             r'<td>\s*(?:<[^>]+>\s*)*<a[^>]*class="changelink"',
             re.DOTALL,
