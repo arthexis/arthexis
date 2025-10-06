@@ -474,6 +474,8 @@ if [[ $RUN_AP == true ]]; then
             while iptables -C FORWARD -i wlan0 -j DROP 2>/dev/null; do
                 iptables -D FORWARD -i wlan0 -j DROP
             done
+            iptables -C FORWARD -i wlan0 -o wlan1 -j DROP 2>/dev/null || \
+                iptables -A FORWARD -i wlan0 -o wlan1 -j DROP
         fi
         if ! nmcli -t -f NAME connection show --active | grep -Fxq "$AP_NAME"; then
             echo "Access point $AP_NAME failed to start." >&2
