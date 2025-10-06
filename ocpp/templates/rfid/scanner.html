@@ -18,6 +18,21 @@
       </div>
     {% endif %}
   <p id="{{ prefix }}-status">Scanner ready</p>
+  <div id="{{ prefix }}-command-output" class="rfid-command-output" hidden>
+    <div class="rfid-command-header">
+      <h3>External Command Output</h3>
+      <span class="rfid-command-status" id="{{ prefix }}-command-status"></span>
+    </div>
+    <div class="rfid-command-section" id="{{ prefix }}-command-stdout-section" hidden>
+      <span class="rfid-command-label">stdout</span>
+      <pre id="{{ prefix }}-command-stdout"></pre>
+    </div>
+    <div class="rfid-command-section" id="{{ prefix }}-command-stderr-section" hidden>
+      <span class="rfid-command-label">stderr</span>
+      <pre id="{{ prefix }}-command-stderr"></pre>
+    </div>
+    <p class="rfid-command-error" id="{{ prefix }}-command-error" hidden></p>
+  </div>
   {% if table_mode %}
     <div class="rfid-table-mode">
       <table class="rfid-history" id="{{ prefix }}-history">
@@ -136,6 +151,65 @@
 
 #{{ prefix }}-scanner .rfid-mode-toggle .button.secondary:hover {
   background: var(--rfid-header-bg);
+}
+
+#{{ prefix }}-scanner .rfid-command-output {
+  margin: 0 0 1em;
+  padding: 0.85em 1em;
+  border: 1px solid var(--rfid-table-border);
+  border-radius: 0.5rem;
+  background-color: var(--rfid-row-alt-bg);
+  color: var(--rfid-row-text);
+}
+
+#{{ prefix }}-scanner .rfid-command-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75em;
+  margin-bottom: 0.75em;
+}
+
+#{{ prefix }}-scanner .rfid-command-output h3 {
+  margin: 0;
+  font-size: 1.05em;
+}
+
+#{{ prefix }}-scanner .rfid-command-status {
+  font-weight: 600;
+  font-size: 0.95em;
+}
+
+#{{ prefix }}-scanner .rfid-command-section {
+  margin-bottom: 0.75em;
+}
+
+#{{ prefix }}-scanner .rfid-command-section:last-of-type {
+  margin-bottom: 0.5em;
+}
+
+#{{ prefix }}-scanner .rfid-command-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.25em;
+}
+
+#{{ prefix }}-scanner .rfid-command-section pre {
+  margin: 0;
+  padding: 0.6em 0.75em;
+  border: 1px solid var(--rfid-table-border);
+  border-radius: 0.4rem;
+  background-color: var(--rfid-row-bg);
+  font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.95em;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+#{{ prefix }}-scanner .rfid-command-error {
+  margin: 0;
+  font-size: 0.95em;
+  color: #b91c1c;
 }
 
 #{{ prefix }}-scanner .field {
@@ -266,6 +340,13 @@
   const keyBEl = document.getElementById('{{ prefix }}-key-b');
   const deepBlocksEl = document.getElementById('{{ prefix }}-deep-blocks');
   const deepStatusEl = document.getElementById('{{ prefix }}-deep-status');
+  const commandOutputEl = document.getElementById('{{ prefix }}-command-output');
+  const commandStatusEl = document.getElementById('{{ prefix }}-command-status');
+  const commandStdoutSection = document.getElementById('{{ prefix }}-command-stdout-section');
+  const commandStdoutEl = document.getElementById('{{ prefix }}-command-stdout');
+  const commandStderrSection = document.getElementById('{{ prefix }}-command-stderr-section');
+  const commandStderrEl = document.getElementById('{{ prefix }}-command-stderr');
+  const commandErrorEl = document.getElementById('{{ prefix }}-command-error');
   const adminTemplate = '{{ admin_change_url_template|default:""|escapejs }}';
   const tableMode = {% if table_mode %}true{% else %}false{% endif %};
 
@@ -358,6 +439,94 @@
       return null;
     }
     return parts.join(' – ');
+  }
+
+  function clearCommandOutput(){
+    if(commandOutputEl){
+      commandOutputEl.hidden = true;
+    }
+    if(commandStatusEl){
+      commandStatusEl.textContent = '';
+    }
+    if(commandStdoutEl){
+      commandStdoutEl.textContent = '';
+    }
+    if(commandStdoutSection){
+      commandStdoutSection.hidden = true;
+    }
+    if(commandStderrEl){
+      commandStderrEl.textContent = '';
+    }
+    if(commandStderrSection){
+      commandStderrSection.hidden = true;
+    }
+    if(commandErrorEl){
+      commandErrorEl.textContent = '';
+      commandErrorEl.hidden = true;
+    }
+  }
+
+  function updateCommandOutput(data){
+    if(!commandOutputEl){
+      return;
+    }
+    const details = data && typeof data.command_output === 'object' ? data.command_output : null;
+    if(!details){
+      clearCommandOutput();
+      return;
+    }
+    const stdoutText = details && details.stdout !== undefined && details.stdout !== null
+      ? String(details.stdout)
+      : '';
+    const stderrText = details && details.stderr !== undefined && details.stderr !== null
+      ? String(details.stderr)
+      : '';
+    const errorText = details && details.error !== undefined && details.error !== null
+      ? String(details.error)
+      : '';
+    let returnCode = details && details.returncode !== undefined ? details.returncode : null;
+    if(typeof returnCode === 'string' && returnCode.trim() !== ''){
+      const parsed = Number(returnCode);
+      if(Number.isFinite(parsed)){
+        returnCode = parsed;
+      }
+    }
+    const hasReturnCode = typeof returnCode === 'number' && Number.isFinite(returnCode);
+    const hasStdout = Boolean(stdoutText);
+    const hasStderr = Boolean(stderrText);
+    const hasError = Boolean(errorText);
+    if(!hasStdout && !hasStderr && !hasError && !hasReturnCode){
+      clearCommandOutput();
+      return;
+    }
+
+    commandOutputEl.hidden = false;
+    if(commandStdoutSection && commandStdoutEl){
+      commandStdoutEl.textContent = stdoutText;
+      commandStdoutSection.hidden = !hasStdout;
+    }
+    if(commandStderrSection && commandStderrEl){
+      commandStderrEl.textContent = stderrText;
+      commandStderrSection.hidden = !hasStderr;
+    }
+    if(commandErrorEl){
+      commandErrorEl.textContent = errorText;
+      commandErrorEl.hidden = !hasError;
+    }
+
+    let statusMessage = '';
+    if(hasReturnCode){
+      statusMessage = returnCode === 0
+        ? `Command succeeded (exit code ${returnCode})`
+        : `Command failed (exit code ${returnCode})`;
+    } else if(hasError){
+      statusMessage = 'Command error';
+    } else if(hasStdout || hasStderr){
+      statusMessage = 'Command output';
+    }
+    if(commandStatusEl){
+      commandStatusEl.textContent = statusMessage;
+    }
   }
 
   function clearDeepDetails(){
@@ -524,6 +693,7 @@
     console.error(message);
     const defaultMsg = 'RFID reader not detected. Please connect the reader.';
     clearDeepDetails();
+    clearCommandOutput();
     if(typeof message === 'string' && message){
       statusEl.textContent = message;
     } else {
@@ -532,6 +702,7 @@
   }
 
   function updateFromData(data){
+    clearCommandOutput();
     if(!data || data.error){
       if(data && data.error){
         showError(data.error);
@@ -567,6 +738,7 @@
       configureEl.style.display = 'inline';
     }
     updateDeepDetails(data, rfidValue);
+    updateCommandOutput(data);
     if(deepBtn && data.deep_read){
       setDeepReadState(true, {updateStatus: false, clearDetails: false});
     }

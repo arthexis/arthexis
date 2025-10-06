@@ -102,7 +102,15 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
         command = raw_command.strip()
     else:
         command = ""
+    command_details: dict[str, object] | None = None
+    command_allowed = True
     if command:
+        command_details = {
+            "stdout": "",
+            "stderr": "",
+            "returncode": None,
+            "error": "",
+        }
         env = os.environ.copy()
         env["RFID_VALUE"] = rfid
         env["RFID_LABEL_ID"] = str(tag.pk)
@@ -115,10 +123,15 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
                 text=True,
                 env=env,
             )
-        except Exception:
+        except Exception as exc:
             command_allowed = False
+            command_details["error"] = str(exc)
         else:
-            command_allowed = completed.returncode == 0
+            command_returncode = getattr(completed, "returncode", 1)
+            command_allowed = command_returncode == 0
+            command_details["returncode"] = command_returncode
+            command_details["stdout"] = getattr(completed, "stdout", "") or ""
+            command_details["stderr"] = getattr(completed, "stderr", "") or ""
         allowed = allowed and command_allowed
 
     result = {
@@ -131,6 +144,8 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
         "reference": tag.reference.value if tag.reference else None,
         "kind": tag.kind,
     }
+    if command_details is not None:
+        result["command_output"] = command_details
     status_text = "OK" if allowed else "BAD"
     color_word = (tag.color or "").upper()
     notify_async(f"RFID {tag.label_id} {status_text}".strip(), f"{rfid} {color_word}".strip())
