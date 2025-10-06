@@ -328,10 +328,24 @@ def build(
     if dist:
         if Path("dist").exists():
             shutil.rmtree("dist")
+        build_dir = Path("build")
+        if build_dir.exists():
+            shutil.rmtree(build_dir)
+        sys.modules.pop("build", None)
         try:
             import build  # type: ignore
         except Exception:
             _run([sys.executable, "-m", "pip", "install", "build"])
+        else:
+            module_path = Path(getattr(build, "__file__", "") or "").resolve()
+            try:
+                module_path.relative_to(Path.cwd().resolve())
+            except ValueError:
+                pass
+            else:
+                # A local ``build`` package shadows the build backend; reinstall it.
+                sys.modules.pop("build", None)
+                _run([sys.executable, "-m", "pip", "install", "build"])
         _run([sys.executable, "-m", "build"])
 
     if git:

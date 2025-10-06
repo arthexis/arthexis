@@ -94,6 +94,28 @@ def test_build_stashes_and_restores_when_requested(monkeypatch, release_sandbox)
     ]
 
 
+def test_build_removes_shadow_build_package(monkeypatch, release_sandbox):
+    monkeypatch.setattr(release, "_git_clean", lambda: True)
+    monkeypatch.setattr(release, "_write_pyproject", lambda *a, **k: None)
+
+    build_pkg = release_sandbox / "build"
+    build_pkg.mkdir()
+    (build_pkg / "__init__.py").write_text("# shadow module", encoding="utf-8")
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, check=True):
+        calls.append(list(cmd))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(release, "_run", fake_run)
+
+    release.build(version="1.2.3", dist=True)
+
+    assert calls == [[sys.executable, "-m", "build"]]
+    assert not build_pkg.exists()
+
+
 def test_build_raises_when_tests_fail(monkeypatch, release_sandbox):
     monkeypatch.setattr(release, "_git_clean", lambda: True)
 
