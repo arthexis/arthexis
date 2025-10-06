@@ -37,7 +37,7 @@ from django.templatetags.static import static
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import gettext_lazy as _, ngettext
 from django.forms.models import BaseInlineFormSet
 import json
 import uuid
@@ -2867,7 +2867,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     list_display = (
         "label",
         "rfid",
-        "custom_label",
+        "user_data_flag",
         "color",
         "kind",
         "released",
@@ -2878,7 +2878,12 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     search_fields = ("label_id", "rfid", "custom_label")
     autocomplete_fields = ["energy_accounts"]
     raw_id_fields = ["reference"]
-    actions = ["scan_rfids", "print_card_labels", "copy_rfids"]
+    actions = [
+        "scan_rfids",
+        "print_card_labels",
+        "copy_rfids",
+        "toggle_selected_user_data",
+    ]
     readonly_fields = ("added_on", "last_seen_on")
     form = RFIDForm
 
@@ -2921,10 +2926,59 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     label.admin_order_field = "label_id"
     label.short_description = "Label"
 
+    @admin.display(boolean=True, description=_("UD"))
+    def user_data_flag(self, obj):
+        return getattr(obj, "is_user_data", False)
+
     def scan_rfids(self, request, queryset):
         return redirect("admin:core_rfid_scan")
 
     scan_rfids.short_description = "Scan RFIDs"
+
+    @admin.action(description=_("Toggle selected User Data"))
+    def toggle_selected_user_data(self, request, queryset):
+        toggled = 0
+        skipped = 0
+        for tag in queryset:
+            manager = getattr(type(tag), "all_objects", type(tag).objects)
+            target_user = _resolve_fixture_user(tag, request.user)
+            allow_user_data = _user_allows_user_data(target_user)
+            if tag.is_user_data:
+                manager.filter(pk=tag.pk).update(is_user_data=False)
+                tag.is_user_data = False
+                delete_user_fixture(tag, target_user)
+                toggled += 1
+                continue
+            if not allow_user_data:
+                skipped += 1
+                continue
+            manager.filter(pk=tag.pk).update(is_user_data=True)
+            tag.is_user_data = True
+            dump_user_fixture(tag, target_user)
+            toggled += 1
+
+        if toggled:
+            self.message_user(
+                request,
+                ngettext(
+                    "Toggled user data for %(count)d RFID.",
+                    "Toggled user data for %(count)d RFIDs.",
+                    toggled,
+                )
+                % {"count": toggled},
+                level=messages.SUCCESS,
+            )
+        if skipped:
+            self.message_user(
+                request,
+                ngettext(
+                    "Skipped %(count)d RFID because user data is not available.",
+                    "Skipped %(count)d RFIDs because user data is not available.",
+                    skipped,
+                )
+                % {"count": skipped},
+                level=messages.WARNING,
+            )
 
     @admin.action(description=_("Copy RFID"))
     def copy_rfids(self, request, queryset):
