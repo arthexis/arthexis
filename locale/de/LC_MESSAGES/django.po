@@ -33,6 +33,16 @@ msgstr "Deutsch"
 msgid "Charger timestamps"
 msgstr "Zeitstempel der Ladestation"
 
+#: pages/templates/admin/index.html:209
+msgid "Future actions"
+msgstr "Zukünftige Aktionen"
+
+#: pages/templates/admin/index.html:240
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:4
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:29
+msgid "Public site traffic"
+msgstr "Öffentlicher Website-Verkehr"
+
 #: ocpp/templates/ocpp/charger_status.html:132
 msgid "Select a connector to view live chart data."
 msgstr "Wählen Sie einen Anschluss aus, um Live-Diagrammdaten anzuzeigen."
