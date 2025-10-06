@@ -61,7 +61,7 @@
 .rfid-data-widget__text td {
   border-bottom: 1px solid var(--hairline-color);
   border-right: 1px solid var(--hairline-color);
-  padding: 0.35rem 0.5rem;
+  padding: 0.2rem 0.5rem;
   text-align: center;
   white-space: nowrap;
 }
@@ -132,14 +132,19 @@
 
 .rfid-data-widget__text-input {
   width: 100%;
-  min-height: 2rem;
-  resize: vertical;
+  min-height: 0;
+  height: 1.5rem;
+  resize: none;
   font-family: ui-monospace, SFMono-Regular, SFMono, Menlo, Consolas, "Liberation Mono", "Courier New", monospace;
-  padding: 0.25rem 0.35rem;
+  padding: 0.15rem 0.35rem;
   border: 1px solid var(--hairline-color);
   border-radius: 0.25rem;
   background-color: var(--darkened-bg, rgba(0, 0, 0, 0.02));
   color: inherit;
+}
+
+.rfid-data-widget__text td {
+  vertical-align: middle;
 }
 
 .rfid-data-widget__text-input:focus {
