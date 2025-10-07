@@ -3168,10 +3168,6 @@ class NodeFeatureTests(TestCase):
         control_role, _ = NodeRole.objects.get_or_create(name="Control")
         router = NodeFeature.objects.create(slug="ap-router", display="AP Router")
         router.roles.add(control_role)
-        public = NodeFeature.objects.create(
-            slug="ap-public-wifi", display="AP Public Wi-Fi"
-        )
-        public.roles.add(control_role)
         mac = "00:11:22:33:44:88"
         with TemporaryDirectory() as tmp, override_settings(BASE_DIR=Path(tmp)):
             locks = Path(tmp) / "locks"
@@ -3189,9 +3185,6 @@ class NodeFeatureTests(TestCase):
                 node.refresh_features()
         self.assertTrue(
             NodeFeatureAssignment.objects.filter(node=node, feature=router).exists()
-        )
-        self.assertFalse(
-            NodeFeatureAssignment.objects.filter(node=node, feature=public).exists()
         )
 
     @patch("nodes.models.Node._hosts_gelectriic_ap", side_effect=[True, False])

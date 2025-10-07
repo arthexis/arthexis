@@ -862,10 +862,7 @@ def invitation_login(request, uidb64, token):
         user.is_active = True
         user.save()
         node = Node.get_local()
-        if node and (
-            node.has_feature("ap-router")
-            or node.has_feature("ap-public-wifi")
-        ):
+        if node and node.has_feature("ap-router"):
             mac_address = public_wifi.resolve_mac_address(
                 request.META.get("REMOTE_ADDR")
             )

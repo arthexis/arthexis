@@ -243,7 +243,6 @@ class Node(Entity):
         "gui-toast",
         "rpi-camera",
         "ap-router",
-        "ap-public-wifi",
         "gway-runner",
     }
     MANUAL_FEATURE_SLUGS = {"clipboard-poll", "screenshot-poll"}
