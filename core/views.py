@@ -1247,6 +1247,55 @@ def _step_publish(release, ctx, log_path: Path) -> None:
             verify_availability=False,
         )
         label = target.repository_url or target.name
+        dist_path = Path("dist")
+        if not dist_path.exists():
+            _append_log(log_path, "Dry run: building distribution artifacts")
+            package = release.to_package()
+            version_path = (
+                Path(package.version_path)
+                if package.version_path
+                else Path("VERSION")
+            )
+            original_version = (
+                version_path.read_text(encoding="utf-8")
+                if version_path.exists()
+                else None
+            )
+            pyproject_path = Path("pyproject.toml")
+            original_pyproject = (
+                pyproject_path.read_text(encoding="utf-8")
+                if pyproject_path.exists()
+                else None
+            )
+            try:
+                release_utils.build(
+                    package=package,
+                    version=release.version,
+                    creds=release.to_credentials(),
+                    dist=True,
+                    tests=False,
+                    twine=False,
+                    git=False,
+                    tag=False,
+                    stash=True,
+                )
+            except release_utils.ReleaseError as exc:
+                _append_log(
+                    log_path,
+                    f"Dry run: failed to prepare distribution artifacts ({exc})",
+                )
+                raise
+            finally:
+                if original_version is None:
+                    if version_path.exists():
+                        version_path.unlink()
+                else:
+                    version_path.write_text(original_version, encoding="utf-8")
+                if original_pyproject is None:
+                    if pyproject_path.exists():
+                        pyproject_path.unlink()
+                else:
+                    pyproject_path.write_text(original_pyproject, encoding="utf-8")
         _append_log(log_path, f"Dry run: uploading distribution to {label}")
         release_utils.publish(
             package=release.to_package(),
