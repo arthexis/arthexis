@@ -1,0 +1,257 @@
+{% load i18n %}
+<button
+  type="button"
+  id="user-story-toggle"
+  class="user-story-toggle"
+  aria-haspopup="dialog"
+  aria-controls="user-story-overlay"
+  aria-expanded="false"
+  aria-label="{% trans 'Share your feedback' %}"
+>
+  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+    <path
+      fill="currentColor"
+      fill-rule="evenodd"
+      d="M11.049 2.927a1 1 0 011.902 0l1.563 4.813a1 1 0 00.95.69h5.063c.969 0 1.371 1.24.588 1.81l-4.096 2.977a1 1 0 00-.364 1.118l1.563 4.813c.3.921-.755 1.688-1.54 1.118l-4.096-2.977a1 1 0 00-1.175 0l-4.096 2.977c-.784.57-1.838-.197-1.539-1.118l1.563-4.813a1 1 0 00-.364-1.118L2.445 10.24c-.783-.57-.38-1.81.588-1.81h5.063a1 1 0 00.95-.69l1.563-4.813z"
+      clip-rule="evenodd"
+    ></path>
+  </svg>
+  <span class="visually-hidden">{% trans 'Share your feedback' %}</span>
+</button>
+<div
+  id="user-story-overlay"
+  class="user-story-overlay"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="user-story-title"
+  hidden
+>
+  <div class="user-story-card card" tabindex="-1">
+    <div class="card-header d-flex justify-content-between align-items-start">
+      <div>
+        <h5 class="card-title mb-1" id="user-story-title">{% trans 'Please provide feedback!' %}</h5>
+        <p class="card-subtitle text-muted small mb-0">{% trans 'Tell us how this page worked for you.' %}</p>
+      </div>
+      <button type="button" class="btn-close" aria-label="{% trans 'Close' %}" data-feedback-close></button>
+    </div>
+    <div class="card-body">
+      <form id="user-story-form" method="post" action="{% url 'pages:user-story-submit' %}">
+        {% csrf_token %}
+        <input type="hidden" name="path" value="{{ request.get_full_path|default:'/' }}">
+        <div class="mb-3">
+          <label for="user-story-name" class="form-label">{% trans 'Name (email or pseudonym)' %}</label>
+          <input
+            type="text"
+            class="form-control"
+            id="user-story-name"
+            name="name"
+            maxlength="40"
+            value="{% if request.user.is_authenticated %}{{ request.user.username|slice:':40' }}{% endif %}"
+            placeholder="{% trans 'Share how we should address you' %}"
+          >
+          <div class="form-text">{% trans 'Leave blank to submit anonymously.' %}</div>
+        </div>
+        <div class="mb-3">
+          <span class="form-label d-block">{% trans 'Your experience on this page' %}</span>
+          <div class="user-story-feedback-options">
+            <div class="user-story-rating" role="radiogroup" aria-labelledby="user-story-title">
+              <input type="radio" id="user-story-rating-5" name="rating" value="5" required>
+              <label for="user-story-rating-5" title="{% trans 'Excellent' %}" aria-label="{% trans '5 stars' %}">★</label>
+              <input type="radio" id="user-story-rating-4" name="rating" value="4">
+              <label for="user-story-rating-4" title="{% trans 'Great' %}" aria-label="{% trans '4 stars' %}">★</label>
+              <input type="radio" id="user-story-rating-3" name="rating" value="3">
+              <label for="user-story-rating-3" title="{% trans 'Good' %}" aria-label="{% trans '3 stars' %}">★</label>
+              <input type="radio" id="user-story-rating-2" name="rating" value="2">
+              <label for="user-story-rating-2" title="{% trans 'Okay' %}" aria-label="{% trans '2 stars' %}">★</label>
+              <input type="radio" id="user-story-rating-1" name="rating" value="1">
+              <label for="user-story-rating-1" title="{% trans 'Needs improvement' %}" aria-label="{% trans '1 star' %}">★</label>
+            </div>
+            <div class="form-check user-story-screenshot">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                id="user-story-take-screenshot"
+                name="take_screenshot"
+                value="1"
+                checked
+              >
+              <label class="form-check-label" for="user-story-take-screenshot">{% trans 'Take a screenshot' %}</label>
+            </div>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label for="user-story-comments" class="form-label">{% trans 'Detailed comments / feedback' %}</label>
+          <textarea
+            class="form-control"
+            id="user-story-comments"
+            name="comments"
+            rows="4"
+            maxlength="400"
+            placeholder="{% trans 'Share details about your experience (max 400 characters)' %}"
+            required
+          ></textarea>
+          <div class="form-text">
+            <span id="user-story-char-count">0</span>/400
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary w-100 py-2">
+          {% trans 'Submit feedback' %}
+        </button>
+        <div id="user-story-success" class="alert alert-success user-story-alert mt-3 d-none" role="status">
+          {% trans 'Thank you! Your feedback has been sent.' %}
+        </div>
+        <div id="user-story-error" class="alert alert-danger user-story-alert mt-3 d-none" role="alert"></div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+  (function() {
+    const toggle = document.getElementById('user-story-toggle');
+    const overlay = document.getElementById('user-story-overlay');
+    const form = document.getElementById('user-story-form');
+    if (!toggle || !overlay || !form) {
+      return;
+    }
+
+    const closeBtn = overlay.querySelector('[data-feedback-close]');
+    const card = overlay.querySelector('.user-story-card');
+    const successAlert = document.getElementById('user-story-success');
+    const errorAlert = document.getElementById('user-story-error');
+    const commentField = document.getElementById('user-story-comments');
+    const counter = document.getElementById('user-story-char-count');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    let previousFocus = null;
+
+    const setCharCount = () => {
+      if (counter && commentField) {
+        counter.textContent = commentField.value.length;
+      }
+    };
+
+    const resetAlerts = () => {
+      if (successAlert) {
+        successAlert.classList.add('d-none');
+      }
+      if (errorAlert) {
+        errorAlert.classList.add('d-none');
+        errorAlert.textContent = '';
+      }
+    };
+
+    const openOverlay = () => {
+      if (!overlay.hasAttribute('hidden')) {
+        return;
+      }
+      previousFocus = document.activeElement;
+      overlay.removeAttribute('hidden');
+      requestAnimationFrame(() => {
+        overlay.classList.add('show');
+        document.body.classList.add('user-story-open');
+        toggle.setAttribute('aria-expanded', 'true');
+        if (card) {
+          card.focus();
+        }
+      });
+    };
+
+    const closeOverlay = () => {
+      if (overlay.hasAttribute('hidden')) {
+        return;
+      }
+      overlay.classList.remove('show');
+      document.body.classList.remove('user-story-open');
+      toggle.setAttribute('aria-expanded', 'false');
+      setTimeout(() => {
+        overlay.setAttribute('hidden', '');
+        resetAlerts();
+        form.reset();
+        setCharCount();
+        if (previousFocus) {
+          previousFocus.focus();
+        }
+      }, 200);
+    };
+
+    toggle.addEventListener('click', () => {
+      if (overlay.hasAttribute('hidden')) {
+        openOverlay();
+      } else {
+        closeOverlay();
+      }
+    });
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', closeOverlay);
+    }
+
+    overlay.addEventListener('click', event => {
+      if (event.target === overlay) {
+        closeOverlay();
+      }
+    });
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !overlay.hasAttribute('hidden')) {
+        closeOverlay();
+      }
+    });
+
+    if (commentField) {
+      commentField.addEventListener('input', setCharCount);
+      setCharCount();
+    }
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      resetAlerts();
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+      }
+
+      const formData = new FormData(form);
+      try {
+        const response = await fetch(form.action, {
+          method: 'POST',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: formData,
+        });
+
+        if (response.ok) {
+          form.reset();
+          setCharCount();
+          if (successAlert) {
+            successAlert.classList.remove('d-none');
+          }
+        } else {
+          const data = await response.json().catch(() => ({}));
+          let message = '';
+          if (data && data.errors) {
+            message = Object.values(data.errors)
+              .flat()
+              .join(' ');
+          }
+          if (!message) {
+            message = '{% trans "We could not submit your feedback. Please try again." %}';
+          }
+          if (errorAlert) {
+            errorAlert.textContent = message;
+            errorAlert.classList.remove('d-none');
+          }
+        }
+      } catch (error) {
+        if (errorAlert) {
+          errorAlert.textContent = '{% trans "Network error. Please try again." %}';
+          errorAlert.classList.remove('d-none');
+        }
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+        }
+      }
+    });
+  })();
+</script>
