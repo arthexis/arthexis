@@ -1,7 +1,9 @@
 import json
 import os
+from datetime import timedelta
 from pathlib import Path
 from subprocess import CompletedProcess
+from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
 
@@ -14,7 +16,12 @@ django.setup()
 from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 from nodes.models import Node, NodeFeature, NodeRole
-from core.system import _gather_info, _read_auto_upgrade_mode, get_system_sigil_values
+from core.system import (
+    _gather_info,
+    _load_auto_upgrade_log_entries,
+    _read_auto_upgrade_mode,
+    get_system_sigil_values,
+)
 
 
 class SystemInfoRoleTests(SimpleTestCase):
@@ -89,6 +96,32 @@ class AutoUpgradeModeTests(SimpleTestCase):
         self.assertTrue(info["lock_exists"])
         self.assertTrue(info["enabled"])
         self.assertTrue(info["read_error"])
+
+
+class AutoUpgradeLogParsingTests(SimpleTestCase):
+    def test_parses_zulu_timestamp_entries(self):
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            log_dir = base_dir / "logs"
+            log_dir.mkdir()
+            log_path = log_dir / "auto-upgrade.log"
+            log_path.write_text("2024-01-01T12:34:56Z Started\n", encoding="utf-8")
+
+            with patch("core.system._format_timestamp", return_value="formatted") as mock_format:
+                result = _load_auto_upgrade_log_entries(base_dir)
+
+        entries = result["entries"]
+        self.assertEqual(len(entries), 1)
+        entry = entries[0]
+        self.assertEqual(entry["message"], "Started")
+        self.assertEqual(entry["timestamp"], "formatted")
+
+        mock_format.assert_called_once()
+        parsed_dt = mock_format.call_args[0][0]
+        self.assertEqual(parsed_dt.year, 2024)
+        self.assertEqual(parsed_dt.month, 1)
+        self.assertEqual(parsed_dt.day, 1)
+        self.assertEqual(parsed_dt.utcoffset(), timedelta(0))
 
 
 class SystemInfoRunserverDetectionTests(SimpleTestCase):
