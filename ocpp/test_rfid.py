@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import types
+from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 from unittest.mock import patch, MagicMock, call
 
@@ -26,7 +27,7 @@ from nodes.models import Node, NodeRole
 from core.models import RFID
 from ocpp.rfid.reader import read_rfid, enable_deep_read, validate_rfid_value
 from ocpp.rfid.detect import detect_scanner, main as detect_main
-from ocpp.rfid import background_reader
+from ocpp.rfid import background_reader, camera
 from ocpp.rfid.constants import (
     DEFAULT_IRQ_PIN,
     DEFAULT_RST_PIN,
@@ -169,6 +170,15 @@ class ScanNextViewTests(TestCase):
 
 
 class ReaderNotificationTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        self.queue_patcher = patch("ocpp.rfid.reader.queue_camera_snapshot")
+        self.mock_queue = self.queue_patcher.start()
+
+    def tearDown(self):
+        self.queue_patcher.stop()
+        super().tearDown()
+
     def _mock_reader(self):
         class MockReader:
             MI_OK = 1
@@ -233,6 +243,87 @@ class ReaderNotificationTests(TestCase):
         mock_notify.assert_has_calls([call("RFID 2 BAD", f"{result['rfid']} B")])
         self.assertTrue(getattr(reader, "select_called", False))
         self.assertTrue(getattr(reader, "stop_called", False))
+
+    @patch("ocpp.rfid.reader.notify_async")
+    @patch("ocpp.rfid.reader.RFID.register_scan")
+    def test_snapshot_metadata_passed_to_queue(self, mock_register, mock_notify):
+        tag = MagicMock(
+            label_id=5,
+            pk=5,
+            allowed=True,
+            color="",
+            released=False,
+            reference=None,
+        )
+        mock_register.return_value = (tag, True)
+
+        reader = self._mock_reader()
+        result = read_rfid(mfrc=reader, cleanup=False)
+
+        self.assertTrue(self.mock_queue.called)
+        args, kwargs = self.mock_queue.call_args
+        self.assertEqual(args[0], result["rfid"])
+        self.assertEqual(args[1]["label_id"], tag.pk)
+        self.assertTrue(args[1]["created"])
+
+
+class CameraSnapshotTriggerTests(SimpleTestCase):
+    @patch("ocpp.rfid.camera._camera_feature_enabled", return_value=False)
+    @patch("ocpp.rfid.camera.threading.Thread")
+    def test_queue_skips_without_feature(self, mock_thread, mock_enabled):
+        camera.queue_camera_snapshot("ABC123", {"label_id": 1})
+        mock_thread.assert_not_called()
+
+    @patch("ocpp.rfid.camera.timezone.now")
+    @patch("ocpp.rfid.camera.threading.Thread")
+    @patch("ocpp.rfid.camera._camera_feature_enabled", return_value=True)
+    def test_queue_spawns_thread_with_metadata(
+        self, mock_enabled, mock_thread, mock_now
+    ):
+        thread_instance = MagicMock()
+        mock_thread.return_value = thread_instance
+        mock_now.return_value = datetime(2023, 1, 1, tzinfo=dt_timezone.utc)
+
+        camera.queue_camera_snapshot("ABC123", {"label_id": 7})
+
+        mock_thread.assert_called_once()
+        kwargs = mock_thread.call_args.kwargs
+        self.assertTrue(kwargs.get("daemon"))
+        metadata = kwargs["args"][0]
+        self.assertEqual(metadata["rfid"], "ABC123")
+        self.assertEqual(metadata["label_id"], 7)
+        self.assertEqual(metadata["source"], "rfid-scan")
+        self.assertEqual(metadata["captured_at"], "2023-01-01T00:00:00+00:00")
+        thread_instance.start.assert_called_once()
+
+    @patch("ocpp.rfid.camera.close_old_connections")
+    @patch("ocpp.rfid.camera.save_screenshot")
+    @patch("ocpp.rfid.camera.capture_rpi_snapshot")
+    def test_worker_saves_snapshot(
+        self, mock_capture, mock_save, mock_close
+    ):
+        mock_capture.return_value = Path("/tmp/test.jpg")
+
+        camera._capture_snapshot_worker({"rfid": "ABC", "label_id": 3})
+
+        mock_capture.assert_called_once()
+        mock_save.assert_called_once()
+        _, kwargs = mock_save.call_args
+        self.assertEqual(kwargs["method"], "RFID_SCAN")
+        metadata = json.loads(kwargs["content"])
+        self.assertEqual(metadata["rfid"], "ABC")
+        self.assertEqual(metadata["label_id"], 3)
+        self.assertGreaterEqual(mock_close.call_count, 2)
+
+    @patch("ocpp.rfid.camera.close_old_connections")
+    @patch("ocpp.rfid.camera.save_screenshot")
+    @patch("ocpp.rfid.camera.capture_rpi_snapshot", side_effect=RuntimeError("boom"))
+    def test_worker_handles_capture_failure(
+        self, mock_capture, mock_save, mock_close
+    ):
+        camera._capture_snapshot_worker({"rfid": "XYZ"})
+        mock_save.assert_not_called()
+        self.assertGreaterEqual(mock_close.call_count, 2)
 
 
 class ValidateRfidValueTests(SimpleTestCase):
@@ -640,6 +731,15 @@ class DeepReadViewTests(TestCase):
 
 
 class DeepReadAuthTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        self.queue_patcher = patch("ocpp.rfid.reader.queue_camera_snapshot")
+        self.queue_patcher.start()
+
+    def tearDown(self):
+        self.queue_patcher.stop()
+        super().tearDown()
+
     class MockReader:
         MI_OK = 1
         MI_ERR = 2

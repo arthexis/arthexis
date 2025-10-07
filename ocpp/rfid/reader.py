@@ -14,6 +14,7 @@ from .constants import (
     SPI_BUS,
     SPI_DEVICE,
 )
+from .camera import queue_camera_snapshot
 
 
 _deep_read_enabled: bool = False
@@ -149,6 +150,7 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
     status_text = "OK" if allowed else "BAD"
     color_word = (tag.color or "").upper()
     notify_async(f"RFID {tag.label_id} {status_text}".strip(), f"{rfid} {color_word}".strip())
+    queue_camera_snapshot(rfid, result)
     return result
 
 

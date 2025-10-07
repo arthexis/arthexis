@@ -79,7 +79,14 @@ def capture_rpi_snapshot(timeout: int = 10) -> Path:
     return filename
 
 
-def save_screenshot(path: Path, node=None, method: str = "", transaction_uuid=None):
+def save_screenshot(
+    path: Path,
+    node=None,
+    method: str = "",
+    transaction_uuid=None,
+    *,
+    content: str | None = None,
+):
     """Save screenshot file info if not already recorded.
 
     Returns the created :class:`ContentSample` or ``None`` if duplicate.
@@ -103,6 +110,8 @@ def save_screenshot(path: Path, node=None, method: str = "", transaction_uuid=No
     }
     if transaction_uuid is not None:
         data["transaction_uuid"] = transaction_uuid
+    if content is not None:
+        data["content"] = content
     with suppress_default_classifiers():
         sample = ContentSample.objects.create(**data)
     run_default_classifiers(sample)
