@@ -2,6 +2,8 @@
 
 [![Cobertura](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![Cobertura OCPP 1.6](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md)
 
+Para obtener orientación sobre la codificación, consulta [AGENTS.md](AGENTS.md).
+
 ## Propósito
 
 Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/Suite_de_software) [impulsada por la narrativa](https://es.wikipedia.org/wiki/Narrativa) basada en [Django](https://www.djangoproject.com/) que centraliza herramientas para gestionar la [infraestructura de carga de vehículos eléctricos](https://es.wikipedia.org/wiki/Punto_de_recarga) y orquestar [productos](https://es.wikipedia.org/wiki/Producto_(econom%C3%ADa)) y [servicios](https://es.wikipedia.org/wiki/Servicio_(econom%C3%ADa)) relacionados con la [energía](https://es.wikipedia.org/wiki/Energ%C3%ADa).
