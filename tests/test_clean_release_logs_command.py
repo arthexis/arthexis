@@ -2,6 +2,7 @@ import os
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import shutil
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -23,6 +24,7 @@ class CleanReleaseLogsCommandTests(TestCase):
             version="1.0",
             revision="",
         )
+        self.addCleanup(lambda: shutil.rmtree("locks", ignore_errors=True))
 
     def test_requires_arguments(self):
         with self.assertRaises(CommandError):
