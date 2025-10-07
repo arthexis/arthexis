@@ -341,6 +341,32 @@ class ReleaseProgressViewTests(TestCase):
         self.assertIsNone(response.context.get("todos"))
         self.assertEqual(response.context["next_step"], 2)
 
+    def test_acknowledged_todos_not_rendered(self):
+        todo = Todo.objects.create(request="Do something", url="/admin/")
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        session = self.client.session
+        session_key = f"release_publish_{self.release.pk}"
+        session[session_key] = {
+            "step": 1,
+            "log": self.log_name,
+            "started": True,
+            "todos": [
+                {
+                    "id": todo.pk,
+                    "request": "Do something",
+                    "url": "/admin/",
+                    "request_details": "",
+                }
+            ],
+            "todos_ack": True,
+        }
+        session.save()
+
+        response = self.client.get(url)
+
+        self.assertIsNone(response.context["todos"])
+        self.assertFalse(response.context["has_pending_todos"])
+
     def test_todo_ack_condition_failure_blocks_acknowledgement(self):
         todo = Todo.objects.create(
             request="Do something",

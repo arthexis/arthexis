@@ -1723,6 +1723,8 @@ def release_progress(request, pk: int, action: str):
     ):
         fixtures_summary = None
 
+    todos_display = ctx.get("todos") if has_pending_todos else None
+
     context = {
         "release": release,
         "action": "publish",
@@ -1735,7 +1737,7 @@ def release_progress(request, pk: int, action: str):
         "log_path": str(log_path),
         "cert_log": ctx.get("cert_log"),
         "fixtures": fixtures_summary,
-        "todos": ctx.get("todos"),
+        "todos": todos_display,
         "dirty_files": dirty_files,
         "dirty_commit_message": ctx.get("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE),
         "dirty_commit_error": ctx.get("dirty_commit_error"),
