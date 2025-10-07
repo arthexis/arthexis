@@ -129,7 +129,12 @@ def check_github_updates() -> None:
     mode_file = base_dir / "locks" / "auto_upgrade.lck"
     mode = "version"
     if mode_file.exists():
-        mode = mode_file.read_text().strip()
+        try:
+            mode = mode_file.read_text().strip() or "version"
+        except (OSError, UnicodeDecodeError):
+            logger.warning(
+                "Failed to read auto-upgrade mode lockfile", exc_info=True
+            )
 
     branch = "main"
     subprocess.run(["git", "fetch", "origin", branch], cwd=base_dir, check=True)
