@@ -426,7 +426,7 @@ def _resolve_release_log_dir(preferred: Path) -> tuple[Path, str | None]:
             f"Release log directory {fallback} is not writable"
         )
 
-    settings.LOG_DIR = str(fallback)
+    settings.LOG_DIR = fallback
     warning = (
         f"Release log directory {preferred} is not writable; using {fallback}"
     )
