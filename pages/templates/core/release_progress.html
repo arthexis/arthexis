@@ -327,7 +327,7 @@
     <h2>{% trans 'Logs' %}</h2>
     {% if show_log %}
       {% if log_content %}
-      <pre class="log-text">{{ log_content }}</pre>
+      <pre class="log-text" id="release-log">{{ log_content }}</pre>
       {% else %}
       <p class="log-empty">{% trans 'Logs will appear here as steps progress.' %}</p>
       {% endif %}
@@ -336,5 +336,22 @@
     {% endif %}
   </div>
 </div>
+<script>
+  (function () {
+    const logEl = document.getElementById('release-log');
+    if (!logEl) {
+      return;
+    }
+
+    const scrollToBottom = () => {
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+
+    scrollToBottom();
+
+    const observer = new MutationObserver(scrollToBottom);
+    observer.observe(logEl, { childList: true, characterData: true, subtree: true });
+  })();
+</script>
 {% endblock %}
 
