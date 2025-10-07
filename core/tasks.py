@@ -115,9 +115,11 @@ def _resolve_service_url(base_dir: Path) -> str:
     mode = "internal"
     if mode_file.exists():
         try:
-            mode = mode_file.read_text().strip() or "internal"
+            value = mode_file.read_text(encoding="utf-8").strip()
         except OSError:
-            mode = "internal"
+            value = ""
+        if value:
+            mode = value.lower()
     port = 8000 if mode == "public" else 8888
     return f"http://127.0.0.1:{port}/"
 
