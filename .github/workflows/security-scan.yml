@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Run ZAP baseline scan
         id: zap_scan
@@ -88,7 +88,7 @@ jobs:
 
       - name: Create issue for high risk alerts
         if: steps.evaluate.outputs.high_alerts != '0'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           HIGH_ALERTS: ${{ steps.evaluate.outputs.high_alerts }}
           ALERT_SUMMARY: ${{ steps.evaluate.outputs.high_alerts_summary }}

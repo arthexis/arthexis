@@ -28,7 +28,7 @@ from tempfile import TemporaryDirectory
 import shutil
 import stat
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
@@ -43,7 +43,7 @@ from dns import resolver as dns_resolver
 from . import dns as dns_utils
 from selenium.common.exceptions import WebDriverException
 from .classifiers import run_default_classifiers
-from .utils import capture_screenshot, save_screenshot
+from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
 from django.db.utils import DatabaseError
 
 from .models import (
@@ -1677,6 +1677,7 @@ class NodeAdminTests(TestCase):
         response.render()
         expected_stream = "http://testserver:8554/"
         self.assertEqual(response.context_data["stream_url"], expected_stream)
+        self.assertEqual(response.context_data["stream_embed"], "iframe")
         self.assertContains(response, expected_stream)
         self.assertContains(response, "camera-stream__frame")
 
@@ -1694,7 +1695,40 @@ class NodeAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         response.render()
         self.assertEqual(response.context_data["stream_url"], configured_stream)
+        self.assertEqual(response.context_data["stream_embed"], "iframe")
         self.assertContains(response, configured_stream)
+
+    def test_view_stream_detects_mjpeg_stream(self):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="rpi-camera", defaults={"display": "Raspberry Pi Camera"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        mjpeg_url = "http://camera.local/stream.mjpg"
+        with self.settings(RPI_CAMERA_STREAM_URL=mjpeg_url):
+            response = self.client.get(
+                reverse("admin:nodes_nodefeature_view_stream")
+            )
+        self.assertEqual(response.status_code, 200)
+        response.render()
+        self.assertEqual(response.context_data["stream_embed"], "mjpeg")
+        self.assertContains(response, "<img", html=False)
+
+    def test_view_stream_marks_rtsp_stream_as_unsupported(self):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="rpi-camera", defaults={"display": "Raspberry Pi Camera"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        rtsp_url = "rtsp://camera.local/stream"
+        with self.settings(RPI_CAMERA_STREAM_URL=rtsp_url):
+            response = self.client.get(
+                reverse("admin:nodes_nodefeature_view_stream")
+            )
+        self.assertEqual(response.status_code, 200)
+        response.render()
+        self.assertEqual(response.context_data["stream_embed"], "unsupported")
+        self.assertContains(response, "camera-stream__unsupported")
 
     @patch("nodes.admin.requests.post")
     def test_fetch_rfids_action_fetches_and_imports(self, mock_post):
@@ -3545,3 +3579,42 @@ class ContentClassifierTests(TestCase):
 
         run_default_classifiers(sample)
         self.assertEqual(sample.classifications.count(), 2)
+
+
+class CaptureRpiSnapshotTests(SimpleTestCase):
+    def setUp(self):
+        super().setUp()
+        self.tempdir = TemporaryDirectory()
+        self.addCleanup(self.tempdir.cleanup)
+        patcher = patch("nodes.utils.CAMERA_DIR", Path(self.tempdir.name))
+        self.addCleanup(patcher.stop)
+        patcher.start()
+
+    @patch("pathlib.Path.exists", return_value=True)
+    @patch("nodes.utils.subprocess.run")
+    @patch("nodes.utils.shutil.which", return_value="/usr/bin/rpicam-still")
+    @patch("nodes.utils.uuid.uuid4")
+    @patch("nodes.utils.datetime")
+    def test_snapshot_uses_unique_filenames(
+        self,
+        mock_datetime,
+        mock_uuid,
+        mock_which,
+        mock_run,
+        mock_exists,
+    ):
+        mock_datetime.utcnow.return_value = datetime(2024, 1, 1, 12, 0, 0)
+        mock_uuid.side_effect = [
+            uuid.UUID("00000000-0000-0000-0000-000000000000"),
+            uuid.UUID("11111111-1111-1111-1111-111111111111"),
+        ]
+        mock_run.return_value = SimpleNamespace(returncode=0, stderr="", stdout="")
+
+        first = capture_rpi_snapshot()
+        second = capture_rpi_snapshot()
+
+        self.assertNotEqual(first, second)
+        self.assertTrue(first.name.endswith("-00000000000000000000000000000000.jpg"))
+        self.assertTrue(second.name.endswith("-11111111111111111111111111111111.jpg"))
+        self.assertEqual(mock_uuid.call_count, 2)
+        self.assertEqual(mock_run.call_count, 2)

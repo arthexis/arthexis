@@ -37,8 +37,9 @@ class CleanReleaseLogsCommandTests(TestCase):
             revision="",
         )
 
-        with TemporaryDirectory() as tmp_dir:
+        with TemporaryDirectory() as tmp_dir, TemporaryDirectory() as base_tmp:
             log_dir = Path(tmp_dir)
+            base_dir = Path(base_tmp)
             keep_file = log_dir / "server.log"
             keep_file.write_text("keep", encoding="utf-8")
 
@@ -51,7 +52,7 @@ class CleanReleaseLogsCommandTests(TestCase):
             other_log = log_dir / f"pr.{self.package.name}.v{other_release.version}.log"
             other_log.write_text("other", encoding="utf-8")
 
-            lock_dir = Path("locks")
+            lock_dir = base_dir / "locks"
             lock_dir.mkdir(exist_ok=True)
             lock_file = lock_dir / f"release_publish_{self.release.pk}.json"
             restart_file = lock_dir / f"release_publish_{self.release.pk}.restarts"
@@ -60,7 +61,7 @@ class CleanReleaseLogsCommandTests(TestCase):
             restart_file.write_text("1", encoding="utf-8")
             other_lock.write_text("{}", encoding="utf-8")
 
-            with override_settings(LOG_DIR=log_dir):
+            with override_settings(LOG_DIR=log_dir, BASE_DIR=base_dir):
                 call_command(
                     "clean_release_logs",
                     f"{self.package.name}:{self.release.version}",
@@ -81,8 +82,9 @@ class CleanReleaseLogsCommandTests(TestCase):
             revision="",
         )
 
-        with TemporaryDirectory() as tmp_dir:
+        with TemporaryDirectory() as tmp_dir, TemporaryDirectory() as base_tmp:
             log_dir = Path(tmp_dir)
+            base_dir = Path(base_tmp)
             retained = log_dir / "app.log"
             retained.write_text("retain", encoding="utf-8")
 
@@ -90,7 +92,7 @@ class CleanReleaseLogsCommandTests(TestCase):
                 log_file = log_dir / f"pr.{self.package.name}.v{release.version}.log"
                 log_file.write_text("entry", encoding="utf-8")
 
-            lock_dir = Path("locks")
+            lock_dir = base_dir / "locks"
             lock_dir.mkdir(exist_ok=True)
             for release in (self.release, release_two):
                 (lock_dir / f"release_publish_{release.pk}.json").write_text(
@@ -100,7 +102,7 @@ class CleanReleaseLogsCommandTests(TestCase):
                     "1", encoding="utf-8"
                 )
 
-            with override_settings(LOG_DIR=log_dir):
+            with override_settings(LOG_DIR=log_dir, BASE_DIR=base_dir):
                 call_command("clean_release_logs", "--all")
 
             self.assertTrue(retained.exists())

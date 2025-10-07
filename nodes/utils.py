@@ -4,6 +4,7 @@ import hashlib
 import logging
 import shutil
 import subprocess
+import uuid
 
 from django.conf import settings
 from selenium import webdriver
@@ -57,7 +58,9 @@ def capture_rpi_snapshot(timeout: int = 10) -> Path:
     if not tool_path:
         raise RuntimeError("rpicam-still is not available")
     CAMERA_DIR.mkdir(parents=True, exist_ok=True)
-    filename = CAMERA_DIR / f"{datetime.utcnow():%Y%m%d%H%M%S}.jpg"
+    timestamp = datetime.utcnow()
+    unique_suffix = uuid.uuid4().hex
+    filename = CAMERA_DIR / f"{timestamp:%Y%m%d%H%M%S}-{unique_suffix}.jpg"
     try:
         result = subprocess.run(
             [tool_path, "-o", str(filename), "-t", "1"],
@@ -79,7 +82,14 @@ def capture_rpi_snapshot(timeout: int = 10) -> Path:
     return filename
 
 
-def save_screenshot(path: Path, node=None, method: str = "", transaction_uuid=None):
+def save_screenshot(
+    path: Path,
+    node=None,
+    method: str = "",
+    transaction_uuid=None,
+    *,
+    content: str | None = None,
+):
     """Save screenshot file info if not already recorded.
 
     Returns the created :class:`ContentSample` or ``None`` if duplicate.
@@ -103,6 +113,8 @@ def save_screenshot(path: Path, node=None, method: str = "", transaction_uuid=No
     }
     if transaction_uuid is not None:
         data["transaction_uuid"] = transaction_uuid
+    if content is not None:
+        data["content"] = content
     with suppress_default_classifiers():
         sample = ContentSample.objects.create(**data)
     run_default_classifiers(sample)

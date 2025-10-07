@@ -1248,10 +1248,22 @@ class NodeFeatureAdmin(EntityModelAdmin):
             scheme = getattr(settings, "RPI_CAMERA_STREAM_SCHEME", "http")
             netloc = f"{hostname}:{port}" if port else hostname
             stream_url = urlunsplit((scheme, netloc, "/", "", ""))
+        parsed_stream = urlsplit(stream_url)
+        path = (parsed_stream.path or "").lower()
+        query = (parsed_stream.query or "").lower()
+
+        if parsed_stream.scheme in {"rtsp", "rtsps"}:
+            embed_mode = "unsupported"
+        elif any(path.endswith(ext) for ext in (".mjpg", ".mjpeg", ".jpeg", ".jpg", ".png")) or "action=stream" in query:
+            embed_mode = "mjpeg"
+        else:
+            embed_mode = "iframe"
+
         context = {
             **self.admin_site.each_context(request),
             "title": _("Raspberry Pi Camera Stream"),
             "stream_url": stream_url,
+            "stream_embed": embed_mode,
         }
         return TemplateResponse(
             request,
