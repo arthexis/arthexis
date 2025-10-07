@@ -15,6 +15,102 @@ LOCK_DIR="$BASE_DIR/locks"
 
 BACKUP_DIR="$BASE_DIR/backups"
 
+LAST_FAILOVER_BRANCH=""
+
+determine_node_role() {
+  if [ -n "${NODE_ROLE:-}" ]; then
+    echo "$NODE_ROLE"
+    return
+  fi
+
+  local role_file="$LOCK_DIR/role.lck"
+  if [ -f "$role_file" ]; then
+    local role
+    role=$(tr -d '\r\n' < "$role_file")
+    if [ -n "$role" ]; then
+      echo "$role"
+      return
+    fi
+  fi
+
+  echo "Terminal"
+}
+
+cleanup_non_terminal_git_state() {
+  local role="$1"
+
+  case "$role" in
+    Control|Constellation)
+      ;;
+    *)
+      return
+      ;;
+  esac
+
+  if [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ]; then
+    echo "Detected interrupted rebase; aborting before continuing upgrade..."
+    git rebase --abort >/dev/null 2>&1 || true
+  fi
+
+  if [ -f .git/MERGE_HEAD ]; then
+    echo "Detected interrupted merge; aborting before continuing upgrade..."
+    git merge --abort >/dev/null 2>&1 || git reset --merge >/dev/null 2>&1 || true
+  fi
+
+  if [ -f .git/CHERRY_PICK_HEAD ]; then
+    echo "Detected interrupted cherry-pick; aborting before continuing upgrade..."
+    git cherry-pick --abort >/dev/null 2>&1 || true
+  fi
+}
+
+auto_realign_branch_for_role() {
+  local role="$1"
+  local branch="$2"
+
+  case "$role" in
+    Control|Constellation)
+      ;;
+    *)
+      return
+      ;;
+  esac
+
+  local behind=0 ahead=0
+  if read -r behind ahead < <(git rev-list --left-right --count "origin/$branch...HEAD" 2>/dev/null); then
+    :
+  else
+    behind=0
+    ahead=0
+  fi
+
+  local dirty=0
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    dirty=1
+  fi
+
+  local has_untracked=0
+  if [ -n "$(git ls-files --others --exclude-standard)" ]; then
+    has_untracked=1
+  fi
+
+  if (( ahead > 0 )); then
+    echo "Node role $role does not keep local commits; discarding $ahead local commit(s) to match origin/$branch..."
+    git reset --hard "origin/$branch"
+  elif (( dirty )); then
+    echo "Discarding local working tree changes for $role node before pulling updates..."
+    git reset --hard
+  fi
+
+  if (( has_untracked == 1 )); then
+    echo "Removing untracked files for $role node before pulling updates..."
+    git clean -fd
+  fi
+
+  if (( ahead > 0 )) && [ -n "$LAST_FAILOVER_BRANCH" ]; then
+    echo "The discarded commits are preserved on $LAST_FAILOVER_BRANCH."
+  fi
+}
+
 FORCE=0
 CLEAN=0
 NO_RESTART=0
@@ -104,6 +200,7 @@ create_failover_branch() {
     git branch "$branch"
   fi
   echo "Created failover branch $branch"
+  LAST_FAILOVER_BRANCH="$branch"
   backup_database_for_branch "$branch"
   FAILOVER_BRANCH_CREATED=1
 }
@@ -180,6 +277,10 @@ confirm_database_deletion() {
 }
 
 trap 'status=$?; if [[ $status -eq 0 ]]; then cleanup_failover_branches; fi' EXIT
+
+NODE_ROLE_NAME=$(determine_node_role)
+
+cleanup_non_terminal_git_state "$NODE_ROLE_NAME"
 
 if [[ $REVERT -eq 1 ]]; then
   latest=$(git for-each-ref --format='%(refname:short)' refs/heads/failover-* | sort | tail -n 1)
@@ -284,6 +385,8 @@ if [[ $FORCE -ne 1 && "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
 fi
 
 create_failover_branch
+
+auto_realign_branch_for_role "$NODE_ROLE_NAME" "$BRANCH"
 
 # Track if the node is installed (virtual environment present)
 VENV_PRESENT=1
