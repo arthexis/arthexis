@@ -1,32 +1,37 @@
+from collections import OrderedDict
+from collections.abc import Mapping
+
+from django import forms
+from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.admin import helpers
-from django.urls import NoReverseMatch, path, reverse
+from django.contrib.admin.widgets import FilteredSelectMultiple
+from django.core.exceptions import PermissionDenied
+from django.db.models import Count
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
-from django.utils.html import format_html, format_html_join
-from django import forms
-from django.contrib.admin.widgets import FilteredSelectMultiple
-from django.db.models import Count
-from django.conf import settings
-from pathlib import Path
-from django.http import HttpResponse, JsonResponse
+from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
-from django.utils.translation import gettext_lazy as _
-from urllib.parse import urlsplit, urlunsplit
-from django.core.exceptions import PermissionDenied
 from django.utils.dateparse import parse_datetime
+from django.utils.html import format_html, format_html_join
+from django.utils.translation import gettext_lazy as _
+from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 import base64
 import json
-import pyperclip
-from pyperclip import PyperclipException
-import uuid
 import subprocess
+import uuid
 
+import pyperclip
 import requests
-from requests import RequestException
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+from pyperclip import PyperclipException
+from requests import RequestException
+
 from .classifiers import run_default_classifiers, suppress_default_classifiers
+from .rfid_sync import apply_rfid_payload, serialize_rfid
 from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
 from .reports import (
     collect_celery_log_entries,
@@ -276,7 +281,8 @@ class NodeAdmin(EntityModelAdmin):
         "register_visitor",
         "run_task",
         "take_screenshots",
-        "fetch_rfids",
+        "import_rfids_from_selected",
+        "export_rfids_to_selected",
     ]
     inlines = [NodeFeatureAssignmentInline]
 
@@ -651,150 +657,272 @@ class NodeAdmin(EntityModelAdmin):
                     count += 1
         self.message_user(request, f"{count} screenshots captured", messages.SUCCESS)
 
-    @admin.action(description="Fetch RFIDs from selected")
-    def fetch_rfids(self, request, queryset):
+    def _init_rfid_result(self, node):
+        return {
+            "node": node,
+            "status": "success",
+            "created": 0,
+            "updated": 0,
+            "linked_accounts": 0,
+            "missing_accounts": [],
+            "errors": [],
+            "processed": 0,
+            "message": None,
+        }
+
+    def _skip_result(self, node, message):
+        result = self._init_rfid_result(node)
+        result["status"] = "skipped"
+        result["message"] = message
+        return result
+
+    def _load_local_node_credentials(self):
         local_node = Node.get_local()
         if not local_node:
-            self.message_user(
-                request,
-                "Local node is not registered.",
-                messages.ERROR,
+            return None, None, _("Local node is not registered.")
+
+        endpoint = (local_node.public_endpoint or "").strip()
+        if not endpoint:
+            return local_node, None, _(
+                "Local node public endpoint is not configured."
             )
-            return None
 
         security_dir = Path(local_node.base_path or settings.BASE_DIR) / "security"
-        priv_path = security_dir / f"{local_node.public_endpoint}"
+        priv_path = security_dir / endpoint
         if not priv_path.exists():
-            self.message_user(
-                request,
-                "Local node private key not found.",
-                messages.ERROR,
-            )
-            return None
+            return local_node, None, _("Local node private key not found.")
 
         try:
             private_key = serialization.load_pem_private_key(
                 priv_path.read_bytes(), password=None
             )
         except Exception as exc:  # pragma: no cover - unexpected key errors
-            self.message_user(
-                request,
-                f"Failed to load private key: {exc}",
-                messages.ERROR,
-            )
-            return None
+            return local_node, None, _("Failed to load private key: %(error)s") % {
+                "error": exc
+            }
 
-        payload = json.dumps(
-            {"requester": str(local_node.uuid)},
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        signature = base64.b64encode(
+        return local_node, private_key, None
+
+    def _sign_payload(self, private_key, payload: str) -> str:
+        return base64.b64encode(
             private_key.sign(
                 payload.encode(),
                 padding.PKCS1v15(),
                 hashes.SHA256(),
             )
         ).decode()
+
+    def _dedupe(self, values):
+        if not values:
+            return []
+        return list(OrderedDict.fromkeys(values))
+
+    def _status_from_result(self, result):
+        if result["errors"]:
+            return "error"
+        if result["missing_accounts"]:
+            return "partial"
+        return result.get("status") or "success"
+
+    def _summarize_rfid_results(self, results):
+        return {
+            "total": len(results),
+            "processed": sum(1 for item in results if item["status"] != "skipped"),
+            "success": sum(1 for item in results if item["status"] == "success"),
+            "partial": sum(1 for item in results if item["status"] == "partial"),
+            "error": sum(1 for item in results if item["status"] == "error"),
+            "created": sum(item["created"] for item in results),
+            "updated": sum(item["updated"] for item in results),
+            "linked_accounts": sum(item["linked_accounts"] for item in results),
+            "missing_accounts": sum(
+                len(item["missing_accounts"]) for item in results
+            ),
+        }
+
+    def _render_rfid_sync(self, request, operation, results, setup_error=None):
+        titles = {
+            "import": _("Import RFID results"),
+            "export": _("Export RFID results"),
+        }
+        summary = self._summarize_rfid_results(results)
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": titles.get(operation, _("RFID results")),
+            "operation": operation,
+            "results": results,
+            "summary": summary,
+            "setup_error": setup_error,
+            "back_url": reverse("admin:nodes_node_changelist"),
+        }
+        return TemplateResponse(
+            request,
+            "admin/nodes/node/rfid_sync_results.html",
+            context,
+        )
+
+    def _process_import_from_node(self, node, payload, headers):
+        result = self._init_rfid_result(node)
+        url = f"http://{node.address}:{node.port}/nodes/rfid/export/"
+        try:
+            response = requests.post(url, data=payload, headers=headers, timeout=5)
+        except RequestException as exc:
+            result["status"] = "error"
+            result["errors"].append(str(exc))
+            return result
+
+        if response.status_code != 200:
+            result["status"] = "error"
+            result["errors"].append(f"{response.status_code} {response.text}")
+            return result
+
+        try:
+            data = response.json()
+        except ValueError:
+            result["status"] = "error"
+            result["errors"].append(_("Invalid JSON response"))
+            return result
+
+        rfids = data.get("rfids", []) or []
+        result["processed"] = len(rfids)
+        for entry in rfids:
+            if not isinstance(entry, Mapping):
+                result["errors"].append(_( "Invalid RFID payload" ))
+                continue
+            outcome = apply_rfid_payload(entry, origin_node=node)
+            if not outcome.ok:
+                result["errors"].append(
+                    outcome.error or _("RFID could not be imported")
+                )
+                continue
+            if outcome.created:
+                result["created"] += 1
+            else:
+                result["updated"] += 1
+            result["linked_accounts"] += outcome.accounts_linked
+            result["missing_accounts"].extend(outcome.missing_accounts)
+
+        result["missing_accounts"] = self._dedupe(result["missing_accounts"])
+        result["status"] = self._status_from_result(result)
+        return result
+
+    def _post_export_to_node(self, node, payload, headers):
+        result = self._init_rfid_result(node)
+        url = f"http://{node.address}:{node.port}/nodes/rfid/import/"
+        try:
+            response = requests.post(url, data=payload, headers=headers, timeout=5)
+        except RequestException as exc:
+            result["status"] = "error"
+            result["errors"].append(str(exc))
+            return result
+
+        if response.status_code != 200:
+            result["status"] = "error"
+            result["errors"].append(f"{response.status_code} {response.text}")
+            return result
+
+        try:
+            data = response.json()
+        except ValueError:
+            result["status"] = "error"
+            result["errors"].append(_("Invalid JSON response"))
+            return result
+
+        result["processed"] = data.get("processed", 0) or 0
+        result["created"] = data.get("created", 0) or 0
+        result["updated"] = data.get("updated", 0) or 0
+        result["linked_accounts"] = data.get("accounts_linked", 0) or 0
+
+        missing = data.get("missing_accounts") or []
+        if isinstance(missing, list):
+            result["missing_accounts"].extend(str(value) for value in missing if value)
+        elif missing:
+            result["missing_accounts"].append(str(missing))
+
+        errors = data.get("errors", 0)
+        if isinstance(errors, int) and errors:
+            result["errors"].append(
+                _("Remote reported %(count)s error(s).") % {"count": errors}
+            )
+        elif isinstance(errors, list):
+            result["errors"].extend(str(err) for err in errors if err)
+
+        result["missing_accounts"] = self._dedupe(result["missing_accounts"])
+        result["status"] = self._status_from_result(result)
+        return result
+
+    @admin.action(description=_("Import RFIDs from selected"))
+    def import_rfids_from_selected(self, request, queryset):
+        nodes = list(queryset)
+        local_node, private_key, error = self._load_local_node_credentials()
+        if error:
+            results = [self._skip_result(node, error) for node in nodes]
+            return self._render_rfid_sync(request, "import", results, setup_error=error)
+
+        if not nodes:
+            return self._render_rfid_sync(
+                request,
+                "import",
+                [],
+                setup_error=_("No nodes selected."),
+            )
+
+        payload = json.dumps(
+            {"requester": str(local_node.uuid)},
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        signature = self._sign_payload(private_key, payload)
         headers = {
             "Content-Type": "application/json",
             "X-Signature": signature,
         }
 
-        processed = 0
-        total_created = 0
-        total_updated = 0
-        errors = 0
-
-        for node in queryset:
+        results = []
+        for node in nodes:
             if local_node.pk and node.pk == local_node.pk:
+                results.append(self._skip_result(node, _("Skipped local node.")))
                 continue
-            url = f"http://{node.address}:{node.port}/nodes/rfid/export/"
-            try:
-                response = requests.post(
-                    url,
-                    data=payload,
-                    headers=headers,
-                    timeout=5,
-                )
-            except RequestException as exc:
-                self.message_user(request, f"{node}: {exc}", messages.ERROR)
-                errors += 1
-                continue
+            results.append(self._process_import_from_node(node, payload, headers))
 
-            if response.status_code != 200:
-                self.message_user(
-                    request,
-                    f"{node}: {response.status_code} {response.text}",
-                    messages.ERROR,
-                )
-                errors += 1
-                continue
+        return self._render_rfid_sync(request, "import", results)
 
-            try:
-                data = response.json()
-            except ValueError:
-                self.message_user(
-                    request,
-                    f"{node}: invalid JSON response",
-                    messages.ERROR,
-                )
-                errors += 1
-                continue
+    @admin.action(description=_("Export RFIDs to selected"))
+    def export_rfids_to_selected(self, request, queryset):
+        nodes = list(queryset)
+        local_node, private_key, error = self._load_local_node_credentials()
+        if error:
+            results = [self._skip_result(node, error) for node in nodes]
+            return self._render_rfid_sync(request, "export", results, setup_error=error)
 
-            created = 0
-            updated = 0
-            rfids = data.get("rfids", []) or []
-            for entry in rfids:
-                rfid_value = entry.get("rfid")
-                if not rfid_value:
-                    continue
-                defaults = {
-                    "custom_label": entry.get("custom_label", ""),
-                    "key_a": entry.get(
-                        "key_a", RFID._meta.get_field("key_a").default
-                    ),
-                    "key_b": entry.get(
-                        "key_b", RFID._meta.get_field("key_b").default
-                    ),
-                    "data": entry.get("data", []),
-                    "key_a_verified": bool(entry.get("key_a_verified", False)),
-                    "key_b_verified": bool(entry.get("key_b_verified", False)),
-                    "allowed": bool(entry.get("allowed", True)),
-                    "color": entry.get("color", RFID.BLACK),
-                    "kind": entry.get("kind", RFID.CLASSIC),
-                    "released": bool(entry.get("released", False)),
-                    "origin_node": node,
-                }
-                if "last_seen_on" in entry:
-                    last_seen_raw = entry.get("last_seen_on")
-                    if last_seen_raw:
-                        defaults["last_seen_on"] = parse_datetime(last_seen_raw)
-                    else:
-                        defaults["last_seen_on"] = None
-
-                obj, created_flag = RFID.objects.update_or_create(
-                    rfid=rfid_value,
-                    defaults=defaults,
-                )
-                if created_flag:
-                    created += 1
-                else:
-                    updated += 1
-
-            processed += 1
-            total_created += created
-            total_updated += updated
-
-        if processed:
-            message = (
-                f"Fetched RFIDs from {processed} node(s); "
-                f"{total_created} created, {total_updated} updated."
+        if not nodes:
+            return self._render_rfid_sync(
+                request,
+                "export",
+                [],
+                setup_error=_("No nodes selected."),
             )
-            level = messages.SUCCESS if not errors else messages.WARNING
-            self.message_user(request, message, level)
-        elif not errors:
-            self.message_user(request, "No remote nodes selected.", messages.INFO)
+
+        rfids = [serialize_rfid(tag) for tag in RFID.objects.all().order_by("label_id")]
+        payload = json.dumps(
+            {"requester": str(local_node.uuid), "rfids": rfids},
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        signature = self._sign_payload(private_key, payload)
+        headers = {
+            "Content-Type": "application/json",
+            "X-Signature": signature,
+        }
+
+        results = []
+        for node in nodes:
+            if local_node.pk and node.pk == local_node.pk:
+                results.append(self._skip_result(node, _("Skipped local node.")))
+                continue
+            results.append(self._post_export_to_node(node, payload, headers))
+
+        return self._render_rfid_sync(request, "export", results)
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}
