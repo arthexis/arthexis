@@ -230,6 +230,8 @@ class ReleaseProgressViewTests(TestCase):
         ):
             self.client.get(url)
             response = self.client.get(f"{url}?start=1&step=0")
+            self.assertIsInstance(settings.LOG_DIR, Path)
+            self.assertEqual(settings.LOG_DIR, fallback)
 
         self.assertEqual(response.status_code, 200)
         log_path = fallback / self.log_name
