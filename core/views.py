@@ -437,6 +437,10 @@ def _resolve_release_log_dir(preferred: Path) -> tuple[Path, str | None]:
 def _sync_with_origin_main(log_path: Path) -> None:
     """Ensure the current branch is rebased onto ``origin/main``."""
 
+    if not _has_remote("origin"):
+        _append_log(log_path, "No git remote configured; skipping sync with origin/main")
+        return
+
     try:
         subprocess.run(["git", "fetch", "origin", "main"], check=True)
         _append_log(log_path, "Fetched latest changes from origin/main")
@@ -464,6 +468,17 @@ def _format_path(path: Path) -> str:
 def _git_stdout(args: Sequence[str]) -> str:
     proc = subprocess.run(args, check=True, capture_output=True, text=True)
     return (proc.stdout or "").strip()
+
+
+def _has_remote(remote: str) -> bool:
+    proc = subprocess.run(
+        ["git", "remote"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    remotes = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    return remote in remotes
 
 
 def _collect_dirty_files() -> list[dict[str, str]]:
@@ -496,6 +511,12 @@ def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
 
 def _ensure_origin_main_unchanged(log_path: Path) -> None:
     """Verify that ``origin/main`` has not advanced during the release."""
+
+    if not _has_remote("origin"):
+        _append_log(
+            log_path, "No git remote configured; skipping origin/main verification"
+        )
+        return
 
     try:
         subprocess.run(["git", "fetch", "origin", "main"], check=True)
@@ -1036,8 +1057,21 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
                 log_path,
                 f"Committed release metadata for v{release.version}",
             )
-        subprocess.run(["git", "push"], check=True)
-        _append_log(log_path, "Pushed release changes to origin")
+        if _has_remote("origin"):
+            try:
+                subprocess.run(["git", "push"], check=True)
+            except subprocess.CalledProcessError as exc:
+                details = _format_subprocess_error(exc)
+                _append_log(
+                    log_path, f"Failed to push release changes to origin: {details}"
+                )
+                raise Exception("Failed to push release changes") from exc
+            _append_log(log_path, "Pushed release changes to origin")
+        else:
+            _append_log(
+                log_path,
+                "No git remote configured; skipping push of release changes",
+            )
         PackageRelease.dump_fixture()
         _append_log(log_path, "Updated release fixtures")
     except Exception:
