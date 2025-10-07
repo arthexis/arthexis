@@ -982,6 +982,14 @@ class LogViewerAdminTests(SimpleTestCase):
         self.assertIn("root.log", response.context_data["available_logs"])
         self.assertNotIn("hidden.log", response.context_data["available_logs"])
 
+    def test_log_viewer_ignores_hidden_files(self):
+        hidden_log = self.logs_dir / ".hidden.log"
+        hidden_log.write_text("secret", encoding="utf-8")
+        self._create_log("visible.log", "visible")
+        response = self._render()
+        self.assertIn("visible.log", response.context_data["available_logs"])
+        self.assertNotIn(".hidden.log", response.context_data["available_logs"])
+
 class AdminModelStatusTests(TestCase):
     def setUp(self):
         self.client = Client()
