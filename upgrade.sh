@@ -236,6 +236,38 @@ fi
 
 # Determine current and remote versions
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [[ "$BRANCH" == "HEAD" ]]; then
+  echo "Detected detached HEAD; attempting to switch back to the tracked branch..." >&2
+
+  determine_default_branch() {
+    local remote_head
+    remote_head=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
+    if [[ -n "$remote_head" ]]; then
+      echo "${remote_head#origin/}"
+      return 0
+    fi
+
+    git branch --remotes --contains HEAD 2>/dev/null \
+      | sed -n 's#^[ *]*origin/##p' \
+      | head -n1
+  }
+
+  TARGET_BRANCH=$(determine_default_branch)
+  if [[ -z "$TARGET_BRANCH" ]]; then
+    echo "Unable to determine branch to switch to while detached." >&2
+    echo "Please create or select a branch and rerun the upgrade." >&2
+    exit 1
+  fi
+
+  if git show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
+    git switch "$TARGET_BRANCH" >/dev/null
+  else
+    git switch -c "$TARGET_BRANCH" "origin/$TARGET_BRANCH" >/dev/null
+  fi
+
+  BRANCH="$TARGET_BRANCH"
+  echo "Switched to branch $BRANCH." >&2
+fi
 LOCAL_VERSION="0"
 [ -f VERSION ] && LOCAL_VERSION=$(cat VERSION)
 
