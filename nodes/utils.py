@@ -4,6 +4,7 @@ import hashlib
 import logging
 import shutil
 import subprocess
+import uuid
 
 from django.conf import settings
 from selenium import webdriver
@@ -57,7 +58,9 @@ def capture_rpi_snapshot(timeout: int = 10) -> Path:
     if not tool_path:
         raise RuntimeError("rpicam-still is not available")
     CAMERA_DIR.mkdir(parents=True, exist_ok=True)
-    filename = CAMERA_DIR / f"{datetime.utcnow():%Y%m%d%H%M%S}.jpg"
+    timestamp = datetime.utcnow()
+    unique_suffix = uuid.uuid4().hex
+    filename = CAMERA_DIR / f"{timestamp:%Y%m%d%H%M%S}-{unique_suffix}.jpg"
     try:
         result = subprocess.run(
             [tool_path, "-o", str(filename), "-t", "1"],
