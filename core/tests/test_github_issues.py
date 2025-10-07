@@ -37,6 +37,18 @@ class ResolveRepositoryTests(TestCase):
         self.assertEqual(owner, "arthexis")
         self.assertEqual(repo, "arthexis")
 
+    def test_whitespace_repository_url_falls_back_to_default(self) -> None:
+        Package.objects.create(
+            name="custom",
+            repository_url="   ",
+            is_active=True,
+        )
+
+        owner, repo = github_issues.resolve_repository()
+
+        self.assertEqual(owner, "arthexis")
+        self.assertEqual(repo, "arthexis")
+
 
 class TokenLookupTests(TestCase):
     def test_token_comes_from_latest_release(self) -> None:
