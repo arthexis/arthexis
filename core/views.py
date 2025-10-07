@@ -526,6 +526,19 @@ def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
     return (exc.stderr or exc.stdout or str(exc)).strip() or str(exc)
 
 
+def _git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
+    message = (exc.stderr or exc.stdout or "").strip().lower()
+    if not message:
+        return False
+    auth_markers = [
+        "could not read username",
+        "authentication failed",
+        "fatal: authentication failed",
+        "terminal prompts disabled",
+    ]
+    return any(marker in message for marker in auth_markers)
+
+
 def _ensure_origin_main_unchanged(log_path: Path) -> None:
     """Verify that ``origin/main`` has not advanced during the release."""
 
@@ -1086,11 +1099,20 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
                 subprocess.run(push_cmd, check=True, capture_output=True, text=True)
             except subprocess.CalledProcessError as exc:
                 details = _format_subprocess_error(exc)
-                _append_log(
-                    log_path, f"Failed to push release changes to origin: {details}"
-                )
-                raise Exception("Failed to push release changes") from exc
-            _append_log(log_path, "Pushed release changes to origin")
+                if _git_authentication_missing(exc):
+                    _append_log(
+                        log_path,
+                        "Authentication is required to push release changes to origin; skipping push",
+                    )
+                    if details:
+                        _append_log(log_path, details)
+                else:
+                    _append_log(
+                        log_path, f"Failed to push release changes to origin: {details}"
+                    )
+                    raise Exception("Failed to push release changes") from exc
+            else:
+                _append_log(log_path, "Pushed release changes to origin")
         else:
             _append_log(
                 log_path,
