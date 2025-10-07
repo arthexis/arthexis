@@ -2,6 +2,7 @@ import base64
 import ipaddress
 import json
 import socket
+from collections.abc import Mapping
 
 from django.http import JsonResponse
 from django.http.request import split_domain_port
@@ -18,6 +19,8 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
 from core.models import RFID
+
+from .rfid_sync import apply_rfid_payload, serialize_rfid
 
 from .models import (
     Node,
@@ -441,28 +444,82 @@ def export_rfids(request):
     except Exception:
         return JsonResponse({"detail": "invalid signature"}, status=403)
 
-    tags = []
-    for tag in RFID.objects.all().order_by("label_id"):
-        tags.append(
-            {
-                "rfid": tag.rfid,
-                "custom_label": tag.custom_label,
-                "key_a": tag.key_a,
-                "key_b": tag.key_b,
-                "data": tag.data,
-                "key_a_verified": tag.key_a_verified,
-                "key_b_verified": tag.key_b_verified,
-                "allowed": tag.allowed,
-                "color": tag.color,
-                "kind": tag.kind,
-                "released": tag.released,
-                "last_seen_on": tag.last_seen_on.isoformat()
-                if tag.last_seen_on
-                else None,
-            }
-        )
+    tags = [serialize_rfid(tag) for tag in RFID.objects.all().order_by("label_id")]
 
     return JsonResponse({"rfids": tags})
+
+
+@csrf_exempt
+def import_rfids(request):
+    """Import RFID payloads from a trusted peer."""
+
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required"}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "invalid json"}, status=400)
+
+    requester = payload.get("requester")
+    signature = request.headers.get("X-Signature")
+    if not requester:
+        return JsonResponse({"detail": "requester required"}, status=400)
+    if not signature:
+        return JsonResponse({"detail": "signature required"}, status=403)
+
+    node = Node.objects.filter(uuid=requester).first()
+    if not node or not node.public_key:
+        return JsonResponse({"detail": "unknown requester"}, status=403)
+
+    try:
+        public_key = serialization.load_pem_public_key(node.public_key.encode())
+        public_key.verify(
+            base64.b64decode(signature),
+            request.body,
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+    except Exception:
+        return JsonResponse({"detail": "invalid signature"}, status=403)
+
+    rfids = payload.get("rfids", [])
+    if not isinstance(rfids, list):
+        return JsonResponse({"detail": "rfids must be a list"}, status=400)
+
+    created = 0
+    updated = 0
+    linked_accounts = 0
+    missing_accounts: list[str] = []
+    errors = 0
+
+    for entry in rfids:
+        if not isinstance(entry, Mapping):
+            errors += 1
+            continue
+        outcome = apply_rfid_payload(entry, origin_node=node)
+        if not outcome.ok:
+            errors += 1
+            if outcome.error:
+                missing_accounts.append(outcome.error)
+            continue
+        if outcome.created:
+            created += 1
+        else:
+            updated += 1
+        linked_accounts += outcome.accounts_linked
+        missing_accounts.extend(outcome.missing_accounts)
+
+    return JsonResponse(
+        {
+            "processed": len(rfids),
+            "created": created,
+            "updated": updated,
+            "accounts_linked": linked_accounts,
+            "missing_accounts": missing_accounts,
+            "errors": errors,
+        }
+    )
 
 
 @csrf_exempt

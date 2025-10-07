@@ -64,7 +64,7 @@ from .backends import OutboxEmailBackend
 from .tasks import capture_node_screenshot, sample_clipboard
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
-from core.models import Package, PackageRelease, SecurityGroup, RFID
+from core.models import Package, PackageRelease, SecurityGroup, RFID, EnergyAccount
 
 
 class NodeBadgeColorTests(TestCase):
@@ -1731,7 +1731,7 @@ class NodeAdminTests(TestCase):
         self.assertContains(response, "camera-stream__unsupported")
 
     @patch("nodes.admin.requests.post")
-    def test_fetch_rfids_action_fetches_and_imports(self, mock_post):
+    def test_import_rfids_action_fetches_and_imports(self, mock_post):
         local = self._create_local_node()
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         private_bytes = key.private_bytes(
@@ -1782,17 +1782,27 @@ class NodeAdminTests(TestCase):
 
         response = self.client.post(
             reverse("admin:nodes_node_changelist"),
-            {"action": "fetch_rfids", "_selected_action": [str(remote.pk)]},
-            follow=True,
+            {
+                "action": "import_rfids_from_selected",
+                "_selected_action": [str(remote.pk)],
+            },
+            follow=False,
         )
         self.assertEqual(response.status_code, 200)
+        response.render()
+
         self.assertTrue(RFID.objects.filter(rfid="ABC123").exists())
         tag = RFID.objects.get(rfid="ABC123")
         self.assertEqual(tag.custom_label, "Remote tag")
         self.assertEqual(tag.origin_node, remote)
         self.assertEqual(tag.data, ["sector"])
 
-        self.assertTrue(mock_post.called)
+        results = response.context_data["results"]
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["status"], "success")
+        self.assertEqual(results[0]["created"], 1)
+
+        mock_post.assert_called_once()
         call_kwargs = mock_post.call_args.kwargs
         payload = call_kwargs["data"]
         headers = call_kwargs["headers"]
@@ -1803,6 +1813,141 @@ class NodeAdminTests(TestCase):
             padding.PKCS1v15(),
             hashes.SHA256(),
         )
+
+    @patch("nodes.admin.requests.post")
+    def test_import_rfids_links_existing_accounts_only(self, mock_post):
+        local = self._create_local_node()
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        private_bytes = key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        public_bytes = key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        security_dir = Path(settings.BASE_DIR) / "security"
+        security_dir.mkdir(parents=True, exist_ok=True)
+        (security_dir / f"{local.public_endpoint}").write_bytes(private_bytes)
+        (security_dir / f"{local.public_endpoint}.pub").write_bytes(public_bytes)
+        local.public_key = public_bytes.decode()
+        local.save(update_fields=["public_key"])
+
+        existing = EnergyAccount.objects.create(name="KNOWN")
+        remote = Node.objects.create(
+            hostname="remote", address="127.0.0.3", port=8020
+        )
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = ""
+        mock_response.json.return_value = {
+            "rfids": [
+                {
+                    "rfid": "deadbeef",
+                    "energy_accounts": [existing.pk, 9999],
+                    "energy_account_names": ["KNOWN", "missing"],
+                }
+            ]
+        }
+        mock_post.return_value = mock_response
+
+        response = self.client.post(
+            reverse("admin:nodes_node_changelist"),
+            {
+                "action": "import_rfids_from_selected",
+                "_selected_action": [str(remote.pk)],
+            },
+            follow=False,
+        )
+        self.assertEqual(response.status_code, 200)
+        response.render()
+
+        tag = RFID.objects.get(rfid="DEADBEEF")
+        self.assertEqual(list(tag.energy_accounts.all()), [existing])
+        self.assertEqual(EnergyAccount.objects.filter(name__iexact="missing").count(), 0)
+
+        result = response.context_data["results"][0]
+        self.assertEqual(result["status"], "partial")
+        self.assertIn("9999", result["missing_accounts"])
+        self.assertIn("missing", result["missing_accounts"])
+        self.assertEqual(result["linked_accounts"], 1)
+
+    @patch("nodes.admin.requests.post")
+    def test_export_rfids_action_posts_payload(self, mock_post):
+        local = self._create_local_node()
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        private_bytes = key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        public_bytes = key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        security_dir = Path(settings.BASE_DIR) / "security"
+        security_dir.mkdir(parents=True, exist_ok=True)
+        (security_dir / f"{local.public_endpoint}").write_bytes(private_bytes)
+        (security_dir / f"{local.public_endpoint}.pub").write_bytes(public_bytes)
+        local.public_key = public_bytes.decode()
+        local.save(update_fields=["public_key"])
+
+        account = EnergyAccount.objects.create(name="LOCAL")
+        tag = RFID.objects.create(rfid="1234ABCD", origin_node=local)
+        tag.energy_accounts.add(account)
+
+        remote = Node.objects.create(
+            hostname="remote", address="127.0.0.4", port=8030
+        )
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = ""
+        mock_response.json.return_value = {
+            "processed": 1,
+            "created": 0,
+            "updated": 1,
+            "accounts_linked": 1,
+            "missing_accounts": ["remote-missing"],
+            "errors": 0,
+        }
+        mock_post.return_value = mock_response
+
+        response = self.client.post(
+            reverse("admin:nodes_node_changelist"),
+            {
+                "action": "export_rfids_to_selected",
+                "_selected_action": [str(remote.pk)],
+            },
+            follow=False,
+        )
+        self.assertEqual(response.status_code, 200)
+        response.render()
+
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args.kwargs
+        payload = call_kwargs["data"]
+        headers = call_kwargs["headers"]
+        signature = base64.b64decode(headers["X-Signature"])
+        key.public_key().verify(
+            signature,
+            payload.encode(),
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+
+        payload_data = json.loads(payload)
+        self.assertIn("rfids", payload_data)
+        self.assertEqual(payload_data["rfids"][0]["rfid"], "1234ABCD")
+        self.assertEqual(payload_data["rfids"][0]["energy_accounts"], [account.pk])
+
+        result = response.context_data["results"][0]
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["updated"], 1)
+        self.assertEqual(result["linked_accounts"], 1)
+        self.assertIn("remote-missing", result["missing_accounts"])
 
     def test_update_selected_nodes_action_renders_progress_page(self):
         remote = Node.objects.create(
@@ -1892,6 +2037,58 @@ class NodeAdminTests(TestCase):
         post_data = json.loads(mock_post.call_args.kwargs["data"])
         self.assertEqual(post_data["hostname"], local.hostname)
         self.assertEqual(post_data["mac_address"], local.mac_address)
+
+
+class NodeRFIDAPITests(TestCase):
+    def test_import_endpoint_applies_payload_without_creating_accounts(self):
+        remote = Node.objects.create(
+            hostname="remote", address="127.0.0.10", port=8050
+        )
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        remote.public_key = key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode()
+        remote.save(update_fields=["public_key"])
+
+        existing = EnergyAccount.objects.create(name="KNOWN")
+
+        payload = {
+            "requester": str(remote.uuid),
+            "rfids": [
+                {
+                    "rfid": "deadface",
+                    "custom_label": "Remote",
+                    "energy_accounts": [existing.pk, 777],
+                    "energy_account_names": ["known", "missing"],
+                }
+            ],
+        }
+        body = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        signature = base64.b64encode(
+            key.sign(body.encode(), padding.PKCS1v15(), hashes.SHA256())
+        ).decode()
+
+        response = self.client.post(
+            reverse("node-rfid-import"),
+            body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["created"], 1)
+        self.assertEqual(data["updated"], 0)
+        self.assertEqual(data["accounts_linked"], 1)
+        self.assertIn("missing", data["missing_accounts"])
+        self.assertIn("777", data["missing_accounts"])
+
+        tag = RFID.objects.get(rfid="DEADFACE")
+        self.assertEqual(tag.custom_label, "Remote")
+        self.assertEqual(list(tag.energy_accounts.all()), [existing])
+        self.assertEqual(
+            EnergyAccount.objects.filter(name__iexact="missing").count(), 0
+        )
 
 
 class RFIDExportViewTests(TestCase):
