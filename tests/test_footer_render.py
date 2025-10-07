@@ -15,7 +15,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from unittest.mock import patch, PropertyMock
 
-from core.models import Reference
+from core.models import PackageRelease, Reference
 from core.release import DEFAULT_PACKAGE
 from utils import revision
 from nodes.models import (
@@ -45,7 +45,15 @@ class FooterRenderTests(TestCase):
         self.assertContains(response, "Example")
         self.assertContains(response, "https://example.com")
         version = Path("VERSION").read_text().strip()
-        rev_short = revision.get_revision()[-6:]
+        revision_value = (revision.get_revision() or "").strip()
+        release = PackageRelease.objects.filter(version=version).first()
+        release_revision = ""
+        if release and release.revision:
+            release_revision = release.revision.strip()
+        rev_short = ""
+        if revision_value and revision_value != release_revision:
+            rev_short = revision_value[-6:]
+
         release_name = f"{DEFAULT_PACKAGE.name}-{version}"
         if rev_short:
             release_name = f"{release_name}-{rev_short}"
