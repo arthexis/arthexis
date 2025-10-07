@@ -213,6 +213,25 @@ class ReleaseProgressViewTests(TestCase):
         )
         self.assertIsNone(response.context["next_step"])
 
+    @mock.patch("core.views._sync_with_origin_main")
+    @mock.patch("core.views.release_utils._git_clean", return_value=True)
+    @mock.patch("core.views.release_utils.network_available", return_value=True)
+    @mock.patch("core.views.requests.get")
+    def test_version_check_uses_timeout(
+        self, requests_get, network_available, git_clean, sync_main
+    ):
+        requests_get.return_value = mock.Mock(ok=False)
+
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        response = self.client.get(f"{url}?start=1&step=0")
+
+        self.assertEqual(response.status_code, 200)
+        requests_get.assert_called_once()
+        self.assertEqual(
+            requests_get.call_args.kwargs.get("timeout"),
+            core_views.PYPI_REQUEST_TIMEOUT,
+        )
+
     @mock.patch("core.views.subprocess.run")
     @mock.patch("core.views._collect_dirty_files")
     @mock.patch("core.views._sync_with_origin_main")

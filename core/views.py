@@ -36,6 +36,8 @@ from utils.api import api_login_required
 
 logger = logging.getLogger(__name__)
 
+PYPI_REQUEST_TIMEOUT = 10
+
 from . import changelog as changelog_utils
 from .models import OdooProfile, Product, EnergyAccount, PackageRelease, Todo
 from .models import RFID
@@ -907,7 +909,10 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
     _append_log(log_path, f"Checking if version {release.version} exists on PyPI")
     if release_utils.network_available():
         try:
-            resp = requests.get(f"https://pypi.org/pypi/{release.package.name}/json")
+            resp = requests.get(
+                f"https://pypi.org/pypi/{release.package.name}/json",
+                timeout=PYPI_REQUEST_TIMEOUT,
+            )
             if resp.ok:
                 data = resp.json()
                 releases = data.get("releases", {})
