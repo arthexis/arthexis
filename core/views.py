@@ -451,6 +451,39 @@ def _sync_with_origin_main(log_path: Path) -> None:
     except subprocess.CalledProcessError as exc:
         subprocess.run(["git", "rebase", "--abort"], check=False)
         _append_log(log_path, "Rebase onto origin/main failed; aborted rebase")
+
+        stdout = (exc.stdout or "").strip()
+        stderr = (exc.stderr or "").strip()
+        if stdout:
+            _append_log(log_path, "git output:\n" + stdout)
+        if stderr:
+            _append_log(log_path, "git errors:\n" + stderr)
+
+        branch = _current_branch() or "(detached HEAD)"
+        instructions = [
+            "Manual intervention required to finish syncing with origin/main.",
+            "Ensure you are on the branch you intend to publish (normally `main`; currently "
+            f"{branch}).",
+            "Then run these commands from the repository root:",
+            "  git fetch origin main",
+            "  git rebase origin/main",
+            "Resolve any conflicts (use `git status` to review files) and continue the rebase.",
+        ]
+
+        if branch != "main" and branch != "(detached HEAD)":
+            instructions.append(
+                "If this branch should mirror main, push the rebased changes with "
+                f"`git push origin {branch}:main`."
+            )
+        else:
+            instructions.append("Push the rebased branch with `git push origin main`.")
+
+        instructions.append(
+            "If push authentication fails, verify your git remote permissions and SSH keys "
+            "for origin/main before retrying the publish flow."
+        )
+        _append_log(log_path, "\n".join(instructions))
+
         raise Exception("Rebase onto main failed") from exc
 
 
