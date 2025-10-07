@@ -810,6 +810,7 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
     from packaging.version import InvalidVersion, Version
 
     sync_error: Optional[Exception] = None
+    retry_sync = False
     try:
         _sync_with_origin_main(log_path)
     except Exception as exc:
@@ -862,6 +863,7 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
             _append_log(log_path, "Fixture changes committed")
             ctx.pop("dirty_files", None)
             ctx.pop("dirty_commit_error", None)
+            retry_sync = True
         else:
             ctx["dirty_files"] = dirty_entries
             ctx.setdefault("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE)
@@ -882,6 +884,14 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
         ctx.pop("dirty_files", None)
         ctx.pop("dirty_commit_error", None)
         ctx.pop("dirty_log_message", None)
+
+    if retry_sync and sync_error is not None:
+        try:
+            _sync_with_origin_main(log_path)
+        except Exception as exc:
+            sync_error = exc
+        else:
+            sync_error = None
 
     if sync_error is not None:
         raise sync_error
