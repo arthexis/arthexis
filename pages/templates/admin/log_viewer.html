@@ -1,0 +1,161 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Log viewer" %}{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .log-viewer-module {
+      background: var(--body-bg);
+      border: 1px solid var(--hairline-color);
+      border-radius: 6px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .log-viewer-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .log-viewer-form label {
+      font-weight: 600;
+    }
+    .log-viewer-form select {
+      min-width: 220px;
+    }
+    .log-viewer-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .log-viewer-content {
+      max-height: 60vh;
+      overflow: auto;
+      background: var(--darkened-bg);
+      border: 1px solid var(--hairline-color);
+      border-radius: 4px;
+      padding: 16px;
+      white-space: pre-wrap;
+      font-family: var(--font-monospace, monospace);
+      font-size: 0.875rem;
+      line-height: 1.4;
+    }
+    .log-viewer-status {
+      margin: 0;
+      font-size: 0.875rem;
+    }
+    .log-viewer-status.error {
+      color: var(--error-fg, #ba2121);
+    }
+  </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+    &rsaquo; {% translate "Log viewer" %}
+  </div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module log-viewer-module">
+    <h1>{% translate "Log viewer" %}</h1>
+    <form method="get" class="log-viewer-form" aria-label="{% translate 'Select log file' %}">
+      <label for="id_log">{% translate "Log file" %}</label>
+      <select id="id_log" name="log">
+        <option value=""{% if not selected_log %} selected{% endif %} disabled>{% translate "Choose a log file" %}</option>
+        {% for filename in available_logs %}
+          <option value="{{ filename }}"{% if filename == selected_log %} selected{% endif %}>{{ filename }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="button">{% translate "View" %}</button>
+    </form>
+
+    {% if log_notice %}
+      <p class="help">{{ log_notice }}</p>
+    {% endif %}
+
+    {% if log_error %}
+      <p class="errornote">{{ log_error }}</p>
+    {% endif %}
+
+    {% if selected_log and not log_error %}
+      {% translate 'Log copied to your clipboard.' as copy_success %}
+      {% translate 'Copy failed. Use your browser copy command instead.' as copy_error %}
+      {% translate 'Copy to clipboard' as copy_label %}
+      <div class="log-viewer-actions">
+        <h2 style="margin: 0;">{% blocktranslate with name=selected_log %}Viewing {{ name }}{% endblocktranslate %}</h2>
+        <button
+          type="button"
+          class="button button-secondary"
+          id="log-viewer-copy"
+          data-copy-target="#log-viewer-content"
+          data-copy-success="{{ copy_success|escapejs|escape }}"
+          data-copy-error="{{ copy_error|escapejs|escape }}"
+        >{{ copy_label }}</button>
+        <span id="log-viewer-copy-status" class="log-viewer-status" aria-live="polite" hidden></span>
+      </div>
+      <pre id="log-viewer-content" class="log-viewer-content" tabindex="0">{{ log_content }}</pre>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extrajs %}
+  {{ block.super }}
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const copyButton = document.getElementById('log-viewer-copy');
+      if (!copyButton) {
+        return;
+      }
+      const status = document.getElementById('log-viewer-copy-status');
+      copyButton.addEventListener('click', () => {
+        const targetSelector = copyButton.getAttribute('data-copy-target');
+        const target = targetSelector ? document.querySelector(targetSelector) : null;
+        if (!target) {
+          return;
+        }
+        const text = target.innerText;
+        const successMessage = copyButton.getAttribute('data-copy-success') || '';
+        const errorMessage = copyButton.getAttribute('data-copy-error') || '';
+        const handleSuccess = () => {
+          if (status) {
+            status.textContent = successMessage;
+            status.classList.remove('error');
+            status.hidden = false;
+          }
+        };
+        const handleError = () => {
+          if (status) {
+            status.textContent = errorMessage;
+            status.classList.add('error');
+            status.hidden = false;
+          }
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(handleSuccess).catch(handleError);
+        } else {
+          try {
+            const range = document.createRange();
+            range.selectNodeContents(target);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            const successful = document.execCommand('copy');
+            selection.removeAllRanges();
+            successful ? handleSuccess() : handleError();
+          } catch (err) {
+            handleError();
+          }
+        }
+      });
+    });
+  </script>
+{% endblock %}

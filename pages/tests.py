@@ -6,7 +6,7 @@ import django
 
 django.setup()
 
-from django.test import Client, RequestFactory, TestCase, override_settings
+from django.test import Client, RequestFactory, TestCase, SimpleTestCase, override_settings
 from django.urls import reverse
 from django.templatetags.static import static
 from urllib.parse import quote
@@ -33,6 +33,7 @@ from pages.admin import (
     UserManualAdmin,
     UserStoryAdmin,
     ViewHistoryAdmin,
+    log_viewer,
 )
 from pages.screenshot_specs import (
     ScreenshotSpec,
@@ -892,6 +893,94 @@ class ViewHistoryAdminTests(TestCase):
         self.assertContains(resp, reverse("admin:pages_viewhistory_traffic_graph"))
         self.assertContains(resp, static("core/vendor/chart.umd.min.js"))
 
+
+class LogViewerAdminTests(SimpleTestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.logs_dir = Path(settings.BASE_DIR) / "logs"
+        self.logs_dir.mkdir(exist_ok=True)
+
+    def tearDown(self):
+        for path in list(self.logs_dir.iterdir()):
+            if path.name == ".gitkeep":
+                continue
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+
+    def _create_log(self, name: str, content: str = "") -> Path:
+        path = self.logs_dir / name
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def _build_request(self, params: dict | None = None):
+        request = self.factory.get("/admin/logs/viewer/", params or {})
+
+        class DummyUser:
+            is_active = True
+            is_staff = True
+            is_superuser = True
+
+            @property
+            def is_authenticated(self):
+                return True
+
+            def has_perm(self, perm):
+                return True
+
+            def has_perms(self, perms):
+                return True
+
+            def has_module_perms(self, app_label):
+                return True
+
+            def get_username(self):
+                return "tester"
+
+        request.user = DummyUser()
+        request.session = {}
+        request.current_app = admin.site.name
+        return request
+
+    def _render(self, params: dict | None = None):
+        request = self._build_request(params)
+        context = {
+            "site_title": "Constellation",
+            "site_header": "Constellation",
+            "site_url": "/",
+            "available_apps": [],
+        }
+        with patch("pages.admin.admin.site.each_context", return_value=context), patch(
+            "pages.context_processors.get_site", return_value=None
+        ):
+            response = log_viewer(request)
+        return response
+
+    def test_log_viewer_lists_available_logs(self):
+        self._create_log("example.log", "example content")
+        response = self._render()
+        self.assertIn("example.log", response.context_data["available_logs"])
+
+    def test_log_viewer_displays_selected_log(self):
+        self._create_log("selected.log", "hello world")
+        response = self._render({"log": "selected.log"})
+        context = response.context_data
+        self.assertEqual(context["selected_log"], "selected.log")
+        self.assertIn("hello world", context["log_content"])
+
+    def test_log_viewer_reports_missing_log(self):
+        response = self._render({"log": "missing.log"})
+        self.assertIn("requested log could not be found", response.context_data["log_error"])
+
+    def test_log_viewer_ignores_nested_files(self):
+        nested = self.logs_dir / "nested"
+        nested.mkdir(exist_ok=True)
+        (nested / "hidden.log").write_text("hidden", encoding="utf-8")
+        self._create_log("root.log", "root")
+        response = self._render()
+        self.assertIn("root.log", response.context_data["available_logs"])
+        self.assertNotIn("hidden.log", response.context_data["available_logs"])
 
 class AdminModelStatusTests(TestCase):
     def setUp(self):

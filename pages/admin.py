@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from django.contrib import admin, messages
 from django.contrib.sites.admin import SiteAdmin as DjangoSiteAdmin
@@ -612,10 +613,70 @@ def favorite_clear(request):
     return redirect("admin:favorite_list")
 
 
+def log_viewer(request):
+    logs_dir = Path(settings.BASE_DIR) / "logs"
+    logs_exist = logs_dir.exists() and logs_dir.is_dir()
+    available_logs = []
+    if logs_exist:
+        available_logs = sorted(
+            [entry.name for entry in logs_dir.iterdir() if entry.is_file()],
+            key=str.lower,
+        )
+
+    selected_log = request.GET.get("log", "")
+    log_content = ""
+    log_error = ""
+
+    if selected_log:
+        if selected_log in available_logs:
+            selected_path = logs_dir / selected_log
+            try:
+                log_content = selected_path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                log_content = selected_path.read_text(
+                    encoding="utf-8", errors="replace"
+                )
+            except OSError as exc:  # pragma: no cover - filesystem edge cases
+                logger.warning("Unable to read log file %s", selected_path, exc_info=exc)
+                log_error = _(
+                    "The log file could not be read. Check server permissions and try again."
+                )
+        else:
+            log_error = _("The requested log could not be found.")
+
+    if not logs_exist:
+        log_notice = _("The logs directory could not be found at %(path)s.") % {
+            "path": logs_dir,
+        }
+    elif not available_logs:
+        log_notice = _("No log files were found in %(path)s.") % {"path": logs_dir}
+    else:
+        log_notice = ""
+
+    context = {**admin.site.each_context(request)}
+    context.update(
+        {
+            "title": _("Log viewer"),
+            "available_logs": available_logs,
+            "selected_log": selected_log,
+            "log_content": log_content,
+            "log_error": log_error,
+            "log_notice": log_notice,
+            "logs_directory": logs_dir,
+        }
+    )
+    return TemplateResponse(request, "admin/log_viewer.html", context)
+
+
 def get_admin_urls(original_get_urls):
     def get_urls():
         urls = original_get_urls()
         my_urls = [
+            path(
+                "logs/viewer/",
+                admin.site.admin_view(log_viewer),
+                name="log_viewer",
+            ),
             path(
                 "favorites/<int:ct_id>/",
                 admin.site.admin_view(favorite_toggle),
