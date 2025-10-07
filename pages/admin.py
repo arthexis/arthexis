@@ -619,7 +619,11 @@ def log_viewer(request):
     available_logs = []
     if logs_exist:
         available_logs = sorted(
-            [entry.name for entry in logs_dir.iterdir() if entry.is_file()],
+            [
+                entry.name
+                for entry in logs_dir.iterdir()
+                if entry.is_file() and not entry.name.startswith(".")
+            ],
             key=str.lower,
         )
 
