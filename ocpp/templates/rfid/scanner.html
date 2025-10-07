@@ -361,6 +361,7 @@
   let localConnected = false;
   let lastLocalValue = null;
   let lastLocalAt = 0;
+  let lastScanRfid = null;
   const historyEntries = tableMode ? new Map() : null;
   let deepReadActive = false;
   let lastDeepDetailsRfid = null;
@@ -702,7 +703,6 @@
   }
 
   function updateFromData(data){
-    clearCommandOutput();
     if(!data || data.error){
       if(data && data.error){
         showError(data.error);
@@ -716,6 +716,15 @@
       return;
     }
     const rfidValue = normalizeRfidValue(data.rfid);
+    const rfidKey = rfidValue !== null
+      ? rfidValue
+      : (data.rfid !== undefined && data.rfid !== null ? String(data.rfid) : null);
+    if(lastScanRfid !== null && rfidKey !== null && rfidKey !== lastScanRfid){
+      clearCommandOutput();
+    }
+    if(rfidKey !== null){
+      lastScanRfid = rfidKey;
+    }
     const labelValue = data.label_id === undefined || data.label_id === null ? '' : data.label_id;
     if(labelEl){ labelEl.textContent = labelValue; }
     if(kindEl){ kindEl.textContent = data.kind || ''; }
