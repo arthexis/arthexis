@@ -20,4 +20,12 @@ def test_network_setup_help_includes_flags() -> None:
     assert "--interactive" in result.stdout
     assert "--unsafe" in result.stdout
     assert "--no-watchdog" in result.stdout
-    assert "--public" in result.stdout
+    assert "--subnet" in result.stdout
+
+
+def test_network_setup_firewall_ports_include_camera_stream() -> None:
+    """Ensure the firewall validation checks the camera stream port."""
+
+    script = REPO_ROOT / "network-setup.sh"
+    script_contents = script.read_text()
+    assert "PORTS=(22 21114 8554)" in script_contents

@@ -576,7 +576,7 @@ if [[ $RUN_PACKAGES == true ]]; then
 fi
 
 if [[ $RUN_FIREWALL == true ]]; then
-    PORTS=(22 21114)
+    PORTS=(22 21114 8554)
     MODE="internal"
     if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
         MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
