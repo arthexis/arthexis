@@ -652,6 +652,15 @@ LOGGING = {
             "encoding": "utf-8",
             "formatter": "standard",
         },
+        "error_file": {
+            "class": "config.logging.ErrorFileHandler",
+            "filename": str(LOG_DIR / "error.log"),
+            "when": "midnight",
+            "backupCount": 7,
+            "encoding": "utf-8",
+            "formatter": "standard",
+            "level": "ERROR",
+        },
         "console": {
             "class": "logging.StreamHandler",
             "level": "ERROR",
@@ -659,7 +668,7 @@ LOGGING = {
         },
     },
     "root": {
-        "handlers": ["file", "console"],
+        "handlers": ["file", "error_file", "console"],
         "level": "DEBUG",
     },
 }
