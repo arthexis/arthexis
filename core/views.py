@@ -481,6 +481,23 @@ def _has_remote(remote: str) -> bool:
     return remote in remotes
 
 
+def _current_branch() -> str | None:
+    branch = _git_stdout(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    if branch == "HEAD":
+        return None
+    return branch
+
+
+def _has_upstream(branch: str) -> bool:
+    proc = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", f"{branch}@{{upstream}}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.returncode == 0
+
+
 def _collect_dirty_files() -> list[dict[str, str]]:
     proc = subprocess.run(
         ["git", "status", "--porcelain"],
@@ -1059,7 +1076,14 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
             )
         if _has_remote("origin"):
             try:
-                subprocess.run(["git", "push"], check=True)
+                branch = _current_branch()
+                if branch is None:
+                    push_cmd = ["git", "push", "origin", "HEAD"]
+                elif _has_upstream(branch):
+                    push_cmd = ["git", "push"]
+                else:
+                    push_cmd = ["git", "push", "--set-upstream", "origin", branch]
+                subprocess.run(push_cmd, check=True, capture_output=True, text=True)
             except subprocess.CalledProcessError as exc:
                 details = _format_subprocess_error(exc)
                 _append_log(
