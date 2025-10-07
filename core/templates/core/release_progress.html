@@ -32,6 +32,21 @@
   .progress-actions button {
     min-width: 8rem;
   }
+  .progress-actions .dry-run-form {
+    display: flex;
+    align-items: center;
+    margin-right: 0.75rem;
+  }
+  .dry-run-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 600;
+  }
+  .dry-run-toggle input[type="checkbox"] {
+    width: 1.2rem;
+    height: 1.2rem;
+  }
   .dirty-changes {
     margin: 1.5rem 0;
     padding: 1rem;
@@ -210,8 +225,18 @@
 <div class="release-progress-layout">
   <div class="progress-column">
     <div class="progress-actions">
+      <form method="get" class="dry-run-form">
+        <input type="hidden" name="set_dry_run" value="1">
+        <label class="dry-run-toggle">
+          <input type="checkbox" name="dry_run" value="1" {% if dry_run %}checked{% endif %} {% if not dry_run_toggle_enabled %}disabled{% endif %} onchange="this.form.submit()">
+          {% trans "Dry Run" %}
+        </label>
+      </form>
       <form method="get">
         <input type="hidden" name="step" value="{{ current_step }}">
+        {% if dry_run %}
+        <input type="hidden" name="dry_run" value="1">
+        {% endif %}
         <button type="submit" name="start" value="1" {% if is_running or done or error %}disabled{% endif %}>
           {% if can_resume %}
           ▶️ {% trans 'Continue Publish' %}

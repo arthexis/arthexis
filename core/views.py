@@ -999,6 +999,9 @@ def _step_changelog_docs(release, ctx, log_path: Path) -> None:
 
 def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Execute pre-release actions")
+    if ctx.get("dry_run"):
+        _append_log(log_path, "Dry run: skipping pre-release actions")
+        return
     _sync_with_origin_main(log_path)
     try:
         subprocess.run(["scripts/generate-changelog.sh"], check=True)
@@ -1100,6 +1103,9 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
 
     _append_log(log_path, "Generating build files")
+    if ctx.get("dry_run"):
+        _append_log(log_path, "Dry run: skipping build promotion")
+        return
     try:
         _ensure_origin_main_unchanged(log_path)
         release_utils.promote(
@@ -1220,6 +1226,36 @@ def _step_release_manager_approval(release, ctx, log_path: Path) -> None:
 
 def _step_publish(release, ctx, log_path: Path) -> None:
     from . import release as release_utils
+
+    if ctx.get("dry_run"):
+        test_repository_url = os.environ.get(
+            "PYPI_TEST_REPOSITORY_URL", "https://test.pypi.org/legacy/"
+        )
+        test_creds = release.to_credentials()
+        if not (test_creds and test_creds.has_auth()):
+            test_creds = release_utils.Credentials(
+                token=os.environ.get("PYPI_TEST_API_TOKEN"),
+                username=os.environ.get("PYPI_TEST_USERNAME"),
+                password=os.environ.get("PYPI_TEST_PASSWORD"),
+            )
+            if not test_creds.has_auth():
+                test_creds = None
+        target = release_utils.RepositoryTarget(
+            name="Test PyPI",
+            repository_url=(test_repository_url or None),
+            credentials=test_creds,
+            verify_availability=False,
+        )
+        label = target.repository_url or target.name
+        _append_log(log_path, f"Dry run: uploading distribution to {label}")
+        release_utils.publish(
+            package=release.to_package(),
+            version=release.version,
+            creds=target.credentials or release.to_credentials(),
+            repositories=[target],
+        )
+        _append_log(log_path, "Dry run: skipped release metadata updates")
+        return
 
     targets = release.build_publish_targets()
     repo_labels = []
@@ -1537,6 +1573,23 @@ def release_progress(request, pk: int, action: str):
     else:
         log_dir_warning_message = ctx.get("log_dir_warning_message")
 
+    steps = PUBLISH_STEPS
+    total_steps = len(steps)
+    step_count = ctx.get("step", 0)
+    started_flag = bool(ctx.get("started"))
+    paused_flag = bool(ctx.get("paused"))
+    error_flag = bool(ctx.get("error"))
+    done_flag = step_count >= total_steps and not error_flag
+    start_enabled = (not started_flag or paused_flag) and not done_flag and not error_flag
+
+    ctx["dry_run"] = bool(ctx.get("dry_run"))
+
+    if request.GET.get("set_dry_run") is not None:
+        if start_enabled:
+            ctx["dry_run"] = bool(request.GET.get("dry_run"))
+            request.session[session_key] = ctx
+        return redirect(request.path)
+
     manager = release.release_manager or release.package.release_manager
     credentials_ready = bool(release.to_credentials())
     if credentials_ready and ctx.get("approval_credentials_missing"):
@@ -1545,6 +1598,8 @@ def release_progress(request, pk: int, action: str):
     ack_todos_requested = bool(request.GET.get("ack_todos"))
 
     if request.GET.get("start"):
+        if start_enabled:
+            ctx["dry_run"] = bool(request.GET.get("dry_run"))
         ctx["started"] = True
         ctx["paused"] = False
     if (
@@ -1661,7 +1716,6 @@ def release_progress(request, pk: int, action: str):
         _append_log(log_path, log_dir_warning_message)
         ctx["log_dir_warning_logged"] = True
 
-    steps = PUBLISH_STEPS
     fixtures_step_index = next(
         (
             index
@@ -1819,6 +1873,9 @@ def release_progress(request, pk: int, action: str):
 
     todos_display = ctx.get("todos") if has_pending_todos else None
 
+    dry_run_active = bool(ctx.get("dry_run"))
+    dry_run_toggle_enabled = not is_running and not done and not ctx.get("error")
+
     context = {
         "release": release,
         "action": "publish",
@@ -1849,6 +1906,8 @@ def release_progress(request, pk: int, action: str):
         "current_user_admin_url": current_user_admin_url,
         "is_running": is_running,
         "can_resume": can_resume,
+        "dry_run": dry_run_active,
+        "dry_run_toggle_enabled": dry_run_toggle_enabled,
     }
     request.session[session_key] = ctx
     if done or ctx.get("error"):

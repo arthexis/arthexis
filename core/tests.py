@@ -1279,6 +1279,129 @@ class ReleaseProcessTests(TestCase):
         self.assertEqual(repositories[0].name, "PyPI")
         self.assertEqual(repositories[1].name, "GitHub Packages")
 
+    @mock.patch("core.views.subprocess.run")
+    @mock.patch("core.views._sync_with_origin_main")
+    def test_pre_release_actions_skipped_in_dry_run(self, sync_main, run):
+        log_path = Path("rel.log")
+        if log_path.exists():
+            log_path.unlink()
+
+        try:
+            _step_pre_release_actions(self.release, {"dry_run": True}, log_path)
+            self.assertTrue(log_path.exists())
+            contents = log_path.read_text(encoding="utf-8")
+            self.assertIn("Dry run: skipping pre-release actions", contents)
+        finally:
+            if log_path.exists():
+                log_path.unlink()
+
+        sync_main.assert_not_called()
+        run.assert_not_called()
+
+    @mock.patch("core.views.release_utils.promote")
+    def test_promote_build_skipped_in_dry_run(self, promote):
+        log_path = Path("rel.log")
+        if log_path.exists():
+            log_path.unlink()
+
+        try:
+            _step_promote_build(self.release, {"dry_run": True}, log_path)
+            self.assertTrue(log_path.exists())
+            contents = log_path.read_text(encoding="utf-8")
+            self.assertIn("Dry run: skipping build promotion", contents)
+        finally:
+            if log_path.exists():
+                log_path.unlink()
+
+        promote.assert_not_called()
+
+    @mock.patch("core.views.release_utils.publish")
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    def test_publish_uses_test_repository_in_dry_run(self, dump_fixture, publish):
+        log_path = Path("rel.log")
+        if log_path.exists():
+            log_path.unlink()
+
+        publish.return_value = ["Test PyPI"]
+        env = {
+            "PYPI_TEST_REPOSITORY_URL": "https://test.example/simple/",
+            "PYPI_TEST_API_TOKEN": "token",
+        }
+
+        with mock.patch.dict(os.environ, env, clear=False):
+            _step_publish(self.release, {"dry_run": True}, log_path)
+
+        self.release.refresh_from_db()
+        self.assertEqual(self.release.pypi_url, "")
+        self.assertEqual(self.release.github_url, "")
+        self.assertIsNone(self.release.release_on)
+        dump_fixture.assert_not_called()
+        publish.assert_called_once()
+        repositories = publish.call_args.kwargs["repositories"]
+        self.assertEqual(len(repositories), 1)
+        target = repositories[0]
+        self.assertEqual(target.name, "Test PyPI")
+        self.assertEqual(target.repository_url, "https://test.example/simple/")
+        self.assertFalse(target.verify_availability)
+        self.assertTrue(log_path.exists())
+        contents = log_path.read_text(encoding="utf-8")
+        self.assertIn("Dry run: uploading distribution", contents)
+        self.assertIn("Dry run: skipped release metadata updates", contents)
+        log_path.unlink(missing_ok=True)
+
+    def test_release_progress_toggle_dry_run_before_start(self):
+        user = User.objects.create_superuser("admin", "admin@example.com", "pw")
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        self.client.force_login(user)
+
+        response = self.client.get(f"{url}?set_dry_run=1&dry_run=1", follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        context = response.context
+        if isinstance(context, list):
+            context = context[-1]
+        self.assertTrue(context["dry_run"])
+        self.assertTrue(context["dry_run_toggle_enabled"])
+        session = self.client.session
+        ctx = session.get(f"release_publish_{self.release.pk}")
+        self.assertTrue(ctx.get("dry_run"))
+
+    def test_release_progress_toggle_blocked_while_running(self):
+        user = User.objects.create_superuser("admin", "admin@example.com", "pw")
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        self.client.force_login(user)
+        session = self.client.session
+        session[f"release_publish_{self.release.pk}"] = {
+            "step": 0,
+            "started": True,
+            "paused": False,
+        }
+        session.save()
+
+        response = self.client.get(f"{url}?set_dry_run=1&dry_run=1")
+        self.assertEqual(response.status_code, 302)
+        session = self.client.session
+        ctx = session.get(f"release_publish_{self.release.pk}")
+        self.assertFalse(ctx.get("dry_run"))
+
+        follow = self.client.get(url)
+        follow_context = follow.context
+        if isinstance(follow_context, list):
+            follow_context = follow_context[-1]
+        self.assertFalse(follow_context["dry_run"])
+        self.assertFalse(follow_context["dry_run_toggle_enabled"])
+
+    def test_start_request_sets_dry_run_flag(self):
+        user = User.objects.create_superuser("admin", "admin@example.com", "pw")
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        self.client.force_login(user)
+
+        self.client.get(f"{url}?start=1&dry_run=1")
+
+        session = self.client.session
+        ctx = session.get(f"release_publish_{self.release.pk}")
+        self.assertTrue(ctx.get("dry_run"))
+
     def test_new_todo_does_not_reset_pending_flow(self):
         user = User.objects.create_superuser("admin", "admin@example.com", "pw")
         url = reverse("release-progress", args=[self.release.pk, "publish"])
