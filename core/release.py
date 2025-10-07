@@ -5,6 +5,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -115,8 +116,50 @@ class TestsFailed(ReleaseError):
         self.output = output
 
 
-def _run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, check=check)
+def _run(
+    cmd: list[str],
+    check: bool = True,
+    *,
+    cwd: Path | str | None = None,
+) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, check=check, cwd=cwd)
+
+
+def _export_tracked_files(base_dir: Path, destination: Path) -> None:
+    """Copy tracked files into ``destination`` preserving modifications."""
+
+    proc = subprocess.run(
+        ["git", "ls-files", "-z"],
+        capture_output=True,
+        check=True,
+        cwd=base_dir,
+    )
+    for entry in proc.stdout.split(b"\0"):
+        if not entry:
+            continue
+        relative = Path(entry.decode("utf-8"))
+        source_path = base_dir / relative
+        if not source_path.exists():
+            continue
+        target_path = destination / relative
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, target_path)
+
+
+def _build_in_sanitized_tree(base_dir: Path) -> None:
+    """Run ``python -m build`` from a staging tree containing tracked files."""
+
+    with tempfile.TemporaryDirectory(prefix="arthexis-build-") as temp_dir:
+        staging_root = Path(temp_dir)
+        _export_tracked_files(base_dir, staging_root)
+        _run([sys.executable, "-m", "build"], cwd=staging_root)
+        built_dist = staging_root / "dist"
+        if not built_dist.exists():
+            raise ReleaseError("dist directory not created")
+        destination_dist = base_dir / "dist"
+        if destination_dist.exists():
+            shutil.rmtree(destination_dist)
+        shutil.copytree(built_dist, destination_dist)
 
 
 _RETRYABLE_TWINE_ERRORS = (
@@ -346,7 +389,7 @@ def build(
                 # A local ``build`` package shadows the build backend; reinstall it.
                 sys.modules.pop("build", None)
                 _run([sys.executable, "-m", "pip", "install", "build"])
-        _run([sys.executable, "-m", "build"])
+        _build_in_sanitized_tree(Path.cwd())
 
     if git:
         files = ["VERSION", "pyproject.toml"]
