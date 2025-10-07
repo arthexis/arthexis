@@ -330,21 +330,71 @@
         if (window.Chart) {
           return Promise.resolve(window.Chart);
         }
+
+        const waitForChart = (resolve) => {
+          if (window.Chart) {
+            resolve(window.Chart);
+            return true;
+          }
+          return false;
+        };
+
         return new Promise((resolve) => {
           const existing = document.querySelector('script[data-chartjs]');
           if (existing) {
-            existing.addEventListener('load', () => resolve(window.Chart || null), {
-              once: true,
-            });
-            existing.addEventListener('error', () => resolve(null), { once: true });
+            if (existing.dataset.chartjsState === 'error') {
+              resolve(null);
+              return;
+            }
+
+            if (waitForChart(resolve)) {
+              return;
+            }
+
+            existing.addEventListener(
+              'load',
+              () => {
+                existing.dataset.chartjsState = 'loaded';
+                resolve(window.Chart || null);
+              },
+              { once: true },
+            );
+            existing.addEventListener(
+              'error',
+              () => {
+                existing.dataset.chartjsState = 'error';
+                resolve(null);
+              },
+              { once: true },
+            );
+
+            if (existing.readyState === 'complete') {
+              waitForChart(resolve);
+            }
             return;
           }
+
           const script = document.createElement('script');
           script.src = chartJsUrl;
           script.async = true;
           script.dataset.chartjs = 'true';
-          script.onload = () => resolve(window.Chart);
-          script.onerror = () => resolve(null);
+          script.dataset.chartjsState = 'loading';
+          script.addEventListener(
+            'load',
+            () => {
+              script.dataset.chartjsState = 'loaded';
+              resolve(window.Chart || null);
+            },
+            { once: true },
+          );
+          script.addEventListener(
+            'error',
+            () => {
+              script.dataset.chartjsState = 'error';
+              resolve(null);
+            },
+            { once: true },
+          );
           document.head.appendChild(script);
         });
       };
