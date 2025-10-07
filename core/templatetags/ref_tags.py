@@ -57,15 +57,24 @@ def render_footer(context):
     if ver_path.exists():
         version = ver_path.read_text().strip()
 
-    revision_value = revision.get_revision()
-    rev_short = revision_value[-6:] if revision_value else ""
+    revision_value = (revision.get_revision() or "").strip()
     release_name = DEFAULT_PACKAGE.name
     release_url = None
+    release = None
+    release_revision = ""
+    if version:
+        release = PackageRelease.objects.filter(version=version).first()
+        if release and release.revision:
+            release_revision = release.revision.strip()
+
+    rev_short = ""
+    if revision_value and revision_value != release_revision:
+        rev_short = revision_value[-6:]
+
     if version:
         release_name = f"{release_name}-{version}"
         if rev_short:
             release_name = f"{release_name}-{rev_short}"
-        release = PackageRelease.objects.filter(version=version).first()
         if release:
             release_url = reverse("admin:core_packagerelease_change", args=[release.pk])
 
