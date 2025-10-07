@@ -50,13 +50,18 @@ def _resolve_github_token(package: Package | None) -> str:
 
     if package:
         manager = getattr(package, "release_manager", None)
-        if manager and getattr(manager, "github_token", None):
-            return manager.github_token
+        if manager:
+            token = getattr(manager, "github_token", "")
+            if token:
+                cleaned = str(token).strip()
+                if cleaned:
+                    return cleaned
 
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
+    token = os.environ.get("GITHUB_TOKEN", "")
+    cleaned_env = token.strip() if isinstance(token, str) else str(token).strip()
+    if not cleaned_env:
         raise GitHubRepositoryError("GitHub token is not configured")
-    return token
+    return cleaned_env
 
 
 def _build_headers(token: str) -> Mapping[str, str]:
