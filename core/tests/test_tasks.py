@@ -66,3 +66,18 @@ def test_check_github_updates_handles_mode_read_error(monkeypatch, tmp_path):
     monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
 
     tasks.check_github_updates()
+
+
+def test_resolve_service_url_handles_case_insensitive_mode(tmp_path):
+    """Public mode should be detected regardless of the file's casing."""
+
+    from core import tasks
+
+    base_dir = tmp_path
+    lock_dir = base_dir / "locks"
+    lock_dir.mkdir()
+    (lock_dir / "nginx_mode.lck").write_text("PUBLIC\n", encoding="utf-8")
+
+    url = tasks._resolve_service_url(base_dir)
+
+    assert url == "http://127.0.0.1:8000/"
