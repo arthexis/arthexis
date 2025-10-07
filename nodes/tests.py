@@ -28,7 +28,7 @@ from tempfile import TemporaryDirectory
 import shutil
 import stat
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
@@ -43,7 +43,7 @@ from dns import resolver as dns_resolver
 from . import dns as dns_utils
 from selenium.common.exceptions import WebDriverException
 from .classifiers import run_default_classifiers
-from .utils import capture_screenshot, save_screenshot
+from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
 from django.db.utils import DatabaseError
 
 from .models import (
@@ -3579,3 +3579,42 @@ class ContentClassifierTests(TestCase):
 
         run_default_classifiers(sample)
         self.assertEqual(sample.classifications.count(), 2)
+
+
+class CaptureRpiSnapshotTests(SimpleTestCase):
+    def setUp(self):
+        super().setUp()
+        self.tempdir = TemporaryDirectory()
+        self.addCleanup(self.tempdir.cleanup)
+        patcher = patch("nodes.utils.CAMERA_DIR", Path(self.tempdir.name))
+        self.addCleanup(patcher.stop)
+        patcher.start()
+
+    @patch("pathlib.Path.exists", return_value=True)
+    @patch("nodes.utils.subprocess.run")
+    @patch("nodes.utils.shutil.which", return_value="/usr/bin/rpicam-still")
+    @patch("nodes.utils.uuid.uuid4")
+    @patch("nodes.utils.datetime")
+    def test_snapshot_uses_unique_filenames(
+        self,
+        mock_datetime,
+        mock_uuid,
+        mock_which,
+        mock_run,
+        mock_exists,
+    ):
+        mock_datetime.utcnow.return_value = datetime(2024, 1, 1, 12, 0, 0)
+        mock_uuid.side_effect = [
+            uuid.UUID("00000000-0000-0000-0000-000000000000"),
+            uuid.UUID("11111111-1111-1111-1111-111111111111"),
+        ]
+        mock_run.return_value = SimpleNamespace(returncode=0, stderr="", stdout="")
+
+        first = capture_rpi_snapshot()
+        second = capture_rpi_snapshot()
+
+        self.assertNotEqual(first, second)
+        self.assertTrue(first.name.endswith("-00000000000000000000000000000000.jpg"))
+        self.assertTrue(second.name.endswith("-11111111111111111111111111111111.jpg"))
+        self.assertEqual(mock_uuid.call_count, 2)
+        self.assertEqual(mock_run.call_count, 2)
