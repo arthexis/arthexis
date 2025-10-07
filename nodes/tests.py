@@ -1677,6 +1677,7 @@ class NodeAdminTests(TestCase):
         response.render()
         expected_stream = "http://testserver:8554/"
         self.assertEqual(response.context_data["stream_url"], expected_stream)
+        self.assertEqual(response.context_data["stream_embed"], "iframe")
         self.assertContains(response, expected_stream)
         self.assertContains(response, "camera-stream__frame")
 
@@ -1694,7 +1695,40 @@ class NodeAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         response.render()
         self.assertEqual(response.context_data["stream_url"], configured_stream)
+        self.assertEqual(response.context_data["stream_embed"], "iframe")
         self.assertContains(response, configured_stream)
+
+    def test_view_stream_detects_mjpeg_stream(self):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="rpi-camera", defaults={"display": "Raspberry Pi Camera"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        mjpeg_url = "http://camera.local/stream.mjpg"
+        with self.settings(RPI_CAMERA_STREAM_URL=mjpeg_url):
+            response = self.client.get(
+                reverse("admin:nodes_nodefeature_view_stream")
+            )
+        self.assertEqual(response.status_code, 200)
+        response.render()
+        self.assertEqual(response.context_data["stream_embed"], "mjpeg")
+        self.assertContains(response, "<img", html=False)
+
+    def test_view_stream_marks_rtsp_stream_as_unsupported(self):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="rpi-camera", defaults={"display": "Raspberry Pi Camera"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        rtsp_url = "rtsp://camera.local/stream"
+        with self.settings(RPI_CAMERA_STREAM_URL=rtsp_url):
+            response = self.client.get(
+                reverse("admin:nodes_nodefeature_view_stream")
+            )
+        self.assertEqual(response.status_code, 200)
+        response.render()
+        self.assertEqual(response.context_data["stream_embed"], "unsupported")
+        self.assertContains(response, "camera-stream__unsupported")
 
     @patch("nodes.admin.requests.post")
     def test_fetch_rfids_action_fetches_and_imports(self, mock_post):
