@@ -1250,6 +1250,46 @@ def _step_publish(release, ctx, log_path: Path) -> None:
         dist_path = Path("dist")
         if not dist_path.exists():
             _append_log(log_path, "Dry run: building distribution artifacts")
+            repo_was_clean = False
+            try:
+                status_proc = subprocess.run(
+                    ["git", "status", "--porcelain"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except subprocess.CalledProcessError:
+                pass
+            else:
+                repo_was_clean = not status_proc.stdout.strip()
+
+            def _restore_clean_worktree() -> None:
+                if not repo_was_clean:
+                    return
+                try:
+                    changed_proc = subprocess.run(
+                        ["git", "status", "--porcelain", "--untracked-files=no"],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                except subprocess.CalledProcessError:
+                    return
+                changed_files = []
+                for line in changed_proc.stdout.splitlines():
+                    if not line:
+                        continue
+                    path = line[3:]
+                    if " -> " in path:
+                        path = path.split(" -> ", 1)[1]
+                    if path:
+                        changed_files.append(path)
+                if changed_files:
+                    subprocess.run(
+                        ["git", "checkout", "--", *changed_files],
+                        check=False,
+                    )
+
             try:
                 release_utils.build(
                     package=release.to_package(),
@@ -1268,6 +1308,8 @@ def _step_publish(release, ctx, log_path: Path) -> None:
                     f"Dry run: failed to prepare distribution artifacts ({exc})",
                 )
                 raise
+            finally:
+                _restore_clean_worktree()
         _append_log(log_path, f"Dry run: uploading distribution to {label}")
         release_utils.publish(
             package=release.to_package(),
