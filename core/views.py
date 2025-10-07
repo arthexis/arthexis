@@ -1,6 +1,8 @@
 import json
 import logging
+import os
 import shutil
+import uuid
 from datetime import datetime, timedelta, timezone as datetime_timezone
 
 import requests
@@ -345,6 +347,7 @@ def version_info(request):
 
 
 from . import release as release_utils
+from .log_paths import select_log_dir
 
 
 TODO_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
@@ -372,6 +375,63 @@ def _append_log(path: Path, message: str) -> None:
 
 def _release_log_name(package_name: str, version: str) -> str:
     return f"pr.{package_name}.v{version}.log"
+
+
+def _ensure_log_directory(path: Path) -> tuple[bool, OSError | None]:
+    """Return whether ``path`` is writable along with the triggering error."""
+
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return False, exc
+
+    probe = path / f".permcheck_{uuid.uuid4().hex}"
+    try:
+        with probe.open("w", encoding="utf-8") as fh:
+            fh.write("")
+    except OSError as exc:
+        return False, exc
+    else:
+        try:
+            probe.unlink()
+        except OSError:
+            pass
+        return True, None
+
+
+def _resolve_release_log_dir(preferred: Path) -> tuple[Path, str | None]:
+    """Return a writable log directory for the release publish flow."""
+
+    writable, error = _ensure_log_directory(preferred)
+    if writable:
+        return preferred, None
+
+    logger.warning(
+        "Release log directory %s is not writable: %s", preferred, error
+    )
+
+    env_override = os.environ.pop("ARTHEXIS_LOG_DIR", None)
+    fallback = select_log_dir(Path(settings.BASE_DIR))
+    if env_override and Path(env_override) != fallback:
+        os.environ["ARTHEXIS_LOG_DIR"] = str(fallback)
+
+    if fallback == preferred:
+        if error:
+            raise error
+        raise PermissionError(f"Release log directory {preferred} is not writable")
+
+    fallback_writable, fallback_error = _ensure_log_directory(fallback)
+    if not fallback_writable:
+        raise fallback_error or PermissionError(
+            f"Release log directory {fallback} is not writable"
+        )
+
+    settings.LOG_DIR = str(fallback)
+    warning = (
+        f"Release log directory {preferred} is not writable; using {fallback}"
+    )
+    logger.warning(warning)
+    return fallback, warning
 
 
 def _sync_with_origin_main(log_path: Path) -> None:
@@ -1289,7 +1349,8 @@ def release_progress(request, pk: int, action: str):
     session_key = f"release_publish_{pk}"
     lock_path = Path("locks") / f"release_publish_{pk}.json"
     restart_path = Path("locks") / f"release_publish_{pk}.restarts"
-    log_dir = Path(settings.LOG_DIR)
+    log_dir, log_dir_warning = _resolve_release_log_dir(Path(settings.LOG_DIR))
+    log_dir_warning_message = log_dir_warning
 
     version_path = Path("VERSION")
     repo_version_before_sync = ""
@@ -1343,6 +1404,10 @@ def release_progress(request, pk: int, action: str):
         ctx = {"step": 0}
         if restart_path.exists():
             restart_path.unlink()
+    if log_dir_warning_message:
+        ctx["log_dir_warning_message"] = log_dir_warning_message
+    else:
+        log_dir_warning_message = ctx.get("log_dir_warning_message")
 
     manager = release.release_manager or release.package.release_manager
     credentials_ready = bool(release.to_credentials())
@@ -1462,6 +1527,11 @@ def release_progress(request, pk: int, action: str):
     ):
         if log_path.exists():
             log_path.unlink()
+        ctx.pop("log_dir_warning_logged", None)
+
+    if log_dir_warning_message and not ctx.get("log_dir_warning_logged"):
+        _append_log(log_path, log_dir_warning_message)
+        ctx["log_dir_warning_logged"] = True
 
     steps = PUBLISH_STEPS
     fixtures_step_index = next(

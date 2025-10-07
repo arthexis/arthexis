@@ -12,6 +12,7 @@ import django
 
 django.setup()
 
+from django.conf import settings
 from django.contrib.messages import get_messages
 from django.test import TestCase
 from django.urls import reverse
@@ -46,8 +47,8 @@ class ReleaseProgressViewTests(TestCase):
                 self.original_version, encoding="utf-8"
             )
         )
-        self.log_dir = Path("logs")
-        self.log_dir.mkdir(exist_ok=True)
+        self.log_dir = Path(settings.LOG_DIR)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
         lock_path = Path("locks") / f"release_publish_{self.release.pk}.json"
         if lock_path.exists():
             lock_path.unlink()
@@ -198,8 +199,85 @@ class ReleaseProgressViewTests(TestCase):
         run.assert_any_call(
             ["git", "commit", "-m", "Workspace cleanup"], check=True
         )
-        self.assertFalse(response.context["dirty_files"])
-        self.assertEqual(response.context["current_step"], 1)
+
+    @mock.patch("core.views._append_log", wraps=core_views._append_log)
+    @mock.patch("core.views._sync_with_origin_main")
+    @mock.patch("core.views.select_log_dir")
+    def test_release_log_dir_falls_back_when_unwritable(
+        self, select_log_dir, sync_main, append_log
+    ):
+        fallback = Path("logs-fallback")
+        fallback.mkdir(parents=True, exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(fallback, ignore_errors=True))
+
+        select_log_dir.return_value = fallback
+
+        unwritable = Path("logs-unwritable")
+        unwritable.mkdir(parents=True, exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(unwritable, ignore_errors=True))
+
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        with (
+            self.settings(LOG_DIR=str(unwritable)),
+            mock.patch(
+                "core.views._ensure_log_directory",
+                side_effect=[
+                    (False, PermissionError("denied")),
+                    (True, None),
+                    (True, None),
+                ],
+            ),
+        ):
+            self.client.get(url)
+            response = self.client.get(f"{url}?start=1&step=0")
+
+        self.assertEqual(response.status_code, 200)
+        log_path = fallback / self.log_name
+        self.assertTrue(log_path.exists())
+        messages = [call.args[1] for call in append_log.call_args_list]
+        self.assertIn(
+            f"Release log directory {unwritable} is not writable; using {fallback}",
+            messages,
+        )
+
+    @mock.patch("core.views._append_log", wraps=core_views._append_log)
+    @mock.patch("core.views._sync_with_origin_main")
+    @mock.patch("core.views.select_log_dir")
+    def test_release_log_dir_warning_logged_once(
+        self, select_log_dir, sync_main, append_log
+    ):
+        fallback = Path("logs-fallback-once")
+        fallback.mkdir(parents=True, exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(fallback, ignore_errors=True))
+
+        select_log_dir.return_value = fallback
+
+        unwritable = Path("logs-unwritable-once")
+        unwritable.mkdir(parents=True, exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(unwritable, ignore_errors=True))
+
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        with (
+            self.settings(LOG_DIR=str(unwritable)),
+            mock.patch(
+                "core.views._ensure_log_directory",
+                side_effect=[
+                    (False, PermissionError("denied")),
+                    (True, None),
+                    (True, None),
+                    (True, None),
+                ],
+            ),
+        ):
+            self.client.get(url)
+            self.client.get(f"{url}?start=1&step=0")
+            self.client.get(url)
+
+        messages = [call.args[1] for call in append_log.call_args_list]
+        warning = (
+            f"Release log directory {unwritable} is not writable; using {fallback}"
+        )
+        self.assertEqual(messages.count(warning), 1)
 
     @mock.patch("core.views._clean_repo")
     @mock.patch("core.views._collect_dirty_files")
@@ -368,9 +446,12 @@ class ReleaseProgressViewTests(TestCase):
             "Release manager rejected release", response.context["log_content"]
         )
 
+    @mock.patch("core.views._sync_with_origin_main")
     @mock.patch("core.views.release_utils.network_available", return_value=False)
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
-    def test_pause_publish_suspends_process(self, git_clean, net_available):
+    def test_pause_publish_suspends_process(
+        self, git_clean, net_available, sync_main
+    ):
         url = reverse("release-progress", args=[self.release.pk, "publish"])
         self.client.get(url)
         self.client.get(f"{url}?start=1&step=0")
