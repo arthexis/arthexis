@@ -46,3 +46,14 @@ class ActiveAppFileHandler(TimedRotatingFileHandler):
         if len(files) <= self.backupCount:
             return []
         return files[: len(files) - self.backupCount]
+
+
+class ErrorFileHandler(ActiveAppFileHandler):
+    """File handler dedicated to capturing application errors."""
+
+    def _current_file(self) -> Path:
+        log_dir = Path(settings.LOG_DIR)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        if "test" in sys.argv:
+            return log_dir / "tests-error.log"
+        return log_dir / "error.log"
