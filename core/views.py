@@ -1247,6 +1247,27 @@ def _step_publish(release, ctx, log_path: Path) -> None:
             verify_availability=False,
         )
         label = target.repository_url or target.name
+        dist_path = Path("dist")
+        if not dist_path.exists():
+            _append_log(log_path, "Dry run: building distribution artifacts")
+            try:
+                release_utils.build(
+                    package=release.to_package(),
+                    version=release.version,
+                    creds=release.to_credentials(),
+                    dist=True,
+                    tests=False,
+                    twine=False,
+                    git=False,
+                    tag=False,
+                    stash=True,
+                )
+            except release_utils.ReleaseError as exc:
+                _append_log(
+                    log_path,
+                    f"Dry run: failed to prepare distribution artifacts ({exc})",
+                )
+                raise
         _append_log(log_path, f"Dry run: uploading distribution to {label}")
         release_utils.publish(
             package=release.to_package(),
