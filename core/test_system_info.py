@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 from subprocess import CompletedProcess
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -14,7 +14,7 @@ django.setup()
 from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 from nodes.models import Node, NodeFeature, NodeRole
-from core.system import _gather_info, get_system_sigil_values
+from core.system import _gather_info, _read_auto_upgrade_mode, get_system_sigil_values
 
 
 class SystemInfoRoleTests(SimpleTestCase):
@@ -75,6 +75,20 @@ class SystemInfoDatabaseTests(SimpleTestCase):
         info = _gather_info()
         databases = info["databases"]
         self.assertEqual(databases[0]["name"], "/tmp/db.sqlite3")
+
+
+class AutoUpgradeModeTests(SimpleTestCase):
+    def test_lock_file_read_error_marks_enabled(self):
+        mock_path = Mock()
+        mock_path.exists.return_value = True
+        mock_path.read_text.side_effect = OSError
+
+        with patch("core.system._auto_upgrade_mode_file", return_value=mock_path):
+            info = _read_auto_upgrade_mode(Path("/tmp"))
+
+        self.assertTrue(info["lock_exists"])
+        self.assertTrue(info["enabled"])
+        self.assertTrue(info["read_error"])
 
 
 class SystemInfoRunserverDetectionTests(SimpleTestCase):

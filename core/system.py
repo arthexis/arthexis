@@ -150,6 +150,8 @@ def _read_auto_upgrade_mode(base_dir: Path) -> dict[str, object]:
     if not info["lock_exists"]:
         return info
 
+    info["enabled"] = True
+
     try:
         raw_value = mode_file.read_text(encoding="utf-8").strip()
     except OSError:
