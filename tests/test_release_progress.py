@@ -149,6 +149,47 @@ class ReleaseProgressViewTests(TestCase):
             response = self.client.get(f"{url}?step=1")
         self.assertEqual(response.status_code, 200)
 
+    @mock.patch("core.views.release_utils.network_available", return_value=False)
+    @mock.patch("core.views._collect_dirty_files")
+    @mock.patch("core.views._sync_with_origin_main")
+    @mock.patch("core.views.release_utils._git_clean", return_value=False)
+    def test_fixture_commit_retries_sync(
+        self, git_clean, sync_main, collect_dirty, net_available
+    ):
+        fixture_path = Path("core/fixtures/releases__packagerelease_0_1_3.json")
+        if fixture_path.exists():
+            original = fixture_path.read_text(encoding="utf-8")
+            self.addCleanup(
+                lambda original=original: fixture_path.write_text(
+                    original, encoding="utf-8"
+                )
+            )
+        else:
+            fixture_path.write_text("[]", encoding="utf-8")
+            self.addCleanup(lambda: fixture_path.unlink(missing_ok=True))
+        fixture_path.write_text("[]", encoding="utf-8")
+
+        collect_dirty.return_value = [
+            {"path": str(fixture_path), "status": "M", "status_label": "Modified"}
+        ]
+
+        sync_main.side_effect = [Exception("rebase failed"), None]
+
+        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout=f" M {fixture_path}\n", stderr=""
+                )
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with mock.patch("core.views.subprocess.run", side_effect=fake_run):
+            url = reverse("release-progress", args=[self.release.pk, "publish"])
+            self.client.get(f"{url}?start=1&step=0")
+            response = self.client.get(f"{url}?step=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(sync_main.call_count, 2)
+
     @mock.patch("core.views._collect_dirty_files")
     @mock.patch("core.views._sync_with_origin_main")
     @mock.patch("core.views.release_utils._git_clean", return_value=False)
