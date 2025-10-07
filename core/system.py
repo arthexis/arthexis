@@ -179,6 +179,25 @@ def _load_auto_upgrade_skip_revisions(base_dir: Path) -> list[str]:
     return sorted(revisions)
 
 
+def _parse_log_timestamp(value: str) -> datetime | None:
+    """Return a ``datetime`` parsed from ``value`` if it appears ISO formatted."""
+
+    if not value:
+        return None
+
+    candidate = value.strip()
+    if not candidate:
+        return None
+
+    if candidate[-1] in {"Z", "z"}:
+        candidate = f"{candidate[:-1]}+00:00"
+
+    try:
+        return datetime.fromisoformat(candidate)
+    except ValueError:
+        return None
+
+
 def _load_auto_upgrade_log_entries(
     base_dir: Path, *, limit: int = 25
 ) -> dict[str, object]:
@@ -208,11 +227,7 @@ def _load_auto_upgrade_log_entries(
             continue
         timestamp_str, _, message = line.partition(" ")
         message = message.strip()
-        timestamp: datetime | None = None
-        try:
-            timestamp = datetime.fromisoformat(timestamp_str)
-        except ValueError:
-            timestamp = None
+        timestamp = _parse_log_timestamp(timestamp_str)
         if not message:
             message = timestamp_str
         if timestamp is not None:
