@@ -25,11 +25,17 @@ def resolve_repository() -> tuple[str, str]:
     """Return the ``(owner, repo)`` tuple for the active package."""
 
     package = Package.objects.filter(is_active=True).first()
-    repository_url = (
-        package.repository_url
-        if package and package.repository_url
-        else DEFAULT_PACKAGE.repository_url
-    )
+
+    repository_url: str
+    if package is not None:
+        raw_url = getattr(package, "repository_url", "")
+        if raw_url is None:
+            cleaned_url = ""
+        else:
+            cleaned_url = str(raw_url).strip()
+        repository_url = cleaned_url or DEFAULT_PACKAGE.repository_url
+    else:
+        repository_url = DEFAULT_PACKAGE.repository_url
 
     owner: str
     repo: str
