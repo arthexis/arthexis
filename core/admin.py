@@ -471,17 +471,24 @@ class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
         (
-            "Credentials",
+            "PyPI",
             {
                 "fields": (
                     "pypi_username",
                     "pypi_token",
                     "pypi_password",
+                    "pypi_url",
+                    "secondary_pypi_url",
+                )
+            },
+        ),
+        (
+            "GitHub",
+            {
+                "fields": (
                     "github_token",
                     "git_username",
                     "git_password",
-                    "pypi_url",
-                    "secondary_pypi_url",
                 )
             },
         ),
