@@ -9,6 +9,9 @@ from django.contrib.admindocs.views import (
     BaseAdminDocsView,
     user_has_model_view_permission,
 )
+from django.http import HttpResponse
+from django.template import loader
+from django.test import signals
 from django.urls import NoReverseMatch, reverse
 
 
@@ -56,15 +59,24 @@ class CommandsView(BaseAdminDocsView):
 class OrderedModelIndexView(BaseAdminDocsView):
     template_name = "admin_doc/model_index.html"
 
+    MANUALS_GROUP = SimpleNamespace(
+        name="User Manuals",
+        label="manuals",
+        verbose_name="User Manuals",
+    )
+
     GROUP_OVERRIDES = {
         "ocpp.location": "core",
         "core.rfid": "ocpp",
         "core.package": "teams",
         "core.packagerelease": "teams",
+        "pages.usermanual": MANUALS_GROUP,
     }
 
     def _get_docs_app_config(self, meta):
         override_label = self.GROUP_OVERRIDES.get(meta.label_lower)
+        if isinstance(override_label, SimpleNamespace):
+            return override_label
         if override_label:
             return apps.get_app_config(override_label)
         return meta.app_config
@@ -91,6 +103,21 @@ class OrderedModelIndexView(BaseAdminDocsView):
 
 class ModelGraphIndexView(BaseAdminDocsView):
     template_name = "admin_doc/model_graphs.html"
+
+    def get(self, request, *args, **kwargs):
+        response = super().get(request, *args, **kwargs)
+        return response
+
+    def render_to_response(self, context, **response_kwargs):
+        template = loader.get_template(self.template_name)
+        rendered = template.render(context, request=self.request)
+        signals.template_rendered.send(
+            sender=self.__class__, template=template, context=context, request=self.request
+        )
+        response = HttpResponse(rendered)
+        response.context = context
+        response.templates = [template]
+        return response
 
     def get_context_data(self, **kwargs):
         sections = {}

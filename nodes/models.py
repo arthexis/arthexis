@@ -927,10 +927,12 @@ class NodeManager(Profile):
         default=Provider.GODADDY,
     )
     api_key = SigilShortAutoField(
+        "API key",
         max_length=255,
         help_text="API key issued by the DNS provider.",
     )
     api_secret = SigilShortAutoField(
+        "API secret",
         max_length=255,
         help_text="API secret issued by the DNS provider.",
     )

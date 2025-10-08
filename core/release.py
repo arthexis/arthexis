@@ -49,6 +49,13 @@ class Package:
     version_path: Optional[Path | str] = None
     dependencies_path: Optional[Path | str] = None
     test_command: Optional[str] = None
+    pypi_repository_url: Optional[str] = None
+    pypi_token: Optional[str] = None
+    pypi_username: Optional[str] = None
+    pypi_password: Optional[str] = None
+    secondary_pypi_url: Optional[str] = None
+    secondary_pypi_username: Optional[str] = None
+    secondary_pypi_password: Optional[str] = None
 
 
 @dataclass
@@ -236,8 +243,14 @@ def _manager_credentials() -> Optional[Credentials]:
         from core.models import Package as PackageModel
 
         package_obj = PackageModel.objects.select_related("release_manager").first()
-        if package_obj and package_obj.release_manager:
-            return package_obj.release_manager.to_credentials()
+        if package_obj:
+            package_creds = getattr(package_obj, "to_credentials", None)
+            if package_creds is not None:
+                creds = package_creds()
+                if creds:
+                    return creds
+            if package_obj.release_manager:
+                return package_obj.release_manager.to_credentials()
     except Exception:
         return None
     return None

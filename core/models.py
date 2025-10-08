@@ -3101,6 +3101,21 @@ class Package(Entity):
     version_path = models.CharField(max_length=255, blank=True, default="")
     dependencies_path = models.CharField(max_length=255, blank=True, default="")
     test_command = models.TextField(blank=True, default="")
+    pypi_repository_url = SigilShortAutoField(
+        "PyPI repository URL", max_length=200, blank=True
+    )
+    pypi_token = SigilShortAutoField("PyPI token", max_length=200, blank=True)
+    pypi_username = SigilShortAutoField("PyPI username", max_length=100, blank=True)
+    pypi_password = SigilShortAutoField("PyPI password", max_length=200, blank=True)
+    secondary_pypi_url = SigilShortAutoField(
+        "Secondary PyPI URL", max_length=200, blank=True
+    )
+    secondary_pypi_username = SigilShortAutoField(
+        "Secondary PyPI username", max_length=100, blank=True
+    )
+    secondary_pypi_password = SigilShortAutoField(
+        "Secondary PyPI password", max_length=200, blank=True
+    )
     release_manager = models.ForeignKey(
         ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
     )
@@ -3142,7 +3157,24 @@ class Package(Entity):
             version_path=self.version_path or None,
             dependencies_path=self.dependencies_path or None,
             test_command=self.test_command or None,
+            pypi_repository_url=self.pypi_repository_url or None,
+            pypi_token=self.pypi_token or None,
+            pypi_username=self.pypi_username or None,
+            pypi_password=self.pypi_password or None,
+            secondary_pypi_url=self.secondary_pypi_url or None,
+            secondary_pypi_username=self.secondary_pypi_username or None,
+            secondary_pypi_password=self.secondary_pypi_password or None,
         )
+
+    def to_credentials(self) -> Credentials | None:
+        """Return package-level PyPI credentials if configured."""
+        if self.pypi_token:
+            return Credentials(token=self.pypi_token)
+        if self.pypi_username and self.pypi_password:
+            return Credentials(
+                username=self.pypi_username, password=self.pypi_password
+            )
+        return None
 
 
 class PackageRelease(Entity):
@@ -3206,9 +3238,20 @@ class PackageRelease(Entity):
 
     def to_credentials(self) -> Credentials | None:
         """Return :class:`Credentials` from the associated release manager."""
-        manager = self.release_manager or self.package.release_manager
-        if manager:
-            return manager.to_credentials()
+        package_creds = self.package.to_credentials()
+        if package_creds and package_creds.has_auth():
+            return package_creds
+
+        managers: tuple[ReleaseManager | None, ...] = (
+            self.release_manager,
+            self.package.release_manager,
+        )
+        for manager in managers:
+            if not manager:
+                continue
+            creds = manager.to_credentials()
+            if creds and creds.has_auth():
+                return creds
         return None
 
     def get_github_token(self) -> str | None:
@@ -3221,17 +3264,42 @@ class PackageRelease(Entity):
     def build_publish_targets(self) -> list[RepositoryTarget]:
         """Return repository targets for publishing this release."""
 
-        manager = self.release_manager or self.package.release_manager
+        managers: list[ReleaseManager] = []
+        if self.release_manager:
+            managers.append(self.release_manager)
+        if self.package.release_manager and (
+            not managers or managers[0] != self.package.release_manager
+        ):
+            managers.append(self.package.release_manager)
+
         targets: list[RepositoryTarget] = []
 
-        primary_url = ""
-        if manager and manager.pypi_url:
-            primary_url = manager.pypi_url.strip()
+        primary_url = (self.package.pypi_repository_url or "").strip()
+        if not primary_url:
+            for manager in managers:
+                if manager.pypi_url:
+                    primary_url = manager.pypi_url.strip()
+                if primary_url:
+                    break
         if not primary_url:
             env_primary = os.environ.get("PYPI_REPOSITORY_URL", "")
             primary_url = env_primary.strip()
 
-        primary_creds = self.to_credentials()
+        primary_creds = self.package.to_credentials()
+        if not (primary_creds and primary_creds.has_auth()):
+            for manager in managers:
+                creds = manager.to_credentials()
+                if creds and creds.has_auth():
+                    primary_creds = creds
+                    break
+        if not (primary_creds and primary_creds.has_auth()):
+            env_creds = Credentials(
+                token=os.environ.get("PYPI_API_TOKEN"),
+                username=os.environ.get("PYPI_USERNAME"),
+                password=os.environ.get("PYPI_PASSWORD"),
+            )
+            primary_creds = env_creds if env_creds.has_auth() else None
+
         targets.append(
             RepositoryTarget(
                 name="PyPI",
@@ -3241,9 +3309,14 @@ class PackageRelease(Entity):
             )
         )
 
-        secondary_url = ""
-        if manager and getattr(manager, "secondary_pypi_url", ""):
-            secondary_url = manager.secondary_pypi_url.strip()
+        secondary_url = (self.package.secondary_pypi_url or "").strip()
+        if not secondary_url:
+            for manager in managers:
+                candidate = getattr(manager, "secondary_pypi_url", "")
+                if candidate:
+                    secondary_url = candidate.strip()
+                if secondary_url:
+                    break
         if not secondary_url:
             env_secondary = os.environ.get("PYPI_SECONDARY_URL", "")
             secondary_url = env_secondary.strip()
@@ -3261,8 +3334,11 @@ class PackageRelease(Entity):
 
         github_token = self.get_github_token()
         github_username = None
-        if manager and manager.pypi_username:
-            github_username = manager.pypi_username.strip() or None
+        for manager in managers:
+            if manager.pypi_username:
+                github_username = manager.pypi_username.strip() or None
+            if github_username:
+                break
         env_secondary_username = os.environ.get("PYPI_SECONDARY_USERNAME")
         env_secondary_password = os.environ.get("PYPI_SECONDARY_PASSWORD")
         if not github_username:
@@ -3272,18 +3348,34 @@ class PackageRelease(Entity):
                 or (env_secondary_username.strip() if env_secondary_username else None)
             )
 
-        password_candidate = github_token or (
-            env_secondary_password.strip() if env_secondary_password else None
+        package_secondary_username = (
+            self.package.secondary_pypi_username.strip()
+            if self.package.secondary_pypi_username
+            else ""
+        )
+        package_secondary_password = (
+            self.package.secondary_pypi_password.strip()
+            if self.package.secondary_pypi_password
+            else ""
         )
 
         secondary_creds: Credentials | None = None
-        if github_username and password_candidate:
+        if package_secondary_username and package_secondary_password:
             secondary_creds = Credentials(
-                username=github_username,
-                password=password_candidate,
+                username=package_secondary_username,
+                password=package_secondary_password,
             )
         else:
-            secondary_creds = _clone_credentials(primary_creds)
+            password_candidate = github_token or (
+                env_secondary_password.strip() if env_secondary_password else None
+            )
+            if github_username and password_candidate:
+                secondary_creds = Credentials(
+                    username=github_username,
+                    password=password_candidate,
+                )
+            else:
+                secondary_creds = _clone_credentials(primary_creds)
 
         if secondary_creds and secondary_creds.has_auth():
             name = "GitHub Packages" if github_token else "Secondary repository"

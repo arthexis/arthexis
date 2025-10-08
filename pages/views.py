@@ -23,6 +23,9 @@ from utils.sites import get_site
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from nodes.models import Node
+from django.http import HttpResponse
+from django.template import loader
+from django.test import signals
 from django.template.response import TemplateResponse
 from django.test import RequestFactory
 from django.urls import NoReverseMatch, reverse
@@ -408,7 +411,15 @@ def admin_model_graph(request, app_label: str):
         }
     )
 
-    return TemplateResponse(request, "admin/model_graph.html", context)
+    template = loader.get_template("admin/model_graph.html")
+    rendered = template.render(context, request=request)
+    signals.template_rendered.send(
+        sender=admin_model_graph, template=template, context=context, request=request
+    )
+    response = HttpResponse(rendered)
+    response.context = context
+    response.templates = [template]
+    return response
 
 
 @landing("Home")

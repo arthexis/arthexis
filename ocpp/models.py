@@ -856,7 +856,9 @@ class DataTransferMessage(models.Model):
     )
     connector_id = models.PositiveIntegerField(null=True, blank=True)
     direction = models.CharField(max_length=16, choices=DIRECTION_CHOICES)
-    ocpp_message_id = models.CharField(max_length=64)
+    ocpp_message_id = models.CharField(
+        "OCPP message ID", max_length=64
+    )
     vendor_id = models.CharField(max_length=255, blank=True)
     message_id = models.CharField(max_length=255, blank=True)
     payload = models.JSONField(default=dict, blank=True)

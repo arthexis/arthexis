@@ -83,6 +83,16 @@ def model_admin_actions(context, app_label, model_name):
         actions.append({"url": url, "label": label})
         seen.add(action_name)
 
+    def resolve_profile_label(default_label):
+        getter = getattr(model_admin, "get_my_profile_label", None)
+        if not callable(getter):
+            return default_label
+        try:
+            resolved = getter(request)
+        except TypeError:
+            resolved = getter()
+        return resolved or default_label
+
     for action_name, (func, _name, description) in model_admin.get_actions(
         request
     ).items():
@@ -95,6 +105,7 @@ def model_admin_actions(context, app_label, model_name):
             description or _name.replace("_", " "),
         )
         if action_name == "my_profile":
+            label = resolve_profile_label(label)
             getter = getattr(model_admin, "get_my_profile_url", None)
             if callable(getter):
                 url = getter(request)
@@ -130,6 +141,8 @@ def model_admin_actions(context, app_label, model_name):
                     action_name.replace("_", " "),
                 ),
             )
+            if action_name == "my_profile":
+                label = resolve_profile_label(label)
             url = None
             tools_view_name = getattr(model_admin, "tools_view_name", None)
             if not tools_view_name:
