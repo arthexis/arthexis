@@ -50,6 +50,7 @@ from .release import (
     Credentials,
     DEFAULT_PACKAGE,
     RepositoryTarget,
+    GitCredentials,
 )
 
 
@@ -3024,6 +3025,8 @@ class ReleaseManager(Profile):
         "pypi_username",
         "pypi_token",
         "github_token",
+        "git_username",
+        "git_password",
         "pypi_password",
         "pypi_url",
         "secondary_pypi_url",
@@ -3036,6 +3039,21 @@ class ReleaseManager(Profile):
         help_text=(
             "Personal access token for GitHub operations. "
             "Used before the GITHUB_TOKEN environment variable."
+        ),
+    )
+    git_username = SigilShortAutoField(
+        "Git username",
+        max_length=100,
+        blank=True,
+        help_text="Username used for Git pushes (for example, your GitHub username).",
+    )
+    git_password = SigilShortAutoField(
+        "Git password/token",
+        max_length=200,
+        blank=True,
+        help_text=(
+            "Password or personal access token for HTTPS Git pushes. "
+            "Leave blank to use the GitHub token instead."
         ),
     )
     pypi_password = SigilShortAutoField("PyPI password", max_length=200, blank=True)
@@ -3077,6 +3095,16 @@ class ReleaseManager(Profile):
             return Credentials(token=self.pypi_token)
         if self.pypi_username and self.pypi_password:
             return Credentials(username=self.pypi_username, password=self.pypi_password)
+        return None
+
+    def to_git_credentials(self) -> GitCredentials | None:
+        """Return Git credentials for pushing tags."""
+
+        username = (self.git_username or "").strip()
+        password_source = self.git_password or self.github_token or ""
+        password = password_source.strip()
+        if username and password:
+            return GitCredentials(username=username, password=password)
         return None
 
 

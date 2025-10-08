@@ -10,6 +10,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence
+from urllib.parse import quote, urlsplit, urlunsplit
 
 try:  # pragma: no cover - optional dependency
     import toml  # type: ignore
@@ -68,6 +69,17 @@ class Credentials:
         if self.username and self.password:
             return ["--username", self.username, "--password", self.password]
         raise ValueError("Missing PyPI credentials")
+
+
+@dataclass
+class GitCredentials:
+    """Credentials used for Git operations such as pushing tags."""
+
+    username: Optional[str] = None
+    password: Optional[str] = None
+
+    def has_auth(self) -> bool:
+        return bool((self.username or "").strip() and (self.password or "").strip())
 
 
 @dataclass
@@ -241,6 +253,113 @@ def _manager_credentials() -> Optional[Credentials]:
     except Exception:
         return None
     return None
+
+
+def _manager_git_credentials(package: Optional[Package] = None) -> Optional[GitCredentials]:
+    """Return Git credentials from the Package's release manager if available."""
+
+    try:  # pragma: no cover - optional dependency
+        from core.models import Package as PackageModel
+
+        queryset = PackageModel.objects.select_related("release_manager")
+        if package is not None:
+            queryset = queryset.filter(name=package.name)
+        package_obj = queryset.first()
+        if package_obj and package_obj.release_manager:
+            creds = package_obj.release_manager.to_git_credentials()
+            if creds and creds.has_auth():
+                return creds
+    except Exception:
+        return None
+    return None
+
+
+def _git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
+    message = (exc.stderr or exc.stdout or "").strip().lower()
+    if not message:
+        return False
+    auth_markers = [
+        "could not read username",
+        "authentication failed",
+        "fatal: authentication failed",
+        "terminal prompts disabled",
+    ]
+    return any(marker in message for marker in auth_markers)
+
+
+def _format_subprocess_error(exc: subprocess.CalledProcessError) -> str:
+    return (exc.stderr or exc.stdout or str(exc)).strip() or str(exc)
+
+
+def _git_remote_url(remote: str = "origin") -> Optional[str]:
+    proc = subprocess.run(
+        ["git", "remote", "get-url", remote],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    return (proc.stdout or "").strip() or None
+
+
+def _remote_with_credentials(url: str, creds: GitCredentials) -> Optional[str]:
+    if not creds.has_auth():
+        return None
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"}:
+        return None
+    host = parsed.netloc.split("@", 1)[-1]
+    username = quote((creds.username or "").strip(), safe="")
+    password = quote((creds.password or "").strip(), safe="")
+    netloc = f"{username}:{password}@{host}"
+    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+
+
+def _raise_git_authentication_error(tag_name: str, exc: subprocess.CalledProcessError) -> None:
+    details = _format_subprocess_error(exc)
+    message = (
+        "Git authentication failed while pushing tag {tag}. "
+        "Configure Git credentials in the release manager profile or authenticate "
+        "locally, then rerun the publish step or push the tag manually with `git push "
+        "origin {tag}`."
+    ).format(tag=tag_name)
+    if details:
+        message = f"{message} Git reported: {details}"
+    raise ReleaseError(message) from exc
+
+
+def _push_tag(tag_name: str, package: Package) -> None:
+    auth_error: subprocess.CalledProcessError | None = None
+    try:
+        _run(["git", "push", "origin", tag_name])
+        return
+    except subprocess.CalledProcessError as exc:
+        if not _git_authentication_missing(exc):
+            raise
+        auth_error = exc
+
+    creds = _manager_git_credentials(package)
+    if creds and creds.has_auth():
+        remote_url = _git_remote_url("origin")
+        if remote_url:
+            authed_url = _remote_with_credentials(remote_url, creds)
+            if authed_url:
+                try:
+                    _run(["git", "push", authed_url, tag_name])
+                    return
+                except subprocess.CalledProcessError as push_exc:
+                    if not _git_authentication_missing(push_exc):
+                        raise
+                    auth_error = push_exc
+    # If we reach this point, the original exception is an auth error
+    if auth_error is not None:
+        _raise_git_authentication_error(tag_name, auth_error)
+    raise ReleaseError(
+        "Git authentication failed while pushing tag {tag}. Configure Git credentials and try again.".format(
+            tag=tag_name
+        )
+    )
 
 
 def run_tests(
@@ -541,7 +660,7 @@ def publish(
 
     tag_name = f"v{version}"
     _run(["git", "tag", tag_name])
-    _run(["git", "push", "origin", tag_name])
+    _push_tag(tag_name, package)
     return uploaded
 
 
