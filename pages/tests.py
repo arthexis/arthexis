@@ -1362,6 +1362,12 @@ class ControlNavTests(TestCase):
                 settings.BASE_DIR,
                 "pages",
                 "fixtures",
+                "default__application_pages.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
                 "control__application_ocpp.json",
             ),
             Path(
@@ -1387,6 +1393,18 @@ class ControlNavTests(TestCase):
                 "pages",
                 "fixtures",
                 "control__landing_ocpp_rfid.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "control__module_readme.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "control__landing_readme.json",
             ),
         ]
         call_command("loaddata", *map(str, fixtures))
@@ -1427,6 +1445,84 @@ class ControlNavTests(TestCase):
         self.assertIn("header_references", resp.context)
         self.assertFalse(resp.context["header_references"])
         self.assertNotContains(resp, "https://example.com/hidden")
+
+    def test_readme_pill_visible(self):
+        resp = self.client.get(reverse("pages:readme"))
+        self.assertContains(resp, 'href="/readme/"')
+        self.assertContains(resp, 'badge rounded-pill text-bg-secondary">README')
+
+
+class SatelliteNavTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        role, _ = NodeRole.objects.get_or_create(name="Satellite")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": "localhost",
+                "address": "127.0.0.1",
+                "role": role,
+            },
+        )
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
+        )
+        fixtures = [
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "default__application_pages.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "satellite_box__application_ocpp.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "satellite_box__module_ocpp.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "satellite_box__landing_ocpp_dashboard.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "satellite_box__landing_ocpp_cp_simulator.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "satellite_box__landing_ocpp_rfid.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "satellite_box__module_readme.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "satellite_box__landing_readme.json",
+            ),
+        ]
+        call_command("loaddata", *map(str, fixtures))
+
+    def test_readme_pill_visible(self):
+        resp = self.client.get(reverse("pages:readme"))
+        self.assertContains(resp, 'href="/readme/"')
+        self.assertContains(resp, 'badge rounded-pill text-bg-secondary">README')
 
 
 class PowerNavTests(TestCase):

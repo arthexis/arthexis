@@ -411,6 +411,43 @@ def admin_model_graph(request, app_label: str):
     return TemplateResponse(request, "admin/model_graph.html", context)
 
 
+def _render_readme(request, role):
+    app = (
+        Module.objects.filter(node_role=role, is_default=True)
+        .select_related("application")
+        .first()
+    )
+    app_slug = app.path.strip("/") if app else ""
+    readme_base = (
+        Path(settings.BASE_DIR) / app_slug if app_slug else Path(settings.BASE_DIR)
+    )
+    lang = getattr(request, "LANGUAGE_CODE", "")
+    lang = lang.replace("_", "-").lower()
+    root_base = Path(settings.BASE_DIR)
+    candidates = []
+    if lang:
+        candidates.append(readme_base / f"README.{lang}.md")
+        short = lang.split("-")[0]
+        if short != lang:
+            candidates.append(readme_base / f"README.{short}.md")
+    candidates.append(readme_base / "README.md")
+    if readme_base != root_base:
+        if lang:
+            candidates.append(root_base / f"README.{lang}.md")
+            short = lang.split("-")[0]
+            if short != lang:
+                candidates.append(root_base / f"README.{short}.md")
+        candidates.append(root_base / "README.md")
+    readme_file = next((p for p in candidates if p.exists()), root_base / "README.md")
+    text = readme_file.read_text(encoding="utf-8")
+    html, toc_html = _render_markdown_with_toc(text)
+    title = "README" if readme_file.name.startswith("README") else readme_file.stem
+    context = {"content": html, "title": title, "toc": toc_html}
+    response = render(request, "pages/readme.html", context)
+    patch_vary_headers(response, ["Accept-Language", "Cookie"])
+    return response
+
+
 @landing("Home")
 @never_cache
 def index(request):
@@ -456,40 +493,14 @@ def index(request):
             target_path = landing_obj.path
             if target_path and target_path != request.path:
                 return redirect(target_path)
-    app = (
-        Module.objects.filter(node_role=role, is_default=True)
-        .select_related("application")
-        .first()
-    )
-    app_slug = app.path.strip("/") if app else ""
-    readme_base = (
-        Path(settings.BASE_DIR) / app_slug if app_slug else Path(settings.BASE_DIR)
-    )
-    lang = getattr(request, "LANGUAGE_CODE", "")
-    lang = lang.replace("_", "-").lower()
-    root_base = Path(settings.BASE_DIR)
-    candidates = []
-    if lang:
-        candidates.append(readme_base / f"README.{lang}.md")
-        short = lang.split("-")[0]
-        if short != lang:
-            candidates.append(readme_base / f"README.{short}.md")
-    candidates.append(readme_base / "README.md")
-    if readme_base != root_base:
-        if lang:
-            candidates.append(root_base / f"README.{lang}.md")
-            short = lang.split("-")[0]
-            if short != lang:
-                candidates.append(root_base / f"README.{short}.md")
-        candidates.append(root_base / "README.md")
-    readme_file = next((p for p in candidates if p.exists()), root_base / "README.md")
-    text = readme_file.read_text(encoding="utf-8")
-    html, toc_html = _render_markdown_with_toc(text)
-    title = "README" if readme_file.name.startswith("README") else readme_file.stem
-    context = {"content": html, "title": title, "toc": toc_html}
-    response = render(request, "pages/readme.html", context)
-    patch_vary_headers(response, ["Accept-Language", "Cookie"])
-    return response
+    return _render_readme(request, role)
+
+
+@never_cache
+def readme(request):
+    node = Node.get_local()
+    role = node.role if node else None
+    return _render_readme(request, role)
 
 
 def sitemap(request):
