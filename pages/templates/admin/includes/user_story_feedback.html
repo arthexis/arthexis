@@ -97,10 +97,10 @@
         <button type="submit" class="btn btn-primary w-100 py-2">
           {% trans 'Submit feedback' %}
         </button>
-        <div id="user-story-success" class="alert alert-success user-story-alert mt-3 d-none" role="status">
+        <div id="user-story-success" class="alert alert-success user-story-alert mt-3 d-none" role="status" hidden>
           {% trans 'Thank you! Your feedback has been sent.' %}
         </div>
-        <div id="user-story-error" class="alert alert-danger user-story-alert mt-3 d-none" role="alert"></div>
+        <div id="user-story-error" class="alert alert-danger user-story-alert mt-3 d-none" role="alert" hidden></div>
       </form>
     </div>
   </div>
@@ -132,10 +132,12 @@
     const resetAlerts = () => {
       if (successAlert) {
         successAlert.classList.add('d-none');
+        successAlert.setAttribute('hidden', '');
       }
       if (errorAlert) {
         errorAlert.classList.add('d-none');
         errorAlert.textContent = '';
+        errorAlert.setAttribute('hidden', '');
       }
     };
 
@@ -225,6 +227,7 @@
           setCharCount();
           if (successAlert) {
             successAlert.classList.remove('d-none');
+            successAlert.removeAttribute('hidden');
           }
         } else {
           const data = await response.json().catch(() => ({}));
@@ -240,12 +243,14 @@
           if (errorAlert) {
             errorAlert.textContent = message;
             errorAlert.classList.remove('d-none');
+            errorAlert.removeAttribute('hidden');
           }
         }
       } catch (error) {
         if (errorAlert) {
           errorAlert.textContent = '{% trans "Network error. Please try again." %}';
           errorAlert.classList.remove('d-none');
+          errorAlert.removeAttribute('hidden');
         }
       } finally {
         if (submitBtn) {
