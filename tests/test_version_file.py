@@ -77,3 +77,26 @@ def test_build_runs_custom_test_command(monkeypatch, tmp_path):
     release.build(version="3.1.4", tests=True, package=package)
 
     assert called["command"] == ["pytest", "-k", "unit"]
+
+
+def test_build_uses_custom_module_list(monkeypatch, tmp_path):
+    base = tmp_path
+    (base / "requirements.txt").write_text("")
+    monkeypatch.chdir(base)
+    monkeypatch.setattr(release, "_git_clean", lambda: True)
+
+    captured = {}
+
+    def fake_write_pyproject(package, version, requirements):
+        captured["modules"] = list(package.packages)
+
+    monkeypatch.setattr(release, "_write_pyproject", fake_write_pyproject)
+
+    package = dataclasses.replace(
+        release.DEFAULT_PACKAGE,
+        packages=("gway", "projects"),
+    )
+
+    release.build(version="4.5.6", package=package)
+
+    assert captured["modules"] == ["gway", "projects"]

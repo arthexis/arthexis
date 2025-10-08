@@ -381,6 +381,12 @@ def run_tests(
 
 
 def _write_pyproject(package: Package, version: str, requirements: list[str]) -> None:
+    modules = [str(module).strip() for module in package.packages if str(module).strip()]
+    if not modules:
+        raise ReleaseError(
+            "Package configuration must include at least one Python package to distribute."
+        )
+
     content = {
         "build-system": {
             "requires": ["setuptools", "wheel"],
@@ -405,7 +411,7 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
             },
         },
         "tool": {
-            "setuptools": {"packages": list(package.packages)}
+            "setuptools": {"packages": modules}
         },
     }
 

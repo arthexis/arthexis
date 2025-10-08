@@ -8,7 +8,8 @@ from django.test import SimpleTestCase
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
-from core.models import PackageRelease
+from core.models import Package, PackageRelease
+from core.release import DEFAULT_PACKAGE
 
 
 class PackageReleaseMigrationTests(SimpleTestCase):
@@ -35,3 +36,19 @@ class PackageReleaseMigrationTests(SimpleTestCase):
                     PackageRelease.version_from_migration(expected_migration),
                     version,
                 )
+
+
+class PackageModelTests(SimpleTestCase):
+    def test_to_package_includes_configured_modules(self) -> None:
+        package = Package(packages=["gway", "projects"])
+
+        release_package = package.to_package()
+
+        self.assertEqual(release_package.packages, ("gway", "projects"))
+
+    def test_to_package_falls_back_to_default_modules(self) -> None:
+        package = Package(packages=[])
+
+        release_package = package.to_package()
+
+        self.assertEqual(release_package.packages, DEFAULT_PACKAGE.packages)

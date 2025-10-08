@@ -3126,6 +3126,10 @@ class Package(Entity):
     license = models.CharField(max_length=100, default=DEFAULT_PACKAGE.license)
     repository_url = models.URLField(default=DEFAULT_PACKAGE.repository_url)
     homepage_url = models.URLField(default=DEFAULT_PACKAGE.homepage_url)
+    packages = models.JSONField(
+        default=default_package_modules,
+        help_text="List of Python packages to include in the distribution.",
+    )
     version_path = models.CharField(max_length=255, blank=True, default="")
     dependencies_path = models.CharField(max_length=255, blank=True, default="")
     test_command = models.TextField(blank=True, default="")
@@ -3158,6 +3162,21 @@ class Package(Entity):
 
     def to_package(self) -> ReleasePackage:
         """Return a :class:`ReleasePackage` instance from package data."""
+        raw_modules = self.packages
+        if isinstance(raw_modules, str):
+            modules = [
+                part.strip()
+                for part in raw_modules.replace("\r", "\n").split("\n")
+                if part.strip()
+            ]
+        elif isinstance(raw_modules, (list, tuple, set)):
+            modules = [str(part).strip() for part in raw_modules if str(part).strip()]
+        else:
+            modules = []
+
+        if not modules:
+            modules = default_package_modules()
+
         return ReleasePackage(
             name=self.name,
             description=self.description,
@@ -3167,6 +3186,7 @@ class Package(Entity):
             license=self.license,
             repository_url=self.repository_url,
             homepage_url=self.homepage_url,
+            packages=tuple(modules),
             version_path=self.version_path or None,
             dependencies_path=self.dependencies_path or None,
             test_command=self.test_command or None,
