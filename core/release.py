@@ -102,7 +102,7 @@ class RepositoryTarget:
 
 DEFAULT_PACKAGE = Package(
     name="arthexis",
-    description="Django-based MESH system",
+    description="Power & Energy Infrastructure",
     author="Rafael J. Guillén-Osorio",
     email="tecnologia@gelectriic.com",
     python_requires=">=3.10",
