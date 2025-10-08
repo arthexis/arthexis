@@ -176,7 +176,7 @@ class PyPITokenTests(TestCase):
             license="GPL",
         )
 
-        def fake_run(cmd, capture_output=False, text=False, check=True):
+        def fake_run(cmd, capture_output=False, text=False, check=True, cwd=None):
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
         with (
@@ -200,3 +200,83 @@ class PyPITokenTests(TestCase):
         assert "--repository-url" not in twine_commands[0]
         assert "--repository-url" in twine_commands[1]
         assert "https://upload.github.com/pypi/" in twine_commands[1]
+
+    def test_publish_reports_git_authentication_errors(self):
+        creds = release.Credentials(token="pypi-token")
+        error = subprocess.CalledProcessError(
+            128,
+            ["git", "push", "origin", "v0.1.1"],
+            stderr="fatal: could not read Username for 'https://github.com': No such device or address",
+        )
+
+        def fake_run(cmd, check=True, cwd=None):
+            if cmd[:3] == ["git", "tag", "v0.1.1"]:
+                return subprocess.CompletedProcess(cmd, 0)
+            if cmd == ["git", "push", "origin", "v0.1.1"]:
+                raise error
+            raise AssertionError(f"Unexpected command: {cmd}")
+
+        with (
+            mock.patch("core.release.network_available", return_value=False),
+            mock.patch.object(release.Path, "exists", return_value=True),
+            mock.patch.object(
+                release.Path, "glob", return_value=[Path("dist/fake.whl")]
+            ),
+            mock.patch("core.release._upload_with_retries"),
+            mock.patch("core.release._manager_git_credentials", return_value=None),
+            mock.patch("core.release._run", side_effect=fake_run),
+        ):
+            with self.assertRaises(release.ReleaseError) as exc:
+                release.publish(version="0.1.1", creds=creds)
+
+        message = str(exc.exception)
+        assert "Git authentication failed while pushing tag v0.1.1" in message
+        assert "git push origin v0.1.1" in message
+        assert "could not read Username" in message
+
+    def test_publish_retries_git_push_with_release_manager_credentials(self):
+        creds = release.Credentials(token="pypi-token")
+        git_creds = release.GitCredentials(username="octocat", password="gh-token")
+        error = subprocess.CalledProcessError(
+            128,
+            ["git", "push", "origin", "v0.1.1"],
+            stderr="fatal: could not read Username for 'https://github.com': No such device or address",
+        )
+        commands = []
+
+        def fake_run(cmd, check=True, cwd=None):
+            commands.append(cmd)
+            if cmd[:3] == ["git", "tag", "v0.1.1"]:
+                return subprocess.CompletedProcess(cmd, 0)
+            if cmd == ["git", "push", "origin", "v0.1.1"]:
+                raise error
+            if cmd == ["git", "push", "https://auth.example/repo", "v0.1.1"]:
+                return subprocess.CompletedProcess(cmd, 0)
+            raise AssertionError(f"Unexpected command: {cmd}")
+
+        with (
+            mock.patch("core.release.network_available", return_value=False),
+            mock.patch.object(release.Path, "exists", return_value=True),
+            mock.patch.object(
+                release.Path, "glob", return_value=[Path("dist/fake.whl")]
+            ),
+            mock.patch("core.release._upload_with_retries"),
+            mock.patch("core.release._run", side_effect=fake_run),
+            mock.patch("core.release._manager_git_credentials", return_value=git_creds),
+            mock.patch(
+                "core.release._git_remote_url",
+                return_value="https://github.com/arthexis/arthexis.git",
+            ),
+            mock.patch(
+                "core.release._remote_with_credentials",
+                return_value="https://auth.example/repo",
+            ) as remote_with_credentials,
+        ):
+            uploaded = release.publish(version="0.1.1", creds=creds)
+
+        assert uploaded == ["PyPI"]
+        assert ["git", "push", "origin", "v0.1.1"] in commands
+        assert ["git", "push", "https://auth.example/repo", "v0.1.1"] in commands
+        remote_with_credentials.assert_called_once_with(
+            "https://github.com/arthexis/arthexis.git", git_creds
+        )

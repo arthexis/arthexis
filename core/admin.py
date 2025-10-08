@@ -424,6 +424,7 @@ class ReleaseManagerAdminForm(forms.ModelForm):
         widgets = {
             "pypi_token": forms.Textarea(attrs={"rows": 3, "style": "width: 40em;"}),
             "github_token": forms.Textarea(attrs={"rows": 3, "style": "width: 40em;"}),
+            "git_password": forms.Textarea(attrs={"rows": 3, "style": "width: 40em;"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -448,6 +449,16 @@ class ReleaseManagerAdminForm(forms.ModelForm):
                 "or an equivalent fine-grained token) and paste it here."
             ),
         )
+        self.fields["git_username"].help_text = (
+            "Username used for HTTPS git pushes (for example, your GitHub username)."
+        )
+        self.fields["git_password"].help_text = format_html(
+            "{} <a href=\"{}\" target=\"_blank\" rel=\"noopener noreferrer\">{}</a>{}",
+            "Provide the password or personal access token used for pushing tags. ",
+            "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token",
+            "docs.github.com/.../creating-a-personal-access-token",
+            " If left blank, the GitHub token will be used instead.",
+        )
 
 
 @admin.register(ReleaseManager)
@@ -467,6 +478,8 @@ class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
                     "pypi_token",
                     "pypi_password",
                     "github_token",
+                    "git_username",
+                    "git_password",
                     "pypi_url",
                     "secondary_pypi_url",
                 )
@@ -1249,12 +1262,16 @@ class ReleaseManagerInlineForm(ProfileFormMixin, forms.ModelForm):
             "pypi_username",
             "pypi_token",
             "github_token",
+            "git_username",
+            "git_password",
             "pypi_password",
             "pypi_url",
+            "secondary_pypi_url",
         )
         widgets = {
             "pypi_token": forms.Textarea(attrs={"rows": 3, "style": "width: 40em;"}),
             "github_token": forms.Textarea(attrs={"rows": 3, "style": "width: 40em;"}),
+            "git_password": forms.Textarea(attrs={"rows": 3, "style": "width: 40em;"}),
         }
 
 
