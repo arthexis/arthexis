@@ -2542,6 +2542,55 @@ class UserStorySubmissionTests(TestCase):
         self.assertIsNone(story.owner)
 
 
+class UserStoryIssueAutomationTests(TestCase):
+    def setUp(self):
+        self.lock_dir = Path(settings.BASE_DIR) / "locks"
+        self.lock_dir.mkdir(parents=True, exist_ok=True)
+        self.lock_file = self.lock_dir / "celery.lck"
+
+    def tearDown(self):
+        self.lock_file.unlink(missing_ok=True)
+
+    def test_low_rating_story_enqueues_issue_creation_when_celery_enabled(self):
+        self.lock_file.write_text("")
+
+        with patch("pages.models.create_user_story_github_issue.delay") as mock_delay:
+            story = UserStory.objects.create(
+                path="/feedback/",
+                rating=2,
+                comments="Needs work",
+                take_screenshot=False,
+            )
+
+        mock_delay.assert_called_once_with(story.pk)
+
+    def test_five_star_story_does_not_enqueue_issue(self):
+        self.lock_file.write_text("")
+
+        with patch("pages.models.create_user_story_github_issue.delay") as mock_delay:
+            UserStory.objects.create(
+                path="/feedback/",
+                rating=5,
+                comments="Great!",
+                take_screenshot=True,
+            )
+
+        mock_delay.assert_not_called()
+
+    def test_low_rating_story_skips_when_celery_disabled(self):
+        self.lock_file.unlink(missing_ok=True)
+
+        with patch("pages.models.create_user_story_github_issue.delay") as mock_delay:
+            UserStory.objects.create(
+                path="/feedback/",
+                rating=1,
+                comments="Not good",
+                take_screenshot=False,
+            )
+
+        mock_delay.assert_not_called()
+
+
 class UserStoryAdminActionTests(TestCase):
     def setUp(self):
         self.client = Client()

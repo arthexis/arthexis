@@ -1,3 +1,6 @@
+import logging
+from pathlib import Path
+
 from django.db import models
 from django.db.models import Q
 from core.entity import Entity
@@ -15,6 +18,10 @@ from django.core.validators import MaxLengthValidator, MaxValueValidator, MinVal
 from django.core.exceptions import ValidationError
 
 from core import github_issues
+from .tasks import create_user_story_github_issue
+
+
+logger = logging.getLogger(__name__)
 
 
 class ApplicationManager(models.Manager):
@@ -597,6 +604,35 @@ class UserStory(Entity):
 
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+
+
+def _celery_lock_path() -> Path:
+    return Path(settings.BASE_DIR) / "locks" / "celery.lck"
+
+
+def _is_celery_enabled() -> bool:
+    return _celery_lock_path().exists()
+
+
+@receiver(post_save, sender=UserStory)
+def _queue_low_rating_user_story_issue(
+    sender, instance: UserStory, created: bool, raw: bool, **kwargs
+) -> None:
+    if raw or not created:
+        return
+    if instance.rating >= 5:
+        return
+    if instance.github_issue_url:
+        return
+    if not _is_celery_enabled():
+        return
+
+    try:
+        create_user_story_github_issue.delay(instance.pk)
+    except Exception:  # pragma: no cover - logging only
+        logger.exception(
+            "Failed to enqueue GitHub issue creation for user story %s", instance.pk
+        )
 
 
 @receiver(post_save, sender=Module)
