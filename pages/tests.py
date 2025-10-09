@@ -62,7 +62,7 @@ import shutil
 from io import StringIO
 from django.conf import settings
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 from types import SimpleNamespace
 from django.core.management import call_command
 import re
@@ -1090,6 +1090,45 @@ class SiteAdminScreenshotTests(TestCase):
         link = reverse("admin:nodes_contentsample_change", args=[screenshot.pk])
         self.assertContains(response, link)
         mock_capture.assert_called_once_with("http://testserver/")
+
+
+class SiteAdminReloadFixturesTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="fixture-admin", password="pwd", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "Terminal", "domain": "testserver"}
+        )
+
+    @patch("pages.admin.call_command")
+    def test_reload_site_fixtures_action(self, mock_call_command):
+        response = self.client.post(
+            reverse("admin:pages_siteproxy_changelist"),
+            {"action": "reload_site_fixtures", "_selected_action": [1]},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        fixtures_dir = Path(settings.BASE_DIR) / "core" / "fixtures"
+        expected = sorted(fixtures_dir.glob("references__00_site_*.json"))
+        sigil_fixture = fixtures_dir / "sigil_roots__site.json"
+        if sigil_fixture.exists():
+            expected.append(sigil_fixture)
+
+        expected_calls = [
+            call("loaddata", str(path), verbosity=0) for path in expected
+        ]
+        self.assertEqual(mock_call_command.call_args_list, expected_calls)
+
+        if expected_calls:
+            self.assertContains(
+                response,
+                f"Reloaded {len(expected_calls)} site fixtures.",
+            )
 
 
 class AdminBadgesWebsiteTests(TestCase):

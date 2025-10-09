@@ -16,7 +16,6 @@ import base64
 from django.utils import timezone
 from django.utils.text import slugify
 from django.conf import settings
-from django.contrib.sites.models import Site
 from datetime import timedelta
 import uuid
 import os
@@ -344,7 +343,6 @@ class Node(Entity):
             if terminal:
                 node.role = terminal
                 node.save(update_fields=["role"])
-        Site.objects.get_or_create(domain=hostname, defaults={"name": "host"})
         node.ensure_keys()
         node.notify_peers_of_update()
         return node, created

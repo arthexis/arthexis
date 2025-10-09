@@ -35,7 +35,6 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
 from django.contrib.auth.models import Permission
-from django.contrib.sites.models import Site
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from django.conf import settings
 from django.utils import timezone
@@ -1357,8 +1356,6 @@ class NodeAdminTests(TestCase):
         self.assertTrue(priv.exists())
         self.assertTrue(pub.exists())
         self.assertTrue(node.public_key)
-        self.assertTrue(Site.objects.filter(domain=hostname, name="host").exists())
-
     def test_register_current_updates_existing_node(self):
         hostname = socket.gethostname()
         Node.objects.create(

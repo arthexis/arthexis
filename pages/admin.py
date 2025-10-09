@@ -18,6 +18,7 @@ import ipaddress
 from django.apps import apps as django_apps
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _, ngettext
+from django.core.management import CommandError, call_command
 
 from nodes.models import Node
 from nodes.utils import capture_screenshot, save_screenshot
@@ -76,7 +77,7 @@ class SiteAdmin(DjangoSiteAdmin):
     change_list_template = "admin/sites/site/change_list.html"
     fields = ("domain", "name")
     list_display = ("domain", "name")
-    actions = ["capture_screenshot"]
+    actions = ["capture_screenshot", "reload_site_fixtures"]
 
     @admin.action(description="Capture screenshot")
     def capture_screenshot(self, request, queryset):
@@ -106,6 +107,42 @@ class SiteAdmin(DjangoSiteAdmin):
                     f"{site.domain}: duplicate screenshot; not saved",
                     messages.INFO,
                 )
+
+    @admin.action(description=_("Reload site fixtures"))
+    def reload_site_fixtures(self, request, queryset):
+        fixtures_dir = Path(settings.BASE_DIR) / "core" / "fixtures"
+        fixture_paths = sorted(fixtures_dir.glob("references__00_site_*.json"))
+        sigil_fixture = fixtures_dir / "sigil_roots__site.json"
+        if sigil_fixture.exists():
+            fixture_paths.append(sigil_fixture)
+
+        if not fixture_paths:
+            self.message_user(request, _("No site fixtures found."), messages.WARNING)
+            return None
+
+        loaded = 0
+        for path in fixture_paths:
+            try:
+                call_command("loaddata", str(path), verbosity=0)
+            except CommandError as exc:
+                self.message_user(
+                    request,
+                    _("%(fixture)s: %(error)s")
+                    % {"fixture": path.name, "error": exc},
+                    messages.ERROR,
+                )
+            else:
+                loaded += 1
+
+        if loaded:
+            message = ngettext(
+                "Reloaded %(count)d site fixture.",
+                "Reloaded %(count)d site fixtures.",
+                loaded,
+            ) % {"count": loaded}
+            self.message_user(request, message, messages.SUCCESS)
+
+        return None
 
     def get_urls(self):
         urls = super().get_urls()
