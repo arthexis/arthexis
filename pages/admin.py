@@ -77,7 +77,7 @@ class SiteAdmin(DjangoSiteAdmin):
     change_list_template = "admin/sites/site/change_list.html"
     fields = ("domain", "name")
     list_display = ("domain", "name")
-    actions = ["capture_screenshot", "reload_site_fixtures"]
+    actions = ["capture_screenshot"]
 
     @admin.action(description="Capture screenshot")
     def capture_screenshot(self, request, queryset):
@@ -108,8 +108,7 @@ class SiteAdmin(DjangoSiteAdmin):
                     messages.INFO,
                 )
 
-    @admin.action(description=_("Reload site fixtures"))
-    def reload_site_fixtures(self, request, queryset):
+    def _reload_site_fixtures(self, request):
         fixtures_dir = Path(settings.BASE_DIR) / "core" / "fixtures"
         fixture_paths = sorted(fixtures_dir.glob("references__00_site_*.json"))
         sigil_fixture = fixtures_dir / "sigil_roots__site.json"
@@ -144,6 +143,14 @@ class SiteAdmin(DjangoSiteAdmin):
 
         return None
 
+    def reload_site_fixtures(self, request):
+        if request.method != "POST":
+            return redirect("..")
+
+        self._reload_site_fixtures(request)
+
+        return redirect("..")
+
     def get_urls(self):
         urls = super().get_urls()
         custom = [
@@ -151,7 +158,12 @@ class SiteAdmin(DjangoSiteAdmin):
                 "register-current/",
                 self.admin_site.admin_view(self.register_current),
                 name="pages_siteproxy_register_current",
-            )
+            ),
+            path(
+                "reload-site-fixtures/",
+                self.admin_site.admin_view(self.reload_site_fixtures),
+                name="pages_siteproxy_reload_site_fixtures",
+            ),
         ]
         return custom + urls
 

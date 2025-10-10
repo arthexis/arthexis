@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Sites change list",
+      "url": "/admin/pages/siteproxy/",
+      "request_details": "Ensure the Reload site fixtures button runs the fixture loader without requiring a selection."
+    }
+  }
+]
