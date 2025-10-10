@@ -41,6 +41,49 @@ def _auto_upgrade_log_file(base_dir: Path) -> Path:
     return base_dir / "logs" / AUTO_UPGRADE_LOG_NAME
 
 
+def _open_changelog_entries() -> list[dict[str, str]]:
+    """Return changelog entries that are not yet part of a tagged release."""
+
+    changelog_path = Path("CHANGELOG.rst")
+    try:
+        text = changelog_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return []
+    except OSError:
+        return []
+
+    collecting = False
+    entries: list[dict[str, str]] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not collecting:
+            if line == "Unreleased":
+                collecting = True
+            continue
+
+        if not line:
+            if entries:
+                break
+            continue
+
+        if set(line) == {"-"}:
+            # Underline immediately following the section heading.
+            continue
+
+        if not line.startswith("- "):
+            break
+
+        trimmed = line[2:].strip()
+        if not trimmed:
+            continue
+        parts = trimmed.split(" ", 1)
+        sha = parts[0]
+        message = parts[1] if len(parts) > 1 else ""
+        entries.append({"sha": sha, "message": message})
+
+    return entries
+
+
 @dataclass(frozen=True)
 class SystemField:
     """Metadata describing a single entry on the system admin page."""
@@ -716,6 +759,7 @@ def _system_view(request):
             "title": _("System"),
             "info": info,
             "system_fields": _build_system_fields(info),
+            "open_changelog_entries": _open_changelog_entries(),
         }
     )
     return TemplateResponse(request, "admin/system.html", context)
