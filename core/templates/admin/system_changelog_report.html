@@ -20,10 +20,15 @@
           {% trans "Recalculate changelog" %}
         </button>
       </form>
+      {% if open_changelog_entries %}
+        <button type="submit" class="button" form="changelog-exclude-form" style="display: inline-block; margin-left: 0.5rem;">
+          {% trans "Exclude selected" %}
+        </button>
+      {% endif %}
     </div>
     <h2>{% trans "Open Changelog" %}</h2>
     {% if open_changelog_entries %}
-      <form method="post" class="changelog-exclude-form">
+      <form method="post" class="changelog-exclude-form" id="changelog-exclude-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="exclude">
         <table class="table table-striped">
@@ -50,9 +55,6 @@
           {% endfor %}
           </tbody>
         </table>
-        <div style="text-align: right; margin-top: 0.5rem;">
-          <button type="submit" class="button">{% trans "Exclude selected" %}</button>
-        </div>
       </form>
     {% else %}
       <p class="help">{% trans "No pending changelog entries." %}</p>
