@@ -45,7 +45,7 @@ def select_log_dir(base_dir: Path) -> Path:
         home: Path | None
         try:
             home = Path.home()
-        except (RuntimeError, OSError):
+        except (RuntimeError, OSError, KeyError):
             home = None
 
         candidates.append(default)
