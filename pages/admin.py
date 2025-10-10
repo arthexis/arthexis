@@ -18,6 +18,7 @@ import ipaddress
 from django.apps import apps as django_apps
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _, ngettext
+from django.core.exceptions import PermissionDenied
 from django.core.management import CommandError, call_command
 
 from nodes.models import Node
@@ -146,6 +147,9 @@ class SiteAdmin(DjangoSiteAdmin):
     def reload_site_fixtures(self, request):
         if request.method != "POST":
             return redirect("..")
+
+        if not self.has_change_permission(request):
+            raise PermissionDenied
 
         self._reload_site_fixtures(request)
 
