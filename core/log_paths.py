@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import os
 import sys
+import tempfile
 
 
 def _is_root() -> bool:
@@ -41,16 +42,29 @@ def select_log_dir(base_dir: Path) -> Path:
         candidates.append(Path("/var/log/arthexis"))
         candidates.append(Path("/tmp/arthexis/logs"))
     else:
-        home = Path.home()
-        state_home = _state_home(home)
-        candidates.extend(
-            [
-                default,
-                state_home / "arthexis" / "logs",
-                home / ".arthexis" / "logs",
-                Path("/tmp/arthexis/logs"),
-            ]
-        )
+        home: Path | None
+        try:
+            home = Path.home()
+        except (RuntimeError, OSError, KeyError):
+            home = None
+
+        candidates.append(default)
+
+        tmp_logs = Path(tempfile.gettempdir()) / "arthexis" / "logs"
+
+        if home is not None:
+            state_home = _state_home(home)
+            candidates.extend(
+                [
+                    state_home / "arthexis" / "logs",
+                    home / ".arthexis" / "logs",
+                ]
+            )
+        else:
+            candidates.append(tmp_logs)
+
+        candidates.append(Path("/tmp/arthexis/logs"))
+        candidates.append(tmp_logs)
 
     seen: set[Path] = set()
     ordered_candidates: list[Path] = []
