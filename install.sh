@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 # shellcheck source=scripts/helpers/logging.sh
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/nginx_maintenance.sh
+. "$SCRIPT_DIR/scripts/helpers/nginx_maintenance.sh"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -483,7 +485,11 @@ else
     sudo sed -i '/#DATASETTE_START/,/#DATASETTE_END/d' "$NGINX_CONF"
 fi
 
-if command -v nginx >/dev/null 2>&1; then
+if arthexis_can_manage_nginx; then
+    arthexis_refresh_nginx_maintenance "$SCRIPT_DIR" "$NGINX_CONF"
+fi
+
+if arthexis_ensure_nginx_in_path && command -v nginx >/dev/null 2>&1; then
     sudo nginx -t
     sudo systemctl reload nginx || echo "Warning: nginx reload failed"
 else

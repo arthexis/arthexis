@@ -380,7 +380,12 @@ if [ "$REFRESH_MAINTENANCE" = true ]; then
         echo "--refresh-maintenance cannot be combined with other options" >&2
         usage
     fi
-    arthexis_refresh_nginx_maintenance "$BASE_DIR"
+    if arthexis_can_manage_nginx; then
+        arthexis_refresh_nginx_maintenance "$BASE_DIR"
+    else
+        echo "nginx not detected; unable to refresh maintenance assets" >&2
+        exit 1
+    fi
     exit 0
 fi
 
@@ -491,7 +496,7 @@ elif [ "$AUTO_UPGRADE_MODE" = "disable" ]; then
     run_auto_upgrade_management disable
 fi
 
-if command -v nginx >/dev/null 2>&1; then
+if arthexis_can_manage_nginx; then
     arthexis_refresh_nginx_maintenance "$BASE_DIR" "/etc/nginx/conf.d/arthexis-${NGINX_MODE}.conf"
 fi
 

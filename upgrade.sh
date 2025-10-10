@@ -408,7 +408,7 @@ if [ $VENV_PRESENT -eq 0 ]; then
   exit 0
 fi
 
-if command -v nginx >/dev/null 2>&1; then
+if arthexis_can_manage_nginx; then
   arthexis_refresh_nginx_maintenance "$BASE_DIR" \
     "/etc/nginx/conf.d/arthexis-internal.conf" \
     "/etc/nginx/conf.d/arthexis-public.conf"

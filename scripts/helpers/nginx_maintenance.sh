@@ -1,6 +1,45 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 
+arthexis_ensure_nginx_in_path() {
+  if command -v nginx >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local -a extra_paths=("/usr/sbin" "/usr/local/sbin" "/sbin")
+  local dir
+  for dir in "${extra_paths[@]}"; do
+    if [ -x "$dir/nginx" ]; then
+      case ":$PATH:" in
+        *":$dir:"*) ;;
+        *) PATH="${PATH:+$PATH:}$dir"
+           export PATH ;;
+      esac
+      if command -v nginx >/dev/null 2>&1; then
+        return 0
+      fi
+    fi
+  done
+
+  return 1
+}
+
+arthexis_can_manage_nginx() {
+  if ! command -v sudo >/dev/null 2>&1; then
+    return 1
+  fi
+
+  if arthexis_ensure_nginx_in_path; then
+    return 0
+  fi
+
+  if [ -d /etc/nginx ]; then
+    return 0
+  fi
+
+  return 1
+}
+
 arthexis_refresh_nginx_maintenance() {
   local base_dir="$1"
   shift || true
@@ -58,7 +97,12 @@ arthexis_refresh_nginx_maintenance() {
     fi
   done
 
-  if [ $changed -eq 1 ] && command -v nginx >/dev/null 2>&1; then
+  local nginx_available=0
+  if arthexis_ensure_nginx_in_path && command -v nginx >/dev/null 2>&1; then
+    nginx_available=1
+  fi
+
+  if [ $changed -eq 1 ] && [ $nginx_available -eq 1 ]; then
     if sudo nginx -t; then
       sudo systemctl reload nginx || echo "Warning: nginx reload failed"
     else
