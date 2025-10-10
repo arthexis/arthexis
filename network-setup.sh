@@ -409,6 +409,35 @@ if [[ $INSTALL_WATCHDOG == true ]]; then
 else
     RUN_WIFI_WATCHDOG=false
 fi
+
+require_arthexis_service_autostart() {
+    local service_file="$LOCK_DIR/service.lck"
+    if [[ ! -f "$service_file" ]]; then
+        echo "Error: WiFi watchdog requires the Arthexis suite to be configured as a systemd service." >&2
+        echo "Run ./install.sh with --service or rerun this script with --no-watchdog." >&2
+        exit 1
+    fi
+
+    local service_name
+    service_name="$(<"$service_file")"
+    if [[ -z "$service_name" ]]; then
+        echo "Error: WiFi watchdog requires the Arthexis suite to be configured as a systemd service." >&2
+        echo "Run ./install.sh with --service or rerun this script with --no-watchdog." >&2
+        exit 1
+    fi
+
+    if ! systemctl list-unit-files | grep -Fq "${service_name}.service"; then
+        echo "Error: WiFi watchdog requires the Arthexis systemd service '${service_name}' to exist." >&2
+        echo "Install or enable the service, or rerun this script with --no-watchdog." >&2
+        exit 1
+    fi
+
+    if ! systemctl is-enabled --quiet "$service_name"; then
+        echo "Error: WiFi watchdog requires the Arthexis systemd service '${service_name}' to be enabled." >&2
+        echo "Enable the service with 'systemctl enable ${service_name}' or rerun this script with --no-watchdog." >&2
+        exit 1
+    fi
+}
 ask_step RUN_PACKAGES "Ensure required packages and SSH service"
 if [[ $SKIP_FIREWALL == false ]]; then
     ask_step RUN_FIREWALL "Validate firewall ports"
@@ -512,6 +541,7 @@ EOF
 fi
 
 if [[ $RUN_WIFI_WATCHDOG == true ]]; then
+    require_arthexis_service_autostart
     WATCHDOG_SCRIPT="$BASE_DIR/scripts/wifi-watchdog.sh"
     WATCHDOG_SERVICE="wifi-watchdog"
     WATCHDOG_SERVICE_FILE="/etc/systemd/system/${WATCHDOG_SERVICE}.service"
