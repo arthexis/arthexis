@@ -1,24 +1,95 @@
 import ast
 import inspect
 import textwrap
+from datetime import timedelta
 from pathlib import Path
 
 from django import template
 from django.apps import apps
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 from django.db import connection
 from django.db.models import Count, Q
 from django.db.models import Model
+from django.db.models.signals import post_delete, post_save
 from django.conf import settings
 from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from django.dispatch import receiver
 
 from core.models import Lead, RFID, ReleaseManager, Todo
-from core.entity import Entity
+from core.entity import Entity, user_data_flag_updated
 
 register = template.Library()
+
+
+USER_DATA_MODELS_CACHE_KEY = "pages:future_action_items:user_data_models"
+USER_DATA_MODELS_CACHE_TIMEOUT = getattr(settings, "USER_DATA_MODELS_CACHE_TIMEOUT", 300)
+
+
+def _get_user_data_model_labels() -> set[str]:
+    """Return cached model labels with ``is_user_data`` rows."""
+
+    timeout = getattr(settings, "USER_DATA_MODELS_CACHE_TIMEOUT", USER_DATA_MODELS_CACHE_TIMEOUT)
+    cache_entry: dict[str, object] | None = cache.get(USER_DATA_MODELS_CACHE_KEY)
+    now = timezone.now()
+    if cache_entry:
+        labels = cache_entry.get("labels")
+        timestamp = cache_entry.get("timestamp")
+        if isinstance(labels, (list, tuple, set)) and timestamp is not None:
+            if timeout:
+                if now - timestamp < timedelta(seconds=timeout):
+                    return set(labels)
+            else:
+                return set(labels)
+
+    labels: set[str] = set()
+    for model, _ in admin.site._registry.items():
+        if model is Todo or not issubclass(model, Entity):
+            continue
+        if model.objects.filter(is_user_data=True).exists():
+            labels.add(model._meta.label_lower)
+
+    cache.set(
+        USER_DATA_MODELS_CACHE_KEY,
+        {"labels": list(labels), "timestamp": now},
+        timeout=timeout,
+    )
+    return labels
+
+
+def _invalidate_user_data_model_cache() -> None:
+    cache.delete(USER_DATA_MODELS_CACHE_KEY)
+
+
+@receiver(post_save)
+def _invalidate_user_data_models_on_save(sender, instance, created, update_fields, **kwargs):
+    if not isinstance(instance, Entity):
+        return
+    if created and not instance.is_user_data:
+        return
+    if update_fields and "is_user_data" not in update_fields:
+        return
+    _invalidate_user_data_model_cache()
+
+
+@receiver(post_delete)
+def _invalidate_user_data_models_on_delete(sender, instance, **kwargs):
+    if not isinstance(instance, Entity):
+        return
+    if not instance.is_user_data:
+        return
+    _invalidate_user_data_model_cache()
+
+
+@receiver(user_data_flag_updated)
+def _invalidate_user_data_models_on_update(sender, **kwargs):
+    if not issubclass(sender, Entity):
+        return
+    _invalidate_user_data_model_cache()
 
 
 @register.simple_tag(takes_context=True)
@@ -385,10 +456,11 @@ def future_action_items(context):
             register_model(ct, label, url, priority=1)
 
     # Models with user data
+    user_data_labels = _get_user_data_model_labels()
     for model, model_admin in admin.site._registry.items():
         if model is Todo or not issubclass(model, Entity):
             continue
-        if not model.objects.filter(is_user_data=True).exists():
+        if model._meta.label_lower not in user_data_labels:
             continue
         ct = ContentType.objects.get_for_model(model)
         label = model._meta.verbose_name_plural

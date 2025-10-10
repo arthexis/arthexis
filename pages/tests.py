@@ -16,6 +16,8 @@ from django.contrib.sites.models import Site
 from django.contrib import admin
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import DisallowedHost
+from django.core.cache import cache
+from django.db import connection
 import socket
 from django.db import connection
 from pages.models import (
@@ -2205,6 +2207,40 @@ class FavoriteTests(TestCase):
         self.assertIn("View Histories", labels)
         self.assertNotIn("Packages", labels)
         ContentType.objects.clear_cache()
+
+    def test_future_action_items_limits_user_data_queries(self):
+        from pages.templatetags import admin_extras
+
+        cache.delete(admin_extras.USER_DATA_MODELS_CACHE_KEY)
+        self.addCleanup(cache.delete, admin_extras.USER_DATA_MODELS_CACHE_KEY)
+
+        for index in range(3):
+            NodeRole.objects.create(name=f"CachedRole{index}", is_user_data=True)
+        for index in range(2):
+            NodeFeature.objects.create(
+                slug=f"cached-feature-{index}",
+                display=f"Feature {index}",
+                is_user_data=True,
+            )
+
+        Node.objects.create(
+            hostname="cached-node",
+            address="127.0.0.1",
+            mac_address="AA:BB:CC:DD:EE:FF",
+            port=8000,
+            is_user_data=True,
+        )
+
+        response = self.client.get(reverse("admin:index"))
+        request = response.wsgi_request
+
+        admin_extras.future_action_items({"request": request})
+        with CaptureQueriesContext(connection) as ctx:
+            admin_extras.future_action_items({"request": request})
+
+        # History and favorites queries should remain bounded regardless of the
+        # number of Entity subclasses with user data.
+        self.assertLessEqual(len(ctx.captured_queries), 4)
 
     def test_favorite_ct_id_recreates_missing_content_type(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")

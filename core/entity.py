@@ -4,8 +4,12 @@ import logging
 from django.contrib.auth.models import UserManager as DjangoUserManager
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models
+from django.dispatch import Signal
 
 logger = logging.getLogger(__name__)
+
+
+user_data_flag_updated = Signal()
 
 
 class EntityQuerySet(models.QuerySet):
@@ -16,10 +20,22 @@ class EntityQuerySet(models.QuerySet):
             deleted += 1
         return deleted, {}
 
+    def update(self, **kwargs):
+        invalidate_user_data_cache = "is_user_data" in kwargs
+        updated = super().update(**kwargs)
+        if invalidate_user_data_cache and updated:
+            user_data_flag_updated.send(sender=self.model)
+        return updated
+
 
 class EntityManager(models.Manager):
     def get_queryset(self):
         return EntityQuerySet(self.model, using=self._db).filter(is_deleted=False)
+
+
+class EntityAllManager(models.Manager):
+    def get_queryset(self):
+        return EntityQuerySet(self.model, using=self._db)
 
 
 class EntityUserManager(DjangoUserManager):
@@ -35,7 +51,7 @@ class Entity(models.Model):
     is_deleted = models.BooleanField(default=False, editable=False)
 
     objects = EntityManager()
-    all_objects = models.Manager()
+    all_objects = EntityAllManager()
 
     class Meta:
         abstract = True
