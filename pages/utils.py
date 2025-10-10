@@ -10,3 +10,14 @@ def landing(label=None):
         return view
 
     return decorator
+
+
+def landing_leads_supported() -> bool:
+    """Return ``True`` when the local node supports landing lead tracking."""
+
+    from nodes.models import Node
+
+    node = Node.get_local()
+    if not node:
+        return False
+    return node.has_feature("celery-queue")

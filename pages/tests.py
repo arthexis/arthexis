@@ -708,6 +708,32 @@ class ViewHistoryLoggingTests(TestCase):
     def setUp(self):
         self.client = Client()
         Site.objects.update_or_create(id=1, defaults={"name": "Terminal"})
+        self.addCleanup(self._reset_purge_task)
+
+    def _reset_purge_task(self):
+        from django_celery_beat.models import PeriodicTask
+
+        PeriodicTask.objects.filter(name="pages_purge_landing_leads").delete()
+
+    def _create_local_node(self):
+        node, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": socket.gethostname(),
+                "address": "127.0.0.1",
+                "base_path": settings.BASE_DIR,
+                "port": 8000,
+            },
+        )
+        return node
+
+    def _enable_celery_feature(self):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="celery-queue", defaults={"display": "Celery Queue"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        return node
 
     def test_successful_visit_creates_entry(self):
         resp = self.client.get(reverse("pages:index"))
@@ -752,6 +778,8 @@ class ViewHistoryLoggingTests(TestCase):
         self.assertEqual(user.last_visit_ip_address, "203.0.113.5")
 
     def test_landing_visit_records_lead(self):
+        self._enable_celery_feature()
+
         role = NodeRole.objects.create(name="landing-role")
         application = Application.objects.create(
             name="landing-tests-app", description=""
@@ -775,6 +803,26 @@ class ViewHistoryLoggingTests(TestCase):
         self.assertEqual(lead.landing, landing)
         self.assertEqual(lead.path, "/")
         self.assertEqual(lead.referer, "https://example.com/ref")
+
+    def test_landing_visit_does_not_record_lead_without_celery(self):
+        role = NodeRole.objects.create(name="no-celery-role")
+        application = Application.objects.create(
+            name="no-celery-app", description=""
+        )
+        module = Module.objects.create(
+            node_role=role,
+            application=application,
+            path="/",
+            menu="Landing",
+        )
+        landing = module.landings.get(path="/")
+        landing.label = "No Celery"
+        landing.save(update_fields=["label"])
+
+        resp = self.client.get(reverse("pages:index"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(LandingLead.objects.exists())
 
     def test_disabled_landing_does_not_record_lead(self):
         role = NodeRole.objects.create(name="landing-role-disabled")
@@ -894,6 +942,93 @@ class ViewHistoryAdminTests(TestCase):
         self.assertContains(resp, "viewhistory-mini-module")
         self.assertContains(resp, reverse("admin:pages_viewhistory_traffic_graph"))
         self.assertContains(resp, static("core/vendor/chart.umd.min.js"))
+
+
+class LandingLeadAdminTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="lead_admin", password="pwd", email="lead@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "test", "domain": "testserver"}
+        )
+        self.node, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": socket.gethostname(),
+                "address": "127.0.0.1",
+                "base_path": settings.BASE_DIR,
+                "port": 8000,
+            },
+        )
+        self.node.features.clear()
+        self.addCleanup(self._reset_purge_task)
+
+    def _reset_purge_task(self):
+        from django_celery_beat.models import PeriodicTask
+
+        PeriodicTask.objects.filter(name="pages_purge_landing_leads").delete()
+
+    def test_changelist_warns_without_celery(self):
+        url = reverse("admin:pages_landinglead_changelist")
+        response = self.client.get(url)
+        self.assertContains(
+            response,
+            "Landing leads are not being recorded because Celery is not running on this node.",
+        )
+
+    def test_changelist_no_warning_with_celery(self):
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="celery-queue", defaults={"display": "Celery Queue"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=self.node, feature=feature)
+        url = reverse("admin:pages_landinglead_changelist")
+        response = self.client.get(url)
+        self.assertNotContains(
+            response,
+            "Landing leads are not being recorded because Celery is not running on this node.",
+        )
+
+
+class LandingLeadTaskTests(TestCase):
+    def setUp(self):
+        self.role = NodeRole.objects.create(name="lead-task-role")
+        self.application = Application.objects.create(
+            name="lead-task-app", description=""
+        )
+        self.module = Module.objects.create(
+            node_role=self.role,
+            application=self.application,
+            path="/tasks",
+            menu="Landing",
+        )
+        self.landing = Landing.objects.create(
+            module=self.module,
+            path="/tasks/",
+            label="Tasks Landing",
+            enabled=True,
+        )
+
+    def test_purge_expired_landing_leads_removes_old_records(self):
+        from pages.tasks import purge_expired_landing_leads
+
+        stale = LandingLead.objects.create(landing=self.landing, path="/tasks/")
+        recent = LandingLead.objects.create(landing=self.landing, path="/tasks/")
+        LandingLead.objects.filter(pk=stale.pk).update(
+            created_on=timezone.now() - timedelta(days=31)
+        )
+        LandingLead.objects.filter(pk=recent.pk).update(
+            created_on=timezone.now() - timedelta(days=5)
+        )
+
+        deleted = purge_expired_landing_leads()
+
+        self.assertEqual(deleted, 1)
+        self.assertFalse(LandingLead.objects.filter(pk=stale.pk).exists())
+        self.assertTrue(LandingLead.objects.filter(pk=recent.pk).exists())
 
 
 class LogViewerAdminTests(SimpleTestCase):

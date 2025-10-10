@@ -10,6 +10,7 @@ from django.conf import settings
 from django.urls import Resolver404, resolve
 
 from .models import Landing, LandingLead, ViewHistory
+from .utils import landing_leads_supported
 
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,9 @@ class ViewHistoryMiddleware:
 
     def _record_landing_lead(self, request, landing):
         if request.method.upper() != "GET":
+            return
+
+        if not landing_leads_supported():
             return
 
         referer = request.META.get("HTTP_REFERER", "") or ""
