@@ -1,0 +1,44 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:system' %}">{% trans 'System' %}</a>
+  &rsaquo; {% trans "System Report" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module open-changelog">
+    <h2>{% trans "Open Changelog" %}</h2>
+    <form method="post" class="changelog-refresh-form">
+      {% csrf_token %}
+      <button type="submit" class="button default">
+        {% trans "Recalculate changelog" %}
+      </button>
+    </form>
+    {% if open_changelog_entries %}
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th scope="col">{% trans "Commit" %}</th>
+            <th scope="col">{% trans "Message" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for entry in open_changelog_entries %}
+          <tr>
+            <td><code>{{ entry.sha }}</code></td>
+            <td>{{ entry.message|default:"" }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="help">{% trans "No pending changelog entries." %}</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -10,23 +10,29 @@ import re
 import socket
 import subprocess
 import shutil
+import logging
 from typing import Callable, Iterable, Optional
 
 from django.conf import settings
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.template.response import TemplateResponse
-from django.urls import path
+from django.http import HttpResponseRedirect
+from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.formats import date_format
 from django.utils.translation import gettext_lazy as _
 
 from core.auto_upgrade import AUTO_UPGRADE_TASK_NAME, AUTO_UPGRADE_TASK_PATH
+from core import changelog as changelog_utils
 from utils import revision
 
 
 AUTO_UPGRADE_LOCK_NAME = "auto_upgrade.lck"
 AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
 AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
+
+
+logger = logging.getLogger(__name__)
 
 
 def _auto_upgrade_mode_file(base_dir: Path) -> Path:
@@ -82,6 +88,23 @@ def _open_changelog_entries() -> list[dict[str, str]]:
         entries.append({"sha": sha, "message": message})
 
     return entries
+
+
+def _regenerate_changelog() -> None:
+    """Rebuild the changelog file using recent git commits."""
+
+    changelog_path = Path("CHANGELOG.rst")
+    previous_text = (
+        changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else None
+    )
+    range_spec = changelog_utils.determine_range_spec()
+    sections = changelog_utils.collect_sections(
+        range_spec=range_spec, previous_text=previous_text
+    )
+    content = changelog_utils.render_changelog(sections)
+    if not content.endswith("\n"):
+        content += "\n"
+    changelog_path.write_text(content, encoding="utf-8")
 
 
 @dataclass(frozen=True)
@@ -759,10 +782,44 @@ def _system_view(request):
             "title": _("System"),
             "info": info,
             "system_fields": _build_system_fields(info),
-            "open_changelog_entries": _open_changelog_entries(),
         }
     )
     return TemplateResponse(request, "admin/system.html", context)
+
+
+def _system_report_view(request):
+    if request.method == "POST":
+        try:
+            _regenerate_changelog()
+        except subprocess.CalledProcessError as exc:
+            logger.exception("Changelog regeneration failed")
+            messages.error(
+                request,
+                _("Unable to recalculate the changelog: %(error)s")
+                % {"error": exc.stderr.strip() if exc.stderr else str(exc)},
+            )
+        except Exception as exc:  # pragma: no cover - unexpected failure
+            logger.exception("Unexpected error while regenerating changelog")
+            messages.error(
+                request,
+                _("Unable to recalculate the changelog: %(error)s")
+                % {"error": str(exc)},
+            )
+        else:
+            messages.success(
+                request,
+                _("Successfully recalculated the changelog from recent commits."),
+            )
+        return HttpResponseRedirect(reverse("admin:system-report"))
+
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "title": _("System Report"),
+            "open_changelog_entries": _open_changelog_entries(),
+        }
+    )
+    return TemplateResponse(request, "admin/system_report.html", context)
 
 
 def _system_upgrade_report_view(request):
@@ -784,6 +841,11 @@ def patch_admin_system_view() -> None:
         urls = original_get_urls()
         custom = [
             path("system/", admin.site.admin_view(_system_view), name="system"),
+            path(
+                "system/report/",
+                admin.site.admin_view(_system_report_view),
+                name="system-report",
+            ),
             path(
                 "system/upgrade-report/",
                 admin.site.admin_view(_system_upgrade_report_view),
