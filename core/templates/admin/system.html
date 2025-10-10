@@ -95,5 +95,22 @@
       </tbody>
     </table>
   </div>
+  <div class="module open-changelog">
+    <h2>{% trans "Open Changelog" %}</h2>
+    {% if open_changelog_entries %}
+      <ul>
+        {% for entry in open_changelog_entries %}
+          <li>
+            <code>{{ entry.sha }}</code>
+            {% if entry.message %}
+              {{ entry.message }}
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="help">{% trans "No pending changelog entries." %}</p>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}
