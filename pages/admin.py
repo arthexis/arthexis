@@ -24,6 +24,7 @@ from nodes.models import Node
 from nodes.utils import capture_screenshot, save_screenshot
 
 from .forms import UserManualAdminForm
+from .utils import landing_leads_supported
 
 from .models import (
     SiteBadge,
@@ -285,6 +286,17 @@ class LandingLeadAdmin(EntityModelAdmin):
     list_select_related = ("landing", "landing__module", "landing__module__application")
     ordering = ("-created_on",)
     date_hierarchy = "created_on"
+
+    def changelist_view(self, request, extra_context=None):
+        if not landing_leads_supported():
+            self.message_user(
+                request,
+                _(
+                    "Landing leads are not being recorded because Celery is not running on this node."
+                ),
+                messages.WARNING,
+            )
+        return super().changelist_view(request, extra_context=extra_context)
 
     @admin.display(description=_("Landing"), ordering="landing__label")
     def landing_label(self, obj):

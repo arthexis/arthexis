@@ -1270,6 +1270,29 @@ class NodeRegisterCurrentTests(TestCase):
         NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
 
+    def test_landing_lead_purge_task_syncs_with_celery_feature(self):
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="celery-queue", defaults={"display": "Celery Queue"}
+        )
+        node, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": socket.gethostname(),
+                "address": "127.0.0.1",
+                "port": 9300,
+                "base_path": settings.BASE_DIR,
+            },
+        )
+        PeriodicTask.objects.filter(name="pages_purge_landing_leads").delete()
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        self.assertTrue(
+            PeriodicTask.objects.filter(name="pages_purge_landing_leads").exists()
+        )
+        NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
+        self.assertFalse(
+            PeriodicTask.objects.filter(name="pages_purge_landing_leads").exists()
+        )
+
 
 class CheckRegistrationReadyCommandTests(TestCase):
     def test_command_completes_successfully(self):

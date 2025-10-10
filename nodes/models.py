@@ -743,8 +743,10 @@ class Node(Entity):
     def sync_feature_tasks(self):
         clipboard_enabled = self.has_feature("clipboard-poll")
         screenshot_enabled = self.has_feature("screenshot-poll")
+        celery_enabled = self.is_local and self.has_feature("celery-queue")
         self._sync_clipboard_task(clipboard_enabled)
         self._sync_screenshot_task(screenshot_enabled)
+        self._sync_landing_lead_task(celery_enabled)
 
     def _sync_clipboard_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -785,6 +787,33 @@ class Node(Entity):
                             "method": "AUTO",
                         }
                     ),
+                },
+            )
+        else:
+            PeriodicTask.objects.filter(name=task_name).delete()
+
+    def _sync_landing_lead_task(self, enabled: bool):
+        if not self.is_local:
+            return
+
+        from django_celery_beat.models import CrontabSchedule, PeriodicTask
+
+        task_name = "pages_purge_landing_leads"
+        if enabled:
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute="0",
+                hour="3",
+                day_of_week="*",
+                day_of_month="*",
+                month_of_year="*",
+            )
+            PeriodicTask.objects.update_or_create(
+                name=task_name,
+                defaults={
+                    "crontab": schedule,
+                    "interval": None,
+                    "task": "pages.tasks.purge_expired_landing_leads",
+                    "enabled": True,
                 },
             )
         else:
