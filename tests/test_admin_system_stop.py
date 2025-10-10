@@ -46,16 +46,18 @@ class AdminSystemViewTests(TestCase):
             reverse("admin:system_command", args=["check"])
 
     @mock.patch("core.system._open_changelog_entries", return_value=[{"sha": "abc12345", "message": "Fix bug"}])
-    def test_system_report_page_displays_changelog(self, mock_entries):
+    def test_changelog_report_page_displays_changelog(self, mock_entries):
         self.client.force_login(self.superuser)
-        response = self.client.get(reverse("admin:system-report"))
+        response = self.client.get(reverse("admin:system-changelog-report"))
         self.assertContains(response, "Open Changelog")
         self.assertContains(response, "abc12345")
         mock_entries.assert_called_once_with()
 
     @mock.patch("core.system._regenerate_changelog")
-    def test_system_report_recalculate_triggers_regeneration(self, mock_regenerate):
+    def test_changelog_report_recalculate_triggers_regeneration(self, mock_regenerate):
         self.client.force_login(self.superuser)
-        response = self.client.post(reverse("admin:system-report"), follow=True)
-        self.assertRedirects(response, reverse("admin:system-report"))
+        response = self.client.post(
+            reverse("admin:system-changelog-report"), follow=True
+        )
+        self.assertRedirects(response, reverse("admin:system-changelog-report"))
         mock_regenerate.assert_called_once_with()
