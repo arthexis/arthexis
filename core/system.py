@@ -20,7 +20,7 @@ from django.http import HttpResponseRedirect
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.formats import date_format
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import gettext_lazy as _, ngettext
 
 from core.auto_upgrade import AUTO_UPGRADE_TASK_NAME, AUTO_UPGRADE_TASK_PATH
 from core import changelog as changelog_utils
@@ -88,6 +88,72 @@ def _open_changelog_entries() -> list[dict[str, str]]:
         entries.append({"sha": sha, "message": message})
 
     return entries
+
+
+def _exclude_changelog_entries(shas: Iterable[str]) -> int:
+    """Remove entries matching ``shas`` from the changelog.
+
+    Returns the number of entries removed. Only entries within the
+    ``Unreleased`` section are considered.
+    """
+
+    normalized_shas = {sha.strip() for sha in shas if sha and sha.strip()}
+    if not normalized_shas:
+        return 0
+
+    changelog_path = Path("CHANGELOG.rst")
+    try:
+        text = changelog_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return 0
+
+    lines = text.splitlines(keepends=True)
+    new_lines: list[str] = []
+    collecting = False
+    removed = 0
+
+    for raw_line in lines:
+        stripped = raw_line.strip()
+
+        if not collecting:
+            new_lines.append(raw_line)
+            if stripped == "Unreleased":
+                collecting = True
+            continue
+
+        if not stripped:
+            new_lines.append(raw_line)
+            continue
+
+        if set(stripped) == {"-"}:
+            new_lines.append(raw_line)
+            continue
+
+        if not stripped.startswith("- "):
+            new_lines.append(raw_line)
+            collecting = False
+            continue
+
+        trimmed = stripped[2:].strip()
+        if not trimmed:
+            new_lines.append(raw_line)
+            continue
+
+        sha = trimmed.split(" ", 1)[0]
+        if sha in normalized_shas:
+            removed += 1
+            normalized_shas.remove(sha)
+            continue
+
+        new_lines.append(raw_line)
+
+    if removed:
+        new_text = "".join(new_lines)
+        if not new_text.endswith("\n"):
+            new_text += "\n"
+        changelog_path.write_text(new_text, encoding="utf-8")
+
+    return removed
 
 
 def _regenerate_changelog() -> None:
@@ -789,27 +855,55 @@ def _system_view(request):
 
 def _system_changelog_report_view(request):
     if request.method == "POST":
-        try:
-            _regenerate_changelog()
-        except subprocess.CalledProcessError as exc:
-            logger.exception("Changelog regeneration failed")
-            messages.error(
-                request,
-                _("Unable to recalculate the changelog: %(error)s")
-                % {"error": exc.stderr.strip() if exc.stderr else str(exc)},
-            )
-        except Exception as exc:  # pragma: no cover - unexpected failure
-            logger.exception("Unexpected error while regenerating changelog")
-            messages.error(
-                request,
-                _("Unable to recalculate the changelog: %(error)s")
-                % {"error": str(exc)},
-            )
+        action = request.POST.get("action")
+        if action == "exclude":
+            selected_shas = request.POST.getlist("selected_shas")
+            removed = _exclude_changelog_entries(selected_shas)
+            if removed:
+                messages.success(
+                    request,
+                    ngettext(
+                        "Excluded %(count)d changelog entry.",
+                        "Excluded %(count)d changelog entries.",
+                        removed,
+                    )
+                    % {"count": removed},
+                )
+            else:
+                if selected_shas:
+                    messages.info(
+                        request,
+                        _(
+                            "The selected changelog entries were not found or have already been excluded."
+                        ),
+                    )
+                else:
+                    messages.info(
+                        request,
+                        _("Select at least one changelog entry to exclude."),
+                    )
         else:
-            messages.success(
-                request,
-                _("Successfully recalculated the changelog from recent commits."),
-            )
+            try:
+                _regenerate_changelog()
+            except subprocess.CalledProcessError as exc:
+                logger.exception("Changelog regeneration failed")
+                messages.error(
+                    request,
+                    _("Unable to recalculate the changelog: %(error)s")
+                    % {"error": exc.stderr.strip() if exc.stderr else str(exc)},
+                )
+            except Exception as exc:  # pragma: no cover - unexpected failure
+                logger.exception("Unexpected error while regenerating changelog")
+                messages.error(
+                    request,
+                    _("Unable to recalculate the changelog: %(error)s")
+                    % {"error": str(exc)},
+                )
+            else:
+                messages.success(
+                    request,
+                    _("Successfully recalculated the changelog from recent commits."),
+                )
         return HttpResponseRedirect(reverse("admin:system-changelog-report"))
 
     context = admin.site.each_context(request)
