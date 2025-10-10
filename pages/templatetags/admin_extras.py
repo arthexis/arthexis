@@ -21,7 +21,7 @@ from django.utils.translation import gettext_lazy as _
 from django.dispatch import receiver
 
 from core.models import Lead, RFID, ReleaseManager, Todo
-from core.entity import Entity
+from core.entity import Entity, user_data_flag_updated
 
 register = template.Library()
 
@@ -81,6 +81,13 @@ def _invalidate_user_data_models_on_delete(sender, instance, **kwargs):
     if not isinstance(instance, Entity):
         return
     if not instance.is_user_data:
+        return
+    _invalidate_user_data_model_cache()
+
+
+@receiver(user_data_flag_updated)
+def _invalidate_user_data_models_on_update(sender, **kwargs):
+    if not issubclass(sender, Entity):
         return
     _invalidate_user_data_model_cache()
 
