@@ -111,6 +111,13 @@
   {{ block.super }}
   <script>
     document.addEventListener('DOMContentLoaded', () => {
+      const content = document.getElementById('log-viewer-content');
+      if (content) {
+        window.requestAnimationFrame(() => {
+          content.scrollTop = content.scrollHeight;
+        });
+      }
+
       const copyButton = document.getElementById('log-viewer-copy');
       if (!copyButton) {
         return;
