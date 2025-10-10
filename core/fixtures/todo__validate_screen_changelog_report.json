@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Changelog Report",
+      "url": "/admin/system/changelog-report/",
+      "request_details": "Verify the Changelog Report link, breadcrumbs, and recalculation button placement all reflect the updated changelog layout."
+    }
+  }
+]

@@ -5,20 +5,22 @@
 <div class="breadcrumbs">
   <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
   &rsaquo; <a href="{% url 'admin:system' %}">{% trans 'System' %}</a>
-  &rsaquo; {% trans "System Report" %}
+  &rsaquo; {% trans "Changelog Report" %}
 </div>
 {% endblock %}
 
 {% block content %}
 <div id="content-main">
   <div class="module open-changelog">
+    <div class="changelog-refresh-actions" style="text-align: right; margin-bottom: 0.5rem;">
+      <form method="post" class="changelog-refresh-form">
+        {% csrf_token %}
+        <button type="submit" class="button default">
+          {% trans "Recalculate changelog" %}
+        </button>
+      </form>
+    </div>
     <h2>{% trans "Open Changelog" %}</h2>
-    <form method="post" class="changelog-refresh-form">
-      {% csrf_token %}
-      <button type="submit" class="button default">
-        {% trans "Recalculate changelog" %}
-      </button>
-    </form>
     {% if open_changelog_entries %}
       <table class="table table-striped">
         <thead>

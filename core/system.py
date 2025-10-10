@@ -787,7 +787,7 @@ def _system_view(request):
     return TemplateResponse(request, "admin/system.html", context)
 
 
-def _system_report_view(request):
+def _system_changelog_report_view(request):
     if request.method == "POST":
         try:
             _regenerate_changelog()
@@ -810,16 +810,16 @@ def _system_report_view(request):
                 request,
                 _("Successfully recalculated the changelog from recent commits."),
             )
-        return HttpResponseRedirect(reverse("admin:system-report"))
+        return HttpResponseRedirect(reverse("admin:system-changelog-report"))
 
     context = admin.site.each_context(request)
     context.update(
         {
-            "title": _("System Report"),
+            "title": _("Changelog Report"),
             "open_changelog_entries": _open_changelog_entries(),
         }
     )
-    return TemplateResponse(request, "admin/system_report.html", context)
+    return TemplateResponse(request, "admin/system_changelog_report.html", context)
 
 
 def _system_upgrade_report_view(request):
@@ -842,9 +842,9 @@ def patch_admin_system_view() -> None:
         custom = [
             path("system/", admin.site.admin_view(_system_view), name="system"),
             path(
-                "system/report/",
-                admin.site.admin_view(_system_report_view),
-                name="system-report",
+                "system/changelog-report/",
+                admin.site.admin_view(_system_changelog_report_view),
+                name="system-changelog-report",
             ),
             path(
                 "system/upgrade-report/",
