@@ -1,6 +1,7 @@
 {% load i18n admin_extras favorites %}
 
 {% if app_list %}
+  {% favorite_map as favorites_map %}
   {% celery_feature_enabled as celery_enabled %}
   {% for app in app_list %}
     {% if app.app_label != 'django_celery_beat' or celery_enabled %}
@@ -20,7 +21,7 @@
         {% for model in app.models %}
           {% with model_name=model.object_name|lower %}
             {% favorite_ct_id app.app_label model.object_name as ct_id %}
-            {% favorite_get ct_id as fav %}
+            {% favorite_from_map favorites_map ct_id as fav %}
             <tr class="model-{{ model_name }}{% if model.admin_url in request.path|urlencode %} current-model{% endif %}">
               <th scope="row" id="{{ app.app_label }}-{{ model_name }}">
                 {% if ct_id %}

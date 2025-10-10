@@ -7,6 +7,7 @@ import django
 django.setup()
 
 from django.test import Client, RequestFactory, TestCase, SimpleTestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.templatetags.static import static
 from urllib.parse import quote
@@ -16,6 +17,7 @@ from django.contrib import admin
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import DisallowedHost
 import socket
+from django.db import connection
 from pages.models import (
     Application,
     Landing,
@@ -2305,6 +2307,62 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "Release manager tasks")
         self.assertContains(resp, todo.request)
+
+
+class AdminIndexQueryRegressionTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.client = Client()
+        self.user = User.objects.create_superuser(
+            username="queryadmin", password="pwd", email="query@example.com"
+        )
+        self.client.force_login(self.user)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "test", "domain": "testserver"}
+        )
+        favorite_cts = [
+            ContentType.objects.get_for_model(Application),
+            ContentType.objects.get_for_model(Landing),
+        ]
+        for ct in favorite_cts:
+            Favorite.objects.create(user=self.user, content_type=ct)
+
+    def _render_admin_and_count_queries(self):
+        url = reverse("admin:index")
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        sql_statements = [query["sql"].lower() for query in ctx.captured_queries]
+        ct_queries = [sql for sql in sql_statements if '"django_content_type"' in sql]
+        favorite_queries = [sql for sql in sql_statements if '"pages_favorite"' in sql]
+        return len(ct_queries), len(favorite_queries)
+
+    def test_admin_index_queries_constant_with_more_models(self):
+        site = admin.site
+        original_registry = site._registry.copy()
+        registry_items = list(original_registry.items())
+        if len(registry_items) < 2:
+            self.skipTest("Not enough registered admin models for regression test")
+
+        for model in original_registry.keys():
+            ContentType.objects.get_for_model(model)
+
+        try:
+            site._registry = dict(registry_items[:1])
+            baseline_ct_queries, baseline_favorite_queries = (
+                self._render_admin_and_count_queries()
+            )
+
+            expanded_limit = min(len(registry_items), 5)
+            site._registry = dict(registry_items[:expanded_limit])
+            expanded_ct_queries, expanded_favorite_queries = (
+                self._render_admin_and_count_queries()
+            )
+        finally:
+            site._registry = original_registry
+
+        self.assertEqual(expanded_ct_queries, baseline_ct_queries)
+        self.assertEqual(expanded_favorite_queries, baseline_favorite_queries)
 
 
 class AdminActionListTests(TestCase):
