@@ -303,6 +303,47 @@ def _git_remote_url(remote: str = "origin") -> Optional[str]:
     return (proc.stdout or "").strip() or None
 
 
+def _git_tag_commit(tag_name: str) -> Optional[str]:
+    """Return the commit referenced by ``tag_name`` in the local repository."""
+
+    for ref in (f"{tag_name}^{{}}", tag_name):
+        proc = subprocess.run(
+            ["git", "rev-parse", ref],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode == 0:
+            commit = (proc.stdout or "").strip()
+            if commit:
+                return commit
+    return None
+
+
+def _git_remote_tag_commit(remote: str, tag_name: str) -> Optional[str]:
+    """Return the commit referenced by ``tag_name`` on ``remote`` if it exists."""
+
+    proc = subprocess.run(
+        ["git", "ls-remote", "--tags", remote, tag_name],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+
+    commit = None
+    for line in (proc.stdout or "").splitlines():
+        parts = line.strip().split()
+        if len(parts) != 2:
+            continue
+        sha, ref = parts
+        commit = sha
+        if ref.endswith("^{}"):
+            return sha
+    return commit
+
+
 def _remote_with_credentials(url: str, creds: GitCredentials) -> Optional[str]:
     if not creds.has_auth():
         return None
@@ -335,6 +376,17 @@ def _push_tag(tag_name: str, package: Package) -> None:
         _run(["git", "push", "origin", tag_name])
         return
     except subprocess.CalledProcessError as exc:
+        remote_commit = _git_remote_tag_commit("origin", tag_name)
+        local_commit = _git_tag_commit(tag_name)
+        if remote_commit:
+            if local_commit and remote_commit == local_commit:
+                # Another process already pushed the tag; treat as success.
+                return
+            message = (
+                "Git rejected tag {tag} because it already exists on the remote. "
+                "Delete the remote tag or choose a new version before retrying."
+            ).format(tag=tag_name)
+            raise ReleaseError(message) from exc
         if not _git_authentication_missing(exc):
             raise
         auth_error = exc
