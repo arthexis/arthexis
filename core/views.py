@@ -859,7 +859,12 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
             for f in files
             if "fixtures" in Path(f).parts and Path(f).suffix == ".json"
         ]
-        if files and len(fixture_files) == len(files):
+        changelog_dirty = "CHANGELOG.rst" in files
+        allowed_dirty_files = set(fixture_files)
+        if changelog_dirty:
+            allowed_dirty_files.add("CHANGELOG.rst")
+
+        if files and len(allowed_dirty_files) == len(files):
             summary = []
             for f in fixture_files:
                 path = Path(f)
@@ -887,15 +892,36 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
                 summary.append({"path": f, "count": count, "models": models})
 
             ctx["fixtures"] = summary
+            commit_paths = [*fixture_files]
+            if changelog_dirty:
+                commit_paths.append("CHANGELOG.rst")
+
+            log_fragments = []
+            if fixture_files:
+                log_fragments.append(
+                    "fixtures " + ", ".join(fixture_files)
+                )
+            if changelog_dirty:
+                log_fragments.append("CHANGELOG.rst")
+            details = ", ".join(log_fragments) if log_fragments else "changes"
             _append_log(
                 log_path,
-                "Committing fixture changes: " + ", ".join(fixture_files),
+                f"Committing release prep changes: {details}",
             )
-            subprocess.run(["git", "add", *fixture_files], check=True)
-            subprocess.run(
-                ["git", "commit", "-m", "chore: update fixtures"], check=True
+            subprocess.run(["git", "add", *commit_paths], check=True)
+
+            if changelog_dirty and fixture_files:
+                commit_message = "chore: sync release fixtures and changelog"
+            elif changelog_dirty:
+                commit_message = "docs: refresh changelog"
+            else:
+                commit_message = "chore: update fixtures"
+
+            subprocess.run(["git", "commit", "-m", commit_message], check=True)
+            _append_log(
+                log_path,
+                f"Release prep changes committed ({commit_message})",
             )
-            _append_log(log_path, "Fixture changes committed")
             ctx.pop("dirty_files", None)
             ctx.pop("dirty_commit_error", None)
             retry_sync = True

@@ -1051,6 +1051,79 @@ class ReleaseProcessTests(TestCase):
         requests_get.assert_called_once()
         sync_main.assert_called_once_with(Path("rel.log"))
 
+    @mock.patch("core.views.release_utils.network_available", return_value=False)
+    @mock.patch("core.views._collect_dirty_files")
+    @mock.patch("core.views._sync_with_origin_main")
+    @mock.patch("core.views.subprocess.run")
+    @mock.patch("core.views.release_utils._git_clean", return_value=False)
+    def test_step_check_commits_release_prep_changes(
+        self,
+        git_clean,
+        subprocess_run,
+        sync_main,
+        collect_dirty,
+        network_available,
+    ):
+        fixture_path = next(Path("core/fixtures").glob("releases__*.json"))
+        collect_dirty.return_value = [
+            {
+                "path": str(fixture_path),
+                "status": "M",
+                "status_label": "Modified",
+            },
+            {"path": "CHANGELOG.rst", "status": "M", "status_label": "Modified"},
+        ]
+        subprocess_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
+
+        ctx: dict[str, object] = {}
+        _step_check_version(self.release, ctx, Path("rel.log"))
+
+        add_call = mock.call(
+            ["git", "add", str(fixture_path), "CHANGELOG.rst"],
+            check=True,
+        )
+        commit_call = mock.call(
+            [
+                "git",
+                "commit",
+                "-m",
+                "chore: sync release fixtures and changelog",
+            ],
+            check=True,
+        )
+        self.assertIn(add_call, subprocess_run.call_args_list)
+        self.assertIn(commit_call, subprocess_run.call_args_list)
+        self.assertNotIn("dirty_files", ctx)
+
+    @mock.patch("core.views.release_utils.network_available", return_value=False)
+    @mock.patch("core.views._collect_dirty_files")
+    @mock.patch("core.views._sync_with_origin_main")
+    @mock.patch("core.views.subprocess.run")
+    @mock.patch("core.views.release_utils._git_clean", return_value=False)
+    def test_step_check_commits_changelog_only(
+        self,
+        git_clean,
+        subprocess_run,
+        sync_main,
+        collect_dirty,
+        network_available,
+    ):
+        collect_dirty.return_value = [
+            {"path": "CHANGELOG.rst", "status": "M", "status_label": "Modified"}
+        ]
+        subprocess_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
+
+        ctx: dict[str, object] = {}
+        _step_check_version(self.release, ctx, Path("rel.log"))
+
+        subprocess_run.assert_any_call(
+            ["git", "add", "CHANGELOG.rst"], check=True
+        )
+        subprocess_run.assert_any_call(
+            ["git", "commit", "-m", "docs: refresh changelog"], check=True
+        )
+        self.assertNotIn("dirty_files", ctx)
+
     @mock.patch("core.models.PackageRelease.dump_fixture")
     def test_save_does_not_dump_fixture(self, dump):
         self.release.pypi_url = "https://example.com"
