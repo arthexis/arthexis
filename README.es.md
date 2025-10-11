@@ -2,7 +2,6 @@
 
 [![Cobertura](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![Cobertura OCPP 1.6](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md)
 
-Para obtener orientación sobre la codificación, consulta [AGENTS.md](AGENTS.md).
 
 ## Propósito
 
