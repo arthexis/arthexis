@@ -108,6 +108,19 @@ class RFIDBackend:
             .first()
         )
         if account:
+            post_command = (getattr(tag, "post_auth_command", "") or "").strip()
+            if post_command:
+                env = os.environ.copy()
+                env["RFID_VALUE"] = rfid_value
+                env["RFID_LABEL_ID"] = str(tag.pk)
+                with contextlib.suppress(Exception):
+                    subprocess.Popen(
+                        post_command,
+                        shell=True,
+                        env=env,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
             return account.user
         return None
 

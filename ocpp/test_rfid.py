@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import subprocess
 import sys
 import types
 from datetime import datetime, timezone as dt_timezone
@@ -394,10 +395,11 @@ class ValidateRfidValueTests(SimpleTestCase):
 
     @patch("ocpp.rfid.reader.timezone.now")
     @patch("ocpp.rfid.reader.notify_async")
+    @patch("ocpp.rfid.reader.subprocess.Popen")
     @patch("ocpp.rfid.reader.subprocess.run")
     @patch("ocpp.rfid.reader.RFID.register_scan")
     def test_external_command_success(
-        self, mock_register, mock_run, mock_notify, mock_now
+        self, mock_register, mock_run, mock_popen, mock_notify, mock_now
     ):
         fake_now = object()
         mock_now.return_value = fake_now
@@ -414,6 +416,7 @@ class ValidateRfidValueTests(SimpleTestCase):
         mock_run.return_value = types.SimpleNamespace(
             returncode=0, stdout="ok\n", stderr=""
         )
+        mock_popen.return_value = object()
 
         result = validate_rfid_value("abcd1234")
 
@@ -424,6 +427,7 @@ class ValidateRfidValueTests(SimpleTestCase):
         env = run_kwargs.get("env", {})
         self.assertEqual(env.get("RFID_VALUE"), "ABCD1234")
         self.assertEqual(env.get("RFID_LABEL_ID"), "1")
+        mock_popen.assert_not_called()
         mock_notify.assert_called_once_with("RFID 1 OK", "ABCD1234 B")
         tag.save.assert_called_once_with(update_fields=["last_seen_on"])
         self.assertTrue(result["allowed"])
@@ -436,10 +440,11 @@ class ValidateRfidValueTests(SimpleTestCase):
 
     @patch("ocpp.rfid.reader.timezone.now")
     @patch("ocpp.rfid.reader.notify_async")
+    @patch("ocpp.rfid.reader.subprocess.Popen")
     @patch("ocpp.rfid.reader.subprocess.run")
     @patch("ocpp.rfid.reader.RFID.register_scan")
     def test_external_command_failure_blocks_tag(
-        self, mock_register, mock_run, mock_notify, mock_now
+        self, mock_register, mock_run, mock_popen, mock_notify, mock_now
     ):
         fake_now = object()
         mock_now.return_value = fake_now
@@ -456,6 +461,7 @@ class ValidateRfidValueTests(SimpleTestCase):
         mock_run.return_value = types.SimpleNamespace(
             returncode=1, stdout="", stderr="failure"
         )
+        mock_popen.return_value = object()
 
         result = validate_rfid_value("ffff")
 
@@ -469,6 +475,42 @@ class ValidateRfidValueTests(SimpleTestCase):
         self.assertEqual(output.get("stdout"), "")
         self.assertEqual(output.get("stderr"), "failure")
         self.assertEqual(output.get("error"), "")
+        mock_popen.assert_not_called()
+
+    @patch("ocpp.rfid.reader.timezone.now")
+    @patch("ocpp.rfid.reader.notify_async")
+    @patch("ocpp.rfid.reader.subprocess.Popen")
+    @patch("ocpp.rfid.reader.subprocess.run")
+    @patch("ocpp.rfid.reader.RFID.register_scan")
+    def test_post_command_runs_after_success(
+        self, mock_register, mock_run, mock_popen, mock_notify, mock_now
+    ):
+        fake_now = object()
+        mock_now.return_value = fake_now
+        tag = MagicMock()
+        tag.pk = 3
+        tag.label_id = 3
+        tag.allowed = True
+        tag.external_command = ""
+        tag.post_auth_command = "echo done"
+        tag.color = "B"
+        tag.released = False
+        tag.reference = None
+        tag.kind = RFID.CLASSIC
+        mock_register.return_value = (tag, False)
+        result = validate_rfid_value("abcdef")
+
+        mock_run.assert_not_called()
+        mock_popen.assert_called_once()
+        args, kwargs = mock_popen.call_args
+        self.assertEqual(args[0], "echo done")
+        env = kwargs.get("env", {})
+        self.assertEqual(env.get("RFID_VALUE"), "ABCDEF")
+        self.assertEqual(env.get("RFID_LABEL_ID"), "3")
+        self.assertIs(kwargs.get("stdout"), subprocess.DEVNULL)
+        self.assertIs(kwargs.get("stderr"), subprocess.DEVNULL)
+        self.assertTrue(result["allowed"])
+        mock_notify.assert_called_once_with("RFID 3 OK", "ABCDEF B")
 
 
 class CardTypeDetectionTests(TestCase):
