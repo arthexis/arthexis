@@ -365,6 +365,45 @@ class RFIDLoginTests(TestCase):
         self.assertEqual(response.status_code, 401)
         mock_run.assert_called_once()
 
+    @patch("core.backends.subprocess.Popen")
+    def test_rfid_login_post_command_runs_after_success(self, mock_popen):
+        tag = self.account.rfids.first()
+        tag.post_auth_command = "echo welcome"
+        tag.save(update_fields=["post_auth_command"])
+
+        response = self.client.post(
+            reverse("rfid-login"),
+            data={"rfid": "CARD123"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_popen.assert_called_once()
+        args, kwargs = mock_popen.call_args
+        self.assertEqual(args[0], "echo welcome")
+        self.assertTrue(kwargs.get("shell"))
+        env = kwargs.get("env", {})
+        self.assertEqual(env.get("RFID_VALUE"), "CARD123")
+        self.assertEqual(env.get("RFID_LABEL_ID"), str(tag.pk))
+        self.assertIs(kwargs.get("stdout"), subprocess.DEVNULL)
+        self.assertIs(kwargs.get("stderr"), subprocess.DEVNULL)
+
+    @patch("core.backends.subprocess.Popen")
+    def test_rfid_login_post_command_skipped_on_failure(self, mock_popen):
+        tag = self.account.rfids.first()
+        tag.post_auth_command = "echo welcome"
+        tag.allowed = False
+        tag.save(update_fields=["post_auth_command", "allowed"])
+
+        response = self.client.post(
+            reverse("rfid-login"),
+            data={"rfid": "CARD123"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 401)
+        mock_popen.assert_not_called()
+
 
 class RFIDBatchApiTests(TestCase):
     def setUp(self):
@@ -387,6 +426,8 @@ class RFIDBatchApiTests(TestCase):
                         "rfid": "CARD999",
                         "custom_label": "Main Tag",
                         "energy_accounts": [self.account.id],
+                        "external_command": "",
+                        "post_auth_command": "",
                         "allowed": True,
                         "color": "B",
                         "released": False,
@@ -406,6 +447,8 @@ class RFIDBatchApiTests(TestCase):
                         "rfid": "CARD111",
                         "custom_label": "",
                         "energy_accounts": [],
+                        "external_command": "",
+                        "post_auth_command": "",
                         "allowed": True,
                         "color": "W",
                         "released": False,
@@ -426,6 +469,8 @@ class RFIDBatchApiTests(TestCase):
                         "rfid": "CARD112",
                         "custom_label": "",
                         "energy_accounts": [],
+                        "external_command": "",
+                        "post_auth_command": "",
                         "allowed": True,
                         "color": "B",
                         "released": True,
@@ -441,6 +486,8 @@ class RFIDBatchApiTests(TestCase):
                     "rfid": "A1B2C3D4",
                     "custom_label": "Imported Tag",
                     "energy_accounts": [self.account.id],
+                    "external_command": "echo pre",
+                    "post_auth_command": "echo post",
                     "allowed": True,
                     "color": "W",
                     "released": True,
@@ -459,6 +506,8 @@ class RFIDBatchApiTests(TestCase):
                 rfid="A1B2C3D4",
                 custom_label="Imported Tag",
                 energy_accounts=self.account,
+                external_command="echo pre",
+                post_auth_command="echo post",
                 color=RFID.WHITE,
                 released=True,
             ).exists()

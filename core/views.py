@@ -1521,6 +1521,7 @@ def rfid_batch(request):
                 "custom_label": t.custom_label,
                 "energy_accounts": list(t.energy_accounts.values_list("id", flat=True)),
                 "external_command": t.external_command,
+                "post_auth_command": t.post_auth_command,
                 "allowed": t.allowed,
                 "color": t.color,
                 "released": t.released,
@@ -1556,6 +1557,11 @@ def rfid_batch(request):
                 external_command = ""
             else:
                 external_command = external_command.strip()
+            post_auth_command = row.get("post_auth_command")
+            if not isinstance(post_auth_command, str):
+                post_auth_command = ""
+            else:
+                post_auth_command = post_auth_command.strip()
 
             tag, _ = RFID.objects.update_or_create(
                 rfid=rfid.upper(),
@@ -1565,6 +1571,7 @@ def rfid_batch(request):
                     "released": released,
                     "custom_label": custom_label,
                     "external_command": external_command,
+                    "post_auth_command": post_auth_command,
                 },
             )
             if energy_accounts:

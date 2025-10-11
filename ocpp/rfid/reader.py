@@ -135,6 +135,24 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
             command_details["stderr"] = getattr(completed, "stderr", "") or ""
         allowed = allowed and command_allowed
 
+    post_command = getattr(tag, "post_auth_command", "")
+    if allowed and isinstance(post_command, str):
+        post = post_command.strip()
+        if post:
+            env = os.environ.copy()
+            env["RFID_VALUE"] = rfid
+            env["RFID_LABEL_ID"] = str(tag.pk)
+            try:
+                subprocess.Popen(
+                    post,
+                    shell=True,
+                    env=env,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception:  # pragma: no cover - best effort fire and forget
+                pass
+
     result = {
         "rfid": rfid,
         "label_id": tag.pk,

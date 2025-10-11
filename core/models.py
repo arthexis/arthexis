@@ -1816,6 +1816,11 @@ class RFID(Entity):
         blank=True,
         help_text="Optional command executed during validation.",
     )
+    post_auth_command = models.TextField(
+        default="",
+        blank=True,
+        help_text="Optional command executed after successful validation.",
+    )
     BLACK = "B"
     WHITE = "W"
     BLUE = "U"
