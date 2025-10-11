@@ -110,3 +110,25 @@ class RFIDAdminPrintLabelsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "No RFID cards marked as valid are available to print.")
+
+    def test_print_release_form_returns_pdf_response(self):
+        tag1 = RFID.objects.create(rfid="REL00001", released=True)
+        tag2 = RFID.objects.create(rfid="REL00002", custom_label="Front Desk", released=True)
+
+        response = self.client.post(
+            self.url,
+            data={
+                "action": "print_release_form",
+                ACTION_CHECKBOX_NAME: [str(tag1.pk), str(tag2.pk)],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertTrue(
+            response["Content-Disposition"].startswith(
+                "attachment; filename=rfid-release-form"
+            )
+        )
+        self.assertTrue(response.content.startswith(b"%PDF"))
+        self.assertGreater(len(response.content), 500)
