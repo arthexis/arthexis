@@ -55,6 +55,8 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.graphics import renderPDF
 from reportlab.graphics.barcode import qr
 from reportlab.graphics.shapes import Drawing
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from ocpp.models import Transaction
 from ocpp.rfid.utils import build_mode_toggle
 from nodes.models import EmailOutbox
@@ -2906,6 +2908,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     actions = [
         "scan_rfids",
         "print_card_labels",
+        "print_release_form",
         "copy_rfids",
         "toggle_selected_user_data",
     ]
@@ -3261,6 +3264,130 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         )
 
     print_card_labels.short_description = _("Print Card Labels")
+
+    def _render_release_form(self, request, queryset, empty_message, redirect_url):
+        tags = list(queryset)
+        if not tags:
+            self.message_user(request, empty_message, level=messages.WARNING)
+            return HttpResponseRedirect(redirect_url)
+
+        buffer = BytesIO()
+        document = SimpleDocTemplate(
+            buffer,
+            pagesize=letter,
+            leftMargin=36,
+            rightMargin=36,
+            topMargin=72,
+            bottomMargin=36,
+        )
+        document.title = "RFID Release Form"
+
+        styles = getSampleStyleSheet()
+        story = []
+        story.append(Paragraph(_("RFID Release Form"), styles["Title"]))
+        story.append(Spacer(1, 12))
+
+        generated_on = timezone.localtime()
+        generated_text = Paragraph(
+            _("Generated on: %(date)s")
+            % {"date": generated_on.strftime("%Y-%m-%d %H:%M %Z")},
+            styles["Normal"],
+        )
+        story.append(generated_text)
+        story.append(Spacer(1, 24))
+
+        table_data = [
+            [
+                _("Label"),
+                _("RFID"),
+                _("Custom label"),
+                _("Color"),
+                _("Type"),
+            ]
+        ]
+
+        for tag in tags:
+            table_data.append(
+                [
+                    tag.label_id or "",
+                    tag.rfid or "",
+                    tag.custom_label or "",
+                    tag.get_color_display() if tag.color else "",
+                    tag.get_kind_display() if tag.kind else "",
+                ]
+            )
+
+        table = Table(table_data, repeatRows=1, hAlign="LEFT")
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+                ]
+            )
+        )
+
+        story.append(table)
+        story.append(Spacer(1, 36))
+
+        signature_lines = [
+            [
+                Paragraph(
+                    _("Issuer Signature: ______________________________"),
+                    styles["Normal"],
+                ),
+                Paragraph(
+                    _("Receiver Signature: ______________________________"),
+                    styles["Normal"],
+                ),
+            ],
+            [
+                Paragraph(
+                    _("Issuer Name (print): ______________________________"),
+                    styles["Normal"],
+                ),
+                Paragraph(
+                    _("Receiver Name (print): ______________________________"),
+                    styles["Normal"],
+                ),
+            ],
+        ]
+
+        signature_table = Table(
+            signature_lines,
+            colWidths=[document.width / 2.0, document.width / 2.0],
+            hAlign="LEFT",
+        )
+        signature_table.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+                ]
+            )
+        )
+        story.append(signature_table)
+
+        document.build(story)
+        buffer.seek(0)
+
+        response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+        response["Content-Disposition"] = "attachment; filename=rfid-release-form.pdf"
+        return response
+
+    def print_release_form(self, request, queryset):
+        return self._render_release_form(
+            request,
+            queryset,
+            _("Select at least one RFID to print the release form."),
+            request.get_full_path(),
+        )
+
+    print_release_form.short_description = _("Print Release Form")
 
     def get_changelist_actions(self, request):
         parent = getattr(super(), "get_changelist_actions", None)
