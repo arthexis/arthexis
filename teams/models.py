@@ -7,7 +7,6 @@ from core.models import (
     ReleaseManager as CoreReleaseManager,
     OdooProfile as CoreOdooProfile,
     AssistantProfile as CoreAssistantProfile,
-    Todo as CoreTodo,
 )
 from awg.models import PowerLead as CorePowerLead
 from django_otp.plugins.otp_totp.models import (
@@ -107,9 +106,3 @@ class TOTPDevice(CoreTOTPDevice):
         verbose_name_plural = CoreTOTPDevice._meta.verbose_name_plural
 
 
-class Todo(CoreTodo):
-    class Meta:
-        proxy = True
-        app_label = "teams"
-        verbose_name = CoreTodo._meta.verbose_name
-        verbose_name_plural = CoreTodo._meta.verbose_name_plural
