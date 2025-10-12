@@ -34,7 +34,8 @@ from import_export.forms import (
 from import_export.widgets import ForeignKeyWidget
 from django.contrib.auth.models import Group
 from django.templatetags.static import static
-from django.utils import timezone
+from django.utils import timezone, translation
+from django.utils.formats import date_format
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _, ngettext
@@ -3274,113 +3275,124 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             self.message_user(request, empty_message, level=messages.WARNING)
             return HttpResponseRedirect(redirect_url)
 
-        buffer = BytesIO()
-        document = SimpleDocTemplate(
-            buffer,
-            pagesize=letter,
-            leftMargin=36,
-            rightMargin=36,
-            topMargin=72,
-            bottomMargin=36,
-        )
-        document.title = "RFID Release Form"
+        language = getattr(request, "LANGUAGE_CODE", translation.get_language())
+        if not language:
+            language = settings.LANGUAGE_CODE
 
-        styles = getSampleStyleSheet()
-        story = []
-        story.append(Paragraph(_("RFID Release Form"), styles["Title"]))
-        story.append(Spacer(1, 12))
+        with translation.override(language):
+            buffer = BytesIO()
+            document = SimpleDocTemplate(
+                buffer,
+                pagesize=letter,
+                leftMargin=36,
+                rightMargin=36,
+                topMargin=72,
+                bottomMargin=36,
+            )
+            document.title = str(_("RFID Release Form"))
 
-        generated_on = timezone.localtime()
-        generated_text = Paragraph(
-            _("Generated on: %(date)s")
-            % {"date": generated_on.strftime("%Y-%m-%d %H:%M %Z")},
-            styles["Normal"],
-        )
-        story.append(generated_text)
-        story.append(Spacer(1, 24))
+            styles = getSampleStyleSheet()
+            story = []
+            story.append(Paragraph(_("RFID Release Form"), styles["Title"]))
+            story.append(Spacer(1, 12))
 
-        table_data = [
-            [
-                _("Label"),
-                _("RFID"),
-                _("Custom label"),
-                _("Color"),
-                _("Type"),
+            generated_on = timezone.localtime()
+            formatted_generated_on = date_format(generated_on, "DATETIME_FORMAT")
+            if generated_on.tzinfo:
+                formatted_generated_on = _("%(datetime)s %(timezone)s") % {
+                    "datetime": formatted_generated_on,
+                    "timezone": generated_on.tzname() or "",
+                }
+            generated_text = Paragraph(
+                _("Generated on: %(date)s")
+                % {"date": formatted_generated_on},
+                styles["Normal"],
+            )
+            story.append(generated_text)
+            story.append(Spacer(1, 24))
+
+            table_data = [
+                [
+                    _("Label"),
+                    _("RFID"),
+                    _("Custom label"),
+                    _("Color"),
+                    _("Type"),
+                ]
             ]
-        ]
 
-        for tag in tags:
-            table_data.append(
-                [
-                    tag.label_id or "",
-                    tag.rfid or "",
-                    tag.custom_label or "",
-                    tag.get_color_display() if tag.color else "",
-                    tag.get_kind_display() if tag.kind else "",
-                ]
+            for tag in tags:
+                table_data.append(
+                    [
+                        tag.label_id or "",
+                        tag.rfid or "",
+                        tag.custom_label or "",
+                        tag.get_color_display() if tag.color else "",
+                        tag.get_kind_display() if tag.kind else "",
+                    ]
+                )
+
+            table = Table(table_data, repeatRows=1, hAlign="LEFT")
+            table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                        ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+                    ]
+                )
             )
 
-        table = Table(table_data, repeatRows=1, hAlign="LEFT")
-        table.setStyle(
-            TableStyle(
+            story.append(table)
+            story.append(Spacer(1, 36))
+
+            signature_lines = [
                 [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
-                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                    ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                    ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
-                ]
-            )
-        )
-
-        story.append(table)
-        story.append(Spacer(1, 36))
-
-        signature_lines = [
-            [
-                Paragraph(
-                    _("Issuer Signature: ______________________________"),
-                    styles["Normal"],
-                ),
-                Paragraph(
-                    _("Receiver Signature: ______________________________"),
-                    styles["Normal"],
-                ),
-            ],
-            [
-                Paragraph(
-                    _("Issuer Name (print): ______________________________"),
-                    styles["Normal"],
-                ),
-                Paragraph(
-                    _("Receiver Name (print): ______________________________"),
-                    styles["Normal"],
-                ),
-            ],
-        ]
-
-        signature_table = Table(
-            signature_lines,
-            colWidths=[document.width / 2.0, document.width / 2.0],
-            hAlign="LEFT",
-        )
-        signature_table.setStyle(
-            TableStyle(
+                    Paragraph(
+                        _("Issuer Signature: ______________________________"),
+                        styles["Normal"],
+                    ),
+                    Paragraph(
+                        _("Receiver Signature: ______________________________"),
+                        styles["Normal"],
+                    ),
+                ],
                 [
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
-                ]
+                    Paragraph(
+                        _("Issuer Name: ______________________________"),
+                        styles["Normal"],
+                    ),
+                    Paragraph(
+                        _("Receiver Name: ______________________________"),
+                        styles["Normal"],
+                    ),
+                ],
+            ]
+
+            signature_table = Table(
+                signature_lines,
+                colWidths=[document.width / 2.0, document.width / 2.0],
+                hAlign="LEFT",
             )
-        )
-        story.append(signature_table)
+            signature_table.setStyle(
+                TableStyle(
+                    [
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+                    ]
+                )
+            )
+            story.append(signature_table)
 
-        document.build(story)
-        buffer.seek(0)
+            document.build(story)
+            buffer.seek(0)
 
-        response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
-        response["Content-Disposition"] = "attachment; filename=rfid-release-form.pdf"
-        return response
+            response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+            response["Content-Disposition"] = "attachment; filename=rfid-release-form.pdf"
+            return response
 
     def print_release_form(self, request, queryset):
         return self._render_release_form(
