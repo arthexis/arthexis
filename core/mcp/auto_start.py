@@ -170,8 +170,16 @@ def _start_server_if_needed() -> bool:
     return True
 
 
-def schedule_auto_start(*, delay: float | None = None) -> bool:
+def schedule_auto_start(
+    *, delay: float | None = None, check_profiles_immediately: bool = True
+) -> bool:
     """Schedule the MCP server auto-start if the environment requires it.
+
+    When ``check_profiles_immediately`` is ``True`` (the default), the function
+    verifies that an active Assistant Profile exists before scheduling the
+    timer. When ``False``, the initial database lookup is deferred to the
+    background callback so callers can avoid database access during
+    initialization.
 
     Returns ``True`` when the timer has been scheduled, ``False`` otherwise.
     """
@@ -179,7 +187,7 @@ def schedule_auto_start(*, delay: float | None = None) -> bool:
     if not _should_schedule_auto_start():
         return False
 
-    if not _has_active_assistant_profile():
+    if check_profiles_immediately and not _has_active_assistant_profile():
         return False
 
     delay_seconds = _resolve_delay_seconds(delay)
