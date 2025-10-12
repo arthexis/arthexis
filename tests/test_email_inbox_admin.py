@@ -274,13 +274,9 @@ class EmailCollectorInlineTests(TestCase):
             "collectors-0-id": "",
             "collectors-0-subject": "s1",
             "collectors-0-sender": "",
-            "collectors-0-body": "",
-            "collectors-0-fragment": "",
             "collectors-1-id": "",
             "collectors-1-subject": "s2",
             "collectors-1-sender": "",
-            "collectors-1-body": "",
-            "collectors-1-fragment": "",
             "_save": "Save",
         }
         request = self.factory.post("/", data)

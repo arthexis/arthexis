@@ -1649,6 +1649,7 @@ class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
 class EmailCollectorInline(admin.TabularInline):
     model = EmailCollector
     extra = 0
+    fields = ("name", "subject", "sender")
 
 
 class EmailCollectorAdmin(EntityModelAdmin):
