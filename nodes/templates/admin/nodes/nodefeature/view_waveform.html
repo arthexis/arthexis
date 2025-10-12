@@ -1,0 +1,308 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div id="content-main" class="audio-capture">
+  <div class="module">
+    <h2>
+      {% blocktrans with feature_name=feature.display %}
+        {{ feature_name }} waveform monitor
+      {% endblocktrans %}
+    </h2>
+    <p class="help">
+      {% blocktrans %}
+        Grant microphone access when prompted to preview the live waveform.
+        Use the controls below to capture a temporary recording and download it
+        once you stop.
+      {% endblocktrans %}
+    </p>
+    <div class="audio-capture__monitor" role="group" aria-label="{% trans "Live audio waveform" %}">
+      <canvas
+        id="audio-capture-waveform"
+        class="audio-capture__canvas"
+        height="240"
+      >
+        {% trans "Waveform preview requires canvas support." %}
+      </canvas>
+      <p id="audio-capture-status" class="audio-capture__status" aria-live="polite">
+        {% trans "Initializing audio preview…" %}
+      </p>
+    </div>
+    <div class="audio-capture__controls">
+      <button type="button" class="button" id="audio-capture-start">
+        {% trans "Start recording" %}
+      </button>
+      <button type="button" class="button button-danger" id="audio-capture-stop" disabled>
+        {% trans "Stop recording" %}
+      </button>
+      <a
+        id="audio-capture-download"
+        class="button audio-capture__download"
+        href="#"
+        download="recording.webm"
+        hidden
+      >
+        {% trans "Download recording" %}
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .audio-capture__monitor {
+    background: #0b1721;
+    padding: 1rem;
+    border-radius: 6px;
+    margin-bottom: 1.5rem;
+  }
+
+  .audio-capture__canvas {
+    width: 100%;
+    display: block;
+    background: #030910;
+    border-radius: 4px;
+  }
+
+  .audio-capture__status {
+    margin: 0.75rem 0 0;
+    color: #d1ecf1;
+  }
+
+  .audio-capture__status--error {
+    color: #f8d7da;
+  }
+
+  .audio-capture__controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .audio-capture__controls .button-danger {
+    background: #ba2121;
+  }
+
+  .audio-capture__controls .button-danger:hover,
+  .audio-capture__controls .button-danger:focus {
+    background: #a51d1d;
+  }
+
+  .audio-capture__download[hidden] {
+    display: none;
+  }
+</style>
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const canvas = document.getElementById("audio-capture-waveform");
+    const statusEl = document.getElementById("audio-capture-status");
+    const startBtn = document.getElementById("audio-capture-start");
+    const stopBtn = document.getElementById("audio-capture-stop");
+    const downloadLink = document.getElementById("audio-capture-download");
+
+    let audioContext;
+    let analyser;
+    let mediaStream;
+    let mediaRecorder;
+    let animationFrame;
+    let recordedChunks = [];
+    let canvasCtx = canvas.getContext("2d");
+
+    resizeCanvas();
+
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.classList.toggle("audio-capture__status--error", isError);
+    }
+
+    function cleanupRecording() {
+      if (downloadLink.dataset.objectUrl) {
+        URL.revokeObjectURL(downloadLink.dataset.objectUrl);
+        delete downloadLink.dataset.objectUrl;
+      }
+      downloadLink.hidden = true;
+      downloadLink.removeAttribute("href");
+    }
+
+    function resizeCanvas() {
+      if (!canvasCtx) {
+        return;
+      }
+      const ratio = window.devicePixelRatio || 1;
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight || canvas.height;
+      canvas.width = Math.floor(width * ratio);
+      canvas.height = Math.floor(height * ratio);
+      canvasCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+
+    function drawWaveform() {
+      if (!analyser) {
+        return;
+      }
+      const bufferLength = analyser.fftSize;
+      const dataArray = new Uint8Array(bufferLength);
+      analyser.getByteTimeDomainData(dataArray);
+
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      canvasCtx.clearRect(0, 0, width, height);
+      canvasCtx.fillStyle = "#030910";
+      canvasCtx.fillRect(0, 0, width, height);
+      canvasCtx.lineWidth = 2;
+      canvasCtx.strokeStyle = "#4db6ff";
+      canvasCtx.beginPath();
+
+      const sliceWidth = width / bufferLength;
+      let x = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = (v * height) / 2;
+        if (i === 0) {
+          canvasCtx.moveTo(x, y);
+        } else {
+          canvasCtx.lineTo(x, y);
+        }
+        x += sliceWidth;
+      }
+
+      canvasCtx.lineTo(width, height / 2);
+      canvasCtx.stroke();
+      animationFrame = requestAnimationFrame(drawWaveform);
+    }
+
+    async function initializePreview() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus("{% trans "Audio capture is not supported in this browser." %}", true);
+        startBtn.disabled = true;
+        return;
+      }
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        setStatus("{% trans "Microphone ready. Press start to record." %}");
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(mediaStream);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 2048;
+        source.connect(analyser);
+        resizeCanvas();
+        drawWaveform();
+      } catch (error) {
+        console.error(error);
+        setStatus("{% trans "Microphone access was denied." %}", true);
+        startBtn.disabled = true;
+      }
+    }
+
+    function ensureRecorder() {
+      if (!mediaStream) {
+        return null;
+      }
+      if (typeof MediaRecorder === "undefined") {
+        return null;
+      }
+      if (mediaRecorder) {
+        return mediaRecorder;
+      }
+      try {
+        mediaRecorder = new MediaRecorder(mediaStream);
+      } catch (error) {
+        console.error(error);
+        return null;
+      }
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size) {
+          recordedChunks.push(event.data);
+        }
+      };
+      mediaRecorder.onstop = () => {
+        if (!recordedChunks.length) {
+          setStatus("{% trans "No audio was captured." %}", true);
+          return;
+        }
+        const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+        recordedChunks = [];
+        cleanupRecording();
+        const objectUrl = URL.createObjectURL(blob);
+        downloadLink.href = objectUrl;
+        downloadLink.dataset.objectUrl = objectUrl;
+        downloadLink.hidden = false;
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        downloadLink.download = `recording-${timestamp}.webm`;
+        setStatus("{% trans "Recording ready. Use the download button to save it." %}");
+      };
+      mediaRecorder.onerror = (event) => {
+        console.error(event.error);
+        setStatus("{% trans "Recording error. Please try again." %}", true);
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      };
+      return mediaRecorder;
+    }
+
+    startBtn.addEventListener("click", () => {
+      cleanupRecording();
+      const recorder = ensureRecorder();
+      if (!recorder) {
+        setStatus("{% trans "Recording is not supported in this browser." %}", true);
+        return;
+      }
+      recordedChunks = [];
+      try {
+        recorder.start();
+      } catch (error) {
+        console.error(error);
+        setStatus("{% trans "Unable to start recording." %}", true);
+        return;
+      }
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      setStatus("{% trans "Recording… press stop when finished." %}");
+    });
+
+    stopBtn.addEventListener("click", () => {
+      if (!mediaRecorder || mediaRecorder.state === "inactive") {
+        return;
+      }
+      try {
+        mediaRecorder.stop();
+      } catch (error) {
+        console.error(error);
+        setStatus("{% trans "Unable to stop recording." %}", true);
+        return;
+      }
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+    });
+
+    window.addEventListener("beforeunload", () => {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+      }
+      if (analyser) {
+        analyser.disconnect();
+      }
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
+      if (audioContext) {
+        audioContext.close();
+      }
+      if (mediaStream) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+      }
+      cleanupRecording();
+    });
+
+    window.addEventListener("resize", resizeCanvas);
+
+    initializePreview();
+  });
+</script>
+{% endblock %}

@@ -1348,6 +1348,16 @@ class NodeAdminTests(TestCase):
         self.assertContains(response, f'href="{snapshot_url}"')
         self.assertContains(response, f'href="{stream_url}"')
 
+    def test_node_feature_list_shows_waveform_action_when_enabled(self):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="audio-capture", defaults={"display": "Audio Capture"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        response = self.client.get(reverse("admin:nodes_nodefeature_changelist"))
+        action_url = reverse("admin:nodes_nodefeature_view_waveform")
+        self.assertContains(response, f'href="{action_url}"')
+
     def test_node_feature_list_hides_default_action_when_disabled(self):
         self._create_local_node()
         NodeFeature.objects.get_or_create(
@@ -1749,6 +1759,34 @@ class NodeAdminTests(TestCase):
         response.render()
         self.assertEqual(response.context_data["stream_embed"], "unsupported")
         self.assertContains(response, "camera-stream__unsupported")
+
+    def test_view_waveform_requires_enabled_feature(self):
+        self._create_local_node()
+        NodeFeature.objects.get_or_create(
+            slug="audio-capture", defaults={"display": "Audio Capture"}
+        )
+        response = self.client.get(
+            reverse("admin:nodes_nodefeature_view_waveform"), follow=True
+        )
+        self.assertEqual(response.status_code, 200)
+        changelist_url = reverse("admin:nodes_nodefeature_changelist")
+        self.assertEqual(response.wsgi_request.path, changelist_url)
+        self.assertContains(
+            response, "Audio Capture feature is not enabled on this node."
+        )
+
+    def test_view_waveform_renders_when_feature_enabled(self):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="audio-capture", defaults={"display": "Audio Capture"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        response = self.client.get(reverse("admin:nodes_nodefeature_view_waveform"))
+        self.assertEqual(response.status_code, 200)
+        response.render()
+        self.assertEqual(response.context_data["feature"], feature)
+        self.assertEqual(response.context_data["title"], "Audio Capture Waveform")
+        self.assertContains(response, "audio-capture__canvas")
 
     @patch("nodes.admin.requests.post")
     def test_import_rfids_action_fetches_and_imports(self, mock_post):
@@ -3195,6 +3233,18 @@ class NodeFeatureTests(TestCase):
         labels = {action.label for action in actions}
         self.assertIn("Take a Snapshot", labels)
         self.assertIn("View stream", labels)
+
+    def test_audio_capture_feature_has_view_waveform_action(self):
+        feature = NodeFeature.objects.create(
+            slug="audio-capture", display="Audio Capture"
+        )
+        actions = feature.get_default_actions()
+        self.assertEqual(len(actions), 1)
+        action = actions[0]
+        self.assertEqual(action.label, "View Waveform")
+        self.assertEqual(
+            action.url_name, "admin:nodes_nodefeature_view_waveform"
+        )
 
     def test_default_action_missing_when_unconfigured(self):
         feature = NodeFeature.objects.create(

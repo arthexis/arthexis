@@ -98,6 +98,12 @@ class NodeFeature(Entity):
                 url_name="admin:nodes_nodefeature_celery_report",
             ),
         ),
+        "audio-capture": (
+            NodeFeatureDefaultAction(
+                label="View Waveform",
+                url_name="admin:nodes_nodefeature_view_waveform",
+            ),
+        ),
         "screenshot-poll": (
             NodeFeatureDefaultAction(
                 label="Take Screenshot",
@@ -244,7 +250,7 @@ class Node(Entity):
         "ap-router",
         "gway-runner",
     }
-    MANUAL_FEATURE_SLUGS = {"clipboard-poll", "screenshot-poll"}
+    MANUAL_FEATURE_SLUGS = {"clipboard-poll", "screenshot-poll", "audio-capture"}
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.hostname}:{self.port}"

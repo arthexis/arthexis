@@ -1218,6 +1218,11 @@ class NodeFeatureAdmin(EntityModelAdmin):
                 name="nodes_nodefeature_celery_report",
             ),
             path(
+                "view-waveform/",
+                self.admin_site.admin_view(self.view_waveform),
+                name="nodes_nodefeature_view_waveform",
+            ),
+            path(
                 "take-screenshot/",
                 self.admin_site.admin_view(self.take_screenshot),
                 name="nodes_nodefeature_take_screenshot",
@@ -1290,6 +1295,24 @@ class NodeFeatureAdmin(EntityModelAdmin):
             )
             return None
         return feature
+
+    def view_waveform(self, request):
+        feature = self._ensure_feature_enabled(
+            request, "audio-capture", "View Waveform"
+        )
+        if not feature:
+            return redirect("..")
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": _("Audio Capture Waveform"),
+            "feature": feature,
+        }
+        return TemplateResponse(
+            request,
+            "admin/nodes/nodefeature/view_waveform.html",
+            context,
+        )
 
     def take_screenshot(self, request):
         feature = self._ensure_feature_enabled(
