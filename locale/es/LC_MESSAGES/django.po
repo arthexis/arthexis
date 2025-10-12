@@ -730,3 +730,59 @@ msgstr "Marcas de tiempo del cargador"
 #: ocpp/templates/ocpp/charger_status.html:132
 msgid "Select a connector to view live chart data."
 msgstr "Seleccione un conector para ver los datos de la gráfica en vivo."
+
+#: core/admin.py:3293 core/admin.py:3297
+msgid "RFID Release Form"
+msgstr "Formulario de entrega RFID"
+
+#: core/admin.py:3310
+msgid "%(datetime)s %(timezone)s"
+msgstr "%(datetime)s %(timezone)s"
+
+#: core/admin.py:3314
+msgid "Generated on: %(date)s"
+msgstr "Generado el: %(date)s"
+
+#: core/admin.py:3322
+msgid "Label"
+msgstr "Etiqueta"
+
+#: core/admin.py:3323
+msgid "RFID"
+msgstr "RFID"
+
+#: core/admin.py:3324
+msgid "Custom label"
+msgstr "Etiqueta personalizada"
+
+#: core/admin.py:3325
+msgid "Color"
+msgstr "Color"
+
+#: core/admin.py:3326
+msgid "Type"
+msgstr "Tipo"
+
+#: core/admin.py:3358
+msgid "Issuer Signature: ______________________________"
+msgstr "Firma del emisor: ______________________________"
+
+#: core/admin.py:3362
+msgid "Receiver Signature: ______________________________"
+msgstr "Firma del receptor: ______________________________"
+
+#: core/admin.py:3368
+msgid "Issuer Name: ______________________________"
+msgstr "Nombre del emisor: ______________________________"
+
+#: core/admin.py:3372
+msgid "Receiver Name: ______________________________"
+msgstr "Nombre del receptor: ______________________________"
+
+#: core/admin.py:3397
+msgid "Select at least one RFID to print the release form."
+msgstr "Seleccione al menos un RFID para imprimir el formulario de entrega."
+
+#: core/admin.py:3406
+msgid "Print Release Form"
+msgstr "Imprimir formulario de entrega"
