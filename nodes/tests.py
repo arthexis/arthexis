@@ -2534,6 +2534,8 @@ class NetMessagePropagationTests(TestCase):
     def test_propagate_forwards_to_three_and_notifies_local(
         self, mock_notify, mock_post
     ):
+        mock_post.return_value.ok = True
+        mock_post.return_value.status_code = 200
         msg = NetMessage.objects.create(subject="s", body="b", reach=self.role)
         with patch.object(Node, "get_local", return_value=self.local):
             msg.propagate(seen=[str(self.remotes[0].uuid)])
@@ -2550,6 +2552,13 @@ class NetMessagePropagationTests(TestCase):
         self.assertNotIn(sender_addr, targets)
         self.assertEqual(msg.propagated_to.count(), 4)
         self.assertTrue(msg.complete)
+        self.assertEqual(len(msg.confirmed_peers), mock_post.call_count)
+        self.assertTrue(
+            all(entry["status"] == "acknowledged" for entry in msg.confirmed_peers.values())
+        )
+        self.assertTrue(
+            all(entry["status_code"] == 200 for entry in msg.confirmed_peers.values())
+        )
 
     @patch("requests.post")
     @patch("core.notifications.notify", return_value=False)
@@ -2624,6 +2633,21 @@ class NetMessagePropagationTests(TestCase):
         self.assertFalse(NetMessage.objects.filter(pk=old_local.pk).exists())
         self.assertTrue(NetMessage.objects.filter(pk=old_remote.pk).exists())
         self.assertTrue(NetMessage.objects.filter(pk=msg.pk).exists())
+
+    @patch("core.notifications.notify", return_value=False)
+    def test_propagate_records_error_status(self, mock_notify):
+        msg = NetMessage.objects.create(subject="s", body="b", reach=self.role)
+        with (
+            patch.object(Node, "get_local", return_value=self.local),
+            patch("random.shuffle", side_effect=lambda seq: None),
+            patch("requests.post", side_effect=Exception("boom")),
+        ):
+            msg.propagate()
+
+        self.assertTrue(msg.confirmed_peers)
+        self.assertTrue(
+            all(entry["status"] == "error" for entry in msg.confirmed_peers.values())
+        )
 
 
 class NetMessageSignatureTests(TestCase):
