@@ -133,6 +133,21 @@ class ScheduleAutoStartTests(TestCase):
         self.assertFalse(result)
         timer_mock.assert_not_called()
 
+    @mock.patch("core.mcp.auto_start.threading.Timer")
+    def test_schedule_auto_start_defers_profile_check_when_requested(
+        self, timer_mock
+    ):
+        AssistantProfile.objects.update(is_active=False)
+        timer_instance = timer_mock.return_value
+
+        result = auto_start.schedule_auto_start(
+            delay=1.0, check_profiles_immediately=False
+        )
+
+        self.assertTrue(result)
+        timer_mock.assert_called_once()
+        timer_instance.start.assert_called_once()
+
     @mock.patch("core.mcp.auto_start.mcp_process")
     def test_start_server_if_needed_starts_when_inactive(self, process_mock):
         process_mock.get_status.return_value = {"running": False}

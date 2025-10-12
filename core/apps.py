@@ -351,6 +351,6 @@ class CoreConfig(AppConfig):
         try:
             from .mcp.auto_start import schedule_auto_start
 
-            schedule_auto_start()
+            schedule_auto_start(check_profiles_immediately=False)
         except Exception:  # pragma: no cover - defensive
             logger.exception("Failed to schedule MCP auto-start")
