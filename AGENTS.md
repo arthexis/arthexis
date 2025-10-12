@@ -16,7 +16,7 @@
 - Release manager tasks should be added via fixtures for the `Todo` model so they appear in the admin Future Actions section. Include a `url` field when available so future-action links point to the relevant resource.
   - When you provide a Django admin URL, confirm that the view actually exists. Use the `admin:<app>_<model>_<action>` route names with ``reverse`` (for example, ``python manage.py shell -c "from django.urls import reverse; print(reverse('admin:core_todo_changelist'))"``) or check the registered admin classes before linking. If there is no accessible admin page, leave the ``url`` blank and add guidance in ``request_details`` instead of pointing to a nonexistent path.
 - Whenever a user reports a repeated error or regression, create a corresponding Release manager `Todo` to review and validate the implemented solution.
-- After modifying a view or any part of the GUI, add a `Todo` fixture titled `Validate screen [Screen]` and set its `url` to the screen needing manual validation.
+- Follow the UI and visual design guidelines in `DESIGN.md` when making any interface changes.
 - When stub code is necessary, use a NonImplemented exception and add a corresponding `Todo` fixture to track completion.
 - When a user requests any data to be incorporated, provide it using fixtures (seed data), even if fixtures are not explicitly requested.
 - Store each fixture object in its own file to avoid merge conflicts, giving each file a unique name related to the item it contains.
