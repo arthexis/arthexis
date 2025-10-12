@@ -18,6 +18,7 @@ from core.admin import (
     ReleaseManagerAdmin,
     OdooProfileAdmin,
     AssistantProfileAdmin,
+    TodoAdmin,
 )
 from core.models import (
     InviteLead as CoreInviteLead,
@@ -28,6 +29,7 @@ from core.models import (
     ReleaseManager as CoreReleaseManager,
     OdooProfile as CoreOdooProfile,
     AssistantProfile as CoreAssistantProfile,
+    Todo as CoreTodo,
 )
 from core.user_data import (
     UserDatumAdminMixin,
@@ -53,11 +55,17 @@ from .models import (
     OdooProfile,
     AssistantProfile,
     TOTPDevice,
+    Todo,
 )
 
 
 try:
     admin.site.unregister(CoreReleaseManager)
+except NotRegistered:
+    pass
+
+try:
+    admin.site.unregister(CoreTodo)
 except NotRegistered:
     pass
 
@@ -110,6 +118,12 @@ class OdooProfileAdminProxy(OdooProfileAdmin):
 @admin.register(AssistantProfile)
 class AssistantProfileAdminProxy(AssistantProfileAdmin):
     pass
+
+
+@admin.register(Todo)
+class TodoAdminProxy(TodoAdmin):
+    def get_model_perms(self, request):
+        return admin.ModelAdmin.get_model_perms(self, request)
 
 
 try:

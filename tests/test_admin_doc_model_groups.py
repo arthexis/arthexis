@@ -74,6 +74,10 @@ class AdminDocsModelGroupsTests(TestCase):
             "django-admindocs-models-detail",
             kwargs={"app_label": "core", "model_name": "packagerelease"},
         )
+        todo_link = reverse(
+            "django-admindocs-models-detail",
+            kwargs={"app_label": "core", "model_name": "todo"},
+        )
 
         self.assertIn(f'href="{location_link}"', business_section)
         self.assertNotIn(f'href="{location_link}"', protocol_section)
@@ -84,3 +88,6 @@ class AdminDocsModelGroupsTests(TestCase):
         for link in (package_link, package_release_link):
             self.assertIn(f'href="{link}"', workgroup_section)
             self.assertNotIn(f'href="{link}"', business_section)
+
+        self.assertIn(f'href="{todo_link}"', workgroup_section)
+        self.assertNotIn(f'href="{todo_link}"', business_section)
