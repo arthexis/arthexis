@@ -10,6 +10,7 @@ from django.contrib.admindocs.views import (
     user_has_model_view_permission,
 )
 from django.urls import NoReverseMatch, reverse
+from django.utils.translation import gettext_lazy as _
 
 
 class CommandsView(BaseAdminDocsView):
@@ -56,17 +57,27 @@ class CommandsView(BaseAdminDocsView):
 class OrderedModelIndexView(BaseAdminDocsView):
     template_name = "admin_doc/model_index.html"
 
+    USER_MANUALS_APP = SimpleNamespace(
+        label="manuals",
+        name="manuals",
+        verbose_name=_("User Manuals"),
+    )
+
     GROUP_OVERRIDES = {
         "ocpp.location": "core",
         "core.rfid": "ocpp",
         "core.package": "teams",
         "core.packagerelease": "teams",
+        "core.todo": "teams",
+        "pages.usermanual": USER_MANUALS_APP,
     }
 
     def _get_docs_app_config(self, meta):
-        override_label = self.GROUP_OVERRIDES.get(meta.label_lower)
-        if override_label:
-            return apps.get_app_config(override_label)
+        override = self.GROUP_OVERRIDES.get(meta.label_lower)
+        if override:
+            if isinstance(override, str):
+                return apps.get_app_config(override)
+            return override
         return meta.app_config
 
     def get_context_data(self, **kwargs):
