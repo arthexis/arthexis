@@ -14,6 +14,16 @@ from .reader import validate_rfid_value
 from .utils import build_mode_toggle
 
 
+def _request_wants_json(request):
+    """Return True if the request expects a JSON response."""
+
+    accept = request.headers.get("accept", "")
+    if "application/json" in accept.lower():
+        return True
+    # Fallback for older callers that mark AJAX requests without Accept headers.
+    return request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+
 def scan_next(request):
     """Return the next scanned RFID tag or validate a client-provided value."""
 
@@ -22,6 +32,8 @@ def scan_next(request):
     allow_anonymous = role_name == "Control"
 
     if request.method != "POST" and not request.user.is_authenticated and not allow_anonymous:
+        if _request_wants_json(request):
+            return JsonResponse({"error": "Authentication required"}, status=401)
         return redirect_to_login(
             request.get_full_path(), reverse("pages:login")
         )
