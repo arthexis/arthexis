@@ -995,15 +995,18 @@ class NodeManager(Profile):
     )
     api_key = SigilShortAutoField(
         max_length=255,
+        verbose_name="API key",
         help_text="API key issued by the DNS provider.",
     )
     api_secret = SigilShortAutoField(
         max_length=255,
+        verbose_name="API secret",
         help_text="API secret issued by the DNS provider.",
     )
     customer_id = SigilShortAutoField(
         max_length=100,
         blank=True,
+        verbose_name="Customer ID",
         help_text="Optional GoDaddy customer identifier for the account.",
     )
     default_domain = SigilShortAutoField(
