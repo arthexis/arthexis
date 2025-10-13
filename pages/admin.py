@@ -20,10 +20,11 @@ from django.conf import settings
 from django.utils.translation import gettext_lazy as _, ngettext
 from django.core.management import CommandError, call_command
 
-from nodes.models import Node
+from nodes.models import Node, NodeRole
 from nodes.utils import capture_screenshot, save_screenshot
 
 from .forms import UserManualAdminForm
+from .module_defaults import reload_default_modules as restore_default_modules
 from .utils import landing_leads_supported
 
 from .models import (
@@ -234,10 +235,95 @@ class LandingInline(admin.TabularInline):
 
 @admin.register(Module)
 class ModuleAdmin(EntityModelAdmin):
+    change_list_template = "admin/pages/module/change_list.html"
     list_display = ("application", "node_role", "path", "menu", "is_default")
     list_filter = ("node_role", "application")
     fields = ("node_role", "application", "path", "menu", "is_default", "favicon")
     inlines = [LandingInline]
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "reload-default-modules/",
+                self.admin_site.admin_view(self.reload_default_modules_view),
+                name="pages_module_reload_default_modules",
+            ),
+        ]
+        return custom + urls
+
+    def reload_default_modules_view(self, request):
+        if request.method != "POST":
+            return redirect("..")
+
+        summary = restore_default_modules(Application, Module, Landing, NodeRole)
+
+        if summary.roles_processed == 0:
+            self.message_user(
+                request,
+                _("No default modules were reloaded because the required node roles are missing."),
+                messages.WARNING,
+            )
+        elif summary.has_changes:
+            parts: list[str] = []
+            if summary.modules_created:
+                parts.append(
+                    ngettext(
+                        "%(count)d module created",
+                        "%(count)d modules created",
+                        summary.modules_created,
+                    )
+                    % {"count": summary.modules_created}
+                )
+            if summary.modules_updated:
+                parts.append(
+                    ngettext(
+                        "%(count)d module updated",
+                        "%(count)d modules updated",
+                        summary.modules_updated,
+                    )
+                    % {"count": summary.modules_updated}
+                )
+            if summary.landings_created:
+                parts.append(
+                    ngettext(
+                        "%(count)d landing created",
+                        "%(count)d landings created",
+                        summary.landings_created,
+                    )
+                    % {"count": summary.landings_created}
+                )
+            if summary.landings_updated:
+                parts.append(
+                    ngettext(
+                        "%(count)d landing updated",
+                        "%(count)d landings updated",
+                        summary.landings_updated,
+                    )
+                    % {"count": summary.landings_updated}
+                )
+
+            details = "; ".join(parts)
+            if details:
+                message = _(
+                    "Reloaded default modules for %(roles)d role(s). %(details)s."
+                ) % {"roles": summary.roles_processed, "details": details}
+            else:
+                message = _(
+                    "Reloaded default modules for %(roles)d role(s)."
+                ) % {"roles": summary.roles_processed}
+            self.message_user(request, message, messages.SUCCESS)
+        else:
+            self.message_user(
+                request,
+                _(
+                    "Default modules are already up to date for %(roles)d role(s)."
+                )
+                % {"roles": summary.roles_processed},
+                messages.INFO,
+            )
+
+        return redirect("..")
 
 
 @admin.register(LandingLead)

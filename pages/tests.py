@@ -45,6 +45,7 @@ from pages.screenshot_specs import (
     ScreenshotUnavailable,
     registry,
 )
+from pages.context_processors import nav_links
 from django.apps import apps as django_apps
 from core import mailer
 from core.admin import ProfileAdminMixin
@@ -96,7 +97,7 @@ from nodes.models import (
     NodeFeature,
     NodeFeatureAssignment,
 )
-
+from django.contrib.auth.models import AnonymousUser
 
 class LoginViewTests(TestCase):
     def setUp(self):
@@ -1791,6 +1792,83 @@ class StaffNavVisibilityTests(TestCase):
         self.client.login(username="staff", password="pw")
         resp = self.client.get(reverse("pages:index"))
         self.assertContains(resp, 'href="/ocpp/"')
+
+
+class ModuleAdminReloadActionTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.superuser = User.objects.create_superuser(
+            username="admin",
+            email="admin@example.com",
+            password="pw",
+        )
+        self.client.force_login(self.superuser)
+        self.role, _ = NodeRole.objects.get_or_create(name="Constellation")
+        Application.objects.get_or_create(name="ocpp")
+        Application.objects.get_or_create(name="awg")
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
+        )
+
+    def _post_reload(self):
+        changelist_url = reverse("admin:pages_module_changelist")
+        self.client.get(changelist_url)
+        csrf_cookie = self.client.cookies.get("csrftoken")
+        token = csrf_cookie.value if csrf_cookie else ""
+        return self.client.post(
+            reverse("admin:pages_module_reload_default_modules"),
+            {"csrfmiddlewaretoken": token},
+            follow=True,
+        )
+
+    def test_reload_restores_missing_modules_and_landings(self):
+        Module.objects.filter(node_role=self.role).delete()
+        Landing.objects.filter(module__node_role=self.role).delete()
+
+        response = self._post_reload()
+        self.assertEqual(response.status_code, 200)
+
+        chargers = Module.objects.get(node_role=self.role, path="/ocpp/")
+        calculators = Module.objects.get(node_role=self.role, path="/awg/")
+
+        self.assertEqual(chargers.menu, "Chargers")
+        self.assertEqual(calculators.menu, "")
+        self.assertFalse(getattr(chargers, "is_deleted", False))
+        self.assertFalse(getattr(calculators, "is_deleted", False))
+
+        charger_landings = set(
+            Landing.objects.filter(module=chargers).values_list("path", flat=True)
+        )
+        self.assertSetEqual(
+            charger_landings,
+            {"/ocpp/", "/ocpp/simulator/", "/ocpp/rfid/"},
+        )
+
+        calculator_landings = set(
+            Landing.objects.filter(module=calculators).values_list(
+                "path", flat=True
+            )
+        )
+        self.assertSetEqual(
+            calculator_landings,
+            {"/awg/", "/awg/energy-tariff/"},
+        )
+
+    def test_reload_is_idempotent(self):
+        self._post_reload()
+        module_count = Module.objects.filter(node_role=self.role).count()
+        landing_count = Landing.objects.filter(module__node_role=self.role).count()
+
+        self._post_reload()
+
+        self.assertEqual(
+            Module.objects.filter(node_role=self.role).count(), module_count
+        )
+        self.assertEqual(
+            Landing.objects.filter(module__node_role=self.role).count(),
+            landing_count,
+        )
 
 
 class ApplicationModelTests(TestCase):
