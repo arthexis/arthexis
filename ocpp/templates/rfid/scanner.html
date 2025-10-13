@@ -504,6 +504,24 @@
     return parts.join(' – ');
   }
 
+  async function readJsonResponse(response){
+    const contentType = response && response.headers && typeof response.headers.get === 'function'
+      ? (response.headers.get('content-type') || '')
+      : '';
+    if(contentType.toLowerCase().includes('json')){
+      return response.json();
+    }
+    const error = new Error(text.requestFailed);
+    error.status = response ? response.status : undefined;
+    error.statusText = response ? response.statusText : undefined;
+    try {
+      error.body = await response.text();
+    } catch(_err){
+      error.body = '';
+    }
+    throw error;
+  }
+
   function clearCommandOutput(){
     if(commandOutputEl){
       commandOutputEl.hidden = true;
@@ -832,10 +850,16 @@
 
   async function requestScanData(){
     try {
-      const resp = await fetch('{{ scan_url }}');
-      const data = await resp.json();
-      if(data.error){
-        showError(data.error);
+      const resp = await fetch('{{ scan_url }}', {
+        credentials: 'same-origin',
+        headers: {
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      });
+      const data = await readJsonResponse(resp);
+      if(!resp.ok || (data && data.error)){
+        showError(data && data.error ? data.error : text.requestFailed);
         return null;
       }
       updateFromData(data);
@@ -870,6 +894,7 @@
     const headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
     };
     const csrf = getCookie('csrftoken');
     if(csrf){
@@ -882,13 +907,14 @@
         headers,
         body: JSON.stringify({rfid: rfidValue})
       });
-      const data = await resp.json();
-      if(!resp.ok || data.error){
-        showError(data.error || text.unableValidate);
+      const data = await readJsonResponse(resp);
+      if(!resp.ok || (data && data.error)){
+        showError((data && data.error) || text.unableValidate);
         return;
       }
       updateFromData(data);
     } catch(err){
+      console.error(err);
       showError(text.localValidationFailed);
     }
   }
@@ -1022,6 +1048,7 @@
       const enabling = !deepReadActive;
       const headers = {
         'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
       };
       const csrf = getCookie('csrftoken');
       if(csrf){
@@ -1037,12 +1064,10 @@
           credentials: 'same-origin',
           headers,
         });
-        if(!response.ok){
-          throw new Error(text.requestFailed);
-        }
-        const data = await response.json().catch(() => ({}));
-        if(data.error){
-          throw new Error(data.error);
+        const data = await readJsonResponse(response);
+        if(!response.ok || (data && data.error)){
+          const message = data && data.error ? data.error : text.deepReadFailed;
+          throw new Error(message);
         }
         const enabled = Boolean(data.enabled);
         setDeepReadState(enabled, {updateStatus: false});
