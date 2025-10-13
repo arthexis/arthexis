@@ -239,9 +239,9 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     SigilRoot = apps.get_model("core", "SigilRoot")
     SigilRoot.objects.all().delete()
 
-    # Remove existing Site entries to avoid duplicate domain constraints
+    # Track Site entries provided via fixtures so we can update them without
+    # disturbing operator-managed records.
     Site = apps.get_model("sites", "Site")
-    Site.objects.all().delete()
 
     fixtures = _fixture_files()
     if fixtures:
@@ -306,6 +306,16 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                                 )
                                 modified = True
                                 continue
+                    if model is Site:
+                        domain = fields.get("domain")
+                        if domain:
+                            Site.objects.update_or_create(
+                                domain=domain,
+                                defaults=fields,
+                            )
+                            model_counts[model._meta.label] += 1
+                        modified = True
+                        continue
                     if model is PackageRelease:
                         version = obj.get("fields", {}).get("version")
                         if (
