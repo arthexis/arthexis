@@ -3108,6 +3108,13 @@ class ReleaseManager(Profile):
         username = (self.git_username or "").strip()
         password_source = self.git_password or self.github_token or ""
         password = password_source.strip()
+
+        if password and not username and password_source == self.github_token:
+            # GitHub personal access tokens require a username when used for
+            # HTTPS pushes. Default to the recommended ``x-access-token`` so
+            # release managers only need to provide their token.
+            username = "x-access-token"
+
         if username and password:
             return GitCredentials(username=username, password=password)
         return None
