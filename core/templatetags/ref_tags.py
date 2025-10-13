@@ -81,18 +81,48 @@ def render_footer(context):
     base_dir = Path(settings.BASE_DIR)
     log_file = base_dir / "logs" / "auto-upgrade.log"
 
-    latest = INSTANCE_START
+    latest = None
     if log_file.exists():
         try:
-            last_line = log_file.read_text().splitlines()[-1]
-            timestamp = last_line.split(" ", 1)[0]
-            dt = datetime.fromisoformat(timestamp)
+            lines = log_file.read_text().splitlines()
+        except Exception:
+            lines = []
+
+        for line in reversed(lines):
+            try:
+                timestamp, message = line.split(" ", 1)
+            except ValueError:
+                continue
+
+            if "running: ./upgrade.sh" not in message:
+                continue
+
+            try:
+                dt = datetime.fromisoformat(timestamp)
+            except ValueError:
+                continue
+
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=dt_timezone.utc)
-            if dt > latest:
-                latest = dt
-        except Exception:
-            pass
+            latest = dt
+            break
+
+        if latest is None:
+            for line in reversed(lines):
+                try:
+                    timestamp, _ = line.split(" ", 1)
+                    dt = datetime.fromisoformat(timestamp)
+                except ValueError:
+                    continue
+
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=dt_timezone.utc)
+
+                if latest is None or dt > latest:
+                    latest = dt
+
+    if latest is None:
+        latest = INSTANCE_START
 
     fresh_since = timezone.localtime(latest).strftime("%Y-%m-%d %H:%M")
 
