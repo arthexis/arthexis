@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Tuple
 
 from django.http import HttpRequest
+from django.utils.translation import gettext_lazy as _
 
 
 def build_mode_toggle(
@@ -18,10 +19,10 @@ def build_mode_toggle(
     params._mutable = True
     if table_mode:
         params.pop("mode", None)
-        toggle_label = "Single Mode"
+        toggle_label = _("Single Mode")
     else:
         params["mode"] = "table"
-        toggle_label = "Table Mode"
+        toggle_label = _("Table Mode")
 
     toggle_url = base_path or request.path
     toggle_query = params.urlencode()

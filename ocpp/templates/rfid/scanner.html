@@ -1,34 +1,35 @@
+{% load i18n %}
 {% with prefix=prefix|default:"rfid" %}
   <div id="{{ prefix }}-scanner">
     {% if toggle_url or admin_view_url or public_view_url or request.user.is_staff %}
       <div class="rfid-mode-toggle">
         {% if request.user.is_staff %}
-          <button id="{{ prefix }}-connect-local" class="button" type="button">Local Scanner</button>
-          <button id="{{ prefix }}-deep-read" class="button" type="button" aria-pressed="false">Deep Read</button>
+          <button id="{{ prefix }}-connect-local" class="button" type="button">{% trans "Local Scanner" %}</button>
+          <button id="{{ prefix }}-deep-read" class="button" type="button" aria-pressed="false">{% trans "Deep Read" %}</button>
           <a id="{{ prefix }}-configure" class="button" href="#" style="display:none;"></a>
         {% endif %}
         {% if toggle_url %}
           <a id="{{ prefix }}-mode-toggle" class="button" href="{{ toggle_url }}" data-toggle-url="{{ toggle_url }}">{{ toggle_label }}</a>
         {% endif %}
         {% if request.user.is_staff and admin_view_url %}
-          <a class="button secondary" href="{{ admin_view_url }}">Admin View</a>
+          <a class="button secondary" href="{{ admin_view_url }}">{% trans "Admin View" %}</a>
         {% elif request.user.is_staff and public_view_url %}
-          <a class="button secondary" href="{{ public_view_url }}">Public View</a>
+          <a class="button secondary" href="{{ public_view_url }}">{% trans "Public View" %}</a>
         {% endif %}
       </div>
     {% endif %}
-  <p id="{{ prefix }}-status">Scanner ready</p>
+  <p id="{{ prefix }}-status">{% trans "Scanner ready" %}</p>
   <div id="{{ prefix }}-command-output" class="rfid-command-output" hidden>
     <div class="rfid-command-header">
-      <h3>External Command Output</h3>
+      <h3>{% trans "External Command Output" %}</h3>
       <span class="rfid-command-status" id="{{ prefix }}-command-status"></span>
     </div>
     <div class="rfid-command-section" id="{{ prefix }}-command-stdout-section" hidden>
-      <span class="rfid-command-label">stdout</span>
+      <span class="rfid-command-label">{% trans "stdout" %}</span>
       <pre id="{{ prefix }}-command-stdout"></pre>
     </div>
     <div class="rfid-command-section" id="{{ prefix }}-command-stderr-section" hidden>
-      <span class="rfid-command-label">stderr</span>
+      <span class="rfid-command-label">{% trans "stderr" %}</span>
       <pre id="{{ prefix }}-command-stderr"></pre>
     </div>
     <p class="rfid-command-error" id="{{ prefix }}-command-error" hidden></p>
@@ -38,46 +39,46 @@
       <table class="rfid-history" id="{{ prefix }}-history">
         <thead>
           <tr>
-            <th>Time</th>
-            <th>Label</th>
-            <th>Type</th>
-            <th>Color</th>
-            <th>Valid</th>
+            <th>{% trans "Time" %}</th>
+            <th>{% trans "Label" %}</th>
+            <th>{% trans "Type" %}</th>
+            <th>{% trans "Color" %}</th>
+            <th>{% trans "Valid" %}</th>
             {% if request.user.is_staff %}
-              <th>RFID</th>
+              <th>{% trans "RFID" %}</th>
             {% endif %}
             {% if show_release_info %}
-              <th>Released</th>
-              <th>Reference</th>
+              <th>{% trans "Released" %}</th>
+              <th>{% trans "Reference" %}</th>
             {% endif %}
           </tr>
         </thead>
         <tbody id="{{ prefix }}-history-body"></tbody>
       </table>
-      <p class="rfid-history-total">Total scanned: <span id="{{ prefix }}-total-count">0</span></p>
+      <p class="rfid-history-total"><span class="rfid-history-total-label">{% trans "Total scanned:" %}</span> <span id="{{ prefix }}-total-count">0</span></p>
     </div>
   {% else %}
-    <div class="field"><span class="label">Label:</span><span class="value" id="{{ prefix }}-label"></span></div>
-    <div class="field"><span class="label">Type:</span><span class="value" id="{{ prefix }}-kind"></span></div>
-    <div class="field"><span class="label">Color:</span><span class="value" id="{{ prefix }}-color"></span></div>
-    <div class="field"><span class="label">Valid:</span><span class="value" id="{{ prefix }}-allowed"></span></div>
+    <div class="field"><span class="label">{% trans "Label" %}:</span><span class="value" id="{{ prefix }}-label"></span></div>
+    <div class="field"><span class="label">{% trans "Type" %}:</span><span class="value" id="{{ prefix }}-kind"></span></div>
+    <div class="field"><span class="label">{% trans "Color" %}:</span><span class="value" id="{{ prefix }}-color"></span></div>
+    <div class="field"><span class="label">{% trans "Valid" %}:</span><span class="value" id="{{ prefix }}-allowed"></span></div>
     {% if request.user.is_staff %}
-      <div class="field"><span class="label">RFID:</span><span class="value" id="{{ prefix }}-rfid"></span></div>
+      <div class="field"><span class="label">{% trans "RFID" %}:</span><span class="value" id="{{ prefix }}-rfid"></span></div>
     {% endif %}
     {% if show_release_info %}
-      <div class="field"><span class="label">Released:</span><span class="value" id="{{ prefix }}-released"></span></div>
-      <div class="field"><span class="label">Reference:</span><span class="value" id="{{ prefix }}-reference"></span></div>
+      <div class="field"><span class="label">{% trans "Released" %}:</span><span class="value" id="{{ prefix }}-released"></span></div>
+      <div class="field"><span class="label">{% trans "Reference" %}:</span><span class="value" id="{{ prefix }}-reference"></span></div>
     {% endif %}
     {% if request.user.is_staff %}
       <div id="{{ prefix }}-deep-details" class="deep-read-details" style="display:none;">
-        <h3>Deep Read Details</h3>
+        <h3>{% trans "Deep Read Details" %}</h3>
         <div class="deep-read-keys">
           <div class="deep-read-key">
-            <span class="label">Key A:</span>
+            <span class="label">{% trans "Key A" %}:</span>
             <span class="value" id="{{ prefix }}-key-a"></span>
           </div>
           <div class="deep-read-key">
-            <span class="label">Key B:</span>
+            <span class="label">{% trans "Key B" %}:</span>
             <span class="value" id="{{ prefix }}-key-b"></span>
           </div>
         </div>
@@ -350,6 +351,66 @@
   const adminTemplate = '{{ admin_change_url_template|default:""|escapejs }}';
   const tableMode = {% if table_mode %}true{% else %}false{% endif %};
 
+  const text = {
+    yes: '{{ _("Yes")|escapejs }}',
+    no: '{{ _("No")|escapejs }}',
+    verified: '{{ _("verified")|escapejs }}',
+    unverified: '{{ _("unverified")|escapejs }}',
+    keyValueState: '{{ _("%(value)s (%(state)s)")|escapejs }}',
+    blockLabel: '{{ _("Block %(number)s")|escapejs }}',
+    keyLabel: '{{ _("Key %(key)s")|escapejs }}',
+    commandSucceeded: '{{ _("Command succeeded (exit code %(code)s)")|escapejs }}',
+    commandFailed: '{{ _("Command failed (exit code %(code)s)")|escapejs }}',
+    commandError: '{{ _("Command error")|escapejs }}',
+    commandOutput: '{{ _("Command output")|escapejs }}',
+    deepReadEnabled: '{{ _("Deep Read enabled. Hold the card on the reader a bit longer to complete the read.")|escapejs }}',
+    deepReadDisabled: '{{ _("Deep Read disabled.")|escapejs }}',
+    deepRead: '{{ _("Deep Read")|escapejs }}',
+    noReadableBlocks: '{{ _("No readable data blocks.")|escapejs }}',
+    discoveredBlockSingular: '{{ _("Discovered %(count)s data block.")|escapejs }}',
+    discoveredBlockPlural: '{{ _("Discovered %(count)s data blocks.")|escapejs }}',
+    noReadableWithKeys: '{{ _("No data blocks were readable with the current keys.")|escapejs }}',
+    scannerNotDetected: '{{ _("RFID reader not detected. Please connect the reader.")|escapejs }}',
+    unableValidate: '{{ _("Unable to validate RFID")|escapejs }}',
+    localValidationFailed: '{{ _("Local scanner validation failed")|escapejs }}',
+    localScannerNotReadable: '{{ _("Local scanner is not readable")|escapejs }}',
+    browserNoSupport: '{{ _("This browser does not support connecting to local scanners.")|escapejs }}',
+    selectScanner: '{{ _("Select a local scanner to connect.")|escapejs }}',
+    scannerConnected: '{{ _("Scanner Connected")|escapejs }}',
+    localConnectedAwaiting: '{{ _("Local scanner connected. Awaiting RFID...")|escapejs }}',
+    scannerReady: '{{ _("Scanner ready")|escapejs }}',
+    localDisconnected: '{{ _("Local scanner disconnected")|escapejs }}',
+    localConnectFailed: '{{ _("Failed to connect to local scanner")|escapejs }}',
+    webSerialUnsupported: '{{ _("Web Serial API is not supported in this browser.")|escapejs }}',
+    requestFailed: '{{ _("Request failed")|escapejs }}',
+    deepReadFailed: '{{ _("Deep read failed")|escapejs }}',
+    attemptingDeepRead: '{{ _("Attempting deep read...")|escapejs }}',
+    localScanner: '{{ _("Local Scanner")|escapejs }}',
+    configureRfid: '{{ _("Configure RFID %(label)s")|escapejs }}',
+    rfidStatusState: '{{ _("RFID %(label)s %(state)s")|escapejs }}',
+    rfidStatus: '{{ _("RFID %(label)s")|escapejs }}',
+    rfidStateOnly: '{{ _("RFID %(state)s")|escapejs }}',
+    rfidOnly: '{{ _("RFID")|escapejs }}',
+    createdStatus: '{{ _("Created %(status)s")|escapejs }}',
+    okText: '{{ _("OK")|escapejs }}',
+    badText: '{{ _("BAD")|escapejs }}',
+  };
+
+  function formatText(template, replacements){
+    if(typeof template !== 'string' || !template){
+      return '';
+    }
+    const entries = Object.entries(replacements || {});
+    if(!entries.length){
+      return template;
+    }
+    return entries.reduce((result, [key, value]) => {
+      const pattern = new RegExp(`%\\(${key}\\)s`, 'g');
+      const replacement = value === undefined || value === null ? '' : String(value);
+      return result.replace(pattern, replacement);
+    }, template);
+  }
+
   const historyBody = tableMode ? document.getElementById('{{ prefix }}-history-body') : null;
   const totalCountEl = tableMode ? document.getElementById('{{ prefix }}-total-count') : null;
   const isStaff = {{ request.user.is_staff|yesno:"true,false" }};
@@ -380,7 +441,7 @@
     if(value === undefined || value === null){
       return '';
     }
-    return value ? 'Yes' : 'No';
+    return value ? text.yes : text.no;
   }
 
   function normalizeKeyValue(value){
@@ -401,7 +462,8 @@
     if(verified === undefined || verified === null){
       return normalized;
     }
-    return verified ? `${normalized} (verified)` : `${normalized} (unverified)`;
+    const stateText = verified ? text.verified : text.unverified;
+    return formatText(text.keyValueState, {value: normalized, state: stateText});
   }
 
   function formatBlockEntry(entry){
@@ -410,10 +472,10 @@
     }
     const parts = [];
     if(typeof entry.block === 'number' && Number.isFinite(entry.block)){
-      parts.push(`Block ${entry.block}`);
+      parts.push(formatText(text.blockLabel, {number: entry.block}));
     }
     if(entry.key){
-      parts.push(`Key ${entry.key}`);
+      parts.push(formatText(text.keyLabel, {key: entry.key}));
     }
     let dataText = '';
     if(Array.isArray(entry.data)){
@@ -518,12 +580,12 @@
     let statusMessage = '';
     if(hasReturnCode){
       statusMessage = returnCode === 0
-        ? `Command succeeded (exit code ${returnCode})`
-        : `Command failed (exit code ${returnCode})`;
+        ? formatText(text.commandSucceeded, {code: returnCode})
+        : formatText(text.commandFailed, {code: returnCode});
     } else if(hasError){
-      statusMessage = 'Command error';
+      statusMessage = text.commandError;
     } else if(hasStdout || hasStderr){
-      statusMessage = 'Command output';
+      statusMessage = text.commandOutput;
     }
     if(commandStatusEl){
       commandStatusEl.textContent = statusMessage;
@@ -544,16 +606,16 @@
 
   function deepReadStatusText(enabled){
     if(enabled){
-      return 'Deep Read enabled. Hold the card on the reader a bit longer to complete the read.';
+      return text.deepReadEnabled;
     }
-    return 'Deep Read disabled.';
+    return text.deepReadDisabled;
   }
 
   function setDeepReadState(enabled, options){
     const opts = Object.assign({updateStatus: true, clearDetails: true}, options || {});
     deepReadActive = Boolean(enabled);
     if(deepBtn){
-      deepBtn.textContent = 'Deep Read';
+      deepBtn.textContent = text.deepRead;
       deepBtn.classList.toggle('is-active', deepReadActive);
       deepBtn.setAttribute('aria-pressed', deepReadActive ? 'true' : 'false');
     }
@@ -569,8 +631,8 @@
     if(value === undefined || value === null){
       return null;
     }
-    const text = String(value);
-    return text ? text : null;
+    const normalizedValue = String(value);
+    return normalizedValue ? normalizedValue : null;
   }
 
   function updateDeepDetails(data, rfidValue){
@@ -610,25 +672,26 @@
     if(deepBlocksEl){
       deepBlocksEl.innerHTML = '';
       dumpEntries.forEach((entry) => {
-        const text = formatBlockEntry(entry);
-        if(text){
+        const entryText = formatBlockEntry(entry);
+        if(entryText){
           const item = document.createElement('li');
-          item.textContent = text;
+          item.textContent = entryText;
           deepBlocksEl.appendChild(item);
         }
       });
       if(!deepBlocksEl.childElementCount){
         const item = document.createElement('li');
-        item.textContent = 'No readable data blocks.';
+        item.textContent = text.noReadableBlocks;
         deepBlocksEl.appendChild(item);
       }
     }
     if(deepStatusEl){
       if(hasDump){
         const count = dumpEntries.length;
-        deepStatusEl.textContent = `Discovered ${count} data block${count === 1 ? '' : 's'}.`;
+        const template = count === 1 ? text.discoveredBlockSingular : text.discoveredBlockPlural;
+        deepStatusEl.textContent = formatText(template, {count});
       } else {
-        deepStatusEl.textContent = 'No data blocks were readable with the current keys.';
+        deepStatusEl.textContent = text.noReadableWithKeys;
       }
     }
   }
@@ -637,7 +700,7 @@
     if(data.allowed === undefined || data.allowed === null){
       return '';
     }
-    return data.allowed && data.released ? 'Yes' : 'No';
+    return data.allowed && data.released ? text.yes : text.no;
   }
 
   function buildHistoryCells(data, labelValue){
@@ -692,14 +755,13 @@
 
   function showError(message){
     console.error(message);
-    const defaultMsg = 'RFID reader not detected. Please connect the reader.';
+    const defaultMsg = text.scannerNotDetected;
     clearDeepDetails();
     clearCommandOutput();
-    if(typeof message === 'string' && message){
-      statusEl.textContent = message;
-    } else {
-      statusEl.textContent = defaultMsg;
-    }
+    const messageText = typeof message === 'string' && message
+      ? message
+      : (message && typeof message.message === 'string' ? message.message : '');
+    statusEl.textContent = messageText || defaultMsg;
   }
 
   function updateFromData(data){
@@ -742,7 +804,7 @@
       if(w){ w.focus(); }
     }
     if(configureEl){
-      configureEl.textContent = `Configure RFID ${labelValue}`;
+      configureEl.textContent = formatText(text.configureRfid, {label: labelValue});
       configureEl.href = adminTemplate ? adminTemplate.replace('0', labelValue) : '#';
       configureEl.style.display = 'inline';
     }
@@ -751,9 +813,18 @@
     if(deepBtn && data.deep_read){
       setDeepReadState(true, {updateStatus: false, clearDetails: false});
     }
-    const okText = data.allowed === undefined ? '' : (data.allowed ? 'OK' : 'BAD');
-    const statusMsg = okText ? `RFID ${labelValue} ${okText}` : `RFID ${labelValue}`;
-    statusEl.textContent = data.created ? `Created ${statusMsg}` : statusMsg;
+    const hasLabel = Boolean(labelValue);
+    const okText = data.allowed === undefined ? '' : (data.allowed ? text.okText : text.badText);
+    let statusMsg = '';
+    if(okText){
+      const template = hasLabel ? text.rfidStatusState : text.rfidStateOnly;
+      statusMsg = formatText(template, {label: labelValue, state: okText}).trim();
+    } else if(hasLabel){
+      statusMsg = formatText(text.rfidStatus, {label: labelValue}).trim();
+    } else {
+      statusMsg = text.rfidOnly;
+    }
+    statusEl.textContent = data.created ? formatText(text.createdStatus, {status: statusMsg}) : statusMsg;
     if(tableMode){
       appendHistoryRow(data, labelValue);
     }
@@ -813,12 +884,12 @@
       });
       const data = await resp.json();
       if(!resp.ok || data.error){
-        showError(data.error || 'Unable to validate RFID');
+        showError(data.error || text.unableValidate);
         return;
       }
       updateFromData(data);
     } catch(err){
-      showError('Local scanner validation failed');
+      showError(text.localValidationFailed);
     }
   }
 
@@ -841,7 +912,7 @@
 
   async function readFromLocalPort(){
     if(!localPort || !localPort.readable){
-      throw new Error('Local scanner is not readable');
+      throw new Error(text.localScannerNotReadable);
     }
     localReader = localPort.readable.getReader();
     const decoder = new TextDecoder();
@@ -875,28 +946,28 @@
 
   async function connectLocalScanner(){
     if(!('serial' in navigator)){
-      showError('This browser does not support connecting to local scanners.');
+      showError(text.browserNoSupport);
       return;
     }
     try {
-      statusEl.textContent = 'Select a local scanner to connect.';
+      statusEl.textContent = text.selectScanner;
       const port = await navigator.serial.requestPort();
       await port.open({baudRate: 9600});
       localPort = port;
       localConnected = true;
       if(connectBtn){
         connectBtn.disabled = true;
-        connectBtn.textContent = 'Scanner Connected';
+        connectBtn.textContent = text.scannerConnected;
       }
-      statusEl.textContent = 'Local scanner connected. Awaiting RFID...';
+      statusEl.textContent = text.localConnectedAwaiting;
       await readFromLocalPort();
     } catch(err){
       if(err && err.name === 'NotFoundError'){
-        statusEl.textContent = 'Scanner ready';
+        statusEl.textContent = text.scannerReady;
       } else if(localConnected){
-        showError('Local scanner disconnected');
+        showError(text.localDisconnected);
       } else {
-        showError('Failed to connect to local scanner');
+        showError(text.localConnectFailed);
       }
     } finally {
       if(localReader){
@@ -908,10 +979,10 @@
       }
       if(connectBtn){
         connectBtn.disabled = false;
-        connectBtn.textContent = 'Local Scanner';
+        connectBtn.textContent = text.localScanner;
       }
       if(localConnected){
-        statusEl.textContent = 'Local scanner disconnected';
+        statusEl.textContent = text.localDisconnected;
       }
       localConnected = false;
       localReader = null;
@@ -924,7 +995,7 @@
     }
     if(!('serial' in navigator)){
       connectBtn.disabled = true;
-      connectBtn.title = 'Web Serial API is not supported in this browser.';
+      connectBtn.title = text.webSerialUnsupported;
       return;
     }
     connectBtn.addEventListener('click', () => {
@@ -937,9 +1008,9 @@
           localConnected = false;
           if(connectBtn){
             connectBtn.disabled = false;
-            connectBtn.textContent = 'Local Scanner';
+            connectBtn.textContent = text.localScanner;
           }
-          showError('Local scanner disconnected');
+          showError(text.localDisconnected);
         }
       });
     }
@@ -958,7 +1029,7 @@
       }
       deepBtn.disabled = true;
       if(enabling){
-        statusEl.textContent = 'Attempting deep read...';
+        statusEl.textContent = text.attemptingDeepRead;
       }
       try {
         const response = await fetch('{{ deep_read_url|default:"" }}', {
@@ -967,7 +1038,7 @@
           headers,
         });
         if(!response.ok){
-          throw new Error('Request failed');
+          throw new Error(text.requestFailed);
         }
         const data = await response.json().catch(() => ({}));
         if(data.error){
@@ -986,7 +1057,7 @@
           statusEl.textContent = data.status || deepReadStatusText(enabled);
         }
       } catch(err){
-        const message = err && err.message ? err.message : 'Deep read failed';
+        const message = err && err.message ? err.message : text.deepReadFailed;
         statusEl.textContent = message;
       } finally {
         deepBtn.disabled = false;
