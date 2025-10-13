@@ -2500,6 +2500,24 @@ class FavoriteTests(TestCase):
             resp, '<div class="todo-details">More info</div>', html=True
         )
 
+    def test_dashboard_shows_todos_when_node_unknown(self):
+        Todo.objects.create(request="Check fallback")
+        from nodes.models import Node
+
+        Node.objects.all().delete()
+
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, "Release manager tasks")
+        self.assertContains(resp, "Check fallback")
+
+    def test_dashboard_shows_todos_without_release_manager_profile(self):
+        Todo.objects.create(request="Unrestricted task")
+        ReleaseManager.objects.filter(user=self.user).delete()
+
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, "Release manager tasks")
+        self.assertContains(resp, "Unrestricted task")
+
     def test_dashboard_excludes_todo_changelist_link(self):
         ct = ContentType.objects.get_for_model(Todo)
         Favorite.objects.create(user=self.user, content_type=ct)
@@ -2513,7 +2531,7 @@ class FavoriteTests(TestCase):
         changelist = reverse("admin:core_todo_changelist")
         self.assertNotContains(resp, f'href="{changelist}"')
 
-    def test_dashboard_hides_todos_without_release_manager(self):
+    def test_dashboard_shows_todos_for_admin_without_release_manager(self):
         todo = Todo.objects.create(request="Only Release Manager")
         User = get_user_model()
         other_user = User.objects.create_superuser(
@@ -2521,10 +2539,10 @@ class FavoriteTests(TestCase):
         )
         self.client.force_login(other_user)
         resp = self.client.get(reverse("admin:index"))
-        self.assertNotContains(resp, "Release manager tasks")
-        self.assertNotContains(resp, todo.request)
+        self.assertContains(resp, "Release manager tasks")
+        self.assertContains(resp, todo.request)
 
-    def test_dashboard_hides_todos_for_non_terminal_node(self):
+    def test_dashboard_shows_todos_for_non_terminal_node(self):
         todo = Todo.objects.create(request="Terminal Tasks")
         from nodes.models import NodeRole
 
@@ -2532,8 +2550,8 @@ class FavoriteTests(TestCase):
         self.node.role = control_role
         self.node.save(update_fields=["role"])
         resp = self.client.get(reverse("admin:index"))
-        self.assertNotContains(resp, "Release manager tasks")
-        self.assertNotContains(resp, todo.request)
+        self.assertContains(resp, "Release manager tasks")
+        self.assertContains(resp, todo.request)
 
     def test_dashboard_shows_todos_for_delegate_release_manager(self):
         todo = Todo.objects.create(request="Delegate Task")

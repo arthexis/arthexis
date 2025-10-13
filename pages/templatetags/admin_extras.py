@@ -20,7 +20,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.dispatch import receiver
 
-from core.models import Lead, RFID, ReleaseManager, Todo
+from core.models import Lead, RFID, Todo
 from core.entity import Entity, user_data_flag_updated
 
 register = template.Library()
@@ -405,12 +405,6 @@ def future_action_items(context):
     if not user or not user.is_authenticated:
         return {"models": [], "todos": []}
 
-    badge_node = context.get("badge_node")
-    node_role_name = ""
-    if badge_node:
-        role = getattr(badge_node, "role", None)
-        node_role_name = getattr(role, "name", "") if role else ""
-
     model_data = {}
     first_seen = 0
     todo_ct = ContentType.objects.get_for_model(Todo)
@@ -481,17 +475,15 @@ def future_action_items(context):
         {"url": item["url"], "label": item["label"]} for item in sorted_models[:4]
     ]
 
-    todos: list[dict[str, str]] = []
-    if node_role_name == "Terminal" and user.has_profile(ReleaseManager):
-        todos = [
-            {
-                "url": reverse("todo-focus", args=[todo.pk]),
-                "label": todo.request,
-                "details": todo.request_details,
-                "done_url": reverse("todo-done", args=[todo.pk]),
-            }
-            for todo in Todo.objects.filter(is_deleted=False, done_on__isnull=True)
-        ]
+    todos: list[dict[str, str]] = [
+        {
+            "url": reverse("todo-focus", args=[todo.pk]),
+            "label": todo.request,
+            "details": todo.request_details,
+            "done_url": reverse("todo-done", args=[todo.pk]),
+        }
+        for todo in Todo.objects.filter(is_deleted=False, done_on__isnull=True)
+    ]
 
     return {"models": model_items, "todos": todos}
 
