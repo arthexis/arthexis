@@ -15,7 +15,7 @@ import tempfile
 import hashlib
 import time
 from weakref import WeakKeyDictionary
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable
 
 import django
 import importlib.util
@@ -108,6 +108,41 @@ def _fixture_sort_key(name: str) -> tuple[int, str]:
     else:
         priority = 4
     return (priority, filename)
+
+
+def _preferred_site_domain(domains: Iterable[str]) -> str | None:
+    """Return the preferred ``Site`` domain from *domains*.
+
+    Preference follows the order defined in ``settings.ALLOWED_HOSTS`` while
+    skipping wildcard and network entries.  If none of those hosts appear in
+    the fixture set, fall back to the lexicographically smallest domain to
+    guarantee determinism.
+    """
+
+    if not domains:
+        return None
+
+    normalized: list[str] = []
+    for domain in domains:
+        if isinstance(domain, str):
+            candidate = domain.strip()
+            if candidate:
+                normalized.append(candidate)
+
+    if not normalized:
+        return None
+
+    allowed_hosts = getattr(settings, "ALLOWED_HOSTS", [])
+    for host in allowed_hosts:
+        if not isinstance(host, str):
+            continue
+        candidate = host.strip()
+        if not candidate or candidate.startswith("*") or "/" in candidate:
+            continue
+        if candidate in normalized:
+            return candidate
+
+    return sorted(normalized)[0]
 
 
 def _migration_hash(app_labels: list[str]) -> str:
@@ -250,6 +285,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
             patched: dict[int, list[str]] = {}
             user_pk_map: dict[int, int] = {}
             model_counts: dict[str, int] = defaultdict(int)
+            site_fixture_defaults: dict[str, dict] = {}
             for name in fixtures:
                 priority, _ = _fixture_sort_key(name)
                 source = Path(settings.BASE_DIR, name)
@@ -309,10 +345,12 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     if model is Site:
                         domain = fields.get("domain")
                         if domain:
+                            defaults = dict(fields)
                             Site.objects.update_or_create(
                                 domain=domain,
-                                defaults=fields,
+                                defaults=defaults,
                             )
+                            site_fixture_defaults[domain] = defaults
                             model_counts[model._meta.label] += 1
                         modified = True
                         continue
@@ -354,6 +392,26 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                 for module in Module.objects.all():
                     module.create_landings()
                 Landing.objects.update(is_seed_data=True)
+
+                if site_fixture_defaults:
+                    preferred = _preferred_site_domain(site_fixture_defaults)
+                    if preferred:
+                        defaults = dict(site_fixture_defaults[preferred])
+                        defaults["domain"] = preferred
+                        site_id = getattr(settings, "SITE_ID", 1)
+                        existing = Site.objects.filter(pk=site_id).first()
+                        Site.objects.filter(domain=preferred).exclude(pk=site_id).delete()
+                        if existing:
+                            for field, value in defaults.items():
+                                setattr(existing, field, value)
+                            existing.save(update_fields=list(defaults.keys()))
+                        else:
+                            Site.objects.update_or_create(
+                                pk=site_id,
+                                defaults=defaults,
+                            )
+                    Site.objects.clear_cache()
+
                 if model_counts:
                     print()
                     for label, count in sorted(model_counts.items()):
