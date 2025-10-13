@@ -321,6 +321,44 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             except (TypeError, ValueError):
                 return
         if connector_value is None:
+            aggregate = self.aggregate_charger
+            if (
+                not aggregate
+                or aggregate.connector_id is not None
+                or aggregate.charger_id != self.charger_id
+            ):
+                aggregate, _ = await database_sync_to_async(
+                    Charger.objects.get_or_create
+                )(
+                    charger_id=self.charger_id,
+                    connector_id=None,
+                    defaults={"last_path": self.scope.get("path", "")},
+                )
+                await database_sync_to_async(aggregate.refresh_manager_node)()
+                self.aggregate_charger = aggregate
+            self.charger = self.aggregate_charger
+            previous_key = self.store_key
+            new_key = store.identity_key(self.charger_id, None)
+            if previous_key != new_key:
+                existing_consumer = store.connections.get(new_key)
+                if existing_consumer is not None and existing_consumer is not self:
+                    await existing_consumer.close()
+                store.reassign_identity(previous_key, new_key)
+                store.connections[new_key] = self
+                store.logs["charger"].setdefault(new_key, [])
+            aggregate_name = await sync_to_async(
+                lambda: self.charger.name or self.charger.charger_id
+            )()
+            friendly_name = aggregate_name or self.charger_id
+            store.register_log_name(new_key, friendly_name, log_type="charger")
+            store.register_log_name(
+                store.identity_key(self.charger_id, None),
+                friendly_name,
+                log_type="charger",
+            )
+            store.register_log_name(self.charger_id, friendly_name, log_type="charger")
+            self.store_key = new_key
+            self.connector_value = None
             if not self._header_reference_created and self.client_ip:
                 await database_sync_to_async(self._ensure_console_reference)()
                 self._header_reference_created = True
