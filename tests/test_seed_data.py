@@ -290,6 +290,58 @@ class EnvRefreshFixtureTests(TestCase):
         self.assertEqual(loaded_fixtures[0], str(fixture_path))
         shutil.rmtree(tmp_dir)
 
+    def test_env_refresh_preserves_non_fixture_sites(self):
+        base_dir = Path(settings.BASE_DIR)
+        spec = importlib.util.spec_from_file_location(
+            "env_refresh_sites", base_dir / "env-refresh.py"
+        )
+        env_refresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(env_refresh)
+
+        site_fixtures = [
+            str(path.relative_to(base_dir))
+            for path in (base_dir / "core" / "fixtures").glob(
+                "references__00_site_*.json"
+            )
+        ]
+        env_refresh._fixture_files = lambda: site_fixtures
+
+        loaded_fixtures: list[str] = []
+
+        def fake_call_command(name, *args, **kwargs):
+            if name == "loaddata":
+                loaded_fixtures.extend(args)
+            return None
+
+        env_refresh.call_command = fake_call_command
+
+        Site.objects.all().delete()
+        Site.objects.create(domain="127.0.0.1", name="Old Local")
+        Site.objects.create(domain="operator.example", name="Operator Portal")
+
+        env_refresh.run_database_tasks()
+
+        self.assertIn("operator.example", Site.objects.values_list("domain", flat=True))
+        self.assertEqual(
+            Site.objects.get(domain="operator.example").name, "Operator Portal"
+        )
+
+        expected_sites = {
+            "arthexis.com": "Arthexis",
+            "127.0.0.1": "Local",
+            "10.42.0.1": "Router",
+            "192.168.129.10": "Gateway",
+        }
+        for domain, name in expected_sites.items():
+            site = Site.objects.get(domain=domain)
+            self.assertEqual(site.name, name)
+
+        self.assertEqual(len(loaded_fixtures), 0)
+        self.assertEqual(
+            Site.objects.count(),
+            len(expected_sites) + 1,  # fixture domains plus custom site
+        )
+
 
 class EnvRefreshNodeTests(TestCase):
     def setUp(self):
