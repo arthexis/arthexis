@@ -554,7 +554,7 @@ class CustomLoginView(LoginView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
-        context = super(LoginView, self).get_context_data(**kwargs)
+        context = super().get_context_data(**kwargs)
         current_site = get_site(self.request)
         redirect_target = self.request.GET.get(self.redirect_field_name)
         restricted_notice = None
@@ -569,11 +569,13 @@ class CustomLoginView(LoginView):
                 restricted_notice = _(
                     "This page is reserved for members only. Please log in to continue."
                 )
+        redirect_value = context.get(self.redirect_field_name) or self.get_success_url()
+        context[self.redirect_field_name] = redirect_value
+        context["next"] = redirect_value
         context.update(
             {
                 "site": current_site,
                 "site_name": getattr(current_site, "name", ""),
-                "next": self.get_success_url(),
                 "can_request_invite": mailer.can_send_email(),
                 "restricted_notice": restricted_notice,
             }
