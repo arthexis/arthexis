@@ -20,6 +20,7 @@ from django.http import HttpResponseRedirect
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.formats import date_format
+from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from core.auto_upgrade import AUTO_UPGRADE_TASK_NAME, AUTO_UPGRADE_TASK_PATH
@@ -171,6 +172,74 @@ def _regenerate_changelog() -> None:
     if not content.endswith("\n"):
         content += "\n"
     changelog_path.write_text(content, encoding="utf-8")
+
+
+def _format_git_command_output(
+    command: list[str], result: subprocess.CompletedProcess[str]
+) -> str:
+    """Return a readable summary of a git command execution."""
+
+    command_display = "$ " + " ".join(command)
+    message_parts = []
+    if result.stdout:
+        message_parts.append(result.stdout.strip())
+    if result.stderr:
+        message_parts.append(result.stderr.strip())
+    if result.returncode != 0:
+        message_parts.append(f"[exit status {result.returncode}]")
+    if message_parts:
+        return command_display + "\n" + "\n".join(part for part in message_parts if part)
+    return command_display
+
+
+def _git_status() -> str:
+    """Return the repository status after attempting to commit."""
+
+    status_result = subprocess.run(
+        ["git", "status", "--short", "--branch"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    stdout = status_result.stdout.strip()
+    stderr = status_result.stderr.strip()
+    if stdout and stderr:
+        return stdout + "\n" + stderr
+    return stdout or stderr
+
+
+def _commit_changelog() -> tuple[bool, str, str]:
+    """Stage, commit, and push the changelog file."""
+
+    git_commands: list[list[str]] = [
+        ["git", "add", "CHANGELOG.rst"],
+        [
+            "git",
+            "commit",
+            "-m",
+            "chore: update changelog",
+            "--",
+            "CHANGELOG.rst",
+        ],
+        ["git", "push"],
+    ]
+    outputs: list[str] = []
+    success = True
+
+    for command in git_commands:
+        result = subprocess.run(
+            command, capture_output=True, text=True, check=False
+        )
+        formatted = _format_git_command_output(command, result)
+        outputs.append(formatted)
+        logger.info("Executed %s with exit code %s", command, result.returncode)
+        if result.returncode != 0:
+            success = False
+            break
+
+    command_output = "\n\n".join(output for output in outputs if output)
+    repo_status = _git_status()
+    return success, command_output, repo_status
 
 
 @dataclass(frozen=True)
@@ -882,6 +951,36 @@ def _system_changelog_report_view(request):
                         request,
                         _("Select at least one changelog entry to exclude."),
                     )
+        elif action == "commit":
+            success, command_output, repo_status = _commit_changelog()
+            details: list[str] = []
+            if command_output:
+                details.append(
+                    format_html(
+                        "<div class=\"changelog-git-output\"><strong>{}</strong><pre>{}</pre></div>",
+                        _("Command log"),
+                        command_output,
+                    )
+                )
+            if repo_status:
+                details.append(
+                    format_html(
+                        "<div class=\"changelog-git-status\"><strong>{}</strong><pre>{}</pre></div>",
+                        _("Repository status"),
+                        repo_status,
+                    )
+                )
+            details_html = (
+                format_html_join("", "{}", ((detail,) for detail in details))
+                if details
+                else ""
+            )
+            if success:
+                base_message = _("Committed the changelog and pushed to the current branch.")
+                messages.success(request, format_html("{}{}", base_message, details_html))
+            else:
+                base_message = _("Unable to commit the changelog.")
+                messages.error(request, format_html("{}{}", base_message, details_html))
         else:
             try:
                 _regenerate_changelog()
