@@ -326,6 +326,14 @@ class EnvRefreshFixtureTests(TestCase):
             Site.objects.get(domain="operator.example").name, "Operator Portal"
         )
 
+        Site.objects.clear_cache()
+        current_site = Site.objects.get_current()
+        self.assertEqual(current_site.domain, "127.0.0.1")
+        self.assertEqual(
+            Site.objects.filter(domain=current_site.domain).count(),
+            1,
+        )
+
         expected_sites = {
             "arthexis.com": "Arthexis",
             "127.0.0.1": "Local",
