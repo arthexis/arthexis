@@ -362,12 +362,15 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                         ):
                             modified = True
                             continue
-                    if _model_defines_seed_flag(model):
-                        obj.setdefault("fields", {})["is_seed_data"] = True
-                    if any(f.name == "is_seed_data" for f in model._meta.fields):
-                        if fields.get("is_seed_data") is not True:
-                            fields["is_seed_data"] = True
-                            modified = True
+                    defines_seed_flag = _model_defines_seed_flag(model)
+                    has_seed_field = any(
+                        f.name == "is_seed_data" for f in model._meta.fields
+                    )
+                    if (defines_seed_flag or has_seed_field) and fields.get(
+                        "is_seed_data"
+                    ) is not True:
+                        fields["is_seed_data"] = True
+                        modified = True
                     patched_data.append(obj)
                     model_counts[model._meta.label] += 1
                 if modified:
@@ -391,7 +394,6 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                             print(".", end="", flush=True)
                 for module in Module.objects.all():
                     module.create_landings()
-                Landing.objects.update(is_seed_data=True)
 
                 if site_fixture_defaults:
                     preferred = _preferred_site_domain(site_fixture_defaults)
