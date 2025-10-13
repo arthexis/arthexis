@@ -411,6 +411,10 @@ def future_action_items(context):
         role = getattr(badge_node, "role", None)
         node_role_name = getattr(role, "name", "") if role else ""
 
+    show_todos = user.has_profile(ReleaseManager)
+    if node_role_name:
+        show_todos = show_todos and node_role_name == "Terminal"
+
     model_data = {}
     first_seen = 0
     todo_ct = ContentType.objects.get_for_model(Todo)
@@ -482,7 +486,7 @@ def future_action_items(context):
     ]
 
     todos: list[dict[str, str]] = []
-    if node_role_name == "Terminal" and user.has_profile(ReleaseManager):
+    if show_todos:
         todos = [
             {
                 "url": reverse("todo-focus", args=[todo.pk]),

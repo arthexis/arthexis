@@ -2500,6 +2500,16 @@ class FavoriteTests(TestCase):
             resp, '<div class="todo-details">More info</div>', html=True
         )
 
+    def test_dashboard_shows_todos_when_node_unknown(self):
+        Todo.objects.create(request="Check fallback")
+        from nodes.models import Node
+
+        Node.objects.all().delete()
+
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, "Release manager tasks")
+        self.assertContains(resp, "Check fallback")
+
     def test_dashboard_excludes_todo_changelist_link(self):
         ct = ContentType.objects.get_for_model(Todo)
         Favorite.objects.create(user=self.user, content_type=ct)
