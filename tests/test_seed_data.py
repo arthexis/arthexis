@@ -5,8 +5,10 @@ import shutil
 import importlib.util
 from glob import glob
 import io
+import uuid
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -27,6 +29,7 @@ from django.core.management import call_command
 import socket
 from core.models import Brand, Todo, WMICode
 from core.user_data import dump_user_fixture
+from pages.models import Application, Module, Landing
 
 
 class SeedDataEntityTests(TestCase):
@@ -91,8 +94,12 @@ class EntityInheritanceTests(TestCase):
 
         allowed = {
             "core.SecurityGroup",
+            "core.TOTPDeviceSettings",
+            "ocpp.DataTransferMessage",
+            "pages.Manual",
             "pages.SiteProxy",
             "teams.SecurityGroup",
+            "teams.TOTPDevice",
         }
         for app_label in getattr(settings, "LOCAL_APPS", []):
             config = apps.get_app_config(app_label)
@@ -392,6 +399,54 @@ class EnvRefreshNodeTests(TestCase):
             )
         finally:
             control_lock.unlink(missing_ok=True)
+
+
+class EnvRefreshLandingTests(TestCase):
+    def setUp(self):
+        base_dir = Path(settings.BASE_DIR)
+        spec = importlib.util.spec_from_file_location(
+            "env_refresh_landings", base_dir / "env-refresh.py"
+        )
+        self.env_refresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.env_refresh)
+        self.env_refresh._fixture_files = lambda: []
+        self.env_refresh.call_command = lambda *args, **kwargs: None
+
+    def test_env_refresh_marks_landings_seed_data_once(self):
+        role = NodeRole.objects.create(name=f"LandingRole-{uuid.uuid4().hex}")
+        app = Application.objects.create(
+            name=f"landing_app_{uuid.uuid4().hex}", description=""
+        )
+        module = Module.objects.create(
+            node_role=role,
+            application=app,
+            path="/landing-module/",
+        )
+        landing, _ = Landing.objects.get_or_create(
+            module=module,
+            path="/landing-module/",
+            defaults={"label": "Landing", "description": ""},
+        )
+        landing.is_seed_data = False
+        landing.save(update_fields=["is_seed_data"])
+
+        original_update = self.env_refresh.Landing.objects.update
+        update_calls: list[tuple[tuple, dict]] = []
+
+        def tracking_update(*args, **kwargs):
+            update_calls.append((args, kwargs))
+            return original_update(*args, **kwargs)
+
+        with patch.object(
+            self.env_refresh.Landing.objects,
+            "update",
+            side_effect=tracking_update,
+        ):
+            self.env_refresh.run_database_tasks()
+
+        landing.refresh_from_db()
+        self.assertTrue(landing.is_seed_data)
+        self.assertEqual(len(update_calls), 1)
 
 
 class EnvRefreshUserDataTests(TransactionTestCase):
