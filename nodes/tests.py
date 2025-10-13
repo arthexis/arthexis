@@ -1293,6 +1293,51 @@ class NodeRegisterCurrentTests(TestCase):
             PeriodicTask.objects.filter(name="pages_purge_landing_leads").exists()
         )
 
+    def test_ocpp_session_report_task_syncs_with_feature(self):
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="celery-queue", defaults={"display": "Celery Queue"}
+        )
+        node, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": socket.gethostname(),
+                "address": "127.0.0.1",
+                "port": 9400,
+                "base_path": settings.BASE_DIR,
+            },
+        )
+        task_name = "ocpp_send_daily_session_report"
+        PeriodicTask.objects.filter(name=task_name).delete()
+
+        with patch("nodes.models.mailer.can_send_email", return_value=True):
+            NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+
+        self.assertTrue(PeriodicTask.objects.filter(name=task_name).exists())
+
+        NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
+        self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
+
+    def test_ocpp_session_report_task_requires_email(self):
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="celery-queue", defaults={"display": "Celery Queue"}
+        )
+        node, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": socket.gethostname(),
+                "address": "127.0.0.1",
+                "port": 9500,
+                "base_path": settings.BASE_DIR,
+            },
+        )
+        task_name = "ocpp_send_daily_session_report"
+        PeriodicTask.objects.filter(name=task_name).delete()
+
+        with patch("nodes.models.mailer.can_send_email", return_value=False):
+            NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+
+        self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
+
 
 class CheckRegistrationReadyCommandTests(TestCase):
     def test_command_completes_successfully(self):

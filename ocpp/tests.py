@@ -40,6 +40,7 @@ from django.test import (
     TestCase,
     override_settings,
 )
+from django.conf import settings
 from unittest import skip
 from contextlib import suppress
 from types import SimpleNamespace
@@ -79,7 +80,7 @@ from .simulator import SimulatorConfig, ChargePointSimulator
 from .evcs import simulate, SimulatorState, _simulators
 import re
 from datetime import datetime, timedelta, timezone as dt_timezone
-from .tasks import purge_meter_readings
+from .tasks import purge_meter_readings, send_daily_session_report
 from django.db import close_old_connections
 from django.db.utils import OperationalError
 from urllib.parse import unquote, urlparse
@@ -3714,6 +3715,75 @@ class PurgeMeterReadingsTaskTests(TestCase):
         purge_meter_readings()
 
         self.assertTrue(MeterReading.objects.filter(pk=reading.pk).exists())
+
+
+class DailySessionReportTaskTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        self.locks_dir = Path(settings.BASE_DIR) / "locks"
+        self.locks_dir.mkdir(parents=True, exist_ok=True)
+        self.celery_lock = self.locks_dir / "celery.lck"
+        self.celery_lock.write_text("")
+        self.addCleanup(self._cleanup_lock)
+
+    def _cleanup_lock(self):
+        try:
+            self.celery_lock.unlink()
+        except FileNotFoundError:
+            pass
+
+    def test_report_sends_email_when_sessions_exist(self):
+        User = get_user_model()
+        User.objects.create_superuser(
+            username="report-admin",
+            email="report-admin@example.com",
+            password="pw",
+        )
+        charger = Charger.objects.create(charger_id="RPT1", display_name="Pod 1")
+        start = timezone.now().replace(hour=10, minute=0, second=0, microsecond=0)
+        Transaction.objects.create(
+            charger=charger,
+            start_time=start,
+            stop_time=start + timedelta(hours=1),
+            meter_start=0,
+            meter_stop=2500,
+            connector_id=2,
+            rfid="AA11",
+        )
+
+        with patch("core.mailer.can_send_email", return_value=True), patch(
+            "core.mailer.send"
+        ) as mock_send:
+            count = send_daily_session_report()
+
+        self.assertEqual(count, 1)
+        self.assertTrue(mock_send.called)
+        args, _kwargs = mock_send.call_args
+        self.assertIn("OCPP session report", args[0])
+        self.assertIn("Pod 1", args[1])
+        self.assertIn("report-admin@example.com", args[2])
+        self.assertGreaterEqual(len(args[2]), 1)
+
+    def test_report_skips_when_no_sessions(self):
+        with patch("core.mailer.can_send_email", return_value=True), patch(
+            "core.mailer.send"
+        ) as mock_send:
+            count = send_daily_session_report()
+
+        self.assertEqual(count, 0)
+        mock_send.assert_not_called()
+
+    def test_report_skips_without_celery_feature(self):
+        if self.celery_lock.exists():
+            self.celery_lock.unlink()
+
+        with patch("core.mailer.can_send_email", return_value=True), patch(
+            "core.mailer.send"
+        ) as mock_send:
+            count = send_daily_session_report()
+
+        self.assertEqual(count, 0)
+        mock_send.assert_not_called()
 
 
 class TransactionKwTests(TestCase):

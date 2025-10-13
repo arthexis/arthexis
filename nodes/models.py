@@ -753,6 +753,7 @@ class Node(Entity):
         self._sync_clipboard_task(clipboard_enabled)
         self._sync_screenshot_task(screenshot_enabled)
         self._sync_landing_lead_task(celery_enabled)
+        self._sync_ocpp_session_report_task(celery_enabled)
 
     def _sync_clipboard_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -824,6 +825,39 @@ class Node(Entity):
             )
         else:
             PeriodicTask.objects.filter(name=task_name).delete()
+
+    def _sync_ocpp_session_report_task(self, celery_enabled: bool):
+        from django_celery_beat.models import CrontabSchedule, PeriodicTask
+        from django.db.utils import OperationalError, ProgrammingError
+
+        task_name = "ocpp_send_daily_session_report"
+
+        if not self.is_local:
+            return
+
+        if not celery_enabled or not mailer.can_send_email():
+            PeriodicTask.objects.filter(name=task_name).delete()
+            return
+
+        try:
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute="0",
+                hour="18",
+                day_of_week="*",
+                day_of_month="*",
+                month_of_year="*",
+            )
+            PeriodicTask.objects.update_or_create(
+                name=task_name,
+                defaults={
+                    "crontab": schedule,
+                    "interval": None,
+                    "task": "ocpp.tasks.send_daily_session_report",
+                    "enabled": True,
+                },
+            )
+        except (OperationalError, ProgrammingError):
+            logger.debug("Skipping OCPP session report task sync; tables not ready")
 
     def send_mail(
         self,
