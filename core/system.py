@@ -213,7 +213,14 @@ def _commit_changelog() -> tuple[bool, str, str]:
 
     git_commands: list[list[str]] = [
         ["git", "add", "CHANGELOG.rst"],
-        ["git", "commit", "-m", "chore: update changelog"],
+        [
+            "git",
+            "commit",
+            "-m",
+            "chore: update changelog",
+            "--",
+            "CHANGELOG.rst",
+        ],
         ["git", "push"],
     ]
     outputs: list[str] = []
