@@ -2981,6 +2981,46 @@ class SimulatorAdminTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_heartbeat_refreshes_aggregate_after_connector_status(self):
+        store.ip_connections.clear()
+        store.connections.clear()
+        await database_sync_to_async(Charger.objects.create)(charger_id="HBAGG")
+        communicator = WebsocketCommunicator(application, "/HBAGG/")
+        connect_result = await communicator.connect()
+        self.assertTrue(connect_result[0], connect_result)
+
+        status_payload = {
+            "connectorId": 2,
+            "status": "Faulted",
+            "errorCode": "ReaderFailure",
+        }
+        await communicator.send_json_to(
+            [2, "1", "StatusNotification", status_payload]
+        )
+        await communicator.receive_json_from()
+
+        aggregate = await database_sync_to_async(Charger.objects.get)(
+            charger_id="HBAGG", connector_id=None
+        )
+        connector = await database_sync_to_async(Charger.objects.get)(
+            charger_id="HBAGG", connector_id=2
+        )
+        previous_heartbeat = aggregate.last_heartbeat
+
+        await communicator.send_json_to([2, "2", "Heartbeat", {}])
+        await communicator.receive_json_from()
+
+        await database_sync_to_async(aggregate.refresh_from_db)()
+        await database_sync_to_async(connector.refresh_from_db)()
+
+        self.assertIsNotNone(aggregate.last_heartbeat)
+        if previous_heartbeat:
+            self.assertNotEqual(aggregate.last_heartbeat, previous_heartbeat)
+        if connector.last_heartbeat:
+            self.assertNotEqual(aggregate.last_heartbeat, connector.last_heartbeat)
+
+        await communicator.disconnect()
+
 
 class ChargerLocationTests(TestCase):
     def test_lat_lon_fields_saved(self):
