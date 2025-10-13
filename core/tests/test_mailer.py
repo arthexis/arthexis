@@ -6,6 +6,7 @@ import os
 from types import SimpleNamespace
 
 import django
+from django.core import mail
 from django.test.utils import override_settings
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -64,3 +65,33 @@ def test_can_send_email_detects_outbox(monkeypatch):
         EMAIL_BACKEND="django.core.mail.backends.dummy.EmailBackend"
     ):
         assert mailer.can_send_email() is True
+
+
+def test_send_allows_two_item_attachment():
+    """``send`` should accept two-part attachments without raising errors."""
+
+    from core import mailer
+
+    with override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="noreply@example.com",
+    ):
+        mail.get_connection()
+        mail.outbox.clear()
+        email = mailer.send(
+            "Subject",
+            "Body",
+            ["person@example.com"],
+            attachments=[("report.txt", "hello world")],
+            fail_silently=True,
+        )
+
+        attachment = email.attachments[0]
+        assert attachment.filename == "report.txt"
+        assert attachment.content == "hello world"
+        assert attachment.mimetype == "text/plain"
+
+        stored_attachment = mail.outbox[0].attachments[0]
+        assert stored_attachment.filename == "report.txt"
+        assert stored_attachment.content == "hello world"
+        assert stored_attachment.mimetype == "text/plain"
