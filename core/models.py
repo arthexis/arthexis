@@ -1827,11 +1827,11 @@ class RFID(Entity):
     RED = "R"
     GREEN = "G"
     COLOR_CHOICES = [
-        (BLACK, "Black"),
-        (WHITE, "White"),
-        (BLUE, "Blue"),
-        (RED, "Red"),
-        (GREEN, "Green"),
+        (BLACK, _("Black")),
+        (WHITE, _("White")),
+        (BLUE, _("Blue")),
+        (RED, _("Red")),
+        (GREEN, _("Green")),
     ]
     SCAN_LABEL_STEP = 10
     COPY_LABEL_STEP = 1
@@ -1843,8 +1843,8 @@ class RFID(Entity):
     CLASSIC = "CLASSIC"
     NTAG215 = "NTAG215"
     KIND_CHOICES = [
-        (CLASSIC, "MIFARE Classic"),
-        (NTAG215, "NTAG215"),
+        (CLASSIC, _("MIFARE Classic")),
+        (NTAG215, _("NTAG215")),
     ]
     kind = models.CharField(
         max_length=8,

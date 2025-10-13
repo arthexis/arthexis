@@ -747,6 +747,34 @@ msgstr "Generado el: %(date)s"
 msgid "Label"
 msgstr "Etiqueta"
 
+#: core/models.py:1830
+msgid "Black"
+msgstr "Negro"
+
+#: core/models.py:1831
+msgid "White"
+msgstr "Blanco"
+
+#: core/models.py:1832
+msgid "Blue"
+msgstr "Azul"
+
+#: core/models.py:1833
+msgid "Red"
+msgstr "Rojo"
+
+#: core/models.py:1834
+msgid "Green"
+msgstr "Verde"
+
+#: core/models.py:1846
+msgid "MIFARE Classic"
+msgstr "MIFARE Classic"
+
+#: core/models.py:1847
+msgid "NTAG215"
+msgstr "NTAG215"
+
 #: core/admin.py:3323
 msgid "RFID"
 msgstr "RFID"
