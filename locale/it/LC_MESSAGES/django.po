@@ -47,6 +47,82 @@ msgstr "Traffico del sito pubblico"
 msgid "Select a connector to view live chart data."
 msgstr "Seleziona un connettore per visualizzare i dati del grafico in tempo reale."
 
+#: core/admin.py:3293 core/admin.py:3297
+msgid "RFID Release Form"
+msgstr "Modulo di consegna RFID"
+
+#: core/admin.py:3310
+msgid "%(datetime)s %(timezone)s"
+msgstr "%(datetime)s %(timezone)s"
+
+#: core/admin.py:3314
+msgid "Generated on: %(date)s"
+msgstr "Generato il: %(date)s"
+
+#: core/admin.py:3322
+msgid "Label"
+msgstr "Etichetta"
+
+#: core/models.py:1830
+msgid "Black"
+msgstr "Nero"
+
+#: core/models.py:1831
+msgid "White"
+msgstr "Bianco"
+
+#: core/models.py:1832
+msgid "Blue"
+msgstr "Blu"
+
+#: core/models.py:1833
+msgid "Red"
+msgstr "Rosso"
+
+#: core/models.py:1834
+msgid "Green"
+msgstr "Verde"
+
+#: core/models.py:1846
+msgid "MIFARE Classic"
+msgstr "MIFARE Classic"
+
+#: core/models.py:1847
+msgid "NTAG215"
+msgstr "NTAG215"
+
+#: core/admin.py:3323
+msgid "RFID"
+msgstr "RFID"
+
+#: core/admin.py:3324
+msgid "Custom label"
+msgstr "Etichetta personalizzata"
+
+#: core/admin.py:3325
+msgid "Color"
+msgstr "Colore"
+
+#: core/admin.py:3326
+msgid "Type"
+msgstr "Tipo"
+
+#: core/admin.py:3358
+msgid "Issuer Signature: ______________________________"
+msgstr "Firma dell'emittente: ______________________________"
+
+#: core/admin.py:3362
+msgid "Receiver Signature: ______________________________"
+msgstr "Firma del destinatario: ______________________________"
+
+#: core/admin.py:3368
+msgid "Issuer Name: ______________________________"
+msgstr "Nome dell'emittente: ______________________________"
+
+#: core/admin.py:3372
+msgid "Receiver Name: ______________________________"
+msgstr "Nome del destinatario: ______________________________"
+
 #: awg/templates/awg/calculator.html:3
 msgid "AWG Calculator"
 msgstr "Calcolatore AWG"
