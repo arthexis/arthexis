@@ -400,15 +400,15 @@
     if(typeof template !== 'string' || !template){
       return '';
     }
-    const entries = Object.entries(replacements || {});
-    if(!entries.length){
-      return template;
-    }
-    return entries.reduce((result, [key, value]) => {
-      const pattern = new RegExp(`%\\(${key}\\)s`, 'g');
-      const replacement = value === undefined || value === null ? '' : String(value);
-      return result.replace(pattern, replacement);
-    }, template);
+    const values = replacements || {};
+    const placeholderPattern = /%\(([^)]+)\)(?:[-+0 #]*\d*(?:\.\d+)?)?[a-zA-Z]/g;
+    return template.replace(placeholderPattern, (match, key) => {
+      if(!Object.prototype.hasOwnProperty.call(values, key)){
+        return match;
+      }
+      const replacement = values[key];
+      return replacement === undefined || replacement === null ? '' : String(replacement);
+    });
   }
 
   const historyBody = tableMode ? document.getElementById('{{ prefix }}-history-body') : null;
