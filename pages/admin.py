@@ -625,13 +625,22 @@ class UserStoryAdmin(EntityModelAdmin):
         "name",
         "rating",
         "path",
+        "status",
         "submitted_at",
         "github_issue_display",
         "take_screenshot",
         "owner",
+        "assign_to",
     )
-    list_filter = ("rating", "submitted_at", "take_screenshot")
-    search_fields = ("name", "comments", "path", "github_issue_url")
+    list_filter = ("rating", "status", "submitted_at", "take_screenshot")
+    search_fields = (
+        "name",
+        "comments",
+        "path",
+        "referer",
+        "github_issue_url",
+        "ip_address",
+    )
     readonly_fields = (
         "name",
         "rating",
@@ -640,6 +649,10 @@ class UserStoryAdmin(EntityModelAdmin):
         "path",
         "user",
         "owner",
+        "referer",
+        "user_agent",
+        "ip_address",
+        "created_on",
         "submitted_at",
         "github_issue_number",
         "github_issue_url",
@@ -653,6 +666,12 @@ class UserStoryAdmin(EntityModelAdmin):
         "path",
         "user",
         "owner",
+        "status",
+        "assign_to",
+        "referer",
+        "user_agent",
+        "ip_address",
+        "created_on",
         "submitted_at",
         "github_issue_number",
         "github_issue_url",

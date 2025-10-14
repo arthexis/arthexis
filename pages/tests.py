@@ -2812,6 +2812,7 @@ class DatasetteTests(TestCase):
 
 class UserStorySubmissionTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.client = Client()
         self.url = reverse("pages:user-story-submit")
         User = get_user_model()
@@ -2827,6 +2828,8 @@ class UserStorySubmissionTests(TestCase):
                 "path": "/wizard/step-1/",
                 "take_screenshot": "1",
             },
+            HTTP_REFERER="https://example.test/wizard/step-1/",
+            HTTP_USER_AGENT="FeedbackBot/1.0",
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"success": True})
@@ -2838,6 +2841,10 @@ class UserStorySubmissionTests(TestCase):
         self.assertEqual(story.owner, self.user)
         self.assertTrue(story.is_user_data)
         self.assertTrue(story.take_screenshot)
+        self.assertEqual(story.status, UserStory.Status.OPEN)
+        self.assertEqual(story.referer, "https://example.test/wizard/step-1/")
+        self.assertEqual(story.user_agent, "FeedbackBot/1.0")
+        self.assertEqual(story.ip_address, "127.0.0.1")
 
     def test_anonymous_submission_uses_provided_name(self):
         response = self.client.post(
@@ -2858,6 +2865,7 @@ class UserStorySubmissionTests(TestCase):
         self.assertIsNone(story.owner)
         self.assertEqual(story.comments, "It was fine.")
         self.assertTrue(story.take_screenshot)
+        self.assertEqual(story.status, UserStory.Status.OPEN)
 
     def test_invalid_rating_returns_errors(self):
         response = self.client.post(
@@ -2890,6 +2898,7 @@ class UserStorySubmissionTests(TestCase):
         self.assertIsNone(story.user)
         self.assertIsNone(story.owner)
         self.assertTrue(story.take_screenshot)
+        self.assertEqual(story.status, UserStory.Status.OPEN)
 
     def test_submission_without_screenshot_request(self):
         response = self.client.post(
@@ -2904,6 +2913,22 @@ class UserStorySubmissionTests(TestCase):
         story = UserStory.objects.get()
         self.assertFalse(story.take_screenshot)
         self.assertIsNone(story.owner)
+
+    def test_rate_limit_blocks_repeated_submissions(self):
+        payload = {
+            "rating": 4,
+            "comments": "Pretty good",
+            "path": "/feedback/",
+            "take_screenshot": "1",
+        }
+        first = self.client.post(self.url, payload)
+        self.assertEqual(first.status_code, 200)
+        second = self.client.post(self.url, payload)
+        self.assertEqual(second.status_code, 429)
+        data = second.json()
+        self.assertFalse(data["success"])
+        self.assertIn("__all__", data.get("errors", {}))
+        self.assertIn("5", data["errors"]["__all__"][0])
 
 
 class UserStoryIssueAutomationTests(TestCase):
