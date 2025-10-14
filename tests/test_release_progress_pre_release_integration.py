@@ -90,9 +90,19 @@ EOF
     assert fixture_one.exists()
     fixture_data = json.loads(fixture_one.read_text(encoding="utf-8"))
     assert fixture_data[0]["fields"]["request"] == "Create release pkg 1.2.1"
+    assert (
+        fixture_data[0]["fields"]["generated_for_version"]
+        == release.version
+    )
+    assert (
+        fixture_data[0]["fields"]["generated_for_revision"]
+        == release.revision
+    )
 
     todo_one = Todo.objects.get(request="Create release pkg 1.2.1")
     assert todo_one.is_seed_data
+    assert todo_one.generated_for_version == release.version
+    assert todo_one.generated_for_revision == release.revision
 
     diff_cached = subprocess.run(
         ["git", "diff", "--cached", "--name-only"],

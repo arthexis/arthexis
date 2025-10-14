@@ -3584,6 +3584,8 @@ class Todo(Entity):
         max_length=200, blank=True, default="", validators=[validate_relative_url]
     )
     request_details = models.TextField(blank=True, default="")
+    generated_for_version = models.CharField(max_length=20, blank=True, default="")
+    generated_for_revision = models.CharField(max_length=40, blank=True, default="")
     done_on = models.DateTimeField(null=True, blank=True)
     on_done_condition = ConditionTextField(blank=True, default="")
 
