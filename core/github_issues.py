@@ -71,8 +71,10 @@ def get_github_token() -> str:
     latest_release = PackageRelease.latest()
     if latest_release:
         token = latest_release.get_github_token()
-        if token:
-            return token
+        if token is not None:
+            cleaned = token.strip() if isinstance(token, str) else str(token).strip()
+            if cleaned:
+                return cleaned
 
     env_token = os.environ.get("GITHUB_TOKEN")
     if env_token is not None:
