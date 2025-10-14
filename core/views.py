@@ -666,9 +666,16 @@ def _ensure_release_todo(
     previous_version = (previous_version or "").strip()
     target_version = _next_patch_version(release.version)
     if previous_version:
-        incremented_previous = _next_patch_version(previous_version)
-        if incremented_previous == release.version:
-            target_version = release.version
+        try:
+            from packaging.version import InvalidVersion, Version
+
+            parsed_previous = Version(previous_version)
+            parsed_target = Version(target_version)
+        except InvalidVersion:
+            pass
+        else:
+            if parsed_target <= parsed_previous:
+                target_version = _next_patch_version(previous_version)
     request = f"Create release {release.package.name} {target_version}"
     try:
         url = reverse("admin:core_packagerelease_changelist")
