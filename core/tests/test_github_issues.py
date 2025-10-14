@@ -77,6 +77,12 @@ class TokenLookupTests(TestCase):
                 with self.assertRaises(RuntimeError):
                     github_issues.get_github_token()
 
+    def test_blank_environment_token_is_treated_as_missing(self) -> None:
+        with mock.patch("core.github_issues.PackageRelease.latest", return_value=None):
+            with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "   "}, clear=True):
+                with self.assertRaises(RuntimeError):
+                    github_issues.get_github_token()
+
 
 class FingerprintTests(TestCase):
     def setUp(self) -> None:

@@ -74,10 +74,13 @@ def get_github_token() -> str:
         if token:
             return token
 
-    try:
-        return os.environ["GITHUB_TOKEN"]
-    except KeyError as exc:  # pragma: no cover - defensive guard
-        raise RuntimeError("GitHub token is not configured") from exc
+    env_token = os.environ.get("GITHUB_TOKEN")
+    if env_token is not None:
+        cleaned = env_token.strip() if isinstance(env_token, str) else str(env_token).strip()
+        if cleaned:
+            return cleaned
+
+    raise RuntimeError("GitHub token is not configured")
 
 
 def _ensure_lock_dir() -> None:
