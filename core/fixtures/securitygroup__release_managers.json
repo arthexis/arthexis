@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.securitygroup",
+    "fields": {
+      "name": "Release Managers",
+      "permissions": [],
+      "user_set": [
+        ["admin"],
+        ["arthexis"]
+      ]
+    }
+  }
+]

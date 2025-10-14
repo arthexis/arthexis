@@ -19,6 +19,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import LoginView
 from django import forms
 from django.apps import apps as django_apps
+from utils.decorators import security_group_required
 from utils.sites import get_site
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -548,6 +549,12 @@ def sitemap(request):
             lines.append(f"  <url><loc>{loc}</loc></url>")
     lines.append("</urlset>")
     return HttpResponse("\n".join(lines), content_type="application/xml")
+
+
+@landing("Package Releases")
+@security_group_required("Release Managers")
+def release_admin_redirect(request):
+    return redirect("admin:core_packagerelease_changelist")
 
 
 def release_checklist(request):
