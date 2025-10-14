@@ -1,4 +1,4 @@
-{% load i18n %}
+{% load i18n static %}
 <!DOCTYPE html>
 <html lang="{{ LANGUAGE_CODE|default:'en' }}">
 <head>
@@ -81,6 +81,19 @@
     .todo-button-done:hover {
       background: #1d4ed8;
     }
+    .todo-button-snapshot {
+      background: #0ea5e9;
+      color: #ffffff;
+      border-color: #0284c7;
+      box-shadow: 0 1px 4px rgba(14, 165, 233, 0.25);
+    }
+    .todo-button-snapshot:hover {
+      background: #0284c7;
+    }
+    .todo-button.is-busy {
+      opacity: 0.7;
+      pointer-events: none;
+    }
     .todo-button-back {
       background: transparent;
       color: #1e293b;
@@ -113,6 +126,18 @@
       width: 100%;
       border: 0;
       background: #ffffff;
+    }
+    .todo-snapshot-status {
+      font-size: 0.8rem;
+      margin-top: 0.35rem;
+      min-height: 1.2rem;
+      color: #1e293b;
+    }
+    .todo-snapshot-status.success {
+      color: #166534;
+    }
+    .todo-snapshot-status.error {
+      color: #b91c1c;
     }
   </style>
 </head>
@@ -148,6 +173,18 @@
     </div>
     <div class="todo-actions">
       <a href="{{ focus_target_url }}" target="_blank" rel="noopener" class="todo-button todo-button-open">{% trans "Open target" %}</a>
+      <button
+        type="button"
+        id="todo-snapshot-btn"
+        class="todo-button todo-button-snapshot"
+        data-snapshot-url="{{ snapshot_url }}"
+        data-label-default="{% trans "Take Snapshot" %}"
+        data-label-saving="{% trans "Saving…" %}"
+        data-message-success="{% trans "Snapshot saved." %}"
+        data-error-unavailable="{% trans "Snapshot is unavailable for this task." %}"
+        data-error-capture="{% trans "Unable to capture the snapshot." %}"
+        data-error-upload="{% trans "Unable to save the snapshot." %}"
+      >{% trans "Take Snapshot" %}</button>
       <form method="post" action="{{ done_url }}" class="todo-done-form">
         {% csrf_token %}
         <input type="hidden" name="next" value="{{ next_url }}">
@@ -155,7 +192,10 @@
       </form>
       <a href="{{ next_url }}" class="todo-button todo-button-back">{% trans "Back" %}</a>
     </div>
+    <div id="todo-snapshot-status" class="todo-snapshot-status" role="status" aria-live="polite"></div>
   </div>
   <iframe src="{{ iframe_url }}" class="todo-frame" title="{{ todo.request }}"></iframe>
+  <script src="{% static 'core/vendor/html2canvas.min.js' %}"></script>
+  <script src="{% static 'core/todo_focus.js' %}"></script>
 </body>
 </html>

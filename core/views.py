@@ -1,3 +1,5 @@
+import base64
+import binascii
 import json
 import logging
 import os
@@ -16,6 +18,7 @@ from django.http import Http404, JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.template.response import TemplateResponse
 from django.utils import timezone
+from django.utils.html import strip_tags
 from django.utils.text import slugify
 from django.utils.translation import gettext as _
 from django.urls import NoReverseMatch, reverse
@@ -32,6 +35,7 @@ from django.template.loader import get_template
 from django.test import signals
 
 from utils import revision
+from nodes.utils import save_screenshot
 from utils.api import api_login_required
 
 logger = logging.getLogger(__name__)
@@ -2198,6 +2202,7 @@ def todo_focus(request, pk: int):
         "focus_auth": focus_auth,
         "next_url": _get_return_url(request),
         "done_url": reverse("todo-done", args=[todo.pk]),
+        "snapshot_url": reverse("todo-snapshot", args=[todo.pk]),
     }
     return render(request, "core/todo_focus.html", context)
 
@@ -2217,3 +2222,67 @@ def todo_done(request, pk: int):
     todo.done_on = timezone.now()
     todo.save(update_fields=["done_on"])
     return redirect(redirect_to)
+
+
+@staff_member_required
+@require_POST
+def todo_snapshot(request, pk: int):
+    todo = get_object_or_404(Todo, pk=pk, is_deleted=False)
+    if todo.done_on:
+        return JsonResponse({"detail": _("This TODO has already been completed.")}, status=400)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": _("Invalid JSON payload.")}, status=400)
+
+    image_data = payload.get("image", "") if isinstance(payload, dict) else ""
+    if not isinstance(image_data, str) or not image_data.startswith("data:image/png;base64,"):
+        return JsonResponse({"detail": _("A PNG data URL is required.")}, status=400)
+
+    try:
+        encoded = image_data.split(",", 1)[1]
+    except IndexError:
+        return JsonResponse({"detail": _("Screenshot data is incomplete.")}, status=400)
+
+    try:
+        image_bytes = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error):
+        return JsonResponse({"detail": _("Unable to decode screenshot data.")}, status=400)
+
+    if not image_bytes:
+        return JsonResponse({"detail": _("Screenshot data is empty.")}, status=400)
+
+    max_size = 5 * 1024 * 1024
+    if len(image_bytes) > max_size:
+        return JsonResponse({"detail": _("Screenshot is too large to store.")}, status=400)
+
+    relative_path = Path("screenshots") / f"todo-{todo.pk}-{uuid.uuid4().hex}.png"
+    full_path = settings.LOG_DIR / relative_path
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    with full_path.open("wb") as fh:
+        fh.write(image_bytes)
+
+    primary_text = strip_tags(todo.request or "").strip()
+    details_text = strip_tags(todo.request_details or "").strip()
+    alt_parts = [part for part in (primary_text, details_text) if part]
+    if alt_parts:
+        alt_text = " — ".join(alt_parts)
+    else:
+        alt_text = _("TODO %(id)s snapshot") % {"id": todo.pk}
+
+    sample = save_screenshot(
+        relative_path,
+        method="TODO_QA",
+        content=alt_text,
+        user=request.user if request.user.is_authenticated else None,
+    )
+
+    if sample is None:
+        try:
+            full_path.unlink()
+        except FileNotFoundError:
+            pass
+        return JsonResponse({"detail": _("Duplicate snapshot ignored.")})
+
+    return JsonResponse({"detail": _("Snapshot saved."), "sample": str(sample.pk)})
