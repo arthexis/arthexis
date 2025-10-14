@@ -106,6 +106,18 @@ def _get_registered_models(app_label: str):
     return sorted(registered, key=lambda model: str(model._meta.verbose_name))
 
 
+def _get_client_ip(request) -> str:
+    """Return the client IP from the request headers."""
+
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded_for:
+        for value in forwarded_for.split(","):
+            candidate = value.strip()
+            if candidate:
+                return candidate
+    return request.META.get("REMOTE_ADDR", "")
+
+
 def _filter_models_for_request(models, request):
     """Filter ``models`` to only those viewable by ``request.user``."""
 
@@ -1110,6 +1122,24 @@ def client_report(request):
 
 @require_POST
 def submit_user_story(request):
+    throttle_seconds = getattr(settings, "USER_STORY_THROTTLE_SECONDS", 300)
+    client_ip = _get_client_ip(request)
+    cache_key = None
+
+    if throttle_seconds:
+        cache_key = f"user-story:ip:{client_ip or 'unknown'}"
+        if not cache.add(cache_key, timezone.now(), throttle_seconds):
+            minutes = throttle_seconds // 60
+            if throttle_seconds % 60:
+                minutes += 1
+            error_message = _(
+                "You can only submit feedback once every %(minutes)s minutes."
+            ) % {"minutes": minutes or 1}
+            return JsonResponse(
+                {"success": False, "errors": {"__all__": [error_message]}},
+                status=429,
+            )
+
     data = request.POST.copy()
     if request.user.is_authenticated and not data.get("name"):
         data["name"] = request.user.get_username()[:40]
@@ -1130,6 +1160,9 @@ def submit_user_story(request):
         if not story.name:
             story.name = str(_("Anonymous"))[:40]
         story.path = (story.path or request.get_full_path())[:500]
+        story.referer = request.META.get("HTTP_REFERER", "")
+        story.user_agent = request.META.get("HTTP_USER_AGENT", "")
+        story.ip_address = client_ip or None
         story.is_user_data = True
         story.save()
         return JsonResponse({"success": True})

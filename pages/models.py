@@ -470,7 +470,7 @@ class Favorite(Entity):
         unique_together = ("user", "content_type")
 
 
-class UserStory(Entity):
+class UserStory(Lead):
     path = models.CharField(max_length=500)
     name = models.CharField(max_length=40, blank=True)
     rating = models.PositiveSmallIntegerField(
