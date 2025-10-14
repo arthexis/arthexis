@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.http import HttpRequest
 import csv
 import json
+import importlib.util
 from decimal import Decimal
 from unittest import mock
 from unittest.mock import patch
@@ -22,6 +23,7 @@ import tempfile
 from urllib.parse import quote
 
 from django.utils import timezone
+from django.conf import settings
 from django.contrib.auth.models import Permission
 from django.contrib.messages import get_messages
 from tablib import Dataset
@@ -2092,6 +2094,42 @@ class TodoDoneTests(TestCase):
         self.assertRedirects(resp, reverse("admin:index"))
         todo.refresh_from_db()
         self.assertIsNotNone(todo.done_on)
+
+    def test_env_refresh_preserves_completed_fixture_todo(self):
+        base_dir = Path(settings.BASE_DIR)
+        fixture_path = base_dir / "core" / "fixtures" / "todo__validate_screen_system_reports.json"
+        spec = importlib.util.spec_from_file_location(
+            "env_refresh_todo", base_dir / "env-refresh.py"
+        )
+        env_refresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(env_refresh)
+        fixture_rel_path = str(fixture_path.relative_to(base_dir))
+        env_refresh._fixture_files = lambda: [fixture_rel_path]
+
+        from django.core.management import call_command as django_call
+
+        def fake_call_command(name, *args, **kwargs):
+            if name == "loaddata":
+                return django_call(name, *args, **kwargs)
+            return None
+
+        env_refresh.call_command = fake_call_command
+        env_refresh.load_shared_user_fixtures = lambda *args, **kwargs: None
+        env_refresh.load_user_fixtures = lambda *args, **kwargs: None
+        env_refresh.generate_model_sigils = lambda: None
+
+        env_refresh.run_database_tasks()
+
+        todo = Todo.objects.get(request="Validate screen System Reports")
+        self.assertTrue(todo.is_seed_data)
+        todo.done_on = timezone.now()
+        todo.save(update_fields=["done_on"])
+
+        env_refresh.run_database_tasks()
+
+        todo.refresh_from_db()
+        self.assertIsNotNone(todo.done_on)
+        self.assertTrue(todo.is_seed_data)
 
 
 class TodoFocusViewTests(TestCase):
