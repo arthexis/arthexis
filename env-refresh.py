@@ -43,7 +43,7 @@ from nodes.models import Node
 from django.contrib.sites.models import Site
 from django.contrib.auth import get_user_model
 
-from core.models import PackageRelease
+from core.models import PackageRelease, Todo
 from core.sigil_builder import generate_model_sigils
 from core.user_data import load_shared_user_fixtures, load_user_fixtures
 from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
@@ -362,6 +362,19 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                         ):
                             modified = True
                             continue
+                    if model_label == "core.todo":
+                        request_value = fields.get("request")
+                        if isinstance(request_value, str):
+                            existing_todo = Todo.objects.filter(
+                                request__iexact=request_value
+                            ).first()
+                            if existing_todo and existing_todo.done_on:
+                                if existing_todo.is_seed_data is not True:
+                                    existing_todo.is_seed_data = True
+                                    existing_todo.save(update_fields=["is_seed_data"])
+                                modified = True
+                                model_counts[model._meta.label] += 1
+                                continue
                     defines_seed_flag = _model_defines_seed_flag(model)
                     has_seed_field = any(
                         f.name == "is_seed_data" for f in model._meta.fields
