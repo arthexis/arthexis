@@ -7,7 +7,11 @@ from pathlib import Path
 from unittest import mock
 
 import requests
+import django
 from django.test import TestCase
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+django.setup()
 
 from core import github_issues
 from core.models import Package
@@ -63,6 +67,32 @@ class TokenLookupTests(TestCase):
 
         self.assertEqual(token, "release-token")
         release.get_github_token.assert_called_once_with()
+
+    def test_release_token_is_trimmed(self) -> None:
+        release = mock.Mock()
+        release.get_github_token.return_value = "  release-token  "
+
+        with mock.patch(
+            "core.github_issues.PackageRelease.latest", return_value=release
+        ):
+            with mock.patch.dict(os.environ, {}, clear=True):
+                token = github_issues.get_github_token()
+
+        self.assertEqual(token, "release-token")
+
+    def test_blank_release_token_falls_back_to_environment(self) -> None:
+        release = mock.Mock()
+        release.get_github_token.return_value = "   "
+
+        with mock.patch(
+            "core.github_issues.PackageRelease.latest", return_value=release
+        ):
+            with mock.patch.dict(
+                os.environ, {"GITHUB_TOKEN": "env-token"}, clear=True
+            ):
+                token = github_issues.get_github_token()
+
+        self.assertEqual(token, "env-token")
 
     def test_token_falls_back_to_environment(self) -> None:
         with mock.patch("core.github_issues.PackageRelease.latest", return_value=None):
