@@ -15,12 +15,13 @@ def get_site(request):
     ports still resolve to the correct ``Site`` instance.
     """
     host, _ = split_domain_port(request.get_host())
-    try:
-        return Site.objects.get(domain=host)
-    except Site.DoesNotExist:
-        pass
-    except DatabaseError:
-        return RequestSite(request)
+    if host:
+        try:
+            return Site.objects.get(domain__iexact=host)
+        except Site.DoesNotExist:
+            pass
+        except DatabaseError:
+            return RequestSite(request)
 
     try:
         return get_current_site(request)

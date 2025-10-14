@@ -1,5 +1,6 @@
 import pytest
 
+from django.conf import settings
 from django.contrib.sites.requests import RequestSite
 from django.contrib.sites.models import Site
 from django.db import DatabaseError
@@ -90,3 +91,27 @@ def test_sites_template_tag_falls_back_to_request_site(monkeypatch):
 
     assert isinstance(site, RequestSite)
     assert site.domain == "testserver"
+
+
+def test_get_site_uses_case_insensitive_domain_lookup(monkeypatch):
+    request = _build_request("Example.COM:8000")
+    recorded_kwargs: dict[str, object] = {}
+    sentinel = Site(domain="example.com", name="Example")
+
+    monkeypatch.setattr(settings, "ALLOWED_HOSTS", ["example.com"], raising=False)
+
+    def fake_get(**kwargs):
+        recorded_kwargs.update(kwargs)
+        return sentinel
+
+    def fail_if_called(*args, **kwargs):
+        pytest.fail("get_current_site should not be consulted when domain lookup succeeds")
+
+    monkeypatch.setattr("utils.sites.Site.objects.get", fake_get)
+    monkeypatch.setattr("utils.sites.get_current_site", fail_if_called)
+
+    resolved = get_site(request)
+
+    assert resolved is sentinel
+    assert "domain__iexact" in recorded_kwargs
+    assert "domain" not in recorded_kwargs
