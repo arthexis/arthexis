@@ -1521,6 +1521,74 @@ class ConstellationNavTests(TestCase):
         resp = self.client.get(reverse("pages:index"))
         self.assertContains(resp, 'href="/ocpp/"')
 
+
+class ReleaseModuleNavTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user_model = get_user_model()
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": "localhost",
+                "address": "127.0.0.1",
+                "role": role,
+            },
+        )
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": "Terminal"}
+        )
+        application, _ = Application.objects.get_or_create(name="core")
+        module, _ = Module.objects.get_or_create(
+            node_role=role,
+            application=application,
+            path="/release/",
+            defaults={"menu": "Release", "is_default": False},
+        )
+        module_updates = []
+        if module.menu != "Release":
+            module.menu = "Release"
+            module_updates.append("menu")
+        if getattr(module, "is_deleted", False):
+            module.is_deleted = False
+            module_updates.append("is_deleted")
+        if module_updates:
+            module.save(update_fields=module_updates)
+        Landing.objects.update_or_create(
+            module=module,
+            path="/release/",
+            defaults={
+                "label": "Package Releases",
+                "enabled": True,
+                "description": "",
+            },
+        )
+        self.release_group, _ = SecurityGroup.objects.get_or_create(
+            name="Release Managers"
+        )
+
+    def test_release_module_hidden_for_anonymous(self):
+        response = self.client.get(reverse("pages:index"))
+        self.assertNotContains(response, 'badge rounded-pill text-bg-secondary">RELEASE')
+
+    def test_release_module_visible_to_release_manager(self):
+        user = self.user_model.objects.create_user(
+            "release-admin", password="test", is_staff=True
+        )
+        user.groups.add(self.release_group)
+        self.client.force_login(user)
+        response = self.client.get(reverse("pages:index"))
+        self.assertContains(response, 'badge rounded-pill text-bg-secondary">RELEASE')
+
+    def test_release_module_hidden_for_non_member_staff(self):
+        user = self.user_model.objects.create_user(
+            "staff-user", password="test", is_staff=True
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse("pages:index"))
+        self.assertNotContains(response, 'badge rounded-pill text-bg-secondary">RELEASE')
+
+
 class ControlNavTests(TestCase):
     def setUp(self):
         self.client = Client()

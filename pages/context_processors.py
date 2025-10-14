@@ -50,6 +50,13 @@ def nav_links(request):
     valid_modules = []
     datasette_enabled = False
     current_module = None
+    user = getattr(request, "user", None)
+    user_is_authenticated = getattr(user, "is_authenticated", False)
+    user_is_superuser = getattr(user, "is_superuser", False)
+    if user_is_authenticated:
+        user_group_names = set(user.groups.values_list("name", flat=True))
+    else:
+        user_group_names = set()
     for module in modules:
         landings = []
         for landing in module.landings.filter(enabled=True):
@@ -62,7 +69,19 @@ def nav_links(request):
             if not requires_login and hasattr(view_func, "login_url"):
                 requires_login = True
             staff_only = getattr(view_func, "staff_required", False)
-            if requires_login and not request.user.is_authenticated:
+            required_groups = getattr(
+                view_func, "required_security_groups", frozenset()
+            )
+            if required_groups:
+                requires_login = True
+                setattr(landing, "requires_login", True)
+                if not user_is_authenticated:
+                    continue
+                if not user_is_superuser and not (
+                    user_group_names & set(required_groups)
+                ):
+                    continue
+            elif requires_login and not user_is_authenticated:
                 setattr(landing, "requires_login", True)
             if staff_only and not request.user.is_staff:
                 continue
