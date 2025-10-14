@@ -132,11 +132,15 @@ def check_github_updates() -> None:
     mode = "version"
     if mode_file.exists():
         try:
-            mode = mode_file.read_text().strip() or "version"
+            raw_mode = mode_file.read_text().strip()
         except (OSError, UnicodeDecodeError):
             logger.warning(
                 "Failed to read auto-upgrade mode lockfile", exc_info=True
             )
+        else:
+            cleaned_mode = raw_mode.lower()
+            if cleaned_mode:
+                mode = cleaned_mode
 
     branch = "main"
     subprocess.run(["git", "fetch", "origin", branch], cwd=base_dir, check=True)
