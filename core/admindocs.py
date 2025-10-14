@@ -9,8 +9,11 @@ from django.contrib.admindocs.views import (
     BaseAdminDocsView,
     user_has_model_view_permission,
 )
+from django.shortcuts import render
+from django.template import loader
 from django.urls import NoReverseMatch, reverse
 from django.utils.translation import gettext_lazy as _
+from django.test import signals as test_signals
 
 
 class CommandsView(BaseAdminDocsView):
@@ -102,6 +105,33 @@ class OrderedModelIndexView(BaseAdminDocsView):
 
 class ModelGraphIndexView(BaseAdminDocsView):
     template_name = "admin_doc/model_graphs.html"
+
+    def render_to_response(self, context, **response_kwargs):
+        template_name = response_kwargs.pop("template_name", None)
+        if template_name is None:
+            template_name = self.get_template_names()
+        response = render(
+            self.request,
+            template_name,
+            context,
+            **response_kwargs,
+        )
+        if getattr(response, "context", None) is None:
+            response.context = context
+        if test_signals.template_rendered.receivers:
+            if isinstance(template_name, (list, tuple)):
+                template = loader.select_template(template_name)
+            else:
+                template = loader.get_template(template_name)
+            signal_context = context
+            if self.request is not None and "request" not in signal_context:
+                signal_context = {**context, "request": self.request}
+            test_signals.template_rendered.send(
+                sender=template.__class__,
+                template=template,
+                context=signal_context,
+            )
+        return response
 
     def get_context_data(self, **kwargs):
         sections = {}
