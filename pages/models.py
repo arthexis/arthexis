@@ -624,6 +624,8 @@ def _queue_low_rating_user_story_issue(
         return
     if instance.github_issue_url:
         return
+    if not instance.user_id:
+        return
     if not _is_celery_enabled():
         return
 

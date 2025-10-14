@@ -2911,6 +2911,10 @@ class UserStoryIssueAutomationTests(TestCase):
         self.lock_dir = Path(settings.BASE_DIR) / "locks"
         self.lock_dir.mkdir(parents=True, exist_ok=True)
         self.lock_file = self.lock_dir / "celery.lck"
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="feedback_user", password="pwd"
+        )
 
     def tearDown(self):
         self.lock_file.unlink(missing_ok=True)
@@ -2924,9 +2928,23 @@ class UserStoryIssueAutomationTests(TestCase):
                 rating=2,
                 comments="Needs work",
                 take_screenshot=False,
+                user=self.user,
             )
 
         mock_delay.assert_called_once_with(story.pk)
+
+    def test_low_rating_story_without_user_does_not_enqueue_issue(self):
+        self.lock_file.write_text("")
+
+        with patch("pages.models.create_user_story_github_issue.delay") as mock_delay:
+            UserStory.objects.create(
+                path="/feedback/",
+                rating=2,
+                comments="Needs work",
+                take_screenshot=False,
+            )
+
+        mock_delay.assert_not_called()
 
     def test_five_star_story_does_not_enqueue_issue(self):
         self.lock_file.write_text("")
@@ -2950,6 +2968,7 @@ class UserStoryIssueAutomationTests(TestCase):
                 rating=1,
                 comments="Not good",
                 take_screenshot=False,
+                user=self.user,
             )
 
         mock_delay.assert_not_called()
