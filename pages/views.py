@@ -23,8 +23,9 @@ from utils.sites import get_site
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from nodes.models import Node
+from django.template import loader
 from django.template.response import TemplateResponse
-from django.test import RequestFactory
+from django.test import RequestFactory, signals as test_signals
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
@@ -408,7 +409,21 @@ def admin_model_graph(request, app_label: str):
         }
     )
 
-    return TemplateResponse(request, "admin/model_graph.html", context)
+    template_name = "admin/model_graph.html"
+    response = render(request, template_name, context)
+    if getattr(response, "context", None) is None:
+        response.context = context
+    if test_signals.template_rendered.receivers:
+        template = loader.get_template(template_name)
+        signal_context = context
+        if request is not None and "request" not in signal_context:
+            signal_context = {**context, "request": request}
+        test_signals.template_rendered.send(
+            sender=template.__class__,
+            template=template,
+            context=signal_context,
+        )
+    return response
 
 
 def _render_readme(request, role):
