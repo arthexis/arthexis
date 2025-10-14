@@ -155,8 +155,13 @@ EOF
     changelog_text = Path("CHANGELOG.rst").read_text(encoding="utf-8")
     assert "Fix fallback integration coverage (#42)" in changelog_text
 
-    fixture_two = todo_fixture_dir / "todos__create_release_pkg_1_2_1.json"
+    fixture_two = todo_fixture_dir / "todos__create_release_pkg_1_2_2.json"
     assert fixture_two.exists()
+    fixture_two_data = json.loads(fixture_two.read_text(encoding="utf-8"))
+    assert fixture_two_data[0]["fields"]["request"] == "Create release pkg 1.2.2"
+    assert not Todo.objects.filter(request="Create release pkg 1.2.1").exists()
+    todo_two = Todo.objects.get(request="Create release pkg 1.2.2")
+    assert todo_two.is_seed_data
 
     second_diff = subprocess.run(
         ["git", "diff", "--cached", "--name-only"],

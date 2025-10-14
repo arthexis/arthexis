@@ -653,7 +653,7 @@ class ReleaseProgressViewTests(TestCase):
         self.release.refresh_from_db()
         self.assertEqual(self.release.changelog, "- pending change")
 
-    def test_ensure_release_todo_uses_release_version_when_bumped(self):
+    def test_ensure_release_todo_targets_next_patch_after_bump(self):
         self.release.version = "0.9.1"
         self.release.save(update_fields=["version"])
 
@@ -666,7 +666,7 @@ class ReleaseProgressViewTests(TestCase):
                 self.release, previous_version="0.9.0"
             )
 
-        expected_request = "Create release pkg 0.9.1"
+        expected_request = "Create release pkg 0.9.2"
         self.assertEqual(todo.request, expected_request)
         data = json.loads(fixture_path.read_text(encoding="utf-8"))
         self.assertEqual(data[0]["fields"]["request"], expected_request)
