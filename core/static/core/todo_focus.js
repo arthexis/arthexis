@@ -44,14 +44,25 @@
   }
 
   function buildSnapshot(iframe) {
-    if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
+    if (!iframe) {
+      return Promise.reject(new Error('frame-unavailable'));
+    }
+    let doc;
+    try {
+      if (!iframe.contentWindow) {
+        return Promise.reject(new Error('frame-unavailable'));
+      }
+      doc = iframe.contentDocument;
+    } catch (error) {
+      return Promise.reject(new Error('frame-unavailable'));
+    }
+    if (!doc) {
       return Promise.reject(new Error('frame-unavailable'));
     }
     if (typeof window.html2canvas !== 'function') {
       return Promise.reject(new Error('canvas-missing'));
     }
 
-    const doc = iframe.contentDocument;
     const target = doc.documentElement;
     const width = Math.max(target.scrollWidth, target.clientWidth, iframe.clientWidth);
     const height = Math.max(target.scrollHeight, target.clientHeight, iframe.clientHeight);
