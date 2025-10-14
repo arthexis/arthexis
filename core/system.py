@@ -25,6 +25,12 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from core.auto_upgrade import AUTO_UPGRADE_TASK_NAME, AUTO_UPGRADE_TASK_PATH
 from core import changelog as changelog_utils
+from core.release import (
+    _git_authentication_missing,
+    _git_remote_url,
+    _manager_git_credentials,
+    _remote_with_credentials,
+)
 from core.tasks import check_github_updates
 from utils import revision
 
@@ -212,6 +218,48 @@ def _git_status() -> str:
 def _commit_changelog() -> tuple[bool, str, str]:
     """Stage, commit, and push the changelog file."""
 
+    def _retry_push_with_release_credentials(
+        command: list[str],
+        result: subprocess.CompletedProcess[str],
+    ) -> bool:
+        exc = subprocess.CalledProcessError(
+            result.returncode,
+            command,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
+        if not _git_authentication_missing(exc):
+            return False
+
+        creds = _manager_git_credentials()
+        if not creds or not creds.has_auth():
+            return False
+
+        remote_url = _git_remote_url("origin")
+        if not remote_url:
+            return False
+
+        authed_url = _remote_with_credentials(remote_url, creds)
+        if not authed_url:
+            return False
+
+        retry_command = ["git", "push", authed_url]
+        retry_result = subprocess.run(
+            retry_command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        formatted_retry = _format_git_command_output(retry_command, retry_result)
+        if formatted_retry:
+            outputs.append(formatted_retry)
+        logger.info(
+            "Executed %s with exit code %s",
+            retry_command,
+            retry_result.returncode,
+        )
+        return retry_result.returncode == 0
+
     git_commands: list[list[str]] = [
         ["git", "add", "CHANGELOG.rst"],
         [
@@ -235,6 +283,10 @@ def _commit_changelog() -> tuple[bool, str, str]:
         outputs.append(formatted)
         logger.info("Executed %s with exit code %s", command, result.returncode)
         if result.returncode != 0:
+            if command[:2] == ["git", "push"] and _retry_push_with_release_credentials(
+                command, result
+            ):
+                continue
             success = False
             break
 
