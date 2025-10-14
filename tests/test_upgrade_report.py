@@ -4,13 +4,22 @@ from pathlib import Path
 import tempfile
 from unittest import mock
 
-from django.test import SimpleTestCase, override_settings
+from django.contrib import messages
+from django.contrib.sessions.middleware import SessionMiddleware
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.test import SimpleTestCase, RequestFactory, override_settings
+from django.urls import reverse
 from django.utils import timezone
 
 from core import system
 
 
 class UpgradeReportTests(SimpleTestCase):
+    databases = {"default"}
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
     def test_build_auto_upgrade_report_reads_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir)
@@ -115,3 +124,57 @@ class UpgradeReportTests(SimpleTestCase):
         self.assertEqual(info["name"], dummy_task.name)
         self.assertEqual(info["start_time"], expected_start)
         self.assertEqual(info["last_run_at"], expected_last_run)
+
+    def test_trigger_upgrade_check_uses_async_queue(self):
+        with mock.patch("core.system.check_github_updates") as mock_task:
+            mock_task.delay = mock.Mock()
+
+            queued = system._trigger_upgrade_check()
+
+        self.assertTrue(queued)
+        mock_task.delay.assert_called_once_with()
+        mock_task.assert_not_called()
+
+    def test_trigger_upgrade_check_falls_back_to_sync(self):
+        with mock.patch("core.system.check_github_updates") as mock_task:
+            mock_task.delay = mock.Mock(side_effect=RuntimeError("broker down"))
+
+            queued = system._trigger_upgrade_check()
+
+        self.assertFalse(queued)
+        mock_task.delay.assert_called_once_with()
+        mock_task.assert_called_once_with()
+
+    def test_trigger_upgrade_check_view_adds_success_message(self):
+        request = self.factory.post(reverse("admin:system-upgrade-run-check"))
+        SessionMiddleware(lambda req: None).process_request(request)
+        request.session.save()
+        setattr(request, "_messages", FallbackStorage(request))
+        request.user = mock.Mock(is_staff=True, is_active=True)
+
+        with mock.patch("core.system._trigger_upgrade_check", return_value=True):
+            response = system._system_trigger_upgrade_check_view(request)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("admin:system-upgrade-report"))
+        stored = list(messages.get_messages(request))
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0].level, messages.SUCCESS)
+
+    def test_trigger_upgrade_check_view_reports_error(self):
+        request = self.factory.post(reverse("admin:system-upgrade-run-check"))
+        SessionMiddleware(lambda req: None).process_request(request)
+        request.session.save()
+        setattr(request, "_messages", FallbackStorage(request))
+        request.user = mock.Mock(is_staff=True, is_active=True)
+
+        with mock.patch(
+            "core.system._trigger_upgrade_check",
+            side_effect=RuntimeError("oops"),
+        ):
+            response = system._system_trigger_upgrade_check_view(request)
+
+        self.assertEqual(response.status_code, 302)
+        stored = list(messages.get_messages(request))
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0].level, messages.ERROR)

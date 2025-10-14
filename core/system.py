@@ -25,6 +25,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from core.auto_upgrade import AUTO_UPGRADE_TASK_NAME, AUTO_UPGRADE_TASK_PATH
 from core import changelog as changelog_utils
+from core.tasks import check_github_updates
 from utils import revision
 
 
@@ -1026,6 +1027,49 @@ def _system_upgrade_report_view(request):
     return TemplateResponse(request, "admin/system_upgrade_report.html", context)
 
 
+def _trigger_upgrade_check() -> bool:
+    """Return ``True`` when the upgrade check was queued asynchronously."""
+
+    try:
+        check_github_updates.delay()
+    except Exception:
+        logger.exception("Failed to enqueue upgrade check; running synchronously instead")
+        check_github_updates()
+        return False
+    return True
+
+
+def _system_trigger_upgrade_check_view(request):
+    if request.method != "POST":
+        return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
+
+    try:
+        queued = _trigger_upgrade_check()
+    except Exception as exc:  # pragma: no cover - unexpected failure
+        logger.exception("Unable to trigger upgrade check")
+        messages.error(
+            request,
+            _("Unable to trigger an upgrade check: %(error)s")
+            % {"error": str(exc)},
+        )
+    else:
+        if queued:
+            messages.success(
+                request,
+                _("Upgrade check requested. The task will run shortly."),
+            )
+        else:
+            messages.success(
+                request,
+                _(
+                    "Upgrade check started locally. Review the auto-upgrade log for"
+                    " progress."
+                ),
+            )
+
+    return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
+
+
 def patch_admin_system_view() -> None:
     """Add custom admin view for system information."""
     original_get_urls = admin.site.get_urls
@@ -1043,6 +1087,11 @@ def patch_admin_system_view() -> None:
                 "system/upgrade-report/",
                 admin.site.admin_view(_system_upgrade_report_view),
                 name="system-upgrade-report",
+            ),
+            path(
+                "system/upgrade-report/run-check/",
+                admin.site.admin_view(_system_trigger_upgrade_check_view),
+                name="system-upgrade-run-check",
             ),
         ]
         return custom + urls
