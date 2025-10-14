@@ -602,6 +602,8 @@ class ReleaseProgressViewTests(TestCase):
         expected_request = "Create release pkg 1.0.1"
         todo = Todo.objects.get(request=expected_request)
         self.assertTrue(todo.is_seed_data)
+        self.assertEqual(todo.generated_for_version, self.release.version)
+        self.assertEqual(todo.generated_for_revision, self.release.revision)
         self.assertEqual(todo.url, reverse("admin:core_packagerelease_changelist"))
         self.assertIsNone(todo.done_on)
         fixture_path = tmp_dir / fixture_filename
@@ -610,6 +612,12 @@ class ReleaseProgressViewTests(TestCase):
         self.assertEqual(data[0]["fields"]["request"], expected_request)
         self.assertEqual(
             data[0]["fields"]["url"], reverse("admin:core_packagerelease_changelist")
+        )
+        self.assertEqual(
+            data[0]["fields"]["generated_for_version"], self.release.version
+        )
+        self.assertEqual(
+            data[0]["fields"]["generated_for_revision"], self.release.revision
         )
 
         log_path = Path("logs") / self.log_name
@@ -668,8 +676,16 @@ class ReleaseProgressViewTests(TestCase):
 
         expected_request = "Create release pkg 0.9.2"
         self.assertEqual(todo.request, expected_request)
+        self.assertEqual(todo.generated_for_version, self.release.version)
+        self.assertEqual(todo.generated_for_revision, self.release.revision)
         data = json.loads(fixture_path.read_text(encoding="utf-8"))
         self.assertEqual(data[0]["fields"]["request"], expected_request)
+        self.assertEqual(
+            data[0]["fields"]["generated_for_version"], self.release.version
+        )
+        self.assertEqual(
+            data[0]["fields"]["generated_for_revision"], self.release.revision
+        )
 
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     @mock.patch("core.views.release_utils.network_available", return_value=False)

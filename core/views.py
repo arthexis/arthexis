@@ -633,6 +633,8 @@ def _write_todo_fixture(todo: Todo) -> Path:
                 "request": todo.request,
                 "url": todo.url,
                 "request_details": todo.request_details,
+                "generated_for_version": todo.generated_for_version,
+                "generated_for_revision": todo.generated_for_revision,
             },
         }
     ]
@@ -687,6 +689,8 @@ def _ensure_release_todo(
             "request": request,
             "url": url,
             "request_details": "",
+            "generated_for_version": release.version or "",
+            "generated_for_revision": release.revision or "",
             "is_seed_data": True,
             "is_deleted": False,
             "is_user_data": False,
