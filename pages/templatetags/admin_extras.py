@@ -169,6 +169,14 @@ def model_admin_actions(context, app_label, model_name):
             getter = getattr(model_admin, "get_my_profile_url", None)
             if callable(getter):
                 url = getter(request)
+            label_getter = getattr(model_admin, "get_my_profile_label", None)
+            if callable(label_getter):
+                try:
+                    dynamic_label = label_getter(request)
+                except Exception:  # pragma: no cover - defensive fallback
+                    dynamic_label = None
+                if dynamic_label:
+                    label = dynamic_label
         base = f"admin:{model_admin.opts.app_label}_{model_admin.opts.model_name}_"
         if not url:
             try:
