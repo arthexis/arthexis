@@ -4,6 +4,36 @@
 {% block extrahead %}
   {{ block.super }}
   {{ media }}
+  <style>
+    .send-net-message-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 2rem;
+      align-items: start;
+    }
+
+    .send-net-message-column .module {
+      width: 100%;
+    }
+
+    .send-net-message-column .module .form-row {
+      align-items: center;
+    }
+
+    .send-net-message-column .module .form-row .flex-container {
+      width: 100%;
+    }
+
+    .send-net-message-column .module .form-row .flex-container:not(.checkbox-row) > label {
+      min-width: 12rem;
+    }
+
+    @media (max-width: 960px) {
+      .send-net-message-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 {% endblock %}
 
 {% block breadcrumbs %}
@@ -16,37 +46,25 @@
 {% endblock %}
 
 {% block content %}
-  <h1>{% trans 'Send Net Message' %}</h1>
   <form method="post" action="">
     {% csrf_token %}
     {{ adminform.form.non_field_errors }}
-    {% for fieldset in adminform %}
-      <fieldset class="module aligned{% if fieldset.classes %} {{ fieldset.classes }}{% endif %}">
-        {% if fieldset.name %}<h2>{{ fieldset.name }}</h2>{% endif %}
-        {% for line in fieldset %}
-          <div class="form-row{% if line.errors %} errors{% endif %}{% for field in line %} field-{{ field.name }}{% endfor %}">
-            {% for field in line %}
-              <div>
-                {% if field.is_checkbox %}
-                  {{ field.field }}
-                  {{ field.label_tag }}
-                {% else %}
-                  {{ field.label_tag }}
-                  {% if field.is_readonly %}
-                    <div class="readonly">{{ field.contents }}</div>
-                  {% else %}
-                    {{ field.field }}
-                  {% endif %}
-                {% endif %}
-                {% if field.help_text %}
-                  <p class="help">{{ field.help_text }}</p>
-                {% endif %}
-              </div>
-            {% endfor %}
-          </div>
+    <div class="send-net-message-layout">
+      <div class="send-net-message-column send-net-message-column--message">
+        {% for fieldset in adminform %}
+          {% if forloop.counter0 == 0 %}
+            {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=forloop.counter0 %}
+          {% endif %}
         {% endfor %}
-      </fieldset>
-    {% endfor %}
+      </div>
+      <div class="send-net-message-column send-net-message-column--filters">
+        {% for fieldset in adminform %}
+          {% if forloop.counter0 > 0 %}
+            {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=forloop.counter0 %}
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
     <div class="submit-row">
       <a href="{% url opts|admin_urlname:'changelist' %}" class="button cancel-link">{% trans 'Cancel' %}</a>
       <button type="submit" class="button default">{% trans 'Send message' %}</button>
