@@ -82,14 +82,33 @@ def test_authenticate_requires_confirmed_device():
     assert result is None
 
 
-def test_authenticate_requires_named_device():
+def test_authenticate_falls_back_to_any_confirmed_device():
     user, device = create_staff_user_with_device(name="unexpected")
     token = _current_token(device)
 
     backend = TOTPBackend()
     result = backend.authenticate(None, username=user.username, otp_token=token)
 
-    assert result is None
+    assert result is not None
+    assert result.pk == user.pk
+    assert getattr(result, "otp_device") == device
+
+
+def test_authenticate_prefers_named_device():
+    user, _fallback_device = create_staff_user_with_device(name="unexpected")
+    named_device = TOTPDevice.objects.create(
+        user=user,
+        name=TOTP_DEVICE_NAME,
+        confirmed=True,
+    )
+    token = _current_token(named_device)
+
+    backend = TOTPBackend()
+    result = backend.authenticate(None, username=user.username, otp_token=token)
+
+    assert result is not None
+    assert result.pk == user.pk
+    assert getattr(result, "otp_device") == named_device
 
 
 def test_authenticate_handles_verify_exceptions(monkeypatch):
