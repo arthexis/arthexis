@@ -89,6 +89,7 @@ def save_screenshot(
     transaction_uuid=None,
     *,
     content: str | None = None,
+    user=None,
 ):
     """Save screenshot file info if not already recorded.
 
@@ -115,6 +116,8 @@ def save_screenshot(
         data["transaction_uuid"] = transaction_uuid
     if content is not None:
         data["content"] = content
+    if user is not None:
+        data["user"] = user
     with suppress_default_classifiers():
         sample = ContentSample.objects.create(**data)
     run_default_classifiers(sample)

@@ -135,6 +135,11 @@ urlpatterns = [
         name="todo-done",
     ),
     path(
+        "admin/core/todos/<int:pk>/snapshot/",
+        core_views.todo_snapshot,
+        name="todo-snapshot",
+    ),
+    path(
         "admin/core/odoo-products/",
         core_views.odoo_products,
         name="odoo-products",

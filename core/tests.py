@@ -53,6 +53,7 @@ from core.admin import (
     USER_PROFILE_INLINES,
 )
 from ocpp.models import Transaction, Charger
+from nodes.models import ContentSample
 
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
@@ -2150,6 +2151,9 @@ class TodoFocusViewTests(TestCase):
         self.assertContains(resp, f'src="{todo.url}"')
         self.assertContains(resp, "Done")
         self.assertContains(resp, "Back")
+        self.assertContains(resp, "Take Snapshot")
+        snapshot_url = reverse("todo-snapshot", args=[todo.pk])
+        self.assertContains(resp, snapshot_url)
 
     def test_focus_view_uses_admin_change_when_no_url(self):
         todo = Todo.objects.create(request="Task")
@@ -2219,6 +2223,57 @@ class TodoFocusViewTests(TestCase):
             f"{reverse('todo-focus', args=[todo.pk])}?next={quote(next_url)}"
         )
         self.assertRedirects(resp, next_url, target_status_code=200)
+
+
+class TodoSnapshotViewTests(TestCase):
+    PNG_PIXEL = (
+        "data:image/png;base64," "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR42mP8/5+hHgAFgwJ/lSdX6QAAAABJRU5ErkJggg=="
+    )
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="manager", password="secret", is_staff=True
+        )
+        self.client.force_login(self.user)
+        self.todo = Todo.objects.create(
+            request="QA release notes", request_details="Verify layout"
+        )
+
+    def test_snapshot_creates_content_sample(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        with override_settings(LOG_DIR=Path(tmpdir.name)):
+            response = self.client.post(
+                reverse("todo-snapshot", args=[self.todo.pk]),
+                data=json.dumps({"image": self.PNG_PIXEL}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("sample", payload)
+        self.assertEqual(ContentSample.objects.filter(kind=ContentSample.IMAGE).count(), 1)
+        sample = ContentSample.objects.get(pk=payload["sample"])
+        self.assertEqual(sample.method, "TODO_QA")
+        self.assertEqual(sample.user, self.user)
+        self.assertEqual(sample.content, "QA release notes — Verify layout")
+        rel_path = Path(sample.path)
+        self.assertTrue(rel_path.parts)
+        self.assertEqual(rel_path.parts[0], "screenshots")
+        self.assertTrue((Path(tmpdir.name) / rel_path).exists())
+
+    def test_snapshot_rejects_completed_todo(self):
+        self.todo.done_on = timezone.now()
+        self.todo.save(update_fields=["done_on"])
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        with override_settings(LOG_DIR=Path(tmpdir.name)):
+            response = self.client.post(
+                reverse("todo-snapshot", args=[self.todo.pk]),
+                data=json.dumps({"image": self.PNG_PIXEL}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(ContentSample.objects.count(), 0)
 
 
 class TodoUrlValidationTests(TestCase):
