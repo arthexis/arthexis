@@ -45,6 +45,28 @@ def test_sets_operate_as_on_admin_creation():
     assert user.operate_as_id == delegate.id
 
 
+def test_resets_missing_password_on_login():
+    User = get_user_model()
+    ensure_arthexis_user()
+    User.all_objects.filter(username="admin").delete()
+    admin = User.objects.create_user(
+        username="admin", is_staff=True, is_superuser=True, password="irrelevant"
+    )
+    admin.password = ""
+    admin.save(update_fields=["password"])
+
+    backend = LocalhostAdminBackend()
+    req = HttpRequest()
+    req.META["REMOTE_ADDR"] = "127.0.0.1"
+    req.META["HTTP_HOST"] = "127.0.0.1"
+
+    user = backend.authenticate(req, username="admin", password="admin")
+
+    assert user is not None
+    admin.refresh_from_db()
+    assert admin.check_password("admin")
+
+
 def test_blocks_docker_bridge_addresses():
     User = get_user_model()
     ensure_arthexis_user()

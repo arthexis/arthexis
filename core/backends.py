@@ -228,11 +228,16 @@ class LocalhostAdminBackend(ModelBackend):
                     user.operate_as = arthexis_user
                 user.set_password("admin")
                 user.save()
-            elif not user.check_password("admin"):
-                return None
-            elif arthexis_user and user.operate_as_id is None:
-                user.operate_as = arthexis_user
-                user.save(update_fields=["operate_as"])
+            else:
+                if not user.check_password("admin"):
+                    if not user.password or not user.has_usable_password():
+                        user.set_password("admin")
+                        user.save(update_fields=["password"])
+                    else:
+                        return None
+                if arthexis_user and user.operate_as_id is None:
+                    user.operate_as = arthexis_user
+                    user.save(update_fields=["operate_as"])
             return user
         return super().authenticate(request, username, password, **kwargs)
 
