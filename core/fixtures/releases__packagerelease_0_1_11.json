@@ -6,7 +6,7 @@
       "0.1.11"
     ],
     "fields": {
-      "is_seed_data": true,
+      "is_seed_data": false,
       "is_user_data": false,
       "is_deleted": false,
       "package": [
@@ -21,7 +21,7 @@
       "changelog": "",
       "pypi_url": "https://pypi.org/project/arthexis/0.1.11/",
       "github_url": "",
-      "release_on": "2025-09-26T15:15:16.387Z"
+      "release_on": "2025-09-26T15:15:16.387000Z"
     }
   }
 ]
