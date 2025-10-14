@@ -42,9 +42,12 @@ class TOTPBackend(ModelBackend):
 
         device_qs = TOTPDevice.objects.filter(user=user, confirmed=True)
         if TOTP_DEVICE_NAME:
-            device_qs = device_qs.filter(name=TOTP_DEVICE_NAME)
+            device = device_qs.filter(name=TOTP_DEVICE_NAME).order_by("-id").first()
+        else:
+            device = None
 
-        device = device_qs.order_by("-id").first()
+        if device is None:
+            device = device_qs.order_by("-id").first()
         if device is None:
             return None
 
