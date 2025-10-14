@@ -567,13 +567,27 @@
       ? String(details.error)
       : '';
     let returnCode = details && details.returncode !== undefined ? details.returncode : null;
-    if(typeof returnCode === 'string' && returnCode.trim() !== ''){
-      const parsed = Number(returnCode);
-      if(Number.isFinite(parsed)){
-        returnCode = parsed;
+    let numericReturnCode = null;
+    let returnCodeText = '';
+    if(typeof returnCode === 'number' && Number.isFinite(returnCode)){
+      numericReturnCode = returnCode;
+      returnCodeText = String(returnCode);
+    } else if(typeof returnCode === 'string'){
+      const trimmed = returnCode.trim();
+      if(trimmed){
+        const sanitized = trimmed.replace(/%+$/, '');
+        if(sanitized){
+          const parsed = Number(sanitized);
+          if(Number.isFinite(parsed)){
+            numericReturnCode = parsed;
+            returnCodeText = String(parsed);
+          } else {
+            returnCodeText = sanitized;
+          }
+        }
       }
     }
-    const hasReturnCode = typeof returnCode === 'number' && Number.isFinite(returnCode);
+    const hasReturnCode = Boolean(returnCodeText);
     const hasStdout = Boolean(stdoutText);
     const hasStderr = Boolean(stderrText);
     const hasError = Boolean(errorText);
@@ -598,9 +612,13 @@
 
     let statusMessage = '';
     if(hasReturnCode){
-      statusMessage = returnCode === 0
-        ? formatText(text.commandSucceeded, {code: returnCode})
-        : formatText(text.commandFailed, {code: returnCode});
+      if(numericReturnCode !== null){
+        statusMessage = numericReturnCode === 0
+          ? formatText(text.commandSucceeded, {code: returnCodeText})
+          : formatText(text.commandFailed, {code: returnCodeText});
+      } else {
+        statusMessage = formatText(text.commandFailed, {code: returnCodeText});
+      }
     } else if(hasError){
       statusMessage = text.commandError;
     } else if(hasStdout || hasStderr){
