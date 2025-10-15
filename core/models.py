@@ -3068,6 +3068,7 @@ class ReleaseManager(Profile):
         blank=True,
         help_text=(
             "Link to the PyPI user profile (for example, https://pypi.org/user/username/). "
+            "Use the account's user page, not a project-specific URL. "
             "This value is informational and not used for uploads."
         ),
     )
