@@ -838,7 +838,14 @@ def _gather_info() -> dict:
     info["service"] = service_file.read_text().strip() if service_file.exists() else ""
 
     mode_file = lock_dir / "nginx_mode.lck"
-    mode = mode_file.read_text().strip() if mode_file.exists() else "internal"
+    if mode_file.exists():
+        try:
+            raw_mode = mode_file.read_text().strip()
+        except OSError:
+            raw_mode = ""
+    else:
+        raw_mode = ""
+    mode = raw_mode.lower() or "internal"
     info["mode"] = mode
     default_port = 8000 if mode == "public" else 8888
     detected_port: int | None = None

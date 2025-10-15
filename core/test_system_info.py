@@ -55,6 +55,22 @@ class SystemInfoScreenModeTests(SimpleTestCase):
                 lock_dir.rmdir()
 
 
+class SystemInfoModeTests(SimpleTestCase):
+    def test_public_mode_case_insensitive(self):
+        lock_dir = Path(settings.BASE_DIR) / "locks"
+        lock_dir.mkdir(exist_ok=True)
+        lock_file = lock_dir / "nginx_mode.lck"
+        lock_file.write_text("PUBLIC", encoding="utf-8")
+        try:
+            info = _gather_info()
+            self.assertEqual(info["mode"], "public")
+            self.assertEqual(info["port"], 8000)
+        finally:
+            lock_file.unlink()
+            if not any(lock_dir.iterdir()):
+                lock_dir.rmdir()
+
+
 class SystemInfoRevisionTests(SimpleTestCase):
     @patch("core.system.revision.get_revision", return_value="abcdef1234567890")
     def test_includes_full_revision(self, mock_revision):
