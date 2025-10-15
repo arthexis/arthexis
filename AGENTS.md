@@ -35,6 +35,19 @@
   - Keep the interface and meaning of flags consistent across scripts.
   - Ensure all shell scripts are executable. Verify new or modified scripts retain the `chmod +x` permission.
 
+## Agent Advice
+
+Use the following checklist when deciding whether a change fixes a bug or merely alters configuration defaults:
+
+1. **Crashes or Exceptions** – Does the current behavior raise an unhandled exception or prevent a supported workflow from completing?
+2. **Functional Regression** – Has a feature stopped meeting documented requirements or reasonable user expectations?
+3. **Security Issue** – Does the behavior expose sensitive data or create an unsafe default?
+4. **Data Loss/Corruption** – Can users lose or corrupt data by following supported workflows?
+5. **Build/Test Failure** – Does the project fail to build, install dependencies, or run required automated tests?
+6. **Severe Performance Regression** – Is a workflow effectively unusable due to resource leaks or unacceptable slowness?
+
+Configuration changes that simply prefer one valid default over another (for example, forcing `DEBUG=1` for `manage.py runserver`) do **not** fall into these bug categories because the original behavior still functions and supports legitimate use cases. Treat such changes as feature requests and only apply them when explicitly requested by stakeholders.
+
 - Feature-driven tests must use `@pytest.mark.feature("<slug>")` where the slug
   matches a `nodes.NodeFeature`. CI uses these markers to include the
   feature-specific suites for each node role.
