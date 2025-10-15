@@ -2049,6 +2049,14 @@ def release_progress(request, pk: int, action: str):
         )
 
     is_running = ctx.get("started") and not paused and not done and not ctx.get("error")
+    resume_available = (
+        ctx.get("started")
+        and not paused
+        and not done
+        and not ctx.get("error")
+        and step_count < len(steps)
+        and next_step is None
+    )
     can_resume = ctx.get("started") and paused and not done and not ctx.get("error")
     release_manager_owner = manager.owner_display() if manager else ""
     try:
@@ -2103,6 +2111,7 @@ def release_progress(request, pk: int, action: str):
         "has_release_manager": bool(manager),
         "current_user_admin_url": current_user_admin_url,
         "is_running": is_running,
+        "resume_available": resume_available,
         "can_resume": can_resume,
         "dry_run": dry_run_active,
         "dry_run_toggle_enabled": dry_run_toggle_enabled,

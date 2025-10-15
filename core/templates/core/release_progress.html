@@ -283,6 +283,15 @@
       <form method="get">
         <button type="submit" name="pause" value="1" {% if not is_running %}disabled{% endif %}>⏸️ {% trans 'Pause Publish' %}</button>
       </form>
+      {% if resume_available %}
+      <form method="get">
+        <input type="hidden" name="step" value="{{ current_step }}">
+        {% if dry_run %}
+        <input type="hidden" name="dry_run" value="1">
+        {% endif %}
+        <button type="submit" name="resume" value="1">⏯️ {% trans 'Resume Publish' %}</button>
+      </form>
+      {% endif %}
       {% if started %}
       <form method="get">
         <button type="submit" name="restart" value="1">🔄 {% trans 'Restart Publish' %}</button>
