@@ -3229,13 +3229,22 @@ class PackageRelease(Entity):
     def dump_fixture(cls) -> None:
         base = Path("core/fixtures")
         base.mkdir(parents=True, exist_ok=True)
-        for old in base.glob("releases__*.json"):
-            old.unlink()
+        existing = {path.name: path for path in base.glob("releases__*.json")}
+        expected: set[str] = set()
         for release in cls.objects.all():
             name = f"releases__packagerelease_{release.version.replace('.', '_')}.json"
             path = base / name
             data = serializers.serialize("json", [release])
-            path.write_text(data)
+            expected.add(name)
+            try:
+                current = path.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                current = None
+            if current != data:
+                path.write_text(data, encoding="utf-8")
+        for old_name, old_path in existing.items():
+            if old_name not in expected and old_path.exists():
+                old_path.unlink()
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.package.name} {self.version}"

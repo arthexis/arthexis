@@ -1604,6 +1604,71 @@ class ReleaseProcessTests(TestCase):
             self.assertEqual(count_file.read_text(), "1")
 
 
+class PackageReleaseFixtureTests(TestCase):
+    def setUp(self):
+        self.base = Path("core/fixtures")
+        self.existing_fixtures = {
+            path: path.read_text(encoding="utf-8")
+            for path in self.base.glob("releases__*.json")
+        }
+        self.addCleanup(self._restore_fixtures)
+
+        self.package = Package.objects.create(name="fixture-pkg")
+        self.release_one = PackageRelease.objects.create(
+            package=self.package,
+            version="9.9.9",
+        )
+        self.release_two = PackageRelease.objects.create(
+            package=self.package,
+            version="9.9.10",
+        )
+
+    def _restore_fixtures(self):
+        current_paths = set(self.base.glob("releases__*.json"))
+        for path in current_paths:
+            if path not in self.existing_fixtures:
+                path.unlink()
+        for path, content in self.existing_fixtures.items():
+            path.write_text(content, encoding="utf-8")
+
+    def test_dump_fixture_only_writes_changed_releases(self):
+        PackageRelease.dump_fixture()
+        target_one = self.base / "releases__packagerelease_9_9_9.json"
+        target_two = self.base / "releases__packagerelease_9_9_10.json"
+
+        self.assertTrue(target_one.exists())
+        self.assertTrue(target_two.exists())
+
+        self.release_two.changelog = "updated notes"
+        self.release_two.save(update_fields=["changelog"])
+
+        original_write = Path.write_text
+        written_paths: list[Path] = []
+
+        def tracking_write_text(path_obj, data, *args, **kwargs):
+            written_paths.append(path_obj)
+            return original_write(path_obj, data, *args, **kwargs)
+
+        with mock.patch("pathlib.Path.write_text", tracking_write_text):
+            PackageRelease.dump_fixture()
+
+        written_set = set(written_paths)
+        self.assertNotIn(target_one, written_set)
+        self.assertIn(target_two, written_set)
+        self.assertIn("updated notes", target_two.read_text(encoding="utf-8"))
+
+    def test_dump_fixture_removes_missing_release_files(self):
+        PackageRelease.dump_fixture()
+        target_two = self.base / "releases__packagerelease_9_9_10.json"
+        self.assertTrue(target_two.exists())
+
+        self.release_two.delete()
+
+        PackageRelease.dump_fixture()
+
+        self.assertFalse(target_two.exists())
+
+
 class ReleaseProgressSyncTests(TestCase):
     def setUp(self):
         self.client = Client()
