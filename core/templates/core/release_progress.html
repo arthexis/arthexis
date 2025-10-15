@@ -205,6 +205,41 @@
   .todo-item:hover .todo-details {
     display: block;
   }
+  .todo-ack-card {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    border: 1px solid var(--hairline-color);
+    border-radius: 6px;
+    background: var(--body-bg);
+  }
+  .todo-ack-card h2 {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+  }
+  .todo-ack-card ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 0 0 1rem;
+  }
+  .todo-ack-card li {
+    margin-bottom: 0.5rem;
+  }
+  .todo-ack-card .todo-changelog-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .todo-ack-card .todo-changelog-link:hover,
+  .todo-ack-card .todo-changelog-link:focus {
+    text-decoration: underline;
+  }
+  .todo-ack-card .todo-ack-empty {
+    color: var(--body-quiet-color);
+    font-style: italic;
+    margin-bottom: 1rem;
+  }
 </style>
 {% endblock %}
 
@@ -327,35 +362,57 @@
       {% endif %}
     </div>
     {% endif %}
-    {% if todos %}
-    <h2>{% trans 'Pending TODOs' %}</h2>
-    <form method="get">
-      <input type="hidden" name="step" value="{{ current_step }}">
-      <ul>
-      {% for todo in todos %}
-      <li class="todo-item">
-        <label>
-          <input type="checkbox" class="todo-check">
-          {% if todo.url %}
-          <a href="{% url 'todo-focus' todo.id %}?next={{ request.get_full_path|urlencode }}" class="todo-link">{{ todo.request }}</a>
-          {% else %}
-          {{ todo.request }}
-          {% endif %}
-        </label>
-        {% if todo.request_details %}
-        <div class="todo-details">{{ todo.request_details }}</div>
+    {% if has_pending_todos %}
+    <div class="todo-ack-card">
+      <h2>{% trans 'Release checklist' %}</h2>
+      <p>{% trans 'Confirm every checklist item after reviewing the changelog.' %}</p>
+      {% if changelog_report_url %}
+      <p>
+        <a href="{{ changelog_report_url }}" target="_blank" rel="noopener" class="todo-changelog-link">📄 {% trans 'Review the changelog' %}</a>
+      </p>
+      {% else %}
+      <p class="todo-ack-empty">{% trans 'Changelog report unavailable in this environment.' %}</p>
+      {% endif %}
+      <form method="get" class="todo-ack-form">
+        <input type="hidden" name="step" value="{{ current_step }}">
+        {% if todos %}
+        <ul>
+        {% for todo in todos %}
+          <li class="todo-item">
+            <label>
+              <input type="checkbox" class="todo-check">
+              {% if todo.url %}
+              <a href="{% url 'todo-focus' todo.id %}?next={{ request.get_full_path|urlencode }}" class="todo-link">{{ todo.request }}</a>
+              {% else %}
+              {{ todo.request }}
+              {% endif %}
+            </label>
+            {% if todo.request_details %}
+            <div class="todo-details">{{ todo.request_details }}</div>
+            {% endif %}
+          </li>
+        {% endfor %}
+        </ul>
+        {% else %}
+        <p class="todo-ack-empty">{% trans 'No open TODOs remain. Review the changelog, then continue.' %}</p>
         {% endif %}
-      </li>
-      {% endfor %}
-      </ul>
-      <button type="submit" name="ack_todos" value="1" id="continue-btn" disabled>{% trans 'Continue' %}</button>
-    </form>
+        <button type="submit" name="ack_todos" value="1" id="continue-btn" disabled>{% trans 'Continue' %}</button>
+      </form>
+    </div>
     <script>
-      const btn = document.getElementById('continue-btn');
-      const checks = document.querySelectorAll('.todo-check');
-      function updateBtn(){ btn.disabled = !Array.from(checks).every(c=>c.checked); }
-      checks.forEach(c=>c.addEventListener('change', updateBtn));
-      updateBtn();
+      (function(){
+        const btn = document.getElementById('continue-btn');
+        if (!btn) {
+          return;
+        }
+        const checks = Array.from(document.querySelectorAll('.todo-check'));
+        const updateBtn = () => {
+          const allChecked = checks.length === 0 || checks.every(c => c.checked);
+          btn.disabled = !allChecked;
+        };
+        checks.forEach(c => c.addEventListener('change', updateBtn));
+        updateBtn();
+      })();
     </script>
     {% endif %}
     {% if awaiting_approval %}
