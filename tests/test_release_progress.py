@@ -149,6 +149,26 @@ class ReleaseProgressViewTests(TestCase):
             response = self.client.get(f"{url}?step=1")
         self.assertEqual(response.status_code, 200)
 
+    @mock.patch("core.views.release_utils._git_clean", return_value=False)
+    @mock.patch("core.views.release_utils.network_available", return_value=False)
+    def test_dirty_version_committed(self, net, git_clean):
+        commands: list[list[str]] = []
+
+        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
+            commands.append(cmd)
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout=" M VERSION\n", stderr="")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with mock.patch("core.views.subprocess.run", side_effect=fake_run):
+            url = reverse("release-progress", args=[self.release.pk, "publish"])
+            self.client.get(f"{url}?start=1&step=0")
+            response = self.client.get(f"{url}?step=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(["git", "add", "VERSION"], commands)
+        self.assertIn(["git", "commit", "-m", "chore: update version"], commands)
+
     @mock.patch("core.views.release_utils.network_available", return_value=False)
     @mock.patch("core.views._collect_dirty_files")
     @mock.patch("core.views._sync_with_origin_main")
