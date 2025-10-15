@@ -589,6 +589,28 @@ class ReleaseProgressViewTests(TestCase):
         self.assertNotContains(response, 'name="approve"')
         self.assertContains(response, "Publishing credentials required")
 
+    @mock.patch.dict(os.environ, {"PYPI_API_TOKEN": "token-from-env"}, clear=False)
+    def test_release_manager_approval_uses_environment_credentials(self):
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        session = self.client.session
+        session_key = f"release_publish_{self.release.pk}"
+        session[session_key] = {
+            "step": 7,
+            "log": self.log_name,
+            "started": True,
+            "todos_ack": True,
+        }
+        session.save()
+
+        response = self.client.get(f"{url}?step=7")
+
+        self.assertTrue(response.context["approval_credentials_ready"])
+        self.assertFalse(response.context["approval_credentials_missing"])
+        self.assertNotIn(
+            "Release manager publishing credentials missing",
+            response.context["log_content"],
+        )
+
     def test_release_manager_approval_accepts(self):
         url = reverse("release-progress", args=[self.release.pk, "publish"])
         self._assign_release_manager()
