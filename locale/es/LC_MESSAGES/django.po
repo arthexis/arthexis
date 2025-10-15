@@ -814,3 +814,128 @@ msgstr "Seleccione al menos un RFID para imprimir el formulario de entrega."
 #: core/admin.py:3406
 msgid "Print Release Form"
 msgstr "Imprimir formulario de entrega"
+
+#: pages/templates/admin/includes/user_story_feedback.html:9
+#: pages/templates/pages/base.html:394
+msgid "Share your feedback"
+msgstr "Comparte tus comentarios"
+
+#: pages/templates/admin/includes/user_story_feedback.html:32
+#: pages/templates/pages/base.html:417
+msgid "Please provide feedback!"
+msgstr "¡Por favor, envía tus comentarios!"
+
+#: pages/templates/admin/includes/user_story_feedback.html:33
+#: pages/templates/pages/base.html:418
+msgid "Tell us how this page worked for you."
+msgstr "Cuéntanos cómo funcionó esta página para ti."
+
+#: pages/templates/admin/includes/user_story_feedback.html:35
+#: pages/templates/pages/base.html:420
+msgid "Close"
+msgstr "Cerrar"
+
+#: pages/templates/admin/includes/user_story_feedback.html:42
+#: pages/templates/pages/base.html:427
+msgid "Name (email or pseudonym)"
+msgstr "Nombre (correo electrónico o seudónimo)"
+
+#: pages/templates/admin/includes/user_story_feedback.html:50
+#: pages/templates/pages/base.html:435
+msgid "Share how we should address you"
+msgstr "Indícanos cómo debemos llamarte"
+
+#: pages/templates/admin/includes/user_story_feedback.html:52
+#: pages/templates/pages/base.html:437
+msgid "Leave blank to submit anonymously."
+msgstr "Déjalo en blanco para enviar de forma anónima."
+
+#: pages/templates/admin/includes/user_story_feedback.html:55
+#: pages/templates/pages/base.html:440
+msgid "Your experience on this page"
+msgstr "Tu experiencia en esta página"
+
+#: pages/templates/admin/includes/user_story_feedback.html:59
+#: pages/templates/pages/base.html:444
+msgid "Excellent"
+msgstr "Excelente"
+
+#: pages/templates/admin/includes/user_story_feedback.html:59
+#: pages/templates/pages/base.html:444
+msgid "5 stars"
+msgstr "5 estrellas"
+
+#: pages/templates/admin/includes/user_story_feedback.html:61
+#: pages/templates/pages/base.html:446
+msgid "Great"
+msgstr "Genial"
+
+#: pages/templates/admin/includes/user_story_feedback.html:61
+#: pages/templates/pages/base.html:446
+msgid "4 stars"
+msgstr "4 estrellas"
+
+#: pages/templates/admin/includes/user_story_feedback.html:63
+#: pages/templates/pages/base.html:448
+msgid "Good"
+msgstr "Bueno"
+
+#: pages/templates/admin/includes/user_story_feedback.html:63
+#: pages/templates/pages/base.html:448
+msgid "3 stars"
+msgstr "3 estrellas"
+
+#: pages/templates/admin/includes/user_story_feedback.html:65
+#: pages/templates/pages/base.html:450
+msgid "Okay"
+msgstr "Aceptable"
+
+#: pages/templates/admin/includes/user_story_feedback.html:65
+#: pages/templates/pages/base.html:450
+msgid "2 stars"
+msgstr "2 estrellas"
+
+#: pages/templates/admin/includes/user_story_feedback.html:67
+#: pages/templates/pages/base.html:452
+msgid "Needs improvement"
+msgstr "Necesita mejoras"
+
+#: pages/templates/admin/includes/user_story_feedback.html:67
+#: pages/templates/pages/base.html:452
+msgid "1 star"
+msgstr "1 estrella"
+
+#: pages/templates/admin/includes/user_story_feedback.html:78
+#: pages/templates/pages/base.html:463
+msgid "Take a screenshot"
+msgstr "Tomar una captura de pantalla"
+
+#: pages/templates/admin/includes/user_story_feedback.html:83
+#: pages/templates/pages/base.html:468
+msgid "Detailed comments / feedback"
+msgstr "Comentarios detallados / retroalimentación"
+
+#: pages/templates/admin/includes/user_story_feedback.html:90
+#: pages/templates/pages/base.html:475
+msgid "Share details about your experience (max 400 characters)"
+msgstr "Comparte detalles sobre tu experiencia (máx. 400 caracteres)"
+
+#: pages/templates/admin/includes/user_story_feedback.html:98
+#: pages/templates/pages/base.html:483
+msgid "Submit feedback"
+msgstr "Enviar comentarios"
+
+#: pages/templates/admin/includes/user_story_feedback.html:101
+#: pages/templates/pages/base.html:486
+msgid "Thank you! Your feedback has been sent."
+msgstr "¡Gracias! Tus comentarios han sido enviados."
+
+#: pages/templates/admin/includes/user_story_feedback.html:241
+#: pages/templates/pages/base.html:840
+msgid "We could not submit your feedback. Please try again."
+msgstr "No pudimos enviar tus comentarios. Inténtalo de nuevo."
+
+#: pages/templates/admin/includes/user_story_feedback.html:251
+#: pages/templates/pages/base.html:850
+msgid "Network error. Please try again."
+msgstr "Error de red. Inténtalo de nuevo."

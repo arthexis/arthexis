@@ -349,3 +349,128 @@ msgstr "Der Spannungsfall kann mit den gewählten Parametern 3 % überschreiten
 msgid "Voltage drop exceeds 3% with given max_awg"
 msgstr "Der Spannungsfall überschreitet 3 % mit dem angegebenen max_awg"
 
+#: pages/templates/admin/includes/user_story_feedback.html:9
+#: pages/templates/pages/base.html:394
+msgid "Share your feedback"
+msgstr "Teilen Sie Ihr Feedback"
+
+#: pages/templates/admin/includes/user_story_feedback.html:32
+#: pages/templates/pages/base.html:417
+msgid "Please provide feedback!"
+msgstr "Bitte geben Sie Feedback!"
+
+#: pages/templates/admin/includes/user_story_feedback.html:33
+#: pages/templates/pages/base.html:418
+msgid "Tell us how this page worked for you."
+msgstr "Teilen Sie uns mit, wie diese Seite für Sie funktioniert hat."
+
+#: pages/templates/admin/includes/user_story_feedback.html:35
+#: pages/templates/pages/base.html:420
+msgid "Close"
+msgstr "Schließen"
+
+#: pages/templates/admin/includes/user_story_feedback.html:42
+#: pages/templates/pages/base.html:427
+msgid "Name (email or pseudonym)"
+msgstr "Name (E-Mail oder Pseudonym)"
+
+#: pages/templates/admin/includes/user_story_feedback.html:50
+#: pages/templates/pages/base.html:435
+msgid "Share how we should address you"
+msgstr "Teilen Sie uns mit, wie wir Sie ansprechen sollen"
+
+#: pages/templates/admin/includes/user_story_feedback.html:52
+#: pages/templates/pages/base.html:437
+msgid "Leave blank to submit anonymously."
+msgstr "Lassen Sie das Feld leer, um anonym zu senden."
+
+#: pages/templates/admin/includes/user_story_feedback.html:55
+#: pages/templates/pages/base.html:440
+msgid "Your experience on this page"
+msgstr "Ihre Erfahrung auf dieser Seite"
+
+#: pages/templates/admin/includes/user_story_feedback.html:59
+#: pages/templates/pages/base.html:444
+msgid "Excellent"
+msgstr "Ausgezeichnet"
+
+#: pages/templates/admin/includes/user_story_feedback.html:59
+#: pages/templates/pages/base.html:444
+msgid "5 stars"
+msgstr "5 Sterne"
+
+#: pages/templates/admin/includes/user_story_feedback.html:61
+#: pages/templates/pages/base.html:446
+msgid "Great"
+msgstr "Großartig"
+
+#: pages/templates/admin/includes/user_story_feedback.html:61
+#: pages/templates/pages/base.html:446
+msgid "4 stars"
+msgstr "4 Sterne"
+
+#: pages/templates/admin/includes/user_story_feedback.html:63
+#: pages/templates/pages/base.html:448
+msgid "Good"
+msgstr "Gut"
+
+#: pages/templates/admin/includes/user_story_feedback.html:63
+#: pages/templates/pages/base.html:448
+msgid "3 stars"
+msgstr "3 Sterne"
+
+#: pages/templates/admin/includes/user_story_feedback.html:65
+#: pages/templates/pages/base.html:450
+msgid "Okay"
+msgstr "In Ordnung"
+
+#: pages/templates/admin/includes/user_story_feedback.html:65
+#: pages/templates/pages/base.html:450
+msgid "2 stars"
+msgstr "2 Sterne"
+
+#: pages/templates/admin/includes/user_story_feedback.html:67
+#: pages/templates/pages/base.html:452
+msgid "Needs improvement"
+msgstr "Verbesserungsbedürftig"
+
+#: pages/templates/admin/includes/user_story_feedback.html:67
+#: pages/templates/pages/base.html:452
+msgid "1 star"
+msgstr "1 Stern"
+
+#: pages/templates/admin/includes/user_story_feedback.html:78
+#: pages/templates/pages/base.html:463
+msgid "Take a screenshot"
+msgstr "Screenshot aufnehmen"
+
+#: pages/templates/admin/includes/user_story_feedback.html:83
+#: pages/templates/pages/base.html:468
+msgid "Detailed comments / feedback"
+msgstr "Ausführliche Kommentare / Feedback"
+
+#: pages/templates/admin/includes/user_story_feedback.html:90
+#: pages/templates/pages/base.html:475
+msgid "Share details about your experience (max 400 characters)"
+msgstr "Teilen Sie Details zu Ihrer Erfahrung (max. 400 Zeichen)"
+
+#: pages/templates/admin/includes/user_story_feedback.html:98
+#: pages/templates/pages/base.html:483
+msgid "Submit feedback"
+msgstr "Feedback senden"
+
+#: pages/templates/admin/includes/user_story_feedback.html:101
+#: pages/templates/pages/base.html:486
+msgid "Thank you! Your feedback has been sent."
+msgstr "Vielen Dank! Ihr Feedback wurde gesendet."
+
+#: pages/templates/admin/includes/user_story_feedback.html:241
+#: pages/templates/pages/base.html:840
+msgid "We could not submit your feedback. Please try again."
+msgstr "Ihr Feedback konnte nicht gesendet werden. Bitte versuchen Sie es erneut."
+
+#: pages/templates/admin/includes/user_story_feedback.html:251
+#: pages/templates/pages/base.html:850
+msgid "Network error. Please try again."
+msgstr "Netzwerkfehler. Bitte versuchen Sie es erneut."
+
