@@ -361,7 +361,11 @@ class ReleaseProgressViewTests(TestCase):
         self.assertFalse(response.context["dirty_files"])
         self.assertEqual(response.context["current_step"], 1)
 
-    def test_todos_must_be_acknowledged(self):
+    @mock.patch("core.views._refresh_changelog_once")
+    def test_todos_must_be_acknowledged(self, refresh_changelog):
+        refresh_changelog.side_effect = (
+            lambda ctx, log_path: ctx.setdefault("changelog_refreshed", True)
+        )
         todo = Todo.objects.create(request="Do something", url="/admin/")
         url = reverse("release-progress", args=[self.release.pk, "publish"])
         session = self.client.session
@@ -401,7 +405,80 @@ class ReleaseProgressViewTests(TestCase):
         self.assertIsNone(response.context.get("todos"))
         self.assertEqual(response.context["next_step"], 2)
 
-    def test_acknowledged_todos_not_rendered(self):
+    @mock.patch("core.views._refresh_changelog_once")
+    def test_acknowledgement_required_without_todos(self, refresh_changelog):
+        refresh_changelog.side_effect = (
+            lambda ctx, log_path: ctx.setdefault("changelog_refreshed", True)
+        )
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        session = self.client.session
+        session_key = f"release_publish_{self.release.pk}"
+        session[session_key] = {
+            "step": 1,
+            "log": self.log_name,
+            "started": True,
+        }
+        session.save()
+
+        response = self.client.get(f"{url}?step=1")
+        self.assertEqual(response.context["todos"], [])
+        self.assertTrue(response.context["has_pending_todos"])
+        self.assertFalse(response.context["changelog_report_url"] == "")
+        self.assertIsNone(response.context["next_step"])
+
+        self.client.get(f"{url}?ack_todos=1")
+        response = self.client.get(f"{url}?step=1")
+        self.assertFalse(response.context["has_pending_todos"])
+        self.assertIsNone(response.context.get("todos"))
+        self.assertEqual(response.context["current_step"], 2)
+
+    def test_step_check_todos_refreshes_changelog_once(self):
+        todo = Todo.objects.create(request="Review changelog", url="/admin/")
+        ctx: dict[str, object] = {}
+        log_path = self.log_dir / "refresh-once.log"
+        commands: list[list[str]] = []
+
+        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
+            commands.append(list(cmd))
+            if cmd == ["git", "diff", "--cached", "--name-only"]:
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout="CHANGELOG.rst\n", stderr=""
+                )
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with mock.patch("core.views.subprocess.run", side_effect=fake_run):
+            with self.assertRaises(core_views.PendingTodos):
+                core_views._step_check_todos(self.release, ctx, log_path)
+            first_command_count = len(commands)
+            with self.assertRaises(core_views.PendingTodos):
+                core_views._step_check_todos(self.release, ctx, log_path)
+
+        self.assertTrue(ctx.get("changelog_refreshed"))
+        self.assertTrue(ctx.get("todos_required"))
+        self.assertEqual(
+            ctx.get("todos"),
+            [
+                {
+                    "id": todo.pk,
+                    "request": "Review changelog",
+                    "url": "/admin/",
+                    "request_details": "",
+                }
+            ],
+        )
+        self.assertEqual(len(commands), first_command_count)
+        script_calls = [cmd for cmd in commands if cmd == ["scripts/generate-changelog.sh"]]
+        self.assertEqual(len(script_calls), 1)
+        commit_calls = [
+            cmd for cmd in commands if cmd[:3] == ["git", "commit", "-m"]
+        ]
+        self.assertEqual(len(commit_calls), 1)
+
+    @mock.patch("core.views._refresh_changelog_once")
+    def test_acknowledged_todos_not_rendered(self, refresh_changelog):
+        refresh_changelog.side_effect = (
+            lambda ctx, log_path: ctx.setdefault("changelog_refreshed", True)
+        )
         todo = Todo.objects.create(request="Do something", url="/admin/")
         url = reverse("release-progress", args=[self.release.pk, "publish"])
         session = self.client.session
@@ -427,7 +504,13 @@ class ReleaseProgressViewTests(TestCase):
         self.assertIsNone(response.context["todos"])
         self.assertFalse(response.context["has_pending_todos"])
 
-    def test_todo_ack_condition_failure_blocks_acknowledgement(self):
+    @mock.patch("core.views._refresh_changelog_once")
+    def test_todo_ack_condition_failure_blocks_acknowledgement(
+        self, refresh_changelog
+    ):
+        refresh_changelog.side_effect = (
+            lambda ctx, log_path: ctx.setdefault("changelog_refreshed", True)
+        )
         todo = Todo.objects.create(
             request="Do something",
             on_done_condition="1 = 0",
@@ -469,6 +552,7 @@ class ReleaseProgressViewTests(TestCase):
             "step": 7,
             "log": self.log_name,
             "started": True,
+            "todos_ack": True,
         }
         session.save()
 
@@ -494,6 +578,7 @@ class ReleaseProgressViewTests(TestCase):
             "step": 7,
             "log": self.log_name,
             "started": True,
+            "todos_ack": True,
         }
         session.save()
 
@@ -517,6 +602,7 @@ class ReleaseProgressViewTests(TestCase):
             "step": 7,
             "log": self.log_name,
             "started": True,
+            "todos_ack": True,
         }
         session.save()
 
@@ -580,6 +666,7 @@ class ReleaseProgressViewTests(TestCase):
             "step": 4,
             "log": self.log_name,
             "started": True,
+            "todos_ack": True,
         }
         session.save()
 
@@ -751,6 +838,7 @@ class ReleaseProgressViewTests(TestCase):
             "step": 4,
             "log": self.log_name,
             "started": True,
+            "todos_ack": True,
         }
         session.save()
 

@@ -830,14 +830,77 @@ def _get_return_url(request) -> str:
     return resolve_url("admin:index")
 
 
-def _step_check_todos(release, ctx, log_path: Path) -> None:
-    pending_qs = Todo.objects.filter(is_deleted=False, done_on__isnull=True)
-    if pending_qs.exists():
-        ctx["todos"] = list(
-            pending_qs.values("id", "request", "url", "request_details")
+def _refresh_changelog_once(ctx, log_path: Path) -> None:
+    """Regenerate the changelog a single time per release run."""
+
+    if ctx.get("changelog_refreshed"):
+        return
+
+    _append_log(log_path, "Refreshing changelog before TODO review")
+    try:
+        subprocess.run(["scripts/generate-changelog.sh"], check=True)
+    except OSError as exc:
+        if _should_use_python_changelog(exc):
+            _append_log(
+                log_path,
+                f"scripts/generate-changelog.sh failed: {exc}",
+            )
+            _generate_changelog_with_python(log_path)
+        else:  # pragma: no cover - unexpected OSError
+            raise
+    else:
+        _append_log(
+            log_path,
+            "Regenerated CHANGELOG.rst using scripts/generate-changelog.sh",
         )
-        if not ctx.get("todos_ack"):
-            raise PendingTodos()
+
+    staged_paths: list[str] = []
+    changelog_path = Path("CHANGELOG.rst")
+    if changelog_path.exists():
+        staged_paths.append(str(changelog_path))
+
+    release_fixtures = sorted(Path("core/fixtures").glob("releases__*.json"))
+    staged_paths.extend(str(path) for path in release_fixtures)
+
+    if staged_paths:
+        subprocess.run(["git", "add", *staged_paths], check=True)
+
+    diff = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    changed_paths = [line.strip() for line in diff.stdout.splitlines() if line.strip()]
+
+    if changed_paths:
+        changelog_dirty = "CHANGELOG.rst" in changed_paths
+        fixtures_dirty = any(path.startswith("core/fixtures/") for path in changed_paths)
+        if changelog_dirty and fixtures_dirty:
+            message = "chore: sync release fixtures and changelog"
+        elif changelog_dirty:
+            message = "docs: refresh changelog"
+        else:
+            message = "chore: update release fixtures"
+        subprocess.run(["git", "commit", "-m", message], check=True)
+        _append_log(log_path, f"Committed changelog refresh ({message})")
+    else:
+        _append_log(log_path, "Changelog already up to date")
+
+    ctx["changelog_refreshed"] = True
+
+
+def _step_check_todos(release, ctx, log_path: Path) -> None:
+    _refresh_changelog_once(ctx, log_path)
+
+    pending_qs = Todo.objects.filter(is_deleted=False, done_on__isnull=True)
+    pending_values = list(
+        pending_qs.values("id", "request", "url", "request_details")
+    )
+    if not ctx.get("todos_ack"):
+        ctx["todos"] = pending_values
+        ctx["todos_required"] = True
+        raise PendingTodos()
     todos = list(Todo.objects.filter(is_deleted=False))
     for todo in todos:
         todo.delete()
@@ -852,6 +915,7 @@ def _step_check_todos(release, ctx, log_path: Path) -> None:
             check=False,
         )
     ctx.pop("todos", None)
+    ctx.pop("todos_required", None)
     ctx["todos_ack"] = True
 
 
@@ -1670,6 +1734,12 @@ def release_progress(request, pk: int, action: str):
     else:
         log_dir_warning_message = ctx.get("log_dir_warning_message")
 
+    if "changelog_report_url" not in ctx:
+        try:
+            ctx["changelog_report_url"] = reverse("admin:system-changelog-report")
+        except NoReverseMatch:
+            ctx["changelog_report_url"] = ""
+
     steps = PUBLISH_STEPS
     total_steps = len(steps)
     step_count = ctx.get("step", 0)
@@ -1737,7 +1807,7 @@ def release_progress(request, pk: int, action: str):
         else:
             ctx["todos_ack"] = True
 
-    if pending_items and not ctx.get("todos_ack"):
+    if not ctx.get("todos_ack"):
         ctx["todos"] = [
             {
                 "id": todo.pk,
@@ -1747,8 +1817,10 @@ def release_progress(request, pk: int, action: str):
             }
             for todo in pending_items
         ]
+        ctx["todos_required"] = True
     else:
         ctx.pop("todos", None)
+        ctx.pop("todos_required", None)
 
     log_name = _release_log_name(release.package.name, release.version)
     if ctx.get("log") != log_name:
@@ -1869,7 +1941,9 @@ def release_progress(request, pk: int, action: str):
         and not ctx.get("error")
         else None
     )
-    has_pending_todos = bool(ctx.get("todos") and not ctx.get("todos_ack"))
+    has_pending_todos = bool(
+        ctx.get("todos_required") and not ctx.get("todos_ack")
+    )
     if has_pending_todos:
         next_step = None
     dirty_files = ctx.get("dirty_files")
@@ -1986,6 +2060,7 @@ def release_progress(request, pk: int, action: str):
         "cert_log": ctx.get("cert_log"),
         "fixtures": fixtures_summary,
         "todos": todos_display,
+        "changelog_report_url": ctx.get("changelog_report_url", ""),
         "dirty_files": dirty_files,
         "dirty_commit_message": ctx.get("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE),
         "dirty_commit_error": ctx.get("dirty_commit_error"),

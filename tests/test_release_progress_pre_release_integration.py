@@ -147,7 +147,9 @@ EOF
         check=True,
     )
 
-    core_views._step_check_todos(release, {"todos_ack": True}, log_path)
+    core_views._step_check_todos(
+        release, {"todos_ack": True, "changelog_refreshed": True}, log_path
+    )
     commands.clear()
 
     release.version = "1.2.1"
