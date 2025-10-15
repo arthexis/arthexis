@@ -389,6 +389,12 @@ class TelnetProxy(Entity):
             return
         stop_proxy(self)
 
+    def delete(self, using=None, keep_parents=False):
+        """Ensure any running proxy is stopped before removing the model."""
+
+        self.stop()
+        return super().delete(using=using, keep_parents=keep_parents)
+
     def is_running(self) -> bool:
         from .telnet_proxy import is_proxy_running
 
