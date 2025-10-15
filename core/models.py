@@ -3257,7 +3257,18 @@ class PackageRelease(Entity):
         """Return :class:`Credentials` from the associated release manager."""
         manager = self.release_manager or self.package.release_manager
         if manager:
-            return manager.to_credentials()
+            creds = manager.to_credentials()
+            if creds and creds.has_auth():
+                return creds
+
+        token = (os.environ.get("PYPI_API_TOKEN") or "").strip()
+        username = (os.environ.get("PYPI_USERNAME") or "").strip()
+        password = (os.environ.get("PYPI_PASSWORD") or "").strip()
+
+        if token:
+            return Credentials(token=token)
+        if username and password:
+            return Credentials(username=username, password=password)
         return None
 
     def get_github_token(self) -> str | None:
