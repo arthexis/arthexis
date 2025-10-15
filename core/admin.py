@@ -525,15 +525,31 @@ class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
             else (creds.username, creds.password)
         )
         try:
-            resp = requests.get(url, auth=auth, timeout=10)
-            if resp.ok:
+            resp = requests.post(
+                url,
+                auth=auth,
+                data={"verify_credentials": "1"},
+                timeout=10,
+                allow_redirects=False,
+            )
+            status = resp.status_code
+            if status in {401, 403}:
                 self.message_user(
-                    request, f"{manager} credentials valid", messages.SUCCESS
+                    request,
+                    f"{manager} credentials invalid ({status})",
+                    messages.ERROR,
+                )
+            elif status <= 400:
+                suffix = f" ({status})" if status != 200 else ""
+                self.message_user(
+                    request,
+                    f"{manager} credentials valid{suffix}",
+                    messages.SUCCESS,
                 )
             else:
                 self.message_user(
                     request,
-                    f"{manager} credentials invalid ({resp.status_code})",
+                    f"{manager} credentials check returned unexpected status {status}",
                     messages.ERROR,
                 )
         except Exception as exc:  # pragma: no cover - admin feedback
