@@ -328,6 +328,80 @@ def _cleanup_public_wifi_on_delete(sender, instance, **kwargs):
     public_wifi.revoke_public_access_for_user(instance)
 
 
+class TelnetProxy(Entity):
+    """Bridge TCP clients to an upstream telnet service."""
+
+    endpoint_host = models.CharField(
+        max_length=255,
+        help_text=_("Address where clients connect to reach the proxy."),
+    )
+    endpoint_port = models.PositiveIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(65535)],
+        help_text=_("Port where clients connect to reach the proxy."),
+    )
+    telnet_host = models.CharField(
+        max_length=255,
+        help_text=_("Destination telnet host that the proxy connects to."),
+    )
+    telnet_port = models.PositiveIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(65535)],
+        help_text=_("Destination telnet port that the proxy connects to."),
+    )
+    logfile = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text=_(
+            "Optional path to a logfile. When provided, traffic is written with a "
+            "daily rotation."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Telnet Proxy"
+        verbose_name_plural = "Telnet Proxies"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("endpoint_host", "endpoint_port"),
+                name="unique_telnet_proxy_endpoint",
+            )
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.endpoint_host}:{self.endpoint_port} → {self.telnet_host}:{self.telnet_port}"
+
+    def save(self, *args, **kwargs):
+        if self.logfile:
+            self.logfile = self.logfile.strip()
+        super().save(*args, **kwargs)
+
+    def start(self):
+        from .telnet_proxy import start_proxy
+
+        if not self.pk:
+            raise ValueError("Save the telnet proxy before starting it.")
+        return start_proxy(self)
+
+    def stop(self):
+        from .telnet_proxy import stop_proxy
+
+        if not self.pk:
+            return
+        stop_proxy(self)
+
+    def is_running(self) -> bool:
+        from .telnet_proxy import is_proxy_running
+
+        if not self.pk:
+            return False
+        return is_proxy_running(self)
+
+    def status_display(self) -> str:
+        return "Running" if self.is_running() else "Stopped"
+
+    status_display.short_description = "Status"  # type: ignore[attr-defined]
+
+
 class User(Entity, AbstractUser):
     SYSTEM_USERNAME = "arthexis"
     ADMIN_USERNAME = "admin"

@@ -72,6 +72,7 @@ class OrderedModelIndexView(BaseAdminDocsView):
         "core.package": "teams",
         "core.packagerelease": "teams",
         "core.todo": "teams",
+        "core.telnetproxy": "nodes",
         "pages.usermanual": USER_MANUALS_APP,
     }
 

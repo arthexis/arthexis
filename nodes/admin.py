@@ -15,7 +15,7 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html, format_html_join
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import gettext_lazy as _, ngettext
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 import base64
@@ -54,6 +54,7 @@ from .models import (
     NetMessage,
     NodeManager,
     DNSRecord,
+    TelnetProxy,
 )
 from . import dns as dns_utils
 from core.models import RFID
@@ -221,6 +222,86 @@ class DNSRecordAdmin(EntityModelAdmin):
                 f"Validated {successes} DNS record(s).",
                 messages.SUCCESS,
             )
+
+
+@admin.register(TelnetProxy)
+class TelnetProxyAdmin(EntityModelAdmin):
+    list_display = (
+        "endpoint_display",
+        "destination_display",
+        "status_badge",
+        "logfile",
+    )
+    search_fields = ("endpoint_host", "telnet_host")
+    readonly_fields = ("status_display",)
+    actions = ["start_selected_proxies", "stop_selected_proxies"]
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "endpoint_host",
+                    "endpoint_port",
+                    "telnet_host",
+                    "telnet_port",
+                    "logfile",
+                    "status_display",
+                )
+            },
+        ),
+    )
+
+    @admin.display(description="Endpoint")
+    def endpoint_display(self, obj):
+        return f"{obj.endpoint_host}:{obj.endpoint_port}"
+
+    @admin.display(description="Destination")
+    def destination_display(self, obj):
+        return f"{obj.telnet_host}:{obj.telnet_port}"
+
+    @admin.display(description="Status")
+    def status_badge(self, obj):
+        status = obj.status_display()
+        color = "success" if obj.is_running() else "secondary"
+        return format_html('<span class="badge badge-{}">{}</span>', color, status)
+
+    @admin.action(description="Start selected proxies")
+    def start_selected_proxies(self, request, queryset):
+        started = 0
+        for proxy in queryset:
+            try:
+                proxy.start()
+            except Exception as exc:  # pragma: no cover - admin message feedback
+                self.message_user(
+                    request,
+                    f"Unable to start {proxy}: {exc}",
+                    level=messages.ERROR,
+                )
+            else:
+                started += 1
+        if started:
+            message = ngettext(
+                "Started %(count)d telnet proxy.",
+                "Started %(count)d telnet proxies.",
+                started,
+            ) % {"count": started}
+            self.message_user(request, message, level=messages.SUCCESS)
+
+    @admin.action(description="Stop selected proxies")
+    def stop_selected_proxies(self, request, queryset):
+        stopped = 0
+        for proxy in queryset:
+            if not proxy.is_running():
+                continue
+            proxy.stop()
+            stopped += 1
+        if stopped:
+            message = ngettext(
+                "Stopped %(count)d telnet proxy.",
+                "Stopped %(count)d telnet proxies.",
+                stopped,
+            ) % {"count": stopped}
+            self.message_user(request, message, level=messages.SUCCESS)
 
 
 @admin.register(Node)

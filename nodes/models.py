@@ -8,7 +8,7 @@ from django.db.utils import DatabaseError
 from django.db.models.signals import post_delete
 from django.dispatch import Signal, receiver
 from core.entity import Entity
-from core.models import PackageRelease, Profile
+from core.models import PackageRelease, Profile, TelnetProxy as CoreTelnetProxy
 from core.fields import SigilLongAutoField, SigilShortAutoField
 import re
 import json
@@ -1828,3 +1828,11 @@ class User(UserModel):
         app_label = "nodes"
         verbose_name = UserModel._meta.verbose_name
         verbose_name_plural = UserModel._meta.verbose_name_plural
+
+
+class TelnetProxy(CoreTelnetProxy):
+    class Meta:
+        proxy = True
+        app_label = "nodes"
+        verbose_name = CoreTelnetProxy._meta.verbose_name
+        verbose_name_plural = CoreTelnetProxy._meta.verbose_name_plural
