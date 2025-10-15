@@ -1,4 +1,5 @@
 from io import BytesIO
+import os
 
 from django import forms
 from django.contrib import admin
@@ -518,7 +519,8 @@ class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
         if not creds:
             self.message_user(request, f"{manager} has no credentials", messages.ERROR)
             return
-        url = manager.pypi_url or "https://upload.pypi.org/legacy/"
+        env_url = os.environ.get("PYPI_REPOSITORY_URL", "").strip()
+        url = env_url or "https://upload.pypi.org/legacy/"
         auth = (
             ("__token__", creds.token)
             if creds.token

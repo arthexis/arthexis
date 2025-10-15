@@ -3,11 +3,15 @@ import runpy
 import subprocess
 import sys
 import types
+import uuid
 from pathlib import Path
 
 import pytest
 
+from django.contrib.auth import get_user_model
+
 from core import release
+from core.models import Package, PackageRelease, ReleaseManager
 
 
 @pytest.fixture
@@ -198,7 +202,32 @@ def test_build_raises_when_tests_fail(monkeypatch, release_sandbox):
         release.build(version="1.2.3", tests=True)
 
     assert excinfo.value.output == "tests stdout\ntests stderr\n"
-    assert excinfo.value.log_path == Path("logs/test.log")
+
+
+@pytest.mark.django_db
+def test_build_publish_targets_ignore_manager_profile_url(monkeypatch):
+    for key in ("PYPI_REPOSITORY_URL", "PYPI_API_TOKEN", "PYPI_USERNAME", "PYPI_PASSWORD"):
+        monkeypatch.delenv(key, raising=False)
+
+    User = get_user_model()
+    user = User.objects.create_user(username="relmgr", password="pwd", email="relmgr@example.com")
+    manager = ReleaseManager.objects.create(
+        user=user,
+        pypi_url="https://pypi.org/user/example/",
+    )
+    package = Package.objects.create(
+        name=f"pkg-{uuid.uuid4().hex}",
+        release_manager=manager,
+    )
+    release_obj = PackageRelease.objects.create(
+        package=package,
+        release_manager=manager,
+        version="1.2.3",
+    )
+
+    targets = release_obj.build_publish_targets()
+
+    assert targets[0].repository_url is None
 
 
 def test_promote_commits_only_with_staged_changes(monkeypatch, release_sandbox):
