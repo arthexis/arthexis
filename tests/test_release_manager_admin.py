@@ -77,28 +77,32 @@ class ReleaseManagerAdminActionTests(TestCase):
         expected = reverse("admin:teams_releasemanager_change", args=[self.manager.pk])
         self.assertEqual(response.url, expected)
 
-    @pytest.mark.skip("Release manager credentials action not exercised in environment")
-    @patch("core.admin.requests.get")
-    def test_test_credentials_action(self, mock_get):
-        mock_get.return_value = MagicMock(ok=True, status_code=200)
+    @patch("core.admin.requests.post")
+    def test_test_credentials_action(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=200)
         request = self._get_request()
         self.admin.test_credentials_action(request, self.manager)
-        mock_get.assert_called_once()
+        mock_post.assert_called_once()
         messages = [m.message for m in request._messages]
         self.assertTrue(any("credentials valid" in m for m in messages))
 
-    @pytest.mark.skip(
-        "Release manager bulk credentials action not exercised in environment"
-    )
-    @patch("core.admin.requests.get")
-    def test_test_credentials_bulk_action(self, mock_get):
-        mock_get.return_value = MagicMock(ok=False, status_code=401)
+    @patch("core.admin.requests.post")
+    def test_test_credentials_bulk_action(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=403)
         request = self._get_request()
         queryset = TeamsReleaseManager.objects.filter(pk=self.manager.pk)
         self.admin.test_credentials(request, queryset)
-        mock_get.assert_called_once()
+        mock_post.assert_called_once()
         messages = [m.message.lower() for m in request._messages]
         self.assertTrue(any("credentials invalid" in m for m in messages))
+
+    @patch("core.admin.requests.post")
+    def test_test_credentials_action_unexpected_status(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=404)
+        request = self._get_request()
+        self.admin.test_credentials_action(request, self.manager)
+        messages = [m.message.lower() for m in request._messages]
+        self.assertTrue(any("unexpected status" in m for m in messages))
 
     @pytest.mark.skip("Change form object action link not rendered in test environment")
     def test_change_form_contains_link(self):
