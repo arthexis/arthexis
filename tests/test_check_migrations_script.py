@@ -80,3 +80,28 @@ def test_check_migrations_attempts_merge(monkeypatch, capsys) -> None:
     captured = capsys.readouterr()
     assert "Conflicting migrations detected" in captured.err
     assert "Migrations check passed" in captured.out
+
+
+def test_check_migrations_reports_uncommitted_changes(monkeypatch, capsys) -> None:
+    def fake_run_manage(*args: str) -> SimpleNamespace:
+        assert args == (
+            "makemigrations",
+            "core",
+            "--check",
+            "--dry-run",
+            "--noinput",
+        )
+        return SimpleNamespace(
+            returncode=1,
+            stdout="Migrations for 'core':\n  core/migrations/0070_alter_releasemanager_pypi_url.py",
+            stderr="",
+        )
+
+    monkeypatch.setattr(check_migrations, "_run_manage", fake_run_manage)
+    result = check_migrations._check_migrations(["core"])
+
+    assert result == 1
+
+    captured = capsys.readouterr()
+    assert "Uncommitted model changes detected" in captured.err
+    assert "core/migrations/0070_alter_releasemanager_pypi_url.py" in captured.err
