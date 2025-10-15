@@ -939,9 +939,12 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
             if "fixtures" in Path(f).parts and Path(f).suffix == ".json"
         ]
         changelog_dirty = "CHANGELOG.rst" in files
+        version_dirty = "VERSION" in files
         allowed_dirty_files = set(fixture_files)
         if changelog_dirty:
             allowed_dirty_files.add("CHANGELOG.rst")
+        if version_dirty:
+            allowed_dirty_files.add("VERSION")
 
         if files and len(allowed_dirty_files) == len(files):
             summary = []
@@ -974,6 +977,8 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
             commit_paths = [*fixture_files]
             if changelog_dirty:
                 commit_paths.append("CHANGELOG.rst")
+            if version_dirty:
+                commit_paths.append("VERSION")
 
             log_fragments = []
             if fixture_files:
@@ -982,6 +987,8 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
                 )
             if changelog_dirty:
                 log_fragments.append("CHANGELOG.rst")
+            if version_dirty:
+                log_fragments.append("VERSION")
             details = ", ".join(log_fragments) if log_fragments else "changes"
             _append_log(
                 log_path,
@@ -989,8 +996,16 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
             )
             subprocess.run(["git", "add", *commit_paths], check=True)
 
-            if changelog_dirty and fixture_files:
+            if changelog_dirty and version_dirty and fixture_files:
+                commit_message = "chore: sync release metadata"
+            elif changelog_dirty and version_dirty:
+                commit_message = "chore: update version and changelog"
+            elif version_dirty and fixture_files:
+                commit_message = "chore: update version and fixtures"
+            elif changelog_dirty and fixture_files:
                 commit_message = "chore: sync release fixtures and changelog"
+            elif version_dirty:
+                commit_message = "chore: update version"
             elif changelog_dirty:
                 commit_message = "docs: refresh changelog"
             else:
