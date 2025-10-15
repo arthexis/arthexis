@@ -3062,7 +3062,15 @@ class ReleaseManager(Profile):
         ),
     )
     pypi_password = SigilShortAutoField("PyPI password", max_length=200, blank=True)
-    pypi_url = SigilShortAutoField("PyPI URL", max_length=200, blank=True)
+    pypi_url = SigilShortAutoField(
+        "PyPI URL",
+        max_length=200,
+        blank=True,
+        help_text=(
+            "Link to the PyPI user profile (for example, https://pypi.org/user/username/). "
+            "This value is informational and not used for uploads."
+        ),
+    )
     secondary_pypi_url = SigilShortAutoField(
         "Secondary PyPI URL",
         max_length=200,
@@ -3284,12 +3292,8 @@ class PackageRelease(Entity):
         manager = self.release_manager or self.package.release_manager
         targets: list[RepositoryTarget] = []
 
-        primary_url = ""
-        if manager and manager.pypi_url:
-            primary_url = manager.pypi_url.strip()
-        if not primary_url:
-            env_primary = os.environ.get("PYPI_REPOSITORY_URL", "")
-            primary_url = env_primary.strip()
+        env_primary = os.environ.get("PYPI_REPOSITORY_URL", "")
+        primary_url = env_primary.strip()
 
         primary_creds = self.to_credentials()
         targets.append(
