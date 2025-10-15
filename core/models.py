@@ -3393,10 +3393,12 @@ class PackageRelease(Entity):
 
     @classmethod
     def latest(cls):
-        """Return the latest release by version."""
+        """Return the latest release by version, preferring active packages."""
         from packaging.version import Version
 
-        releases = list(cls.objects.all())
+        releases = list(cls.objects.filter(package__is_active=True))
+        if not releases:
+            releases = list(cls.objects.all())
         if not releases:
             return None
         return max(releases, key=lambda r: Version(r.version))

@@ -3,12 +3,21 @@ from __future__ import annotations
 import os
 
 import django
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-django.setup()
 
-from core.models import PackageRelease
+try:  # Use the pytest-specific setup when available for database readiness
+    from tests.conftest import safe_setup as _safe_setup  # type: ignore
+except Exception:  # pragma: no cover - fallback for direct execution
+    _safe_setup = None
+
+if _safe_setup is not None:
+    _safe_setup()
+else:  # pragma: no cover - fallback when pytest fixtures are unavailable
+    django.setup()
+
+from core.models import Package, PackageRelease
 
 
 class PackageReleaseMigrationTests(SimpleTestCase):
@@ -35,3 +44,17 @@ class PackageReleaseMigrationTests(SimpleTestCase):
                     PackageRelease.version_from_migration(expected_migration),
                     version,
                 )
+
+
+class PackageReleaseLatestTests(TestCase):
+    def test_latest_prefers_active_package(self) -> None:
+        inactive_package = Package.objects.create(name="inactive", is_active=False)
+        active_package = Package.objects.create(name="active", is_active=True)
+
+        PackageRelease.objects.create(package=inactive_package, version="9.9.9")
+        active_release = PackageRelease.objects.create(
+            package=active_package,
+            version="1.0.0",
+        )
+
+        self.assertEqual(PackageRelease.latest(), active_release)
