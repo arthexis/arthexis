@@ -1117,6 +1117,36 @@ def _step_changelog_docs(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "CHANGELOG and documentation review recorded")
 
 
+def _record_release_todo(
+    release, ctx, log_path: Path, *, previous_version: str | None = None
+) -> None:
+    previous_version = previous_version or ctx.pop(
+        "release_todo_previous_version",
+        getattr(release, "_repo_version_before_sync", ""),
+    )
+    todo, fixture_path = _ensure_release_todo(
+        release, previous_version=previous_version
+    )
+    fixture_display = _format_path(fixture_path)
+    _append_log(log_path, f"Added TODO: {todo.request}")
+    _append_log(log_path, f"Wrote TODO fixture {fixture_display}")
+    subprocess.run(["git", "add", str(fixture_path)], check=True)
+    _append_log(log_path, f"Staged TODO fixture {fixture_display}")
+    fixture_diff = subprocess.run(
+        ["git", "diff", "--cached", "--quiet", "--", str(fixture_path)],
+        check=False,
+    )
+    if fixture_diff.returncode != 0:
+        commit_message = f"chore: add release TODO for {release.package.name}"
+        subprocess.run(["git", "commit", "-m", commit_message], check=True)
+        _append_log(log_path, f"Committed TODO fixture {fixture_display}")
+    else:
+        _append_log(
+            log_path,
+            f"No changes detected for TODO fixture {fixture_display}; skipping commit",
+        )
+
+
 def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Execute pre-release actions")
     if ctx.get("dry_run"):
@@ -1190,27 +1220,7 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
         for path in staged_release_fixtures:
             subprocess.run(["git", "reset", "HEAD", str(path)], check=False)
             _append_log(log_path, f"Unstaged release fixture {_format_path(path)}")
-    todo, fixture_path = _ensure_release_todo(
-        release, previous_version=repo_version_before_sync
-    )
-    fixture_display = _format_path(fixture_path)
-    _append_log(log_path, f"Added TODO: {todo.request}")
-    _append_log(log_path, f"Wrote TODO fixture {fixture_display}")
-    subprocess.run(["git", "add", str(fixture_path)], check=True)
-    _append_log(log_path, f"Staged TODO fixture {fixture_display}")
-    fixture_diff = subprocess.run(
-        ["git", "diff", "--cached", "--quiet", "--", str(fixture_path)],
-        check=False,
-    )
-    if fixture_diff.returncode != 0:
-        commit_message = f"chore: add release TODO for {release.package.name}"
-        subprocess.run(["git", "commit", "-m", commit_message], check=True)
-        _append_log(log_path, f"Committed TODO fixture {fixture_display}")
-    else:
-        _append_log(
-            log_path,
-            f"No changes detected for TODO fixture {fixture_display}; skipping commit",
-        )
+    ctx["release_todo_previous_version"] = repo_version_before_sync
     _append_log(log_path, "Pre-release actions complete")
 
 
@@ -1294,6 +1304,7 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
             )
         PackageRelease.dump_fixture()
         _append_log(log_path, "Updated release fixtures")
+        _record_release_todo(release, ctx, log_path)
     except Exception:
         _clean_repo()
         raise
