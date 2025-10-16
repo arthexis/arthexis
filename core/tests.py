@@ -1527,6 +1527,27 @@ class ReleaseProcessTests(TestCase):
         ctx = session.get(f"release_publish_{self.release.pk}")
         self.assertTrue(ctx.get("dry_run"))
 
+    def test_resume_button_shown_when_credentials_missing(self):
+        user = User.objects.create_superuser("admin", "admin@example.com", "pw")
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        self.client.force_login(user)
+
+        self.client.get(f"{url}?start=1")
+
+        session = self.client.session
+        ctx = session.get(f"release_publish_{self.release.pk}") or {}
+        ctx.update({"step": 7, "started": True, "paused": False})
+        session[f"release_publish_{self.release.pk}"] = ctx
+        session.save()
+
+        response = self.client.get(f"{url}?step=7")
+        self.assertEqual(response.status_code, 200)
+        context = response.context
+        if isinstance(context, list):
+            context = context[-1]
+        self.assertTrue(context["resume_available"])
+        self.assertIn(b"Resume Publish", response.content)
+
     def test_new_todo_does_not_reset_pending_flow(self):
         user = User.objects.create_superuser("admin", "admin@example.com", "pw")
         url = reverse("release-progress", args=[self.release.pk, "publish"])
