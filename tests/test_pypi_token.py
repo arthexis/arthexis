@@ -201,7 +201,7 @@ class PyPITokenTests(TestCase):
         assert "--repository-url" in twine_commands[1]
         assert "https://upload.github.com/pypi/" in twine_commands[1]
 
-    def test_publish_reports_git_authentication_errors(self):
+    def test_publish_emits_warning_for_git_authentication_errors(self):
         creds = release.Credentials(token="pypi-token")
         error = subprocess.CalledProcessError(
             128,
@@ -226,13 +226,18 @@ class PyPITokenTests(TestCase):
             mock.patch("core.release._manager_git_credentials", return_value=None),
             mock.patch("core.release._run", side_effect=fake_run),
         ):
-            with self.assertRaises(release.ReleaseError) as exc:
+            with self.assertRaises(release.PostPublishWarning) as exc:
                 release.publish(version="0.1.1", creds=creds)
 
-        message = str(exc.exception)
-        assert "Git authentication failed while pushing tag v0.1.1" in message
+        warning = exc.exception
+        message = str(warning)
+        assert warning.uploaded == ["PyPI"]
+        assert "Upload to PyPI completed" in message
         assert "git push origin v0.1.1" in message
         assert "could not read Username" in message
+        assert any(
+            "Push git tag v0.1.1 to origin" in note for note in warning.followups
+        )
 
     def test_publish_retries_git_push_with_release_manager_credentials(self):
         creds = release.Credentials(token="pypi-token")
