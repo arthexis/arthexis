@@ -1451,12 +1451,29 @@ def _step_publish(release, ctx, log_path: Path) -> None:
         )
     else:
         _append_log(log_path, "Uploading distribution")
-    release_utils.publish(
-        package=release.to_package(),
-        version=release.version,
-        creds=release.to_credentials(),
-        repositories=targets,
-    )
+    publish_warning: release_utils.PostPublishWarning | None = None
+    try:
+        release_utils.publish(
+            package=release.to_package(),
+            version=release.version,
+            creds=release.to_credentials(),
+            repositories=targets,
+        )
+    except release_utils.PostPublishWarning as warning:
+        publish_warning = warning
+
+    if publish_warning is not None:
+        message = str(publish_warning)
+        followups = _dedupe_preserve_order(publish_warning.followups)
+        warning_entries = ctx.setdefault("warnings", [])
+        if not any(entry.get("message") == message for entry in warning_entries):
+            entry: dict[str, object] = {"message": message}
+            if followups:
+                entry["followups"] = followups
+            warning_entries.append(entry)
+        _append_log(log_path, message)
+        for note in followups:
+            _append_log(log_path, f"Follow-up: {note}")
     release.pypi_url = (
         f"https://pypi.org/project/{release.package.name}/{release.version}/"
     )
@@ -2115,6 +2132,7 @@ def release_progress(request, pk: int, action: str):
         "can_resume": can_resume,
         "dry_run": dry_run_active,
         "dry_run_toggle_enabled": dry_run_toggle_enabled,
+        "warnings": ctx.get("warnings", []),
     }
     request.session[session_key] = ctx
     if done or ctx.get("error"):

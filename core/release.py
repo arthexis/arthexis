@@ -114,6 +114,21 @@ class ReleaseError(Exception):
     pass
 
 
+class PostPublishWarning(ReleaseError):
+    """Raised when distribution uploads succeed but post-publish tasks need attention."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        uploaded: Sequence[str],
+        followups: Optional[Sequence[str]] = None,
+    ) -> None:
+        super().__init__(message)
+        self.uploaded = list(uploaded)
+        self.followups = list(followups or [])
+
+
 class TestsFailed(ReleaseError):
     """Raised when the test suite fails.
 
@@ -711,8 +726,46 @@ def publish(
         uploaded.append(target.name)
 
     tag_name = f"v{version}"
-    _run(["git", "tag", tag_name])
-    _push_tag(tag_name, package)
+    try:
+        _run(["git", "tag", tag_name])
+    except subprocess.CalledProcessError as exc:
+        details = _format_subprocess_error(exc)
+        if uploaded:
+            uploads = ", ".join(uploaded)
+            if details:
+                message = (
+                    f"Upload to {uploads} completed, but creating git tag {tag_name} failed: {details}"
+                )
+            else:
+                message = (
+                    f"Upload to {uploads} completed, but creating git tag {tag_name} failed."
+                )
+            followups = [f"Create and push git tag {tag_name} manually once the repository is ready."]
+            raise PostPublishWarning(
+                message,
+                uploaded=uploaded,
+                followups=followups,
+            ) from exc
+        raise ReleaseError(
+            f"Failed to create git tag {tag_name}: {details or exc}"
+        ) from exc
+
+    try:
+        _push_tag(tag_name, package)
+    except ReleaseError as exc:
+        if uploaded:
+            uploads = ", ".join(uploaded)
+            message = f"Upload to {uploads} completed, but {exc}"
+            followups = [
+                f"Push git tag {tag_name} to origin after resolving the reported issue."
+            ]
+            warning = PostPublishWarning(
+                message,
+                uploaded=uploaded,
+                followups=followups,
+            )
+            raise warning from exc
+        raise
     return uploaded
 
 

@@ -54,6 +54,36 @@
     border-radius: 6px;
     background: var(--body-bg);
   }
+  .warning-card {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    border: 1px solid var(--hairline-color);
+    border-radius: 6px;
+    background: rgba(255, 193, 7, 0.15);
+  }
+  .warning-card h2 {
+    margin: 0 0 0.5rem;
+  }
+  .warning-card ul {
+    margin: 0.5rem 0 0;
+    padding-left: 1.2rem;
+  }
+  .warning-card li {
+    margin-bottom: 0.5rem;
+  }
+  .warning-card .warning-message {
+    font-weight: 600;
+    color: var(--warning-fg, #c09853);
+  }
+  .warning-card .warning-followups {
+    margin: 0.35rem 0 0;
+    padding-left: 1.2rem;
+    list-style: disc;
+  }
+  .warning-card .warning-followups li {
+    margin-bottom: 0.25rem;
+    font-weight: 400;
+  }
   .dirty-changes table {
     width: 100%;
     margin-top: 0.75rem;
@@ -306,6 +336,25 @@
       </li>
     {% endfor %}
     </ol>
+    {% if warnings %}
+    <div class="warning-card">
+      <h2>⚠️ {% trans "Manual follow-up required" %}</h2>
+      <ul>
+      {% for warning in warnings %}
+        <li>
+          <div class="warning-message">{{ warning.message }}</div>
+          {% if warning.followups %}
+          <ul class="warning-followups">
+          {% for note in warning.followups %}
+            <li>{{ note }}</li>
+          {% endfor %}
+          </ul>
+          {% endif %}
+        </li>
+      {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
     {% if paused and started and not done and not error %}
     <p class="status-message paused">{% trans 'Publishing paused. Press Continue to resume.' %}</p>
     {% endif %}

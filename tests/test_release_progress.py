@@ -163,11 +163,74 @@ class ReleaseProgressViewTests(TestCase):
         with mock.patch("core.views.subprocess.run", side_effect=fake_run):
             url = reverse("release-progress", args=[self.release.pk, "publish"])
             self.client.get(f"{url}?start=1&step=0")
-            response = self.client.get(f"{url}?step=1")
+        response = self.client.get(f"{url}?step=1")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(["git", "add", "VERSION"], commands)
         self.assertIn(["git", "commit", "-m", "chore: update version"], commands)
+
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    def test_publish_step_records_warning_and_completes(self, dump_fixture):
+        session = self.client.session
+        session_key = f"release_publish_{self.release.pk}"
+        session[session_key] = {
+            "step": 8,
+            "log": self.log_name,
+            "started": True,
+            "todos_ack": True,
+        }
+        session.save()
+
+        warning = core_views.release_utils.PostPublishWarning(
+            "Upload to PyPI completed, but git push failed",
+            uploaded=["PyPI"],
+            followups=["Push git tag v1.0 to origin after updating credentials."],
+        )
+
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        log_path = self.log_dir / self.log_name
+
+        with (
+            mock.patch.object(
+                PackageRelease,
+                "build_publish_targets",
+                return_value=[core_views.release_utils.RepositoryTarget(name="PyPI")],
+            ),
+            mock.patch.object(
+                PackageRelease,
+                "to_package",
+                return_value=core_views.release_utils.DEFAULT_PACKAGE,
+            ),
+            mock.patch.object(
+                PackageRelease,
+                "to_credentials",
+                return_value=core_views.release_utils.Credentials(token="token"),
+            ),
+            mock.patch("core.views.release_utils.publish", side_effect=warning),
+        ):
+            response = self.client.get(f"{url}?step=8")
+
+        self.assertEqual(response.status_code, 200)
+        updated_session = self.client.session.get(session_key, {})
+        self.assertEqual(updated_session.get("step"), 9)
+        self.assertNotIn("error", updated_session)
+        stored_warnings = updated_session.get("warnings", [])
+        self.assertEqual(len(stored_warnings), 1)
+        self.assertEqual(stored_warnings[0]["message"], str(warning))
+        self.assertEqual(
+            stored_warnings[0]["followups"],
+            ["Push git tag v1.0 to origin after updating credentials."],
+        )
+        dump_fixture.assert_called_once()
+        self.release.refresh_from_db()
+        self.assertEqual(
+            self.release.pypi_url,
+            f"https://pypi.org/project/{self.release.package.name}/{self.release.version}/",
+        )
+        self.assertTrue(log_path.exists())
+        log_content = log_path.read_text(encoding="utf-8")
+        self.assertIn(str(warning), log_content)
+        self.assertIn("Push git tag v1.0 to origin after updating credentials.", log_content)
 
     @mock.patch("core.views.release_utils.network_available", return_value=False)
     @mock.patch("core.views._collect_dirty_files")
