@@ -4,14 +4,15 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
+
 import urllib.error
 import urllib.request
 
 from celery import shared_task
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from core import mailer
 from core import github_issues
+from core import mailer
 from django.utils import timezone
 
 from nodes.models import NetMessage
