@@ -251,6 +251,16 @@ def admin_changelist_url(ct: ContentType) -> str:
 
 
 @register.simple_tag
+def optional_url(viewname: str, *args, **kwargs) -> str:
+    """Return ``reverse(viewname)`` or an empty string when missing."""
+
+    try:
+        return reverse(viewname, args=args or None, kwargs=kwargs or None)
+    except NoReverseMatch:
+        return ""
+
+
+@register.simple_tag
 def related_admin_models(opts):
     """Return changelist links for models related to the current model."""
 
