@@ -370,10 +370,6 @@ def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:
     )
     statuses: list[str] = []
     for sibling in siblings:
-        status_value = (sibling.last_status or "").strip()
-        if status_value:
-            statuses.append(status_value.casefold())
-            continue
         tx_obj = store.get_transaction(sibling.charger_id, sibling.connector_id)
         if not tx_obj:
             tx_obj = (
@@ -381,8 +377,18 @@ def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:
                 .order_by("-start_time")
                 .first()
             )
-        if _has_active_session(tx_obj):
+        has_session = _has_active_session(tx_obj)
+        status_value = (sibling.last_status or "").strip()
+        normalized_status = status_value.casefold() if status_value else ""
+        error_code_lower = (sibling.last_error_code or "").strip().lower()
+        if has_session:
             statuses.append("charging")
+            continue
+        if normalized_status == "charging" and error_code_lower in ERROR_OK_VALUES:
+            statuses.append("available")
+            continue
+        if normalized_status:
+            statuses.append(normalized_status)
             continue
         if store.is_connected(sibling.charger_id, sibling.connector_id):
             statuses.append("available")
@@ -424,6 +430,11 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
             # while a session is active. Override the badge so the user can see
             # the charger is actually busy.
             label, color = STATUS_BADGE_MAP.get("charging", (_("Charging"), "#198754"))
+        elif not has_session and key == "charging" and error_code_lower in ERROR_OK_VALUES:
+            # Some chargers continue reporting "Charging" after a session ends.
+            # When no active transaction exists, surface the state as available
+            # so the UI reflects the actual behaviour at the site.
+            label, color = STATUS_BADGE_MAP.get("available", (_("Available"), "#0d6efd"))
         elif error_code and error_code_lower not in ERROR_OK_VALUES:
             label = _("%(status)s (%(error)s)") % {
                 "status": label,

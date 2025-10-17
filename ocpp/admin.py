@@ -29,6 +29,7 @@ from .transactions_io import (
     import_transactions as import_transactions_data,
 )
 from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
+from .views import _charger_state, _live_sessions
 from core.admin import SaveBeforeChangeAction
 from core.user_data import EntityModelAdmin
 
@@ -253,6 +254,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     actions = [
         "purge_data",
         "fetch_cp_configuration",
+        "recheck_charger_status",
         "change_availability_operative",
         "change_availability_inoperative",
         "set_availability_state_operative",
@@ -317,16 +319,14 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             "charger-status-connector",
             args=[obj.charger_id, obj.connector_slug],
         )
-        label = (obj.last_status or "status").strip() or "status"
-        status_key = label.lower()
-        error_code = (obj.last_error_code or "").strip().lower()
-        if (
-            self._has_active_session(obj)
-            and error_code in ERROR_OK_VALUES
-            and (status_key not in STATUS_BADGE_MAP or status_key == "available")
-        ):
-            label = STATUS_BADGE_MAP["charging"][0]
-        return format_html('<a href="{}" target="_blank">{}</a>', url, label)
+        tx_obj = store.get_transaction(obj.charger_id, obj.connector_id)
+        state, _ = _charger_state(
+            obj,
+            tx_obj
+            if obj.connector_id is not None
+            else (_live_sessions(obj) or None),
+        )
+        return format_html('<a href="{}" target="_blank">{}</a>', url, state)
 
     status_link.short_description = "Status"
 
@@ -358,6 +358,63 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         self.message_user(request, "Data purged for selected chargers")
 
     purge_data.short_description = "Purge data"
+
+    @admin.action(description="Re-check Charger Status")
+    def recheck_charger_status(self, request, queryset):
+        requested = 0
+        for charger in queryset:
+            connector_value = charger.connector_id
+            ws = store.get_connection(charger.charger_id, connector_value)
+            if ws is None:
+                self.message_user(
+                    request,
+                    f"{charger}: no active connection",
+                    level=messages.ERROR,
+                )
+                continue
+            payload: dict[str, object] = {"requestedMessage": "StatusNotification"}
+            trigger_connector: int | None = None
+            if connector_value is not None:
+                payload["connectorId"] = connector_value
+                trigger_connector = connector_value
+            message_id = uuid.uuid4().hex
+            msg = json.dumps([2, message_id, "TriggerMessage", payload])
+            try:
+                async_to_sync(ws.send)(msg)
+            except Exception as exc:  # pragma: no cover - network error
+                self.message_user(
+                    request,
+                    f"{charger}: failed to send TriggerMessage ({exc})",
+                    level=messages.ERROR,
+                )
+                continue
+            log_key = store.identity_key(charger.charger_id, connector_value)
+            store.add_log(log_key, f"< {msg}", log_type="charger")
+            store.register_pending_call(
+                message_id,
+                {
+                    "action": "TriggerMessage",
+                    "charger_id": charger.charger_id,
+                    "connector_id": connector_value,
+                    "log_key": log_key,
+                    "trigger_target": "StatusNotification",
+                    "trigger_connector": trigger_connector,
+                    "requested_at": timezone.now(),
+                },
+            )
+            store.schedule_call_timeout(
+                message_id,
+                timeout=5.0,
+                action="TriggerMessage",
+                log_key=log_key,
+                message="TriggerMessage StatusNotification timed out",
+            )
+            requested += 1
+        if requested:
+            self.message_user(
+                request,
+                f"Requested status update from {requested} charger(s)",
+            )
 
     @admin.action(description="Fetch CP configuration")
     def fetch_cp_configuration(self, request, queryset):
