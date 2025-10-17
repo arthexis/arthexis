@@ -281,6 +281,8 @@
 
 {% block extrahead %}
   {{ block.super }}
+  {% optional_url 'last-net-message' as last_netmessage_url %}
+  {% if last_netmessage_url %}
   <script>
     window.addEventListener('DOMContentLoaded', () => {
       const label = document.getElementById('last-netmessage');
@@ -288,7 +290,7 @@
       let lastKey = '';
       async function fetchMessage() {
         try {
-          const resp = await fetch('{% url 'last-net-message' %}');
+          const resp = await fetch('{{ last_netmessage_url }}');
           if (!resp.ok) return;
           const data = await resp.json();
           const text = `${data.subject || ''} - ${data.body || ''}`.replace(/[\r\n]+/g, ' ').trim();
@@ -319,6 +321,7 @@
       setInterval(fetchMessage, 6000);
     });
   </script>
+  {% endif %}
   <script>
     window.addEventListener('DOMContentLoaded', () => {
       const canvas = document.getElementById('viewhistory-mini-chart');
