@@ -2150,6 +2150,32 @@ class ChargerAdminTests(TestCase):
         resp = self.client.get(url)
         self.assertNotContains(resp, charger.reference.image.url)
 
+    def test_toggle_rfid_authentication_action_toggles_value(self):
+        charger_requires = Charger.objects.create(
+            charger_id="RFIDON", require_rfid=True
+        )
+        charger_optional = Charger.objects.create(
+            charger_id="RFIDOFF", require_rfid=False
+        )
+        url = reverse("admin:ocpp_charger_changelist")
+        response = self.client.post(
+            url,
+            {
+                "action": "toggle_rfid_authentication",
+                "_selected_action": [
+                    charger_requires.pk,
+                    charger_optional.pk,
+                ],
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        charger_requires.refresh_from_db()
+        charger_optional.refresh_from_db()
+        self.assertFalse(charger_requires.require_rfid)
+        self.assertTrue(charger_optional.require_rfid)
+        self.assertContains(response, "Updated RFID authentication")
+
     def test_admin_lists_log_link(self):
         charger = Charger.objects.create(charger_id="LOG1")
         url = reverse("admin:ocpp_charger_changelist")
