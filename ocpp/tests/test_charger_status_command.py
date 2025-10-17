@@ -5,6 +5,7 @@ from io import StringIO
 from django.core.management import CommandError, call_command
 from django.test import TestCase
 
+from ocpp import store
 from ocpp.models import Charger
 
 
@@ -50,6 +51,28 @@ class ChargerStatusCommandTests(TestCase):
         self.assertIn("CPPATH-01", text)
         self.assertNotIn("CPPATH-02", text)
 
+    def test_filters_by_connector_id(self):
+        Charger.objects.create(charger_id="CP-CONN-1", connector_id=1)
+        Charger.objects.create(charger_id="CP-CONN-2", connector_id=2)
+
+        output = StringIO()
+        call_command("charger_status", "--cp", "2", stdout=output)
+
+        text = output.getvalue()
+        self.assertIn("CP-CONN-2", text)
+        self.assertNotIn("CP-CONN-1", text)
+
+    def test_filters_by_connector_all(self):
+        Charger.objects.create(charger_id="CP-ALL-AGG", connector_id=None)
+        Charger.objects.create(charger_id="CP-ALL-IND", connector_id=1)
+
+        output = StringIO()
+        call_command("charger_status", "--cp", "all", stdout=output)
+
+        text = output.getvalue()
+        self.assertIn("CP-ALL-AGG", text)
+        self.assertNotIn("CP-ALL-IND", text)
+
     def test_toggles_rfid_requirement(self):
         charger = Charger.objects.create(charger_id="RFID-01", require_rfid=False)
 
@@ -83,3 +106,47 @@ class ChargerStatusCommandTests(TestCase):
             "RFID toggles require selecting at least one charger",
         ):
             call_command("charger_status", "--rfid-enable")
+
+    def test_tail_option_outputs_recent_logs(self):
+        charger = Charger.objects.create(charger_id="TAIL-01", connector_id=2)
+        log_id = store.identity_key(charger.charger_id, charger.connector_id)
+        self.addCleanup(store.clear_log, log_id)
+        store.add_log(log_id, "first", log_type="charger")
+        store.add_log(log_id, "second", log_type="charger")
+
+        output = StringIO()
+        call_command(
+            "charger_status",
+            "--sn",
+            "TAIL-01",
+            "--cp",
+            "2",
+            "--tail",
+            "1",
+            stdout=output,
+        )
+
+        text = output.getvalue()
+        self.assertIn("second", text)
+        self.assertNotIn("first", text)
+
+    def test_tail_requires_unique_selection(self):
+        Charger.objects.create(charger_id="TAIL-A", connector_id=1)
+        Charger.objects.create(charger_id="TAIL-B", connector_id=1)
+
+        with self.assertRaisesMessage(
+            CommandError,
+            "--tail requires selecting exactly one charger",
+        ):
+            call_command("charger_status", "--cp", "1", "--tail", "5")
+
+    def test_tail_requires_positive_value(self):
+        Charger.objects.create(charger_id="TAIL-C", connector_id=1)
+
+        with self.assertRaisesMessage(
+            CommandError,
+            "--tail requires a positive number of log entries.",
+        ):
+            call_command(
+                "charger_status", "--sn", "TAIL-C", "--cp", "1", "--tail", "0"
+            )
