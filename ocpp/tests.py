@@ -1931,6 +1931,27 @@ class ChargerLandingTests(TestCase):
         finally:
             store.transactions.pop(key, None)
 
+    def test_public_page_shows_available_when_status_stale(self):
+        charger = Charger.objects.create(
+            charger_id="STALEPUB",
+            last_status="Charging",
+        )
+        response = self.client.get(reverse("charger-page", args=["STALEPUB"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'style="background-color: #0d6efd; color: #fff;">Available</span>',
+        )
+
+    def test_admin_status_shows_available_when_status_stale(self):
+        charger = Charger.objects.create(
+            charger_id="STALEADM",
+            last_status="Charging",
+        )
+        response = self.client.get(reverse("charger-status", args=["STALEADM"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="charger-state">Available</strong>')
+
     def test_public_status_shows_rfid_link_for_known_tag(self):
         aggregate = Charger.objects.create(charger_id="PUBRFID")
         connector = Charger.objects.create(
@@ -2154,6 +2175,48 @@ class ChargerAdminTests(TestCase):
             self.assertContains(resp, f">{charging_label}<")
         finally:
             store.transactions.pop(key, None)
+
+    def test_admin_status_shows_available_when_status_stale(self):
+        charger = Charger.objects.create(
+            charger_id="ADMINSTALE",
+            last_status="Charging",
+        )
+        url = reverse("admin:ocpp_charger_changelist")
+        resp = self.client.get(url)
+        available_label = force_str(STATUS_BADGE_MAP["available"][0])
+        self.assertContains(resp, f">{available_label}<")
+
+    def test_recheck_charger_status_action_sends_trigger(self):
+        charger = Charger.objects.create(charger_id="RECHECK1")
+
+        class DummyConnection:
+            def __init__(self):
+                self.sent: list[str] = []
+
+            async def send(self, message):
+                self.sent.append(message)
+
+        ws = DummyConnection()
+        store.set_connection(charger.charger_id, charger.connector_id, ws)
+        try:
+            url = reverse("admin:ocpp_charger_changelist")
+            response = self.client.post(
+                url,
+                {
+                    "action": "recheck_charger_status",
+                    "index": 0,
+                    "select_across": 0,
+                    "_selected_action": [charger.pk],
+                },
+                follow=True,
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(ws.sent)
+            self.assertIn("TriggerMessage", ws.sent[0])
+            self.assertContains(response, "Requested status update")
+        finally:
+            store.pop_connection(charger.charger_id, charger.connector_id)
+            store.clear_pending_calls(charger.charger_id)
 
     def test_admin_log_view_displays_entries(self):
         charger = Charger.objects.create(charger_id="LOG2")
