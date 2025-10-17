@@ -384,7 +384,10 @@ def _aggregate_dashboard_state(charger: Charger) -> tuple[str, str] | None:
         if has_session:
             statuses.append("charging")
             continue
-        if normalized_status == "charging" and error_code_lower in ERROR_OK_VALUES:
+        if (
+            normalized_status in {"charging", "finishing"}
+            and error_code_lower in ERROR_OK_VALUES
+        ):
             statuses.append("available")
             continue
         if normalized_status:
@@ -430,7 +433,11 @@ def _charger_state(charger: Charger, tx_obj: Transaction | list | None):
             # while a session is active. Override the badge so the user can see
             # the charger is actually busy.
             label, color = STATUS_BADGE_MAP.get("charging", (_("Charging"), "#198754"))
-        elif not has_session and key == "charging" and error_code_lower in ERROR_OK_VALUES:
+        elif (
+            not has_session
+            and key in {"charging", "finishing"}
+            and error_code_lower in ERROR_OK_VALUES
+        ):
             # Some chargers continue reporting "Charging" after a session ends.
             # When no active transaction exists, surface the state as available
             # so the UI reflects the actual behaviour at the site.

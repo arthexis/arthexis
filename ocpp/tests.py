@@ -4531,6 +4531,49 @@ class LiveUpdateViewTests(TestCase):
         )
         self.assertEqual(aggregate_entry["state"], available_label)
 
+    def test_dashboard_connector_treats_finishing_as_available_without_session(self):
+        charger = Charger.objects.create(
+            charger_id="FINISH-STATE",
+            connector_id=1,
+            last_status="Finishing",
+        )
+
+        resp = self.client.get(reverse("ocpp-dashboard"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNotNone(resp.context)
+        context = resp.context
+        available_label = force_str(STATUS_BADGE_MAP["available"][0])
+        entry = next(
+            item
+            for item in context["chargers"]
+            if item["charger"].pk == charger.pk
+        )
+        self.assertEqual(entry["state"], available_label)
+
+    def test_dashboard_aggregate_treats_finishing_as_available_without_session(self):
+        aggregate = Charger.objects.create(
+            charger_id="FINISH-AGG",
+            connector_id=None,
+            last_status="Finishing",
+        )
+        Charger.objects.create(
+            charger_id=aggregate.charger_id,
+            connector_id=1,
+            last_status="Finishing",
+        )
+
+        resp = self.client.get(reverse("ocpp-dashboard"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNotNone(resp.context)
+        context = resp.context
+        available_label = force_str(STATUS_BADGE_MAP["available"][0])
+        aggregate_entry = next(
+            item
+            for item in context["chargers"]
+            if item["charger"].pk == aggregate.pk
+        )
+        self.assertEqual(aggregate_entry["state"], available_label)
+
     def test_dashboard_aggregate_uses_connection_when_status_missing(self):
         aggregate = Charger.objects.create(
             charger_id="DASHAGG-CONN", last_status="Charging"
