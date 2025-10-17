@@ -254,6 +254,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     actions = [
         "purge_data",
         "fetch_cp_configuration",
+        "toggle_rfid_authentication",
         "recheck_charger_status",
         "change_availability_operative",
         "change_availability_inoperative",
@@ -468,6 +469,30 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             self.message_user(
                 request,
                 f"Requested configuration from {fetched} charger(s)",
+            )
+
+    @admin.action(description="Toggle RFID Authentication")
+    def toggle_rfid_authentication(self, request, queryset):
+        enabled = 0
+        disabled = 0
+        for charger in queryset:
+            new_value = not charger.require_rfid
+            Charger.objects.filter(pk=charger.pk).update(require_rfid=new_value)
+            charger.require_rfid = new_value
+            if new_value:
+                enabled += 1
+            else:
+                disabled += 1
+        if enabled or disabled:
+            changes = []
+            if enabled:
+                changes.append(f"enabled for {enabled} charger(s)")
+            if disabled:
+                changes.append(f"disabled for {disabled} charger(s)")
+            summary = "; ".join(changes)
+            self.message_user(
+                request,
+                f"Updated RFID authentication: {summary}",
             )
 
     def _dispatch_change_availability(self, request, queryset, availability_type: str):
