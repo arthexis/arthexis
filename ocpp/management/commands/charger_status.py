@@ -30,8 +30,21 @@ class Command(BaseCommand):
             "--cp",
             dest="cp",
             help=(
-                "Charge point path used to filter chargers by their last known "
-                "connection path. Matching ignores surrounding slashes."
+                "Connector identifier used to filter chargers. Provide a connector "
+                "number or 'all' to select aggregate connectors. Non-numeric "
+                "values fall back to matching the charge point path, ignoring "
+                "surrounding slashes."
+            ),
+        )
+        parser.add_argument(
+            "--tail",
+            dest="tail",
+            type=int,
+            nargs="?",
+            const=20,
+            help=(
+                "Show the last N log entries for the selected charger/connector. "
+                "Defaults to 20 entries when no value is provided."
             ),
         )
         parser.add_argument(
@@ -50,12 +63,16 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         serial = options.get("serial")
-        cp = options.get("cp")
+        cp_raw = options.get("cp")
+        tail = options.get("tail")
         enable_rfid = options.get("rfid_enable")
         disable_rfid = options.get("rfid_disable")
 
         if enable_rfid and disable_rfid:
             raise CommandError("Use either --rfid-enable or --rfid-disable, not both.")
+
+        if tail is not None and tail <= 0:
+            raise CommandError("--tail requires a positive number of log entries.")
 
         queryset = Charger.objects.all().select_related("location", "manager_node")
 
@@ -66,14 +83,37 @@ class Command(BaseCommand):
                     f"No chargers found matching serial number suffix '{serial}'."
                 )
 
-        if cp:
-            queryset = self._filter_by_cp(queryset, cp)
-            if not queryset.exists():
+        connector_filter = None
+        cp_path = None
+        if cp_raw:
+            connector_filter, cp_path = self._parse_cp(cp_raw)
+
+        if connector_filter is not None:
+            queryset = self._filter_by_connector(queryset, connector_filter)
+            match_count = queryset.count()
+            if not match_count:
+                if connector_filter == store.AGGREGATE_SLUG:
+                    raise CommandError(
+                        "No chargers found matching aggregate connector 'all'."
+                    )
                 raise CommandError(
-                    f"No chargers found matching charge point path '{cp}'."
+                    f"No chargers found matching connector id '{connector_filter}'."
+                )
+            if match_count > 1:
+                self.stdout.write(
+                    self.style.WARNING(
+                        "Multiple chargers matched the provided connector id; showing all matches."
+                    )
                 )
 
-        if (enable_rfid or disable_rfid) and not (serial or cp):
+        if cp_path:
+            queryset = self._filter_by_cp_path(queryset, cp_path)
+            if not queryset.exists():
+                raise CommandError(
+                    f"No chargers found matching charge point path '{cp_path}'."
+                )
+
+        if (enable_rfid or disable_rfid) and not (serial or cp_raw):
             raise CommandError(
                 "RFID toggles require selecting at least one charger with --sn and/or --cp."
             )
@@ -100,7 +140,16 @@ class Command(BaseCommand):
                 )
             )
 
-        if serial or cp:
+        if tail is not None:
+            if len(chargers) != 1:
+                raise CommandError(
+                    "--tail requires selecting exactly one charger using --sn and/or --cp."
+                )
+            self._render_details(chargers)
+            self._render_tail(chargers[0], tail)
+            return
+
+        if serial or cp_raw:
             self._render_details(chargers)
         else:
             self._render_table(chargers)
@@ -125,7 +174,7 @@ class Command(BaseCommand):
                 return filtered
         return queryset.none()
 
-    def _filter_by_cp(
+    def _filter_by_cp_path(
         self, queryset: QuerySet[Charger], cp: str
     ) -> QuerySet[Charger]:
         normalized = (cp or "").strip().strip("/")
@@ -155,6 +204,52 @@ class Command(BaseCommand):
             return suffix_filtered
 
         return queryset.none()
+
+    def _filter_by_connector(
+        self, queryset: QuerySet[Charger], connector: int | str
+    ) -> QuerySet[Charger]:
+        if connector == store.AGGREGATE_SLUG:
+            return queryset.filter(connector_id__isnull=True)
+        return queryset.filter(connector_id=connector)
+
+    def _parse_cp(self, value: str) -> tuple[int | str | None, str | None]:
+        normalized = (value or "").strip()
+        if not normalized:
+            return None, None
+
+        lowered = normalized.lower()
+        if lowered == store.AGGREGATE_SLUG:
+            return store.AGGREGATE_SLUG, None
+
+        try:
+            connector = int(normalized)
+        except ValueError:
+            return None, normalized
+
+        if connector <= 0:
+            raise CommandError("--cp requires a positive connector number.")
+
+        return connector, None
+
+    def _render_tail(self, charger: Charger, limit: int) -> None:
+        connector_label = (
+            f"connector {charger.connector_id}"
+            if charger.connector_id is not None
+            else "all connectors"
+        )
+        heading = f"Log tail ({connector_label}; last {limit} entries)"
+        self.stdout.write("")
+        self.stdout.write(self.style.MIGRATE_HEADING(heading))
+
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        entries = store.get_logs(log_key)
+
+        if not entries:
+            self.stdout.write("No log entries recorded.")
+            return
+
+        for line in entries[-limit:]:
+            self.stdout.write(line)
 
     def _render_table(self, chargers: Iterable[Charger]) -> None:
         rows: list[dict[str, str]] = []
