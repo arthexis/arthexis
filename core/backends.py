@@ -81,7 +81,28 @@ class RFIDBackend:
         if not rfid_value:
             return None
 
-        tag = RFID.objects.filter(rfid=rfid_value).first()
+        search_values = {rfid_value}
+        alternate = RFID._convert_endianness_value(
+            rfid_value,
+            from_endianness=RFID.BIG_ENDIAN,
+            to_endianness=RFID.LITTLE_ENDIAN,
+        )
+        if alternate and alternate != rfid_value:
+            search_values.add(alternate)
+
+        tag = None
+        fallback = None
+        for candidate in RFID.objects.filter(rfid__in=search_values).order_by("pk"):
+            if candidate.rfid == rfid_value:
+                tag = candidate
+                break
+            if fallback is None and candidate.rfid == alternate:
+                fallback = candidate
+            elif fallback is None:
+                fallback = candidate
+
+        if tag is None and fallback is not None:
+            tag = fallback
         if not tag or not tag.allowed:
             return None
 

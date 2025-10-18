@@ -1934,6 +1934,32 @@ class RFID(Entity):
         return cls.BIG_ENDIAN
 
     @classmethod
+    def _convert_endianness_value(
+        cls,
+        value: str,
+        *,
+        from_endianness: str,
+        to_endianness: str,
+    ) -> str:
+        """Convert ``value`` between big and little endian forms."""
+
+        if not isinstance(value, str):
+            return ""
+
+        sanitized = "".join(value.split()).upper()
+        if not sanitized:
+            return ""
+
+        source = cls.normalize_endianness(from_endianness)
+        target = cls.normalize_endianness(to_endianness)
+        if source == target or len(sanitized) % 2 != 0:
+            return sanitized
+
+        bytes_list = [sanitized[i : i + 2] for i in range(0, len(sanitized), 2)]
+        bytes_list.reverse()
+        return "".join(bytes_list)
+
+    @classmethod
     def next_scan_label(
         cls, *, step: int | None = None, start: int | None = None
     ) -> int:
@@ -2005,11 +2031,43 @@ class RFID(Entity):
 
         normalized = (rfid or "").upper()
         desired_endianness = cls.normalize_endianness(endianness)
-        existing = cls.objects.filter(rfid=normalized).first()
+        opposite_endianness = (
+            cls.LITTLE_ENDIAN if desired_endianness == cls.BIG_ENDIAN else cls.BIG_ENDIAN
+        )
+
+        search_values = {normalized}
+        alternate = cls._convert_endianness_value(
+            normalized,
+            from_endianness=desired_endianness,
+            to_endianness=opposite_endianness,
+        )
+        if alternate and alternate != normalized:
+            search_values.add(alternate)
+
+        existing = None
+        fallback = None
+        for candidate in cls.objects.filter(rfid__in=search_values).order_by("pk"):
+            if candidate.rfid == normalized:
+                existing = candidate
+                break
+            if fallback is None and candidate.rfid == alternate:
+                fallback = candidate
+            elif fallback is None:
+                fallback = candidate
+
+        if existing is None and fallback is not None:
+            existing = fallback
+
         if existing:
+            updates = []
+            if existing.rfid != normalized:
+                existing.rfid = normalized
+                updates.append("rfid")
             if existing.endianness != desired_endianness:
                 existing.endianness = desired_endianness
-                existing.save(update_fields=["endianness"])
+                updates.append("endianness")
+            if updates:
+                existing.save(update_fields=updates)
             return existing, False
 
         attempts = 0
