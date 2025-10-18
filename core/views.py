@@ -897,6 +897,9 @@ def _step_check_todos(release, ctx, log_path: Path) -> None:
     pending_values = list(
         pending_qs.values("id", "request", "url", "request_details")
     )
+    if not pending_values:
+        ctx["todos_ack"] = True
+
     if not ctx.get("todos_ack"):
         if not ctx.get("todos_block_logged"):
             _append_log(

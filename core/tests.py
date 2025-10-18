@@ -1096,6 +1096,21 @@ class ReleaseProcessTests(TestCase):
         finally:
             log_path.unlink(missing_ok=True)
 
+    def test_step_check_todos_auto_ack_when_no_pending(self):
+        log_path = Path("rel.log")
+        log_path.unlink(missing_ok=True)
+        ctx: dict[str, object] = {}
+
+        try:
+            with mock.patch("core.views._refresh_changelog_once"):
+                core_views._step_check_todos(self.release, ctx, log_path)
+        finally:
+            log_path.unlink(missing_ok=True)
+
+        self.assertTrue(ctx.get("todos_ack"))
+        self.assertNotIn("todos_required", ctx)
+        self.assertIsNone(ctx.get("todos"))
+
     @mock.patch("core.views._sync_with_origin_main")
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     @mock.patch("core.views.release_utils.network_available", return_value=False)
