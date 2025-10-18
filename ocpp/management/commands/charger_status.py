@@ -5,11 +5,11 @@ from datetime import datetime
 from typing import Iterable
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import Q, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 from django.utils import timezone
 
 from ocpp import store
-from ocpp.models import Charger
+from ocpp.models import Charger, MeterValue, Transaction
 
 
 class Command(BaseCommand):
@@ -74,7 +74,11 @@ class Command(BaseCommand):
         if tail is not None and tail <= 0:
             raise CommandError("--tail requires a positive number of log entries.")
 
-        queryset = Charger.objects.all().select_related("location", "manager_node")
+        queryset = (
+            Charger.objects.all()
+            .select_related("location", "manager_node")
+            .prefetch_related(self._transaction_prefetch())
+        )
 
         if serial:
             queryset = self._filter_by_serial(queryset, serial)
@@ -251,6 +255,68 @@ class Command(BaseCommand):
         for line in entries[-limit:]:
             self.stdout.write(line)
 
+    def _transaction_prefetch(self) -> Prefetch:
+        return Prefetch(
+            "transactions",
+            queryset=Transaction.objects.all().prefetch_related(
+                Prefetch(
+                    "meter_values",
+                    queryset=(
+                        MeterValue.objects.filter(energy__isnull=False)
+                        .order_by("timestamp")
+                    ),
+                    to_attr="energy_values",
+                )
+            ),
+        )
+
+    def _status_label(self, charger: Charger) -> str:
+        if charger.last_status:
+            return charger.last_status
+        if charger.availability_state:
+            return charger.availability_state
+        return "-"
+
+    @staticmethod
+    def _format_energy(total: float) -> str:
+        return f"{total:.2f}"
+
+    def _total_energy_kwh(self, charger: Charger) -> float:
+        total = 0.0
+        connector = charger.connector_id
+        for tx in charger.transactions.all():
+            if connector is not None and tx.connector_id not in (None, connector):
+                continue
+            total += self._transaction_energy_kwh(tx)
+        return total
+
+    def _transaction_energy_kwh(self, tx: Transaction) -> float:
+        start_val = None
+        if tx.meter_start is not None:
+            start_val = float(tx.meter_start) / 1000.0
+
+        end_val = None
+        if tx.meter_stop is not None:
+            end_val = float(tx.meter_stop) / 1000.0
+
+        readings = getattr(tx, "energy_values", None)
+        if readings is None:
+            readings = list(
+                tx.meter_values.filter(energy__isnull=False).order_by("timestamp")
+            )
+
+        if readings:
+            if start_val is None:
+                start_val = float(readings[0].energy or 0)
+            if end_val is None:
+                end_val = float(readings[-1].energy or 0)
+
+        if start_val is None or end_val is None:
+            return 0.0
+
+        total = end_val - start_val
+        return total if total >= 0 else 0.0
+
     def _render_table(self, chargers: Iterable[Charger]) -> None:
         rows: list[dict[str, str]] = []
         for charger in chargers:
@@ -265,10 +331,8 @@ class Command(BaseCommand):
                     ),
                     "rfid": "on" if charger.require_rfid else "off",
                     "public": "yes" if charger.public_display else "no",
-                    "connected": "yes"
-                    if store.is_connected(charger.charger_id, charger.connector_id)
-                    else "no",
-                    "status": charger.last_status or "-",
+                    "status": self._status_label(charger),
+                    "energy": self._format_energy(self._total_energy_kwh(charger)),
                 }
             )
 
@@ -278,8 +342,8 @@ class Command(BaseCommand):
             "connector": "Connector",
             "rfid": "RFID",
             "public": "Public",
-            "connected": "Connected",
-            "status": "Last Status",
+            "status": "Status",
+            "energy": "Total Energy (kWh)",
         }
 
         widths = {
