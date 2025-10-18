@@ -2933,6 +2933,8 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         "print_release_form",
         "copy_rfids",
         "toggle_selected_user_data",
+        "toggle_selected_released",
+        "toggle_selected_allowed",
     ]
     readonly_fields = ("added_on", "last_seen_on")
     form = RFIDForm
@@ -3028,6 +3030,50 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                 )
                 % {"count": skipped},
                 level=messages.WARNING,
+            )
+
+    @admin.action(description=_("Toggle Released flag"))
+    def toggle_selected_released(self, request, queryset):
+        manager = getattr(self.model, "all_objects", self.model.objects)
+        toggled = 0
+        for tag in queryset:
+            new_state = not tag.released
+            manager.filter(pk=tag.pk).update(released=new_state)
+            tag.released = new_state
+            toggled += 1
+
+        if toggled:
+            self.message_user(
+                request,
+                ngettext(
+                    "Toggled released flag for %(count)d RFID.",
+                    "Toggled released flag for %(count)d RFIDs.",
+                    toggled,
+                )
+                % {"count": toggled},
+                level=messages.SUCCESS,
+            )
+
+    @admin.action(description=_("Toggle Allowed flag"))
+    def toggle_selected_allowed(self, request, queryset):
+        manager = getattr(self.model, "all_objects", self.model.objects)
+        toggled = 0
+        for tag in queryset:
+            new_state = not tag.allowed
+            manager.filter(pk=tag.pk).update(allowed=new_state)
+            tag.allowed = new_state
+            toggled += 1
+
+        if toggled:
+            self.message_user(
+                request,
+                ngettext(
+                    "Toggled allowed flag for %(count)d RFID.",
+                    "Toggled allowed flag for %(count)d RFIDs.",
+                    toggled,
+                )
+                % {"count": toggled},
+                level=messages.SUCCESS,
             )
 
     @admin.action(description=_("Copy RFID"))

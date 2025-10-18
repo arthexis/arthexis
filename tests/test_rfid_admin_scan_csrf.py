@@ -196,3 +196,70 @@ class AdminRfidUserDataActionTests(TestCase):
         tag.refresh_from_db()
         self.assertFalse(tag.is_user_data)
         self.assertFalse(fixture_path.exists())
+
+
+class AdminRfidToggleFlagActionTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="toggleadmin",
+            email="toggleadmin@example.com",
+            password="password",
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.url = reverse("admin:core_rfid_changelist")
+
+    def test_toggle_released_flag(self):
+        tag = RFID.objects.create(rfid="99887766", released=False)
+
+        response = self.client.post(
+            self.url,
+            data={
+                "action": "toggle_selected_released",
+                "_selected_action": [tag.pk],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        tag.refresh_from_db()
+        self.assertTrue(tag.released)
+
+        response = self.client.post(
+            self.url,
+            data={
+                "action": "toggle_selected_released",
+                "_selected_action": [tag.pk],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        tag.refresh_from_db()
+        self.assertFalse(tag.released)
+
+    def test_toggle_allowed_flag(self):
+        tag = RFID.objects.create(rfid="11224488", allowed=True)
+
+        response = self.client.post(
+            self.url,
+            data={
+                "action": "toggle_selected_allowed",
+                "_selected_action": [tag.pk],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        tag.refresh_from_db()
+        self.assertFalse(tag.allowed)
+
+        response = self.client.post(
+            self.url,
+            data={
+                "action": "toggle_selected_allowed",
+                "_selected_action": [tag.pk],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        tag.refresh_from_db()
+        self.assertTrue(tag.allowed)
