@@ -3590,7 +3590,8 @@ class AssistantProfile(Profile):
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    profile_fields = ("user_key_hash", "scopes", "is_active")
+    profile_fields = ("assistant_name", "user_key_hash", "scopes", "is_active")
+    assistant_name = models.CharField(max_length=100, default="Assistant")
     user_key_hash = models.CharField(max_length=64, unique=True)
     scopes = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -3637,8 +3638,7 @@ class AssistantProfile(Profile):
         self.save(update_fields=["last_used_at"])
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        owner = self.owner_display()
-        return f"AssistantProfile for {owner}" if owner else "AssistantProfile"
+        return self.assistant_name or "AssistantProfile"
 
 
 def validate_relative_url(value: str) -> None:
