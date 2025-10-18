@@ -171,7 +171,7 @@ def _regenerate_changelog() -> None:
     previous_text = (
         changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else None
     )
-    range_spec = changelog_utils.determine_range_spec()
+    range_spec = changelog_utils.determine_range_spec(previous_text=previous_text)
     sections = changelog_utils.collect_sections(
         range_spec=range_spec, previous_text=previous_text
     )
