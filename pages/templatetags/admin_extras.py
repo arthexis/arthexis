@@ -493,15 +493,30 @@ def future_action_items(context):
         {"url": item["url"], "label": item["label"]} for item in sorted_models[:4]
     ]
 
-    todos: list[dict[str, str]] = [
-        {
+    active_todos = list(
+        Todo.objects.filter(is_deleted=False, done_on__isnull=True)
+    )
+
+    def _serialize(todo: Todo, *, completed: bool):
+        data = {
             "url": reverse("todo-focus", args=[todo.pk]),
             "label": todo.request,
             "details": todo.request_details,
-            "done_url": reverse("todo-done", args=[todo.pk]),
+            "completed": completed,
         }
-        for todo in Todo.objects.filter(is_deleted=False, done_on__isnull=True)
-    ]
+        if completed:
+            data["done_on"] = todo.done_on
+        else:
+            data["done_url"] = reverse("todo-done", args=[todo.pk])
+        return data
+
+    todos: list[dict[str, object]] = [_serialize(todo, completed=False) for todo in active_todos]
+
+    if user.is_superuser:
+        completed_qs = Todo.objects.filter(
+            is_deleted=False, done_on__isnull=False
+        ).order_by("-done_on", "pk")
+        todos.extend(_serialize(todo, completed=True) for todo in completed_qs)
 
     return {"models": model_items, "todos": todos}
 

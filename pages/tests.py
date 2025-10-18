@@ -2584,6 +2584,17 @@ class FavoriteTests(TestCase):
             resp, '<div class="todo-details">More info</div>', html=True
         )
 
+    def test_dashboard_shows_completed_todos_to_superuser(self):
+        todo = Todo.objects.create(request="Completed task")
+        Todo.objects.filter(pk=todo.pk).update(done_on=timezone.now())
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resp, todo.request)
+        self.assertContains(resp, "Completed")
+        done_url = reverse("todo-done", args=[todo.pk])
+        self.assertNotContains(resp, f'action="{done_url}"')
+
     def test_dashboard_shows_todos_when_node_unknown(self):
         Todo.objects.create(request="Check fallback")
         from nodes.models import Node
