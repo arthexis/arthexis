@@ -167,6 +167,21 @@
         padding: 0 16px 16px;
         margin: 0;
     }
+    .todo-status {
+        float: right;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .todo-status-completed {
+        color: var(--body-quiet-color);
+    }
+    .todo-status-date {
+        font-weight: 400;
+        text-transform: none;
+        letter-spacing: normal;
+    }
   </style>
 {% endblock %}
 
@@ -225,11 +240,15 @@
                     {% if todo.details %}
                     <div class="todo-details">{{ todo.details }}</div>
                     {% endif %}
+                    {% if todo.completed %}
+                    <span class="todo-status todo-status-completed">{% translate 'Completed' %}{% if todo.done_on %} <span class="todo-status-date">({{ todo.done_on|date:"SHORT_DATETIME_FORMAT" }})</span>{% endif %}</span>
+                    {% else %}
                     <form method="post" action="{{ todo.done_url }}" style="display:inline; float:right;">
                         {% csrf_token %}
                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
                         <button class="button" title="Done" style="padding-bottom:2px;">DONE</button>
                     </form>
+                    {% endif %}
                 </li>
                 {% endfor %}
             </ul>
