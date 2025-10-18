@@ -4,11 +4,21 @@ Changelog
 Unreleased
 ----------
 
-- 7e46f625 Add manual resume option to release progress (#2274)
-- 10420985 Fix nginx mode case handling in system info (#2273)
-- 93c09d7b Stop using ReleaseManager PyPI URL when publishing (#2271)
-- 0992d6dc Revert forced debug default and document bug criteria (#2270)
-- 0572a5e9 Add translations for feedback form (#2269)
+- 505065aa Add RFID endianness selection to scanner workflows (#2289)
+- 8ea923be Add CLI command to validate RFID values (#2290)
+- 2821b048 Add admin toggles for RFID released and allowed flags (#2288)
+- 9c316cd4 Use custom login route for authentication redirects (#2287)
+- 793b72b6 Add AP password update flag to network setup script (#2286)
+- eae4cdb8 Fix release manager security group fixture (#2285)
+- e445aa34 Require opt-in to reopen latest changelog release (#2284)
+- 404360d5 Improve changelog range selection (#2283)
+- 498b9934 Treat finishing status as available after sessions (#2282)
+- 15aaa142 Improve charger_status connector filtering and log tailing (#2281)
+- 69f3aacc Add admin action to toggle RFID authentication (#2280)
+- 409c4559 Handle missing last net message endpoint on admin dashboard (#2279)
+- b19f5a69 Fix stale charger statuses and add admin recheck action (#2278)
+- 9a85c373 Add charger status management command (#2276)
+- a1007caf Handle publish warnings after PyPI success (#2275)
 
 v0.1.16 (2025-10-15)
 --------------------
