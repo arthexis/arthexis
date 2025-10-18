@@ -20,6 +20,7 @@ import types
 from glob import glob
 from datetime import datetime, timedelta, timezone as datetime_timezone
 import tempfile
+from io import StringIO
 from urllib.parse import quote
 
 from django.utils import timezone
@@ -57,6 +58,7 @@ from nodes.models import ContentSample
 
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db import IntegrityError
 from .backends import LocalhostAdminBackend
 from core.views import (
@@ -981,6 +983,40 @@ class RFIDImportExportCommandTests(TestCase):
         account = EnergyAccount.objects.get(name="IMPORTED ADMIN ACCOUNT")
         tag = RFID.objects.get(rfid="NAMETAG002")
         self.assertTrue(tag.energy_accounts.filter(pk=account.pk).exists())
+
+
+class CheckRFIDCommandTests(TestCase):
+    def test_successful_validation_outputs_json(self):
+        out = StringIO()
+
+        call_command("check_rfid", "abcd1234", stdout=out)
+
+        payload = json.loads(out.getvalue())
+        self.assertEqual(payload["rfid"], "ABCD1234")
+        self.assertTrue(payload["created"])
+        self.assertTrue(RFID.objects.filter(rfid="ABCD1234").exists())
+
+    def test_invalid_value_raises_error(self):
+        with self.assertRaises(CommandError):
+            call_command("check_rfid", "invalid!")
+
+    def test_kind_option_updates_existing_tag(self):
+        tag = RFID.objects.create(rfid="EXISTING", allowed=False, kind=RFID.CLASSIC)
+        out = StringIO()
+
+        call_command(
+            "check_rfid",
+            "existing",
+            "--kind",
+            RFID.NTAG215,
+            stdout=out,
+        )
+
+        payload = json.loads(out.getvalue())
+        tag.refresh_from_db()
+        self.assertFalse(payload["created"])
+        self.assertEqual(payload["kind"], RFID.NTAG215)
+        self.assertEqual(tag.kind, RFID.NTAG215)
 
 
 class RFIDKeyVerificationFlagTests(TestCase):
