@@ -15,12 +15,13 @@ import tempfile
 import hashlib
 import time
 from weakref import WeakKeyDictionary
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Iterable, Any
 
 import django
 import importlib.util
 from django.apps import apps
 from django.conf import settings
+from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connections, connection
@@ -94,10 +95,51 @@ def _fixture_files() -> list[str]:
     return sorted(fixtures)
 
 
+def _assign_many_to_many(instance: "Model", field_name: str, value: Any) -> bool:
+    manager = getattr(instance, field_name)
+    if value is None or (
+        isinstance(value, (list, tuple, set)) and not value
+    ):
+        manager.set([])
+        return True
+
+    related_manager = manager.model._default_manager
+    if isinstance(value, (str, bytes)):
+        iterable = [value]
+    elif isinstance(value, (list, tuple, set)):
+        iterable = list(value)
+    else:
+        iterable = [value]
+
+    resolved = []
+    for item in iterable:
+        if isinstance(item, dict):
+            try:
+                resolved.append(related_manager.get(**item))
+            except ObjectDoesNotExist:
+                return False
+            continue
+        try:
+            if isinstance(item, (list, tuple)):
+                resolved.append(related_manager.get_by_natural_key(*item))
+            else:
+                resolved.append(related_manager.get_by_natural_key(item))
+            continue
+        except (AttributeError, ObjectDoesNotExist, TypeError):
+            try:
+                resolved.append(related_manager.get(pk=item))
+            except (ObjectDoesNotExist, TypeError, ValueError):
+                return False
+    manager.set(resolved)
+    return True
+
+
 def _fixture_sort_key(name: str) -> tuple[int, str]:
     """Sort fixtures to satisfy foreign key dependencies."""
     filename = Path(name).name
-    if filename.startswith("users__"):
+    if filename.startswith("group__"):
+        priority = -1
+    elif filename.startswith("users__"):
         priority = 0
     elif "__application_" in filename or "__noderole_" in filename:
         priority = 1
@@ -286,6 +328,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
             user_pk_map: dict[int, int] = {}
             model_counts: dict[str, int] = defaultdict(int)
             site_fixture_defaults: dict[str, dict] = {}
+            pending_user_m2m: dict[int, list[tuple[str, Any]]] = defaultdict(list)
             for name in fixtures:
                 priority, _ = _fixture_sort_key(name)
                 source = Path(settings.BASE_DIR, name)
@@ -313,9 +356,21 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                             )
                         if existing:
                             user_pk_map[obj.get("pk")] = existing.pk
-                            for field, value in obj.get("fields", {}).items():
-                                setattr(existing, field, value)
+                            m2m_updates: list[tuple[str, Any]] = []
+                            for field_name, value in obj.get("fields", {}).items():
+                                try:
+                                    field_object = model._meta.get_field(field_name)
+                                except FieldDoesNotExist:
+                                    setattr(existing, field_name, value)
+                                    continue
+                                if field_object.many_to_many:
+                                    m2m_updates.append((field_name, value))
+                                else:
+                                    setattr(existing, field_name, value)
                             existing.save()
+                            for field_name, value in m2m_updates:
+                                if not _assign_many_to_many(existing, field_name, value):
+                                    pending_user_m2m[existing.pk].append((field_name, value))
                             modified = True
                             continue
                     fields = obj.setdefault("fields", {})
@@ -405,6 +460,16 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                             print(f"Skipping fixture {fixture} due to: {exc}")
                         else:
                             print(".", end="", flush=True)
+                if pending_user_m2m:
+                    for user_pk, assignments in pending_user_m2m.items():
+                        user = get_user_model().objects.filter(pk=user_pk).first()
+                        if not user:
+                            continue
+                        for field_name, value in assignments:
+                            if not _assign_many_to_many(user, field_name, value):
+                                raise ValueError(
+                                    f"Unable to resolve many-to-many values for user {user_pk}"
+                                )
                 for module in Module.objects.all():
                     module.create_landings()
 

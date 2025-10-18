@@ -2,12 +2,8 @@
   {
     "model": "core.securitygroup",
     "fields": {
-      "name": "Release Managers",
-      "permissions": [],
-      "user_set": [
-        ["admin"],
-        ["arthexis"]
-      ]
+      "group_ptr": ["Release Managers"],
+      "parent": null
     }
   }
 ]
