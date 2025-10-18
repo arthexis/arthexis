@@ -1,16 +1,59 @@
+from django.db import IntegrityError
+
+from core.models import RFID
+
 from .background_reader import get_next_tag, is_configured, start, stop
 from .irq_wiring_check import check_irq_pin
 from .reader import toggle_deep_read
+from .utils import convert_endianness_value, normalize_endianness
 
 
-def scan_sources(request=None):
+def scan_sources(request=None, *, endianness: str | None = None):
     """Read the next RFID tag from the local scanner."""
     if not is_configured():
         return {"rfid": None, "label_id": None}
     result = get_next_tag()
-    if result and (result.get("rfid") or result.get("error")):
+    if not result:
+        return {"rfid": None, "label_id": None}
+    if result.get("error"):
         return result
-    return {"rfid": None, "label_id": None}
+
+    response = dict(result)
+    stored_endianness = normalize_endianness(response.get("endianness"))
+    response["endianness"] = stored_endianness
+    requested_endianness = (
+        normalize_endianness(endianness)
+        if endianness is not None
+        else stored_endianness
+    )
+
+    rfid_value = response.get("rfid")
+    if rfid_value:
+        normalized_value = str(rfid_value).upper()
+        if requested_endianness != stored_endianness:
+            converted = convert_endianness_value(
+                normalized_value,
+                from_endianness=stored_endianness,
+                to_endianness=requested_endianness,
+            )
+            response["rfid"] = converted
+            response["endianness"] = requested_endianness
+            if response.get("created") and response.get("label_id"):
+                tag = RFID.objects.filter(pk=response["label_id"]).first()
+                if tag:
+                    tag.rfid = converted
+                    tag.endianness = requested_endianness
+                    try:
+                        tag.save(update_fields=["rfid", "endianness"])
+                    except IntegrityError:
+                        response["rfid"] = normalized_value
+                        response["endianness"] = stored_endianness
+        else:
+            response["rfid"] = normalized_value
+    else:
+        response["rfid"] = None
+
+    return response
 
 
 def restart_sources():

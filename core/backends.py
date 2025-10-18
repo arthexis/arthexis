@@ -90,6 +90,7 @@ class RFIDBackend:
             env = os.environ.copy()
             env["RFID_VALUE"] = rfid_value
             env["RFID_LABEL_ID"] = str(tag.pk)
+            env["RFID_ENDIANNESS"] = getattr(tag, "endianness", RFID.BIG_ENDIAN)
             try:
                 completed = subprocess.run(
                     command,
@@ -117,6 +118,7 @@ class RFIDBackend:
                 env = os.environ.copy()
                 env["RFID_VALUE"] = rfid_value
                 env["RFID_LABEL_ID"] = str(tag.pk)
+                env["RFID_ENDIANNESS"] = getattr(tag, "endianness", RFID.BIG_ENDIAN)
                 with contextlib.suppress(Exception):
                     subprocess.Popen(
                         post_command,

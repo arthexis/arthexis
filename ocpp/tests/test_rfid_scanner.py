@@ -10,13 +10,18 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
 from ..rfid import scanner
+from core.models import RFID
 
 
 @pytest.mark.parametrize(
     "configured, queued_tag, expected",
     [
         (False, {"rfid": "123", "label_id": "abc"}, {"rfid": None, "label_id": None}),
-        (True, {"rfid": "123", "label_id": "abc"}, {"rfid": "123", "label_id": "abc"}),
+        (
+            True,
+            {"rfid": "123", "label_id": "abc"},
+            {"rfid": "123", "label_id": "abc", "endianness": RFID.BIG_ENDIAN},
+        ),
         (True, {"error": "timeout"}, {"error": "timeout"}),
         (True, None, {"rfid": None, "label_id": None}),
     ],

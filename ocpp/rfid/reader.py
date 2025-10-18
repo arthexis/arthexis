@@ -15,6 +15,7 @@ from .constants import (
     SPI_DEVICE,
 )
 from .camera import queue_camera_snapshot
+from .utils import convert_endianness_value, normalize_endianness
 
 
 _deep_read_enabled: bool = False
@@ -115,6 +116,7 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
         env = os.environ.copy()
         env["RFID_VALUE"] = rfid
         env["RFID_LABEL_ID"] = str(tag.pk)
+        env["RFID_ENDIANNESS"] = getattr(tag, "endianness", RFID.BIG_ENDIAN)
         try:
             completed = subprocess.run(
                 command,
@@ -142,6 +144,7 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
             env = os.environ.copy()
             env["RFID_VALUE"] = rfid
             env["RFID_LABEL_ID"] = str(tag.pk)
+            env["RFID_ENDIANNESS"] = getattr(tag, "endianness", RFID.BIG_ENDIAN)
             try:
                 subprocess.Popen(
                     post,
@@ -162,6 +165,7 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
         "released": tag.released,
         "reference": tag.reference.value if tag.reference else None,
         "kind": tag.kind,
+        "endianness": tag.endianness,
     }
     if command_details is not None:
         result["command_output"] = command_details
@@ -380,7 +384,9 @@ def read_rfid(
                 pass
 
 
-def validate_rfid_value(value: object, *, kind: str | None = None) -> dict:
+def validate_rfid_value(
+    value: object, *, kind: str | None = None, endianness: str | None = None
+) -> dict:
     """Validate ``value`` against the database and return scanner payload data."""
 
     if not isinstance(value, str):
@@ -403,11 +409,22 @@ def validate_rfid_value(value: object, *, kind: str | None = None) -> dict:
         if candidate in {choice[0] for choice in RFID.KIND_CHOICES}:
             normalized_kind = candidate
 
+    normalized_endianness = normalize_endianness(endianness)
+    converted_value = convert_endianness_value(
+        normalized,
+        from_endianness=RFID.BIG_ENDIAN,
+        to_endianness=normalized_endianness,
+    )
+
     try:
-        tag, created = RFID.register_scan(normalized, kind=normalized_kind)
+        tag, created = RFID.register_scan(
+            converted_value, kind=normalized_kind, endianness=normalized_endianness
+        )
     except ValidationError as exc:
         return {"error": "; ".join(exc.messages)}
     except Exception as exc:  # pragma: no cover - defensive fallback
         return {"error": str(exc)}
 
-    return _build_tag_response(tag, normalized, created=created, kind=normalized_kind)
+    return _build_tag_response(
+        tag, converted_value, created=created, kind=normalized_kind
+    )
