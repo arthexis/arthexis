@@ -1073,6 +1073,29 @@ class ReleaseProcessTests(TestCase):
         )
         sync_main.assert_called_once_with(Path("rel.log"))
 
+    def test_step_check_todos_logs_instruction_when_pending(self):
+        log_path = Path("rel.log")
+        log_path.unlink(missing_ok=True)
+        Todo.objects.create(request="Review checklist")
+        ctx: dict[str, object] = {}
+
+        try:
+            with self.assertRaises(core_views.PendingTodos):
+                core_views._step_check_todos(self.release, ctx, log_path)
+
+            contents = log_path.read_text(encoding="utf-8")
+            message = "Release checklist requires acknowledgment before continuing."
+            self.assertIn(message, contents)
+            self.assertIn("Review outstanding TODO items", contents)
+
+            with self.assertRaises(core_views.PendingTodos):
+                core_views._step_check_todos(self.release, ctx, log_path)
+
+            contents = log_path.read_text(encoding="utf-8")
+            self.assertEqual(contents.count(message), 1)
+        finally:
+            log_path.unlink(missing_ok=True)
+
     @mock.patch("core.views._sync_with_origin_main")
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     @mock.patch("core.views.release_utils.network_available", return_value=False)
