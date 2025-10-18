@@ -898,6 +898,14 @@ def _step_check_todos(release, ctx, log_path: Path) -> None:
         pending_qs.values("id", "request", "url", "request_details")
     )
     if not ctx.get("todos_ack"):
+        if not ctx.get("todos_block_logged"):
+            _append_log(
+                log_path,
+                "Release checklist requires acknowledgment before continuing. "
+                "Review outstanding TODO items and confirm the checklist; "
+                "publishing will resume automatically afterward.",
+            )
+            ctx["todos_block_logged"] = True
         ctx["todos"] = pending_values
         ctx["todos_required"] = True
         raise PendingTodos()
@@ -1859,6 +1867,9 @@ def release_progress(request, pk: int, action: str):
                 ctx["todos_ack"] = True
         else:
             ctx["todos_ack"] = True
+
+    if ctx.get("todos_ack"):
+        ctx.pop("todos_block_logged", None)
 
     if not ctx.get("todos_ack"):
         ctx["todos"] = [
