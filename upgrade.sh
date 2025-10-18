@@ -552,9 +552,3 @@ if [[ $NO_RESTART -eq 0 ]]; then
   echo "Services restart triggered"
 fi
 
-if command -v gway >/dev/null 2>&1; then
-  echo "Detected gway command; running gway upgrade..."
-  if ! gway upgrade; then
-    echo "gway upgrade failed; continuing with suite upgrade" >&2
-  fi
-fi
