@@ -7,7 +7,10 @@
       "is_staff": true,
       "is_superuser": true,
       "is_active": true,
-      "password": ""
+      "password": "",
+      "groups": [
+        ["Release Managers"]
+      ]
     }
   }
 ]
