@@ -1584,6 +1584,33 @@ class ReleaseProcessTests(TestCase):
         self.assertTrue(context["resume_available"])
         self.assertIn(b"Resume Publish", response.content)
 
+    def test_resume_without_step_parameter_defaults_to_current_progress(self):
+        run: list[str] = []
+
+        def step_fn(release, ctx, log_path):
+            run.append("step")
+
+        steps = [("Only step", step_fn)]
+        user = User.objects.create_superuser("admin", "admin@example.com", "pw")
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        with mock.patch("core.views.PUBLISH_STEPS", steps):
+            self.client.force_login(user)
+            session = self.client.session
+            session[f"release_publish_{self.release.pk}"] = {
+                "step": 0,
+                "started": True,
+                "paused": False,
+            }
+            session.save()
+
+            response = self.client.get(f"{url}?resume=1")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(run, ["step"])
+
+            session = self.client.session
+            ctx = session.get(f"release_publish_{self.release.pk}")
+            self.assertEqual(ctx.get("step"), 1)
+
     def test_new_todo_does_not_reset_pending_flow(self):
         user = User.objects.create_superuser("admin", "admin@example.com", "pw")
         url = reverse("release-progress", args=[self.release.pk, "publish"])
