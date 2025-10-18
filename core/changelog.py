@@ -154,6 +154,48 @@ def _parse_sections(text: str) -> List[ChangelogSection]:
     return sections
 
 
+def _latest_release_version(previous_text: str) -> Optional[str]:
+    for section in _parse_sections(previous_text):
+        if section.version:
+            return section.version
+    return None
+
+
+def _find_release_commit(version: str) -> Optional[str]:
+    normalized = version.lstrip("v")
+    search_terms = [
+        f"Release v{normalized}",
+        f"Release {normalized}",
+        f"pre-release commit v{normalized}",
+        f"pre-release commit {normalized}",
+    ]
+    for term in search_terms:
+        proc = subprocess.run(
+            [
+                "git",
+                "log",
+                "--max-count=1",
+                "--format=%H",
+                "--fixed-strings",
+                f"--grep={term}",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        sha = proc.stdout.strip()
+        if sha:
+            return sha.splitlines()[0]
+    return None
+
+
+def _resolve_release_commit_from_text(previous_text: str) -> Optional[str]:
+    version = _latest_release_version(previous_text)
+    if not version:
+        return None
+    return _find_release_commit(version)
+
+
 def _merge_sections(
     new_sections: Iterable[ChangelogSection],
     old_sections: Iterable[ChangelogSection],
@@ -274,12 +316,20 @@ def _resolve_start_tag(explicit: str | None = None) -> Optional[str]:
     return None
 
 
-def determine_range_spec(start_tag: str | None = None) -> str:
+def determine_range_spec(
+    start_tag: str | None = None, *, previous_text: str | None = None
+) -> str:
     """Return the git range specification to build the changelog."""
 
     resolved = _resolve_start_tag(start_tag)
     if resolved:
         return f"{resolved}..HEAD"
+
+    if previous_text:
+        release_commit = _resolve_release_commit_from_text(previous_text)
+        if release_commit:
+            return f"{release_commit}..HEAD"
+
     return "HEAD"
 
 

@@ -321,3 +321,48 @@ class ChangelogBuilderTests(SimpleTestCase):
 
         with mock.patch("core.changelog.subprocess.run", side_effect=fake_run):
             self.assertEqual(changelog.determine_range_spec(), "v0.1.13..HEAD")
+
+    def test_determine_range_spec_uses_previous_changelog_when_tags_missing(self):
+        previous_text = "\n".join(
+            [
+                "Changelog",
+                "=========",
+                "",
+                "Unreleased",
+                "----------",
+                "",
+                "- " + "b" * 8 + " Existing entry",
+                "",
+                "v1.3.0 (2025-10-06)",
+                "-------------------",
+                "",
+                "- " + "a" * 8 + " Example entry",
+                "",
+            ]
+        )
+
+        release_commit = "f" * 40
+
+        def fake_run(cmd, capture_output=False, text=False, check=False):
+            if cmd == ["git", "describe", "--tags", "--exact-match", "HEAD"]:
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+            if cmd == ["git", "describe", "--tags", "--abbrev=0"]:
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+            if (
+                cmd[:3] == ["git", "log", "--max-count=1"]
+                and "--fixed-strings" in cmd
+                and cmd[-1] == "--grep=Release v1.3.0"
+            ):
+                return subprocess.CompletedProcess(cmd, 0, stdout=release_commit + "\n", stderr="")
+            if (
+                cmd[:3] == ["git", "log", "--max-count=1"]
+                and "--fixed-strings" in cmd
+            ):
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            raise AssertionError(f"Unexpected command: {cmd}")
+
+        with mock.patch("core.changelog.subprocess.run", side_effect=fake_run):
+            self.assertEqual(
+                changelog.determine_range_spec(previous_text=previous_text),
+                f"{release_commit}..HEAD",
+            )
