@@ -2835,6 +2835,7 @@ class RFIDResource(resources.ModelResource):
             "post_auth_command",
             "allowed",
             "color",
+            "endianness",
             "kind",
             "released",
             "last_seen_on",
@@ -2849,6 +2850,7 @@ class RFIDResource(resources.ModelResource):
             "post_auth_command",
             "allowed",
             "color",
+            "endianness",
             "kind",
             "released",
             "last_seen_on",
@@ -2919,11 +2921,12 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         "user_data_flag",
         "color",
         "kind",
+        "endianness",
         "released",
         "allowed",
         "last_seen_on",
     )
-    list_filter = ("color", "released", "allowed")
+    list_filter = ("color", "endianness", "released", "allowed")
     search_fields = ("label_id", "rfid", "custom_label")
     autocomplete_fields = ["energy_accounts"]
     raw_id_fields = ["reference"]
@@ -3543,6 +3546,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         context["title"] = _("Scan RFIDs")
         context["opts"] = self.model._meta
         context["show_release_info"] = True
+        context["default_endianness"] = RFID.BIG_ENDIAN
         return render(request, "admin/core/rfid/scan.html", context)
 
     def scan_next(self, request):
@@ -3556,9 +3560,11 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                 return JsonResponse({"error": "Invalid JSON payload"}, status=400)
             rfid = payload.get("rfid") or payload.get("value")
             kind = payload.get("kind")
-            result = validate_rfid_value(rfid, kind=kind)
+            endianness = payload.get("endianness")
+            result = validate_rfid_value(rfid, kind=kind, endianness=endianness)
         else:
-            result = scan_sources(request)
+            endianness = request.GET.get("endianness")
+            result = scan_sources(request, endianness=endianness)
         status = 500 if result.get("error") else 200
         return JsonResponse(result, status=status)
 

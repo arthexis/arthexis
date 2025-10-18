@@ -11,6 +11,7 @@ from pages.utils import landing
 
 from .scanner import scan_sources, enable_deep_read_mode
 from .reader import validate_rfid_value
+from core.models import RFID
 from .utils import build_mode_toggle
 
 
@@ -46,9 +47,11 @@ def scan_next(request):
             return JsonResponse({"error": "Invalid JSON payload"}, status=400)
         rfid = payload.get("rfid") or payload.get("value")
         kind = payload.get("kind")
-        result = validate_rfid_value(rfid, kind=kind)
+        endianness = payload.get("endianness")
+        result = validate_rfid_value(rfid, kind=kind, endianness=endianness)
     else:
-        result = scan_sources(request)
+        endianness = request.GET.get("endianness")
+        result = scan_sources(request, endianness=endianness)
     status = 500 if result.get("error") else 200
     return JsonResponse(result, status=status)
 
@@ -82,6 +85,7 @@ def reader(request):
         "toggle_url": toggle_url,
         "toggle_label": toggle_label,
         "show_release_info": request.user.is_staff,
+        "default_endianness": RFID.BIG_ENDIAN,
     }
     if request.user.is_staff:
         context["admin_change_url_template"] = reverse(

@@ -1851,6 +1851,17 @@ class RFID(Entity):
         choices=KIND_CHOICES,
         default=CLASSIC,
     )
+    BIG_ENDIAN = "BIG"
+    LITTLE_ENDIAN = "LITTLE"
+    ENDIANNESS_CHOICES = [
+        (BIG_ENDIAN, _("Big endian")),
+        (LITTLE_ENDIAN, _("Little endian")),
+    ]
+    endianness = models.CharField(
+        max_length=6,
+        choices=ENDIANNESS_CHOICES,
+        default=BIG_ENDIAN,
+    )
     reference = models.ForeignKey(
         "Reference",
         null=True,
@@ -1902,12 +1913,25 @@ class RFID(Entity):
             self.key_b = self.key_b.upper()
         if self.kind:
             self.kind = self.kind.upper()
+        if self.endianness:
+            self.endianness = self.normalize_endianness(self.endianness)
         super().save(*args, **kwargs)
         if not self.allowed:
             self.energy_accounts.clear()
 
     def __str__(self):  # pragma: no cover - simple representation
         return str(self.label_id)
+
+    @classmethod
+    def normalize_endianness(cls, value: object) -> str:
+        """Return a valid endianness value, defaulting to BIG."""
+
+        if isinstance(value, str):
+            candidate = value.strip().upper()
+            valid = {choice[0] for choice in cls.ENDIANNESS_CHOICES}
+            if candidate in valid:
+                return candidate
+        return cls.BIG_ENDIAN
 
     @classmethod
     def next_scan_label(
@@ -1971,13 +1995,39 @@ class RFID(Entity):
 
     @classmethod
     def register_scan(
-        cls, rfid: str, *, kind: str | None = None
+        cls,
+        rfid: str,
+        *,
+        kind: str | None = None,
+        endianness: str | None = None,
     ) -> tuple["RFID", bool]:
         """Return or create an RFID that was detected via scanning."""
 
-        normalized = (rfid or "").upper()
-        existing = cls.objects.filter(rfid=normalized).first()
+        normalized = "".join((rfid or "").split()).upper()
+        desired_endianness = cls.normalize_endianness(endianness)
+        alternate = None
+        if normalized and len(normalized) % 2 == 0:
+            bytes_list = [normalized[i : i + 2] for i in range(0, len(normalized), 2)]
+            bytes_list.reverse()
+            alternate_candidate = "".join(bytes_list)
+            if alternate_candidate != normalized:
+                alternate = alternate_candidate
+
+        existing = None
+        if normalized:
+            existing = cls.objects.filter(rfid=normalized).first()
+        if not existing and alternate:
+            existing = cls.objects.filter(rfid=alternate).first()
         if existing:
+            update_fields: list[str] = []
+            if normalized and existing.rfid != normalized:
+                existing.rfid = normalized
+                update_fields.append("rfid")
+            if existing.endianness != desired_endianness:
+                existing.endianness = desired_endianness
+                update_fields.append("endianness")
+            if update_fields:
+                existing.save(update_fields=update_fields)
             return existing, False
 
         attempts = 0
@@ -1990,6 +2040,7 @@ class RFID(Entity):
                 "rfid": normalized,
                 "allowed": True,
                 "released": False,
+                "endianness": desired_endianness,
             }
             if kind:
                 create_kwargs["kind"] = kind

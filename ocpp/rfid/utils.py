@@ -5,6 +5,43 @@ from typing import Tuple
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 
+from core.models import RFID
+
+
+def normalize_endianness(value) -> str:
+    """Normalize a raw endianness value to one of the RFID choices."""
+
+    if isinstance(value, str):
+        candidate = value.strip().upper()
+        valid = {choice[0] for choice in RFID.ENDIANNESS_CHOICES}
+        if candidate in valid:
+            return candidate
+    return RFID.BIG_ENDIAN
+
+
+def convert_endianness_value(
+    value: str,
+    *,
+    from_endianness: str | None = None,
+    to_endianness: str | None = None,
+) -> str:
+    """Convert ``value`` between big and little endian representations."""
+
+    if not isinstance(value, str):
+        return ""
+    sanitized = "".join(value.split()).upper()
+    if not sanitized:
+        return ""
+    source = normalize_endianness(from_endianness or RFID.BIG_ENDIAN)
+    target = normalize_endianness(to_endianness or RFID.BIG_ENDIAN)
+    if source == target:
+        return sanitized
+    if len(sanitized) % 2 != 0:
+        return sanitized
+    bytes_list = [sanitized[i : i + 2] for i in range(0, len(sanitized), 2)]
+    bytes_list.reverse()
+    return "".join(bytes_list)
+
 
 def build_mode_toggle(
     request: HttpRequest, *, base_path: str | None = None

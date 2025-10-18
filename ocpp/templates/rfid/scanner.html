@@ -16,6 +16,10 @@
         {% elif request.user.is_staff and public_view_url %}
           <a class="button secondary" href="{{ public_view_url }}">{% trans "Public View" %}</a>
         {% endif %}
+        <label class="rfid-endian-toggle">
+          <input type="checkbox" id="{{ prefix }}-endian-toggle" value="LITTLE">
+          <span>{% trans "Little Endian" %}</span>
+        </label>
       </div>
     {% endif %}
   <p id="{{ prefix }}-status">{% trans "Scanner ready" %}</p>
@@ -143,6 +147,19 @@
   background: var(--rfid-row-hover-bg);
   border-color: var(--rfid-row-hover-bg);
   color: var(--rfid-row-text);
+}
+
+#{{ prefix }}-scanner .rfid-endian-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  font-weight: 600;
+  color: var(--rfid-header-text);
+  cursor: pointer;
+}
+
+#{{ prefix }}-scanner .rfid-endian-toggle input {
+  cursor: pointer;
 }
 
 #{{ prefix }}-scanner .rfid-mode-toggle .button.secondary {
@@ -348,8 +365,12 @@
   const commandStderrSection = document.getElementById('{{ prefix }}-command-stderr-section');
   const commandStderrEl = document.getElementById('{{ prefix }}-command-stderr');
   const commandErrorEl = document.getElementById('{{ prefix }}-command-error');
+  const endiannessToggle = document.getElementById('{{ prefix }}-endian-toggle');
   const adminTemplate = '{{ admin_change_url_template|default:""|escapejs }}';
   const tableMode = {% if table_mode %}true{% else %}false{% endif %};
+  const baseScanUrl = '{{ scan_url|escapejs }}';
+  const defaultEndianness = ('{{ default_endianness|default:"BIG"|upper|escapejs }}' || 'BIG').toUpperCase();
+  let requestedEndianness = defaultEndianness;
 
   const text = {
     yes: '{{ _("Yes")|escapejs }}',
@@ -424,6 +445,7 @@
   let lastLocalValue = null;
   let lastLocalAt = 0;
   let lastScanRfid = null;
+  let lastScanData = null;
   const historyEntries = tableMode ? new Map() : null;
   let deepReadActive = false;
   let lastDeepDetailsRfid = null;
@@ -453,6 +475,40 @@
       return '';
     }
     return String(value);
+  }
+
+  function normalizeEndianness(value){
+    if(typeof value === 'string'){
+      const normalized = value.trim().toUpperCase();
+      if(normalized === 'LITTLE' || normalized === 'BIG'){
+        return normalized;
+      }
+    }
+    return 'BIG';
+  }
+
+  function getRequestedEndianness(){
+    return requestedEndianness === 'LITTLE' ? 'LITTLE' : 'BIG';
+  }
+
+  function convertEndianness(value, fromEndian, toEndian){
+    const source = normalizeEndianness(fromEndian);
+    const target = normalizeEndianness(toEndian);
+    if(typeof value !== 'string'){
+      return '';
+    }
+    const sanitized = value.replace(/\s+/g, '').toUpperCase();
+    if(!sanitized){
+      return sanitized;
+    }
+    if(source === target){
+      return sanitized;
+    }
+    if(sanitized.length % 2 !== 0){
+      return sanitized;
+    }
+    const parts = sanitized.match(/.{1,2}/g) || [];
+    return parts.reverse().join('');
   }
 
   function formatKeyText(value, verified){
@@ -737,10 +793,10 @@
     if(data.allowed === undefined || data.allowed === null){
       return '';
     }
-    return data.allowed && data.released ? text.yes : text.no;
+    return data.allowed ? text.yes : text.no;
   }
 
-  function buildHistoryCells(data, labelValue){
+  function buildHistoryCells(data, labelValue, displayRfid){
     const values = [
       new Date().toLocaleTimeString(),
       labelValue,
@@ -749,7 +805,7 @@
       validText(data),
     ];
     if(isStaff){
-      values.push(data.rfid || '');
+      values.push(displayRfid || '');
     }
     if(showReleaseInfo){
       values.push(booleanText(data.released));
@@ -758,7 +814,7 @@
     return values;
   }
 
-  function appendHistoryRow(data, labelValue){
+  function appendHistoryRow(data, labelValue, displayRfid){
     if(!historyBody){
       return;
     }
@@ -773,7 +829,7 @@
       }
     }
     const row = document.createElement('tr');
-    buildHistoryCells(data, labelValue).forEach((value) => {
+    buildHistoryCells(data, labelValue, displayRfid).forEach((value) => {
       const cell = document.createElement('td');
       cell.textContent = value;
       row.appendChild(cell);
@@ -801,10 +857,15 @@
     statusEl.textContent = messageText || defaultMsg;
   }
 
-  function updateFromData(data){
+  function updateFromData(data, options){
+    const opts = Object.assign({updateHistory: true, triggerActions: true}, options || {});
     if(!data || data.error){
       if(data && data.error){
-        showError(data.error);
+        if(opts.triggerActions){
+          showError(data.error);
+        } else {
+          statusEl.textContent = data.error;
+        }
       }
       return;
     }
@@ -815,10 +876,15 @@
       return;
     }
     const rfidValue = normalizeRfidValue(data.rfid);
+    const storedEndianness = normalizeEndianness(data.endianness);
+    const desiredEndianness = getRequestedEndianness();
+    const displayRfid = rfidValue
+      ? convertEndianness(rfidValue, storedEndianness, desiredEndianness)
+      : '';
     const rfidKey = rfidValue !== null
       ? rfidValue
       : (data.rfid !== undefined && data.rfid !== null ? String(data.rfid) : null);
-    if(lastScanRfid !== null && rfidKey !== null && rfidKey !== lastScanRfid){
+    if(opts.triggerActions && lastScanRfid !== null && rfidKey !== null && rfidKey !== lastScanRfid){
       clearCommandOutput();
     }
     if(rfidKey !== null){
@@ -827,18 +893,20 @@
     const labelValue = data.label_id === undefined || data.label_id === null ? '' : data.label_id;
     if(labelEl){ labelEl.textContent = labelValue; }
     if(kindEl){ kindEl.textContent = data.kind || ''; }
-    if(rfidEl){ rfidEl.textContent = data.rfid || ''; }
+    if(rfidEl){ rfidEl.textContent = displayRfid || ''; }
     if(colorEl){ colorEl.textContent = data.color || ''; }
     if(allowedEl){ allowedEl.textContent = validText(data); }
     if(releasedEl){ releasedEl.textContent = booleanText(data.released); }
     if(referenceEl){ referenceEl.textContent = data.reference || ''; }
     const hasReferenceLink = data.reference && /^https?:\/\//i.test(data.reference);
-    if(referenceEl && hasReferenceLink){
-      const w = window.open(data.reference, '_blank');
-      if(w){ w.focus(); }
-    } else if(!referenceEl && tableMode && showReleaseInfo && hasReferenceLink){
-      const w = window.open(data.reference, '_blank');
-      if(w){ w.focus(); }
+    if(opts.triggerActions){
+      if(referenceEl && hasReferenceLink){
+        const w = window.open(data.reference, '_blank');
+        if(w){ w.focus(); }
+      } else if(!referenceEl && tableMode && showReleaseInfo && hasReferenceLink){
+        const w = window.open(data.reference, '_blank');
+        if(w){ w.focus(); }
+      }
     }
     if(configureEl){
       configureEl.textContent = formatText(text.configureRfid, {label: labelValue});
@@ -862,14 +930,15 @@
       statusMsg = text.rfidOnly;
     }
     statusEl.textContent = data.created ? formatText(text.createdStatus, {status: statusMsg}) : statusMsg;
-    if(tableMode){
-      appendHistoryRow(data, labelValue);
+    lastScanData = Object.assign({}, data);
+    if(tableMode && opts.updateHistory){
+      appendHistoryRow(data, labelValue, displayRfid);
     }
   }
 
   async function requestScanData(){
     try {
-      const resp = await fetch('{{ scan_url }}', {
+      const resp = await fetch(buildScanUrl(), {
         credentials: 'same-origin',
         headers: {
           'Accept': 'application/json',
@@ -909,6 +978,16 @@
     return null;
   }
 
+  function buildScanUrl(){
+    try {
+      const url = new URL(baseScanUrl || '', window.location.origin);
+      url.searchParams.set('endianness', getRequestedEndianness());
+      return url.toString();
+    } catch(err){
+      return baseScanUrl;
+    }
+  }
+
   async function sendLocalScan(rfidValue){
     const headers = {
       'Content-Type': 'application/json',
@@ -920,11 +999,11 @@
       headers['X-CSRFToken'] = csrf;
     }
     try {
-      const resp = await fetch('{{ scan_url }}', {
+      const resp = await fetch(baseScanUrl, {
         method: 'POST',
         credentials: 'same-origin',
         headers,
-        body: JSON.stringify({rfid: rfidValue})
+        body: JSON.stringify({rfid: rfidValue, endianness: getRequestedEndianness()})
       });
       const data = await readJsonResponse(resp);
       if(!resp.ok || (data && data.error)){
@@ -947,10 +1026,12 @@
       return;
     }
     const now = Date.now();
-    if(lastLocalValue === cleaned && now - lastLocalAt < 300){
+    const desired = getRequestedEndianness();
+    const dedupeKey = `${desired}:${cleaned}`;
+    if(lastLocalValue === dedupeKey && now - lastLocalAt < 300){
       return;
     }
-    lastLocalValue = cleaned;
+    lastLocalValue = dedupeKey;
     lastLocalAt = now;
     sendLocalScan(cleaned);
   }
@@ -1105,6 +1186,15 @@
         statusEl.textContent = message;
       } finally {
         deepBtn.disabled = false;
+      }
+    });
+  }
+  if(endiannessToggle){
+    endiannessToggle.checked = requestedEndianness === 'LITTLE';
+    endiannessToggle.addEventListener('change', () => {
+      requestedEndianness = endiannessToggle.checked ? 'LITTLE' : 'BIG';
+      if(lastScanData){
+        updateFromData(lastScanData, {updateHistory: false, triggerActions: false});
       }
     });
   }

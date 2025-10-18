@@ -131,7 +131,7 @@ class ScanNextViewTests(TestCase):
         self.assertEqual(
             resp.json(), {"rfid": "ABCD1234", "label_id": 1, "created": False}
         )
-        mock_validate.assert_called_once_with("ABCD1234", kind=None)
+        mock_validate.assert_called_once_with("ABCD1234", kind=None, endianness=None)
 
     @patch("config.middleware.Node.get_local", return_value=None)
     @patch("config.middleware.get_site")
@@ -342,16 +342,20 @@ class ValidateRfidValueTests(SimpleTestCase):
         tag.released = False
         tag.reference = None
         tag.kind = RFID.CLASSIC
+        tag.endianness = RFID.BIG_ENDIAN
         mock_register.return_value = (tag, True)
 
         result = validate_rfid_value("abcd1234")
 
-        mock_register.assert_called_once_with("ABCD1234", kind=None)
+        mock_register.assert_called_once_with(
+            "ABCD1234", kind=None, endianness=RFID.BIG_ENDIAN
+        )
         tag.save.assert_called_once_with(update_fields=["last_seen_on"])
         self.assertIs(tag.last_seen_on, fake_now)
         mock_notify.assert_called_once_with("RFID 1 OK", "ABCD1234 B")
         self.assertTrue(result["created"])
         self.assertEqual(result["rfid"], "ABCD1234")
+        self.assertEqual(result["endianness"], RFID.BIG_ENDIAN)
 
     @patch("ocpp.rfid.reader.timezone.now")
     @patch("ocpp.rfid.reader.notify_async")
@@ -367,11 +371,14 @@ class ValidateRfidValueTests(SimpleTestCase):
         tag.released = True
         tag.reference = None
         tag.kind = RFID.CLASSIC
+        tag.endianness = RFID.BIG_ENDIAN
         mock_register.return_value = (tag, False)
 
         result = validate_rfid_value("abcd", kind=RFID.NTAG215)
 
-        mock_register.assert_called_once_with("ABCD", kind=RFID.NTAG215)
+        mock_register.assert_called_once_with(
+            "ABCD", kind=RFID.NTAG215, endianness=RFID.BIG_ENDIAN
+        )
         tag.save.assert_called_once_with(update_fields=["kind", "last_seen_on"])
         self.assertIs(tag.last_seen_on, fake_now)
         self.assertEqual(tag.kind, RFID.NTAG215)
@@ -379,6 +386,36 @@ class ValidateRfidValueTests(SimpleTestCase):
         self.assertFalse(result["allowed"])
         self.assertFalse(result["created"])
         self.assertEqual(result["kind"], RFID.NTAG215)
+        self.assertEqual(result["endianness"], RFID.BIG_ENDIAN)
+
+    @patch("ocpp.rfid.reader.timezone.now")
+    @patch("ocpp.rfid.reader.notify_async")
+    @patch("ocpp.rfid.reader.RFID.register_scan")
+    def test_registers_little_endian_value(
+        self, mock_register, mock_notify, mock_now
+    ):
+        fake_now = object()
+        mock_now.return_value = fake_now
+        tag = MagicMock()
+        tag.pk = 7
+        tag.label_id = 7
+        tag.allowed = True
+        tag.color = "B"
+        tag.released = False
+        tag.reference = None
+        tag.kind = RFID.CLASSIC
+        tag.endianness = RFID.LITTLE_ENDIAN
+        mock_register.return_value = (tag, True)
+
+        result = validate_rfid_value("A1B2C3D4", endianness=RFID.LITTLE_ENDIAN)
+
+        mock_register.assert_called_once_with(
+            "D4C3B2A1", kind=None, endianness=RFID.LITTLE_ENDIAN
+        )
+        tag.save.assert_called_once_with(update_fields=["last_seen_on"])
+        self.assertEqual(result["rfid"], "D4C3B2A1")
+        self.assertEqual(result["endianness"], RFID.LITTLE_ENDIAN)
+        mock_notify.assert_called_once()
 
     def test_rejects_invalid_value(self):
         result = validate_rfid_value("invalid!")
@@ -412,6 +449,7 @@ class ValidateRfidValueTests(SimpleTestCase):
         tag.released = False
         tag.reference = None
         tag.kind = RFID.CLASSIC
+        tag.endianness = RFID.BIG_ENDIAN
         mock_register.return_value = (tag, False)
         mock_run.return_value = types.SimpleNamespace(
             returncode=0, stdout="ok\n", stderr=""
@@ -427,6 +465,7 @@ class ValidateRfidValueTests(SimpleTestCase):
         env = run_kwargs.get("env", {})
         self.assertEqual(env.get("RFID_VALUE"), "ABCD1234")
         self.assertEqual(env.get("RFID_LABEL_ID"), "1")
+        self.assertEqual(env.get("RFID_ENDIANNESS"), RFID.BIG_ENDIAN)
         mock_popen.assert_not_called()
         mock_notify.assert_called_once_with("RFID 1 OK", "ABCD1234 B")
         tag.save.assert_called_once_with(update_fields=["last_seen_on"])
@@ -437,6 +476,7 @@ class ValidateRfidValueTests(SimpleTestCase):
         self.assertEqual(output.get("stderr"), "")
         self.assertEqual(output.get("returncode"), 0)
         self.assertEqual(output.get("error"), "")
+        self.assertEqual(result["endianness"], RFID.BIG_ENDIAN)
 
     @patch("ocpp.rfid.reader.timezone.now")
     @patch("ocpp.rfid.reader.notify_async")
@@ -457,6 +497,7 @@ class ValidateRfidValueTests(SimpleTestCase):
         tag.released = False
         tag.reference = None
         tag.kind = RFID.CLASSIC
+        tag.endianness = RFID.BIG_ENDIAN
         mock_register.return_value = (tag, False)
         mock_run.return_value = types.SimpleNamespace(
             returncode=1, stdout="", stderr="failure"
@@ -476,6 +517,7 @@ class ValidateRfidValueTests(SimpleTestCase):
         self.assertEqual(output.get("stderr"), "failure")
         self.assertEqual(output.get("error"), "")
         mock_popen.assert_not_called()
+        self.assertEqual(result["endianness"], RFID.BIG_ENDIAN)
 
     @patch("ocpp.rfid.reader.timezone.now")
     @patch("ocpp.rfid.reader.notify_async")
@@ -497,6 +539,7 @@ class ValidateRfidValueTests(SimpleTestCase):
         tag.released = False
         tag.reference = None
         tag.kind = RFID.CLASSIC
+        tag.endianness = RFID.BIG_ENDIAN
         mock_register.return_value = (tag, False)
         result = validate_rfid_value("abcdef")
 
@@ -507,10 +550,12 @@ class ValidateRfidValueTests(SimpleTestCase):
         env = kwargs.get("env", {})
         self.assertEqual(env.get("RFID_VALUE"), "ABCDEF")
         self.assertEqual(env.get("RFID_LABEL_ID"), "3")
+        self.assertEqual(env.get("RFID_ENDIANNESS"), RFID.BIG_ENDIAN)
         self.assertIs(kwargs.get("stdout"), subprocess.DEVNULL)
         self.assertIs(kwargs.get("stderr"), subprocess.DEVNULL)
         self.assertTrue(result["allowed"])
         mock_notify.assert_called_once_with("RFID 3 OK", "ABCDEF B")
+        self.assertEqual(result["endianness"], RFID.BIG_ENDIAN)
 
 
 class CardTypeDetectionTests(TestCase):
