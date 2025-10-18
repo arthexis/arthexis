@@ -656,8 +656,8 @@ def _should_use_python_changelog(exc: OSError) -> bool:
 def _generate_changelog_with_python(log_path: Path) -> None:
     _append_log(log_path, "Falling back to Python changelog generator")
     changelog_path = Path("CHANGELOG.rst")
-    range_spec = changelog_utils.determine_range_spec()
     previous = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else None
+    range_spec = changelog_utils.determine_range_spec(previous_text=previous)
     sections = changelog_utils.collect_sections(range_spec=range_spec, previous_text=previous)
     content = changelog_utils.render_changelog(sections)
     if not content.endswith("\n"):

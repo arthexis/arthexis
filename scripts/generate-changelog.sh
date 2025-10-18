@@ -15,9 +15,9 @@ from core import changelog
 
 
 start_tag = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else None
-range_spec = changelog.determine_range_spec(start_tag)
 path = Path("CHANGELOG.rst")
 previous = path.read_text(encoding="utf-8") if path.exists() else None
+range_spec = changelog.determine_range_spec(start_tag, previous_text=previous)
 sections = changelog.collect_sections(range_spec=range_spec, previous_text=previous)
 content = changelog.render_changelog(sections)
 if not content.endswith("\n"):
