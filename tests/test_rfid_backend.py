@@ -61,3 +61,36 @@ def test_authenticate_returns_none_when_account_has_no_user(backend):
 def test_get_user(backend, user):
     assert backend.get_user(user.pk) == user
     assert backend.get_user(999999) is None
+
+
+def test_register_scan_updates_existing_endianness():
+    initial_count = RFID.objects.count()
+
+    first_tag, created = RFID.register_scan("A1B2C3D4", endianness=RFID.BIG_ENDIAN)
+
+    assert created is True
+    assert RFID.objects.count() == initial_count + 1
+
+    second_tag, created_again = RFID.register_scan(
+        "D4C3B2A1", endianness=RFID.LITTLE_ENDIAN
+    )
+
+    assert created_again is False
+    assert second_tag.pk == first_tag.pk
+    assert RFID.objects.count() == initial_count + 1
+
+    first_tag.refresh_from_db()
+    assert first_tag.rfid == "D4C3B2A1"
+    assert first_tag.endianness == RFID.LITTLE_ENDIAN
+
+    third_tag, created_third = RFID.register_scan(
+        "A1B2C3D4", endianness=RFID.BIG_ENDIAN
+    )
+
+    assert created_third is False
+    assert third_tag.pk == first_tag.pk
+    assert RFID.objects.count() == initial_count + 1
+
+    first_tag.refresh_from_db()
+    assert first_tag.rfid == "A1B2C3D4"
+    assert first_tag.endianness == RFID.BIG_ENDIAN

@@ -2003,13 +2003,31 @@ class RFID(Entity):
     ) -> tuple["RFID", bool]:
         """Return or create an RFID that was detected via scanning."""
 
-        normalized = (rfid or "").upper()
+        normalized = "".join((rfid or "").split()).upper()
         desired_endianness = cls.normalize_endianness(endianness)
-        existing = cls.objects.filter(rfid=normalized).first()
+        alternate = None
+        if normalized and len(normalized) % 2 == 0:
+            bytes_list = [normalized[i : i + 2] for i in range(0, len(normalized), 2)]
+            bytes_list.reverse()
+            alternate_candidate = "".join(bytes_list)
+            if alternate_candidate != normalized:
+                alternate = alternate_candidate
+
+        existing = None
+        if normalized:
+            existing = cls.objects.filter(rfid=normalized).first()
+        if not existing and alternate:
+            existing = cls.objects.filter(rfid=alternate).first()
         if existing:
+            update_fields: list[str] = []
+            if normalized and existing.rfid != normalized:
+                existing.rfid = normalized
+                update_fields.append("rfid")
             if existing.endianness != desired_endianness:
                 existing.endianness = desired_endianness
-                existing.save(update_fields=["endianness"])
+                update_fields.append("endianness")
+            if update_fields:
+                existing.save(update_fields=update_fields)
             return existing, False
 
         attempts = 0
