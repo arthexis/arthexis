@@ -107,3 +107,14 @@ class ChargerAccessTests(TestCase):
             f"{login_url}?next={expected_next}",
             fetch_redirect_response=False,
         )
+
+    def test_charger_status_redirects_to_login(self):
+        path = reverse("charger-status", args=[self.charger.charger_id])
+        response = self.client.get(path)
+        login_url = resolve_url(settings.LOGIN_URL)
+        expected_next = quote(path)
+        self.assertRedirects(
+            response,
+            f"{login_url}?next={expected_next}",
+            fetch_redirect_response=False,
+        )
