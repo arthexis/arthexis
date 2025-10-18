@@ -199,6 +199,8 @@ def _resolve_release_commit_from_text(previous_text: str) -> Optional[str]:
 def _merge_sections(
     new_sections: Iterable[ChangelogSection],
     old_sections: Iterable[ChangelogSection],
+    *,
+    reopen_latest: bool = False,
 ) -> List[ChangelogSection]:
     merged = list(new_sections)
     old_sections_list = list(old_sections)
@@ -241,7 +243,8 @@ def _merge_sections(
         existing = version_to_section.get(old.version)
         if existing is None:
             if (
-                first_release_version
+                reopen_latest
+                and first_release_version
                 and old.version == first_release_version
                 and not reopened_latest_version
                 and unreleased_section is not None
@@ -334,19 +337,27 @@ def determine_range_spec(
 
 
 def collect_sections(
-    *, range_spec: str = "HEAD", previous_text: str | None = None
+    *,
+    range_spec: str = "HEAD",
+    previous_text: str | None = None,
+    reopen_latest: bool = False,
 ) -> List[ChangelogSection]:
     """Return changelog sections for *range_spec*.
 
     When ``previous_text`` is provided, sections not regenerated in the current run
-    are appended so long as they can be parsed from the existing changelog.
+    are appended so long as they can be parsed from the existing changelog. Set
+    ``reopen_latest`` to ``True`` when the caller intends to move the most recent
+    release notes back into the ``Unreleased`` section (for example, when
+    preparing a release retry before a new tag is created).
     """
 
     commits = _read_commits(range_spec)
     sections = _sections_from_commits(commits)
     if previous_text:
         old_sections = _parse_sections(previous_text)
-        sections = _merge_sections(sections, old_sections)
+        sections = _merge_sections(
+            sections, old_sections, reopen_latest=reopen_latest
+        )
     return sections
 
 

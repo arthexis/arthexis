@@ -196,6 +196,84 @@ class ChangelogBuilderTests(SimpleTestCase):
             ],
         )
 
+    def test_regeneration_without_new_commits_preserves_latest_release(self):
+        previous_text = "\n".join(
+            [
+                "Changelog",
+                "=========",
+                "",
+                "Unreleased",
+                "----------",
+                "",
+                "- " + "a" * 8 + " Existing unreleased entry",
+                "",
+                "v1.3.0 (2025-10-06)",
+                "-------------------",
+                "",
+                "- " + "b" * 8 + " Handle changelog duplicate merges (#601)",
+                "",
+            ]
+        )
+
+        with mock.patch("core.changelog._read_commits", return_value=[]):
+            sections = changelog.collect_sections(
+                range_spec="HEAD", previous_text=previous_text
+            )
+
+        self.assertEqual(len(sections), 2)
+        unreleased, latest = sections
+        self.assertEqual(unreleased.title, "Unreleased")
+        self.assertEqual(unreleased.entries, [])
+        self.assertEqual(latest.title, "v1.3.0 (2025-10-06)")
+        self.assertEqual(
+            latest.entries,
+            ["- " + "b" * 8 + " Handle changelog duplicate merges (#601)"],
+        )
+
+    def test_regeneration_with_new_commits_preserves_latest_release(self):
+        previous_text = "\n".join(
+            [
+                "Changelog",
+                "=========",
+                "",
+                "Unreleased",
+                "----------",
+                "",
+                "- " + "a" * 8 + " Existing unreleased entry",
+                "",
+                "v1.3.0 (2025-10-06)",
+                "-------------------",
+                "",
+                "- " + "b" * 8 + " Handle changelog duplicate merges (#601)",
+                "",
+            ]
+        )
+
+        commits = [
+            changelog.Commit(
+                sha="d" * 40,
+                date="2025-10-07",
+                subject="Fix changelog regression (#604)",
+            )
+        ]
+
+        with mock.patch("core.changelog._read_commits", return_value=commits):
+            sections = changelog.collect_sections(
+                range_spec="HEAD", previous_text=previous_text
+            )
+
+        self.assertEqual(len(sections), 2)
+        unreleased, latest = sections
+        self.assertEqual(
+            unreleased.entries,
+            ["- " + "d" * 8 + " Fix changelog regression (#604)"],
+        )
+        self.assertEqual(latest.title, "v1.3.0 (2025-10-06)")
+        self.assertEqual(
+            latest.entries,
+            ["- " + "b" * 8 + " Handle changelog duplicate merges (#601)"],
+        )
+
     def test_retry_release_reopens_latest_section(self):
         previous_text = "\n".join(
             [
@@ -233,7 +311,7 @@ class ChangelogBuilderTests(SimpleTestCase):
             "core.changelog._read_commits", return_value=commits_without_release
         ):
             reopened_sections = changelog.collect_sections(
-                range_spec="HEAD", previous_text=previous_text
+                range_spec="HEAD", previous_text=previous_text, reopen_latest=True
             )
 
         self.assertEqual(len(reopened_sections), 1)
