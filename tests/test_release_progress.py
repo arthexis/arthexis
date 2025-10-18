@@ -489,7 +489,7 @@ class ReleaseProgressViewTests(TestCase):
         self.assertEqual(response.context["next_step"], 2)
 
     @mock.patch("core.views._refresh_changelog_once")
-    def test_acknowledgement_required_without_todos(self, refresh_changelog):
+    def test_empty_todo_list_allows_progress(self, refresh_changelog):
         refresh_changelog.side_effect = (
             lambda ctx, log_path: ctx.setdefault("changelog_refreshed", True)
         )
@@ -504,16 +504,11 @@ class ReleaseProgressViewTests(TestCase):
         session.save()
 
         response = self.client.get(f"{url}?step=1")
-        self.assertEqual(response.context["todos"], [])
-        self.assertTrue(response.context["has_pending_todos"])
-        self.assertFalse(response.context["changelog_report_url"] == "")
-        self.assertIsNone(response.context["next_step"])
-
-        self.client.get(f"{url}?ack_todos=1")
-        response = self.client.get(f"{url}?step=1")
-        self.assertFalse(response.context["has_pending_todos"])
         self.assertIsNone(response.context.get("todos"))
+        self.assertFalse(response.context["has_pending_todos"])
+        self.assertFalse(response.context["changelog_report_url"] == "")
         self.assertEqual(response.context["current_step"], 2)
+        self.assertEqual(response.context["next_step"], 2)
 
     def test_step_check_todos_refreshes_changelog_once(self):
         todo = Todo.objects.create(request="Review changelog", url="/admin/")
