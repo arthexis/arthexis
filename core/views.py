@@ -1821,8 +1821,16 @@ def release_progress(request, pk: int, action: str):
             ctx["release_approval"] = "approved"
         if request.GET.get("reject"):
             ctx["release_approval"] = "rejected"
+    resume_requested = bool(request.GET.get("resume"))
+
     if request.GET.get("pause") and ctx.get("started"):
         ctx["paused"] = True
+
+    if resume_requested:
+        if not ctx.get("started"):
+            ctx["started"] = True
+        if ctx.get("paused"):
+            ctx["paused"] = False
     restart_count = 0
     if restart_path.exists():
         try:
@@ -1831,6 +1839,8 @@ def release_progress(request, pk: int, action: str):
             restart_count = 0
     step_count = ctx.get("step", 0)
     step_param = request.GET.get("step")
+    if resume_requested and step_param is None:
+        step_param = str(step_count)
 
     pending_qs = Todo.objects.filter(is_deleted=False, done_on__isnull=True)
     pending_items = list(pending_qs)
