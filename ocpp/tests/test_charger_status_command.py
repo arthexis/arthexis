@@ -4,19 +4,33 @@ from io import StringIO
 
 from django.core.management import CommandError, call_command
 from django.test import TestCase
+from django.utils import timezone
 
 from ocpp import store
-from ocpp.models import Charger
+from ocpp.models import Charger, Transaction
 
 
 class ChargerStatusCommandTests(TestCase):
     def test_lists_all_chargers(self):
-        Charger.objects.create(charger_id="CP100", display_name="Main Lobby")
         Charger.objects.create(
+            charger_id="CP100",
+            display_name="Main Lobby",
+            last_status="Available",
+        )
+        connector = Charger.objects.create(
             charger_id="CP200",
             display_name="Garage",
             connector_id=2,
             require_rfid=True,
+            last_status="Charging",
+        )
+        Transaction.objects.create(
+            charger=connector,
+            connector_id=2,
+            start_time=timezone.now(),
+            stop_time=timezone.now(),
+            meter_start=1000,
+            meter_stop=2500,
         )
 
         output = StringIO()
@@ -28,6 +42,11 @@ class ChargerStatusCommandTests(TestCase):
         self.assertIn("Main Lobby", text)
         self.assertIn("CP200", text)
         self.assertIn("connector", text.lower())
+        self.assertIn("Status", text)
+        self.assertIn("Available", text)
+        self.assertIn("Total Energy (kWh)", text)
+        self.assertIn("1.50", text)
+        self.assertNotIn("Connected", text)
 
     def test_matches_serial_suffix(self):
         Charger.objects.create(charger_id="EVBOX-12345678")
