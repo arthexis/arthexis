@@ -1309,11 +1309,11 @@ class AssistantProfileInlineForm(ProfileFormMixin, forms.ModelForm):
         widget=forms.PasswordInput(render_value=True),
         help_text="Provide a plain key to create or rotate credentials.",
     )
-    profile_fields = ("user_key", "scopes", "is_active")
+    profile_fields = ("assistant_name", "user_key", "scopes", "is_active")
 
     class Meta:
         model = AssistantProfile
-        fields = ("scopes", "is_active")
+        fields = ("assistant_name", "scopes", "is_active")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1475,7 +1475,7 @@ PROFILE_INLINE_CONFIG = {
     },
     AssistantProfile: {
         "form": AssistantProfileInlineForm,
-        "fields": ("user_key", "scopes", "is_active"),
+        "fields": ("assistant_name", "user_key", "scopes", "is_active"),
         "readonly_fields": ("user_key_hash", "created_at", "last_used_at"),
         "template": "admin/edit_inline/profile_stacked.html",
     },
@@ -2016,7 +2016,7 @@ class EmailInboxAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmi
 class AssistantProfileAdmin(
     ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
 ):
-    list_display = ("owner", "created_at", "last_used_at", "is_active")
+    list_display = ("assistant_name", "owner", "created_at", "last_used_at", "is_active")
     readonly_fields = ("user_key_hash", "created_at", "last_used_at")
 
     change_form_template = "admin/workgroupassistantprofile_change_form.html"
@@ -2028,7 +2028,15 @@ class AssistantProfileAdmin(
         ("Credentials", {"fields": ("user_key_hash",)}),
         (
             "Configuration",
-            {"fields": ("scopes", "is_active", "created_at", "last_used_at")},
+            {
+                "fields": (
+                    "assistant_name",
+                    "scopes",
+                    "is_active",
+                    "created_at",
+                    "last_used_at",
+                )
+            },
         ),
     )
 
