@@ -480,6 +480,9 @@ AUTHENTICATION_BACKENDS = [
     "core.backends.RFIDBackend",
 ]
 
+# Use the custom login view for all authentication redirects.
+LOGIN_URL = "pages:login"
+
 # Issuer name used when generating otpauth URLs for authenticator apps.
 OTP_TOTP_ISSUER = os.environ.get("OTP_TOTP_ISSUER", "Arthexis")
 
