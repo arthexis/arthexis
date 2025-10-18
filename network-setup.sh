@@ -18,7 +18,7 @@ mkdir -p "$LOCK_DIR"
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet N[/P]]
+Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet N[/P]] [--ap-set-password]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --no-firewall   Skip firewall port validation.
@@ -29,6 +29,7 @@ Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i]
   --no-vnc        Skip validating that a VNC service is enabled (default).
   --subnet N[/P]  Configure eth0 on the 192.168.N.0/P subnet (default: 129/16).
                   Accepts prefix lengths of 16 or 24.
+  --ap-set-password  Update the configured access point password without running other setup steps.
 USAGE
 }
 
@@ -46,6 +47,8 @@ AP_NAME_LOWER=""
 SKIP_AP=false
 ETH0_SUBNET=129
 ETH0_PREFIX=16
+AP_SET_PASSWORD=false
+OTHER_OPTIONS_USED=false
 validate_subnet_value() {
     local value="$1"
     if [[ ! "$value" =~ ^[0-9]+$ ]]; then
@@ -88,9 +91,18 @@ set_subnet_and_prefix() {
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --password)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
+            OTHER_OPTIONS_USED=true
             FORCE_PASSWORD=true
             ;;
         --ap)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
             if [[ $# -lt 2 ]]; then
                 echo "Error: --ap requires a name." >&2
                 exit 1
@@ -101,52 +113,118 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             AP_SPECIFIED=true
+            OTHER_OPTIONS_USED=true
             shift
             ;;
         --ap=*)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
             AP_NAME="${1#--ap=}"
             if [[ -z "$AP_NAME" ]]; then
                 echo "Error: --ap requires a non-empty name." >&2
                 exit 1
             fi
             AP_SPECIFIED=true
+            OTHER_OPTIONS_USED=true
             ;;
         --subnet)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
             if [[ $# -lt 2 ]]; then
                 echo "Error: --subnet requires a value." >&2
                 exit 1
             fi
             set_subnet_and_prefix "$2"
+            OTHER_OPTIONS_USED=true
             shift
             ;;
         --subnet=*)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
             subnet_value="${1#--subnet=}"
             set_subnet_and_prefix "$subnet_value"
+            OTHER_OPTIONS_USED=true
             ;;
         --no-firewall)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
             SKIP_FIREWALL=true
+            OTHER_OPTIONS_USED=true
             ;;
         --no-ap)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
             SKIP_AP=true
+            OTHER_OPTIONS_USED=true
             ;;
         --unsafe)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
             UNSAFE=true
+            OTHER_OPTIONS_USED=true
             ;;
         -i|--interactive)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
             INTERACTIVE=true
+            OTHER_OPTIONS_USED=true
             ;;
         --no-watchdog)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
             INSTALL_WATCHDOG=false
+            OTHER_OPTIONS_USED=true
             ;;
         --vnc)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
             REQUIRE_VNC=true
             VNC_OPTION_SET=true
+            OTHER_OPTIONS_USED=true
             ;;
         --no-vnc)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
             REQUIRE_VNC=false
             VNC_OPTION_SET=true
+            OTHER_OPTIONS_USED=true
+            ;;
+        --ap-set-password)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password can only be specified once." >&2
+                exit 1
+            fi
+            if [[ $OTHER_OPTIONS_USED == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
+            AP_SET_PASSWORD=true
             ;;
         -h|--help)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
             usage
             exit 0
             ;;
@@ -161,6 +239,11 @@ done
 
 if [[ $EUID -ne 0 ]]; then
     echo "This script must be run as root" >&2
+    exit 1
+fi
+
+if [[ $AP_SET_PASSWORD == true && $OTHER_OPTIONS_USED == true ]]; then
+    echo "Error: --ap-set-password cannot be combined with other options." >&2
     exit 1
 fi
 
@@ -267,6 +350,55 @@ find_existing_ap_connection() {
     fi
     return 0
 }
+
+if [[ $AP_SET_PASSWORD == true ]]; then
+    if ! command -v nmcli >/dev/null 2>&1; then
+        echo "nmcli (NetworkManager) is required." >&2
+        exit 1
+    fi
+
+    TARGET_AP="$(find_existing_ap_connection)"
+    if [[ -z "$TARGET_AP" ]]; then
+        if nmcli -t -f NAME connection show 2>/dev/null | grep -Fxq "$DEFAULT_AP_NAME"; then
+            TARGET_AP="$DEFAULT_AP_NAME"
+        fi
+    fi
+
+    if [[ -z "$TARGET_AP" ]]; then
+        echo "Error: Unable to find an access point connection to update." >&2
+        exit 1
+    fi
+
+    conn_type=$(nmcli -t -f connection.type connection show "$TARGET_AP" 2>/dev/null || true)
+    if [[ "$conn_type" != "802-11-wireless" ]]; then
+        echo "Error: Connection '$TARGET_AP' is not a WiFi access point." >&2
+        exit 1
+    fi
+
+    wifi_mode=$(nmcli -t -f wifi.mode connection show "$TARGET_AP" 2>/dev/null || true)
+    if [[ "$wifi_mode" != "ap" ]]; then
+        echo "Error: Connection '$TARGET_AP' is not configured as an access point." >&2
+        exit 1
+    fi
+
+    while true; do
+        read -rsp "Enter new WiFi password for '$TARGET_AP': " NEW_WIFI_PASS1; echo
+        read -rsp "Confirm password: " NEW_WIFI_PASS2; echo
+        if [[ -n "$NEW_WIFI_PASS1" && "$NEW_WIFI_PASS1" == "$NEW_WIFI_PASS2" ]]; then
+            break
+        fi
+        echo "Passwords do not match or are empty." >&2
+    done
+
+    nmcli connection modify "$TARGET_AP" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$NEW_WIFI_PASS1"
+
+    if nmcli -t -f NAME connection show --active 2>/dev/null | grep -Fxq "$TARGET_AP"; then
+        nmcli connection up "$TARGET_AP" >/dev/null 2>&1 || true
+    fi
+
+    echo "Updated WiFi password for access point '$TARGET_AP'."
+    exit 0
+fi
 
 # Check initial internet connectivity (non-fatal)
 check_connectivity() {
