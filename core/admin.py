@@ -2947,7 +2947,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         "toggle_selected_released",
         "toggle_selected_allowed",
     ]
-    readonly_fields = ("added_on", "last_seen_on")
+    readonly_fields = ("added_on", "last_seen_on", "reversed_uid")
     form = RFIDForm
 
     def get_import_resource_kwargs(self, request, form=None, **kwargs):

@@ -550,6 +550,15 @@ class RFIDValidationTests(TestCase):
         tag = RFID.objects.create(rfid="DEADBEEF10")
         self.assertEqual(tag.rfid, "DEADBEEF10")
 
+    def test_reversed_uid_updates_with_rfid(self):
+        tag = RFID.objects.create(rfid="A1B2C3D4")
+        self.assertEqual(tag.reversed_uid, "D4C3B2A1")
+
+        tag.rfid = "112233"
+        tag.save(update_fields=["rfid"])
+        tag.refresh_from_db()
+        self.assertEqual(tag.reversed_uid, "332211")
+
     def test_find_user_by_rfid(self):
         user = User.objects.create_user(username="finder", password="pwd")
         acc = EnergyAccount.objects.create(user=user, name="FINDER")
