@@ -4,7 +4,7 @@
     "fields": {
       "request": "Validate screen System Reports",
       "url": "/admin/system/",
-      "request_details": "Confirm the System Reports section lists the upgrade report link and shows the Celery report link only when Celery support is available."
+      "request_details": "Confirm the System Reports table lists the changelog, upgrade, and pending TODOs reports with their purposes and only shows the Celery report row when Celery support is available."
     }
   }
 ]

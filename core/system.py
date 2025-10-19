@@ -13,8 +13,10 @@ import shutil
 import logging
 from typing import Callable, Iterable, Optional
 
+from django import forms
 from django.conf import settings
 from django.contrib import admin, messages
+from django.forms import modelformset_factory
 from django.template.response import TemplateResponse
 from django.http import HttpResponseRedirect
 from django.urls import path, reverse
@@ -32,6 +34,7 @@ from core.release import (
     _remote_with_credentials,
 )
 from core.tasks import check_github_updates
+from core.models import Todo
 from utils import revision
 
 
@@ -1086,6 +1089,124 @@ def _system_upgrade_report_view(request):
     return TemplateResponse(request, "admin/system_upgrade_report.html", context)
 
 
+class PendingTodoForm(forms.ModelForm):
+    mark_done = forms.BooleanField(required=False, label=_("Approve"))
+
+    class Meta:
+        model = Todo
+        fields = [
+            "request",
+            "request_details",
+            "url",
+            "generated_for_version",
+            "generated_for_revision",
+            "on_done_condition",
+        ]
+        widgets = {
+            "request_details": forms.Textarea(attrs={"rows": 3}),
+            "on_done_condition": forms.Textarea(attrs={"rows": 2}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name in [
+            "request",
+            "url",
+            "generated_for_version",
+            "generated_for_revision",
+        ]:
+            self.fields[name].widget.attrs.setdefault("class", "vTextField")
+        for name in ["request_details", "on_done_condition"]:
+            self.fields[name].widget.attrs.setdefault("class", "vLargeTextField")
+
+
+PendingTodoFormSet = modelformset_factory(Todo, form=PendingTodoForm, extra=0)
+
+
+def _system_pending_todos_report_view(request):
+    queryset = (
+        Todo.objects.filter(is_deleted=False, done_on__isnull=True)
+        .order_by("request")
+    )
+    formset = PendingTodoFormSet(
+        request.POST or None,
+        queryset=queryset,
+        prefix="todos",
+    )
+
+    if request.method == "POST":
+        if formset.is_valid():
+            approved_count = 0
+            edited_count = 0
+            for form in formset.forms:
+                mark_done = form.cleaned_data.get("mark_done")
+                todo = form.save(commit=False)
+                has_changes = form.has_changed()
+                if mark_done and todo.done_on is None:
+                    todo.done_on = timezone.now()
+                    approved_count += 1
+                    has_changes = True
+                if has_changes:
+                    todo.save()
+                    if form.has_changed():
+                        edited_count += 1
+                if has_changes and form.has_changed():
+                    form.save_m2m()
+
+            if approved_count or edited_count:
+                message_parts: list[str] = []
+                if edited_count:
+                    message_parts.append(
+                        ngettext(
+                            "%(count)d TODO updated.",
+                            "%(count)d TODOs updated.",
+                            edited_count,
+                        )
+                        % {"count": edited_count}
+                    )
+                if approved_count:
+                    message_parts.append(
+                        ngettext(
+                            "%(count)d TODO approved.",
+                            "%(count)d TODOs approved.",
+                            approved_count,
+                        )
+                        % {"count": approved_count}
+                    )
+                messages.success(request, " ".join(message_parts))
+            else:
+                messages.info(
+                    request,
+                    _("No changes were applied to the pending TODOs."),
+                )
+            return HttpResponseRedirect(reverse("admin:system-pending-todos-report"))
+        else:
+            messages.error(request, _("Please correct the errors below."))
+
+    rows = [
+        {
+            "form": form,
+            "todo": form.instance,
+            "condition": form.instance.check_on_done_condition(),
+        }
+        for form in formset.forms
+    ]
+
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "title": _("Pending TODOs Report"),
+            "formset": formset,
+            "rows": rows,
+        }
+    )
+    return TemplateResponse(
+        request,
+        "admin/system_pending_todos_report.html",
+        context,
+    )
+
+
 def _trigger_upgrade_check() -> bool:
     """Return ``True`` when the upgrade check was queued asynchronously."""
 
@@ -1141,6 +1262,11 @@ def patch_admin_system_view() -> None:
                 "system/changelog-report/",
                 admin.site.admin_view(_system_changelog_report_view),
                 name="system-changelog-report",
+            ),
+            path(
+                "system/pending-todos-report/",
+                admin.site.admin_view(_system_pending_todos_report_view),
+                name="system-pending-todos-report",
             ),
             path(
                 "system/upgrade-report/",
