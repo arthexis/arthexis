@@ -13,7 +13,7 @@ from django.templatetags.static import static
 from urllib.parse import quote
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import DisallowedHost
 from django.core.cache import cache
@@ -3180,6 +3180,40 @@ class UserStoryAdminActionTests(TestCase):
         self.admin.create_github_issues(request, queryset)
 
         mock_create_issue.assert_not_called()
+
+    def test_create_github_issues_action_links_to_credentials_when_missing(self):
+        request = self._build_request()
+        queryset = UserStory.objects.filter(pk=self.story.pk)
+
+        mock_url = "/admin/core/releasemanager/"
+        with (
+            patch(
+                "pages.admin.reverse", return_value=mock_url
+            ) as mock_reverse,
+            patch.object(
+                UserStory,
+                "create_github_issue",
+                side_effect=RuntimeError("GitHub token is not configured"),
+            ),
+        ):
+            self.admin.create_github_issues(request, queryset)
+
+        messages_list = list(request._messages)
+        self.assertTrue(messages_list)
+
+        opts = ReleaseManager._meta
+        mock_reverse.assert_called_once_with(
+            f"{self.admin.admin_site.name}:{opts.app_label}_{opts.model_name}_changelist"
+        )
+        self.assertTrue(
+            any(mock_url in message.message for message in messages_list),
+        )
+        self.assertTrue(
+            any("Configure GitHub credentials" in message.message for message in messages_list),
+        )
+        self.assertTrue(
+            any(message.level == messages.ERROR for message in messages_list),
+        )
 
 
 class ClientReportLiveUpdateTests(TestCase):

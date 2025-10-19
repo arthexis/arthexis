@@ -6,7 +6,7 @@ from django.contrib.sites.admin import SiteAdmin as DjangoSiteAdmin
 from django.contrib.sites.models import Site
 from django import forms
 from django.shortcuts import redirect, render, get_object_or_404
-from django.urls import path, reverse
+from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html
 from django.template.response import TemplateResponse
 from django.http import JsonResponse
@@ -41,6 +41,7 @@ from .models import (
     UserStory,
 )
 from django.contrib.contenttypes.models import ContentType
+from core.models import ReleaseManager
 from core.user_data import EntityModelAdmin
 
 
@@ -708,10 +709,33 @@ class UserStoryAdmin(EntityModelAdmin):
                 issue_url = story.create_github_issue()
             except Exception as exc:  # pragma: no cover - network/runtime errors
                 logger.exception("Failed to create GitHub issue for UserStory %s", story.pk)
+                message = _("Unable to create a GitHub issue for %(story)s: %(error)s") % {
+                    "story": story,
+                    "error": exc,
+                }
+
+                if (
+                    isinstance(exc, RuntimeError)
+                    and "GitHub token is not configured" in str(exc)
+                ):
+                    try:
+                        opts = ReleaseManager._meta
+                        config_url = reverse(
+                            f"{self.admin_site.name}:{opts.app_label}_{opts.model_name}_changelist"
+                        )
+                    except NoReverseMatch:  # pragma: no cover - defensive guard
+                        config_url = None
+                    if config_url:
+                        message = format_html(
+                            "{} <a href=\"{}\">{}</a>",
+                            message,
+                            config_url,
+                            _("Configure GitHub credentials."),
+                        )
+
                 self.message_user(
                     request,
-                    _("Unable to create a GitHub issue for %(story)s: %(error)s")
-                    % {"story": story, "error": exc},
+                    message,
                     messages.ERROR,
                 )
                 continue
