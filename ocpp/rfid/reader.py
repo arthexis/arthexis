@@ -23,6 +23,32 @@ _deep_read_enabled: bool = False
 _HEX_RE = re.compile(r"^[0-9A-F]+$")
 _KEY_RE = re.compile(r"^[0-9A-F]{12}$")
 
+
+def _normalize_command_text(value: object) -> str:
+    """Strip trailing " %" tokens from each line of command output."""
+
+    if not isinstance(value, str) or not value:
+        return "" if value in (None, "") else str(value)
+
+    lines: list[str] = []
+    for segment in value.splitlines(keepends=True):
+        newline = ""
+        body = segment
+        if segment.endswith("\r\n"):
+            newline = "\r\n"
+            body = segment[:-2]
+        elif segment.endswith("\n") or segment.endswith("\r"):
+            newline = segment[-1]
+            body = segment[:-1]
+
+        trimmed = body.rstrip()
+        while trimmed.endswith(" %"):
+            trimmed = trimmed[:-2].rstrip()
+
+        lines.append(trimmed + newline)
+
+    return "".join(lines)
+
 COMMON_MIFARE_CLASSIC_KEYS = (
     "FFFFFFFFFFFF",
     "A0A1A2A3A4A5",
@@ -128,13 +154,17 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
             )
         except Exception as exc:
             command_allowed = False
-            command_details["error"] = str(exc)
+            command_details["error"] = _normalize_command_text(str(exc))
         else:
             command_returncode = getattr(completed, "returncode", 1)
             command_allowed = command_returncode == 0
             command_details["returncode"] = command_returncode
-            command_details["stdout"] = getattr(completed, "stdout", "") or ""
-            command_details["stderr"] = getattr(completed, "stderr", "") or ""
+            command_details["stdout"] = _normalize_command_text(
+                getattr(completed, "stdout", "") or ""
+            )
+            command_details["stderr"] = _normalize_command_text(
+                getattr(completed, "stderr", "") or ""
+            )
         allowed = allowed and command_allowed
 
     post_command = getattr(tag, "post_auth_command", "")
@@ -168,6 +198,15 @@ def _build_tag_response(tag, rfid: str, *, created: bool, kind: str | None = Non
         "endianness": tag.endianness,
     }
     if command_details is not None:
+        command_details["stdout"] = _normalize_command_text(
+            command_details.get("stdout", "")
+        )
+        command_details["stderr"] = _normalize_command_text(
+            command_details.get("stderr", "")
+        )
+        command_details["error"] = _normalize_command_text(
+            command_details.get("error", "")
+        )
         result["command_output"] = command_details
     status_text = "OK" if allowed else "BAD"
     color_word = (tag.color or "").upper()
