@@ -26,6 +26,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management import call_command
+from django.utils import timezone
 import socket
 from core.models import Brand, Todo, WMICode
 from core.user_data import dump_user_fixture
@@ -447,6 +448,66 @@ class EnvRefreshLandingTests(TestCase):
         landing.refresh_from_db()
         self.assertTrue(landing.is_seed_data)
         self.assertEqual(len(update_calls), 1)
+
+
+class EnvRefreshTodoFixtureTests(TestCase):
+    def setUp(self):
+        base_dir = Path(settings.BASE_DIR)
+        spec = importlib.util.spec_from_file_location(
+            "env_refresh_todos", base_dir / "env-refresh.py"
+        )
+        self.env_refresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.env_refresh)
+        self.base_dir = base_dir
+        self.fixture_root = base_dir / f"tmp_env_refresh_{uuid.uuid4().hex}"
+        self.fixture_root.mkdir(exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(self.fixture_root, ignore_errors=True))
+        self._commands: list[tuple[str, tuple, dict]] = []
+        self._original_call_command = self.env_refresh.call_command
+
+        def _fake_call_command(name, *args, **kwargs):
+            self._commands.append((name, args, kwargs))
+            return None
+
+        self.env_refresh.call_command = _fake_call_command
+        self.addCleanup(self._restore_call_command)
+        self._original_fixture_files = self.env_refresh._fixture_files
+        self.addCleanup(self._restore_fixture_files)
+
+    def _restore_call_command(self):
+        self.env_refresh.call_command = self._original_call_command
+
+    def _restore_fixture_files(self):
+        self.env_refresh._fixture_files = self._original_fixture_files
+
+    def test_env_refresh_skips_soft_deleted_todos(self):
+        request_text = "Validate screen Example"
+        todo = Todo.objects.create(request=request_text, is_seed_data=True)
+        todo.done_on = timezone.now()
+        todo.save(update_fields=["done_on"])
+        todo.delete()
+        fixture_path = self.fixture_root / "todos__validate_screen_example.json"
+        fixture_data = [
+            {
+                "model": "core.todo",
+                "fields": {
+                    "request": request_text,
+                    "url": "/admin/",
+                    "request_details": "",
+                },
+            }
+        ]
+        fixture_path.write_text(json.dumps(fixture_data, indent=2) + "\n", encoding="utf-8")
+        relative = fixture_path.relative_to(self.base_dir)
+        self.env_refresh._fixture_files = lambda: [str(relative)]
+
+        self.env_refresh.run_database_tasks()
+
+        self.assertFalse(any(name == "loaddata" for name, _, _ in self._commands))
+        self.assertFalse(Todo.objects.filter(request=request_text).exists())
+        self.assertTrue(
+            Todo.all_objects.filter(request=request_text, is_deleted=True).exists()
+        )
 
 
 class EnvRefreshUserDataTests(TransactionTestCase):
