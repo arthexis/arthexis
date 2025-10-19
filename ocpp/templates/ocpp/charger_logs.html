@@ -31,17 +31,56 @@
   <input class="form-check-input" type="checkbox" id="auto-reload">
   <label class="form-check-label" for="auto-reload">Auto reload</label>
 </div>
+<div class="mb-3">
+  <label for="log-limit" class="form-label">{% trans "Lines to display" %}: <span id="log-limit-value"></span></label>
+  <input
+    type="range"
+    class="form-range"
+    id="log-limit"
+    min="0"
+    max="{{ log_limit_options|length|add:'-1' }}"
+    step="1"
+    list="log-limit-options"
+    value="{{ log_limit_index }}"
+  >
+  <datalist id="log-limit-options">
+    {% for option in log_limit_options %}
+    <option value="{{ forloop.counter0 }}" label="{{ option.label }}"></option>
+    {% endfor %}
+  </datalist>
+</div>
+{{ log_limit_options|json_script:"log-limit-data" }}
 <pre id="log" class="p-3 border rounded bg-body text-body">
 {% for entry in log %}{{ entry }}
 {% endfor %}
 </pre>
 <script>
   const logEl = document.getElementById('log');
+  const limitDataScript = document.getElementById('log-limit-data');
+  const limitSlider = document.getElementById('log-limit');
+  const limitValueEl = document.getElementById('log-limit-value');
+  const limitData = limitDataScript ? JSON.parse(limitDataScript.textContent) : [];
+
+  function getLimitItem(index) {
+    return limitData[Math.max(0, Math.min(index, limitData.length - 1))];
+  }
+
+  function updateLimitLabel() {
+    if (!limitSlider || !limitValueEl) {
+      return;
+    }
+    const index = parseInt(limitSlider.value, 10) || 0;
+    const item = getLimitItem(index);
+    if (item) {
+      limitValueEl.textContent = item.label;
+    }
+  }
+
   function scrollToBottom() {
     logEl.scrollTop = logEl.scrollHeight;
   }
-  function fetchLog() {
-    fetch(window.location.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+  function fetchLog(url = window.location.href) {
+    fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
       .then(resp => resp.text())
       .then(html => {
         const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -52,6 +91,28 @@
         }
       });
   }
+  function updateLimitSelection() {
+    if (!limitSlider) {
+      return;
+    }
+    const index = parseInt(limitSlider.value, 10) || 0;
+    const item = getLimitItem(index);
+    if (!item) {
+      return;
+    }
+    const url = new URL(window.location);
+    url.searchParams.set('limit', item.value);
+    window.history.replaceState({}, '', url);
+    fetchLog(url.toString());
+  }
+  if (limitSlider) {
+    limitSlider.addEventListener('input', updateLimitLabel);
+    limitSlider.addEventListener('change', () => {
+      updateLimitLabel();
+      updateLimitSelection();
+    });
+  }
+  updateLimitLabel();
   scrollToBottom();
   let reloadTimer;
   document.getElementById('auto-reload').addEventListener('change', function() {

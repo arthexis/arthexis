@@ -1209,17 +1209,38 @@ def charger_log_page(request, cid, connector=None):
             charger_id=cid
         )
         target_id = cid
-    log = store.get_logs(target_id, log_type=log_type)
+    limit_options = [
+        {"value": "10", "label": "10"},
+        {"value": "20", "label": "20"},
+        {"value": "40", "label": "40"},
+        {"value": "100", "label": "100"},
+        {"value": "all", "label": gettext("All")},
+    ]
+    allowed_values = [item["value"] for item in limit_options]
+    limit_choice = request.GET.get("limit", "20")
+    if limit_choice not in allowed_values:
+        limit_choice = "20"
+
+    log_entries = list(store.get_logs(target_id, log_type=log_type) or [])
+    if limit_choice != "all":
+        try:
+            limit_value = int(limit_choice)
+        except (TypeError, ValueError):
+            limit_value = 20
+            limit_choice = "20"
+        log_entries = log_entries[-limit_value:]
     return render(
         request,
         "ocpp/charger_logs.html",
         {
             "charger": charger,
-            "log": log,
+            "log": log_entries,
             "log_type": log_type,
             "connector_slug": connector_slug,
             "connector_links": connector_links,
             "status_url": status_url,
+            "log_limit_options": limit_options,
+            "log_limit_index": allowed_values.index(limit_choice),
         },
     )
 
