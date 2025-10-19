@@ -10,7 +10,8 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.core.management import call_command
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from django.test import RequestFactory
+from django.test import Client, RequestFactory
+from django.urls import reverse
 
 from core import temp_passwords
 from core.backends import TempPasswordBackend
@@ -180,3 +181,31 @@ def test_user_set_password_discards_temp_password(tmp_path, monkeypatch):
 
     assert not entry.path.exists()
     assert not user.check_password(password)
+
+
+def test_request_temp_password_view_generates_entry(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "TEMP_PASSWORD_LOCK_DIR", str(tmp_path), raising=False)
+
+    User = get_user_model()
+    user = User.objects.create_user(
+        username="zoe",
+        password="irrelevant",
+        is_staff=True,
+    )
+
+    client = Client()
+    client.force_login(user)
+    response = client.get(reverse("admin-request-temp-password"))
+
+    assert response.status_code == 200
+    response.render()
+    context = response.context_data
+    password = context["password"]
+    assert isinstance(password, str) and password
+
+    entry = temp_passwords.load_temp_password(user.username)
+    assert entry is not None
+    assert entry.allow_change
+    assert entry.check_password(password)
+    assert context["allow_change"] is True
+    assert context["return_url"] == reverse("admin:password_change")

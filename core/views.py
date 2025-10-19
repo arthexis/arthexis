@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 PYPI_REQUEST_TIMEOUT = 10
 
 from . import changelog as changelog_utils
+from . import temp_passwords
 from .models import OdooProfile, Product, EnergyAccount, PackageRelease, Todo
 from .models import RFID
 
@@ -334,6 +335,35 @@ def odoo_quote_report(request):
         )
 
     return TemplateResponse(request, "admin/core/odoo_quote_report.html", context)
+
+
+@staff_member_required
+@require_GET
+def request_temp_password(request):
+    """Generate a temporary password for the authenticated staff member."""
+
+    user = request.user
+    username = user.get_username()
+    password = temp_passwords.generate_password()
+    entry = temp_passwords.store_temp_password(
+        username,
+        password,
+        allow_change=True,
+    )
+    context = {
+        **admin_site.each_context(request),
+        "title": _("Temporary password"),
+        "username": username,
+        "password": password,
+        "expires_at": timezone.localtime(entry.expires_at),
+        "allow_change": entry.allow_change,
+        "return_url": reverse("admin:password_change"),
+    }
+    return TemplateResponse(
+        request,
+        "admin/core/request_temp_password.html",
+        context,
+    )
 
 
 @require_GET
