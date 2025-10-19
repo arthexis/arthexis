@@ -21,6 +21,7 @@ from django.utils.translation import gettext_lazy as _
 from django.dispatch import receiver
 
 from core.models import Lead, RFID, Todo
+from ocpp.models import Charger
 from core.entity import Entity, user_data_flag_updated
 
 register = template.Library()
@@ -404,6 +405,36 @@ def rfid_release_stats(context):
         stats = {
             "released_allowed": counts.get("released_allowed") or 0,
             "total": counts.get("total") or 0,
+        }
+        context[cache_key] = stats
+    return stats
+
+
+@register.simple_tag(takes_context=True)
+def charger_availability_stats(context):
+    """Return availability statistics for the Charger model."""
+
+    cache_key = "_charger_availability_stats"
+    stats = context.get(cache_key)
+    if stats is None:
+        counts = Charger.objects.aggregate(
+            available_total=Count(
+                "pk", filter=Q(last_status__iexact="Available")
+            ),
+            available_with_cp_number=Count(
+                "pk",
+                filter=Q(
+                    last_status__iexact="Available",
+                    connector_id__isnull=False,
+                ),
+            ),
+        )
+        stats = {
+            "available_total": counts.get("available_total") or 0,
+            "available_with_cp_number": counts.get(
+                "available_with_cp_number"
+            )
+            or 0,
         }
         context[cache_key] = stats
     return stats
