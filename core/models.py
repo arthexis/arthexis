@@ -1775,6 +1775,14 @@ class RFID(Entity):
             )
         ],
     )
+    reversed_uid = models.CharField(
+        max_length=255,
+        default="",
+        blank=True,
+        editable=False,
+        verbose_name="Reversed UID",
+        help_text="UID value stored with opposite endianness for reference.",
+    )
     custom_label = models.CharField(
         max_length=32,
         blank=True,
@@ -1906,7 +1914,16 @@ class RFID(Entity):
                 if self.key_b and old["key_b"] != self.key_b.upper():
                     self.key_b_verified = False
         if self.rfid:
-            self.rfid = self.rfid.upper()
+            normalized_rfid = self.rfid.upper()
+            self.rfid = normalized_rfid
+            reversed_uid = self.reverse_uid(normalized_rfid)
+            if reversed_uid != self.reversed_uid:
+                self.reversed_uid = reversed_uid
+                if update_fields:
+                    fields = set(update_fields)
+                    if "reversed_uid" not in fields:
+                        fields.add("reversed_uid")
+                        kwargs["update_fields"] = tuple(fields)
         if self.key_a:
             self.key_a = self.key_a.upper()
         if self.key_b:
@@ -1932,6 +1949,19 @@ class RFID(Entity):
             if candidate in valid:
                 return candidate
         return cls.BIG_ENDIAN
+
+    @staticmethod
+    def reverse_uid(value: str) -> str:
+        """Return ``value`` with reversed byte order for reference storage."""
+
+        normalized = "".join((value or "").split()).upper()
+        if not normalized:
+            return ""
+        if len(normalized) % 2 != 0:
+            return normalized[::-1]
+        bytes_list = [normalized[index : index + 2] for index in range(0, len(normalized), 2)]
+        bytes_list.reverse()
+        return "".join(bytes_list)
 
     @classmethod
     def next_scan_label(
