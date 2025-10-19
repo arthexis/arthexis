@@ -4,6 +4,14 @@ Changelog
 Unreleased
 ----------
 
+- e7092812 Hide completed release manager todos from admin dashboard (#2299)
+- 39f37301 fix: skip release checklist when no todos (#2298)
+- 9255c684 feat(admin): show completed release todos to superusers (#2297)
+- af98b554 feat: add assistant name to assistant profile (#2296)
+- 3ca1a9ce Log instructions when release checklist blocks publish (#2295)
+- 681fbb60 Remove gway auto-upgrade hook (#2294)
+- d61fe732 Adjust charger status table columns and add energy totals (#2293)
+- b1049030 Handle publish resume requests without a step parameter (#2292)
 - 505065aa Add RFID endianness selection to scanner workflows (#2289)
 - 8ea923be Add CLI command to validate RFID values (#2290)
 - 2821b048 Add admin toggles for RFID released and allowed flags (#2288)
