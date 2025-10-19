@@ -8,3 +8,6 @@ class PagesConfig(AppConfig):
 
     def ready(self):  # pragma: no cover - import for side effects
         from . import checks  # noqa: F401
+        from . import site_config
+
+        site_config.ready()

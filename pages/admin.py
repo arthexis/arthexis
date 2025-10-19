@@ -12,6 +12,7 @@ from django.template.response import TemplateResponse
 from django.http import JsonResponse
 from django.utils import timezone
 from django.db.models import Count
+from django.core.exceptions import FieldError
 from django.db.models.functions import TruncDate
 from datetime import datetime, time, timedelta
 import ipaddress
@@ -25,6 +26,7 @@ from nodes.utils import capture_screenshot, save_screenshot
 
 from .forms import UserManualAdminForm
 from .module_defaults import reload_default_modules as restore_default_modules
+from .site_config import ensure_site_fields
 from .utils import landing_leads_supported
 
 from .models import (
@@ -74,12 +76,47 @@ class SiteForm(forms.ModelForm):
         fields = "__all__"
 
 
+ensure_site_fields()
+
+
+class _BooleanAttributeListFilter(admin.SimpleListFilter):
+    """Filter helper for boolean attributes on :class:`~django.contrib.sites.models.Site`."""
+
+    field_name: str
+
+    def lookups(self, request, model_admin):  # pragma: no cover - admin UI
+        return (("1", _("Yes")), ("0", _("No")))
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value not in {"0", "1"}:
+            return queryset
+        expected = value == "1"
+        try:
+            return queryset.filter(**{self.field_name: expected})
+        except FieldError:  # pragma: no cover - defensive when fields missing
+            return queryset
+
+
+class ManagedSiteListFilter(_BooleanAttributeListFilter):
+    title = _("Managed by local NGINX")
+    parameter_name = "managed"
+    field_name = "managed"
+
+
+class RequireHttpsListFilter(_BooleanAttributeListFilter):
+    title = _("Require HTTPS")
+    parameter_name = "require_https"
+    field_name = "require_https"
+
+
 class SiteAdmin(DjangoSiteAdmin):
     form = SiteForm
     inlines = [SiteBadgeInline]
     change_list_template = "admin/sites/site/change_list.html"
-    fields = ("domain", "name")
-    list_display = ("domain", "name")
+    fields = ("domain", "name", "managed", "require_https")
+    list_display = ("domain", "name", "managed", "require_https")
+    list_filter = (ManagedSiteListFilter, RequireHttpsListFilter)
     actions = ["capture_screenshot"]
 
     @admin.action(description="Capture screenshot")
@@ -110,6 +147,27 @@ class SiteAdmin(DjangoSiteAdmin):
                     f"{site.domain}: duplicate screenshot; not saved",
                     messages.INFO,
                 )
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if {"managed", "require_https"} & set(form.changed_data or []):
+            self.message_user(
+                request,
+                _(
+                    "Managed NGINX configuration staged. Run network-setup.sh to apply changes."
+                ),
+                messages.INFO,
+            )
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        self.message_user(
+            request,
+            _(
+                "Managed NGINX configuration staged. Run network-setup.sh to apply changes."
+            ),
+            messages.INFO,
+        )
 
     def _reload_site_fixtures(self, request):
         fixtures_dir = Path(settings.BASE_DIR) / "core" / "fixtures"
