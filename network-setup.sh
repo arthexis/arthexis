@@ -285,6 +285,51 @@ slugify() {
     echo "$input" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
 }
 
+apply_managed_nginx_sites() {
+    local config_json="$BASE_DIR/scripts/generated/nginx-sites.json"
+    local mode="internal"
+    if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
+        mode="$(tr '[:upper:]' '[:lower:]' < "$LOCK_DIR/nginx_mode.lck")"
+    fi
+
+    local port="8888"
+    if [[ "$mode" == "public" ]]; then
+        port="8000"
+    fi
+
+    local helper="$BASE_DIR/scripts/helpers/render_nginx_sites.py"
+    local dest_dir="/etc/nginx/conf.d/arthexis-sites.d"
+
+    if [ ! -f "$helper" ]; then
+        echo "Managed site helper not found at $helper; skipping." >&2
+        return 1
+    fi
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "python3 not available; skipping managed site configuration." >&2
+        return 1
+    fi
+
+    if ! command -v nginx >/dev/null 2>&1; then
+        echo "nginx not available; skipping managed site configuration." >&2
+        return 1
+    fi
+
+    local args=("$helper" "--mode" "$mode" "--port" "$port" "--dest" "$dest_dir" "--config" "$config_json")
+    python3 "${args[@]}"
+    local status=$?
+
+    if [ $status -eq 2 ]; then
+        if nginx -t; then
+            systemctl reload nginx || echo "Warning: nginx reload failed" >&2
+        else
+            echo "Warning: nginx configuration test failed after applying managed sites" >&2
+        fi
+    elif [ $status -ne 0 ]; then
+        echo "Warning: managed site configuration script exited with status $status" >&2
+    fi
+}
+
 # Clear any saved WiFi secrets so the connection can run as an open network
 # when switching an existing AP profile into public mode. NetworkManager keeps
 # legacy WEP keys around even after changing the key management setting to
@@ -571,6 +616,7 @@ require_arthexis_service_autostart() {
     fi
 }
 ask_step RUN_PACKAGES "Ensure required packages and SSH service"
+ask_step RUN_NGINX_SITES "Apply managed NGINX site configuration"
 if [[ $SKIP_FIREWALL == false ]]; then
     ask_step RUN_FIREWALL "Validate firewall ports"
 else
@@ -735,6 +781,10 @@ if [[ $RUN_PACKAGES == true ]]; then
             ufw allow 22/tcp || true
         fi
     fi
+fi
+
+if [[ $RUN_NGINX_SITES == true ]]; then
+    apply_managed_nginx_sites
 fi
 
 if [[ $RUN_FIREWALL == true ]]; then

@@ -77,8 +77,9 @@ class SiteAdmin(DjangoSiteAdmin):
     form = SiteForm
     inlines = [SiteBadgeInline]
     change_list_template = "admin/sites/site/change_list.html"
-    fields = ("domain", "name")
-    list_display = ("domain", "name")
+    fields = ("domain", "name", "managed", "require_https")
+    list_display = ("domain", "name", "managed", "require_https")
+    list_filter = ("managed", "require_https")
     actions = ["capture_screenshot"]
 
     @admin.action(description="Capture screenshot")
@@ -109,6 +110,27 @@ class SiteAdmin(DjangoSiteAdmin):
                     f"{site.domain}: duplicate screenshot; not saved",
                     messages.INFO,
                 )
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if {"managed", "require_https"} & set(form.changed_data or []):
+            self.message_user(
+                request,
+                _(
+                    "Managed NGINX configuration staged. Run network-setup.sh to apply changes."
+                ),
+                messages.INFO,
+            )
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        self.message_user(
+            request,
+            _(
+                "Managed NGINX configuration staged. Run network-setup.sh to apply changes."
+            ),
+            messages.INFO,
+        )
 
     def _reload_site_fixtures(self, request):
         fixtures_dir = Path(settings.BASE_DIR) / "core" / "fixtures"

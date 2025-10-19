@@ -20,6 +20,7 @@ from django.core.cache import cache
 from django.db import connection
 import socket
 from django.db import connection
+from pages import site_config
 from pages.models import (
     Application,
     Landing,
@@ -47,6 +48,7 @@ from pages.screenshot_specs import (
 )
 from pages.context_processors import nav_links
 from django.apps import apps as django_apps
+from config.middleware import SiteHttpsRedirectMiddleware
 from core import mailer
 from core.admin import ProfileAdminMixin
 from core.models import (
@@ -62,6 +64,7 @@ from core.models import (
 )
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
+import json
 import tempfile
 import shutil
 from io import StringIO
@@ -72,6 +75,7 @@ from types import SimpleNamespace
 from django.core.management import call_command
 import re
 from django.contrib.contenttypes.models import ContentType
+from django.http import HttpResponse
 from datetime import (
     date,
     datetime,
@@ -1170,6 +1174,125 @@ class AdminModelStatusTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, 'class="model-status ok"')
         self.assertContains(resp, 'class="model-status missing"', count=1)
+
+
+class _FakeQuerySet(list):
+    def only(self, *args, **kwargs):
+        return self
+
+    def order_by(self, *args, **kwargs):
+        return self
+
+
+class SiteConfigurationStagingTests(SimpleTestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmpdir)
+        self.config_path = Path(self.tmpdir) / "nginx-sites.json"
+        self._path_patcher = patch(
+            "pages.site_config._sites_config_path", side_effect=lambda: self.config_path
+        )
+        self._path_patcher.start()
+        self.addCleanup(self._path_patcher.stop)
+        self._model_patcher = patch("pages.site_config.apps.get_model")
+        self.mock_get_model = self._model_patcher.start()
+        self.addCleanup(self._model_patcher.stop)
+
+    def _read_config(self):
+        if not self.config_path.exists():
+            return None
+        return json.loads(self.config_path.read_text(encoding="utf-8"))
+
+    def _set_sites(self, sites):
+        queryset = _FakeQuerySet(sites)
+
+        class _Manager:
+            @staticmethod
+            def filter(**kwargs):
+                return queryset
+
+        self.mock_get_model.return_value = SimpleNamespace(objects=_Manager())
+
+    def test_managed_site_persists_configuration(self):
+        self._set_sites([SimpleNamespace(domain="example.com", require_https=True)])
+        site_config.update_local_nginx_scripts()
+        config = self._read_config()
+        self.assertEqual(
+            config,
+            [
+                {
+                    "domain": "example.com",
+                    "require_https": True,
+                }
+            ],
+        )
+
+    def test_disabling_managed_site_removes_entry(self):
+        primary = SimpleNamespace(domain="primary.test", require_https=False)
+        secondary = SimpleNamespace(domain="secondary.test", require_https=False)
+        self._set_sites([primary, secondary])
+        site_config.update_local_nginx_scripts()
+        config = self._read_config()
+        self.assertEqual(
+            [entry["domain"] for entry in config],
+            ["primary.test", "secondary.test"],
+        )
+
+        self._set_sites([secondary])
+        site_config.update_local_nginx_scripts()
+        config = self._read_config()
+        self.assertEqual(config, [{"domain": "secondary.test", "require_https": False}])
+
+        self._set_sites([])
+        site_config.update_local_nginx_scripts()
+        self.assertIsNone(self._read_config())
+
+    def test_require_https_toggle_updates_configuration(self):
+        site = SimpleNamespace(domain="secure.example", require_https=False)
+        self._set_sites([site])
+        site_config.update_local_nginx_scripts()
+        config = self._read_config()
+        self.assertEqual(config, [{"domain": "secure.example", "require_https": False}])
+
+        site.require_https = True
+        self._set_sites([site])
+        site_config.update_local_nginx_scripts()
+        config = self._read_config()
+        self.assertEqual(config, [{"domain": "secure.example", "require_https": True}])
+
+
+class SiteRequireHttpsMiddlewareTests(SimpleTestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.middleware = SiteHttpsRedirectMiddleware(lambda request: HttpResponse("ok"))
+        self.secure_site = SimpleNamespace(domain="secure.test", require_https=True)
+
+    def test_http_request_redirects_to_https(self):
+        request = self.factory.get("/", HTTP_HOST="secure.test")
+        request.site = self.secure_site
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 301)
+        self.assertTrue(response["Location"].startswith("https://secure.test"))
+
+    def test_secure_request_not_redirected(self):
+        request = self.factory.get("/", HTTP_HOST="secure.test", secure=True)
+        request.site = self.secure_site
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 200)
+
+    def test_forwarded_proto_respected(self):
+        request = self.factory.get(
+            "/", HTTP_HOST="secure.test", HTTP_X_FORWARDED_PROTO="https"
+        )
+        request.site = self.secure_site
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 200)
+
+        self.secure_site.require_https = False
+        request = self.factory.get("/", HTTP_HOST="secure.test")
+        request.site = self.secure_site
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 200)
 
 
 class SiteAdminRegisterCurrentTests(TestCase):
