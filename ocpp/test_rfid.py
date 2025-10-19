@@ -524,6 +524,76 @@ class ValidateRfidValueTests(SimpleTestCase):
     @patch("ocpp.rfid.reader.subprocess.Popen")
     @patch("ocpp.rfid.reader.subprocess.run")
     @patch("ocpp.rfid.reader.RFID.register_scan")
+    def test_external_command_strips_trailing_percent_tokens(
+        self, mock_register, mock_run, mock_popen, mock_notify, mock_now
+    ):
+        mock_now.return_value = timezone.now()
+        tag = MagicMock()
+        tag.pk = 3
+        tag.label_id = 3
+        tag.allowed = True
+        tag.external_command = "echo weird"
+        tag.color = "Y"
+        tag.released = False
+        tag.reference = None
+        tag.kind = RFID.CLASSIC
+        tag.endianness = RFID.BIG_ENDIAN
+        mock_register.return_value = (tag, False)
+        mock_run.return_value = types.SimpleNamespace(
+            returncode=0,
+            stdout="first %\nsecond 50%\r\nthird % %\n",
+            stderr="oops %\n",
+        )
+
+        result = validate_rfid_value("abc3")
+
+        output = result.get("command_output")
+        self.assertIsNotNone(output)
+        self.assertEqual(
+            output.get("stdout"), "first\nsecond 50%\r\nthird\n"
+        )
+        self.assertEqual(output.get("stderr"), "oops\n")
+        self.assertEqual(output.get("returncode"), 0)
+        self.assertEqual(output.get("error"), "")
+        mock_popen.assert_not_called()
+
+    @patch("ocpp.rfid.reader.timezone.now")
+    @patch("ocpp.rfid.reader.notify_async")
+    @patch("ocpp.rfid.reader.subprocess.Popen")
+    @patch("ocpp.rfid.reader.subprocess.run")
+    @patch("ocpp.rfid.reader.RFID.register_scan")
+    def test_external_command_error_strips_trailing_percent_tokens(
+        self, mock_register, mock_run, mock_popen, mock_notify, mock_now
+    ):
+        mock_now.return_value = timezone.now()
+        tag = MagicMock()
+        tag.pk = 4
+        tag.label_id = 4
+        tag.allowed = True
+        tag.external_command = "echo boom"
+        tag.color = "R"
+        tag.released = False
+        tag.reference = None
+        tag.kind = RFID.CLASSIC
+        tag.endianness = RFID.BIG_ENDIAN
+        mock_register.return_value = (tag, False)
+        mock_run.side_effect = RuntimeError("bad % %")
+
+        result = validate_rfid_value("abcd")
+
+        output = result.get("command_output")
+        self.assertIsInstance(output, dict)
+        self.assertEqual(output.get("stdout"), "")
+        self.assertEqual(output.get("stderr"), "")
+        self.assertEqual(output.get("error"), "bad")
+        self.assertFalse(result["allowed"])
+        mock_popen.assert_not_called()
+
+    @patch("ocpp.rfid.reader.timezone.now")
+    @patch("ocpp.rfid.reader.notify_async")
+    @patch("ocpp.rfid.reader.subprocess.Popen")
+    @patch("ocpp.rfid.reader.subprocess.run")
+    @patch("ocpp.rfid.reader.RFID.register_scan")
     def test_post_command_runs_after_success(
         self, mock_register, mock_run, mock_popen, mock_notify, mock_now
     ):
