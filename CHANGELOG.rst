@@ -4,6 +4,7 @@ Changelog
 Unreleased
 ----------
 
+- d8f148b5 chore: remove TODO fixtures
 - d78f5d1f chore: add release TODO for arthexis
 
 v0.1.17 (2025-10-18)
