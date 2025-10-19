@@ -420,16 +420,21 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     if model_label == "core.todo":
                         request_value = fields.get("request")
                         if isinstance(request_value, str):
-                            existing_todo = Todo.objects.filter(
+                            existing_todo = Todo.all_objects.filter(
                                 request__iexact=request_value
                             ).first()
-                            if existing_todo and existing_todo.done_on:
-                                if existing_todo.is_seed_data is not True:
-                                    existing_todo.is_seed_data = True
-                                    existing_todo.save(update_fields=["is_seed_data"])
-                                modified = True
-                                model_counts[model._meta.label] += 1
-                                continue
+                            if existing_todo:
+                                if existing_todo.is_deleted:
+                                    modified = True
+                                    model_counts[model._meta.label] += 1
+                                    continue
+                                if existing_todo.done_on:
+                                    if existing_todo.is_seed_data is not True:
+                                        existing_todo.is_seed_data = True
+                                        existing_todo.save(update_fields=["is_seed_data"])
+                                    modified = True
+                                    model_counts[model._meta.label] += 1
+                                    continue
                     defines_seed_flag = _model_defines_seed_flag(model)
                     has_seed_field = any(
                         f.name == "is_seed_data" for f in model._meta.fields
