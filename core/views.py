@@ -1855,26 +1855,26 @@ def release_progress(request, pk: int, action: str):
 
     pending_qs = Todo.objects.filter(is_deleted=False, done_on__isnull=True)
     pending_items = list(pending_qs)
-    if ack_todos_requested:
-        if pending_items:
-            failures = []
-            for todo in pending_items:
-                result = todo.check_on_done_condition()
-                if not result.passed:
-                    failures.append((todo, result))
-            if failures:
-                ctx.pop("todos_ack", None)
-                for todo, result in failures:
-                    messages.error(request, _format_condition_failure(todo, result))
-            else:
-                ctx["todos_ack"] = True
+    if not pending_items:
+        ctx["todos_ack"] = True
+    elif ack_todos_requested:
+        failures = []
+        for todo in pending_items:
+            result = todo.check_on_done_condition()
+            if not result.passed:
+                failures.append((todo, result))
+        if failures:
+            ctx.pop("todos_ack", None)
+            for todo, result in failures:
+                messages.error(request, _format_condition_failure(todo, result))
         else:
             ctx["todos_ack"] = True
 
     if ctx.get("todos_ack"):
         ctx.pop("todos_block_logged", None)
-
-    if not ctx.get("todos_ack"):
+        ctx.pop("todos", None)
+        ctx.pop("todos_required", None)
+    else:
         ctx["todos"] = [
             {
                 "id": todo.pk,
@@ -1885,9 +1885,6 @@ def release_progress(request, pk: int, action: str):
             for todo in pending_items
         ]
         ctx["todos_required"] = True
-    else:
-        ctx.pop("todos", None)
-        ctx.pop("todos_required", None)
 
     log_name = _release_log_name(release.package.name, release.version)
     if ctx.get("log") != log_name:
@@ -1897,6 +1894,8 @@ def release_progress(request, pk: int, action: str):
             "started": ctx.get("started", False),
         }
         step_count = 0
+        if not pending_items:
+            ctx["todos_ack"] = True
     log_path = log_dir / log_name
     ctx.setdefault("log", log_name)
     ctx.setdefault("paused", False)

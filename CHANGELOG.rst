@@ -4,6 +4,10 @@ Changelog
 Unreleased
 ----------
 
+
+v0.1.17 (2025-10-18)
+--------------------
+
 - e7092812 Hide completed release manager todos from admin dashboard (#2299)
 - 39f37301 fix: skip release checklist when no todos (#2298)
 - 9255c684 feat(admin): show completed release todos to superusers (#2297)
@@ -27,6 +31,11 @@ Unreleased
 - b19f5a69 Fix stale charger statuses and add admin recheck action (#2278)
 - 9a85c373 Add charger status management command (#2276)
 - a1007caf Handle publish warnings after PyPI success (#2275)
+- 7e46f625 Add manual resume option to release progress (#2274)
+- 10420985 Fix nginx mode case handling in system info (#2273)
+- 93c09d7b Stop using ReleaseManager PyPI URL when publishing (#2271)
+- 0992d6dc Revert forced debug default and document bug criteria (#2270)
+- 0572a5e9 Add translations for feedback form (#2269)
 
 v0.1.16 (2025-10-15)
 --------------------

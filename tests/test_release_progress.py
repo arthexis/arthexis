@@ -510,6 +510,19 @@ class ReleaseProgressViewTests(TestCase):
         self.assertEqual(response.context["current_step"], 2)
         self.assertEqual(response.context["next_step"], 2)
 
+    def test_publish_view_auto_acknowledges_empty_todos(self):
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        session = self.client.session
+        session_key = f"release_publish_{self.release.pk}"
+        ctx = session.get(session_key, {})
+        self.assertTrue(ctx.get("todos_ack"))
+        self.assertIsNone(response.context["todos"])
+        self.assertFalse(response.context["has_pending_todos"])
+
     def test_step_check_todos_refreshes_changelog_once(self):
         todo = Todo.objects.create(request="Review changelog", url="/admin/")
         ctx: dict[str, object] = {}
