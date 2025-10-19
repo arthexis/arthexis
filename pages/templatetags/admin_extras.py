@@ -512,12 +512,6 @@ def future_action_items(context):
 
     todos: list[dict[str, object]] = [_serialize(todo, completed=False) for todo in active_todos]
 
-    if user.is_superuser:
-        completed_qs = Todo.objects.filter(
-            is_deleted=False, done_on__isnull=False
-        ).order_by("-done_on", "pk")
-        todos.extend(_serialize(todo, completed=True) for todo in completed_qs)
-
     return {"models": model_items, "todos": todos}
 
 
