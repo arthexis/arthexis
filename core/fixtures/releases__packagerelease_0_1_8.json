@@ -1,10 +1,6 @@
 [
   {
     "model": "core.packagerelease",
-    "pk": [
-      "arthexis",
-      "0.1.8"
-    ],
     "fields": {
       "changelog": "",
       "github_url": "",
