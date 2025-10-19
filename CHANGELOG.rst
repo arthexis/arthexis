@@ -4,10 +4,13 @@ Changelog
 Unreleased
 ----------
 
+- 7b6da3b4 fix: auto-acknowledge empty release todos
 
 v0.1.17 (2025-10-18)
 --------------------
 
+- d8f148b5 chore: remove TODO fixtures
+- d78f5d1f chore: add release TODO for arthexis
 - e7092812 Hide completed release manager todos from admin dashboard (#2299)
 - 39f37301 fix: skip release checklist when no todos (#2298)
 - 9255c684 feat(admin): show completed release todos to superusers (#2297)

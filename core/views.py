@@ -1857,6 +1857,7 @@ def release_progress(request, pk: int, action: str):
     pending_items = list(pending_qs)
     if not pending_items:
         ctx["todos_ack"] = True
+        ctx["todos_ack_auto"] = True
     elif ack_todos_requested:
         failures = []
         for todo in pending_items:
@@ -1864,11 +1865,18 @@ def release_progress(request, pk: int, action: str):
             if not result.passed:
                 failures.append((todo, result))
         if failures:
-            ctx.pop("todos_ack", None)
+            ctx["todos_ack"] = False
+            ctx.pop("todos_ack_auto", None)
             for todo, result in failures:
                 messages.error(request, _format_condition_failure(todo, result))
         else:
             ctx["todos_ack"] = True
+            ctx.pop("todos_ack_auto", None)
+    else:
+        if ctx.pop("todos_ack_auto", None):
+            ctx["todos_ack"] = False
+        else:
+            ctx.setdefault("todos_ack", False)
 
     if ctx.get("todos_ack"):
         ctx.pop("todos_block_logged", None)
