@@ -60,6 +60,7 @@ from core.models import (
     Todo,
     TOTPDeviceSettings,
 )
+from ocpp.models import Charger
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
 import tempfile
@@ -2419,6 +2420,27 @@ class FavoriteTests(TestCase):
         ) % {"released_allowed": 1, "registered": 2}
 
         self.assertContains(resp, expected)
+        self.assertContains(resp, f'title="{badge_label}"')
+        self.assertContains(resp, f'aria-label="{badge_label}"')
+
+    def test_dashboard_shows_charge_point_availability_badge(self):
+        Charger.objects.create(charger_id="CP-001", last_status="Available")
+        Charger.objects.create(
+            charger_id="CP-001", connector_id=1, last_status="Available"
+        )
+        Charger.objects.create(
+            charger_id="CP-002", connector_id=1, last_status="Unavailable"
+        )
+
+        resp = self.client.get(reverse("admin:index"))
+
+        expected = "2 / 1"
+        badge_label = gettext(
+            "%(total)s chargers reporting Available status, including %(with_cp)s with a CP number"
+        ) % {"total": 2, "with_cp": 1}
+
+        self.assertContains(resp, expected)
+        self.assertContains(resp, 'class="charger-availability-badge"')
         self.assertContains(resp, f'title="{badge_label}"')
         self.assertContains(resp, f'aria-label="{badge_label}"')
 

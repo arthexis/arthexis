@@ -51,6 +51,17 @@
                       </span>
                     {% endif %}
                   {% endif %}
+                  {% if model.object_name == 'Charger' %}
+                    {% charger_availability_stats as charger_stats %}
+                    {% if charger_stats %}
+                      {% blocktranslate with total=charger_stats.available_total connectors=charger_stats.available_with_cp_number asvar charger_badge_label trimmed %}
+                        {{ total }} chargers reporting Available status, including {{ connectors }} with a CP number
+                      {% endblocktranslate %}
+                      <span class="charger-availability-badge" aria-label="{{ charger_badge_label }}" title="{{ charger_badge_label }}">
+                        {{ charger_stats.available_total }} / {{ charger_stats.available_with_cp_number }}
+                      </span>
+                    {% endif %}
+                  {% endif %}
                   {% lead_open_count app.app_label model.object_name as lead_open_count %}
                   {% if lead_open_count is not None %}
                     {% blocktranslate count open_count=lead_open_count asvar lead_open_label trimmed %}
