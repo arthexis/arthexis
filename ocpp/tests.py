@@ -1852,6 +1852,16 @@ class ChargerLandingTests(TestCase):
         status_url = reverse("charger-status-connector", args=["PAGE1", "all"])
         self.assertContains(response, status_url)
 
+    def test_charger_page_respects_language_configuration(self):
+        charger = Charger.objects.create(charger_id="PAGE-DE", language="de")
+
+        response = self.client.get(reverse("charger-page", args=["PAGE-DE"]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["LANGUAGE_CODE"], "de")
+        self.assertContains(response, 'lang="de"')
+        self.assertContains(response, 'data-preferred-language="de"')
+
     def test_status_page_renders(self):
         charger = Charger.objects.create(charger_id="PAGE2")
         resp = self.client.get(reverse("charger-status", args=["PAGE2"]))

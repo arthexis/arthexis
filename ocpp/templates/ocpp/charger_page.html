@@ -5,7 +5,7 @@
 
 {% block content %}
 {% with charger.display_name|default:charger.name|default:charger.charger_id as charger_label %}
-<div class="container px-0 px-sm-4" data-language-container>
+<div class="container px-0 px-sm-4" data-language-container data-preferred-language="{{ preferred_language }}">
   <div class="row justify-content-center mt-2 mt-sm-4">
     <div class="col-12 col-lg-8 col-xl-6">
       <div class="card shadow-sm border-0 overflow-hidden">
@@ -171,13 +171,22 @@
       console.error('Failed to parse landing page translations', error);
       return;
     }
-    const languageOrder = ['es', 'en'];
-    let currentIndex = languageOrder.findIndex((code) => code === document.documentElement.lang && translations[code]);
-    if (currentIndex === -1) {
-      currentIndex = languageOrder.findIndex((code) => Boolean(translations[code]));
+    const preferredLanguage = (languageContainer.getAttribute('data-preferred-language') || '').trim();
+    const languageOrder = [];
+    if (preferredLanguage && translations[preferredLanguage]) {
+      languageOrder.push(preferredLanguage);
     }
-    if (currentIndex === -1) {
+    Object.keys(translations).forEach((code) => {
+      if (!languageOrder.includes(code) && translations[code]) {
+        languageOrder.push(code);
+      }
+    });
+    if (!languageOrder.length) {
       return;
+    }
+    let currentIndex = languageOrder.findIndex((code) => code === document.documentElement.lang);
+    if (currentIndex === -1) {
+      currentIndex = 0;
     }
     let currentLang = languageOrder[currentIndex];
     function applyLanguage(lang) {
@@ -207,17 +216,12 @@
       document.documentElement.setAttribute('lang', lang);
     }
     applyLanguage(currentLang);
+    if (languageOrder.length <= 1) {
+      return;
+    }
     setInterval(() => {
-      let nextIndex = (currentIndex + 1) % languageOrder.length;
-      let attempts = 0;
-      while (!translations[languageOrder[nextIndex]] && attempts < languageOrder.length) {
-        nextIndex = (nextIndex + 1) % languageOrder.length;
-        attempts += 1;
-      }
+      const nextIndex = (currentIndex + 1) % languageOrder.length;
       const nextLang = languageOrder[nextIndex];
-      if (!translations[nextLang] || nextLang === currentLang) {
-        return;
-      }
       languageContainer.style.opacity = '0';
       window.setTimeout(() => {
         applyLanguage(nextLang);
