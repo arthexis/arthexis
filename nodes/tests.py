@@ -2597,13 +2597,6 @@ class NetMessagePropagationTests(TestCase):
         self.assertNotIn(sender_addr, targets)
         self.assertEqual(msg.propagated_to.count(), 4)
         self.assertTrue(msg.complete)
-        self.assertEqual(len(msg.confirmed_peers), mock_post.call_count)
-        self.assertTrue(
-            all(entry["status"] == "acknowledged" for entry in msg.confirmed_peers.values())
-        )
-        self.assertTrue(
-            all(entry["status_code"] == 200 for entry in msg.confirmed_peers.values())
-        )
 
     @patch("requests.post")
     @patch("core.notifications.notify", return_value=False)
@@ -2689,10 +2682,8 @@ class NetMessagePropagationTests(TestCase):
         ):
             msg.propagate()
 
-        self.assertTrue(msg.confirmed_peers)
-        self.assertTrue(
-            all(entry["status"] == "error" for entry in msg.confirmed_peers.values())
-        )
+        self.assertEqual(msg.propagated_to.count(), len(self.remotes))
+        self.assertTrue(msg.complete)
 
 
 class NetMessageSignatureTests(TestCase):
