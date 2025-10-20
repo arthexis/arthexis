@@ -429,12 +429,14 @@ def charger_availability_stats(context):
                 ),
             ),
         )
+        available_total = counts.get("available_total") or 0
+        available_with_cp_number = counts.get("available_with_cp_number") or 0
         stats = {
-            "available_total": counts.get("available_total") or 0,
-            "available_with_cp_number": counts.get(
-                "available_with_cp_number"
-            )
-            or 0,
+            "available_total": available_total,
+            "available_with_cp_number": available_with_cp_number,
+            "available_missing_cp_number": max(
+                available_total - available_with_cp_number, 0
+            ),
         }
         context[cache_key] = stats
     return stats

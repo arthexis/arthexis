@@ -54,11 +54,17 @@
                   {% if model.object_name == 'Charger' %}
                     {% charger_availability_stats as charger_stats %}
                     {% if charger_stats %}
-                      {% blocktranslate with total=charger_stats.available_total connectors=charger_stats.available_with_cp_number asvar charger_badge_label trimmed %}
-                        {{ total }} chargers reporting Available status, including {{ connectors }} with a CP number
-                      {% endblocktranslate %}
+                      {% if charger_stats.available_missing_cp_number %}
+                        {% blocktranslate with available=charger_stats.available_with_cp_number total=charger_stats.available_total missing=charger_stats.available_missing_cp_number asvar charger_badge_label trimmed %}
+                          {{ available }} chargers reporting Available status with a CP number, out of {{ total }} total Available chargers. {{ missing }} Available chargers are missing a connector number.
+                        {% endblocktranslate %}
+                      {% else %}
+                        {% blocktranslate with available=charger_stats.available_with_cp_number total=charger_stats.available_total asvar charger_badge_label trimmed %}
+                          {{ available }} chargers reporting Available status with a CP number.
+                        {% endblocktranslate %}
+                      {% endif %}
                       <span class="charger-availability-badge" aria-label="{{ charger_badge_label }}" title="{{ charger_badge_label }}">
-                        {{ charger_stats.available_total }} / {{ charger_stats.available_with_cp_number }}
+                        {{ charger_stats.available_with_cp_number }} / {{ charger_stats.available_total }}
                       </span>
                     {% endif %}
                   {% endif %}
