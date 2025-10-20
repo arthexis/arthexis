@@ -8,13 +8,8 @@ import urllib.error
 import urllib.request
 
 from celery import shared_task
-from django.conf import settings
-from django.contrib.auth import get_user_model
-from core import mailer
 from core import github_issues
 from django.utils import timezone
-
-from nodes.models import NetMessage
 
 
 AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 30
@@ -28,23 +23,6 @@ logger = logging.getLogger(__name__)
 def heartbeat() -> None:
     """Log a simple heartbeat message."""
     logger.info("Heartbeat task executed")
-
-
-@shared_task
-def birthday_greetings() -> None:
-    """Send birthday greetings to users via Net Message and email."""
-    User = get_user_model()
-    today = timezone.localdate()
-    for user in User.objects.filter(birthday=today):
-        NetMessage.broadcast("Happy bday!", user.username)
-        if user.email:
-            mailer.send(
-                "Happy bday!",
-                f"Happy bday! {user.username}",
-                [user.email],
-                settings.DEFAULT_FROM_EMAIL,
-                fail_silently=True,
-            )
 
 
 def _auto_upgrade_log_path(base_dir: Path) -> Path:

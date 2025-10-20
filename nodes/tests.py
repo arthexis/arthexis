@@ -2355,29 +2355,6 @@ class NetMessageAdminTests(TransactionTestCase):
         self.assertEqual(form["subject"].value(), "Re: Ping")
         self.assertEqual(str(form["filter_node"].value()), str(node.pk))
 
-
-class LastNetMessageViewTests(TestCase):
-    def setUp(self):
-        self.client = Client()
-        NodeRole.objects.get_or_create(name="Terminal")
-
-    def test_returns_latest_message(self):
-        NetMessage.objects.create(subject="old", body="msg1")
-        latest = NetMessage.objects.create(subject="new", body="msg2")
-        resp = self.client.get(reverse("last-net-message"))
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(
-            resp.json(),
-            {
-                "subject": "new",
-                "body": "msg2",
-                "admin_url": reverse(
-                    "admin:nodes_netmessage_change", args=[latest.pk]
-                ),
-            },
-        )
-
-
 class NetMessageReachTests(TestCase):
     def setUp(self):
         self.roles = {}

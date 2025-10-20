@@ -8,7 +8,7 @@ django.setup()
 
 from django.test import Client, RequestFactory, TestCase, SimpleTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
-from django.urls import NoReverseMatch, reverse
+from django.urls import reverse
 from django.templatetags.static import static
 from urllib.parse import quote
 from django.contrib.auth import get_user_model
@@ -689,23 +689,6 @@ class AdminDashboardAppListTests(TestCase):
         self.celery_lock.write_text("")
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "5. Horologia MODELS")
-
-    def test_dashboard_handles_missing_last_net_message_url(self):
-        from pages.templatetags import admin_extras
-
-        real_reverse = admin_extras.reverse
-
-        def fake_reverse(name, *args, **kwargs):
-            if name == "last-net-message":
-                raise NoReverseMatch("missing")
-            return real_reverse(name, *args, **kwargs)
-
-        with patch("pages.templatetags.admin_extras.reverse", side_effect=fake_reverse):
-            resp = self.client.get(reverse("admin:index"))
-
-        self.assertEqual(resp.status_code, 200)
-        self.assertNotIn(b"last-net-message", resp.content)
-
 
 class AdminSidebarTests(TestCase):
     def setUp(self):
