@@ -4,7 +4,17 @@ Changelog
 Unreleased
 ----------
 
-- 7b6da3b4 fix: auto-acknowledge empty release todos
+- cd1a993f Allow RFID-only authorization without linked account (#2321)
+- bd4ed38e Add log line limit slider to charger log view (#2310)
+- 8a7b74c6 Add managed site configuration fields and middleware (#2308)
+- e5e508fe Add credentials link to GitHub issue error message (#2309)
+- f55f0e6e Add admin badge for available charge points (#2307)
+- cbbaf055 Normalize RFID command output percent tokens (#2306)
+- 2e0e6b29 Add admin temporary password request button (#2304)
+- dc0e91ef fix: skip reloading soft-deleted todos (#2303)
+- 3d4394fa Assign natural primary keys to package release fixtures (#2302)
+- b94d61e1 Auto-acknowledge empty TODO step during package publish (#2300)
+- 543a5abc Add reversed UID reference field to RFID model (#2301)
 
 v0.1.17 (2025-10-18)
 --------------------
