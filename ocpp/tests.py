@@ -2088,7 +2088,10 @@ class ChargerLandingTests(TestCase):
         log_id = store.identity_key("LOG1", None)
         store.add_log(log_id, "hello", log_type="charger")
         entry = store.get_logs(log_id, log_type="charger")[0]
-        self.assertRegex(entry, r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} hello$")
+        self.assertRegex(
+            entry,
+            r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} hello$",
+        )
         resp = self.client.get(reverse("charger-log", args=["LOG1"]) + "?type=charger")
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "hello")
