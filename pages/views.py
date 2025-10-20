@@ -470,7 +470,12 @@ def _render_readme(request, role):
     text = readme_file.read_text(encoding="utf-8")
     html, toc_html = _render_markdown_with_toc(text)
     title = "README" if readme_file.name.startswith("README") else readme_file.stem
-    context = {"content": html, "title": title, "toc": toc_html}
+    context = {
+        "content": html,
+        "title": title,
+        "toc": toc_html,
+        "page_url": request.build_absolute_uri(),
+    }
     response = render(request, "pages/readme.html", context)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])
     return response

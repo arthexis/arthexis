@@ -1,17 +1,31 @@
 {% extends "pages/base.html" %}
+{% load i18n %}
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
 <div class="row">
   {% if toc %}
-  <div class="col-lg-3">
+  <div class="col-12 col-lg-3 mb-4 mb-lg-0">
     <nav class="toc">
       <h4>Contents</h4>
       {{ toc|safe }}
     </nav>
+    <div class="card bg-body-tertiary border-0 shadow-sm mt-4 reader-qr-card">
+      <div class="card-body text-center">
+        <h5 class="card-title">{% trans "Scan this page" %}</h5>
+        <div
+          id="reader-qr"
+          class="mx-auto reader-qr-image"
+          data-url="{{ page_url }}"
+          role="img"
+          aria-label="{% trans 'QR code linking to this page' %}"
+        ></div>
+        <p class="small text-break text-muted mt-3 mb-0">{{ page_url }}</p>
+      </div>
+    </div>
   </div>
   {% endif %}
-  <div class="{% if toc %}col-lg-9{% else %}col-12{% endif %}">
+  <div class="{% if toc %}col-12 col-lg-9{% else %}col-12{% endif %}">
     <div class="markdown-body">
       {{ content|safe }}
     </div>
@@ -31,6 +45,40 @@
       document.addEventListener(evt, resetTimer, { passive: true });
     });
     resetTimer();
+  })();
+  (function () {
+    const initQr = () => {
+      const qrContainer = document.getElementById("reader-qr");
+      if (!qrContainer || typeof window.QRCode === "undefined") {
+        return;
+      }
+      const url = qrContainer.dataset.url || window.location.href;
+      qrContainer.innerHTML = "";
+      new QRCode(qrContainer, {
+        text: url,
+        width: 180,
+        height: 180,
+        colorDark: "#0a0a0a",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+    };
+
+    if (document.readyState === "complete" || document.readyState === "interactive") {
+      if (window.QRCode) {
+        initQr();
+      } else {
+        window.addEventListener("load", initQr, { once: true });
+      }
+    } else {
+      document.addEventListener("DOMContentLoaded", () => {
+        if (window.QRCode) {
+          initQr();
+        } else {
+          window.addEventListener("load", initQr, { once: true });
+        }
+      });
+    }
   })();
 </script>
 {% endblock %}
