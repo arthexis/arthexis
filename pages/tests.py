@@ -33,6 +33,8 @@ from pages.models import (
     UserManual,
     UserStory,
 )
+from django.http import FileResponse
+
 from pages.admin import (
     ApplicationAdmin,
     UserManualAdmin,
@@ -1115,6 +1117,50 @@ class LogViewerAdminTests(SimpleTestCase):
         context = response.context_data
         self.assertEqual(context["selected_log"], "selected.log")
         self.assertIn("hello world", context["log_content"])
+
+    def test_log_viewer_applies_line_limit(self):
+        content = "\n".join(f"line {i}" for i in range(50))
+        self._create_log("limited.log", content)
+        response = self._render({"log": "limited.log", "limit": "20"})
+        context = response.context_data
+        self.assertEqual(context["log_limit_choice"], "20")
+        self.assertIn("line 49", context["log_content"])
+        self.assertIn("line 30", context["log_content"])
+        self.assertNotIn("line 29", context["log_content"])
+
+    def test_log_viewer_all_limit_returns_full_log(self):
+        content = "first\nsecond\nthird"
+        self._create_log("all.log", content)
+        response = self._render({"log": "all.log", "limit": "all"})
+        context = response.context_data
+        self.assertEqual(context["log_limit_choice"], "all")
+        self.assertIn("first", context["log_content"])
+        self.assertIn("second", context["log_content"])
+
+    def test_log_viewer_invalid_limit_defaults_to_20(self):
+        content = "\n".join(f"item {i}" for i in range(5))
+        self._create_log("invalid-limit.log", content)
+        response = self._render({"log": "invalid-limit.log", "limit": "oops"})
+        context = response.context_data
+        self.assertEqual(context["log_limit_choice"], "20")
+
+    def test_log_viewer_downloads_selected_log(self):
+        self._create_log("download.log", "downloadable content")
+        request = self._build_request({"log": "download.log", "download": "1"})
+        context = {
+            "site_title": "Constellation",
+            "site_header": "Constellation",
+            "site_url": "/",
+            "available_apps": [],
+        }
+        with patch("pages.admin.admin.site.each_context", return_value=context), patch(
+            "pages.context_processors.get_site", return_value=None
+        ):
+            response = log_viewer(request)
+        self.assertIsInstance(response, FileResponse)
+        self.assertIn("attachment", response["Content-Disposition"])
+        content = b"".join(response.streaming_content).decode()
+        self.assertIn("downloadable content", content)
 
     def test_log_viewer_reports_missing_log(self):
         response = self._render({"log": "missing.log"})
