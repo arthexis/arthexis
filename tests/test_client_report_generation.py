@@ -15,9 +15,11 @@ from django.core.cache import cache
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.translation import gettext as _
 
 from core.models import RFID, ClientReport, EnergyAccount, ClientReportSchedule
 from ocpp.models import Charger, Transaction
+from pages.views import ClientReportForm
 
 
 class ClientReportGenerationTests(TestCase):
@@ -131,3 +133,34 @@ class ClientReportGenerationTests(TestCase):
             second, "Client reports can only be generated periodically.", status_code=200
         )
         self.assertEqual(ClientReport.objects.count(), 1)
+
+    def test_destinations_help_text_and_parser_alignment(self):
+        form = ClientReportForm()
+        self.assertEqual(
+            form.fields["destinations"].help_text,
+            _("Separate addresses with commas, whitespace, or new lines."),
+        )
+
+        today = timezone.now().date()
+        bound_form = ClientReportForm(
+            data={
+                "period": "range",
+                "start": today.isoformat(),
+                "end": today.isoformat(),
+                "recurrence": ClientReportSchedule.PERIODICITY_NONE,
+                "destinations": (
+                    "first@example.com second@example.com\n"
+                    "third@example.com,\tfourth@example.com"
+                ),
+            }
+        )
+        self.assertTrue(bound_form.is_valid())
+        self.assertEqual(
+            bound_form.cleaned_data["destinations"],
+            [
+                "first@example.com",
+                "second@example.com",
+                "third@example.com",
+                "fourth@example.com",
+            ],
+        )
