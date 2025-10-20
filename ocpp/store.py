@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
@@ -427,7 +427,7 @@ def _file_path(cid: str, log_type: str = "charger") -> Path:
 def add_log(cid: str, entry: str, log_type: str = "charger") -> None:
     """Append a timestamped log entry for the given id and log type."""
 
-    timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     entry = f"{timestamp} {entry}"
 
     store = logs[log_type]
@@ -454,7 +454,7 @@ def start_session_log(cid: str, tx_id: int) -> None:
 
     history[cid] = {
         "transaction": tx_id,
-        "start": datetime.now(UTC),
+        "start": datetime.now(timezone.utc),
         "messages": [],
     }
 
@@ -467,7 +467,9 @@ def add_session_message(cid: str, message: str) -> None:
         return
     sess["messages"].append(
         {
-            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "timestamp": datetime.now(timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z"),
             "message": message,
         }
     )
