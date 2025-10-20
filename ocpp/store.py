@@ -427,7 +427,7 @@ def _file_path(cid: str, log_type: str = "charger") -> Path:
 def add_log(cid: str, entry: str, log_type: str = "charger") -> None:
     """Append a timestamped log entry for the given id and log type."""
 
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     entry = f"{timestamp} {entry}"
 
     store = logs[log_type]
