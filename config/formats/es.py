@@ -1,5 +1,5 @@
-"""Spanish locale customisations aligned with Mexican formatting."""
+"""Spanish locale customisations."""
 
-DECIMAL_SEPARATOR = "."
-THOUSAND_SEPARATOR = ","
+DECIMAL_SEPARATOR = ","
+THOUSAND_SEPARATOR = "."
 NUMBER_GROUPING = 3
