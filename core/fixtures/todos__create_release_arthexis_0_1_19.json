@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Create release arthexis 0.1.19",
+      "url": "/admin/core/packagerelease/",
+      "request_details": "",
+      "generated_for_version": "0.1.18",
+      "generated_for_revision": "cd1a993f129582f9da2b7aada93fac98b9e3ec0b"
+    }
+  }
+]
