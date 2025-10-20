@@ -194,11 +194,6 @@
 <div id="admin-home-header" style="display:flex; justify-content:space-between; align-items:center;">
   <h1>Home</h1>
   <div style="display:flex; align-items:center; gap:8px;">
-    <a
-      id="last-netmessage"
-      href="#"
-      style="display:none; font-family:monospace; white-space:nowrap; margin-right:8px; color:#fff; text-decoration:none;"
-    ></a>
     <a class="button" href="{% url 'admin:seed_data' %}">{% translate 'Seed Data' %}</a>
     <a class="button" href="{% url 'admin:user_data' %}">{% translate 'User Data' %}</a>
     <a class="button" href="{% url 'admin:system' %}">{% translate 'System Reports' %}</a>
@@ -301,47 +296,6 @@
 
 {% block extrahead %}
   {{ block.super }}
-  {% optional_url 'last-net-message' as last_netmessage_url %}
-  {% if last_netmessage_url %}
-  <script>
-    window.addEventListener('DOMContentLoaded', () => {
-      const label = document.getElementById('last-netmessage');
-      if (!label) return;
-      let lastKey = '';
-      async function fetchMessage() {
-        try {
-          const resp = await fetch('{{ last_netmessage_url }}');
-          if (!resp.ok) return;
-          const data = await resp.json();
-          const text = `${data.subject || ''} - ${data.body || ''}`.replace(/[\r\n]+/g, ' ').trim();
-          const adminUrl = data.admin_url || '';
-          const key = `${text}\u0000${adminUrl}`;
-          if (text && key !== lastKey) {
-            label.textContent = text;
-            if (adminUrl) {
-              label.href = adminUrl;
-              label.style.pointerEvents = 'auto';
-            } else {
-              label.removeAttribute('href');
-              label.style.pointerEvents = 'none';
-            }
-            label.style.display = 'inline';
-            lastKey = key;
-          } else if (!text) {
-            label.style.display = 'none';
-            label.removeAttribute('href');
-            label.style.pointerEvents = 'none';
-            lastKey = '';
-          }
-        } catch (e) {
-          // ignore errors
-        }
-      }
-      fetchMessage();
-      setInterval(fetchMessage, 6000);
-    });
-  </script>
-  {% endif %}
   <script>
     window.addEventListener('DOMContentLoaded', () => {
       const canvas = document.getElementById('viewhistory-mini-chart');

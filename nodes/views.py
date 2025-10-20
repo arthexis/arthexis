@@ -668,18 +668,3 @@ def net_message(request):
         msg.apply_attachments(attachments)
     msg.propagate(seen=seen)
     return JsonResponse({"status": "propagated", "complete": msg.complete})
-
-
-def last_net_message(request):
-    """Return the most recent :class:`NetMessage`."""
-
-    msg = NetMessage.objects.order_by("-created").first()
-    if not msg:
-        return JsonResponse({"subject": "", "body": "", "admin_url": ""})
-    return JsonResponse(
-        {
-            "subject": msg.subject,
-            "body": msg.body,
-            "admin_url": reverse("admin:nodes_netmessage_change", args=[msg.pk]),
-        }
-    )

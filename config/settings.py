@@ -688,8 +688,4 @@ CELERY_BEAT_SCHEDULE = {
         "task": "core.tasks.heartbeat",
         "schedule": crontab(minute="*/5"),
     },
-    "birthday_greetings": {
-        "task": "core.tasks.birthday_greetings",
-        "schedule": crontab(hour=9, minute=0),
-    },
 }
