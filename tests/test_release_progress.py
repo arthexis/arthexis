@@ -682,6 +682,35 @@ class ReleaseProgressViewTests(TestCase):
             response.context["log_content"],
         )
 
+    def test_release_followup_todo_does_not_block_final_approval(self):
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        self._assign_release_manager()
+        next_version = core_views._next_patch_version(self.release.version)
+        Todo.objects.create(
+            request=f"Create release {self.package.name} {next_version}",
+            generated_for_version=self.release.version,
+            generated_for_revision=self.release.revision,
+            is_seed_data=True,
+        )
+        session = self.client.session
+        session_key = f"release_publish_{self.release.pk}"
+        session[session_key] = {
+            "step": 7,
+            "log": self.log_name,
+            "started": True,
+            "todos_ack": True,
+        }
+        session.save()
+
+        with mock.patch("config.context_processors.site_and_node", return_value={}):
+            response = self.client.get(f"{url}?step=7")
+
+        self.assertTrue(response.context["awaiting_approval"])
+        self.assertTrue(response.context["approval_credentials_ready"])
+        self.assertFalse(response.context["has_pending_todos"])
+        self.assertIsNone(response.context["todos"])
+        self.assertNotContains(response, "Pending TODOs")
+
     def test_release_manager_approval_accepts(self):
         url = reverse("release-progress", args=[self.release.pk, "publish"])
         self._assign_release_manager()
