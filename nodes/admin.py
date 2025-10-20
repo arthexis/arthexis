@@ -1565,7 +1565,7 @@ class NetMessageAdmin(EntityModelAdmin):
     search_fields = ("subject", "body")
     list_filter = ("complete", "filter_node_role", "filter_current_relation")
     ordering = ("-created",)
-    readonly_fields = ("complete", "confirmed_peers")
+    readonly_fields = ("complete",)
     actions = ["send_messages"]
     fieldsets = (
         (None, {"fields": ("subject", "body")}),
@@ -1590,7 +1590,6 @@ class NetMessageAdmin(EntityModelAdmin):
                     "node_origin",
                     "target_limit",
                     "propagated_to",
-                    "confirmed_peers",
                     "complete",
                 )
             },

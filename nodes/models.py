@@ -1410,7 +1410,6 @@ class NetMessage(Entity):
     propagated_to = models.ManyToManyField(
         Node, blank=True, related_name="received_net_messages"
     )
-    confirmed_peers = models.JSONField(default=dict, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     complete = models.BooleanField(default=False, editable=False)
 
@@ -1640,10 +1639,7 @@ class NetMessage(Entity):
         seen_list = seen.copy()
         selected_ids = [str(n.uuid) for n in selected]
         payload_seen = seen_list + selected_ids
-        confirmed_peers = dict(self.confirmed_peers or {})
-
         for node in selected:
-            now = timezone.now().isoformat()
             payload = {
                 "uuid": str(self.uuid),
                 "subject": self.subject,
@@ -1679,33 +1675,22 @@ class NetMessage(Entity):
                     headers["X-Signature"] = base64.b64encode(signature).decode()
                 except Exception:
                     pass
-            status_entry = {
-                "status": "pending",
-                "status_code": None,
-                "updated": now,
-            }
             try:
-                response = requests.post(
+                requests.post(
                     f"http://{node.address}:{node.port}/nodes/net-message/",
                     data=payload_json,
                     headers=headers,
                     timeout=1,
                 )
-                status_entry["status_code"] = getattr(response, "status_code", None)
-                if getattr(response, "ok", False):
-                    status_entry["status"] = "acknowledged"
-                else:
-                    status_entry["status"] = "failed"
             except Exception:
-                status_entry["status"] = "error"
+                logger.exception(
+                    "Failed to propagate NetMessage %s to node %s",
+                    self.pk,
+                    node.pk,
+                )
             self.propagated_to.add(node)
-            confirmed_peers[str(node.uuid)] = status_entry
 
         save_fields: list[str] = []
-        if confirmed_peers != (self.confirmed_peers or {}):
-            self.confirmed_peers = confirmed_peers
-            save_fields.append("confirmed_peers")
-
         if total_known and self.propagated_to.count() >= total_known:
             self.complete = True
             save_fields.append("complete")
