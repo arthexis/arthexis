@@ -2949,6 +2949,44 @@ class SimulatorAdminTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_authorize_requires_rfid_accepts_allowed_tag_without_account(self):
+        charger_id = "AUTHWARN"
+        tag_value = "WARN01"
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id=charger_id, require_rfid=True
+        )
+        await database_sync_to_async(RFID.objects.create)(rfid=tag_value, allowed=True)
+
+        pending_key = store.pending_key(charger_id)
+        store.clear_log(pending_key, log_type="charger")
+
+        communicator = WebsocketCommunicator(application, f"/{charger_id}/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        message_id = "auth-unlinked"
+        await communicator.send_json_to(
+            [2, message_id, "Authorize", {"idTag": tag_value}]
+        )
+        response = await communicator.receive_json_from()
+        self.assertEqual(response[0], 3)
+        self.assertEqual(response[1], message_id)
+        self.assertEqual(response[2], {"idTagInfo": {"status": "Accepted"}})
+
+        log_entries = store.get_logs(pending_key, log_type="charger")
+        self.assertTrue(
+            any(
+                "Authorized RFID" in entry
+                and tag_value in entry
+                and charger_id in entry
+                for entry in log_entries
+            ),
+            log_entries,
+        )
+
+        await communicator.disconnect()
+        store.clear_log(pending_key, log_type="charger")
+
     async def test_authorize_without_requirement_records_rfid(self):
         await database_sync_to_async(Charger.objects.create)(
             charger_id="AUTHOPT", require_rfid=False
@@ -3040,6 +3078,61 @@ class SimulatorAdminTests(TransactionTestCase):
             pk=tx_id, charger__charger_id="RFIDOK"
         )
         self.assertEqual(tx.account_id, user.energy_account.id)
+
+    async def test_start_transaction_allows_allowed_tag_without_account(self):
+        charger_id = "STARTWARN"
+        tag_value = "WARN02"
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id=charger_id, require_rfid=True
+        )
+        await database_sync_to_async(RFID.objects.create)(rfid=tag_value, allowed=True)
+
+        pending_key = store.pending_key(charger_id)
+        store.clear_log(pending_key, log_type="charger")
+
+        communicator = WebsocketCommunicator(application, f"/{charger_id}/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        start_payload = {
+            "meterStart": 5,
+            "idTag": tag_value,
+            "connectorId": 1,
+        }
+        await communicator.send_json_to([2, "start-1", "StartTransaction", start_payload])
+        response = await communicator.receive_json_from()
+        self.assertEqual(response[0], 3)
+        self.assertEqual(response[2]["idTagInfo"]["status"], "Accepted")
+        tx_id = response[2]["transactionId"]
+
+        tx = await database_sync_to_async(Transaction.objects.get)(
+            pk=tx_id, charger__charger_id=charger_id
+        )
+        self.assertIsNone(tx.account_id)
+
+        log_entries = store.get_logs(pending_key, log_type="charger")
+        self.assertTrue(
+            any(
+                "Authorized RFID" in entry
+                and tag_value in entry
+                and charger_id in entry
+                for entry in log_entries
+            ),
+            log_entries,
+        )
+
+        await communicator.send_json_to(
+            [
+                2,
+                "stop-1",
+                "StopTransaction",
+                {"transactionId": tx_id, "meterStop": 6},
+            ]
+        )
+        await communicator.receive_json_from()
+
+        await communicator.disconnect()
+        store.clear_log(pending_key, log_type="charger")
 
     async def test_status_fields_updated(self):
         communicator = WebsocketCommunicator(application, "/STAT/")
