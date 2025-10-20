@@ -2557,10 +2557,10 @@ class FavoriteTests(TestCase):
 
         resp = self.client.get(reverse("admin:index"))
 
-        expected = "2 / 1"
+        expected = "1 / 2"
         badge_label = gettext(
-            "%(total)s chargers reporting Available status, including %(with_cp)s with a CP number"
-        ) % {"total": 2, "with_cp": 1}
+            "%(available)s chargers reporting Available status with a CP number, out of %(total)s total Available chargers. %(missing)s Available chargers are missing a connector number."
+        ) % {"available": 1, "total": 2, "missing": 1}
 
         self.assertContains(resp, expected)
         self.assertContains(resp, 'class="charger-availability-badge"')
