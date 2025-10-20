@@ -1824,6 +1824,16 @@ class ControlNavTests(TestCase):
         self.assertContains(resp, 'href="/readme/"')
         self.assertContains(resp, 'badge rounded-pill text-bg-secondary">README')
 
+    def test_readme_page_includes_qr_share(self):
+        resp = self.client.get(reverse("pages:readme"), {"section": "intro"})
+        self.assertContains(resp, 'id="reader-qr"')
+        self.assertContains(resp, "Scan this page")
+        self.assertContains(resp, "http://testserver/readme/?section=intro")
+        self.assertContains(
+            resp,
+            'data-url="http://testserver/readme/?section=intro"',
+        )
+
 
 class SatelliteNavTests(TestCase):
     def setUp(self):
