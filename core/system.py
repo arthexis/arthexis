@@ -1187,7 +1187,6 @@ def _system_pending_todos_report_view(request):
         {
             "form": form,
             "todo": form.instance,
-            "condition": form.instance.check_on_done_condition(),
         }
         for form in formset.forms
     ]

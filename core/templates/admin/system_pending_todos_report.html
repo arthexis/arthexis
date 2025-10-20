@@ -18,13 +18,13 @@
             <th scope="col">{% trans "Details" %}</th>
             <th scope="col">{% trans "URL" %}</th>
             <th scope="col">{% trans "Generated for" %}</th>
-            <th scope="col">{% trans "Condition" %}</th>
+            <th scope="col">{% trans "Links" %}</th>
             <th scope="col">{% trans "Approve" %}</th>
           </tr>
         </thead>
         <tbody>
           {% for row in rows %}
-            {% with form=row.form todo=row.todo condition=row.condition %}
+            {% with form=row.form todo=row.todo %}
             <tr>
               <td>
                 {{ form.id }}
@@ -88,33 +88,20 @@
                   {{ form.generated_for_revision }}
                 </div>
               </td>
-              <td class="condition-cell">
-                {% if form.on_done_condition.errors %}
-                  <div class="errorlist">
-                    {% for error in form.on_done_condition.errors %}
-                      <div>{{ error }}</div>
-                    {% endfor %}
+              <td class="links-cell">
+                <div class="todo-link-group">
+                  <div>
+                    <a class="todo-link-config" href="{% url 'admin:core_todo_change' todo.pk %}">
+                      {% trans "Config" %}
+                    </a>
                   </div>
-                {% endif %}
-                {{ form.on_done_condition }}
-                {% if condition.resolved %}
-                  <p class="condition-result">
-                    <strong>{% trans "Resolved" %}:</strong> {{ condition.resolved }}
-                  </p>
-                {% endif %}
-                {% if condition.error %}
-                  <p class="condition-error">
-                    <strong>{% trans "Error" %}:</strong> {{ condition.error }}
-                  </p>
-                {% else %}
-                  <p class="condition-status {% if condition.passed %}status-ok{% else %}status-warning{% endif %}">
-                    {% if condition.passed %}
-                      {% trans "Condition currently passes." %}
-                    {% else %}
-                      {% trans "Condition currently fails." %}
-                    {% endif %}
-                  </p>
-                {% endif %}
+                  <div>
+                    <a class="todo-link-focus" href="{% url 'todo-focus' todo.pk %}?next={{ request.get_full_path|urlencode }}">
+                      {% trans "Link" %}
+                    </a>
+                  </div>
+                </div>
+                {{ form.on_done_condition.as_hidden }}
               </td>
               <td class="approve-cell">
                 {% if form.mark_done.errors %}

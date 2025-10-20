@@ -228,7 +228,11 @@
             </ul>
         {% endif %}
         {% if future_items.todos %}
-            <h3>{% translate 'Release manager tasks' %}</h3>
+            <h3>
+              <a href="{% url 'admin:system-pending-todos-report' %}" class="release-manager-link">
+                {% translate 'Release manager tasks' %}
+              </a>
+            </h3>
             <ul class="actionlist">
                 {% for todo in future_items.todos %}
                 <li class="changelink">
