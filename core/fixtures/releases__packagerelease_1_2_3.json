@@ -1,0 +1,1 @@
+[{"model": "core.packagerelease", "pk": 1, "fields": {"is_seed_data": false, "is_user_data": false, "is_deleted": false, "package": 2, "release_manager": 2, "version": "1.2.3", "revision": "932a2e30f17c42ec8623dd99ee9391dbb401c812", "changelog": "", "pypi_url": "", "github_url": "", "release_on": null}}]

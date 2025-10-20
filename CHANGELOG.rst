@@ -4,6 +4,30 @@ Changelog
 Unreleased
 ----------
 
+- 932a2e30 chore(deps): bump django-import-export from 4.3.9 to 4.3.12 (#2318)
+- b18554fb Add QR code sharing card to README reader view (#2333)
+- 12201b7c Remove birthday greeting task and last Net Message UI (#2332)
+- c0c17daf Verify exported client report JSON contents (#2331)
+- e59dc9d3 feat: add pending TODOs system report (#2305)
+- 073a68d7 chore(deps): bump typing-inspection from 0.4.1 to 0.4.2 (#2314)
+- cda113eb chore(deps): bump psutil from 5.9.8 to 7.1.1 (#2313)
+- 531c589a chore(deps): bump mcp from 1.16.0 to 1.18.0 (#2315)
+- 677d4464 chore(deps): bump atproto from 0.0.61 to 0.0.62 (#2316)
+- bd7037be Normalize user manual PDF uploads to base64 (#2330)
+- 17044b9a chore(deps): bump pyperclip from 1.9.0 to 1.11.0 (#2319)
+- 778eb215 Add per-landing flag to control lead tracking (#2329)
+- 5ccdc8f2 chore(deps): bump idna from 3.10 to 3.11 (#2320)
+- f1d17188 Adjust charger availability badge counts (#2328)
+- 20d1326c Adjust Spanish number separators (#2327)
+- e4b3181a Add millisecond precision to charger logs (#2326)
+- 4401a9a9 Add charge point language preference (#2325)
+- bf3438db Allow overriding local node identity via environment (#2324)
+- 316d5f72 Remove NetMessage response tracking (#2323)
+- cb843a2b Avoid duplicate TODO gate before release approval (#2322)
+
+v0.1.18 (2025-10-19)
+--------------------
+
 - cd1a993f Allow RFID-only authorization without linked account (#2321)
 - bd4ed38e Add log line limit slider to charger log view (#2310)
 - 8a7b74c6 Add managed site configuration fields and middleware (#2308)
