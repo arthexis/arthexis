@@ -2191,6 +2191,47 @@ class UserManualAdminFormTests(TestCase):
         self.assertEqual(form.cleaned_data["content_pdf"], self.manual.content_pdf)
 
 
+class UserManualModelTests(TestCase):
+    def _build_manual(self, **overrides):
+        defaults = {
+            "slug": "manual-model-test",
+            "title": "Manual Model",
+            "description": "Manual description",
+            "languages": "en",
+            "content_html": "<p>Manual</p>",
+            "content_pdf": base64.b64encode(b"initial").decode("ascii"),
+        }
+        defaults.update(overrides)
+        return UserManual(**defaults)
+
+    def test_save_encodes_uploaded_file(self):
+        upload = SimpleUploadedFile("manual.pdf", b"PDF data")
+        manual = self._build_manual(slug="manual-upload", content_pdf=upload)
+        manual.save()
+        manual.refresh_from_db()
+        self.assertEqual(
+            manual.content_pdf,
+            base64.b64encode(b"PDF data").decode("ascii"),
+        )
+
+    def test_save_encodes_raw_bytes(self):
+        manual = self._build_manual(slug="manual-bytes", content_pdf=b"PDF raw")
+        manual.save()
+        manual.refresh_from_db()
+        self.assertEqual(
+            manual.content_pdf,
+            base64.b64encode(b"PDF raw").decode("ascii"),
+        )
+
+    def test_save_strips_data_uri_prefix(self):
+        encoded = base64.b64encode(b"PDF data").decode("ascii")
+        data_uri = f"data:application/pdf;base64,{encoded}"
+        manual = self._build_manual(slug="manual-data-uri", content_pdf=data_uri)
+        manual.save()
+        manual.refresh_from_db()
+        self.assertEqual(manual.content_pdf, encoded)
+
+
 class LandingCreationTests(TestCase):
     def setUp(self):
         role, _ = NodeRole.objects.get_or_create(name="Terminal")

@@ -1,3 +1,4 @@
+import base64
 import logging
 from pathlib import Path
 
@@ -435,6 +436,39 @@ class UserManual(Entity):
 
     def natural_key(self):  # pragma: no cover - simple representation
         return (self.slug,)
+
+    def _ensure_pdf_is_base64(self) -> None:
+        """Normalize ``content_pdf`` so stored values are base64 strings."""
+
+        value = self.content_pdf
+        if value in {None, ""}:
+            self.content_pdf = "" if value is None else value
+            return
+
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            self.content_pdf = base64.b64encode(bytes(value)).decode("ascii")
+            return
+
+        reader = getattr(value, "read", None)
+        if callable(reader):
+            data = reader()
+            if hasattr(value, "seek"):
+                try:
+                    value.seek(0)
+                except Exception:  # pragma: no cover - best effort reset
+                    pass
+            self.content_pdf = base64.b64encode(data).decode("ascii")
+            return
+
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("data:"):
+                _, _, encoded = stripped.partition(",")
+                self.content_pdf = encoded.strip()
+
+    def save(self, *args, **kwargs):
+        self._ensure_pdf_is_base64()
+        super().save(*args, **kwargs)
 
 
 class ViewHistory(Entity):
