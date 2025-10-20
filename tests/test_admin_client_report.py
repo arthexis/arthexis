@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from pathlib import Path
@@ -85,6 +86,16 @@ class AdminClientReportTests(TestCase):
         subjects = {row["subject"] for row in report.data["rows"]}
         self.assertIn(self.account.name, subjects)
         self.assertIn(str(self.rfid2.label_id), subjects)
+        self.assertNotIn(self.rfid1.rfid, subjects)
+        self.assertNotIn(self.rfid2.rfid, subjects)
+
+        with json_path.open(encoding="utf-8") as json_file:
+            payload = json.load(json_file)
+
+        json_rows = payload.get("rows", [])
+        json_subjects = {row.get("subject") for row in json_rows}
+        self.assertIn(str(self.rfid2.label_id), json_subjects)
+        self.assertNotIn(self.rfid1.rfid, json_subjects)
         html_path.unlink()
         json_path.unlink()
 
