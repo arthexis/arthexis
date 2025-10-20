@@ -223,6 +223,46 @@ class NodeGetLocalTests(TestCase):
             node.refresh_from_db()
             self.assertEqual(node.role.name, "Constellation")
 
+    def test_register_current_respects_node_hostname_env(self):
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with override_settings(BASE_DIR=base):
+                with (
+                    patch.dict(os.environ, {"NODE_HOSTNAME": "gway-002"}, clear=False),
+                    patch("nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"),
+                    patch("nodes.models.socket.gethostname", return_value="localhost"),
+                    patch("nodes.models.socket.gethostbyname", return_value="127.0.0.1"),
+                    patch("nodes.models.revision.get_revision", return_value="rev"),
+                    patch.object(Node, "ensure_keys"),
+                    patch.object(Node, "notify_peers_of_update"),
+                ):
+                    node, created = Node.register_current()
+        self.assertTrue(created)
+        self.assertEqual(node.hostname, "gway-002")
+        self.assertEqual(node.public_endpoint, "gway-002")
+
+    def test_register_current_respects_public_endpoint_env(self):
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with override_settings(BASE_DIR=base):
+                with (
+                    patch.dict(
+                        os.environ,
+                        {"NODE_HOSTNAME": "gway-alpha", "NODE_PUBLIC_ENDPOINT": "gway-002"},
+                        clear=False,
+                    ),
+                    patch("nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:56"),
+                    patch("nodes.models.socket.gethostname", return_value="localhost"),
+                    patch("nodes.models.socket.gethostbyname", return_value="127.0.0.1"),
+                    patch("nodes.models.revision.get_revision", return_value="rev"),
+                    patch.object(Node, "ensure_keys"),
+                    patch.object(Node, "notify_peers_of_update"),
+                ):
+                    node, created = Node.register_current()
+        self.assertTrue(created)
+        self.assertEqual(node.hostname, "gway-alpha")
+        self.assertEqual(node.public_endpoint, "gway-002")
+
     def test_register_and_list_node(self):
         response = self.client.post(
             reverse("register-node"),

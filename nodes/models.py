@@ -293,7 +293,13 @@ class Node(Entity):
     @classmethod
     def register_current(cls):
         """Create or update the :class:`Node` entry for this host."""
-        hostname = socket.gethostname()
+        hostname_override = (
+            os.environ.get("NODE_HOSTNAME")
+            or os.environ.get("HOSTNAME")
+            or ""
+        )
+        hostname_override = hostname_override.strip()
+        hostname = hostname_override or socket.gethostname()
         try:
             address = socket.gethostbyname(hostname)
         except OSError:
@@ -305,7 +311,11 @@ class Node(Entity):
         rev_value = revision.get_revision()
         installed_revision = rev_value if rev_value else ""
         mac = cls.get_current_mac()
-        slug = slugify(hostname)
+        endpoint_override = os.environ.get("NODE_PUBLIC_ENDPOINT", "").strip()
+        slug_source = endpoint_override or hostname
+        slug = slugify(slug_source)
+        if not slug:
+            slug = cls._generate_unique_public_endpoint(hostname or mac)
         node = cls.objects.filter(mac_address=mac).first()
         if not node:
             node = cls.objects.filter(public_endpoint=slug).first()
