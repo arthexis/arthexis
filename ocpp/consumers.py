@@ -5,6 +5,7 @@ from datetime import datetime
 import asyncio
 import inspect
 import json
+import logging
 from urllib.parse import parse_qs
 from django.utils import timezone
 from core.models import EnergyAccount, Reference, RFID as CoreRFID
@@ -30,6 +31,9 @@ from .evcs_discovery import (
 )
 
 FORWARDED_PAIR_RE = re.compile(r"for=(?:\"?)(?P<value>[^;,\"\s]+)(?:\"?)", re.IGNORECASE)
+
+
+logger = logging.getLogger(__name__)
 
 
 # Query parameter keys that may contain the charge point serial. Keys are
@@ -308,6 +312,19 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return tag
 
         return await database_sync_to_async(_ensure)()
+
+    def _log_unlinked_rfid(self, rfid: str) -> None:
+        """Record a warning when an RFID is authorized without an account."""
+
+        message = (
+            f"Authorized RFID {rfid} on charger {self.charger_id} without linked energy account"
+        )
+        logger.warning(message)
+        store.add_log(
+            store.pending_key(self.charger_id),
+            message,
+            log_type="charger",
+        )
 
     async def _assign_connector(self, connector: int | str | None) -> None:
         """Ensure ``self.charger`` matches the provided connector id."""
@@ -1395,13 +1412,25 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             elif action == "Authorize":
                 id_tag = payload.get("idTag")
                 account = await self._get_account(id_tag)
+                status = "Invalid"
                 if self.charger.require_rfid:
-                    status = (
-                        "Accepted"
-                        if account
-                        and await database_sync_to_async(account.can_authorize)()
-                        else "Invalid"
-                    )
+                    tag = None
+                    tag_created = False
+                    if id_tag:
+                        tag, tag_created = await database_sync_to_async(
+                            CoreRFID.register_scan
+                        )(id_tag)
+                    if account:
+                        if await database_sync_to_async(account.can_authorize)():
+                            status = "Accepted"
+                    elif (
+                        id_tag
+                        and tag
+                        and not tag_created
+                        and tag.allowed
+                    ):
+                        status = "Accepted"
+                        self._log_unlinked_rfid(tag.rfid)
                 else:
                     await self._ensure_rfid_seen(id_tag)
                     status = "Accepted"
@@ -1475,23 +1504,38 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 reply_payload = {}
             elif action == "StartTransaction":
                 id_tag = payload.get("idTag")
-                account = await self._get_account(id_tag)
+                tag = None
+                tag_created = False
                 if id_tag:
-                    if self.charger.require_rfid:
-                        await database_sync_to_async(CoreRFID.register_scan)(
-                            id_tag.upper()
-                        )
-                    else:
-                        await self._ensure_rfid_seen(id_tag)
+                    tag, tag_created = await database_sync_to_async(
+                        CoreRFID.register_scan
+                    )(id_tag)
+                account = await self._get_account(id_tag)
+                if id_tag and not self.charger.require_rfid:
+                    seen_tag = await self._ensure_rfid_seen(id_tag)
+                    if seen_tag:
+                        tag = seen_tag
                 await self._assign_connector(payload.get("connectorId"))
+                authorized = True
+                authorized_via_tag = False
                 if self.charger.require_rfid:
-                    authorized = (
-                        account is not None
-                        and await database_sync_to_async(account.can_authorize)()
-                    )
-                else:
-                    authorized = True
+                    if account is not None:
+                        authorized = await database_sync_to_async(
+                            account.can_authorize
+                        )()
+                    elif (
+                        id_tag
+                        and tag
+                        and not tag_created
+                        and getattr(tag, "allowed", False)
+                    ):
+                        authorized = True
+                        authorized_via_tag = True
+                    else:
+                        authorized = False
                 if authorized:
+                    if authorized_via_tag and tag:
+                        self._log_unlinked_rfid(tag.rfid)
                     start_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
                     received_start = timezone.now()
                     tx_obj = await database_sync_to_async(Transaction.objects.create)(
