@@ -309,9 +309,14 @@ def _landing_page_translations() -> dict[str, dict[str, str]]:
     """Return static translations used by the charger public landing page."""
 
     catalog: dict[str, dict[str, str]] = {}
-    for code in ("en", "es"):
-        with translation.override(code):
-            catalog[code] = {
+    seen_codes: set[str] = set()
+    for code, _name in settings.LANGUAGES:
+        normalized = str(code).strip()
+        if not normalized or normalized in seen_codes:
+            continue
+        seen_codes.add(normalized)
+        with translation.override(normalized):
+            catalog[normalized] = {
                 "serial_number_label": gettext("Serial Number"),
                 "connector_label": gettext("Connector"),
                 "advanced_view_label": gettext("Advanced View"),
@@ -842,11 +847,30 @@ def charger_page(request, cid, connector=None):
     state_source = tx if charger.connector_id is not None else (sessions if sessions else None)
     state, color = _charger_state(charger, state_source)
     language_cookie = request.COOKIES.get(settings.LANGUAGE_COOKIE_NAME)
-    preferred_language = "es"
-    supported_languages = {code for code, _ in settings.LANGUAGES}
-    if preferred_language in supported_languages and not language_cookie:
-        translation.activate(preferred_language)
-        request.LANGUAGE_CODE = translation.get_language()
+    available_languages = [
+        str(code).strip()
+        for code, _ in settings.LANGUAGES
+        if str(code).strip()
+    ]
+    supported_languages = set(available_languages)
+    charger_language = (charger.language or "es").strip()
+    if charger_language not in supported_languages:
+        fallback = "es" if "es" in supported_languages else ""
+        if not fallback and available_languages:
+            fallback = available_languages[0]
+        charger_language = fallback
+    if (
+        charger_language
+        and (
+            not language_cookie
+            or language_cookie not in supported_languages
+            or language_cookie != charger_language
+        )
+    ):
+        translation.activate(charger_language)
+    current_language = translation.get_language()
+    request.LANGUAGE_CODE = current_language
+    preferred_language = charger_language or current_language
     connector_links = [
         {
             "slug": item["slug"],
@@ -874,6 +898,7 @@ def charger_page(request, cid, connector=None):
             "active_connector_count": active_connector_count,
             "status_url": status_url,
             "landing_translations": _landing_page_translations(),
+            "preferred_language": preferred_language,
             "state": state,
             "color": color,
         },

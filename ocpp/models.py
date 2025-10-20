@@ -82,6 +82,13 @@ class Charger(Entity):
         default=True,
         help_text="Display this charger on the public status dashboard.",
     )
+    language = models.CharField(
+        _("Language"),
+        max_length=12,
+        choices=settings.LANGUAGES,
+        default="es",
+        help_text=_("Preferred language for the public landing page."),
+    )
     require_rfid = models.BooleanField(
         _("Require RFID Authorization"),
         default=False,
