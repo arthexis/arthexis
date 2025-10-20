@@ -736,6 +736,34 @@ def _ensure_release_todo(
     return todo, fixture_path
 
 
+def _todo_blocks_publish(todo: Todo, release: PackageRelease) -> bool:
+    """Return ``True`` when ``todo`` should block the release workflow."""
+
+    request = (todo.request or "").strip()
+    release_name = (release.package.name or "").strip()
+    if not request or not release_name:
+        return True
+
+    prefix = f"create release {release_name.lower()} "
+    if not request.lower().startswith(prefix):
+        return True
+
+    release_version = (release.version or "").strip()
+    generated_version = (todo.generated_for_version or "").strip()
+    if not release_version or release_version != generated_version:
+        return True
+
+    generated_revision = (todo.generated_for_revision or "").strip()
+    release_revision = (release.revision or "").strip()
+    if generated_revision and release_revision and generated_revision != release_revision:
+        return True
+
+    if not todo.is_seed_data:
+        return True
+
+    return False
+
+
 def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
     """Ensure ``release`` matches the repository revision and version.
 
@@ -1885,12 +1913,15 @@ def release_progress(request, pk: int, action: str):
 
     pending_qs = Todo.objects.filter(is_deleted=False, done_on__isnull=True)
     pending_items = list(pending_qs)
-    if not pending_items:
+    blocking_todos = [
+        todo for todo in pending_items if _todo_blocks_publish(todo, release)
+    ]
+    if not blocking_todos:
         ctx["todos_ack"] = True
         ctx["todos_ack_auto"] = True
     elif ack_todos_requested:
         failures = []
-        for todo in pending_items:
+        for todo in blocking_todos:
             result = todo.check_on_done_condition()
             if not result.passed:
                 failures.append((todo, result))
@@ -1920,7 +1951,7 @@ def release_progress(request, pk: int, action: str):
                 "url": todo.url,
                 "request_details": todo.request_details,
             }
-            for todo in pending_items
+            for todo in blocking_todos
         ]
         ctx["todos_required"] = True
 
@@ -1932,7 +1963,7 @@ def release_progress(request, pk: int, action: str):
             "started": ctx.get("started", False),
         }
         step_count = 0
-        if not pending_items:
+        if not blocking_todos:
             ctx["todos_ack"] = True
     log_path = log_dir / log_name
     ctx.setdefault("log", log_name)
