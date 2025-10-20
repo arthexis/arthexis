@@ -6,7 +6,7 @@ from datetime import timedelta
 import json
 
 from django.shortcuts import redirect
-from django.utils import timezone
+from django.utils import formats, timezone, translation
 from django.urls import path
 from django.http import HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -720,7 +720,7 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
         "ws_port",
         "ws_url",
         "interval",
-        "kw_max",
+        "kw_max_display",
         "running",
         "log_link",
     )
@@ -759,6 +759,26 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
     change_actions = ["start_simulator_action", "stop_simulator_action"]
 
     log_type = "simulator"
+
+    @admin.display(description="kW Max", ordering="kw_max")
+    def kw_max_display(self, obj):
+        """Display ``kw_max`` with a dot decimal separator for Spanish locales."""
+
+        language = translation.get_language() or ""
+        if language.startswith("es"):
+            return formats.number_format(
+                obj.kw_max,
+                decimal_pos=2,
+                use_l10n=False,
+                force_grouping=False,
+            )
+
+        return formats.number_format(
+            obj.kw_max,
+            decimal_pos=2,
+            use_l10n=True,
+            force_grouping=False,
+        )
 
     def save_model(self, request, obj, form, change):
         previous_door_open = False
