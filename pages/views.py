@@ -1011,8 +1011,13 @@ class ClientReportForm(forms.Form):
             week_str = cleaned.get("week")
             if not week_str:
                 raise forms.ValidationError(_("Please select a week."))
-            year, week_num = week_str.split("-W")
-            start = datetime.date.fromisocalendar(int(year), int(week_num), 1)
+            try:
+                year_str, week_num_str = week_str.split("-W", 1)
+                start = datetime.date.fromisocalendar(
+                    int(year_str), int(week_num_str), 1
+                )
+            except (TypeError, ValueError):
+                raise forms.ValidationError(_("Please select a week."))
             cleaned["start"] = start
             cleaned["end"] = start + datetime.timedelta(days=6)
         elif period == "month":
