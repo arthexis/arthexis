@@ -984,7 +984,7 @@ class ClientReportForm(forms.Form):
         help_text=_("Separate addresses with commas or new lines."),
     )
     recurrence = forms.ChoiceField(
-        label=_("Recurrency"),
+        label=_("Recurrence"),
         choices=RECURRENCE_CHOICES,
         initial=ClientReportSchedule.PERIODICITY_NONE,
         help_text=_("Defines how often the report should be generated automatically."),
