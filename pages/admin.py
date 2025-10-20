@@ -289,14 +289,19 @@ class ApplicationAdmin(EntityModelAdmin):
 class LandingInline(admin.TabularInline):
     model = Landing
     extra = 0
-    fields = ("path", "label", "enabled")
+    fields = ("path", "label", "enabled", "track_leads")
     show_change_link = True
 
 
 @admin.register(Landing)
 class LandingAdmin(EntityModelAdmin):
-    list_display = ("label", "path", "module", "enabled")
-    list_filter = ("enabled", "module__node_role", "module__application")
+    list_display = ("label", "path", "module", "enabled", "track_leads")
+    list_filter = (
+        "enabled",
+        "track_leads",
+        "module__node_role",
+        "module__application",
+    )
     search_fields = (
         "label",
         "path",
@@ -305,7 +310,7 @@ class LandingAdmin(EntityModelAdmin):
         "module__application__name",
         "module__node_role__name",
     )
-    fields = ("module", "path", "label", "enabled", "description")
+    fields = ("module", "path", "label", "enabled", "track_leads", "description")
     list_select_related = ("module", "module__application", "module__node_role")
 
 

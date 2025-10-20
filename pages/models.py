@@ -212,6 +212,7 @@ class Landing(Entity):
     path = models.CharField(max_length=200)
     label = models.CharField(max_length=100)
     enabled = models.BooleanField(default=True)
+    track_leads = models.BooleanField(default=False)
     description = models.TextField(blank=True)
 
     objects = LandingManager()

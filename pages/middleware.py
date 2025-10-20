@@ -126,6 +126,9 @@ class ViewHistoryMiddleware:
         if request.method.upper() != "GET":
             return
 
+        if not getattr(landing, "track_leads", False):
+            return
+
         if not landing_leads_supported():
             return
 
