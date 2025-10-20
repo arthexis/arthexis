@@ -816,7 +816,8 @@ class ViewHistoryLoggingTests(TestCase):
         )
         landing = module.landings.get(path="/")
         landing.label = "Home Landing"
-        landing.save(update_fields=["label"])
+        landing.track_leads = True
+        landing.save(update_fields=["label", "track_leads"])
 
         resp = self.client.get(
             reverse("pages:index"), HTTP_REFERER="https://example.com/ref"
@@ -841,7 +842,8 @@ class ViewHistoryLoggingTests(TestCase):
         )
         landing = module.landings.get(path="/")
         landing.label = "No Celery"
-        landing.save(update_fields=["label"])
+        landing.track_leads = True
+        landing.save(update_fields=["label", "track_leads"])
 
         resp = self.client.get(reverse("pages:index"))
 
@@ -861,7 +863,8 @@ class ViewHistoryLoggingTests(TestCase):
         )
         landing = module.landings.get(path="/")
         landing.enabled = False
-        landing.save(update_fields=["enabled"])
+        landing.track_leads = True
+        landing.save(update_fields=["enabled", "track_leads"])
 
         resp = self.client.get(reverse("pages:index"))
 
