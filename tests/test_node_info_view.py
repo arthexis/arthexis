@@ -48,3 +48,23 @@ class NodeInfoViewTests(TestCase):
         payload = response.json()
         self.assertEqual(payload["hostname"], "arthexis.com")
         self.assertEqual(payload["address"], "arthexis.com")
+
+    def test_node_info_ignores_localhost_domain(self):
+        mac = Node.get_current_mac()
+        slug = f"test-node-{uuid.uuid4().hex}"
+        defaults = {
+            "hostname": "gway-002",
+            "address": "10.0.0.5",
+            "port": 8123,
+            "public_endpoint": slug,
+        }
+        Node.objects.update_or_create(mac_address=mac, defaults=defaults)
+
+        with patch("nodes.views._get_route_address", return_value="192.168.1.2"):
+            response = self.client.get(
+                reverse("node-info"), HTTP_HOST="localhost:8000"
+            )
+
+        payload = response.json()
+        self.assertEqual(payload["hostname"], "gway-002")
+        self.assertEqual(payload["address"], "192.168.1.2")

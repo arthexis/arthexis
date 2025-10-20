@@ -104,6 +104,8 @@ def _get_host_domain(request) -> str:
     domain, _ = split_domain_port(host)
     if not domain:
         return ""
+    if domain.lower() == "localhost":
+        return ""
     try:
         ipaddress.ip_address(domain)
     except ValueError:
