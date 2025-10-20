@@ -6,25 +6,50 @@
   <div class="module system-reports">
     <h2>{% trans "System Reports" %}</h2>
     {% celery_feature_enabled as celery_enabled %}
-    <ul>
-      <li>
-        <a href="{% url 'admin:system-changelog-report' %}">
-          {% trans "Changelog Report" %}
-        </a>
-      </li>
-      <li>
-        <a href="{% url 'admin:system-upgrade-report' %}">
-          {% trans "Upgrade Report" %}
-        </a>
-      </li>
-      {% if celery_enabled %}
-        <li>
-          <a href="{% url 'admin:nodes_nodefeature_celery_report' %}">
-            {% trans "Celery Report" %}
-          </a>
-        </li>
-      {% endif %}
-    </ul>
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th scope="col">{% trans "Name" %}</th>
+          <th scope="col">{% trans "Purpose" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">
+            <a href="{% url 'admin:system-changelog-report' %}">
+              {% trans "Changelog Report" %}
+            </a>
+          </th>
+          <td>{% trans "Review pending changelog entries and manage release notes." %}</td>
+        </tr>
+        <tr>
+          <th scope="row">
+            <a href="{% url 'admin:system-upgrade-report' %}">
+              {% trans "Upgrade Report" %}
+            </a>
+          </th>
+          <td>{% trans "Check automated upgrade schedules and trigger update checks." %}</td>
+        </tr>
+        <tr>
+          <th scope="row">
+            <a href="{% url 'admin:system-pending-todos-report' %}">
+              {% trans "Pending TODOs Report" %}
+            </a>
+          </th>
+          <td>{% trans "Edit release TODOs, review details, and approve items in bulk." %}</td>
+        </tr>
+        {% if celery_enabled %}
+          <tr>
+            <th scope="row">
+              <a href="{% url 'admin:nodes_nodefeature_celery_report' %}">
+                {% trans "Celery Report" %}
+              </a>
+            </th>
+            <td>{% trans "Inspect Celery worker status and task visibility." %}</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
     {% if not celery_enabled %}
       <p class="help">{% trans "Celery support is not enabled on this node." %}</p>
     {% endif %}

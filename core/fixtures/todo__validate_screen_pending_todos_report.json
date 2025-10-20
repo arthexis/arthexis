@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Pending TODOs Report",
+      "url": "/admin/system/pending-todos-report/",
+      "request_details": "Verify administrators can update TODO metadata, review condition outcomes, and approve multiple pending TODOs in one submission."
+    }
+  }
+]

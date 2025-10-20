@@ -13,6 +13,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
 
+from core.models import Todo
+
 
 class AdminSystemViewTests(TestCase):
     def setUp(self):
@@ -61,3 +63,65 @@ class AdminSystemViewTests(TestCase):
         )
         self.assertRedirects(response, reverse("admin:system-changelog-report"))
         mock_regenerate.assert_called_once_with()
+
+    def test_pending_todos_report_requires_login(self):
+        response = self.client.get(reverse("admin:system-pending-todos-report"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("admin:login"), response.url)
+
+    def test_pending_todos_report_lists_pending_items(self):
+        todo = Todo.objects.create(request="Review docs")
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("admin:system-pending-todos-report"))
+        self.assertContains(response, "Pending TODOs Report")
+        self.assertContains(response, todo.request)
+        self.assertContains(response, "Approve selected TODOs")
+
+    def test_pending_todos_report_updates_and_approves(self):
+        todo_one = Todo.objects.create(
+            request="Sync translations",
+            request_details="Ensure locale files are updated.",
+        )
+        todo_two = Todo.objects.create(
+            request="Review API docs",
+            request_details="Check the OAuth section",
+        )
+        url = reverse("admin:system-pending-todos-report")
+        self.client.force_login(self.superuser)
+
+        data = {
+            "todos-TOTAL_FORMS": "2",
+            "todos-INITIAL_FORMS": "2",
+            "todos-MIN_NUM_FORMS": "0",
+            "todos-MAX_NUM_FORMS": "1000",
+            "todos-0-id": str(todo_one.pk),
+            "todos-0-request": "Sync translation updates",
+            "todos-0-request_details": "Ensure locale files include new strings.",
+            "todos-0-url": "",
+            "todos-0-generated_for_version": "1.2.3",
+            "todos-0-generated_for_revision": "",
+            "todos-0-on_done_condition": "",
+            "todos-0-mark_done": "on",
+            "todos-1-id": str(todo_two.pk),
+            "todos-1-request": "Review API docs",
+            "todos-1-request_details": "Check the OAuth section and callbacks.",
+            "todos-1-url": "/docs/api/",
+            "todos-1-generated_for_version": "",
+            "todos-1-generated_for_revision": "rev-2",
+            "todos-1-on_done_condition": "",
+        }
+
+        response = self.client.post(url, data, follow=True)
+        self.assertRedirects(response, url)
+
+        todo_one.refresh_from_db()
+        todo_two.refresh_from_db()
+        self.assertIsNotNone(todo_one.done_on)
+        self.assertEqual(todo_one.request, "Sync translation updates")
+        self.assertEqual(
+            todo_one.request_details,
+            "Ensure locale files include new strings.",
+        )
+        self.assertEqual(todo_one.generated_for_version, "1.2.3")
+        self.assertEqual(todo_two.generated_for_revision, "rev-2")
+        self.assertIsNone(todo_two.done_on)

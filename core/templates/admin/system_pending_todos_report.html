@@ -1,0 +1,150 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{% trans "Pending TODOs Report" %}</h1>
+  <p class="help">
+    {% trans "Review outstanding release TODOs, update their details, and approve multiple items at once." %}
+  </p>
+  {% if formset.total_form_count %}
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {{ formset.management_form }}
+      <table class="table table-striped pending-todos-table">
+        <thead>
+          <tr>
+            <th scope="col">{% trans "Request" %}</th>
+            <th scope="col">{% trans "Details" %}</th>
+            <th scope="col">{% trans "URL" %}</th>
+            <th scope="col">{% trans "Generated for" %}</th>
+            <th scope="col">{% trans "Condition" %}</th>
+            <th scope="col">{% trans "Approve" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            {% with form=row.form todo=row.todo condition=row.condition %}
+            <tr>
+              <td>
+                {{ form.id }}
+                {% if form.non_field_errors %}
+                  <div class="errorlist nonfield">
+                    {% for error in form.non_field_errors %}
+                      <div>{{ error }}</div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {% if form.request.errors %}
+                  <div class="errorlist">
+                    {% for error in form.request.errors %}
+                      <div>{{ error }}</div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {{ form.request }}
+              </td>
+              <td>
+                {% if form.request_details.errors %}
+                  <div class="errorlist">
+                    {% for error in form.request_details.errors %}
+                      <div>{{ error }}</div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {{ form.request_details }}
+              </td>
+              <td>
+                {% if form.url.errors %}
+                  <div class="errorlist">
+                    {% for error in form.url.errors %}
+                      <div>{{ error }}</div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {{ form.url }}
+              </td>
+              <td class="generated-for">
+                <div class="generated-field">
+                  <span class="label">{% trans "Version" %}</span>
+                  {% if form.generated_for_version.errors %}
+                    <div class="errorlist">
+                      {% for error in form.generated_for_version.errors %}
+                        <div>{{ error }}</div>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  {{ form.generated_for_version }}
+                </div>
+                <div class="generated-field">
+                  <span class="label">{% trans "Revision" %}</span>
+                  {% if form.generated_for_revision.errors %}
+                    <div class="errorlist">
+                      {% for error in form.generated_for_revision.errors %}
+                        <div>{{ error }}</div>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  {{ form.generated_for_revision }}
+                </div>
+              </td>
+              <td class="condition-cell">
+                {% if form.on_done_condition.errors %}
+                  <div class="errorlist">
+                    {% for error in form.on_done_condition.errors %}
+                      <div>{{ error }}</div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {{ form.on_done_condition }}
+                {% if condition.resolved %}
+                  <p class="condition-result">
+                    <strong>{% trans "Resolved" %}:</strong> {{ condition.resolved }}
+                  </p>
+                {% endif %}
+                {% if condition.error %}
+                  <p class="condition-error">
+                    <strong>{% trans "Error" %}:</strong> {{ condition.error }}
+                  </p>
+                {% else %}
+                  <p class="condition-status {% if condition.passed %}status-ok{% else %}status-warning{% endif %}">
+                    {% if condition.passed %}
+                      {% trans "Condition currently passes." %}
+                    {% else %}
+                      {% trans "Condition currently fails." %}
+                    {% endif %}
+                  </p>
+                {% endif %}
+              </td>
+              <td class="approve-cell">
+                {% if form.mark_done.errors %}
+                  <div class="errorlist">
+                    {% for error in form.mark_done.errors %}
+                      <div>{{ error }}</div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                <label class="checkbox">
+                  {{ form.mark_done }}
+                  <span>{% trans "Approve" %}</span>
+                </label>
+              </td>
+            </tr>
+            {% endwith %}
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="submit-row">
+        <button type="submit" name="action" value="save" class="button default">
+          {% trans "Save changes" %}
+        </button>
+        <button type="submit" name="action" value="approve" class="button">
+          {% trans "Approve selected TODOs" %}
+        </button>
+      </div>
+    </form>
+  {% else %}
+    <p class="help-empty">{% trans "No pending TODOs require approval." %}</p>
+  {% endif %}
+</div>
+{% endblock %}
