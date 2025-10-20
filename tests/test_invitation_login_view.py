@@ -7,6 +7,8 @@ from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
+from core.models import InviteLead
+
 
 class InvitationLoginViewTests(TestCase):
     def setUp(self):
@@ -101,6 +103,32 @@ class InvitationLoginViewTests(TestCase):
         self.assertTrue(mock_get_local.called)
         self.assertTrue(mock_resolve_mac.called)
         mock_grant_public_access.assert_called_once_with(user, "aa:bb:cc:dd:ee:ff")
+
+    @patch("pages.views.public_wifi.resolve_mac_address", return_value=None)
+    @patch("pages.views.public_wifi.grant_public_access")
+    def test_wifi_provisioning_uses_fallback_mac_when_available(
+        self, mock_grant_public_access, mock_resolve_mac
+    ):
+        user = self.User.objects.create_user(
+            username="wifi-fallback",
+            email="wifi-fallback@example.com",
+            password="wifi-secret",
+            is_active=False,
+        )
+        InviteLead.objects.create(email=user.email, mac_address="ff:ee:dd:cc:bb:aa")
+        mock_node = Mock()
+        mock_node.has_feature.return_value = True
+        with patch("pages.views.Node.get_local", return_value=mock_node) as mock_get_local:
+            response = self.client.post(self._invitation_url(user), {})
+
+        self.assertRedirects(response, "/")
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+        self.assertTrue(mock_get_local.called)
+        self.assertTrue(mock_resolve_mac.called)
+        mock_grant_public_access.assert_called_once_with(user, "ff:ee:dd:cc:bb:aa")
+        session = self.client.session
+        self.assertEqual(session.get("_auth_user_id"), str(user.pk))
 
     def test_invalid_token_returns_bad_request_without_user_mutation(self):
         user = self.User.objects.create_user(
