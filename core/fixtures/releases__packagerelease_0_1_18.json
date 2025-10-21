@@ -1,1 +1,23 @@
-[{"model": "core.packagerelease", "pk": 19, "fields": {"is_seed_data": false, "is_user_data": false, "is_deleted": false, "package": 1, "release_manager": 1, "version": "0.1.18", "revision": "cd1a993f129582f9da2b7aada93fac98b9e3ec0b", "changelog": "- cd1a993f Allow RFID-only authorization without linked account (#2321)\n- bd4ed38e Add log line limit slider to charger log view (#2310)\n- 8a7b74c6 Add managed site configuration fields and middleware (#2308)\n- e5e508fe Add credentials link to GitHub issue error message (#2309)\n- f55f0e6e Add admin badge for available charge points (#2307)\n- cbbaf055 Normalize RFID command output percent tokens (#2306)\n- 2e0e6b29 Add admin temporary password request button (#2304)\n- dc0e91ef fix: skip reloading soft-deleted todos (#2303)\n- 3d4394fa Assign natural primary keys to package release fixtures (#2302)\n- b94d61e1 Auto-acknowledge empty TODO step during package publish (#2300)\n- 543a5abc Add reversed UID reference field to RFID model (#2301)", "pypi_url": "", "github_url": "", "release_on": null}}]
+[
+  {
+    "model": "core.packagerelease",
+    "fields": {
+      "is_seed_data": false,
+      "is_user_data": false,
+      "is_deleted": false,
+      "package": [
+        "arthexis"
+      ],
+      "release_manager": [
+        "arthexis",
+        "arthexis"
+      ],
+      "version": "0.1.18",
+      "revision": "cd1a993f129582f9da2b7aada93fac98b9e3ec0b",
+      "changelog": "- cd1a993f Allow RFID-only authorization without linked account (#2321)\n- bd4ed38e Add log line limit slider to charger log view (#2310)\n- 8a7b74c6 Add managed site configuration fields and middleware (#2308)\n- e5e508fe Add credentials link to GitHub issue error message (#2309)\n- f55f0e6e Add admin badge for available charge points (#2307)\n- cbbaf055 Normalize RFID command output percent tokens (#2306)\n- 2e0e6b29 Add admin temporary password request button (#2304)\n- dc0e91ef fix: skip reloading soft-deleted todos (#2303)\n- 3d4394fa Assign natural primary keys to package release fixtures (#2302)\n- b94d61e1 Auto-acknowledge empty TODO step during package publish (#2300)\n- 543a5abc Add reversed UID reference field to RFID model (#2301)",
+      "pypi_url": "",
+      "github_url": "",
+      "release_on": null
+    }
+  }
+]
