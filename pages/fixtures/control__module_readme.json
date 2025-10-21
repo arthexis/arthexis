@@ -6,7 +6,7 @@
       "is_deleted": false,
       "node_role": ["Control"],
       "application": ["pages"],
-      "path": "/readme/",
+      "path": "/read/",
       "menu": "Cookbook",
       "is_default": false,
       "favicon": ""

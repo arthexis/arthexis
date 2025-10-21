@@ -88,7 +88,7 @@ def nav_links(request):
             landings.append(landing)
         if landings:
             normalized_module_path = module.path.rstrip("/") or "/"
-            if normalized_module_path == "/readme":
+            if normalized_module_path == "/read":
                 primary_landings = [
                     landing
                     for landing in landings

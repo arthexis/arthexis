@@ -4,8 +4,8 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "module": ["Satellite", "/readme/"],
-      "path": "/readme/",
+      "module": ["Satellite", "/read/"],
+      "path": "/read/",
       "label": "Cookbook",
       "enabled": true,
       "description": ""
