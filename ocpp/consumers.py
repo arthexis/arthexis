@@ -1350,8 +1350,13 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 reply_payload = {"currentTime": datetime.utcnow().isoformat() + "Z"}
                 now = timezone.now()
                 self.charger.last_heartbeat = now
+                if (
+                    self.aggregate_charger
+                    and self.aggregate_charger is not self.charger
+                ):
+                    self.aggregate_charger.last_heartbeat = now
                 await database_sync_to_async(
-                    Charger.objects.filter(pk=self.charger.pk).update
+                    Charger.objects.filter(charger_id=self.charger_id).update
                 )(last_heartbeat=now)
             elif action == "StatusNotification":
                 await self._assign_connector(payload.get("connectorId"))

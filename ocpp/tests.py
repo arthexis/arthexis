@@ -3234,8 +3234,7 @@ class SimulatorAdminTests(TransactionTestCase):
         self.assertIsNotNone(aggregate.last_heartbeat)
         if previous_heartbeat:
             self.assertNotEqual(aggregate.last_heartbeat, previous_heartbeat)
-        if connector.last_heartbeat:
-            self.assertNotEqual(aggregate.last_heartbeat, connector.last_heartbeat)
+        self.assertEqual(connector.last_heartbeat, aggregate.last_heartbeat)
 
         await communicator.disconnect()
 
