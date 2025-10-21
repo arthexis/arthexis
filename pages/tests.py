@@ -2630,12 +2630,12 @@ class FavoriteTests(TestCase):
         self.assertContains(resp, f'aria-label="{badge_label}"')
 
     def test_dashboard_shows_charge_point_availability_badge(self):
-        Charger.objects.create(charger_id="CP-001", last_status="Available")
         Charger.objects.create(
             charger_id="CP-001", connector_id=1, last_status="Available"
         )
+        Charger.objects.create(charger_id="CP-002", last_status="Available")
         Charger.objects.create(
-            charger_id="CP-002", connector_id=1, last_status="Unavailable"
+            charger_id="CP-003", connector_id=1, last_status="Unavailable"
         )
 
         resp = self.client.get(reverse("admin:index"))
@@ -2644,6 +2644,27 @@ class FavoriteTests(TestCase):
         badge_label = gettext(
             "%(available)s chargers reporting Available status with a CP number, out of %(total)s total Available chargers. %(missing)s Available chargers are missing a connector number."
         ) % {"available": 1, "total": 2, "missing": 1}
+
+        self.assertContains(resp, expected)
+        self.assertContains(resp, 'class="charger-availability-badge"')
+        self.assertContains(resp, f'title="{badge_label}"')
+        self.assertContains(resp, f'aria-label="{badge_label}"')
+
+    def test_dashboard_charge_point_badge_ignores_aggregator(self):
+        Charger.objects.create(charger_id="CP-AGG", last_status="Available")
+        Charger.objects.create(
+            charger_id="CP-AGG", connector_id=1, last_status="Available"
+        )
+        Charger.objects.create(
+            charger_id="CP-AGG", connector_id=2, last_status="Available"
+        )
+
+        resp = self.client.get(reverse("admin:index"))
+
+        expected = "2 / 2"
+        badge_label = gettext(
+            "%(available)s chargers reporting Available status with a CP number."
+        ) % {"available": 2}
 
         self.assertContains(resp, expected)
         self.assertContains(resp, 'class="charger-availability-badge"')
