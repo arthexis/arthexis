@@ -4,24 +4,6 @@ Changelog
 Unreleased
 ----------
 
-- 9ee9e5a6 Require references to meet all visibility restrictions (#2373)
-- 2ed92b33 Update settings helper roadmap guidance (#2372)
-- efa21c24 Clarify notification fallback comment (#2371)
-- d9f504e1 Add test for regenerating empty Django secret key (#2370)
-- 20253eab Add VID tracking to OCPP transactions (#2368)
-- 6cddd79d Rename admin environment and config links (#2369)
-- 005ed511 Add stable upgrade mode (#2362)
-- 182b3a7c Show charger display name in admin list (#2367)
-- 72915a35 Fix artifact spelling in capture UI screenshots command (#2366)
-- cfae327f Ensure release log dir restore keeps env override (#2365)
-- 4cd2e52a Assert default Django test command in release logs test (#2363)
-- a46233e5 Clarify admin environment helper docstring (#2364)
-- c4ca7269 Automate pushing publish metadata (#2360)
-- 32bc1fb6 Display RFID details on charger status page (#2361)
-
-v0.1.19 (2025-10-20)
---------------------
-
 - 948743f9 Switch reader route to /read/ (#2358)
 - 562ad93a Move translated README files into locale directory (#2357)
 - 17ea378d Keep readme QR card below table of contents (#2356)
