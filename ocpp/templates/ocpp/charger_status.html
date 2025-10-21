@@ -98,6 +98,16 @@
         {% else %}
         <li>{% trans "Start Time" %}: {{ tx.start_time }}</li>
         {% endif %}
+        {% if tx_rfid_details %}
+        <li>
+          {% trans "RFID" %}:
+          {% if tx_rfid_details.url %}
+          <a href="{{ tx_rfid_details.url }}">{{ tx_rfid_details.value }}</a>
+          {% else %}
+          {{ tx_rfid_details.value }}
+          {% endif %}
+        </li>
+        {% endif %}
         <li>{% trans "Session Energy" %}: <span id="session-kw">{{ tx.kw|floatformat:2 }}</span> kW</li>
       </ul>
       {% elif not past_session %}
