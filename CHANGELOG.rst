@@ -4,6 +4,11 @@ Changelog
 Unreleased
 ----------
 
+- 43b25f1e chore: update release fixtures
+
+v0.1.19 (2025-10-20)
+--------------------
+
 - 948743f9 Switch reader route to /read/ (#2358)
 - 562ad93a Move translated README files into locale directory (#2357)
 - 17ea378d Keep readme QR card below table of contents (#2356)

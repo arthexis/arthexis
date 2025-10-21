@@ -608,6 +608,24 @@ def _git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
     return any(marker in message for marker in auth_markers)
 
 
+def _push_with_credentials_command(
+    push_cmd: Sequence[str], remote_url: str
+) -> list[str]:
+    """Return ``push_cmd`` updated to push to ``remote_url`` directly."""
+
+    authed_cmd = list(push_cmd)
+    for index, arg in enumerate(authed_cmd):
+        if arg == "origin":
+            authed_cmd[index] = remote_url
+            return authed_cmd
+
+    insert_at = 2
+    while insert_at < len(authed_cmd) and authed_cmd[insert_at].startswith("-"):
+        insert_at += 1
+    authed_cmd.insert(insert_at, remote_url)
+    return authed_cmd
+
+
 def _ensure_origin_main_unchanged(log_path: Path) -> None:
     """Verify that ``origin/main`` has not advanced during the release."""
 
@@ -1307,8 +1325,9 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
         return
     try:
         _ensure_origin_main_unchanged(log_path)
+        package = release.to_package()
         release_utils.promote(
-            package=release.to_package(),
+            package=package,
             version=release.version,
             creds=release.to_credentials(),
         )
@@ -1341,6 +1360,7 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
                 f"Committed release metadata for v{release.version}",
             )
         if _has_remote("origin"):
+            push_logged = False
             try:
                 branch = _current_branch()
                 if branch is None:
@@ -1353,12 +1373,53 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
             except subprocess.CalledProcessError as exc:
                 details = _format_subprocess_error(exc)
                 if _git_authentication_missing(exc):
-                    _append_log(
-                        log_path,
-                        "Authentication is required to push release changes to origin; skipping push",
-                    )
-                    if details:
-                        _append_log(log_path, details)
+                    fallback_details = details
+                    creds = release_utils._manager_git_credentials(package)
+                    remote_url = release_utils._git_remote_url("origin")
+                    authed_url = None
+                    if creds and remote_url:
+                        authed_url = release_utils._remote_with_credentials(
+                            remote_url, creds
+                        )
+                    if authed_url:
+                        authed_cmd = _push_with_credentials_command(
+                            push_cmd, authed_url
+                        )
+                        try:
+                            subprocess.run(
+                                authed_cmd,
+                                check=True,
+                                capture_output=True,
+                                text=True,
+                            )
+                        except subprocess.CalledProcessError as push_exc:
+                            fallback_details = (
+                                _format_subprocess_error(push_exc) or fallback_details
+                            )
+                            if not _git_authentication_missing(push_exc):
+                                _append_log(
+                                    log_path,
+                                    (
+                                        "Failed to push release changes to origin: "
+                                        f"{fallback_details}"
+                                    ),
+                                )
+                                raise Exception(
+                                    "Failed to push release changes"
+                                ) from push_exc
+                        else:
+                            _append_log(
+                                log_path,
+                                "Pushed release changes to origin using stored credentials",
+                            )
+                            push_logged = True
+                    if not push_logged:
+                        _append_log(
+                            log_path,
+                            "Authentication is required to push release changes to origin; skipping push",
+                        )
+                        if fallback_details:
+                            _append_log(log_path, fallback_details)
                 else:
                     _append_log(
                         log_path, f"Failed to push release changes to origin: {details}"
@@ -1366,6 +1427,7 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
                     raise Exception("Failed to push release changes") from exc
             else:
                 _append_log(log_path, "Pushed release changes to origin")
+                push_logged = True
         else:
             _append_log(
                 log_path,

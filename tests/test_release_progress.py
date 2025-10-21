@@ -1097,6 +1097,91 @@ class ReleaseProgressViewTests(TestCase):
         updated_session = self.client.session.get(session_key, {})
         self.assertEqual(updated_session.get("step"), 6)
 
+    @mock.patch("core.views.release_utils.promote")
+    @mock.patch("core.views.PackageRelease.dump_fixture")
+    @mock.patch("core.views._ensure_origin_main_unchanged")
+    def test_build_step_push_uses_release_manager_credentials(
+        self, ensure_main, dump_fixture, promote
+    ):
+        session = self.client.session
+        session_key = f"release_publish_{self.release.pk}"
+        session[session_key] = {
+            "step": 5,
+            "log": self.log_name,
+            "started": True,
+            "todos_ack": True,
+            "release_todo_previous_version": self.release.version,
+        }
+        session.save()
+
+        credentials = core_views.release_utils.GitCredentials(
+            username="octocat", password="gh-token"
+        )
+
+        push_calls: list[list[str]] = []
+
+        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
+            if cmd[:3] == ["git", "status", "--porcelain"] and len(cmd) > 3:
+                return subprocess.CompletedProcess(cmd, 0, stdout=" M VERSION\n", stderr="")
+            if cmd[:4] == ["git", "diff", "--cached", "--quiet"]:
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+            if cmd[:2] == ["git", "add"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            if cmd[:2] == ["git", "commit"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            if cmd[:2] == ["git", "push"]:
+                push_calls.append(cmd)
+                if len(push_calls) == 1:
+                    raise subprocess.CalledProcessError(
+                        1,
+                        cmd,
+                        output="",
+                        stderr="fatal: authentication failed",
+                    )
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        authed_url = core_views.release_utils._remote_with_credentials(
+            "https://example.com/repo.git", credentials
+        )
+
+        with (
+            mock.patch("core.views._has_remote", return_value=True),
+            mock.patch("core.views._current_branch", return_value="main"),
+            mock.patch("core.views._has_upstream", return_value=True),
+            mock.patch(
+                "core.views.release_utils._manager_git_credentials",
+                return_value=credentials,
+            ) as git_creds,
+            mock.patch(
+                "core.views.release_utils._git_remote_url",
+                return_value="https://example.com/repo.git",
+            ),
+            mock.patch("core.views._record_release_todo"),
+            mock.patch("core.views.subprocess.run", side_effect=fake_run),
+        ):
+            url = reverse("release-progress", args=[self.release.pk, "publish"])
+            response = self.client.get(f"{url}?step=5")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(len(push_calls), 2)
+        self.assertEqual(push_calls[1], ["git", "push", authed_url])
+        git_creds.assert_called()
+
+        updated_session = self.client.session.get(session_key, {})
+        self.assertEqual(updated_session.get("step"), 6)
+
+        log_path = self.log_dir / self.log_name
+        self.assertTrue(log_path.exists())
+        content = log_path.read_text(encoding="utf-8")
+        self.assertIn(
+            "Pushed release changes to origin using stored credentials", content
+        )
+        self.assertNotIn(
+            "Authentication is required to push release changes to origin; skipping push",
+            content,
+        )
+
     @mock.patch("core.views.release_utils.promote", side_effect=Exception("build failed"))
     @mock.patch("core.views.PackageRelease.dump_fixture")
     @mock.patch("core.views._ensure_origin_main_unchanged")
