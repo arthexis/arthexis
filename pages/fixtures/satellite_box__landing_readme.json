@@ -6,7 +6,7 @@
       "is_deleted": false,
       "module": ["Satellite", "/readme/"],
       "path": "/readme/",
-      "label": "Recipes",
+      "label": "Cookbook",
       "enabled": true,
       "description": ""
     }
