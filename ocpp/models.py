@@ -599,7 +599,18 @@ class Transaction(Entity):
         blank=True,
         verbose_name=_("RFID"),
     )
-    vin = models.CharField(max_length=17, blank=True)
+    vid = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        verbose_name=_("VID"),
+        help_text=_("Vehicle identifier reported by the charger."),
+    )
+    vin = models.CharField(
+        max_length=17,
+        blank=True,
+        help_text=_("Deprecated. Use VID instead."),
+    )
     connector_id = models.PositiveIntegerField(null=True, blank=True)
     meter_start = models.IntegerField(null=True, blank=True)
     meter_stop = models.IntegerField(null=True, blank=True)
@@ -644,6 +655,22 @@ class Transaction(Entity):
     class Meta:
         verbose_name = _("Transaction")
         verbose_name_plural = _("CP Transactions")
+
+    @property
+    def vehicle_identifier(self) -> str:
+        """Return the preferred vehicle identifier for this transaction."""
+
+        return (self.vid or self.vin or "").strip()
+
+    @property
+    def vehicle_identifier_source(self) -> str:
+        """Return which field supplies :pyattr:`vehicle_identifier`."""
+
+        if (self.vid or "").strip():
+            return "vid"
+        if (self.vin or "").strip():
+            return "vin"
+        return ""
 
     @property
     def kw(self) -> float:

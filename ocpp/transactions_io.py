@@ -46,6 +46,7 @@ def export_transactions(
                 "charger": tx.charger.charger_id if tx.charger else None,
                 "account": tx.account_id,
                 "rfid": tx.rfid,
+                "vid": tx.vehicle_identifier,
                 "vin": tx.vin,
                 "meter_start": tx.meter_start,
                 "meter_stop": tx.meter_stop,
@@ -144,11 +145,18 @@ def import_transactions(data: dict) -> int:
             except ValidationError:
                 continue
             charger_map[serial] = charger
+        vid_value = tx.get("vid")
+        vin_value = tx.get("vin")
+        vid_text = str(vid_value).strip() if vid_value is not None else ""
+        vin_text = str(vin_value).strip() if vin_value is not None else ""
+        if not vid_text and vin_text:
+            vid_text = vin_text
         transaction = Transaction.objects.create(
             charger=charger,
             account_id=tx.get("account"),
             rfid=tx.get("rfid", ""),
-            vin=tx.get("vin", ""),
+            vid=vid_text,
+            vin=vin_text,
             meter_start=tx.get("meter_start"),
             meter_stop=tx.get("meter_stop"),
             voltage_start=tx.get("voltage_start"),

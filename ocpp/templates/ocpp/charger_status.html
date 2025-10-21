@@ -100,7 +100,11 @@
         {% endif %}
         {% if tx_rfid_details %}
         <li>
+          {% if tx_rfid_details.display_label %}
+          {{ tx_rfid_details.display_label }}:
+          {% else %}
           {% trans "RFID" %}:
+          {% endif %}
           {% if tx_rfid_details.url %}
           <a href="{{ tx_rfid_details.url }}">{{ tx_rfid_details.value }}</a>
           {% else %}
