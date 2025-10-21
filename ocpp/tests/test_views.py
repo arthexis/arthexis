@@ -13,11 +13,13 @@ from django.shortcuts import resolve_url
 from django.http import HttpResponse
 from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
+from django.utils.text import slugify
 from django.utils.translation import gettext
 from urllib.parse import quote
 from unittest.mock import patch
 
 from nodes.models import Node, NodeRole
+from ocpp import store
 from ocpp.models import Charger
 from ocpp.views import charger_log_page
 
@@ -170,6 +172,11 @@ class ChargerLogViewTests(TestCase):
         )
         self.assertEqual(context["log_limit_choice"], "20")
         self.assertEqual(context["log_limit_label"], "20")
+        expected_target = store.identity_key(
+            self.charger.charger_id, self.charger.connector_id
+        )
+        slug_source = slugify(expected_target) or slugify(self.charger.charger_id) or "log"
+        self.assertEqual(context["log_filename"], f"charger-{slug_source}.log")
 
     def test_log_view_applies_numeric_limit(self):
         entries = [f"entry {i}" for i in range(1, 101)]
@@ -194,3 +201,8 @@ class ChargerLogViewTests(TestCase):
         self.assertTrue(response["Content-Disposition"].startswith("attachment"))
         content = response.content.decode("utf-8")
         self.assertEqual(content, "download one\ndownload two\n")
+        expected_target = store.identity_key(
+            self.charger.charger_id, self.charger.connector_id
+        )
+        slug_source = slugify(expected_target) or slugify(self.charger.charger_id) or "log"
+        self.assertIn(f'filename="charger-{slug_source}.log"', response["Content-Disposition"])

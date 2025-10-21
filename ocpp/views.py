@@ -1235,6 +1235,10 @@ def charger_log_page(request, cid, connector=None):
             charger_id=cid
         )
         target_id = cid
+
+    slug_source = slugify(target_id) or slugify(cid) or "log"
+    filename_parts = [log_type, slug_source]
+    download_filename = f"{'-'.join(part for part in filename_parts if part)}.log"
     limit_options = [
         {"value": "20", "label": "20"},
         {"value": "40", "label": "40"},
@@ -1253,10 +1257,8 @@ def charger_log_page(request, cid, connector=None):
         download_content = "\n".join(log_entries_all)
         if download_content and not download_content.endswith("\n"):
             download_content = f"{download_content}\n"
-        filename_parts = [log_type, slugify(target_id) or slugify(cid) or "log"]
-        download_name = "-".join(part for part in filename_parts if part)
         response = HttpResponse(download_content, content_type="text/plain; charset=utf-8")
-        response["Content-Disposition"] = f'attachment; filename="{download_name}.log"'
+        response["Content-Disposition"] = f'attachment; filename="{download_filename}"'
         return response
 
     log_entries = log_entries_all
@@ -1291,6 +1293,7 @@ def charger_log_page(request, cid, connector=None):
             "log_limit_choice": limit_choice,
             "log_limit_label": limit_label,
             "log_download_url": log_download_url,
+            "log_filename": download_filename,
         },
     )
 
