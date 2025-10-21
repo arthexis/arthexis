@@ -120,6 +120,11 @@ I prefissi sconosciuti restano invariati (ad esempio `[UNKNOWN.VALUE]`) e vengon
 
 Contattaci all'indirizzo [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) o visita la nostra [pagina web](https://www.gelectriic.com/) per [servizi professionali](https://it.wikipedia.org/wiki/Servizio_professionale) e [supporto commerciale](https://it.wikipedia.org/wiki/Supporto_tecnico).
 
+## Linee guida del progetto
+
+- [AGENTS](AGENTS.md) – manuale operativo per i flussi di lavoro del repository, i test e la gestione delle release.
+- [DESIGN](DESIGN.md) – linee guida su design visivo, UX e branding che tutte le interfacce devono seguire.
+
 ## Chi sono
 
 > "Cosa? Vuoi sapere qualcosa anche su di me? Beh, mi piace [sviluppare software](https://it.wikipedia.org/wiki/Sviluppo_software), i [giochi di ruolo](https://it.wikipedia.org/wiki/Gioco_di_ruolo), lunghe passeggiate sulla [spiaggia](https://it.wikipedia.org/wiki/Spiaggia) e una quarta cosa segreta."

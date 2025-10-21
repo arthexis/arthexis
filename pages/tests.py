@@ -1479,17 +1479,17 @@ class NavAppsTests(TestCase):
         )
         app = Application.objects.create(name="Readme")
         Module.objects.create(
-            node_role=role, application=app, path="/", is_default=True
+            node_role=role, application=app, path="/", is_default=True, menu="Recipes"
         )
 
     def test_nav_pill_renders(self):
         resp = self.client.get(reverse("pages:index"))
-        self.assertContains(resp, "README")
+        self.assertContains(resp, "RECIPES")
         self.assertContains(resp, "badge rounded-pill")
 
     def test_nav_pill_renders_with_port(self):
         resp = self.client.get(reverse("pages:index"), HTTP_HOST="127.0.0.1:8000")
-        self.assertContains(resp, "README")
+        self.assertContains(resp, "RECIPES")
 
     def test_nav_pill_uses_menu_field(self):
         site_app = Module.objects.get()
@@ -1497,7 +1497,7 @@ class NavAppsTests(TestCase):
         site_app.save()
         resp = self.client.get(reverse("pages:index"))
         self.assertContains(resp, 'badge rounded-pill text-bg-secondary">DOCS')
-        self.assertNotContains(resp, 'badge rounded-pill text-bg-secondary">README')
+        self.assertNotContains(resp, 'badge rounded-pill text-bg-secondary">RECIPES')
 
     def test_app_without_root_url_excluded(self):
         role = NodeRole.objects.get(name="Terminal")
@@ -1868,7 +1868,7 @@ class ControlNavTests(TestCase):
     def test_readme_pill_visible(self):
         resp = self.client.get(reverse("pages:readme"))
         self.assertContains(resp, 'href="/readme/"')
-        self.assertContains(resp, 'badge rounded-pill text-bg-secondary">README')
+        self.assertContains(resp, 'badge rounded-pill text-bg-secondary">RECIPES')
 
     def test_readme_page_includes_qr_share(self):
         resp = self.client.get(reverse("pages:readme"), {"section": "intro"})
@@ -1879,6 +1879,25 @@ class ControlNavTests(TestCase):
             resp,
             'data-url="http://testserver/readme/?section=intro"',
         )
+
+    def test_readme_document_by_name(self):
+        resp = self.client.get(reverse("pages:readme-document", args=["AGENTS.md"]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Agent Guidelines")
+
+    def test_readme_document_by_relative_path(self):
+        resp = self.client.get(
+            reverse(
+                "pages:readme-document",
+                args=["docs/development/maintenance-roadmap.md"],
+            )
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Maintenance Improvement Proposals")
+
+    def test_readme_document_rejects_traversal(self):
+        resp = self.client.get("/readme/../../SECRET.md")
+        self.assertEqual(resp.status_code, 404)
 
 
 class SatelliteNavTests(TestCase):
@@ -1951,7 +1970,7 @@ class SatelliteNavTests(TestCase):
     def test_readme_pill_visible(self):
         resp = self.client.get(reverse("pages:readme"))
         self.assertContains(resp, 'href="/readme/"')
-        self.assertContains(resp, 'badge rounded-pill text-bg-secondary">README')
+        self.assertContains(resp, 'badge rounded-pill text-bg-secondary">RECIPES')
 
 
 class PowerNavTests(TestCase):

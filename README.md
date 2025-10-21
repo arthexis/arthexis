@@ -122,6 +122,11 @@ Unknown prefixes remain in place (e.g. `[UNKNOWN.VALUE]`) and are logged. When t
 
 Contact us at [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) or visit our [web page](https://www.gelectriic.com/) for [professional services](https://en.wikipedia.org/wiki/Professional_services) and [commercial support](https://en.wikipedia.org/wiki/Technical_support).
 
+## Project Guidelines
+
+- [AGENTS](AGENTS.md) – operating handbook for repository workflows, testing, and release management.
+- [DESIGN](DESIGN.md) – visual, UX, and branding guidance that all interfaces must follow.
+
 ## About Me
 
 > "What, you want to know about me too? Well, I enjoy [developing software](https://en.wikipedia.org/wiki/Software_development), [role-playing games](https://en.wikipedia.org/wiki/Role-playing_game), long walks on the [beach](https://en.wikipedia.org/wiki/Beach) and a fourth secret thing."
