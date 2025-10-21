@@ -945,6 +945,7 @@ class TransactionAdmin(EntityModelAdmin):
     change_list_template = "admin/ocpp/transaction/change_list.html"
     list_display = (
         "charger",
+        "connector_number",
         "account",
         "rfid",
         "vid",
@@ -958,6 +959,12 @@ class TransactionAdmin(EntityModelAdmin):
     list_filter = ("charger", "account")
     date_hierarchy = "start_time"
     inlines = [MeterValueInline]
+
+    def connector_number(self, obj):
+        return obj.connector_id or ""
+
+    connector_number.short_description = "#"
+    connector_number.admin_order_field = "connector_id"
 
     def get_urls(self):
         urls = super().get_urls()
