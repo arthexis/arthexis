@@ -16,6 +16,7 @@ NGINX_MODE="internal"
 PORT=""
 AUTO_UPGRADE=false
 LATEST=false
+STABLE=false
 UPGRADE=false
 ENABLE_CELERY=false
 ENABLE_LCD_SCREEN=false
@@ -28,7 +29,7 @@ ENABLE_DATASETTE=true
 START_SERVICES=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest] [--satellite] [--terminal] [--control] [--constellation] [--celery] [--lcd-screen|--no-lcd-screen] [--datasette|--no-datasette] [--clean] [--start]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest|--stable] [--satellite] [--terminal] [--control] [--constellation] [--celery] [--lcd-screen|--no-lcd-screen] [--datasette|--no-datasette] [--clean] [--start]" >&2
     exit 1
 }
 
@@ -158,6 +159,10 @@ while [[ $# -gt 0 ]]; do
             LATEST=true
             shift
             ;;
+        --stable)
+            STABLE=true
+            shift
+            ;;
         --celery)
             ENABLE_CELERY=true
             shift
@@ -238,6 +243,11 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [ "$LATEST" = true ] && [ "$STABLE" = true ]; then
+    echo "--stable cannot be used together with --latest." >&2
+    exit 1
+fi
 
 if [ -z "$PORT" ]; then
     if [ "$NGINX_MODE" = "public" ]; then
@@ -698,14 +708,18 @@ fi
 
 if [ "$AUTO_UPGRADE" = true ]; then
     rm -f AUTO_UPGRADE
+    AUTO_UPGRADE_MODE="version"
     if [ "$LATEST" = true ]; then
-        echo "latest" > "$LOCK_DIR/auto_upgrade.lck"
-    else
-        echo "version" > "$LOCK_DIR/auto_upgrade.lck"
+        AUTO_UPGRADE_MODE="latest"
+    elif [ "$STABLE" = true ]; then
+        AUTO_UPGRADE_MODE="stable"
     fi
+    echo "$AUTO_UPGRADE_MODE" > "$LOCK_DIR/auto_upgrade.lck"
     if [ "$UPGRADE" = true ]; then
         if [ "$LATEST" = true ]; then
             ./upgrade.sh --latest
+        elif [ "$STABLE" = true ]; then
+            ./upgrade.sh --stable
         else
             ./upgrade.sh
         fi
@@ -720,6 +734,8 @@ PYCODE
 elif [ "$UPGRADE" = true ]; then
     if [ "$LATEST" = true ]; then
         ./upgrade.sh --latest
+    elif [ "$STABLE" = true ]; then
+        ./upgrade.sh --stable
     else
         ./upgrade.sh
     fi

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import re
 import subprocess
 from pathlib import Path
 import urllib.error
@@ -102,6 +103,21 @@ def _resolve_service_url(base_dir: Path) -> str:
     return f"http://127.0.0.1:{port}/"
 
 
+def _parse_major_minor(version: str) -> tuple[int, int] | None:
+    match = re.match(r"^\s*(\d+)\.(\d+)", version)
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def _shares_stable_series(local: str, remote: str) -> bool:
+    local_parts = _parse_major_minor(local)
+    remote_parts = _parse_major_minor(remote)
+    if not local_parts or not remote_parts:
+        return False
+    return local_parts == remote_parts
+
+
 @shared_task
 def check_github_updates() -> None:
     """Check the GitHub repo for updates and upgrade if needed."""
@@ -196,9 +212,16 @@ def check_github_updates() -> None:
             if startup:
                 startup()
             return
+        if mode == "stable" and _shares_stable_series(local, remote):
+            if startup:
+                startup()
+            return
         if notify:
             notify("Upgrading...", upgrade_stamp)
-        args = ["./upgrade.sh", "--no-restart"]
+        if mode == "stable":
+            args = ["./upgrade.sh", "--stable", "--no-restart"]
+        else:
+            args = ["./upgrade.sh", "--no-restart"]
         upgrade_was_applied = True
 
     with log_file.open("a") as fh:

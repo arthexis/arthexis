@@ -117,6 +117,7 @@ NO_RESTART=0
 REVERT=0
 NO_WARN=0
 FAILOVER_BRANCH_CREATED=0
+STABLE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --latest)
@@ -139,12 +140,21 @@ while [[ $# -gt 0 ]]; do
       NO_WARN=1
       shift
       ;;
+    --stable)
+      STABLE=1
+      shift
+      ;;
     *)
       echo "Unknown option: $1" >&2
       exit 1
       ;;
   esac
 done
+
+if [[ $FORCE -eq 1 && $STABLE -eq 1 ]]; then
+  echo "--stable cannot be used together with --latest." >&2
+  exit 1
+fi
 
 backup_database_for_branch() {
   local branch="$1"
@@ -243,6 +253,36 @@ cleanup_failover_branches() {
       echo "Failed to delete failover branch $branch" >&2
     fi
   done
+}
+
+versions_share_minor() {
+  local first="$1"
+  local second="$2"
+
+  local first_major=""
+  local first_minor=""
+  local second_major=""
+  local second_minor=""
+
+  if [[ $first =~ ^([0-9]+)\.([0-9]+) ]]; then
+    first_major="${BASH_REMATCH[1]}"
+    first_minor="${BASH_REMATCH[2]}"
+  else
+    return 1
+  fi
+
+  if [[ $second =~ ^([0-9]+)\.([0-9]+) ]]; then
+    second_major="${BASH_REMATCH[1]}"
+    second_minor="${BASH_REMATCH[2]}"
+  else
+    return 1
+  fi
+
+  if [[ $first_major == "$second_major" && $first_minor == "$second_minor" ]]; then
+    return 0
+  fi
+
+  return 1
 }
 
 confirm_database_deletion() {
@@ -379,9 +419,15 @@ if git cat-file -e "origin/$BRANCH:VERSION" 2>/dev/null; then
   REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r')
 fi
 
-if [[ $FORCE -ne 1 && "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
-  echo "Already up-to-date (version $LOCAL_VERSION)"
-  exit 0
+if [[ $FORCE -ne 1 ]]; then
+  if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
+    echo "Already up-to-date (version $LOCAL_VERSION)"
+    exit 0
+  fi
+  if [[ $STABLE -eq 1 ]] && versions_share_minor "$LOCAL_VERSION" "$REMOTE_VERSION"; then
+    echo "No new stable release available (local $LOCAL_VERSION, remote $REMOTE_VERSION)"
+    exit 0
+  fi
 fi
 
 create_failover_branch
@@ -551,4 +597,3 @@ if [[ $NO_RESTART -eq 0 ]]; then
   nohup ./start.sh >/dev/null 2>&1 &
   echo "Services restart triggered"
 fi
-
