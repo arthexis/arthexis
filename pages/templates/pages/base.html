@@ -28,10 +28,6 @@
         flex-shrink: 0;
       }
       nav.toc {
-        position: sticky;
-        top: 1rem;
-        max-height: calc(100vh - 2rem);
-        overflow-y: auto;
         font-size: 0.9rem;
         border-left: 1px solid #dee2e6;
         padding-left: 1rem;
@@ -60,6 +56,23 @@
       }
       .nav-item.dropdown .nav-link::after {
         display: none;
+      }
+      @media (min-width: 992px) {
+        .reader-sidebar {
+          position: sticky;
+          top: 1rem;
+          max-height: calc(100vh - 2rem);
+          display: flex;
+          flex-direction: column;
+        }
+        .reader-sidebar nav.toc {
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow-y: auto;
+        }
+        .reader-sidebar .reader-qr-card {
+          flex-shrink: 0;
+        }
       }
       .reader-qr-card .card-body {
         display: flex;

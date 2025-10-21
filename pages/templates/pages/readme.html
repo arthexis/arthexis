@@ -6,19 +6,21 @@
 <div class="row">
   {% if toc %}
   <div class="col-12 col-lg-3 mb-4 mb-lg-0">
-    <nav class="toc">
-      <h4>Contents</h4>
-      {{ toc|safe }}
-    </nav>
-    <div class="card bg-body-tertiary border-0 shadow-sm mt-4 reader-qr-card">
-      <div class="card-body">
-        <div
-          id="reader-qr"
-          class="reader-qr-image"
-          data-url="{{ page_url }}"
-          role="img"
-          aria-label="{% trans 'QR code linking to this page' %}"
-        ></div>
+    <div class="reader-sidebar">
+      <nav class="toc">
+        <h4>Contents</h4>
+        {{ toc|safe }}
+      </nav>
+      <div class="card bg-body-tertiary border-0 shadow-sm mt-4 reader-qr-card">
+        <div class="card-body">
+          <div
+            id="reader-qr"
+            class="reader-qr-image"
+            data-url="{{ page_url }}"
+            role="img"
+            aria-label="{% trans 'QR code linking to this page' %}"
+          ></div>
+        </div>
       </div>
     </div>
   </div>
