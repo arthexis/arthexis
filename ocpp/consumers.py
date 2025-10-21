@@ -138,6 +138,18 @@ def _parse_ocpp_timestamp(value) -> datetime | None:
     return timestamp
 
 
+def _extract_vehicle_identifier(payload: dict) -> tuple[str, str]:
+    """Return normalized VID and VIN values from an OCPP message payload."""
+
+    raw_vid = payload.get("vid")
+    vid_value = str(raw_vid).strip() if raw_vid is not None else ""
+    raw_vin = payload.get("vin")
+    vin_value = str(raw_vin).strip() if raw_vin is not None else ""
+    if not vid_value and vin_value:
+        vid_value = vin_value
+    return vid_value, vin_value
+
+
 class SinkConsumer(AsyncWebsocketConsumer):
     """Accept any message without validation."""
 
@@ -1538,17 +1550,13 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         self._log_unlinked_rfid(tag.rfid)
                     start_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
                     received_start = timezone.now()
-                    vid_value = payload.get("vid")
-                    if vid_value is None:
-                        vid_value = ""
-                    else:
-                        vid_value = str(vid_value)
+                    vid_value, vin_value = _extract_vehicle_identifier(payload)
                     tx_obj = await database_sync_to_async(Transaction.objects.create)(
                         charger=self.charger,
                         account=account,
                         rfid=(id_tag or ""),
                         vid=vid_value,
-                        vin=(payload.get("vin") or ""),
+                        vin=vin_value,
                         connector_id=payload.get("connectorId"),
                         meter_start=payload.get("meterStart"),
                         start_time=start_timestamp or received_start,
@@ -1574,11 +1582,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     )()
                 if not tx_obj and tx_id is not None:
                     received_start = timezone.now()
-                    vid_value = payload.get("vid")
-                    if vid_value is None:
-                        vid_value = ""
-                    else:
-                        vid_value = str(vid_value)
+                    vid_value, vin_value = _extract_vehicle_identifier(payload)
                     tx_obj = await database_sync_to_async(Transaction.objects.create)(
                         pk=tx_id,
                         charger=self.charger,
@@ -1587,15 +1591,17 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         meter_start=payload.get("meterStart")
                         or payload.get("meterStop"),
                         vid=vid_value,
-                        vin=(payload.get("vin") or ""),
+                        vin=vin_value,
                     )
                 if tx_obj:
                     stop_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
                     received_stop = timezone.now()
                     tx_obj.meter_stop = payload.get("meterStop")
-                    vid_value = payload.get("vid")
-                    if vid_value is not None:
-                        tx_obj.vid = str(vid_value)
+                    vid_value, vin_value = _extract_vehicle_identifier(payload)
+                    if vid_value:
+                        tx_obj.vid = vid_value
+                    if vin_value:
+                        tx_obj.vin = vin_value
                     tx_obj.stop_time = stop_timestamp or received_stop
                     tx_obj.received_stop_time = received_stop
                     await database_sync_to_async(tx_obj.save)()

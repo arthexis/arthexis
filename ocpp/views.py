@@ -260,19 +260,34 @@ def _transaction_rfid_details(
             cache[cache_key] = details
         return details
 
-    vid_value = getattr(tx_obj, "vid", None)
-    normalized_vid = str(vid_value or "").strip()
-    if not normalized_vid:
+    identifier_value = getattr(tx_obj, "vehicle_identifier", None)
+    normalized_identifier = str(identifier_value or "").strip()
+    if not normalized_identifier:
+        vid_value = getattr(tx_obj, "vid", None)
+        vin_value = getattr(tx_obj, "vin", None)
+        normalized_identifier = str(vid_value or vin_value or "").strip()
+    if not normalized_identifier:
         return None
-    cache_key = f"vid:{normalized_vid}"
+    source = getattr(tx_obj, "vehicle_identifier_source", "") or "vid"
+    if source not in {"vid", "vin"}:
+        vid_raw = getattr(tx_obj, "vid", None)
+        vin_raw = getattr(tx_obj, "vin", None)
+        if str(vid_raw or "").strip():
+            source = "vid"
+        elif str(vin_raw or "").strip():
+            source = "vin"
+        else:
+            source = "vid"
+    cache_key = f"{source}:{normalized_identifier}"
     if cache is not None and cache_key in cache:
         return cache[cache_key]
+    label = gettext("VID") if source == "vid" else gettext("VIN")
     details = {
-        "value": normalized_vid,
+        "value": normalized_identifier,
         "url": None,
         "uid": None,
-        "type": "vid",
-        "display_label": gettext("VID"),
+        "type": source,
+        "display_label": label,
     }
     if cache is not None:
         cache[cache_key] = details
@@ -543,10 +558,12 @@ def charger_list(request):
                 "meterStart": tx_obj.meter_start,
                 "startTime": tx_obj.start_time.isoformat(),
             }
-            if tx_obj.vin:
-                tx_data["vin"] = tx_obj.vin
-            if tx_obj.vid:
-                tx_data["vid"] = tx_obj.vid
+            identifier = str(getattr(tx_obj, "vehicle_identifier", "") or "").strip()
+            if identifier:
+                tx_data["vid"] = identifier
+            legacy_vin = str(getattr(tx_obj, "vin", "") or "").strip()
+            if legacy_vin:
+                tx_data["vin"] = legacy_vin
             if tx_obj.meter_stop is not None:
                 tx_data["meterStop"] = tx_obj.meter_stop
             if tx_obj.stop_time is not None:
@@ -561,10 +578,12 @@ def charger_list(request):
                 "meterStart": session_tx.meter_start,
                 "startTime": session_tx.start_time.isoformat(),
             }
-            if session_tx.vin:
-                active_payload["vin"] = session_tx.vin
-            if session_tx.vid:
-                active_payload["vid"] = session_tx.vid
+            identifier = str(getattr(session_tx, "vehicle_identifier", "") or "").strip()
+            if identifier:
+                active_payload["vid"] = identifier
+            legacy_vin = str(getattr(session_tx, "vin", "") or "").strip()
+            if legacy_vin:
+                active_payload["vin"] = legacy_vin
             if session_tx.meter_stop is not None:
                 active_payload["meterStop"] = session_tx.meter_stop
             if session_tx.stop_time is not None:
@@ -644,10 +663,12 @@ def charger_detail(request, cid, connector=None):
             "meterStart": tx_obj.meter_start,
             "startTime": tx_obj.start_time.isoformat(),
         }
-        if tx_obj.vin:
-            tx_data["vin"] = tx_obj.vin
-        if tx_obj.vid:
-            tx_data["vid"] = tx_obj.vid
+        identifier = str(getattr(tx_obj, "vehicle_identifier", "") or "").strip()
+        if identifier:
+            tx_data["vid"] = identifier
+        legacy_vin = str(getattr(tx_obj, "vin", "") or "").strip()
+        if legacy_vin:
+            tx_data["vin"] = legacy_vin
         if tx_obj.meter_stop is not None:
             tx_data["meterStop"] = tx_obj.meter_stop
         if tx_obj.stop_time is not None:
@@ -663,10 +684,12 @@ def charger_detail(request, cid, connector=None):
             "meterStart": session_tx.meter_start,
             "startTime": session_tx.start_time.isoformat(),
         }
-        if session_tx.vin:
-            payload["vin"] = session_tx.vin
-        if session_tx.vid:
-            payload["vid"] = session_tx.vid
+        identifier = str(getattr(session_tx, "vehicle_identifier", "") or "").strip()
+        if identifier:
+            payload["vid"] = identifier
+        legacy_vin = str(getattr(session_tx, "vin", "") or "").strip()
+        if legacy_vin:
+            payload["vin"] = legacy_vin
         if session_tx.meter_stop is not None:
             payload["meterStop"] = session_tx.meter_stop
         if session_tx.stop_time is not None:

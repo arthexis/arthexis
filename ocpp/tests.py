@@ -67,7 +67,7 @@ from .models import (
     DataTransferMessage,
 )
 from .consumers import CSMSConsumer
-from .views import dispatch_action
+from .views import dispatch_action, _transaction_rfid_details
 from .status_display import STATUS_BADGE_MAP
 from core.models import EnergyAccount, EnergyCredit, Reference, RFID, SecurityGroup
 from . import store
@@ -1109,7 +1109,7 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
-    async def test_vin_recorded(self):
+    async def test_vid_populated_from_vin(self):
         await database_sync_to_async(Charger.objects.create)(charger_id="VINREC")
         communicator = WebsocketCommunicator(application, "/VINREC/")
         connected, _ = await communicator.connect()
@@ -1124,7 +1124,9 @@ class CSMSConsumerTests(TransactionTestCase):
         tx = await database_sync_to_async(Transaction.objects.get)(
             pk=tx_id, charger__charger_id="VINREC"
         )
-        self.assertEqual(tx.vin, "WP0ZZZ11111111111")
+        self.assertEqual(tx.vid, "WP0ZZZ11111111111")
+        self.assertEqual(tx.vehicle_identifier, "WP0ZZZ11111111111")
+        self.assertEqual(tx.vehicle_identifier_source, "vid")
 
         await communicator.disconnect()
 
@@ -4027,6 +4029,43 @@ class TransactionKwTests(TestCase):
         charger = Charger.objects.create(charger_id="SUM2")
         tx = Transaction.objects.create(charger=charger, start_time=timezone.now())
         self.assertEqual(tx.kw, 0.0)
+
+
+class TransactionIdentifierTests(TestCase):
+    def test_vehicle_identifier_prefers_vid(self):
+        charger = Charger.objects.create(charger_id="VIDPREF")
+        tx = Transaction.objects.create(
+            charger=charger,
+            start_time=timezone.now(),
+            vid="VID-123",
+            vin="VIN-456",
+        )
+        self.assertEqual(tx.vehicle_identifier, "VID-123")
+        self.assertEqual(tx.vehicle_identifier_source, "vid")
+
+    def test_vehicle_identifier_falls_back_to_vin(self):
+        charger = Charger.objects.create(charger_id="VINONLY")
+        tx = Transaction.objects.create(
+            charger=charger,
+            start_time=timezone.now(),
+            vin="WP0ZZZ00000000001",
+        )
+        self.assertEqual(tx.vehicle_identifier, "WP0ZZZ00000000001")
+        self.assertEqual(tx.vehicle_identifier_source, "vin")
+
+    def test_transaction_rfid_details_handles_vin(self):
+        charger = Charger.objects.create(charger_id="VINDET")
+        tx = Transaction.objects.create(
+            charger=charger,
+            start_time=timezone.now(),
+            vin="WAUZZZ00000000002",
+        )
+        details = _transaction_rfid_details(tx, cache={})
+        self.assertIsNotNone(details)
+        assert details is not None  # for type checkers
+        self.assertEqual(details["value"], "WAUZZZ00000000002")
+        self.assertEqual(details["display_label"], "VIN")
+        self.assertEqual(details["type"], "vin")
 
 
 class DispatchActionViewTests(TestCase):

@@ -149,8 +149,10 @@ def send_daily_session_report() -> int:
         lines.append(f"   Account: {account}")
         if transaction.rfid:
             lines.append(f"   RFID: {transaction.rfid}")
-        if transaction.vid:
-            lines.append(f"   VID: {transaction.vid}")
+        identifier = transaction.vehicle_identifier
+        if identifier:
+            label = "VID" if transaction.vehicle_identifier_source == "vid" else "VIN"
+            lines.append(f"   {label}: {identifier}")
         if connector:
             lines.append(f"   {connector}")
         lines.append(
