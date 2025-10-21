@@ -1865,6 +1865,23 @@ class ControlNavTests(TestCase):
         self.assertFalse(resp.context["header_references"])
         self.assertNotContains(resp, "https://example.com/hidden")
 
+    def test_header_link_hidden_when_only_site_matches(self):
+        terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        site = Site.objects.get(domain="testserver")
+        reference = Reference.objects.create(
+            alt_text="Restricted",
+            value="https://example.com/restricted",
+            show_in_header=True,
+        )
+        reference.roles.add(terminal_role)
+        reference.sites.add(site)
+
+        resp = self.client.get(reverse("pages:index"))
+
+        self.assertIn("header_references", resp.context)
+        self.assertFalse(resp.context["header_references"])
+        self.assertNotContains(resp, "https://example.com/restricted")
+
     def test_readme_pill_visible(self):
         resp = self.client.get(reverse("pages:readme"))
         self.assertContains(resp, 'href="/read/"')

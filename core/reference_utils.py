@@ -70,17 +70,16 @@ def filter_visible_references(
         required_sites = {current_site.pk for current_site in ref.sites.all()}
 
         if required_roles or required_features or required_sites:
-            allowed = False
-            if required_roles and node_role_id and node_role_id in required_roles:
-                allowed = True
-            elif (
-                required_features
-                and node_active_feature_ids
-                and node_active_feature_ids.intersection(required_features)
-            ):
-                allowed = True
-            elif required_sites and site_id and site_id in required_sites:
-                allowed = True
+            allowed = True
+            if required_roles:
+                allowed = bool(node_role_id and node_role_id in required_roles)
+            if allowed and required_features:
+                allowed = bool(
+                    node_active_feature_ids
+                    and node_active_feature_ids.intersection(required_features)
+                )
+            if allowed and required_sites:
+                allowed = bool(site_id and site_id in required_sites)
 
             if not allowed:
                 continue
