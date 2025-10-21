@@ -1,7 +1,7 @@
 {% extends "admin/base_site.html" %}
 {% load i18n tz %}
 {% block content %}
-<h1>Consumer Report</h1>
+<h1>Client Report</h1>
 <form method="post" id="report-form" class="client-report-form">
   {% csrf_token %}
   {% if form.non_field_errors %}
