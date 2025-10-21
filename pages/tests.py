@@ -1873,11 +1873,13 @@ class ControlNavTests(TestCase):
     def test_readme_page_includes_qr_share(self):
         resp = self.client.get(reverse("pages:readme"), {"section": "intro"})
         self.assertContains(resp, 'id="reader-qr"')
-        self.assertContains(resp, "Scan this page")
-        self.assertContains(resp, "http://testserver/readme/?section=intro")
         self.assertContains(
             resp,
             'data-url="http://testserver/readme/?section=intro"',
+        )
+        self.assertNotContains(resp, "Scan this page")
+        self.assertNotContains(
+            resp, 'class="small text-break text-muted mt-3 mb-0"'
         )
 
 

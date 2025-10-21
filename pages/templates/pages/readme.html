@@ -11,16 +11,14 @@
       {{ toc|safe }}
     </nav>
     <div class="card bg-body-tertiary border-0 shadow-sm mt-4 reader-qr-card">
-      <div class="card-body text-center">
-        <h5 class="card-title">{% trans "Scan this page" %}</h5>
+      <div class="card-body">
         <div
           id="reader-qr"
-          class="mx-auto reader-qr-image"
+          class="reader-qr-image"
           data-url="{{ page_url }}"
           role="img"
           aria-label="{% trans 'QR code linking to this page' %}"
         ></div>
-        <p class="small text-break text-muted mt-3 mb-0">{{ page_url }}</p>
       </div>
     </div>
   </div>
