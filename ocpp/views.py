@@ -224,37 +224,58 @@ def _transaction_rfid_details(
     if not tx_obj:
         return None
     rfid_value = getattr(tx_obj, "rfid", None)
-    if not rfid_value:
+    normalized = str(rfid_value or "").strip().upper()
+    cache_key = normalized
+    if normalized:
+        if cache is not None and cache_key in cache:
+            return cache[cache_key]
+        tag = (
+            RFID.objects.filter(rfid=normalized)
+            .only("pk", "label_id", "custom_label")
+            .first()
+        )
+        rfid_url = None
+        label_value = None
+        if tag:
+            try:
+                rfid_url = reverse("admin:core_rfid_change", args=[tag.pk])
+            except NoReverseMatch:  # pragma: no cover - admin may be disabled
+                rfid_url = None
+            custom_label = (tag.custom_label or "").strip()
+            if custom_label:
+                label_value = custom_label
+            elif tag.label_id is not None:
+                label_value = str(tag.label_id)
+        display_value = label_value or normalized
+        details = {
+            "value": display_value,
+            "url": rfid_url,
+            "uid": normalized,
+            "type": "rfid",
+            "display_label": gettext("RFID"),
+        }
+        if label_value:
+            details["label"] = label_value
+        if cache is not None:
+            cache[cache_key] = details
+        return details
+
+    vid_value = getattr(tx_obj, "vid", None)
+    normalized_vid = str(vid_value or "").strip()
+    if not normalized_vid:
         return None
-    normalized = str(rfid_value).strip()
-    if not normalized:
-        return None
-    normalized = normalized.upper()
-    if cache is not None and normalized in cache:
-        return cache[normalized]
-    tag = (
-        RFID.objects.filter(rfid=normalized)
-        .only("pk", "label_id", "custom_label")
-        .first()
-    )
-    rfid_url = None
-    label_value = None
-    if tag:
-        try:
-            rfid_url = reverse("admin:core_rfid_change", args=[tag.pk])
-        except NoReverseMatch:  # pragma: no cover - admin may be disabled
-            rfid_url = None
-        custom_label = (tag.custom_label or "").strip()
-        if custom_label:
-            label_value = custom_label
-        elif tag.label_id is not None:
-            label_value = str(tag.label_id)
-    display_value = label_value or normalized
-    details = {"value": display_value, "url": rfid_url, "uid": normalized}
-    if label_value:
-        details["label"] = label_value
+    cache_key = f"vid:{normalized_vid}"
+    if cache is not None and cache_key in cache:
+        return cache[cache_key]
+    details = {
+        "value": normalized_vid,
+        "url": None,
+        "uid": None,
+        "type": "vid",
+        "display_label": gettext("VID"),
+    }
     if cache is not None:
-        cache[normalized] = details
+        cache[cache_key] = details
     return details
 
 
@@ -524,6 +545,8 @@ def charger_list(request):
             }
             if tx_obj.vin:
                 tx_data["vin"] = tx_obj.vin
+            if tx_obj.vid:
+                tx_data["vid"] = tx_obj.vid
             if tx_obj.meter_stop is not None:
                 tx_data["meterStop"] = tx_obj.meter_stop
             if tx_obj.stop_time is not None:
@@ -540,6 +563,8 @@ def charger_list(request):
             }
             if session_tx.vin:
                 active_payload["vin"] = session_tx.vin
+            if session_tx.vid:
+                active_payload["vid"] = session_tx.vid
             if session_tx.meter_stop is not None:
                 active_payload["meterStop"] = session_tx.meter_stop
             if session_tx.stop_time is not None:
@@ -621,6 +646,8 @@ def charger_detail(request, cid, connector=None):
         }
         if tx_obj.vin:
             tx_data["vin"] = tx_obj.vin
+        if tx_obj.vid:
+            tx_data["vid"] = tx_obj.vid
         if tx_obj.meter_stop is not None:
             tx_data["meterStop"] = tx_obj.meter_stop
         if tx_obj.stop_time is not None:
@@ -638,6 +665,8 @@ def charger_detail(request, cid, connector=None):
         }
         if session_tx.vin:
             payload["vin"] = session_tx.vin
+        if session_tx.vid:
+            payload["vid"] = session_tx.vid
         if session_tx.meter_stop is not None:
             payload["meterStop"] = session_tx.meter_stop
         if session_tx.stop_time is not None:

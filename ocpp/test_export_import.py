@@ -111,6 +111,7 @@ class TransactionAdminExportImportTests(TestCase):
                     "charger": "C9",
                     "account": None,
                     "rfid": "",
+                    "vid": "",
                     "vin": "",
                     "meter_start": 0,
                     "meter_stop": 0,

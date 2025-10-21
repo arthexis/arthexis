@@ -935,6 +935,7 @@ class TransactionAdmin(EntityModelAdmin):
         "charger",
         "account",
         "rfid",
+        "vid",
         "meter_start",
         "meter_stop",
         "start_time",

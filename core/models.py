@@ -2795,7 +2795,10 @@ class ClientReport(Entity):
     def build_rows(start_date=None, end_date=None, *, for_display: bool = False):
         from ocpp.models import Transaction
 
-        qs = Transaction.objects.exclude(rfid="")
+        qs = Transaction.objects.filter(
+            (Q(rfid__isnull=False) & ~Q(rfid=""))
+            | (Q(vid__isnull=False) & ~Q(vid=""))
+        )
         if start_date:
             from datetime import datetime, time, timedelta, timezone as pytimezone
 
@@ -2841,7 +2844,7 @@ class ClientReport(Entity):
                         subject = str(tag.label_id)
 
             if subject is None:
-                subject = tx.rfid
+                subject = tx.rfid or tx.vid
 
             start_value = tx.start_time
             end_value = tx.stop_time
@@ -2853,6 +2856,7 @@ class ClientReport(Entity):
                 {
                     "subject": subject,
                     "rfid": tx.rfid,
+                    "vid": tx.vid,
                     "kw": energy,
                     "start": start_value,
                     "end": end_value,

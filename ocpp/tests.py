@@ -1128,6 +1128,26 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_vid_recorded(self):
+        await database_sync_to_async(Charger.objects.create)(charger_id="VIDREC")
+        communicator = WebsocketCommunicator(application, "/VIDREC/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [2, "1", "StartTransaction", {"meterStart": 1, "vid": "VID123456"}]
+        )
+        response = await communicator.receive_json_from()
+        tx_id = response[2]["transactionId"]
+
+        tx = await database_sync_to_async(Transaction.objects.get)(
+            pk=tx_id, charger__charger_id="VIDREC"
+        )
+        self.assertEqual(tx.vid, "VID123456")
+        self.assertEqual(tx.rfid, "")
+
+        await communicator.disconnect()
+
     async def test_connector_id_set_from_meter_values(self):
         communicator = WebsocketCommunicator(application, "/NEWCID/")
         connected, _ = await communicator.connect()

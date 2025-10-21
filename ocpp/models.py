@@ -599,6 +599,13 @@ class Transaction(Entity):
         blank=True,
         verbose_name=_("RFID"),
     )
+    vid = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        verbose_name=_("VID"),
+        help_text=_("Vehicle identifier reported by the charger."),
+    )
     vin = models.CharField(max_length=17, blank=True)
     connector_id = models.PositiveIntegerField(null=True, blank=True)
     meter_start = models.IntegerField(null=True, blank=True)
