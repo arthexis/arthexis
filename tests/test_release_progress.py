@@ -385,6 +385,43 @@ class ReleaseProgressViewTests(TestCase):
             messages,
         )
 
+    @mock.patch("core.views._ensure_log_directory")
+    @mock.patch("core.views.select_log_dir")
+    def test_release_log_dir_restores_env_override(
+        self, select_log_dir, ensure_log_directory
+    ):
+        override = Path("logs-env-override")
+        override.mkdir(parents=True, exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(override, ignore_errors=True))
+
+        previous = os.environ.get("ARTHEXIS_LOG_DIR")
+        os.environ["ARTHEXIS_LOG_DIR"] = str(override)
+
+        def restore_env() -> None:
+            if previous is None:
+                os.environ.pop("ARTHEXIS_LOG_DIR", None)
+            else:
+                os.environ["ARTHEXIS_LOG_DIR"] = previous
+
+        self.addCleanup(restore_env)
+
+        original_log_dir = settings.LOG_DIR
+        self.addCleanup(lambda: setattr(settings, "LOG_DIR", original_log_dir))
+
+        select_log_dir.return_value = override
+        ensure_log_directory.side_effect = [
+            (False, PermissionError("denied")),
+            (True, None),
+        ]
+
+        fallback, warning = core_views._resolve_release_log_dir(
+            Path("logs-unwritable-env")
+        )
+
+        self.assertEqual(fallback, override)
+        self.assertEqual(os.environ["ARTHEXIS_LOG_DIR"], str(override))
+        self.assertIsNotNone(warning)
+
     @mock.patch("core.views._append_log", wraps=core_views._append_log)
     @mock.patch("core.views._sync_with_origin_main")
     @mock.patch("core.views.select_log_dir")
