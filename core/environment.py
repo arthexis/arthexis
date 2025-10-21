@@ -39,7 +39,7 @@ def _config_view(request):
 
 
 def patch_admin_environment_view() -> None:
-    """Add custom admin view for environment information."""
+    """Register the Environment and Config admin views on the main admin site."""
     original_get_urls = admin.site.get_urls
 
     def get_urls():
