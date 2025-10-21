@@ -1,7 +1,7 @@
 {% extends "pages/base.html" %}
 {% load i18n tz %}
 {% block content %}
-<h1>{% trans "Consumer Report" %}</h1>
+<h1>{% trans "Client Report" %}</h1>
 {% if report %}
   <section class="report-results" id="client-report-results">
     <h2>{% blocktrans with start=report.start_date end=report.end_date %}Report from {{ start }} to {{ end }}{% endblocktrans %}</h2>

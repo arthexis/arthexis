@@ -5538,7 +5538,7 @@ msgid "Light Mode"
 msgstr "Modo Claro"
 
 #: pages/templates/pages/client_report.html:4
-msgid "Consumer Report"
+msgid "Client Report"
 msgstr ""
 
 #: pages/templates/pages/client_report.html:87
