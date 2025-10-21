@@ -10,7 +10,7 @@ from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.db import connection
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models import Model
 from django.db.models.signals import post_delete, post_save
 from django.conf import settings
@@ -417,26 +417,25 @@ def charger_availability_stats(context):
     cache_key = "_charger_availability_stats"
     stats = context.get(cache_key)
     if stats is None:
-        counts = Charger.objects.aggregate(
-            available_total=Count(
-                "pk", filter=Q(last_status__iexact="Available")
-            ),
-            available_with_cp_number=Count(
-                "pk",
-                filter=Q(
-                    last_status__iexact="Available",
-                    connector_id__isnull=False,
-                ),
-            ),
+        available = Charger.objects.filter(last_status__iexact="Available")
+        available_with_cp_number = available.filter(
+            connector_id__isnull=False
+        ).count()
+
+        available_without_cp_number = available.filter(connector_id__isnull=True)
+        has_connector = Charger.objects.filter(
+            charger_id=OuterRef("charger_id"),
+            connector_id__isnull=False,
         )
-        available_total = counts.get("available_total") or 0
-        available_with_cp_number = counts.get("available_with_cp_number") or 0
+        missing_connector_count = available_without_cp_number.annotate(
+            has_connector=Exists(has_connector)
+        ).filter(has_connector=False).count()
+
+        available_total = available_with_cp_number + missing_connector_count
         stats = {
             "available_total": available_total,
             "available_with_cp_number": available_with_cp_number,
-            "available_missing_cp_number": max(
-                available_total - available_with_cp_number, 0
-            ),
+            "available_missing_cp_number": missing_connector_count,
         }
         context[cache_key] = stats
     return stats
