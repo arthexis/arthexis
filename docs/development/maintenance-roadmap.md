@@ -1,11 +1,11 @@
 # Maintenance Improvement Proposals
 
 ## 1. Modularize and Test Settings Helpers
-- **Current state:** `config/settings.py` is a 700+ line module that mixes Django defaults with bespoke helpers such as `_validate_host_with_subnets` and `_load_secret_key`, and it monkeypatches `django.http.request.validate_host` in place. 【F:config/settings.py†L13-L90】【F:config/settings.py†L103-L150】
+- **Current state:** `config/settings_helpers.py` now hosts the extracted helpers for loading the Django secret key and installing the subnet-aware host validator, while `config/settings.py` still imports them and performs the monkeypatch during module import without dedicated integration coverage. 【F:config/settings_helpers.py†L1-L90】【F:config/settings.py†L31-L74】
 - **Proposed actions:**
-  - Extract the helper functions and monkeypatch into a dedicated module (for example `config/hosts.py`) that can be imported from settings.
-  - Add targeted unit tests that exercise IPv4/IPv6 subnet handling and secret-key persistence outside of the Django settings import path.
-  - Slim the remaining settings file to focus on declarative configuration, improving readability and making future upgrades less risky.
+  - Add integration and middleware-level tests that exercise `install_validate_host_with_subnets` alongside CSRF origin checks to guard against regressions when Django updates its host validation behavior. 【F:config/settings.py†L96-L143】
+  - Consolidate duplicated hostname logic (e.g. `_host_is_allowed`, `_iter_local_hostnames`) around the shared helpers so that monkeypatch responsibilities and hostname normalization live in one place. 【F:config/settings.py†L76-L143】
+  - Document how the helper module should be extended during future settings refactors so contributors understand which logic belongs in `config/settings_helpers.py` versus the main settings file. 【F:config/settings_helpers.py†L1-L90】【F:config/settings.py†L31-L143】
 
 ## 2. Separate Runtime and Tooling Dependencies
 - **Current state:** `pyproject.toml` lists developer tooling (e.g. `black`, `twine`, `selenium`) alongside runtime dependencies, so production installs pull in packages that are only needed for development or publishing. 【F:pyproject.toml†L1-L40】
