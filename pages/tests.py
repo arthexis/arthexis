@@ -1867,11 +1867,11 @@ class ControlNavTests(TestCase):
 
     def test_readme_pill_visible(self):
         resp = self.client.get(reverse("pages:readme"))
-        self.assertContains(resp, 'href="/readme/"')
+        self.assertContains(resp, 'href="/read/"')
         self.assertContains(resp, 'badge rounded-pill text-bg-secondary">COOKBOOK')
 
     def test_cookbook_pill_has_no_dropdown(self):
-        module = Module.objects.get(node_role__name="Control", path="/readme/")
+        module = Module.objects.get(node_role__name="Control", path="/read/")
         Landing.objects.create(
             module=module,
             path="/man/",
@@ -1883,7 +1883,7 @@ class ControlNavTests(TestCase):
 
         self.assertContains(
             resp,
-            '<a class="nav-link" href="/readme/"><span class="badge rounded-pill text-bg-secondary">COOKBOOK</span></a>',
+            '<a class="nav-link" href="/read/"><span class="badge rounded-pill text-bg-secondary">COOKBOOK</span></a>',
             html=True,
         )
         self.assertNotContains(resp, 'dropdown-item" href="/man/"')
@@ -1893,7 +1893,7 @@ class ControlNavTests(TestCase):
         self.assertContains(resp, 'id="reader-qr"')
         self.assertContains(
             resp,
-            'data-url="http://testserver/readme/?section=intro"',
+            'data-url="http://testserver/read/?section=intro"',
         )
         self.assertNotContains(resp, "Scan this page")
         self.assertNotContains(
@@ -1916,7 +1916,7 @@ class ControlNavTests(TestCase):
         self.assertContains(resp, "Maintenance Improvement Proposals")
 
     def test_readme_document_rejects_traversal(self):
-        resp = self.client.get("/readme/../../SECRET.md")
+        resp = self.client.get("/read/../../SECRET.md")
         self.assertEqual(resp.status_code, 404)
 
 
@@ -1989,7 +1989,7 @@ class SatelliteNavTests(TestCase):
 
     def test_readme_pill_visible(self):
         resp = self.client.get(reverse("pages:readme"))
-        self.assertContains(resp, 'href="/readme/"')
+        self.assertContains(resp, 'href="/read/"')
         self.assertContains(resp, 'badge rounded-pill text-bg-secondary">COOKBOOK')
 
 
