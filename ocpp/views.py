@@ -11,6 +11,7 @@ from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
 from django.utils.translation import gettext_lazy as _, gettext, ngettext
+from django.utils.text import slugify
 from django.urls import NoReverseMatch, reverse
 from django.conf import settings
 from django.utils import translation, timezone
@@ -1234,8 +1235,11 @@ def charger_log_page(request, cid, connector=None):
             charger_id=cid
         )
         target_id = cid
+
+    slug_source = slugify(target_id) or slugify(cid) or "log"
+    filename_parts = [log_type, slug_source]
+    download_filename = f"{'-'.join(part for part in filename_parts if part)}.log"
     limit_options = [
-        {"value": "10", "label": "10"},
         {"value": "20", "label": "20"},
         {"value": "40", "label": "40"},
         {"value": "100", "label": "100"},
@@ -1245,15 +1249,35 @@ def charger_log_page(request, cid, connector=None):
     limit_choice = request.GET.get("limit", "20")
     if limit_choice not in allowed_values:
         limit_choice = "20"
+    limit_index = allowed_values.index(limit_choice)
 
-    log_entries = list(store.get_logs(target_id, log_type=log_type) or [])
+    log_entries_all = list(store.get_logs(target_id, log_type=log_type) or [])
+    download_requested = request.GET.get("download") == "1"
+    if download_requested:
+        download_content = "\n".join(log_entries_all)
+        if download_content and not download_content.endswith("\n"):
+            download_content = f"{download_content}\n"
+        response = HttpResponse(download_content, content_type="text/plain; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{download_filename}"'
+        return response
+
+    log_entries = log_entries_all
     if limit_choice != "all":
         try:
             limit_value = int(limit_choice)
         except (TypeError, ValueError):
             limit_value = 20
             limit_choice = "20"
+            limit_index = allowed_values.index(limit_choice)
         log_entries = log_entries[-limit_value:]
+
+    download_params = request.GET.copy()
+    download_params["download"] = "1"
+    download_params.pop("limit", None)
+    download_query = download_params.urlencode()
+    log_download_url = f"{request.path}?{download_query}" if download_query else request.path
+
+    limit_label = limit_options[limit_index]["label"]
     return render(
         request,
         "ocpp/charger_logs.html",
@@ -1265,7 +1289,11 @@ def charger_log_page(request, cid, connector=None):
             "connector_links": connector_links,
             "status_url": status_url,
             "log_limit_options": limit_options,
-            "log_limit_index": allowed_values.index(limit_choice),
+            "log_limit_index": limit_index,
+            "log_limit_choice": limit_choice,
+            "log_limit_label": limit_label,
+            "log_download_url": log_download_url,
+            "log_filename": download_filename,
         },
     )
 

@@ -30,8 +30,29 @@
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
-      align-items: center;
+      align-items: flex-start;
       margin-bottom: 12px;
+    }
+    .log-viewer-heading {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .log-viewer-heading h2 {
+      margin: 0;
+    }
+    .log-viewer-slider {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 200px;
+    }
+    .log-viewer-slider label {
+      font-weight: 600;
+    }
+    .log-viewer-slider input[type="range"] {
+      min-width: 200px;
     }
     .log-viewer-content {
       max-height: 60vh;
@@ -65,7 +86,6 @@
 {% block content %}
 <div id="content-main">
   <div class="module log-viewer-module">
-    <h1>{% translate "Log viewer" %}</h1>
     <form method="get" class="log-viewer-form" aria-label="{% translate 'Select log file' %}">
       <label for="id_log">{% translate "Log file" %}</label>
       <select id="id_log" name="log">
@@ -90,7 +110,32 @@
       {% translate 'Copy failed. Use your browser copy command instead.' as copy_error %}
       {% translate 'Copy to clipboard' as copy_label %}
       <div class="log-viewer-actions">
-        <h2 style="margin: 0;">{% blocktranslate with name=selected_log %}Viewing {{ name }}{% endblocktranslate %}</h2>
+        <div class="log-viewer-heading">
+          <h2>{% blocktranslate with name=selected_log %}Viewing {{ name }}{% endblocktranslate %}</h2>
+          <a
+            href="?log={{ selected_log|urlencode }}&amp;limit={{ log_limit_choice }}&amp;download=1"
+            class="button button-secondary"
+          >{% translate "Download log" %}</a>
+        </div>
+        <div class="log-viewer-slider">
+          <label for="log-viewer-limit">{% translate "Lines to display" %}: <span id="log-viewer-limit-value">{{ log_limit_label }}</span></label>
+          <input
+            type="range"
+            id="log-viewer-limit"
+            class="log-viewer-limit"
+            min="0"
+            max="{{ log_limit_options|length|add:'-1' }}"
+            step="1"
+            value="{{ log_limit_index }}"
+            list="log-viewer-limit-options"
+            data-log="{{ selected_log }}"
+          >
+          <datalist id="log-viewer-limit-options">
+            {% for option in log_limit_options %}
+              <option value="{{ forloop.counter0 }}" label="{{ option.label }}"></option>
+            {% endfor %}
+          </datalist>
+        </div>
         <button
           type="button"
           class="button button-secondary"
@@ -101,6 +146,7 @@
         >{{ copy_label }}</button>
         <span id="log-viewer-copy-status" class="log-viewer-status" aria-live="polite" hidden></span>
       </div>
+      {{ log_limit_options|json_script:"log-viewer-limit-data" }}
       <pre id="log-viewer-content" class="log-viewer-content" tabindex="0">{{ log_content }}</pre>
     {% endif %}
   </div>
@@ -163,6 +209,54 @@
           }
         }
       });
+
+      const limitSlider = document.getElementById('log-viewer-limit');
+      const limitValue = document.getElementById('log-viewer-limit-value');
+      const limitDataScript = document.getElementById('log-viewer-limit-data');
+      const limitData = limitDataScript ? JSON.parse(limitDataScript.textContent) : [];
+
+      function getLimitOption(index) {
+        if (!Array.isArray(limitData) || !limitData.length) {
+          return null;
+        }
+        const clamped = Math.max(0, Math.min(index, limitData.length - 1));
+        return limitData[clamped];
+      }
+
+      function updateLimitLabel() {
+        if (!limitSlider || !limitValue) {
+          return;
+        }
+        const index = parseInt(limitSlider.value, 10) || 0;
+        const option = getLimitOption(index);
+        if (option && option.label) {
+          limitValue.textContent = option.label;
+        }
+      }
+
+      function updateLimitSelection() {
+        if (!limitSlider) {
+          return;
+        }
+        const index = parseInt(limitSlider.value, 10) || 0;
+        const option = getLimitOption(index);
+        if (!option) {
+          return;
+        }
+        const url = new URL(window.location.href);
+        if (limitSlider.dataset.log) {
+          url.searchParams.set('log', limitSlider.dataset.log);
+        }
+        url.searchParams.set('limit', option.value);
+        url.searchParams.delete('download');
+        window.location.assign(url.toString());
+      }
+
+      if (limitSlider) {
+        updateLimitLabel();
+        limitSlider.addEventListener('input', updateLimitLabel);
+        limitSlider.addEventListener('change', updateLimitSelection);
+      }
     });
   </script>
 {% endblock %}

@@ -10,13 +10,18 @@ django.setup()
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.shortcuts import resolve_url
-from django.test import Client, TestCase
+from django.http import HttpResponse
+from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
+from django.utils.text import slugify
+from django.utils.translation import gettext
 from urllib.parse import quote
 from unittest.mock import patch
 
 from nodes.models import Node, NodeRole
+from ocpp import store
 from ocpp.models import Charger
+from ocpp.views import charger_log_page
 
 
 class DashboardAccessTests(TestCase):
@@ -118,3 +123,86 @@ class ChargerAccessTests(TestCase):
             f"{login_url}?next={expected_next}",
             fetch_redirect_response=False,
         )
+
+
+class ChargerLogViewTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.factory = RequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="viewer",
+            email="viewer@example.com",
+            password="test-password",
+        )
+        self.charger = Charger.objects.create(
+            charger_id="CP-01",
+            public_display=True,
+        )
+        self.charger.owner_users.add(self.user)
+        self.client.force_login(self.user)
+
+    def _request(self, params: dict | None = None):
+        path = reverse("charger-log", args=[self.charger.charger_id])
+        request = self.factory.get(path, data=params or {})
+        request.user = self.user
+        request.session = self.client.session
+        return request
+
+    def _render_context(self, entries, params: dict | None = None):
+        request = self._request(params)
+        with patch("ocpp.views.store.get_logs", return_value=entries), patch(
+            "ocpp.views.render"
+        ) as mock_render:
+            mock_render.return_value = HttpResponse()
+            charger_log_page(request, self.charger.charger_id)
+        context = mock_render.call_args[0][2]
+        return context
+
+    def test_log_view_uses_expected_limit_options(self):
+        entries = [f"line {i}" for i in range(1, 6)]
+        context = self._render_context(entries)
+        self.assertEqual(
+            context["log_limit_options"],
+            [
+                {"value": "20", "label": "20"},
+                {"value": "40", "label": "40"},
+                {"value": "100", "label": "100"},
+                {"value": "all", "label": gettext("All")},
+            ],
+        )
+        self.assertEqual(context["log_limit_choice"], "20")
+        self.assertEqual(context["log_limit_label"], "20")
+        expected_target = store.identity_key(
+            self.charger.charger_id, self.charger.connector_id
+        )
+        slug_source = slugify(expected_target) or slugify(self.charger.charger_id) or "log"
+        self.assertEqual(context["log_filename"], f"charger-{slug_source}.log")
+
+    def test_log_view_applies_numeric_limit(self):
+        entries = [f"entry {i}" for i in range(1, 101)]
+        context = self._render_context(entries, params={"limit": "40"})
+        rendered_entries = context["log"]
+        self.assertEqual(len(rendered_entries), 40)
+        self.assertEqual(rendered_entries[0], "entry 61")
+        self.assertEqual(rendered_entries[-1], "entry 100")
+
+    def test_log_view_all_limit_returns_every_entry(self):
+        entries = ["first", "second", "third"]
+        context = self._render_context(entries, params={"limit": "all"})
+        rendered_entries = context["log"]
+        self.assertEqual(rendered_entries, entries)
+
+    def test_log_view_download_streams_full_log(self):
+        entries = ["download one", "download two"]
+        request = self._request(params={"download": "1"})
+        with patch("ocpp.views.store.get_logs", return_value=entries):
+            response = charger_log_page(request, self.charger.charger_id)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response["Content-Disposition"].startswith("attachment"))
+        content = response.content.decode("utf-8")
+        self.assertEqual(content, "download one\ndownload two\n")
+        expected_target = store.identity_key(
+            self.charger.charger_id, self.charger.connector_id
+        )
+        slug_source = slugify(expected_target) or slugify(self.charger.charger_id) or "log"
+        self.assertIn(f'filename="charger-{slug_source}.log"', response["Content-Disposition"])
