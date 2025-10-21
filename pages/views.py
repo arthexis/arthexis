@@ -1005,6 +1005,7 @@ class ClientReportForm(forms.Form):
         label=_("Month"),
         required=False,
         widget=forms.DateInput(attrs={"type": "month"}),
+        input_formats=["%Y-%m"],
         help_text=_("Generates the report for the calendar month that you select."),
     )
     owner = forms.ModelChoiceField(
