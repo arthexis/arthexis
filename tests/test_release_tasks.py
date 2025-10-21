@@ -124,6 +124,120 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
 
 
 @pytest.mark.role("Constellation")
+def test_stable_mode_skips_patch_upgrade(monkeypatch, tmp_path):
+    base = _setup_tmp(monkeypatch, tmp_path)
+    (base / "VERSION").write_text("1.2.3")
+    locks = base / "locks"
+    locks.mkdir()
+    (locks / "auto_upgrade.lck").write_text("stable")
+
+    def fake_check_output(args, cwd=None, **kwargs):
+        if args[:3] == ["git", "rev-parse", "origin/main"]:
+            return b"remote"
+        if args[:3] == ["git", "show", "origin/main:VERSION"]:
+            return b"1.2.4"
+        raise AssertionError(f"Unexpected command: {args}")
+
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    run_recorder = CommandRecorder()
+    monkeypatch.setattr(tasks.subprocess, "run", run_recorder)
+
+    scheduled = []
+
+    def fake_apply_async(*args, **kwargs):
+        scheduled.append({"args": args, "kwargs": kwargs})
+
+    monkeypatch.setattr(
+        tasks.verify_auto_upgrade_health,
+        "apply_async",
+        fake_apply_async,
+    )
+
+    called = {}
+    import nodes.apps as nodes_apps
+
+    monkeypatch.setattr(
+        nodes_apps, "_startup_notification", lambda: called.setdefault("x", True)
+    )
+
+    tasks.check_github_updates()
+
+    assert called.get("x")
+    assert scheduled == []
+    fetch_call = run_recorder.calls[0]
+    fetch_args, fetch_kwargs = fetch_call
+    assert fetch_args[0][:3] == ["git", "fetch", "origin"]
+    assert fetch_kwargs.get("cwd") == base
+    assert fetch_kwargs.get("check") is True
+    assert run_recorder.find("./upgrade.sh") is None
+
+
+@pytest.mark.role("Constellation")
+def test_stable_mode_triggers_minor_upgrade(monkeypatch, tmp_path):
+    base = _setup_tmp(monkeypatch, tmp_path)
+    (base / "VERSION").write_text("1.2.3")
+    locks = base / "locks"
+    locks.mkdir()
+    (locks / "auto_upgrade.lck").write_text("stable")
+
+    def fake_check_output(args, cwd=None, **kwargs):
+        if args[:3] == ["git", "rev-parse", "origin/main"]:
+            return b"remote"
+        if args[:3] == ["git", "show", "origin/main:VERSION"]:
+            return b"1.3.0"
+        raise AssertionError(f"Unexpected command: {args}")
+
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    notify_calls = []
+    import core.notifications as notifications
+
+    monkeypatch.setattr(
+        notifications,
+        "notify",
+        lambda subject, body="": notify_calls.append((subject, body)),
+    )
+
+    run_recorder = CommandRecorder()
+    monkeypatch.setattr(tasks.subprocess, "run", run_recorder)
+
+    scheduled = []
+
+    def fake_apply_async(*args, **kwargs):
+        scheduled.append({"args": args, "kwargs": kwargs})
+
+    monkeypatch.setattr(
+        tasks.verify_auto_upgrade_health,
+        "apply_async",
+        fake_apply_async,
+    )
+
+    tasks.check_github_updates()
+
+    assert any(
+        subject == "Upgrading..."
+        and _matches_upgrade_stamp(body)
+        for subject, body in notify_calls
+    )
+    upgrade_call = run_recorder.find("./upgrade.sh")
+    assert upgrade_call is not None
+    upgrade_args, upgrade_kwargs = upgrade_call
+    assert upgrade_args[0] == ["./upgrade.sh", "--stable", "--no-restart"]
+    assert upgrade_kwargs.get("cwd") == base
+    assert upgrade_kwargs.get("check") is True
+    fetch_call = run_recorder.calls[0]
+    fetch_args, fetch_kwargs = fetch_call
+    assert fetch_args[0][:3] == ["git", "fetch", "origin"]
+    assert fetch_kwargs.get("cwd") == base
+    assert fetch_kwargs.get("check") is True
+    assert scheduled
+    first_call = scheduled[0]
+    assert first_call["kwargs"].get("countdown") == tasks.AUTO_UPGRADE_HEALTH_DELAY_SECONDS
+    assert first_call["kwargs"].get("kwargs") == {"attempt": 1}
+
+
+@pytest.mark.role("Constellation")
 def test_verify_auto_upgrade_health_reverts_and_records_revision(
     monkeypatch, tmp_path
 ):
