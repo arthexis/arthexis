@@ -2446,9 +2446,9 @@ msgstr "Generato il: %(date)s"
 msgid "Links"
 msgstr ""
 
-#: core/templates/admin/system_pending_todos_report.html:100
-msgid "Link"
-msgstr ""
+#: core/templates/admin/system_pending_todos_report.html:127
+msgid "Check"
+msgstr "Verifica"
 
 #: core/templates/admin/system_pending_todos_report.html:126
 msgid "Save changes"
