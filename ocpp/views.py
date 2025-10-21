@@ -232,14 +232,27 @@ def _transaction_rfid_details(
     normalized = normalized.upper()
     if cache is not None and normalized in cache:
         return cache[normalized]
-    tag = RFID.objects.filter(rfid=normalized).only("pk").first()
+    tag = (
+        RFID.objects.filter(rfid=normalized)
+        .only("pk", "label_id", "custom_label")
+        .first()
+    )
     rfid_url = None
+    label_value = None
     if tag:
         try:
             rfid_url = reverse("admin:core_rfid_change", args=[tag.pk])
         except NoReverseMatch:  # pragma: no cover - admin may be disabled
             rfid_url = None
-    details = {"value": normalized, "url": rfid_url}
+        custom_label = (tag.custom_label or "").strip()
+        if custom_label:
+            label_value = custom_label
+        elif tag.label_id is not None:
+            label_value = str(tag.label_id)
+    display_value = label_value or normalized
+    details = {"value": display_value, "url": rfid_url, "uid": normalized}
+    if label_value:
+        details["label"] = label_value
     if cache is not None:
         cache[normalized] = details
     return details
@@ -1049,7 +1062,10 @@ def charger_status(request, cid, connector=None):
                         "connector_id": connector_id,
                     }
                 )
-    overview = _connector_overview(charger, request.user)
+    rfid_cache: dict[str, dict[str, str | None]] = {}
+    overview = _connector_overview(
+        charger, request.user, rfid_cache=rfid_cache
+    )
     connector_links = [
         {
             "slug": item["slug"],
@@ -1090,12 +1106,15 @@ def charger_status(request, cid, connector=None):
     action_url = _reverse_connector_url("charger-action", cid, connector_slug)
     chart_should_animate = bool(has_active_session and not past_session)
 
+    tx_rfid_details = _transaction_rfid_details(tx_obj, cache=rfid_cache)
+
     return render(
         request,
         "ocpp/charger_status.html",
         {
             "charger": charger,
             "tx": tx_obj,
+            "tx_rfid_details": tx_rfid_details,
             "state": state,
             "color": color,
             "transactions": transactions,

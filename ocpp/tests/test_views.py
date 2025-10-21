@@ -14,13 +14,14 @@ from django.http import HttpResponse
 from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 from django.utils.text import slugify
+from django.utils import timezone
 from django.utils.translation import gettext
 from urllib.parse import quote
 from unittest.mock import patch
 
 from nodes.models import Node, NodeRole
 from ocpp import store
-from ocpp.models import Charger
+from ocpp.models import Charger, Transaction, RFID
 from ocpp.views import charger_log_page
 
 
@@ -122,6 +123,70 @@ class ChargerAccessTests(TestCase):
             response,
             f"{login_url}?next={expected_next}",
             fetch_redirect_response=False,
+        )
+
+
+class ChargerStatusRFIDTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = get_user_model().objects.create_user(
+            username="status-user",
+            email="status@example.com",
+            password="test-password",
+        )
+        self.charger = Charger.objects.create(
+            charger_id="RFID-STATUS",
+            connector_id=1,
+            public_display=True,
+        )
+        self.charger.owner_users.add(self.user)
+        self.client.force_login(self.user)
+        store.transactions.clear()
+        self.addCleanup(store.transactions.clear)
+
+    def _activate_transaction(self, *, rfid_value: str) -> Transaction:
+        tx = Transaction.objects.create(
+            charger=self.charger,
+            meter_start=0,
+            start_time=timezone.now(),
+            rfid=rfid_value,
+        )
+        store.set_transaction(self.charger.charger_id, self.charger.connector_id, tx)
+        return tx
+
+    def test_current_transaction_displays_rfid_label_when_available(self):
+        tag = RFID.objects.create(rfid="ABCD1234", custom_label="Lobby Tag")
+        self._activate_transaction(rfid_value="abcd1234")
+
+        response = self.client.get(
+            reverse(
+                "charger-status-connector",
+                args=[self.charger.charger_id, self.charger.connector_slug],
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        expected_url = reverse("admin:core_rfid_change", args=[tag.pk])
+        label_text = gettext("RFID")
+        self.assertInHTML(
+            f'<li>{label_text}: <a href="{expected_url}">{tag.custom_label}</a></li>',
+            response.content.decode(),
+        )
+
+    def test_current_transaction_displays_uid_when_label_missing(self):
+        self._activate_transaction(rfid_value="deadbeef")
+
+        response = self.client.get(
+            reverse(
+                "charger-status-connector",
+                args=[self.charger.charger_id, self.charger.connector_slug],
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        label_text = gettext("RFID")
+        self.assertInHTML(
+            f"<li>{label_text}: DEADBEEF</li>", response.content.decode()
         )
 
 
