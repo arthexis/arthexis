@@ -20,7 +20,7 @@ def _environment_view(request):
     context = admin.site.each_context(request)
     context.update(
         {
-            "title": _("Environ"),
+            "title": _("Environment"),
             "env_vars": env_vars,
         }
     )
@@ -31,7 +31,7 @@ def _config_view(request):
     context = admin.site.each_context(request)
     context.update(
         {
-            "title": _("Config"),
+            "title": _("Django Settings"),
             "django_settings": _get_django_settings(),
         }
     )
