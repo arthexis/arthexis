@@ -39,7 +39,7 @@ class NotificationManager:
         self.lock_file.parent.mkdir(parents=True, exist_ok=True)
         # ``plyer`` is only available on Windows and can fail when used in
         # a non-interactive environment (e.g. service or CI).
-        # Any failure will fallback to logging quietly.
+        # Any failure will fall back to logging quietly.
 
     def _write_lock_file(self, subject: str, body: str) -> None:
         self.lock_file.write_text(f"{subject}\n{body}\n", encoding="utf-8")
