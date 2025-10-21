@@ -439,34 +439,71 @@ def admin_model_graph(request, app_label: str):
     return response
 
 
-def _render_readme(request, role):
+def _render_readme(request, role, doc: str | None = None):
     app = (
         Module.objects.filter(node_role=role, is_default=True)
         .select_related("application")
         .first()
     )
     app_slug = app.path.strip("/") if app else ""
-    readme_base = (
-        Path(settings.BASE_DIR) / app_slug if app_slug else Path(settings.BASE_DIR)
-    )
+    root_base = Path(settings.BASE_DIR).resolve()
+    readme_base = (root_base / app_slug).resolve() if app_slug else root_base
     lang = getattr(request, "LANGUAGE_CODE", "")
     lang = lang.replace("_", "-").lower()
-    root_base = Path(settings.BASE_DIR)
     candidates = []
-    if lang:
-        candidates.append(readme_base / f"README.{lang}.md")
-        short = lang.split("-")[0]
-        if short != lang:
-            candidates.append(readme_base / f"README.{short}.md")
-    candidates.append(readme_base / "README.md")
-    if readme_base != root_base:
+    if doc:
+        normalized = doc.strip().replace("\\", "/")
+        while normalized.startswith("./"):
+            normalized = normalized[2:]
+        normalized = normalized.lstrip("/")
+        if not normalized:
+            raise Http404("Document not found")
+        doc_path = Path(normalized)
+        if doc_path.is_absolute() or any(part == ".." for part in doc_path.parts):
+            raise Http404("Document not found")
+
+        relative_candidates: list[Path] = []
+
+        def add_candidate(path: Path) -> None:
+            if path not in relative_candidates:
+                relative_candidates.append(path)
+
+        add_candidate(doc_path)
+        if doc_path.suffix.lower() != ".md" or doc_path.suffix != ".md":
+            add_candidate(doc_path.with_suffix(".md"))
+        if doc_path.suffix.lower() != ".md":
+            add_candidate(doc_path / "README.md")
+
+        search_roots = [readme_base]
+        if readme_base != root_base:
+            search_roots.append(root_base)
+
+        for relative in relative_candidates:
+            for base in search_roots:
+                base_resolved = base.resolve()
+                candidate = (base_resolved / relative).resolve(strict=False)
+                try:
+                    candidate.relative_to(base_resolved)
+                except ValueError:
+                    continue
+                candidates.append(candidate)
+    else:
         if lang:
-            candidates.append(root_base / f"README.{lang}.md")
+            candidates.append(readme_base / f"README.{lang}.md")
             short = lang.split("-")[0]
             if short != lang:
-                candidates.append(root_base / f"README.{short}.md")
-        candidates.append(root_base / "README.md")
-    readme_file = next((p for p in candidates if p.exists()), root_base / "README.md")
+                candidates.append(readme_base / f"README.{short}.md")
+        candidates.append(readme_base / "README.md")
+        if readme_base != root_base:
+            if lang:
+                candidates.append(root_base / f"README.{lang}.md")
+                short = lang.split("-")[0]
+                if short != lang:
+                    candidates.append(root_base / f"README.{short}.md")
+            candidates.append(root_base / "README.md")
+    readme_file = next((p for p in candidates if p.exists()), None)
+    if readme_file is None:
+        raise Http404("Document not found")
     text = readme_file.read_text(encoding="utf-8")
     html, toc_html = _render_markdown_with_toc(text)
     title = "README" if readme_file.name.startswith("README") else readme_file.stem
@@ -530,10 +567,10 @@ def index(request):
 
 
 @never_cache
-def readme(request):
+def readme(request, doc=None):
     node = Node.get_local()
     role = node.role if node else None
-    return _render_readme(request, role)
+    return _render_readme(request, role, doc)
 
 
 def sitemap(request):

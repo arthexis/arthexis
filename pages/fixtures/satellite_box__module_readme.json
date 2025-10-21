@@ -7,7 +7,7 @@
       "node_role": ["Satellite"],
       "application": ["pages"],
       "path": "/readme/",
-      "menu": "README",
+      "menu": "Recipes",
       "is_default": false,
       "favicon": ""
     }
