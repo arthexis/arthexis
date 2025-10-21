@@ -238,9 +238,9 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "availability_request_details",
     )
     list_display = (
-        "charger_id",
+        "display_name_with_fallback",
         "connector_number",
-        "location_name",
+        "serial_number_display",
         "require_rfid_display",
         "public_display",
         "last_heartbeat",
@@ -348,6 +348,18 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             if store.get_transaction(charger.charger_id, connector_id):
                 return True
         return False
+
+    @admin.display(description="Display Name", ordering="display_name")
+    def display_name_with_fallback(self, obj):
+        if obj.display_name:
+            return obj.display_name
+        if obj.location:
+            return obj.location.name
+        return obj.charger_id
+
+    @admin.display(description="Serial Number", ordering="charger_id")
+    def serial_number_display(self, obj):
+        return obj.charger_id
 
     def location_name(self, obj):
         return obj.location.name if obj.location else ""
