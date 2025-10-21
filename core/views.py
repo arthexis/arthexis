@@ -608,6 +608,43 @@ def _git_authentication_missing(exc: subprocess.CalledProcessError) -> bool:
     return any(marker in message for marker in auth_markers)
 
 
+def _push_release_changes(log_path: Path) -> bool:
+    """Push release commits to ``origin`` and log the outcome."""
+
+    if not _has_remote("origin"):
+        _append_log(
+            log_path, "No git remote configured; skipping push of release changes"
+        )
+        return False
+
+    try:
+        branch = _current_branch()
+        if branch is None:
+            push_cmd = ["git", "push", "origin", "HEAD"]
+        elif _has_upstream(branch):
+            push_cmd = ["git", "push"]
+        else:
+            push_cmd = ["git", "push", "--set-upstream", "origin", branch]
+        subprocess.run(push_cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        details = _format_subprocess_error(exc)
+        if _git_authentication_missing(exc):
+            _append_log(
+                log_path,
+                "Authentication is required to push release changes to origin; skipping push",
+            )
+            if details:
+                _append_log(log_path, details)
+            return False
+        _append_log(
+            log_path, f"Failed to push release changes to origin: {details}"
+        )
+        raise Exception("Failed to push release changes") from exc
+
+    _append_log(log_path, "Pushed release changes to origin")
+    return True
+
+
 def _ensure_origin_main_unchanged(log_path: Path) -> None:
     """Verify that ``origin/main`` has not advanced during the release."""
 
@@ -1340,37 +1377,7 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
                 log_path,
                 f"Committed release metadata for v{release.version}",
             )
-        if _has_remote("origin"):
-            try:
-                branch = _current_branch()
-                if branch is None:
-                    push_cmd = ["git", "push", "origin", "HEAD"]
-                elif _has_upstream(branch):
-                    push_cmd = ["git", "push"]
-                else:
-                    push_cmd = ["git", "push", "--set-upstream", "origin", branch]
-                subprocess.run(push_cmd, check=True, capture_output=True, text=True)
-            except subprocess.CalledProcessError as exc:
-                details = _format_subprocess_error(exc)
-                if _git_authentication_missing(exc):
-                    _append_log(
-                        log_path,
-                        "Authentication is required to push release changes to origin; skipping push",
-                    )
-                    if details:
-                        _append_log(log_path, details)
-                else:
-                    _append_log(
-                        log_path, f"Failed to push release changes to origin: {details}"
-                    )
-                    raise Exception("Failed to push release changes") from exc
-            else:
-                _append_log(log_path, "Pushed release changes to origin")
-        else:
-            _append_log(
-                log_path,
-                "No git remote configured; skipping push of release changes",
-            )
+        _push_release_changes(log_path)
         PackageRelease.dump_fixture()
         _append_log(log_path, "Updated release fixtures")
         _record_release_todo(release, ctx, log_path)
@@ -1561,6 +1568,30 @@ def _step_publish(release, ctx, log_path: Path) -> None:
     _append_log(log_path, f"Recorded PyPI URL: {release.pypi_url}")
     if release.github_url:
         _append_log(log_path, f"Recorded GitHub URL: {release.github_url}")
+    fixture_paths = [
+        str(path) for path in Path("core/fixtures").glob("releases__*.json")
+    ]
+    if fixture_paths:
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--", *fixture_paths],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        if status.stdout.strip():
+            subprocess.run(["git", "add", *fixture_paths], check=True)
+            _append_log(log_path, "Staged publish metadata updates")
+            commit_message = f"chore: record publish metadata for v{release.version}"
+            subprocess.run(["git", "commit", "-m", commit_message], check=True)
+            _append_log(
+                log_path, f"Committed publish metadata for v{release.version}"
+            )
+            _push_release_changes(log_path)
+        else:
+            _append_log(
+                log_path,
+                "No release metadata updates detected after publish; skipping commit",
+            )
     _append_log(log_path, "Upload complete")
 
 
