@@ -68,3 +68,24 @@ class TestLoadSecretKey:
         secret_file = tmp_path / "locks" / "django-secret.key"
         assert result == generated
         assert secret_file.read_text(encoding="utf-8") == generated
+
+    def test_regenerates_when_secret_file_blank(
+        self,
+        tmp_path: pathlib.Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        secret_file = tmp_path / "locks" / "django-secret.key"
+        secret_file.parent.mkdir(parents=True, exist_ok=True)
+        secret_file.write_text("\n", encoding="utf-8")
+
+        regenerated = "regenerated-secret"
+        monkeypatch.setattr(
+            settings_helpers,
+            "get_random_secret_key",
+            lambda: regenerated,
+        )
+
+        result = settings_helpers.load_secret_key(tmp_path, env={})
+
+        assert result == regenerated
+        assert secret_file.read_text(encoding="utf-8") == regenerated
