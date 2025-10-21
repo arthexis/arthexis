@@ -96,9 +96,36 @@ Terminal nodes can start directly with the scripts below without installing; Con
 ### 4. Administration
 Visit [`http://localhost:8000/admin/`](http://localhost:8000/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use `--port` with the start scripts or installer when you need to expose a different port.
 
+## Sigils
+
+Sigils are bracketed tokens such as `[ENV.SMTP_PASSWORD]` that Arthexis expands at runtime. They make it possible to reference configuration secrets, system metadata, or records stored in other apps without duplicating values across the project.
+
+### Syntax at a glance
+
+- `[PREFIX.KEY]` &mdash; returns a field or attribute. Hyphens and casing are normalized automatically.
+- `[PREFIX=IDENTIFIER.FIELD]` &mdash; selects a specific record by primary key or any unique field.
+- `[PREFIX:FIELD=VALUE.ATTRIBUTE]` &mdash; filters by a custom field instead of the primary key.
+- `[PREFIX.FIELD=[OTHER.SIGIL]]` &mdash; nests sigils so the value after `=` resolves before the outer token.
+- `[PREFIX]` &mdash; for entity prefixes, returns the serialized object in JSON; for configuration prefixes, resolves to an empty string when the key is missing.
+
+The platform ships with three configuration prefixes:
+
+- `ENV` reads environment variables.
+- `CONF` reads Django settings.
+- `SYS` exposes computed system information such as build metadata.
+
+Additional prefixes are defined through **Sigil Roots**, which map a short code (for example `ROLE`, `ODOO`, or `USER`) to a Django model. You can review them from **Admin &rarr; Sigil Builder** (`/admin/sigil-builder/`), where a test console is also available.
+
+Unknown prefixes remain in place (e.g. `[UNKNOWN.VALUE]`) and are logged. When the optional `gway` CLI is installed, the resolver will attempt to delegate unresolved tokens to it before falling back to the original text.
+
 ## Support
 
 Contact us at [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) or visit our [web page](https://www.gelectriic.com/) for [professional services](https://en.wikipedia.org/wiki/Professional_services) and [commercial support](https://en.wikipedia.org/wiki/Technical_support).
+
+## Project Guidelines
+
+- [AGENTS](AGENTS.md) – operating handbook for repository workflows, testing, and release management.
+- [DESIGN](DESIGN.md) – visual, UX, and branding guidance that all interfaces must follow.
 
 ## About Me
 

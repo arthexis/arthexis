@@ -87,6 +87,17 @@ def nav_links(request):
                 continue
             landings.append(landing)
         if landings:
+            normalized_module_path = module.path.rstrip("/") or "/"
+            if normalized_module_path == "/readme":
+                primary_landings = [
+                    landing
+                    for landing in landings
+                    if landing.path.rstrip("/") == normalized_module_path
+                ]
+                if primary_landings:
+                    landings = primary_landings
+                else:
+                    landings = [landings[0]]
             app_name = getattr(module.application, "name", "").lower()
             if app_name == "awg":
                 module.menu = "Calculate"

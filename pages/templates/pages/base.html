@@ -61,6 +61,26 @@
       .nav-item.dropdown .nav-link::after {
         display: none;
       }
+      .reader-qr-card .card-body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+      }
+      .reader-qr-card .reader-qr-image {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 180px;
+        height: 180px;
+        max-width: 100%;
+        margin: 0 auto;
+      }
+      .reader-qr-card .reader-qr-image canvas,
+      .reader-qr-card .reader-qr-image img {
+        max-width: 100%;
+        height: auto;
+      }
       .nav-item.dropdown:hover .badge,
       .nav-item.dropdown.show .badge {
         background-color: var(--bs-primary);

@@ -1,145 +1,159 @@
-# SOME DESCRIPTIVE TITLE.
+# Spanish (Latin America) translations for the Arthexis project.
 # Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
 # This file is distributed under the same license as the PACKAGE package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-08-19 07:06-0600\n"
+"POT-Creation-Date: 2025-10-20 16:42-0600\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
-"Language: \n"
+"Language: es_MX\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? "
-"1 : 2;\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: core/apps.py:8 core/templates/core/release_progress.html:9 pages/templates/core/release_progress.html:9
-msgid "2. Business"
-msgstr "2. Negocio"
-
-#: core/models.py:140
-msgid "Invalid municipality for the selected state"
+#: awg/admin.py:196 awg/templates/awg/energy_tariff_calculator.html:96
+msgid "Season"
 msgstr ""
 
-#: core/models.py:395
-msgid "EV Brand"
+#: awg/admin.py:200 awg/templates/awg/energy_tariff_calculator.html:94
+msgid "Contract type"
 msgstr ""
 
-#: core/models.py:396
-msgid "EV Brands"
+#: awg/admin.py:204
+msgid "Period"
 msgstr ""
 
-#: core/models.py:419
-msgid "WMI code"
+#: awg/models.py:47
+msgid "Cable Size"
+msgstr "Tamaño de cable"
+
+#: awg/models.py:48
+msgid "Cable Sizes"
+msgstr "Tamaños de cable"
+
+#: awg/models.py:79
+msgid "Conduit Fill"
+msgstr "Llenado de conducto"
+
+#: awg/models.py:80
+msgid "Conduit Fills"
+msgstr "Llenados de conducto"
+
+#: awg/models.py:104
+msgid "Show in public site"
 msgstr ""
 
-#: core/models.py:420
-msgid "WMI codes"
+#: awg/models.py:111
+msgid "Calculator Template"
+msgstr "Plantilla de calculadora"
+
+#: awg/models.py:112
+msgid "Calculator Templates"
+msgstr "Plantillas de calculadora"
+
+#: awg/models.py:165
+msgid "Power Lead"
 msgstr ""
 
-#: core/models.py:434
-msgid "EV Model"
-msgstr ""
-
-#: core/models.py:435
-msgid "EV Models"
+#: awg/models.py:166
+msgid "Power Leads"
 msgstr ""
 
 #: awg/templates/awg/calculator.html:3
 msgid "AWG Calculator"
 msgstr "Calculadora AWG"
 
-#: awg/templates/awg/calculator.html:5
+#: awg/templates/awg/calculator.html:11
 msgid "Cable & Conduit Calculator"
 msgstr "Calculadora de Cable y Conducto"
 
-#: awg/templates/awg/calculator.html:11
+#: awg/templates/awg/calculator.html:17
 msgid "Meters:"
 msgstr "Metros:"
 
-#: awg/templates/awg/calculator.html:15
+#: awg/templates/awg/calculator.html:21
 msgid "Amps:"
 msgstr "Amperios:"
 
-#: awg/templates/awg/calculator.html:19
+#: awg/templates/awg/calculator.html:25
 msgid "Volts:"
 msgstr "Voltios:"
 
-#: awg/templates/awg/calculator.html:23
+#: awg/templates/awg/calculator.html:29
 msgid "Material:"
 msgstr "Material:"
 
-#: awg/templates/awg/calculator.html:26
+#: awg/templates/awg/calculator.html:32
 msgid "Copper (cu)"
 msgstr "Cobre (cu)"
 
-#: awg/templates/awg/calculator.html:27
+#: awg/templates/awg/calculator.html:33
 msgid "Aluminum (al)"
 msgstr "Aluminio (al)"
 
-#: awg/templates/awg/calculator.html:31
+#: awg/templates/awg/calculator.html:37
 msgid "Phases:"
 msgstr "Fases:"
 
-#: awg/templates/awg/calculator.html:34
+#: awg/templates/awg/calculator.html:40
 msgid "AC Two Phases (2)"
 msgstr "CA Dos Fases (2)"
 
-#: awg/templates/awg/calculator.html:35
+#: awg/templates/awg/calculator.html:41
 msgid "AC Single Phase (1)"
 msgstr "CA Fase Única (1)"
 
-#: awg/templates/awg/calculator.html:36
+#: awg/templates/awg/calculator.html:42
 msgid "AC Three Phases (3)"
 msgstr "CA Tres Fases (3)"
 
-#: awg/templates/awg/calculator.html:42
+#: awg/templates/awg/calculator.html:48
 msgid "Temperature:"
 msgstr "Temperatura:"
 
-#: awg/templates/awg/calculator.html:45
+#: awg/templates/awg/calculator.html:51
 msgid "60C (140F)"
 msgstr "60C (140F)"
 
-#: awg/templates/awg/calculator.html:46
+#: awg/templates/awg/calculator.html:52
 msgid "75C (167F)"
 msgstr "75C (167F)"
 
-#: awg/templates/awg/calculator.html:47
+#: awg/templates/awg/calculator.html:53
 msgid "90C (194F)"
 msgstr "90C (194F)"
 
-#: awg/templates/awg/calculator.html:51
+#: awg/templates/awg/calculator.html:57
 msgid "Conduit:"
 msgstr "Conducto:"
 
-#: awg/templates/awg/calculator.html:54
+#: awg/templates/awg/calculator.html:60
 msgid "EMT"
 msgstr "EMT"
 
-#: awg/templates/awg/calculator.html:55
+#: awg/templates/awg/calculator.html:61
 msgid "IMC"
 msgstr "IMC"
 
-#: awg/templates/awg/calculator.html:56
+#: awg/templates/awg/calculator.html:62
 msgid "RMC"
 msgstr "RMC"
 
-#: awg/templates/awg/calculator.html:57
+#: awg/templates/awg/calculator.html:63
 msgid "FMC"
 msgstr "FMC"
 
-#: awg/templates/awg/calculator.html:61
+#: awg/templates/awg/calculator.html:67
 msgid "Max AWG:"
 msgstr "AWG Máximo:"
 
-#: awg/templates/awg/calculator.html:65
+#: awg/templates/awg/calculator.html:71
 msgid "Ground:"
 msgstr "Tierra:"
 
@@ -147,19 +161,21 @@ msgstr "Tierra:"
 msgid "Maybe"
 msgstr "Quizá"
 
-#: awg/templates/awg/calculator.html:75 core/templates/admin/system.html:44
-#: core/templates/admin/system_upgrade_report.html:74
-#: core/templates/admin/system_upgrade_report.html:84 pages/models.py:407
+#: awg/templates/awg/calculator.html:75 core/templates/admin/system.html:74
+#: core/templates/admin/system_upgrade_report.html:112
+#: core/templates/admin/system_upgrade_report.html:122
+#: ocpp/templates/rfid/scanner.html:376 pages/admin.py:88 pages/models.py:584
 msgid "Yes"
 msgstr "Sí"
 
-#: awg/templates/awg/calculator.html:76 core/templates/admin/system.html:46
-#: core/templates/admin/system_upgrade_report.html:76
-#: core/templates/admin/system_upgrade_report.html:86 pages/models.py:407
+#: awg/templates/awg/calculator.html:76 core/templates/admin/system.html:76
+#: core/templates/admin/system_upgrade_report.html:114
+#: core/templates/admin/system_upgrade_report.html:124
+#: ocpp/templates/rfid/scanner.html:377 pages/admin.py:88 pages/models.py:584
 msgid "No"
 msgstr "No"
 
-#: awg/templates/awg/calculator.html:73
+#: awg/templates/awg/calculator.html:80
 msgid "Max Lines:"
 msgstr "Máximo de Líneas:"
 
@@ -169,157 +185,3457 @@ msgid ""
 "voltage drop and standard gauge sizes. Consult a professional electrician or "
 "your local electrical code before choosing the right cable for your "
 "electrical projects."
-msgstr "Esta aplicación sugerirá un dimensionamiento correcto habitual del cable, considerando la caída de voltaje y calibres estándar. Consulte a un electricista profesional o el código eléctrico local antes de elegir el cable adecuado para sus proyectos eléctricos."
+msgstr ""
+"Esta aplicación sugerirá un dimensionamiento correcto habitual del cable, "
+"considerando la caída de voltaje y calibres estándar. Consulte a un "
+"electricista profesional o el código eléctrico local antes de elegir el "
+"cable adecuado para sus proyectos eléctricos."
 
-#: awg/templates/awg/calculator.html:86
+#: awg/templates/awg/calculator.html:98
+#: awg/templates/awg/energy_tariff_calculator.html:79
 msgid "Calculate"
 msgstr "Calcular"
 
-#: awg/templates/awg/calculator.html:90
+#: awg/templates/awg/calculator.html:102
 msgid "Or try a pre-loaded template:"
 msgstr "O pruebe una plantilla precargada:"
 
-#: awg/templates/awg/calculator.html:103
+#: awg/templates/awg/calculator.html:115 core/views.py:860
 #, python-format
 msgid "Error: %(error)s"
 msgstr "Error: %(error)s"
 
-#: awg/templates/awg/calculator.html:105
+#: awg/templates/awg/calculator.html:117
 msgid "No Suitable Cable Found"
 msgstr "No se encontró un cable adecuado"
 
-#: awg/templates/awg/calculator.html:106
+#: awg/templates/awg/calculator.html:118
 #, python-format
 msgid ""
 "No cable was found that meets the requirements within a 3%% voltage drop."
 "<br>Try adjusting the <b>cable size, amps, length, or material</b> and try "
 "again."
 msgstr ""
-"No se encontró un cable que cumpla los requisitos con una caída de voltaje del 3%%."
-"<br>Intente ajustar el <b>calibre del cable, los amperios, la longitud o el material</b> y vuelva a intentarlo."
+"No se encontró un cable que cumpla los requisitos con una caída de voltaje "
+"del 3%%.<br>Intente ajustar el <b>calibre del cable, los amperios, la "
+"longitud o el material</b> y vuelva a intentarlo."
 
-#: awg/templates/awg/calculator.html:109
+#: awg/templates/awg/calculator.html:121
 msgid "Calculator Results"
 msgstr "Resultados de la Calculadora"
 
-#: awg/templates/awg/calculator.html:112
+#: awg/templates/awg/calculator.html:124
 msgid "AWG Size"
 msgstr "Tamaño AWG"
 
-#: awg/templates/awg/calculator.html:113
+#: awg/templates/awg/calculator.html:125
 msgid "Lines"
 msgstr "Líneas"
 
-#: awg/templates/awg/calculator.html:114
+#: awg/templates/awg/calculator.html:126
 msgid "Total Cables"
 msgstr "Total de Cables"
 
-#: awg/templates/awg/calculator.html:115
+#: awg/templates/awg/calculator.html:127
 msgid "Total Length (m)"
 msgstr "Longitud Total (m)"
 
-#: awg/templates/awg/calculator.html:116
+#: awg/templates/awg/calculator.html:128
 msgid "Voltage Drop"
 msgstr "Caída de Voltaje"
 
-#: awg/templates/awg/calculator.html:117
+#: awg/templates/awg/calculator.html:129
 msgid "Voltage at End"
 msgstr "Voltaje al Final"
 
-#: awg/templates/awg/calculator.html:118
+#: awg/templates/awg/calculator.html:130
 msgid "Temperature Rating"
 msgstr "Clasificación de Temperatura"
 
-#: awg/templates/awg/calculator.html:120
+#: awg/templates/awg/calculator.html:132
 msgid "Conduit"
 msgstr "Conducto"
 
-#: awg/templates/awg/calculator.html:130
+#: awg/templates/awg/calculator.html:142
+#: awg/templates/awg/energy_tariff_calculator.html:113
 msgid "Calculate Again"
 msgstr "Calcular de Nuevo"
 
-#: awg/views.py:100
+#: awg/templates/awg/energy_tariff_calculator.html:3
+#: awg/templates/awg/energy_tariff_calculator.html:5
+msgid "Energy Tariff Calculator"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:11
+msgid "Consumption (kWh):"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:15
+msgid "Year:"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:23
+msgid "Contract type:"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:25
+msgid "All contract types"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:34
+msgid "Climate zone:"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:36
+msgid "All climate zones"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:43
+msgid "Season:"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:45
+msgid "All seasons"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:52
+msgid "Billing period:"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:54
+msgid "All billing periods"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:61
+msgid "Tariff window:"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:68
+#, python-format
+msgid "%(count)s tariff available"
+msgid_plural "%(count)s tariffs available"
+msgstr[0] ""
+msgstr[1] ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:81
+msgid ""
+"Select a CFE tariff and enter your expected kWh consumption to estimate the "
+"energy bill in MXN."
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:86
+msgid "No tariffs match the selected filters. Try expanding your search."
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:89
+msgid "Estimated Bill"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:92
+msgid "Tariff"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:93
+msgid "Year"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:95
+msgid "Climate zone"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:97
+msgid "Billing period"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:98
+msgid "Time window"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:99
+msgid "Unit price"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:100
+msgid "Unit cost"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:101
+#, fuzzy
+#| msgid "Constellation"
+msgid "Consumption"
+msgstr "Constellation"
+
+#: awg/templates/awg/energy_tariff_calculator.html:102
+msgid "Estimated bill"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:103
+msgid "Provider cost"
+msgstr ""
+
+#: awg/templates/awg/energy_tariff_calculator.html:104
+msgid "Gross margin"
+msgstr ""
+
+#: awg/views.py:146
 #, python-format
 msgid "Minimum load for this calculator is 15 Amps.  Yours: amps=%(amps)s."
-msgstr "La carga mínima para esta calculadora es de 15 amperios. Su valor: amperios=%(amps)s."
+msgstr ""
+"La carga mínima para esta calculadora es de 15 amperios. Su valor: "
+"amperios=%(amps)s."
 
-#: awg/views.py:103
+#: awg/views.py:149
 #, python-format
 msgid ""
 "Max. load allowed is 546 A (cu) or 430 A (al). Yours: amps=%(amps)s "
 "material=%(material)s"
-msgstr "La carga máxima permitida es 546 A (cu) o 430 A (al). Su valor: amperios=%(amps)s material=%(material)s"
+msgstr ""
+"La carga máxima permitida es 546 A (cu) o 430 A (al). Su valor: "
+"amperios=%(amps)s material=%(material)s"
 
-#: awg/views.py:105
+#: awg/views.py:151
 msgid "Consider at least 1 meter of cable."
 msgstr "Considere al menos 1 metro de cable."
 
-#: awg/views.py:107
+#: awg/views.py:153
 #, python-format
 msgid "Volt range supported must be between 110-460. Yours: volts=%(volts)s"
-msgstr "El rango de voltaje admitido debe estar entre 110-460. El suyo: voltios=%(volts)s"
+msgstr ""
+"El rango de voltaje admitido debe estar entre 110-460. El suyo: "
+"voltios=%(volts)s"
 
-#: awg/views.py:110
+#: awg/views.py:156
 msgid "Material must be 'cu' (copper) or 'al' (aluminum)."
 msgstr "El material debe ser 'cu' (cobre) o 'al' (aluminio)."
 
-#: awg/views.py:113
+#: awg/views.py:159
 msgid "AC phases 1, 2 or 3 to calculate for. DC not supported."
 msgstr "Fases de CA 1, 2 o 3 para calcular. CC no soportada."
 
-#: awg/views.py:117
+#: awg/views.py:162
 msgid "Temperature must be 60, 75 or 90"
 msgstr "La temperatura debe ser 60, 75 o 90"
 
-#: awg/views.py:212
+#: awg/views.py:275
 msgid "Voltage drop may exceed 3% with chosen parameters"
 msgstr "La caída de voltaje puede exceder el 3% con los parámetros elegidos"
 
-#: awg/views.py:216
+#: awg/views.py:278
 msgid "Voltage drop exceeds 3% with given max_awg"
 msgstr "La caída de voltaje supera el 3% con el AWG máximo dado"
 
-#: config/settings.py:227 pages/templates/pages/base.html:81
-msgid "English"
-msgstr "Inglés"
+#: awg/views.py:479
+#, python-format
+msgid ""
+"%(contract)s • Zone %(zone)s • %(season)s • %(period)s (%(start)s – %(end)s) "
+"@ %(price)s MXN/kWh"
+msgstr ""
 
-#: config/settings.py:228 pages/templates/pages/base.html:81
+#: awg/views.py:501
+msgid "Enter the energy consumption in kWh."
+msgstr ""
+
+#: awg/views.py:504
+msgid "Select an energy tariff to continue."
+msgstr ""
+
+#: awg/views.py:506
+msgid "Selected tariff is not available for the chosen filters."
+msgstr ""
+
+#: awg/views.py:513
+msgid "Energy consumption must be a number."
+msgstr ""
+
+#: awg/views.py:516
+msgid "Energy consumption must be greater than zero."
+msgstr ""
+
+#: config/settings.py:588
 msgid "Spanish"
 msgstr "Español"
 
-#: config/urls.py:19 config/urls.py:20
+#: config/settings.py:589
+msgid "English"
+msgstr "Inglés"
+
+#: config/settings.py:590
+msgid "Italian"
+msgstr "Italiano"
+
+#: config/settings.py:591
+msgid "German"
+msgstr "Alemán"
+
+#: config/urls.py:31 config/urls.py:32 pages/templates/pages/base.html:8
 msgid "Constellation"
 msgstr "Constellation"
 
-#: core/templates/admin/core/emailinbox/search.html:8
-msgid "6. Workgroup"
-msgstr "6. Grupo de trabajo"
+#: core/admin.py:233
+msgid "Active Profile (Unset)"
+msgstr ""
 
-#: emails/models.py:25
-msgid "Email Pattern"
-msgstr "Patrón de correo electrónico"
+#: core/admin.py:235
+#, python-format
+msgid "Active Profile (%(name)s)"
+msgstr ""
 
-#: emails/models.py:26
-msgid "Email Patterns"
+#: core/admin.py:236 core/admin.py:297 core/admin.py:304 core/admin.py:305
+#: core/admin.py:315
+msgid "Active Profile"
+msgstr ""
+
+#: core/admin.py:247
+msgid "You must be logged in to manage your profile."
+msgstr ""
+
+#: core/admin.py:267
+msgid "You do not have permission to view this profile."
+msgstr ""
+
+#: core/admin.py:283
+msgid "You do not have permission to create this profile."
+msgstr ""
+
+#: core/admin.py:565
+msgid "Owner/Repository"
+msgstr ""
+
+#: core/admin.py:566
+msgid "Enter the repository slug in the form owner/repository."
+msgstr ""
+
+#: core/admin.py:570 core/templates/admin/core/odoo_quote_report.html:113
+#: core/templates/admin/core/product/fetch_odoo.html:54
+#: core/templates/admin/system_upgrade_report.html:158
+#: pages/templates/admin_doc/model_index.html:31
+msgid "Description"
+msgstr ""
+
+#: core/admin.py:575
+msgid "Private repository"
+msgstr ""
+
+#: core/admin.py:577
+msgid "Mark the repository as private when checked."
+msgstr ""
+
+#: core/admin.py:583 core/admin.py:588
+msgid "Enter the owner/repository slug."
+msgstr ""
+
+#: core/admin.py:591
+msgid "Owner and repository cannot contain spaces."
+msgstr ""
+
+#: core/admin.py:666 core/admin.py:667 core/admin.py:682 core/admin.py:772
+#: core/templates/admin/core/package/create_repository.html:12
+#: core/templates/admin/core/package/create_repository.html:17
+msgid "Create GitHub repository"
+msgstr ""
+
+#: core/admin.py:688
+msgid "Select exactly one package to create a GitHub repository."
+msgstr ""
+
+#: core/admin.py:739 core/admin.py:749
+#, python-format
+msgid "GitHub repository creation failed: %s"
+msgstr ""
+
+#: core/admin.py:757
+#, python-format
+msgid "GitHub repository created: %s"
+msgstr ""
+
+#: core/admin.py:1095
+#: core/templates/admin/django_object_actions_user_datum_change_form.html:16
+#: core/templates/admin/edit_inline/profile_stacked.html:86
+#: core/templates/admin/user_datum_change_form.html:16
+#: core/templates/admin/user_profile_change_form.html:15
+msgid "User Datum"
+msgstr ""
+
+#: core/admin.py:1096
+msgid "Store this profile in the user's data directory."
+msgstr ""
+
+#: core/admin.py:1222
+msgid "Provide merchant ID, private key, and public key to configure OpenPay."
+msgstr ""
+
+#: core/admin.py:1386 core/admin.py:1821
+msgid "Verification"
+msgstr ""
+
+#: core/admin.py:1419 core/admin.py:1720
+msgid "Network"
+msgstr ""
+
+#: core/admin.py:1425 core/admin.py:1454 core/admin.py:1722
+msgid "Configuration: Bluesky"
+msgstr ""
+
+#: core/admin.py:1429
+msgid ""
+"1. Set your Bluesky handle to the domain managed by Arthexis. 2. Publish a "
+"_atproto TXT record or /.well-known/atproto-did file pointing to the DID "
+"below. 3. Save once Bluesky confirms the domain matches the DID."
+msgstr ""
+
+#: core/admin.py:1436 core/admin.py:1459 core/admin.py:1733
+msgid "Configuration: Discord"
+msgstr ""
+
+#: core/admin.py:1446
+msgid ""
+"Provide the Discord application and guild identifiers plus a bot token so "
+"Arthexis can control the bot. The public key verifies interaction requests "
+"and the default channel is optional."
+msgstr ""
+
+#: core/admin.py:1659
+msgid "User data for user accounts is managed through the profile sections."
+msgstr ""
+
+#: core/admin.py:1678
+msgid "Preview matches"
+msgstr ""
+
+#: core/admin.py:1699 core/templates/admin/core/emailcollector/preview.html:9
+msgid "Preview Email Collectors"
+msgstr ""
+
+#: core/admin.py:1719 core/admin.py:1751 core/admin.py:1817 core/admin.py:1826
+#: nodes/admin.py:109
+msgid "Owner"
+msgstr ""
+
+#: core/admin.py:1726
+msgid ""
+"Link Arthexis to Bluesky by using a verified domain handle. Publish a "
+"_atproto TXT record or /.well-known/atproto-did file that returns the DID "
+"stored here before saving."
+msgstr ""
+
+#: core/admin.py:1743
+msgid ""
+"Store the Discord application and guild identifiers plus the bot token used "
+"for automation. The public key verifies interaction callbacks and the "
+"default channel is optional."
+msgstr ""
+
+#: core/admin.py:1803 core/admin.py:1804
+#: core/templates/admin/core/odoo_quote_report.html:7 core/views.py:85
+msgid "Quote Report"
+msgstr ""
+
+#: core/admin.py:1818
+msgid "Gateway"
+msgstr ""
+
+#: core/admin.py:1819 nodes/admin.py:111
+msgid "Credentials"
+msgstr ""
+
+#: core/admin.py:1830
+msgid "Environment"
+msgstr ""
+
+#: core/admin.py:1832
+#, fuzzy
+#| msgid "Constellation"
+msgid "Production"
+msgstr "Constellation"
+
+#: core/admin.py:1832
+msgid "Sandbox"
+msgstr ""
+
+#: core/admin.py:1854
+#, python-format
+msgid "%(owner)s verified"
+msgstr ""
+
+#: core/admin.py:1858 core/admin.py:1866 core/admin.py:1867
+msgid "Test credentials"
+msgstr ""
+
+#: core/admin.py:2420
+msgid "Enter at least one field to search for a product."
+msgstr ""
+
+#: core/admin.py:2478
+msgid "Configure your Odoo employee credentials before fetching products."
+msgstr ""
+
+#: core/admin.py:2505 core/admin.py:2652
+msgid "Unable to fetch products from Odoo."
+msgstr ""
+
+#: core/admin.py:2511 core/admin.py:2680
+msgid "You do not have permission to add products."
+msgstr ""
+
+#: core/admin.py:2516
+msgid "Select a product to import."
+msgstr ""
+
+#: core/admin.py:2521 core/admin.py:2690
+msgid "Invalid product selection."
+msgstr ""
+
+#: core/admin.py:2531
+msgid "The selected product was not found. Run the search again."
+msgstr ""
+
+#: core/admin.py:2542 core/admin.py:2708
+#, python-format
+msgid "Product %(name)s already imported; opening existing record."
+msgstr ""
+
+#: core/admin.py:2571 core/admin.py:2737
+#, python-format
+msgid "Imported %(name)s from Odoo."
+msgstr ""
+
+#: core/admin.py:2619 core/templates/admin/core/product/change_list.html:7
+#: core/templates/admin/core/product/change_list.html:9
+#: core/templates/admin/core/product/register_from_odoo.html:9
+#, fuzzy
+#| msgid "Register current host"
+msgid "Register from Odoo"
+msgstr "Registrar anfitrión actual"
+
+#: core/admin.py:2634
+msgid "Configure your Odoo employee credentials before registering products."
+msgstr ""
+
+#: core/admin.py:2685
+msgid "Select a product to register."
+msgstr ""
+
+#: core/admin.py:2698
+msgid "The selected product was not found. Reload the page and try again."
+msgstr ""
+
+#: core/admin.py:2759 core/admin.py:2781
+msgid "Energy account IDs"
+msgstr ""
+
+#: core/admin.py:2760 core/admin.py:2782
+msgid "Energy account names"
+msgstr ""
+
+#: core/admin.py:2763 core/admin.py:2785
+msgid "Energy accounts"
+msgstr ""
+
+#: core/admin.py:2897
+msgid "New RFID value"
+msgstr ""
+
+#: core/admin.py:2899
+msgid "Enter the hexadecimal value for the new card."
+msgstr ""
+
+#: core/admin.py:2911
+msgid "RFID value is required."
+msgstr ""
+
+#: core/admin.py:2914
+msgid "An RFID with this value already exists."
+msgstr ""
+
+#: core/admin.py:2992
+msgid "UD"
+msgstr ""
+
+#: core/admin.py:3001
+msgid "Toggle selected User Data"
+msgstr ""
+
+#: core/admin.py:3027
+#, python-format
+msgid "Toggled user data for %(count)d RFID."
+msgid_plural "Toggled user data for %(count)d RFIDs."
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/admin.py:3038
+#, python-format
+msgid "Skipped %(count)d RFID because user data is not available."
+msgid_plural "Skipped %(count)d RFIDs because user data is not available."
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/admin.py:3046
+msgid "Toggle Released flag"
+msgstr ""
+
+#: core/admin.py:3060
+#, python-format
+msgid "Toggled released flag for %(count)d RFID."
+msgid_plural "Toggled released flag for %(count)d RFIDs."
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/admin.py:3068
+msgid "Toggle Allowed flag"
+msgstr ""
+
+#: core/admin.py:3082
+#, python-format
+msgid "Toggled allowed flag for %(count)d RFID."
+msgid_plural "Toggled allowed flag for %(count)d RFIDs."
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/admin.py:3090 core/admin.py:3174
+#, fuzzy
+#| msgid "RFID"
+msgid "Copy RFID"
+msgstr "RFID"
+
+#: core/admin.py:3095
+#, fuzzy
+#| msgid "Select at least one RFID to print the release form."
+msgid "Select exactly one RFID to copy."
+msgstr "Seleccione al menos un RFID para imprimir el formulario de entrega."
+
+#: core/admin.py:3108
+msgid "Unable to find the selected RFID."
+msgstr ""
+
+#: core/admin.py:3144
+#, fuzzy
+#| msgid "Network error. Please try again."
+msgid "Unable to copy RFID. Please try again."
+msgstr "Error de red. Inténtalo de nuevo."
+
+#: core/admin.py:3151
+#, python-format
+msgid "Copied RFID %(source_label)s to %(new_label)s (%(rfid)s)."
+msgstr ""
+
+#: core/admin.py:3272
+#, fuzzy, python-format
+#| msgid "RFID"
+msgid "RFID: %s"
+msgstr "RFID"
+
+#: core/admin.py:3274
+#, fuzzy, python-format
+#| msgid "Custom label"
+msgid "Custom label: %s"
+msgstr "Etiqueta personalizada"
+
+#: core/admin.py:3275
+#, fuzzy, python-format
+#| msgid "Color"
+msgid "Color: %s"
+msgstr "Color"
+
+#: core/admin.py:3276
+#, fuzzy, python-format
+#| msgid "Type"
+msgid "Type: %s"
+msgstr "Tipo"
+
+#: core/admin.py:3278
+#, python-format
+msgid "Reference: %s"
+msgstr ""
+
+#: core/admin.py:3342
+#, fuzzy
+#| msgid "Select at least one RFID to print the release form."
+msgid "Select at least one RFID to print labels."
+msgstr "Seleccione al menos un RFID para imprimir el formulario de entrega."
+
+#: core/admin.py:3346
+msgid "Print Card Labels"
+msgstr ""
+
+#: core/admin.py:3368 core/admin.py:3372
+msgid "RFID Release Form"
+msgstr "Formulario de entrega RFID"
+
+#: core/admin.py:3378
+#, python-format
+msgid "%(datetime)s %(timezone)s"
+msgstr "%(datetime)s %(timezone)s"
+
+#: core/admin.py:3383
+#, python-format
+msgid "Generated on: %(date)s"
+msgstr "Generado el: %(date)s"
+
+#: core/admin.py:3392 ocpp/templates/rfid/scanner.html:47
+#: ocpp/templates/rfid/scanner.html:65
+msgid "Label"
+msgstr "Etiqueta"
+
+#: core/admin.py:3393 ocpp/models.py:600 ocpp/models.py:780
+#: ocpp/templates/ocpp/charger_page.html:79
+#: ocpp/templates/ocpp/charger_page.html:135
+#: ocpp/templates/rfid/scanner.html:52 ocpp/templates/rfid/scanner.html:70
+#: ocpp/templates/rfid/scanner.html:414 ocpp/views.py:327
+msgid "RFID"
+msgstr "RFID"
+
+#: core/admin.py:3394
+msgid "Custom label"
+msgstr "Etiqueta personalizada"
+
+#: core/admin.py:3395 ocpp/templates/rfid/scanner.html:49
+#: ocpp/templates/rfid/scanner.html:67
+msgid "Color"
+msgstr "Color"
+
+#: core/admin.py:3396 ocpp/templates/rfid/scanner.html:48
+#: ocpp/templates/rfid/scanner.html:66
+msgid "Type"
+msgstr "Tipo"
+
+#: core/admin.py:3431
+msgid "Issuer Signature: ______________________________"
+msgstr "Firma del emisor: ______________________________"
+
+#: core/admin.py:3435
+msgid "Receiver Signature: ______________________________"
+msgstr "Firma del receptor: ______________________________"
+
+#: core/admin.py:3441
+msgid "Issuer Name: ______________________________"
+msgstr "Nombre del emisor: ______________________________"
+
+#: core/admin.py:3445
+msgid "Receiver Name: ______________________________"
+msgstr "Nombre del receptor: ______________________________"
+
+#: core/admin.py:3477
+msgid "Select at least one RFID to print the release form."
+msgstr "Seleccione al menos un RFID para imprimir el formulario de entrega."
+
+#: core/admin.py:3481
+msgid "Print Release Form"
+msgstr "Imprimir formulario de entrega"
+
+#: core/admin.py:3499
+msgid "No RFID cards marked as valid are available to print."
+msgstr ""
+
+#: core/admin.py:3546 core/admin.py:3554
+msgid "Scan RFIDs"
+msgstr ""
+
+#: core/admindocs.py:66 pages/templates/pages/manual_list.html:6
+msgid "User Manuals"
+msgstr ""
+
+#: core/apps.py:13 core/templates/core/release_progress.html:280
+#: pages/templates/core/release_progress.html:160
+msgid "2. Business"
+msgstr "2. Negocio"
+
+#: core/environment.py:23 core/sigil_builder.py:43
+#: pages/templates/admin/index.html:200
+msgid "Environ"
+msgstr ""
+
+#: core/environment.py:34 core/sigil_builder.py:48
+#: core/templates/admin/system_pending_todos_report.html:95
+#: pages/templates/admin/index.html:201
+msgid "Config"
+msgstr ""
+
+#: core/fields.py:109
+msgid "Semicolons are not allowed in conditions."
+msgstr ""
+
+#: core/fields.py:113
+msgid "SQL comments are not allowed in conditions."
+msgstr ""
+
+#: core/fields.py:118
+#, python-format
+msgid "Disallowed keyword in condition: %(keyword)s"
+msgstr ""
+
+#: core/form_fields.py:30
+msgid "Please either submit a file or check the clear checkbox, not both."
+msgstr ""
+
+#: core/models.py:110 core/models.py:111
+msgid "Select either a user or a security group, not both."
+msgstr ""
+
+#: core/models.py:116
+msgid "Profiles must be assigned to a user or a security group."
+msgstr ""
+
+#: core/models.py:146 core/models.py:159
+#, python-format
+msgid "The %(username)s account cannot have profiles attached."
+msgstr ""
+
+#: core/models.py:191
+msgid "Enter a valid domain name such as example.com."
+msgstr ""
+
+#: core/models.py:198
+msgid "Enter a valid DID such as did:plc:1234abcd."
+msgstr ""
+
+#: core/models.py:236
+#, fuzzy
+#| msgid "Custom label"
+msgid "Custom Sigil"
+msgstr "Etiqueta personalizada"
+
+#: core/models.py:237
+#, fuzzy
+#| msgid "Custom label"
+msgid "Custom Sigils"
+msgstr "Etiqueta personalizada"
+
+#: core/models.py:244
+msgid "Open"
+msgstr ""
+
+#: core/models.py:245
+msgid "Assigned"
+msgstr ""
+
+#: core/models.py:246
+#, fuzzy
+#| msgid "Close"
+msgid "Closed"
+msgstr "Cerrar"
+
+#: core/models.py:354
+msgid "active"
+msgstr ""
+
+#: core/models.py:409
+msgid "Selected user is not available."
+msgstr ""
+
+#: core/models.py:412
+msgid "Cannot operate as yourself."
+msgstr ""
+
+#: core/models.py:414
+msgid "Cannot operate as a deleted user."
+msgstr ""
+
+#: core/models.py:416
+msgid "Only staff members may operate as another user."
+msgstr ""
+
+#: core/models.py:418
+msgid "Only superusers may operate as staff members."
+msgstr ""
+
+#: core/models.py:625
+msgid "Invalid Odoo credentials"
+msgstr ""
+
+#: core/models.py:679
+msgid "Odoo Employee"
+msgstr ""
+
+#: core/models.py:680
+msgid "Odoo Employees"
+msgstr ""
+
+#: core/models.py:797
+#, python-format
+msgid "Unable to verify OpenPay credentials: %(error)s"
+msgstr ""
+
+#: core/models.py:804
+msgid "Invalid OpenPay credentials"
+msgstr ""
+
+#: core/models.py:837
+msgid "OpenPay Merchant"
+msgstr ""
+
+#: core/models.py:838
+msgid "OpenPay Merchants"
+msgstr ""
+
+#: core/models.py:1185
+#, fuzzy
+#| msgid "Blue"
+msgid "Bluesky"
+msgstr "Azul"
+
+#: core/models.py:1186
+msgid "Discord"
+msgstr ""
+
+#: core/models.py:1204
+msgid ""
+"Select the social network you want to connect. Bluesky and Discord are "
+"supported."
+msgstr ""
+
+#: core/models.py:1211
+msgid ""
+"Bluesky handle that should resolve to Arthexis. Use the verified domain (for "
+"example arthexis.com)."
+msgstr ""
+
+#: core/models.py:1219
+msgid ""
+"Domain that hosts the Bluesky verification. Publish a _atproto TXT record or "
+"a /.well-known/atproto-did file with the DID below."
+msgstr ""
+
+#: core/models.py:1227
+msgid ""
+"Optional DID that Bluesky assigns once the domain is linked (for example did:"
+"plc:1234abcd)."
+msgstr ""
+
+#: core/models.py:1234
+msgid "Discord application ID used to control the bot."
+msgstr ""
+
+#: core/models.py:1239
+msgid "Discord public key used to verify interaction requests."
+msgstr ""
+
+#: core/models.py:1244
+msgid "Discord guild (server) identifier where the bot should operate."
+msgstr ""
+
+#: core/models.py:1249
+msgid "Discord bot token required for authenticated actions."
+msgstr ""
+
+#: core/models.py:1254
+msgid "Optional Discord channel identifier used for default messaging."
+msgstr ""
+
+#: core/models.py:1262
+msgid "Provide the handle that should point to this domain."
+msgstr ""
+
+#: core/models.py:1264
+msgid "A verified domain is required for Bluesky handles."
+msgstr ""
+
+#: core/models.py:1267
+msgid "Provide the Discord application ID for the bot."
+msgstr ""
+
+#: core/models.py:1269
+msgid "Provide the Discord guild identifier where the bot will operate."
+msgstr ""
+
+#: core/models.py:1271
+msgid "Provide the Discord bot token so Arthexis can control the bot."
+msgstr ""
+
+#: core/models.py:1315
+msgid "Social Identity"
+msgstr ""
+
+#: core/models.py:1316
+msgid "Social Identities"
+msgstr ""
+
+#: core/models.py:1424
+msgid "Email Collector"
+msgstr ""
+
+#: core/models.py:1425
+#, fuzzy
+#| msgid "Email Patterns"
+msgid "Email Collectors"
 msgstr "Patrones de correo electrónico"
 
-#: emails/templates/admin/emails/emailpattern/change_form.html:5
-msgid "Test pattern"
+#: core/models.py:1595
+msgid "Select an inbox, collector or outbox for the transaction."
+msgstr ""
+
+#: core/models.py:1599
+msgid "Inbound messages must reference a collector or inbox."
+msgstr ""
+
+#: core/models.py:1603
+msgid "Outbound messages must reference an inbox or outbox."
+msgstr ""
+
+#: core/models.py:1838
+msgid "Black"
+msgstr "Negro"
+
+#: core/models.py:1839
+msgid "White"
+msgstr "Blanco"
+
+#: core/models.py:1840
+msgid "Blue"
+msgstr "Azul"
+
+#: core/models.py:1841
+msgid "Red"
+msgstr "Rojo"
+
+#: core/models.py:1842
+msgid "Green"
+msgstr "Verde"
+
+#: core/models.py:1854
+msgid "MIFARE Classic"
+msgstr "MIFARE Classic"
+
+#: core/models.py:1855
+msgid "NTAG215"
+msgstr "NTAG215"
+
+#: core/models.py:1865
+msgid "Big endian"
+msgstr ""
+
+#: core/models.py:1866
+msgid "Little endian"
+msgstr ""
+
+#: core/models.py:2136
+msgid "Zone 1"
+msgstr ""
+
+#: core/models.py:2137
+msgid "Zone 1A"
+msgstr ""
+
+#: core/models.py:2138
+msgid "Zone 1B"
+msgstr ""
+
+#: core/models.py:2139
+msgid "Zone 1C"
+msgstr ""
+
+#: core/models.py:2140
+msgid "Zone 1D"
+msgstr ""
+
+#: core/models.py:2141
+msgid "Zone 1E"
+msgstr ""
+
+#: core/models.py:2142
+msgid "Zone 1F"
+msgstr ""
+
+#: core/models.py:2145
+msgid "All year"
+msgstr ""
+
+#: core/models.py:2146
+msgid "Summer season"
+msgstr ""
+
+#: core/models.py:2147
+msgid "Non-summer season"
+msgstr ""
+
+#: core/models.py:2150
+msgid "Flat rate"
+msgstr ""
+
+#: core/models.py:2151
+msgid "Basic block"
+msgstr ""
+
+#: core/models.py:2152
+msgid "Intermediate block 1"
+msgstr ""
+
+#: core/models.py:2153
+msgid "Intermediate block 2"
+msgstr ""
+
+#: core/models.py:2154
+msgid "Excess consumption"
+msgstr ""
+
+#: core/models.py:2155
+msgid "Base"
+msgstr ""
+
+#: core/models.py:2156
+msgid "Intermediate"
+msgstr ""
+
+#: core/models.py:2157
+msgid "Peak"
+msgstr ""
+
+#: core/models.py:2158
+msgid "Critical peak"
+msgstr ""
+
+#: core/models.py:2159
+msgid "Demand charge"
+msgstr ""
+
+#: core/models.py:2160
+msgid "Capacity charge"
+msgstr ""
+
+#: core/models.py:2161
+msgid "Distribution charge"
+msgstr ""
+
+#: core/models.py:2162
+#, fuzzy
+#| msgid "Fixture changes"
+msgid "Fixed charge"
+msgstr "Cambios de fixtures"
+
+#: core/models.py:2165
+msgid "Domestic service (Tarifa 1)"
+msgstr ""
+
+#: core/models.py:2166
+msgid "High consumption domestic (DAC)"
+msgstr ""
+
+#: core/models.py:2167
+msgid "General service low demand (PDBT)"
+msgstr ""
+
+#: core/models.py:2168
+msgid "General service high demand (GDBT)"
+msgstr ""
+
+#: core/models.py:2169
+msgid "General distribution medium tension (GDMTO)"
+msgstr ""
+
+#: core/models.py:2170
+msgid "General distribution medium tension hourly (GDMTH)"
+msgstr ""
+
+#: core/models.py:2173
+msgid "Kilowatt-hour"
+msgstr ""
+
+#: core/models.py:2174
+msgid "Kilowatt"
+msgstr ""
+
+#: core/models.py:2175
+msgid "Monthly charge"
+msgstr ""
+
+#: core/models.py:2179
+msgid "Calendar year when the tariff applies."
+msgstr ""
+
+#: core/models.py:2185
+msgid "Season or applicability window defined by CFE."
+msgstr ""
+
+#: core/models.py:2190
+msgid "CFE climate zone associated with the tariff."
+msgstr ""
+
+#: core/models.py:2195
+msgid "Type of service contract regulated by CFE."
+msgstr ""
+
+#: core/models.py:2200
+msgid "Tariff block, demand component, or time-of-use period."
+msgstr ""
+
+#: core/models.py:2206
+msgid "Measurement unit for the tariff charge."
+msgstr ""
+
+#: core/models.py:2209
+msgid "Start time for the tariff's applicability window."
+msgstr ""
+
+#: core/models.py:2212
+msgid "End time for the tariff's applicability window."
+msgstr ""
+
+#: core/models.py:2217
+msgid "Customer price per unit in MXN."
+msgstr ""
+
+#: core/models.py:2222
+msgid "Provider cost per unit in MXN."
+msgstr ""
+
+#: core/models.py:2227
+msgid "Context or special billing conditions published by CFE."
+msgstr ""
+
+#: core/models.py:2233
+msgid "Energy Tariff"
+msgstr ""
+
+#: core/models.py:2234
+msgid "Energy Tariffs"
+msgstr ""
+
+#: core/models.py:2269
+msgid "End time must be after the start time."
+msgstr ""
+
+#: core/models.py:2273
+#, python-format
+msgid "%(contract)s %(zone)s %(season)s %(year)s (%(period)s)"
+msgstr ""
+
+#: core/models.py:2908
+msgid "EV Brand"
+msgstr ""
+
+#: core/models.py:2909
+msgid "EV Brands"
+msgstr ""
+
+#: core/models.py:2933
+msgid "WMI Code"
+msgstr ""
+
+#: core/models.py:2934
+msgid "WMI Codes"
+msgstr ""
+
+#: core/models.py:2990
+msgid "EV Model"
+msgstr ""
+
+#: core/models.py:2991
+msgid "EV Models"
+msgstr ""
+
+#: core/models.py:3018
+msgid "License Plate"
+msgstr "Placa"
+
+#: core/models.py:3032 ocpp/models.py:922
+msgid "Electric Vehicle"
+msgstr ""
+
+#: core/models.py:3033 ocpp/models.py:923
+msgid "Electric Vehicles"
+msgstr ""
+
+#: core/models.py:3752 teams/forms.py:15
+msgid "Label shown in authenticator apps. Leave blank to use Arthexis."
+msgstr ""
+
+#: core/models.py:3758 core/models.py:3759
+msgid "Authenticator device settings"
+msgstr ""
+
+#: core/sigil_builder.py:53 core/system.py:980
+#: core/templates/admin/system_changelog_report.html:33
+#: core/templates/admin/system_upgrade_report.html:7
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:7
+msgid "System"
+msgstr ""
+
+#: core/sigil_builder.py:121 pages/templates/admin/index.html:202
+msgid "Sigil Builder"
+msgstr ""
+
+#: core/system.py:353 core/templates/admin/system_upgrade_report.html:70
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:72
+msgid "Disabled"
+msgstr ""
+
+#: core/system.py:477
+msgid "The auto-upgrade log could not be read."
+msgstr ""
+
+#: core/system.py:509
+msgid "django-celery-beat is not installed or configured."
+msgstr ""
+
+#: core/system.py:533
+msgid "Auto-upgrade schedule could not be loaded."
+msgstr ""
+
+#: core/system.py:682
+msgid "Suite installed"
+msgstr ""
+
+#: core/system.py:683 core/templates/admin/system_pending_todos_report.html:80
+#: core/templates/core/version_check.html:5
+msgid "Revision"
+msgstr ""
+
+#: core/system.py:685
+msgid "not installed"
+msgstr ""
+
+#: core/system.py:686
+msgid "Service"
+msgstr ""
+
+#: core/system.py:691
+msgid "Nginx mode"
+msgstr ""
+
+#: core/system.py:693
+msgid "Node role"
+msgstr ""
+
+#: core/system.py:695
+#, fuzzy
+#| msgid "Display Name"
+msgid "Display mode"
+msgstr "Nombre para mostrar"
+
+#: core/system.py:701
+#, fuzzy
+#| msgid "Fixture"
+msgid "Features"
+msgstr "Fixture"
+
+#: core/system.py:702
+msgid "Running"
+msgstr ""
+
+#: core/system.py:704
+msgid "Service status"
+msgstr ""
+
+#: core/system.py:710
+msgid "Hostname"
+msgstr ""
+
+#: core/system.py:713
+msgid "IP addresses"
+msgstr ""
+
+#: core/system.py:716
+msgid "Databases"
+msgstr ""
+
+#: core/system.py:723
+msgid "Next version check"
+msgstr ""
+
+#: core/system.py:998
+#, python-format
+msgid "Excluded %(count)d changelog entry."
+msgid_plural "Excluded %(count)d changelog entries."
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/system.py:1009
+msgid ""
+"The selected changelog entries were not found or have already been excluded."
+msgstr ""
+
+#: core/system.py:1015
+#, fuzzy
+#| msgid "Select at least one RFID to print the release form."
+msgid "Select at least one changelog entry to exclude."
+msgstr "Seleccione al menos un RFID para imprimir el formulario de entrega."
+
+#: core/system.py:1024
+msgid "Command log"
+msgstr ""
+
+#: core/system.py:1032
+msgid "Repository status"
+msgstr ""
+
+#: core/system.py:1042
+msgid "Committed the changelog and pushed to the current branch."
+msgstr ""
+
+#: core/system.py:1045
+msgid "Unable to commit the changelog."
+msgstr ""
+
+#: core/system.py:1054 core/system.py:1061
+#, python-format
+msgid "Unable to recalculate the changelog: %(error)s"
+msgstr ""
+
+#: core/system.py:1067
+msgid "Successfully recalculated the changelog from recent commits."
+msgstr ""
+
+#: core/system.py:1074 core/templates/admin/system.html:20
+#: core/templates/admin/system_changelog_report.html:34
+msgid "Changelog Report"
+msgstr ""
+
+#: core/system.py:1085 core/templates/admin/system.html:28
+#: core/templates/admin/system_upgrade_report.html:8
+#: core/templates/admin/system_upgrade_report.html:46
+msgid "Upgrade Report"
+msgstr ""
+
+#: core/system.py:1093 core/templates/admin/system_pending_todos_report.html:22
+#: core/templates/admin/system_pending_todos_report.html:116
+#: core/templates/core/release_progress.html:484
+#: pages/templates/core/release_progress.html:269
+msgid "Approve"
+msgstr ""
+
+#: core/system.py:1161
+#, python-format
+msgid "%(count)d TODO updated."
+msgid_plural "%(count)d TODOs updated."
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/system.py:1170
+#, python-format
+msgid "%(count)d TODO approved."
+msgid_plural "%(count)d TODOs approved."
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/system.py:1180
+msgid "No changes were applied to the pending TODOs."
+msgstr ""
+
+#: core/system.py:1184
+msgid "Please correct the errors below."
+msgstr ""
+
+#: core/system.py:1197 core/templates/admin/system.html:36
+#: core/templates/admin/system_pending_todos_report.html:6
+msgid "Pending TODOs Report"
+msgstr ""
+
+#: core/system.py:1231
+#, python-format
+msgid "Unable to trigger an upgrade check: %(error)s"
+msgstr ""
+
+#: core/system.py:1238
+msgid "Upgrade check requested. The task will run shortly."
+msgstr ""
+
+#: core/system.py:1244
+msgid ""
+"Upgrade check started locally. Review the auto-upgrade log for progress."
+msgstr ""
+
+#: core/templates/admin/assistantprofile_key.html:6
+msgid "Assistant Profile Key"
+msgstr ""
+
+#: core/templates/admin/assistantprofile_key.html:7
+msgid "Copy this key now. It will not be shown again."
+msgstr ""
+
+#: core/templates/admin/assistantprofile_key.html:9
+msgid "Return to profile"
+msgstr ""
+
+#: core/templates/admin/change_list.html:4
+#: pages/templates/admin/change_form.html:4
+#: pages/templates/admin/change_list.html:4
+#: pages/templates/registration/password_change_form.html:4
+msgid "Error:"
+msgstr ""
+
+#: core/templates/admin/change_list.html:33
+#: core/templates/admin/core/emailcollector/preview.html:6
+#: core/templates/admin/core/emailinbox/search.html:6
+#: core/templates/admin/core/odoo_quote_report.html:6
+#: core/templates/admin/core/package/create_repository.html:8
+#: core/templates/admin/core/product/fetch_odoo.html:8
+#: core/templates/admin/core/product/register_from_odoo.html:6
+#: core/templates/admin/core/request_temp_password.html:6
+#: core/templates/admin/core/rfid/scan.html:6
+#: core/templates/admin/system_changelog_report.html:32
+#: core/templates/admin/system_upgrade_report.html:6
+#: core/templates/core/release_progress.html:279
+#: nodes/templates/admin/nodes/netmessage/send.html:41
+#: nodes/templates/admin/nodes/node/register_visitor.html:7
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:6
+#: nodes/templates/admin/nodes/node/update_selected.html:6
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:6
+#: ocpp/templates/admin/ocpp/log_view.html:9
+#: pages/templates/admin/change_form.html:30
+#: pages/templates/admin/change_list.html:34
+#: pages/templates/admin/log_viewer.html:60
+#: pages/templates/admin/model_graph.html:93
+#: pages/templates/admin_doc/commands.html:6
+#: pages/templates/admin_doc/index.html:6
+#: pages/templates/admin_doc/manual_detail.html:6
+#: pages/templates/admin_doc/manuals.html:6
+#: pages/templates/admin_doc/model_graphs.html:6
+#: pages/templates/admin_doc/model_index.html:8
+#: pages/templates/core/release_progress.html:159
+#: pages/templates/registration/password_change_form.html:16
+msgid "Home"
+msgstr ""
+
+#: core/templates/admin/change_list.html:58
+#: pages/templates/admin/change_form.html:55
+#: pages/templates/admin/change_list.html:54
+#: pages/templates/registration/password_change_form.html:27
+msgid "Please correct the error below."
+msgid_plural "Please correct the errors below."
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/templates/admin/change_list.html:83 core/templates/admin/config.html:7
+#: core/templates/admin/data_list.html:35
+#: core/templates/admin/environment.html:7
+#: core/templates/admin/sigil_builder.html:25
+#: core/templates/admin/sigil_builder.html:45
+#: pages/templates/admin/change_list.html:79
+msgid "Filter"
+msgstr ""
+
+#: core/templates/admin/change_list.html:86
+#: pages/templates/admin/change_list.html:82
+msgid "Hide counts"
+msgstr ""
+
+#: core/templates/admin/change_list.html:87
+#: pages/templates/admin/change_list.html:82
+msgid "Show counts"
+msgstr ""
+
+#: core/templates/admin/change_list.html:90
+#: pages/templates/admin/change_list.html:85
+msgid "Clear all filters"
+msgstr ""
+
+#: core/templates/admin/config.html:6 nodes/admin.py:115
+#: ocpp/templates/ocpp/charger_status.html:229 ocpp/tests.py:4369
+#: ocpp/tests.py:4378
+#, fuzzy
+#| msgid "Constellation"
+msgid "Configuration"
+msgstr "Constellation"
+
+#: core/templates/admin/config.html:10
+#: core/templates/admin/core/product/fetch_odoo.html:51
+#: core/templates/admin/core/product/register_from_odoo.html:44
+#: core/templates/admin/environment.html:10 core/templates/admin/system.html:12
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:41
+#: ocpp/templates/ocpp/dashboard.html:79
+msgid "Name"
+msgstr ""
+
+#: core/templates/admin/config.html:10 core/templates/admin/environment.html:10
+#, fuzzy
+#| msgid "Value / URL"
+msgid "Value"
+msgstr "Valor / URL"
+
+#: core/templates/admin/config.html:16
+msgid "No settings."
+msgstr ""
+
+#: core/templates/admin/core/clientreport/generate.html:73
+#: pages/templates/pages/client_report.html:140
+msgid "Last week"
+msgstr ""
+
+#: core/templates/admin/core/clientreport/generate.html:173
+#: pages/templates/pages/client_report.html:7
+#, python-format
+msgid "Report from %(start)s to %(end)s"
+msgstr ""
+
+#: core/templates/admin/core/clientreport/generate.html:181
+#: core/templates/admin/core/rfid/report.html:11
+#: pages/templates/pages/client_report.html:15
+#: pages/templates/pages/client_report.html:24
+msgid "RFID / Account"
+msgstr ""
+
+#: core/templates/admin/core/clientreport/generate.html:182
+#: core/templates/admin/core/rfid/report.html:12
+#: pages/templates/pages/client_report.html:16
+#: pages/templates/pages/client_report.html:27
+msgid "Session start"
+msgstr ""
+
+#: core/templates/admin/core/clientreport/generate.html:183
+#: core/templates/admin/core/rfid/report.html:13
+#: pages/templates/pages/client_report.html:17
+#: pages/templates/pages/client_report.html:34
+msgid "Session end"
+msgstr ""
+
+#: core/templates/admin/core/clientreport/generate.html:184
+#: core/templates/admin/core/rfid/report.html:14
+#: pages/templates/pages/client_report.html:18
+#: pages/templates/pages/client_report.html:41
+msgid "Energy (kWh)"
+msgstr ""
+
+#: core/templates/admin/core/clientreport/generate.html:197
+#: core/templates/admin/core/rfid/report.html:27 ocpp/status_display.py:17
+#: pages/templates/pages/client_report.html:31
+#, fuzzy
+#| msgid "Available"
+msgid "Unavailable"
+msgstr "Disponible"
+
+#: core/templates/admin/core/clientreport/generate.html:204
+#: core/templates/admin/core/rfid/report.html:34 core/views.py:2145
+#: pages/templates/pages/client_report.html:38
+msgid "In progress"
+msgstr ""
+
+#: core/templates/admin/core/clientreport/generate.html:210
+#: core/templates/admin/core/clientreport/generate.html:223
+#: core/templates/admin/core/clientreport/generate.html:230
+#: core/templates/admin/core/rfid/report.html:40
+#: core/templates/admin/core/rfid/report.html:53
+#: core/templates/admin/core/rfid/report.html:60
+#: pages/templates/pages/client_report.html:45
+#: pages/templates/pages/client_report.html:68
+#: pages/templates/pages/client_report.html:76
+msgid "No data available."
+msgstr ""
+
+#: core/templates/admin/core/clientreport/generate.html:217
+#: core/templates/admin/core/rfid/report.html:47
+#: pages/templates/pages/client_report.html:54
+#: pages/templates/pages/client_report.html:62
+msgid "RFID/Account"
+msgstr ""
+
+#: core/templates/admin/core/clientreport/generate.html:217
+#: core/templates/admin/core/rfid/report.html:47
+#: ocpp/templates/ocpp/charger_status.html:177
+#: pages/templates/pages/client_report.html:55
+#: pages/templates/pages/client_report.html:63
+msgid "Sessions"
+msgstr ""
+
+#: core/templates/admin/core/clientreport/generate.html:217
+#: core/templates/admin/core/rfid/report.html:47
+#: pages/templates/pages/client_report.html:56
+#: pages/templates/pages/client_report.html:64
+msgid "Total kWh"
+msgstr ""
+
+#: core/templates/admin/core/clientreport/generate.html:234
+#: pages/templates/pages/client_report.html:80
+#, python-format
+msgid "Next run scheduled (%(freq)s)"
+msgstr ""
+
+#: core/templates/admin/core/emailcollector/preview.html:25
+msgid "No subject"
+msgstr ""
+
+#: core/templates/admin/core/emailcollector/preview.html:26
+msgid "From"
+msgstr ""
+
+#: core/templates/admin/core/emailcollector/preview.html:26
+msgid "Unknown sender"
+msgstr ""
+
+#: core/templates/admin/core/emailcollector/preview.html:27
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:95
+msgid "Date"
+msgstr ""
+
+#: core/templates/admin/core/emailcollector/preview.html:27
+msgid "Unknown date"
+msgstr ""
+
+#: core/templates/admin/core/emailcollector/preview.html:33
+#: core/templates/admin/core/emailinbox/search.html:44
+#, fuzzy
+#| msgid "No charge points found."
+msgid "No messages found."
+msgstr "No se encontraron puntos de carga."
+
+#: core/templates/admin/core/emailcollector/preview.html:38
+msgid "No collectors were selected."
+msgstr ""
+
+#: core/templates/admin/core/emailcollector/preview.html:40
+msgid "Back to collectors"
+msgstr ""
+
+#: core/templates/admin/core/emailinbox/change_form.html:6
+msgid "Test Inbox"
+msgstr ""
+
+#: core/templates/admin/core/emailinbox/search.html:9
+msgid "Search Email Inboxes"
+msgstr ""
+
+#: core/templates/admin/core/emailinbox/search.html:15
+msgid "Selected inboxes"
+msgstr ""
+
+#: core/templates/admin/core/emailinbox/search.html:34
+#: core/templates/admin/core/product/fetch_odoo.html:77
+#: ocpp/templates/ocpp/charger_session_search.html:33
+#: ocpp/templates/ocpp/charger_status.html:227
+msgid "Search"
+msgstr ""
+
+#: core/templates/admin/core/emailinbox/search.html:39
+msgid "Results"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:18
+#: core/templates/admin/core/product/fetch_odoo.html:21
+#: core/templates/admin/core/product/register_from_odoo.html:18
+msgid "Manage Odoo credentials"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:24
+#, fuzzy
+#| msgid "Calculator Templates"
+msgid "Quote templates"
+msgstr "Plantillas de calculadora"
+
+#: core/templates/admin/core/odoo_quote_report.html:28
+#, fuzzy
+#| msgid "Temperature:"
+msgid "Template"
+msgstr "Temperatura:"
+
+#: core/templates/admin/core/odoo_quote_report.html:29
+msgid "Quotes"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:40
+#, fuzzy
+#| msgid "No charge points found."
+msgid "No templates found."
+msgstr "No se encontraron puntos de carga."
+
+#: core/templates/admin/core/odoo_quote_report.html:48
+msgid "Recent unsent quotes"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:52
+msgid "Quote"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:53
+#, fuzzy
+#| msgid "Custom label"
+msgid "Customer"
+msgstr "Etiqueta personalizada"
+
+#: core/templates/admin/core/odoo_quote_report.html:54
+msgid "Total"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:55
+msgid "Activity"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:56
+#: pages/templates/admin_doc/index.html:17
+msgid "Tags"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:57
+#: core/templates/admin/core/odoo_quote_report.html:86
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:48
+#, fuzzy
+#| msgid "Great"
+msgid "Created"
+msgstr "Genial"
+
+#: core/templates/admin/core/odoo_quote_report.html:72
+#, fuzzy
+#| msgid "No charge points found."
+msgid "No matching quotes found."
+msgstr "No se encontraron puntos de carga."
+
+#: core/templates/admin/core/odoo_quote_report.html:80
+msgid "Recently updated products"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:84
+msgid "Product"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:85
+#: core/templates/admin/core/product/fetch_odoo.html:52
+msgid "Internal reference"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:87
+msgid "Last updated"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:100
+#: core/templates/admin/core/product/fetch_odoo.html:70
+#, fuzzy
+#| msgid "No charge points found."
+msgid "No products found."
+msgstr "No se encontraron puntos de carga."
+
+#: core/templates/admin/core/odoo_quote_report.html:108
+msgid "Installed modules"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:112 pages/models.py:89
+msgid "Module"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:114
+#: core/templates/admin/system_pending_todos_report.html:69
+#: core/templates/core/version_check.html:4
+msgid "Version"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:115
+msgid "Author"
+msgstr ""
+
+#: core/templates/admin/core/odoo_quote_report.html:128
+#, fuzzy
+#| msgid "No Suitable Cable Found"
+msgid "No installed modules found."
+msgstr "No se encontró un cable adecuado"
+
+#: core/templates/admin/core/package/create_repository.html:31
+#: core/templates/admin/core/rfid/copy.html:46
+#: core/templates/admin/core/widgets/rfid_data_widget.html:133
+#: nodes/templates/admin/nodes/netmessage/send.html:69
+#: pages/templates/admin/favorite_confirm.html:18
+msgid "Cancel"
+msgstr ""
+
+#: core/templates/admin/core/package/create_repository.html:32
+msgid "Create repository"
+msgstr ""
+
+#: core/templates/admin/core/packagerelease/build_release.html:12
+msgid "Build"
+msgstr ""
+
+#: core/templates/admin/core/packagerelease/test_logs.html:5
+msgid "Test logs"
+msgstr ""
+
+#: core/templates/admin/core/packagerelease/test_logs.html:6
+msgid "Tests failed. Logs saved to"
+msgstr ""
+
+#: core/templates/admin/core/packagerelease/test_logs.html:8
+msgid "Copy logs"
+msgstr ""
+
+#: core/templates/admin/core/product/fetch_odoo.html:11
+#: core/templates/admin/core/product/fetch_odoo.html:16
+msgid "Fetch Odoo Product"
+msgstr ""
+
+#: core/templates/admin/core/product/fetch_odoo.html:46
+msgid "Search results"
+msgstr ""
+
+#: core/templates/admin/core/product/fetch_odoo.html:50
+#: core/templates/admin/core/product/register_from_odoo.html:43
+#: core/templates/admin/system_changelog_report.html:70
+msgid "Select"
+msgstr ""
+
+#: core/templates/admin/core/product/fetch_odoo.html:53
+msgid "Barcode"
+msgstr ""
+
+#: core/templates/admin/core/product/fetch_odoo.html:79
+msgid "Import selected product"
+msgstr ""
+
+#: core/templates/admin/core/product/register_from_odoo.html:39
+msgid "Select a product from Odoo to create it in Arthexis."
+msgstr ""
+
+#: core/templates/admin/core/product/register_from_odoo.html:45
+msgid "Sales description"
+msgstr ""
+
+#: core/templates/admin/core/product/register_from_odoo.html:46
+msgid "Price"
+msgstr ""
+
+#: core/templates/admin/core/product/register_from_odoo.html:47
+msgid "Original cost"
+msgstr ""
+
+#: core/templates/admin/core/product/register_from_odoo.html:68
+msgid "No products available from Odoo."
+msgstr ""
+
+#: core/templates/admin/core/product/register_from_odoo.html:74
+#, fuzzy
+#| msgid "Register current host"
+msgid "Register product"
+msgstr "Registrar anfitrión actual"
+
+#: core/templates/admin/core/request_temp_password.html:7
+#: pages/templates/registration/password_change_form.html:17
+msgid "Password change"
+msgstr ""
+
+#: core/templates/admin/core/request_temp_password.html:8
+#: core/templates/admin/core/request_temp_password.html:37 core/views.py:355
+msgid "Temporary password"
+msgstr ""
+
+#: core/templates/admin/core/request_temp_password.html:18
+#, python-format
+msgid "A new temporary password has been created for %(username)s."
+msgstr ""
+
+#: core/templates/admin/core/request_temp_password.html:23
+msgid "Temporary password details"
+msgstr ""
+
+#: core/templates/admin/core/request_temp_password.html:25
+msgid ""
+"Copy the password below and store it securely. It expires at the time shown."
+msgstr ""
+
+#: core/templates/admin/core/request_temp_password.html:29
+msgid ""
+"You may use this temporary password as your old password when changing it."
+msgstr ""
+
+#: core/templates/admin/core/request_temp_password.html:33
+msgid "Username"
+msgstr ""
+
+#: core/templates/admin/core/request_temp_password.html:41
+msgid "Expires at"
+msgstr ""
+
+#: core/templates/admin/core/request_temp_password.html:47
+msgid "Return to password change"
+msgstr ""
+
+#: core/templates/admin/core/rfid/copy.html:16
+#, python-format
+msgid "Copy RFID %(label)s"
+msgstr ""
+
+#: core/templates/admin/core/rfid/copy.html:17
+#, python-format
+msgid "This will create a new RFID using the configuration from %(rfid)s."
+msgstr ""
+
+#: core/templates/admin/core/rfid/copy.html:45
+msgid "Copy"
+msgstr ""
+
+#: core/templates/admin/core/rfid/scan.html:9
+msgid "Scan"
+msgstr ""
+
+#: core/templates/admin/core/rfid/scan.html:14
+#: ocpp/templates/rfid/reader.html:4
+msgid "RFID Scanner"
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:7
+#, python-format
+msgid "Sector %(sector.sector)s"
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:9
+#, fuzzy, python-format
+#| msgid "Serial Number"
+msgid "Sector %(number)s"
+msgstr "Número de serie"
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:13
+#: core/templates/admin/core/widgets/rfid_data_widget.html:55
+#: core/templates/admin/core/widgets/rfid_data_widget.html:97
+msgid "Block"
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:14
+#: core/templates/admin/core/widgets/rfid_data_widget.html:113
+msgid "Key"
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:49
+#, python-format
+msgid "Sector %(sector.sector)s text register"
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:51
+#, python-format
+msgid "Sector %(number)s text"
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:56
+#: core/templates/admin/core/widgets/rfid_data_widget.html:126
+msgid "Text"
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:81
+msgid "Unable to display block data. Showing raw JSON below."
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:83
+msgid "No block data available."
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:89
+msgid "Raw data"
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:96
+msgid "Sector"
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:98
+msgid "Offset"
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:105
+msgid "Edit block"
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:109
+msgid "Update the selected block using hexadecimal or text format."
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:119
+msgid "Hex bytes"
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:122
+msgid "Enter sixteen hexadecimal byte values separated by spaces."
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:129
+msgid ""
+"Characters outside the printable range will be replaced with middot "
+"placeholders."
+msgstr ""
+
+#: core/templates/admin/core/widgets/rfid_data_widget.html:132
+msgid "Update"
+msgstr ""
+
+#: core/templates/admin/data_list.html:26
+msgid "Export"
+msgstr ""
+
+#: core/templates/admin/data_list.html:30
+msgid "Import"
+msgstr ""
+
+#: core/templates/admin/data_list.html:39
+msgid "App"
+msgstr ""
+
+#: core/templates/admin/data_list.html:40
+#: core/templates/admin/sigil_builder.html:28
+#: core/templates/admin/sigil_builder.html:48
+#: pages/templates/admin/favorite_list.html:12
+#, fuzzy
+#| msgid "Models"
+msgid "Model"
+msgstr "Modelos"
+
+#: core/templates/admin/data_list.html:41
+msgid "Entity"
+msgstr ""
+
+#: core/templates/admin/data_list.html:42
+#: core/templates/core/release_progress.html:366
+#: pages/templates/core/release_progress.html:214
+msgid "Fixture"
+msgstr "Fixture"
+
+#: core/templates/admin/data_list.html:59 pages/templates/admin/index.html:256
+#: pages/templates/admin/index.html:273
+msgid "None available"
+msgstr ""
+
+#: core/templates/admin/django_object_actions_user_datum_change_form.html:16
+#: core/templates/admin/django_object_actions_user_datum_change_form.html:22
+#: core/templates/admin/edit_inline/profile_stacked.html:78
+#: core/templates/admin/edit_inline/profile_stacked.html:86
+#: core/templates/admin/user_datum_change_form.html:16
+#: core/templates/admin/user_datum_change_form.html:22
+#: core/templates/admin/user_profile_change_form.html:15
+#: core/templates/admin/user_profile_change_form.html:21
+#: pages/templates/admin/app_list.html:103
+#: pages/templates/admin/log_viewer.html:77
+msgid "View"
+msgstr ""
+
+#: core/templates/admin/django_object_actions_user_datum_change_form.html:22
+#: core/templates/admin/user_datum_change_form.html:22
+#: core/templates/admin/user_profile_change_form.html:21
+msgid "Seed Datum"
+msgstr ""
+
+#: core/templates/admin/edit_inline/profile_stacked.html:78
+#: pages/templates/admin/app_list.html:105
+msgid "Change"
+msgstr ""
+
+#: core/templates/admin/edit_inline/profile_stacked.html:79
+msgid "View on site"
+msgstr ""
+
+#: core/templates/admin/environment.html:6
+msgid "Environment Variables"
+msgstr ""
+
+#: core/templates/admin/environment.html:16
+msgid "No environment variables."
+msgstr ""
+
+#: core/templates/admin/sigil_builder.html:9
+msgid "Sigils"
+msgstr ""
+
+#: core/templates/admin/sigil_builder.html:13
+msgid "Validate"
+msgstr ""
+
+#: core/templates/admin/sigil_builder.html:16
+msgid "Result"
+msgstr ""
+
+#: core/templates/admin/sigil_builder.html:19
+msgid "Built-in Sigil Roots"
+msgstr ""
+
+#: core/templates/admin/sigil_builder.html:28
+msgid "Prefixes"
+msgstr ""
+
+#: core/templates/admin/sigil_builder.html:28
+msgid "Fields"
+msgstr ""
+
+#: core/templates/admin/sigil_builder.html:40
+msgid "No Sigil Roots."
+msgstr ""
+
+#: core/templates/admin/sigil_builder.html:44
+msgid "Auto-resolvable Fields"
+msgstr ""
+
+#: core/templates/admin/sigil_builder.html:48
+msgid "Root"
+msgstr ""
+
+#: core/templates/admin/sigil_builder.html:48
+msgid "Field"
+msgstr ""
+
+#: core/templates/admin/sigil_builder.html:58
+msgid "No auto-resolvable fields."
+msgstr ""
+
+#: core/templates/admin/system.html:7 pages/templates/admin/index.html:199
+msgid "System Reports"
+msgstr ""
+
+#: core/templates/admin/system.html:13
+msgid "Purpose"
+msgstr ""
+
+#: core/templates/admin/system.html:23
+msgid "Review pending changelog entries and manage release notes."
+msgstr ""
+
+#: core/templates/admin/system.html:31
+msgid "Check automated upgrade schedules and trigger update checks."
+msgstr ""
+
+#: core/templates/admin/system.html:39
+msgid "Edit release TODOs, review details, and approve items in bulk."
+msgstr ""
+
+#: core/templates/admin/system.html:45 nodes/admin.py:1264
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:8
+msgid "Celery Report"
+msgstr ""
+
+#: core/templates/admin/system.html:48
+msgid "Inspect Celery worker status and task visibility."
+msgstr ""
+
+#: core/templates/admin/system.html:54
+msgid "Celery support is not enabled on this node."
+msgstr ""
+
+#: core/templates/admin/system.html:61
+msgid "System field"
+msgstr ""
+
+#: core/templates/admin/system.html:62
+msgid "Sigil"
+msgstr ""
+
+#: core/templates/admin/system.html:63
+msgid "Current values"
+msgstr ""
+
+#: core/templates/admin/system.html:87
+msgid "expected and actual"
+msgstr ""
+
+#: core/templates/admin/system.html:89
+msgid "expected"
+msgstr ""
+
+#: core/templates/admin/system.html:91
+msgid "actual"
+msgstr ""
+
+#: core/templates/admin/system.html:99
+msgid "No features detected"
+msgstr ""
+
+#: core/templates/admin/system.html:117
+msgid "No databases configured"
+msgstr ""
+
+#: core/templates/admin/system_changelog_report.html:46
+#, fuzzy
+#| msgid "Calculate Again"
+msgid "Recalculate changelog"
+msgstr "Calcular de Nuevo"
+
+#: core/templates/admin/system_changelog_report.html:53
+msgid "Commit changelog"
+msgstr ""
+
+#: core/templates/admin/system_changelog_report.html:58
+msgid "Exclude selected"
+msgstr ""
+
+#: core/templates/admin/system_changelog_report.html:62
+msgid "Open Changelog"
+msgstr ""
+
+#: core/templates/admin/system_changelog_report.html:71
+msgid "Commit"
+msgstr ""
+
+#: core/templates/admin/system_changelog_report.html:72
+#: core/templates/admin/system_upgrade_report.html:182
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:106
+msgid "Message"
+msgstr ""
+
+#: core/templates/admin/system_changelog_report.html:93
+msgid "No pending changelog entries."
+msgstr ""
+
+#: core/templates/admin/system_pending_todos_report.html:8
+msgid ""
+"Review outstanding release TODOs, update their details, and approve multiple "
+"items at once."
+msgstr ""
+
+#: core/templates/admin/system_pending_todos_report.html:17
+msgid "Request"
+msgstr ""
+
+#: core/templates/admin/system_pending_todos_report.html:18
+msgid "Details"
+msgstr ""
+
+#: core/templates/admin/system_pending_todos_report.html:19
+msgid "URL"
+msgstr ""
+
+#: core/templates/admin/system_pending_todos_report.html:20
+#, fuzzy
+#| msgid "Generated on: %(date)s"
+msgid "Generated for"
+msgstr "Generado el: %(date)s"
+
+#: core/templates/admin/system_pending_todos_report.html:21
+msgid "Links"
+msgstr ""
+
+#: core/templates/admin/system_pending_todos_report.html:127
+msgid "Check"
+msgstr "Revisar"
+
+#: core/templates/admin/system_pending_todos_report.html:126
+#, fuzzy
+#| msgid "Fixture changes"
+msgid "Save changes"
+msgstr "Cambios de fixtures"
+
+#: core/templates/admin/system_pending_todos_report.html:129
+msgid "Approve selected TODOs"
+msgstr ""
+
+#: core/templates/admin/system_pending_todos_report.html:134
+msgid "No pending TODOs require approval."
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:50
+msgid "Run upgrade check"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:56 nodes/reports.py:187
+msgid "Settings"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:58
+msgid "Auto-upgrade status"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:62
+msgid "Enabled (tracking the latest available revision)"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:64
+msgid "Enabled (tracking release versions)"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:68
+msgid "Disabled (mode file present but unreadable)"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:74
+#, fuzzy
+#| msgid "Models"
+msgid "Mode"
+msgstr "Modelos"
+
+#: core/templates/admin/system_upgrade_report.html:76
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:42
+msgid "Task"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:83
+#: ocpp/templates/admin/ocpp/log_view.html:24
+#: pages/templates/admin/log_viewer.html:70
+msgid "Log file"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:85
+msgid "Blocked revisions"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:94
+msgid "No revisions are currently blocked."
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:99
+msgid ""
+"The auto-upgrade mode could not be read; verify the lock file permissions."
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:103
+#: core/templates/admin/system_upgrade_report.html:133
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:43
+msgid "Schedule"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:109
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:70
+msgid "Enabled"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:119
+msgid "One-off"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:129
+msgid "Queue"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:137
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:44
+msgid "Next run"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:141
+msgid "Last run"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:145
+msgid "Start time"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:149
+msgid "Expires"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:153
+msgid "Run count"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:165
+msgid "The auto-upgrade periodic task has not been created yet."
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:171
+msgid "Scheduling information is unavailable."
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:176
+msgid "Recent activity"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:181
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:103
+msgid "Timestamp"
+msgstr ""
+
+#: core/templates/admin/system_upgrade_report.html:195
+msgid "No auto-upgrade activity has been recorded yet."
+msgstr ""
+
+#: core/templates/admin/user_profile_change_form.html:28
+msgid "View __USER__'s profile"
+msgstr ""
+
+#: core/templates/admin/user_profile_change_form.html:29
+#: core/templates/admin/user_profile_change_form.html:41
+msgid "View selected user's profile"
+msgstr ""
+
+#: core/templates/admin/user_profile_change_form.html:39
+#, python-format
+msgid "View %(username)s's profile"
+msgstr ""
+
+#: core/templates/admin/workgroupassistantprofile_change_form.html:6
+msgid "Generate Key"
+msgstr ""
+
+#: core/templates/core/release_progress.html:277
+#: pages/templates/core/release_progress.html:157
+msgid "Breadcrumbs"
+msgstr ""
+
+#: core/templates/core/release_progress.html:281
+#: pages/templates/core/release_progress.html:161
+msgid "Package Releases"
+msgstr ""
+
+#: core/templates/core/release_progress.html:297
+msgid "Dry Run"
+msgstr ""
+
+#: core/templates/core/release_progress.html:307
+#: pages/templates/core/release_progress.html:177
+msgid "Continue Publish"
+msgstr ""
+
+#: core/templates/core/release_progress.html:309
+#: pages/templates/core/release_progress.html:179
+msgid "Start Publish"
+msgstr ""
+
+#: core/templates/core/release_progress.html:314
+#: pages/templates/core/release_progress.html:184
+msgid "Pause Publish"
+msgstr ""
+
+#: core/templates/core/release_progress.html:322
+#: pages/templates/core/release_progress.html:189
+msgid "Resume Publish"
+msgstr ""
+
+#: core/templates/core/release_progress.html:327
+#: pages/templates/core/release_progress.html:194
+msgid "Restart Publish"
+msgstr ""
+
+#: core/templates/core/release_progress.html:341
+msgid "Manual follow-up required"
+msgstr ""
+
+#: core/templates/core/release_progress.html:359
+#: pages/templates/core/release_progress.html:207
+msgid "Publishing paused. Press Continue to resume."
+msgstr ""
+
+#: core/templates/core/release_progress.html:362
+#: pages/templates/core/release_progress.html:210
+msgid "Fixture changes"
+msgstr "Cambios de fixtures"
+
+#: core/templates/core/release_progress.html:367
+#: pages/templates/core/release_progress.html:215
+msgid "Entries"
+msgstr "Entradas"
+
+#: core/templates/core/release_progress.html:368
+#: pages/templates/admin_doc/index.html:23
+#: pages/templates/admin_doc/model_graphs.html:30
+#: pages/templates/admin_doc/model_index.html:10
+#: pages/templates/admin_doc/model_index.html:14
+#: pages/templates/core/release_progress.html:216
+msgid "Models"
+msgstr "Modelos"
+
+#: core/templates/core/release_progress.html:384
+msgid "Uncommitted changes detected"
+msgstr ""
+
+#: core/templates/core/release_progress.html:385
+msgid ""
+"The repository must be clean before continuing. Review the files below, then "
+"discard or commit them."
+msgstr ""
+
+#: core/templates/core/release_progress.html:389
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:47
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:45
+#: ocpp/models.py:98 ocpp/templates/ocpp/charger_status.html:5
+#: ocpp/templates/ocpp/charger_status.html:73
+#: ocpp/templates/ocpp/dashboard.html:81
+msgid "Status"
+msgstr ""
+
+#: core/templates/core/release_progress.html:390 pages/admin.py:472
+msgid "Path"
+msgstr ""
+
+#: core/templates/core/release_progress.html:410
+msgid "Discard local changes"
+msgstr ""
+
+#: core/templates/core/release_progress.html:414
+msgid "Commit message"
+msgstr ""
+
+#: core/templates/core/release_progress.html:415
+msgid "Commit changes and continue"
+msgstr ""
+
+#: core/templates/core/release_progress.html:425
+msgid "Release checklist"
+msgstr ""
+
+#: core/templates/core/release_progress.html:426
+msgid "Confirm every checklist item after reviewing the changelog."
+msgstr ""
+
+#: core/templates/core/release_progress.html:429
+msgid "Review the changelog"
+msgstr ""
+
+#: core/templates/core/release_progress.html:432
+msgid "Changelog report unavailable in this environment."
+msgstr ""
+
+#: core/templates/core/release_progress.html:455
+msgid "No open TODOs remain. Review the changelog, then continue."
+msgstr ""
+
+#: core/templates/core/release_progress.html:457
+#: pages/templates/core/release_progress.html:251
+msgid "Continue"
+msgstr ""
+
+#: core/templates/core/release_progress.html:479
+#: pages/templates/core/release_progress.html:264
+msgid "Release manager approval required"
+msgstr ""
+
+#: core/templates/core/release_progress.html:480
+#: pages/templates/core/release_progress.html:265
+msgid "A release manager must approve before publishing can continue."
+msgstr ""
+
+#: core/templates/core/release_progress.html:488
+#: pages/templates/core/release_progress.html:273
+msgid "Reject"
+msgstr ""
+
+#: core/templates/core/release_progress.html:492
+#: pages/templates/core/release_progress.html:277
+msgid "Publishing credentials required"
+msgstr ""
+
+#: core/templates/core/release_progress.html:494
+#: pages/templates/core/release_progress.html:279
+#, python-format
+msgid ""
+"%(owner)s must configure PyPI publishing credentials before this step can "
+"continue."
+msgstr ""
+
+#: core/templates/core/release_progress.html:496
+#: pages/templates/core/release_progress.html:281
+msgid ""
+"Assign a release manager with PyPI publishing credentials before this step "
+"can continue."
+msgstr ""
+
+#: core/templates/core/release_progress.html:498
+#: pages/templates/core/release_progress.html:283
+#, python-format
+msgid ""
+"Add a PyPI token or PyPI username and password in your <a "
+"href=\"%(profile_url)s\" target=\"_blank\" rel=\"noopener\">user profile</a> "
+"under the Release Manager section."
+msgstr ""
+
+#: core/templates/core/release_progress.html:500
+#: pages/templates/core/release_progress.html:285
+msgid "PyPI token (recommended)"
+msgstr ""
+
+#: core/templates/core/release_progress.html:501
+#: pages/templates/core/release_progress.html:286
+msgid "or PyPI username and password"
+msgstr ""
+
+#: core/templates/core/release_progress.html:514
+#: pages/templates/core/release_progress.html:299
+msgid "Waiting for checklist acknowledgment"
+msgstr ""
+
+#: core/templates/core/release_progress.html:517
+#: pages/templates/core/release_progress.html:302
+msgid "Waiting for release manager approval"
+msgstr ""
+
+#: core/templates/core/release_progress.html:519
+#: pages/templates/core/release_progress.html:304
+msgid "Waiting for release manager credentials"
+msgstr ""
+
+#: core/templates/core/release_progress.html:524
+#: pages/templates/core/release_progress.html:309
+msgid "Running…"
+msgstr ""
+
+#: core/templates/core/release_progress.html:527
+#: pages/templates/core/release_progress.html:312
+msgid "Waiting to start"
+msgstr ""
+
+#: core/templates/core/release_progress.html:530
+#: pages/templates/core/release_progress.html:315
+msgid "All steps completed."
+msgstr ""
+
+#: core/templates/core/release_progress.html:539
+#: pages/templates/core/release_progress.html:324
+msgid "Copy log path"
+msgstr ""
+
+#: core/templates/core/release_progress.html:542
+#: pages/templates/core/release_progress.html:327
+#, python-format
+msgid "Certification logged in %(cert_log)s"
+msgstr ""
+
+#: core/templates/core/release_progress.html:545
+#: pages/templates/core/release_progress.html:330
+#, fuzzy
+#| msgid "5 stars"
+msgid "Restarts"
+msgstr "5 estrellas"
+
+#: core/templates/core/release_progress.html:548
+#: pages/templates/core/release_progress.html:333
+msgid "Logs"
+msgstr ""
+
+#: core/templates/core/release_progress.html:553
+#: pages/templates/core/release_progress.html:338
+msgid "Logs will appear here as steps progress."
+msgstr ""
+
+#: core/templates/core/release_progress.html:556
+#: pages/templates/core/release_progress.html:341
+msgid "Logs will appear here after publishing starts."
+msgstr ""
+
+#: core/templates/core/todo_focus.html:154
+msgid ""
+"Review this page while logged out. Use the Open target button to launch it "
+"without leaving the admin."
+msgstr ""
+
+#: core/templates/core/todo_focus.html:158
+#, python-format
+msgid "Sign in using: %(users)s"
+msgstr ""
+
+#: core/templates/core/todo_focus.html:163
+#, python-format
+msgid "Required permissions: %(perms)s"
+msgstr ""
+
+#: core/templates/core/todo_focus.html:168
+#, python-format
+msgid "Additional authentication notes: %(notes)s"
+msgstr ""
+
+#: core/templates/core/todo_focus.html:175
+msgid "Open target"
+msgstr ""
+
+#: core/templates/core/todo_focus.html:181
+#: core/templates/core/todo_focus.html:187
+#, fuzzy
+#| msgid "Take a screenshot"
+msgid "Take Snapshot"
+msgstr "Tomar una captura de pantalla"
+
+#: core/templates/core/todo_focus.html:182
+msgid "Saving…"
+msgstr ""
+
+#: core/templates/core/todo_focus.html:183 core/views.py:2508
+msgid "Snapshot saved."
+msgstr ""
+
+#: core/templates/core/todo_focus.html:184
+msgid "Snapshot is unavailable for this task."
+msgstr ""
+
+#: core/templates/core/todo_focus.html:185
+msgid "Unable to capture the snapshot."
+msgstr ""
+
+#: core/templates/core/todo_focus.html:186
+msgid "Unable to save the snapshot."
+msgstr ""
+
+#: core/templates/core/todo_focus.html:191
+msgid "Done"
+msgstr ""
+
+#: core/templates/core/todo_focus.html:193
+msgid "Back"
+msgstr ""
+
+#: core/templates/core/version_check.html:2
+msgid "A new version of this site is available."
+msgstr ""
+
+#: core/templates/core/version_check.html:3
+msgid "Refresh"
+msgstr ""
+
+#: core/user_data.py:442
+msgid "Unable to save copy. Adjust unique fields and try again."
+msgstr ""
+
+#: core/user_data.py:476 teams/admin.py:234
+msgid "User data is not available for this account."
+msgstr ""
+
+#: core/user_data.py:558 pages/templates/admin/index.html:197
+msgid "Seed Data"
+msgstr ""
+
+#: core/user_data.py:579 pages/templates/admin/index.html:198
+msgid "User Data"
+msgstr ""
+
+#: core/views.py:104
+msgid ""
+"Configure and verify your Odoo employee credentials before generating the "
+"report."
+msgstr ""
+
+#: core/views.py:329
+msgid "Unable to generate the quote report from Odoo."
+msgstr ""
+
+#: core/views.py:396
+msgid "Added"
+msgstr ""
+
+#: core/views.py:397
+msgid "Copied"
+msgstr ""
+
+#: core/views.py:398
+msgid "Deleted"
+msgstr ""
+
+#: core/views.py:399
+msgid "Modified"
+msgstr ""
+
+#: core/views.py:400
+msgid "Renamed"
+msgstr ""
+
+#: core/views.py:401 nodes/templates/admin/nodes/node/rfid_sync_results.html:49
+msgid "Updated"
+msgstr ""
+
+#: core/views.py:402
+msgid "Untracked"
+msgstr ""
+
+#: core/views.py:855
+#, fuzzy, python-format
+#| msgid "Error: %(error)s"
+msgid "%(condition)s (error: %(error)s)"
+msgstr "Error: %(error)s"
+
+#: core/views.py:864
+msgid "Condition evaluated to False"
+msgstr ""
+
+#: core/views.py:865
+#, python-format
+msgid "Condition failed for %(todo)s: %(detail)s"
+msgstr ""
+
+#: core/views.py:1417
+msgid "Release manager rejected the release. Restart required."
+msgstr ""
+
+#: core/views.py:2006
+#, python-format
+msgid "Committed pending changes: %(message)s"
+msgstr ""
+
+#: core/views.py:2105 pages/templates/admin/index.html:244
+msgid "Completed"
+msgstr ""
+
+#: core/views.py:2109
+msgid "Failed"
+msgstr ""
+
+#: core/views.py:2113
+msgid "Paused"
+msgstr ""
+
+#: core/views.py:2122
+msgid "Awaiting checklist"
+msgstr ""
+
+#: core/views.py:2131
+msgid "Credentials required"
+msgstr ""
+
+#: core/views.py:2141
+msgid "Awaiting approval"
+msgstr ""
+
+#: core/views.py:2149
+msgid "Pending"
+msgstr ""
+
+#: core/views.py:2452
+msgid "This TODO has already been completed."
+msgstr ""
+
+#: core/views.py:2457
+msgid "Invalid JSON payload."
+msgstr ""
+
+#: core/views.py:2461
+msgid "A PNG data URL is required."
+msgstr ""
+
+#: core/views.py:2466
+msgid "Screenshot data is incomplete."
+msgstr ""
+
+#: core/views.py:2471
+#, fuzzy
+#| msgid "Take desktop screenshot"
+msgid "Unable to decode screenshot data."
+msgstr "Tomar captura de escritorio"
+
+#: core/views.py:2474
+msgid "Screenshot data is empty."
+msgstr ""
+
+#: core/views.py:2478
+msgid "Screenshot is too large to store."
+msgstr ""
+
+#: core/views.py:2492
+#, python-format
+msgid "TODO %(id)s snapshot"
+msgstr ""
+
+#: core/views.py:2506
+msgid "Duplicate snapshot ignored."
+msgstr ""
+
+#: nodes/admin.py:72
+msgid "Enable public admin access"
+msgstr ""
+
+#: nodes/admin.py:74
+msgid ""
+"Expose the admin API through this node's public endpoint. Only enable when "
+"trusted peers require administrative access."
+msgstr ""
+
+#: nodes/admin.py:243
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:46
+#: nodes/templates/admin/nodes/node/update_selected.html:29
+msgid "Node"
+msgstr ""
+
+#: nodes/admin.py:256
+msgid "Public endpoint"
+msgstr ""
+
+#: nodes/admin.py:265
+#, fuzzy
+#| msgid "Constellation"
+msgid "Installation"
+msgstr "Constellation"
+
+#: nodes/admin.py:275
+msgid "Public admin"
+msgstr ""
+
+#: nodes/admin.py:289
+#, fuzzy
+#| msgid "Constellation"
+msgid "Relation"
+msgstr "Constellation"
+
+#: nodes/admin.py:339 nodes/admin.py:348
+#: nodes/templates/admin/nodes/node/update_selected.html:12
+#: nodes/templates/admin/nodes/node/update_selected.html:18
+msgid "Update selected nodes"
+msgstr ""
+
+#: nodes/admin.py:343 nodes/admin.py:867 nodes/admin.py:903
+msgid "No nodes selected."
+msgstr ""
+
+#: nodes/admin.py:584 nodes/templates/admin/nodes/node/register_visitor.html:10
+#, fuzzy
+#| msgid "Register current host"
+msgid "Register Visitor"
+msgstr "Registrar anfitrión actual"
+
+#: nodes/admin.py:682
+msgid "Local node is not registered."
+msgstr ""
+
+#: nodes/admin.py:687
+msgid "Local node public endpoint is not configured."
+msgstr ""
+
+#: nodes/admin.py:693
+msgid "Local node private key not found."
+msgstr ""
+
+#: nodes/admin.py:700
+#, python-format
+msgid "Failed to load private key: %(error)s"
+msgstr ""
+
+#: nodes/admin.py:744
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:13
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:24
+msgid "Import RFID results"
+msgstr ""
+
+#: nodes/admin.py:745
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:15
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:26
+msgid "Export RFID results"
+msgstr ""
+
+#: nodes/admin.py:751
+msgid "RFID results"
+msgstr ""
+
+#: nodes/admin.py:783 nodes/admin.py:828
+msgid "Invalid JSON response"
+msgstr ""
+
+#: nodes/admin.py:790
+msgid "Invalid RFID payload"
+msgstr ""
+
+#: nodes/admin.py:795
+msgid "RFID could not be imported"
+msgstr ""
+
+#: nodes/admin.py:845
+#, python-format
+msgid "Remote reported %(count)s error(s)."
+msgstr ""
+
+#: nodes/admin.py:854
+msgid "Import RFIDs from selected"
+msgstr ""
+
+#: nodes/admin.py:884 nodes/admin.py:921
+msgid "Skipped local node."
+msgstr ""
+
+#: nodes/admin.py:890
+msgid "Export RFIDs to selected"
+msgstr ""
+
+#: nodes/admin.py:1308
+msgid "Audio Capture Waveform"
+msgstr ""
+
+#: nodes/admin.py:1415
+msgid "Raspberry Pi Camera Stream"
+msgstr ""
+
+#: nodes/admin.py:1601 pages/templates/admin_doc/index.html:20
+msgid "Filters"
+msgstr ""
+
+#: nodes/admin.py:1614
+#, fuzzy
+#| msgid "Transaction"
+msgid "Propagation"
+msgstr "Transacción"
+
+#: nodes/admin.py:1631 nodes/admin.py:1642 nodes/admin.py:1643
+#: nodes/admin.py:1696
+#: nodes/templates/admin/nodes/netmessage/change_list.html:6
+#: nodes/templates/admin/nodes/netmessage/send.html:44
+msgid "Send Net Message"
+msgstr ""
+
+#: nodes/admin.py:1682
+msgid "Net Message sent to the network."
+msgstr ""
+
+#: nodes/reports.py:29
+msgid "Single day"
+msgstr ""
+
+#: nodes/reports.py:30
+msgid "Seven days"
+msgstr ""
+
+#: nodes/reports.py:31
+msgid "Monthly"
+msgstr ""
+
+#: nodes/reports.py:163
+msgid "Database"
+msgstr ""
+
+#: nodes/reports.py:328
+#, python-format
+msgid "Every %(seconds)s seconds"
+msgstr ""
+
+#: nodes/templates/admin/nodes/dnsrecord/deploy_records.html:7
+#, python-format
+msgid ""
+"\n"
+"  Deploy %(total)s DNS record using the selected Node Manager.\n"
+"  "
+msgid_plural ""
+"\n"
+"  Deploy %(total)s DNS records using the selected Node Manager.\n"
+"  "
+msgstr[0] ""
+msgstr[1] ""
+
+#: nodes/templates/admin/nodes/dnsrecord/deploy_records.html:19
+msgid "Deploy"
+msgstr ""
+
+#: nodes/templates/admin/nodes/dnsrecord/deploy_records.html:22
+msgid "Selected records"
+msgstr ""
+
+#: nodes/templates/admin/nodes/emailoutbox/change_form.html:6
+msgid "Test Outbox"
+msgstr ""
+
+#: nodes/templates/admin/nodes/netmessage/change_form.html:7
+msgid "Reply Message"
+msgstr ""
+
+#: nodes/templates/admin/nodes/netmessage/send.html:70
+msgid "Send message"
 msgstr ""
 
 #: nodes/templates/admin/nodes/nmclitemplate/change_list.html:7
 msgid "Import active connections"
 msgstr ""
 
-#: nodes/templates/admin/nodes/node/change_list.html:7
+#: nodes/templates/admin/nodes/node/change_form.html:7
+msgid "Download public key"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/change_list.html:8
 msgid "Register current host"
 msgstr "Registrar anfitrión actual"
+
+#: nodes/templates/admin/nodes/node/change_list.html:14
+msgid "Register visitor node"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/register_remote.html:5
+#, fuzzy
+#| msgid "Register current host"
+msgid "Register Local Node"
+msgstr "Registrar anfitrión actual"
+
+#: nodes/templates/admin/nodes/node/register_remote.html:6
+msgid "Attempting to register a node running on this computer."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/register_visitor.html:109
+msgid ""
+"Attempting to exchange node information between this host and the visiting "
+"instance."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/register_visitor.html:112
+msgid "Registration in progress…"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/register_visitor.html:117
+msgid "Registering the visiting node on this server…"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/register_visitor.html:121
+msgid "Registering this server on the visiting node…"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/register_visitor.html:136
+msgid "Visitor node registered with this server."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/register_visitor.html:137
+msgid "Host node registered with visitor."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/register_visitor.html:138
+msgid "Both nodes registered successfully."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/register_visitor.html:139
+msgid "One or more registrations failed."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/register_visitor.html:140
+msgid "Registration aborted."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/register_visitor.html:141
+msgid "Unable to read visitor node information."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/register_visitor.html:142
+msgid "Unable to read host node information."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/register_visitor.html:143
+msgid ""
+"Make sure the visiting node is reachable. Run \"./manage.py "
+"check_registration_ready\" on the visiting node to verify readiness."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:36
+#, python-format
+msgid ""
+"\n"
+"        Processed %(processed)s node(s). %(created)s RFID(s) created, "
+"%(updated)s updated, %(linked)s energy account link(s) applied.\n"
+"        "
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:41
+msgid "No node results to display."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:50
+msgid "Linked accounts"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:51
+msgid "Missing accounts"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:52
+msgid "Messages"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:61
+msgid "Success"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:63
+msgid "Partial"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:65
+msgid "Skipped"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:67
+msgid "Error"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:101
+msgid "No results available."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/rfid_sync_results.html:107
+#: nodes/templates/admin/nodes/node/update_selected.html:45
+msgid "Back to node list"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/update_selected.html:19
+msgid "Progress for each node will appear below as the updates complete."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/update_selected.html:20
+#, python-format
+msgid "Finished updating %(nodes|length)s node(s)."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/update_selected.html:20
+msgid "Updating node __CURRENT__ of __TOTAL__…"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/update_selected.html:21
+#, python-format
+msgid "Preparing to update %(count)s node(s)..."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/update_selected.html:30
+msgid "Local update"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/update_selected.html:31
+msgid "Remote update"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/update_selected.html:38
+#: nodes/templates/admin/nodes/node/update_selected.html:39
+msgid "Pending…"
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/update_selected.html:71
+msgid "Completed."
+msgstr ""
+
+#: nodes/templates/admin/nodes/node/update_selected.html:74
+msgid "Failed."
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:15
+msgid "Reporting window"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:29
+#, python-format
+msgid ""
+"\n"
+"        Showing tasks scheduled to run before %(end)s.\n"
+"      "
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:36
+msgid "Scheduled tasks"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:46
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:107
+msgid "Source"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:58
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:65
+msgid "Unknown"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:81
+msgid "No tasks are scheduled for the selected period."
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:86
+msgid "Recent log entries"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:88
+#, python-format
+msgid ""
+"\n"
+"        Showing Celery log entries between %(start)s and %(end)s.\n"
+"      "
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:94
+#, python-format
+msgid ""
+"\n"
+"          Scanned log files: %(sources)s.\n"
+"        "
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:104
+msgid "Level"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:105
+msgid "Logger"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/celery_report.html:123
+msgid "No log entries found for the selected period."
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_stream.html:7
+msgid "Raspberry Pi Camera stream"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_stream.html:9
+msgid ""
+"\n"
+"        The live feed below opens in an embedded frame. If the stream does "
+"not appear,\n"
+"        ensure the Raspberry Pi camera service is running and reachable.\n"
+"      "
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_stream.html:18
+msgid "Live camera stream"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_stream.html:24
+msgid "Camera stream"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_stream.html:32
+msgid ""
+"\n"
+"              This stream uses a protocol that cannot be embedded in the "
+"browser. Use the\n"
+"              button below to open it in an external viewer.\n"
+"            "
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_stream.html:42
+msgid "Open stream in new window"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:8
+#, python-format
+msgid ""
+"\n"
+"        %(feature_name)s waveform monitor\n"
+"      "
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:13
+msgid ""
+"\n"
+"        Grant microphone access when prompted to preview the live waveform.\n"
+"        Use the controls below to capture a temporary recording and download "
+"it\n"
+"        once you stop.\n"
+"      "
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:19
+msgid "Live audio waveform"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:25
+msgid "Waveform preview requires canvas support."
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:28
+msgid "Initializing audio preview…"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:33
+msgid "Start recording"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:36
+msgid "Stop recording"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:45
+msgid "Download recording"
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:182
+msgid "Audio capture is not supported in this browser."
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:188
+msgid "Microphone ready. Press start to record."
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:198
+msgid "Microphone access was denied."
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:226
+msgid "No audio was captured."
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:238
+msgid "Recording ready. Use the download button to save it."
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:242
+#, fuzzy
+#| msgid "Network error. Please try again."
+msgid "Recording error. Please try again."
+msgstr "Error de red. Inténtalo de nuevo."
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:253
+msgid "Recording is not supported in this browser."
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:261
+msgid "Unable to start recording."
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:266
+msgid "Recording… press stop when finished."
+msgstr ""
+
+#: nodes/templates/admin/nodes/nodefeature/view_waveform.html:277
+msgid "Unable to stop recording."
+msgstr ""
 
 #: nodes/templates/admin/nodes/nodescreenshot/change_list.html:7
 msgid "Take site screenshot"
 msgstr "Tomar captura del sitio"
 
-#: nodes/templates/admin/nodes/nodescreenshot/change_list.html:11
+#: nodes/templates/admin/nodes/nodescreenshot/change_list.html:12
 msgid "Take desktop screenshot"
 msgstr "Tomar captura de escritorio"
 
@@ -327,203 +3643,1250 @@ msgstr "Tomar captura de escritorio"
 msgid "Add from clipboard"
 msgstr ""
 
+#: ocpp/models.py:43
+msgid "Charge Location"
+msgstr "Ubicación de Carga"
+
+#: ocpp/models.py:44
+msgid "Charge Locations"
+msgstr "Ubicaciones de Carga"
+
+#: ocpp/models.py:64 ocpp/models.py:771 ocpp/models.py:783
+#: ocpp/templates/ocpp/charger_page.html:16
+#: ocpp/templates/ocpp/charger_status.html:38
+#: ocpp/templates/ocpp/dashboard.html:80 ocpp/views.py:320
+msgid "Serial Number"
+msgstr "Número de serie"
+
+#: ocpp/models.py:69
+msgid "Display Name"
+msgstr "Nombre para mostrar"
+
+#: ocpp/models.py:75 ocpp/models.py:784
+msgid "Connector ID"
+msgstr ""
+
+#: ocpp/models.py:81
+msgid "Public"
+msgstr ""
+
+#: ocpp/models.py:86
+msgid "Language"
+msgstr ""
+
+#: ocpp/models.py:90
+msgid "Preferred language for the public landing page."
+msgstr ""
+
+#: ocpp/models.py:93 ocpp/templates/ocpp/charger_page.html:54 ocpp/views.py:323
+msgid "Require RFID Authorization"
+msgstr "Requiere autorización RFID"
+
+#: ocpp/models.py:105
+msgid "Status Details"
+msgstr ""
+
+#: ocpp/models.py:112
+msgid "Status Timestamp"
+msgstr ""
+
+#: ocpp/models.py:124
+msgid "State"
+msgstr ""
+
+#: ocpp/models.py:134
+msgid "State Updated At"
+msgstr ""
+
+#: ocpp/models.py:140
+msgid "Requested State"
+msgstr ""
+
+#: ocpp/models.py:147
+msgid "Requested At"
+msgstr ""
+
+#: ocpp/models.py:153
+msgid "Request Status"
+msgstr ""
+
+#: ocpp/models.py:163
+msgid "Request Status At"
+msgstr ""
+
+#: ocpp/models.py:169
+msgid "Request Details"
+msgstr ""
+
+#: ocpp/models.py:218
+msgid "Users who can view this charge point."
+msgstr ""
+
+#: ocpp/models.py:224
+msgid "Security groups that can view this charge point."
+msgstr ""
+
+#: ocpp/models.py:269 ocpp/templates/admin/ocpp/location/change_form.html:9
+msgid "Charge Point"
+msgstr "Punto de Carga"
+
+#: ocpp/models.py:270 ocpp/templates/ocpp/dashboard.html:4
+#: ocpp/templates/ocpp/dashboard.html:7
+msgid "Charge Points"
+msgstr "Puntos de Carga"
+
+#: ocpp/models.py:306
+#, fuzzy
+#| msgid "Serial Number"
+msgid "Serial Number cannot be blank."
+msgstr "Número de serie"
+
+#: ocpp/models.py:311
+msgid "Serial Number placeholder values such as <charger_id> are not allowed."
+msgstr ""
+
+#: ocpp/models.py:370
+msgid "All Connectors"
+msgstr ""
+
+#: ocpp/models.py:373
+msgid "Connector 1 (Left)"
+msgstr ""
+
+#: ocpp/models.py:374
+msgid "Connector 2 (Right)"
+msgstr ""
+
+#: ocpp/models.py:379
+#, python-format
+msgid "Connector %(number)s"
+msgstr ""
+
+#: ocpp/models.py:645
+msgid "Transaction"
+msgstr "Transacción"
+
+#: ocpp/models.py:646
+msgid "CP Transactions"
+msgstr "Transacciones CP"
+
+#: ocpp/models.py:721 ocpp/models.py:762
+msgid "Meter Value"
+msgstr ""
+
+#: ocpp/models.py:722 ocpp/models.py:763
+#, fuzzy
+#| msgid "Meters:"
+msgid "Meter Values"
+msgstr "Metros:"
+
+#: ocpp/models.py:771
+#, fuzzy
+#| msgid "Charge Point"
+msgid "Charge Point WS path"
+msgstr "Punto de Carga"
+
+#: ocpp/models.py:775
+msgid "WS Port"
+msgstr "Puerto WS"
+
+#: ocpp/models.py:787
+msgid "Delay"
+msgstr "Retardo"
+
+#: ocpp/models.py:793
+msgid "Door Open"
+msgstr ""
+
+#: ocpp/models.py:795
+msgid "Send a DoorOpen error StatusNotification when enabled."
+msgstr ""
+
+#: ocpp/models.py:801
+msgid "List of configurationKey entries to return for GetConfiguration calls."
+msgstr ""
+
+#: ocpp/models.py:807
+msgid "Keys to include in the GetConfiguration unknownKey response."
+msgstr ""
+
+#: ocpp/models.py:814
+msgid "CP Simulator"
+msgstr "Simulador CP"
+
+#: ocpp/models.py:815
+msgid "CP Simulators"
+msgstr "Simuladores CP"
+
+#: ocpp/models.py:855
+#, fuzzy
+#| msgid "Charge Point"
+msgid "Charge Point → CSMS"
+msgstr "Punto de Carga"
+
+#: ocpp/models.py:856
+#, fuzzy
+#| msgid "Charge Point"
+msgid "CSMS → Charge Point"
+msgstr "Punto de Carga"
+
+#: ocpp/rfid/utils.py:59
+#, fuzzy
+#| msgid "Light Mode"
+msgid "Single Mode"
+msgstr "Modo Claro"
+
+#: ocpp/rfid/utils.py:62
+#, fuzzy
+#| msgid "Dark Mode"
+msgid "Table Mode"
+msgstr "Modo Oscuro"
+
+#: ocpp/status_display.py:10 ocpp/views.py:449 ocpp/views.py:463
+msgid "Available"
+msgstr "Disponible"
+
+#: ocpp/status_display.py:11
+msgid "Preparing"
+msgstr ""
+
+#: ocpp/status_display.py:12 ocpp/templates/ocpp/charger_page.html:58
+#: ocpp/views.py:324 ocpp/views.py:440 ocpp/views.py:461
+msgid "Charging"
+msgstr "Cargando"
+
+#: ocpp/status_display.py:13
+msgid "Suspended (EVSE)"
+msgstr ""
+
+#: ocpp/status_display.py:14
+msgid "Suspended (EV)"
+msgstr ""
+
+#: ocpp/status_display.py:15
+msgid "Finishing"
+msgstr ""
+
+#: ocpp/status_display.py:16
+msgid "Faulted"
+msgstr ""
+
+#: ocpp/status_display.py:18
+msgid "Reserved"
+msgstr ""
+
+#: ocpp/status_display.py:19
+msgid "Occupied"
+msgstr ""
+
+#: ocpp/status_display.py:20
+msgid "Out of Service"
+msgstr ""
+
+#: ocpp/templates/admin/ocpp/location/change_form.html:15
+msgid "Open in Waze"
+msgstr ""
+
+#: ocpp/templates/admin/ocpp/location/change_form.html:16
+msgid "Open in Maps"
+msgstr ""
+
+#: ocpp/templates/admin/ocpp/log_view.html:15
+msgid "Log"
+msgstr ""
+
+#: ocpp/templates/admin/ocpp/log_view.html:29
+msgid "Auto reload"
+msgstr ""
+
+#: ocpp/templates/admin/ocpp/log_view.html:34
+msgid "No log entries recorded yet."
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_logs.html:20
+#: ocpp/templates/ocpp/charger_session_search.html:9
+msgid "Back to status"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_logs.html:35
+msgid "Lines to display"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:18
+#: ocpp/templates/ocpp/charger_session_search.html:44
+#: ocpp/templates/ocpp/charger_status.html:37
+#: ocpp/templates/ocpp/charger_status.html:190 ocpp/views.py:321
+msgid "Connector"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:26 ocpp/tests.py:1851
+#: ocpp/views.py:322
+msgid "Advanced View"
+msgstr "Vista avanzada"
+
+#: ocpp/templates/ocpp/charger_page.html:34
+#: ocpp/templates/ocpp/charger_page.html:113 ocpp/views.py:343
+msgid "Reported status"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:37
+#: ocpp/templates/ocpp/charger_page.html:116
+#: ocpp/templates/ocpp/charger_status.html:54
+#: ocpp/templates/ocpp/charger_status.html:150 ocpp/views.py:344
+msgid "Error code"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:40
+#: ocpp/templates/ocpp/charger_page.html:119
+#: ocpp/templates/ocpp/charger_status.html:57
+#: ocpp/templates/ocpp/charger_status.html:151 ocpp/views.py:345
+msgid "Last status update"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:44
+#: ocpp/templates/ocpp/charger_page.html:123
+#: ocpp/templates/ocpp/charger_status.html:61
+#: ocpp/templates/ocpp/charger_status.html:153 ocpp/views.py:346
+msgid "Vendor"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:47
+#: ocpp/templates/ocpp/charger_page.html:126
+#: ocpp/templates/ocpp/charger_status.html:64
+#: ocpp/templates/ocpp/charger_status.html:154 ocpp/views.py:347
+msgid "Info"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:61
+#, python-format
+msgid "%(active)s connector active"
+msgid_plural "%(active)s connectors active"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ocpp/templates/ocpp/charger_page.html:69
+#: ocpp/templates/ocpp/charger_page.html:132
+#: ocpp/templates/ocpp/charger_status.html:159 ocpp/views.py:325
+msgid "Energy"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:73
+#: ocpp/templates/ocpp/charger_page.html:133
+#: ocpp/templates/ocpp/charger_status.html:162
+#: ocpp/templates/ocpp/charger_status.html:165 ocpp/views.py:326
+msgid "Started"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:90 ocpp/tests.py:1848
+#: ocpp/views.py:329
+msgid ""
+"Plug in your vehicle and slide your RFID card over the reader to begin "
+"charging."
+msgstr ""
+"Conecta tu vehículo y pasa tu tarjeta RFID por el lector para comenzar la "
+"carga."
+
+#: ocpp/templates/ocpp/charger_page.html:101
+#: ocpp/templates/ocpp/charger_status.html:139 ocpp/views.py:331
+msgid "Connectors"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_page.html:144
+#: ocpp/templates/ocpp/charger_status.html:104
+#: ocpp/templates/ocpp/charger_status.html:168 ocpp/views.py:332
+msgid "No active transaction"
+msgstr ""
+
 #: ocpp/templates/ocpp/charger_session_search.html:4
 msgid "Search Sessions"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_session_search.html:9
+#: ocpp/templates/ocpp/charger_session_search.html:20
+#: ocpp/templates/ocpp/charger_session_search.html:21
+#: ocpp/templates/ocpp/charger_status.html:179
+msgid "Date display"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_session_search.html:29
 msgid "Select date"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_session_search.html:11
-#: ocpp/templates/ocpp/charger_status.html:82
-msgid "Search"
-msgstr ""
-
-#: ocpp/templates/ocpp/charger_session_search.html:18
-#: ocpp/templates/ocpp/charger_status.html:59
+#: ocpp/templates/ocpp/charger_session_search.html:42
+#: ocpp/templates/ocpp/charger_status.html:192
 msgid "ID"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_session_search.html:19
-#: ocpp/templates/ocpp/charger_status.html:60
+#: ocpp/templates/ocpp/charger_session_search.html:46
+#: ocpp/templates/ocpp/charger_status.html:193
 msgid "Start"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_session_search.html:20
-#: ocpp/templates/ocpp/charger_status.html:61
+#: ocpp/templates/ocpp/charger_session_search.html:46
+#: ocpp/templates/ocpp/charger_session_search.html:47
+#: ocpp/templates/ocpp/charger_status.html:193
+#: ocpp/templates/ocpp/charger_status.html:194
+msgid "Received time"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_session_search.html:46
+#: ocpp/templates/ocpp/charger_session_search.html:47
+#: ocpp/templates/ocpp/charger_status.html:193
+#: ocpp/templates/ocpp/charger_status.html:194
+#, fuzzy
+#| msgid "Charger timestamps"
+msgid "Charger time"
+msgstr "Marcas de tiempo del cargador"
+
+#: ocpp/templates/ocpp/charger_session_search.html:47
+#: ocpp/templates/ocpp/charger_status.html:194
 msgid "Stop"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_session_search.html:21
-#: ocpp/templates/ocpp/charger_status.html:62
+#: ocpp/templates/ocpp/charger_session_search.html:48
+#: ocpp/templates/ocpp/charger_status.html:195
 msgid "Energy (kW)"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_session_search.html:36
-#: ocpp/templates/ocpp/charger_status.html:74
+#: ocpp/templates/ocpp/charger_session_search.html:72
+#: ocpp/templates/ocpp/charger_status.html:215
 msgid "No sessions found."
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_session_search.html:39
-msgid "Back"
-msgstr ""
-
-#: ocpp/templates/ocpp/charger_status.html:5
-#: ocpp/templates/ocpp/dashboard.html:13
-msgid "Status"
-msgstr ""
-
-#: ocpp/templates/ocpp/charger_status.html:25
-msgid "Landing page"
-msgstr ""
-
-#: ocpp/templates/ocpp/charger_page.html:19
-msgid "Advanced View"
-msgstr "Vista avanzada"
-
-#: ocpp/templates/ocpp/charger_status.html:27
+#: ocpp/templates/ocpp/charger_status.html:48
 msgid "Viewing past session"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:27
+#: ocpp/templates/ocpp/charger_status.html:48
 msgid "Back to live"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:37
+#: ocpp/templates/ocpp/charger_status.html:67
 msgid "Total Energy"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_page.html:38
-msgid "Plug in your vehicle and slide your RFID card over the reader to begin charging."
-msgstr "Conecta tu vehículo y pasa tu tarjeta RFID por el lector para comenzar la carga."
+#: ocpp/templates/ocpp/charger_status.html:70
+msgid "Diagnostics"
+msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:39
+#: ocpp/templates/ocpp/charger_status.html:78
+msgid "Reported"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:83
+#, fuzzy
+#| msgid "Charge Location"
+msgid "Location"
+msgstr "Ubicación de Carga"
+
+#: ocpp/templates/ocpp/charger_status.html:89
+#, fuzzy
+#| msgid "Temperature:"
+msgid "Temperature"
+msgstr "Temperatura:"
+
+#: ocpp/templates/ocpp/charger_status.html:92
 msgid "Session"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:39
+#: ocpp/templates/ocpp/charger_status.html:92
 msgid "Current Transaction"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:41
+#: ocpp/templates/ocpp/charger_status.html:94
 msgid "Transaction ID"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:42
+#: ocpp/templates/ocpp/charger_status.html:95
 msgid "Meter Start"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:43
+#: ocpp/templates/ocpp/charger_status.html:97
+#: ocpp/templates/ocpp/charger_status.html:99
 msgid "Start Time"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:44
+#: ocpp/templates/ocpp/charger_status.html:101
 msgid "Session Energy"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:47
-msgid "No active transaction"
+#: ocpp/templates/ocpp/charger_status.html:109
+msgid "Remote start"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:55
-msgid "Sessions"
+#: ocpp/templates/ocpp/charger_status.html:110
+msgid ""
+"Authorize a remote charging session by entering the driver's RFID or tag "
+"value."
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:80
+#: ocpp/templates/ocpp/charger_status.html:113
+msgid "RFID or Tag"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:117
+#, fuzzy
+#| msgid "Charging"
+msgid "Start Charging"
+msgstr "Cargando"
+
+#: ocpp/templates/ocpp/charger_status.html:132
+msgid "Select a connector to view live chart data."
+msgstr "Seleccione un conector para ver los datos de la gráfica en vivo."
+
+#: ocpp/templates/ocpp/charger_status.html:221
 msgid "Previous 10"
 msgstr ""
 
-#: ocpp/templates/ocpp/charger_status.html:84
+#: ocpp/templates/ocpp/charger_status.html:226
+msgid "Landing page"
+msgstr ""
+
+#: ocpp/templates/ocpp/charger_status.html:233
 msgid "Next 10"
 msgstr ""
 
-#: ocpp/templates/ocpp/dashboard.html:4 ocpp/templates/ocpp/dashboard.html:7 ocpp/models.py:45
-msgid "Charge Points"
-msgstr "Puntos de Carga"
-
-#: ocpp/templates/ocpp/dashboard.html:11
-msgid "Name"
+#: ocpp/templates/ocpp/dashboard.html:14
+msgid "Dismiss demo notice"
 msgstr ""
 
-#: ocpp/templates/ocpp/dashboard.html:12
-msgid "Serial Number"
-msgstr "Número de serie"
+#: ocpp/templates/ocpp/dashboard.html:16
+msgid "Demo OCPP 1.6 CPMS (Charge Point Management System)"
+msgstr ""
 
-#: ocpp/templates/ocpp/dashboard.html:24
+#: ocpp/templates/ocpp/dashboard.html:17
+msgid "Everyone is welcome to use this demo to test their charge points."
+msgstr ""
+
+#: ocpp/templates/ocpp/dashboard.html:18
+#, python-format
+msgid ""
+"Rate limiting applies (maximum %(limit)s simultaneous connections per IP)."
+msgstr ""
+
+#: ocpp/templates/ocpp/dashboard.html:19
+msgid ""
+"Use the following WebSocket URL format, replacing &lt;CHARGE_POINT_ID&gt; "
+"with your charge point identifier:"
+msgstr ""
+
+#: ocpp/templates/ocpp/dashboard.html:22
+msgid ""
+"You may also provide the identifier as a query parameter using any of the "
+"following names: <code>cid</code>, <code>chargePointId</code>, "
+"<code>charge_point_id</code>, <code>chargeBoxId</code>, <code>charge_box_id</"
+"code>, or <code>chargerId</code>."
+msgstr ""
+
+#: ocpp/templates/ocpp/dashboard.html:92
 msgid "No charge points found."
 msgstr "No se encontraron puntos de carga."
 
-#: refs/forms.py:14
-msgid "Value / URL"
-msgstr "Valor / URL"
-
-#: refs/forms.py:15
-msgid "Alt text"
-msgstr "Texto alternativo"
-
-#: refs/templates/refs/landing.html:4
-#: refs/templates/refs/landing.html:7
-msgid "Reference Generator"
+#: ocpp/templates/rfid/scanner.html:7 ocpp/templates/rfid/scanner.html:409
+msgid "Local Scanner"
 msgstr ""
 
-#: refs/templates/refs/landing.html:11
-msgid "Generate"
+#: ocpp/templates/rfid/scanner.html:8 ocpp/templates/rfid/scanner.html:389
+#, fuzzy
+#| msgid "Meter Reading"
+msgid "Deep Read"
+msgstr "Lectura de medidor"
+
+#: ocpp/templates/rfid/scanner.html:15
+#, fuzzy
+#| msgid "Advanced View"
+msgid "Admin View"
+msgstr "Vista avanzada"
+
+#: ocpp/templates/rfid/scanner.html:17
+#, fuzzy
+#| msgid "Public site traffic"
+msgid "Public View"
+msgstr "Tráfico del sitio público"
+
+#: ocpp/templates/rfid/scanner.html:21
+msgid "Little Endian"
 msgstr ""
 
-#: refs/templates/refs/recent.html:1
-#: refs/templates/refs/recent.html:4
-msgid "Recent References"
+#: ocpp/templates/rfid/scanner.html:25 ocpp/templates/rfid/scanner.html:402
+msgid "Scanner ready"
 msgstr ""
 
-#: refs/templates/refs/recent.html:12
-msgid "No references found."
+#: ocpp/templates/rfid/scanner.html:28
+msgid "External Command Output"
 msgstr ""
 
-#: refs/templates/refs/recent.html:22
-msgid "New Reference"
+#: ocpp/templates/rfid/scanner.html:32
+msgid "stdout"
 msgstr ""
 
-#: refs/templates/refs/recent.html:26
-msgid "Create"
+#: ocpp/templates/rfid/scanner.html:36
+msgid "stderr"
 msgstr ""
 
-#: pages/templates/admin/app_list.html:8
+#: ocpp/templates/rfid/scanner.html:46
+msgid "Time"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:50 ocpp/templates/rfid/scanner.html:68
+msgid "Valid"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:55 ocpp/templates/rfid/scanner.html:73
+msgid "Released"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:56 ocpp/templates/rfid/scanner.html:74
+msgid "Reference"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:62
+#, fuzzy
+#| msgid "Total Cables"
+msgid "Total scanned:"
+msgstr "Total de Cables"
+
+#: ocpp/templates/rfid/scanner.html:78
+msgid "Deep Read Details"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:81
+msgid "Key A"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:85
+msgid "Key B"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:378
+msgid "verified"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:379
+msgid "unverified"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:380
+#, python-format
+msgid "%(value)s (%(state)s)"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:381
+#, python-format
+msgid "Block %(number)s"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:382
+#, python-format
+msgid "Key %(key)s"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:383
+#, python-format
+msgid "Command succeeded (exit code %(code)s)"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:384
+#, python-format
+msgid "Command failed (exit code %(code)s)"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:385
+msgid "Command error"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:386
+msgid "Command output"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:387
+msgid ""
+"Deep Read enabled. Hold the card on the reader a bit longer to complete the "
+"read."
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:388
+msgid "Deep Read disabled."
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:390
+msgid "No readable data blocks."
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:391
+#, python-format
+msgid "Discovered %(count)s data block."
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:392
+#, python-format
+msgid "Discovered %(count)s data blocks."
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:393
+msgid "No data blocks were readable with the current keys."
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:394
+msgid "RFID reader not detected. Please connect the reader."
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:395
+msgid "Unable to validate RFID"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:396
+msgid "Local scanner validation failed"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:397
+msgid "Local scanner is not readable"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:398
+msgid "This browser does not support connecting to local scanners."
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:399
+msgid "Select a local scanner to connect."
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:400
+msgid "Scanner Connected"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:401
+msgid "Local scanner connected. Awaiting RFID..."
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:403
+msgid "Local scanner disconnected"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:404
+msgid "Failed to connect to local scanner"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:405
+msgid "Web Serial API is not supported in this browser."
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:406
+msgid "Request failed"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:407
+msgid "Deep read failed"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:408
+msgid "Attempting deep read..."
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:410
+#, python-format
+msgid "Configure RFID %(label)s"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:411
+#, python-format
+msgid "RFID %(label)s %(state)s"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:412
+#, python-format
+msgid "RFID %(label)s"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:413
+#, python-format
+msgid "RFID %(state)s"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:415
+#, fuzzy, python-format
+#| msgid "Generated on: %(date)s"
+msgid "Created %(status)s"
+msgstr "Generado el: %(date)s"
+
+#: ocpp/templates/rfid/scanner.html:416
+msgid "OK"
+msgstr ""
+
+#: ocpp/templates/rfid/scanner.html:417
+msgid "BAD"
+msgstr ""
+
+#: ocpp/views.py:40
+msgid "Remote start transaction"
+msgstr ""
+
+#: ocpp/views.py:41
+msgid "Remote stop transaction"
+msgstr ""
+
+#: ocpp/views.py:42
+msgid "Change availability"
+msgstr ""
+
+#: ocpp/views.py:43
+msgid "Data transfer"
+msgstr ""
+
+#: ocpp/views.py:44
+msgid "Reset"
+msgstr ""
+
+#: ocpp/views.py:45
+msgid "Trigger message"
+msgstr ""
+
+#: ocpp/views.py:85
+#, python-format
+msgid "%(action)s did not receive a response from the charger."
+msgstr ""
+
+#: ocpp/views.py:93
+#, python-format
+msgid "code=%(code)s"
+msgstr ""
+
+#: ocpp/views.py:97
+#, python-format
+msgid "description=%(description)s"
+msgstr ""
+
+#: ocpp/views.py:102
+#, python-format
+msgid "details=%(details)s"
+msgstr ""
+
+#: ocpp/views.py:104
+#, python-format
+msgid "%(action)s failed: %(details)s"
+msgstr ""
+
+#: ocpp/views.py:109
+#, python-format
+msgid "%(action)s failed."
+msgstr ""
+
+#: ocpp/views.py:117
+#, python-format
+msgid "%(action)s response did not include a status."
+msgstr ""
+
+#: ocpp/views.py:122
+#, python-format
+msgid "%(action)s rejected with status %(status)s."
+msgstr ""
+
+#: ocpp/views.py:129
+#, python-format
+msgid "Details: %(details)s"
+msgstr ""
+
+#: ocpp/views.py:334 ocpp/views.py:339
+#, python-format
+msgid "%(count)s connector active"
+msgid_plural "%(count)s connectors active"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ocpp/views.py:451
+#, python-format
+msgid "%(status)s (%(error)s)"
+msgstr ""
+
+#: ocpp/views.py:464
+msgid "Offline"
+msgstr "Sin conexión"
+
+#: ocpp/views.py:964 ocpp/views.py:1158
+msgid "Charger timestamps"
+msgstr "Marcas de tiempo del cargador"
+
+#: ocpp/views.py:965 ocpp/views.py:1159
+#, fuzzy
+#| msgid "Charger timestamps"
+msgid "Received timestamps"
+msgstr "Marcas de tiempo del cargador"
+
+#: ocpp/views.py:1084
+msgid "RFID is required to start a session."
+msgstr ""
+
+#: ocpp/views.py:1085
+msgid "Sending remote start request..."
+msgstr ""
+
+#: ocpp/views.py:1086
+msgid "Remote start command queued."
+msgstr ""
+
+#: ocpp/views.py:1087
+msgid "Unable to send remote start request."
+msgstr ""
+
+#: ocpp/views.py:1242
+msgid "All"
+msgstr ""
+
+#: pages/admin.py:102 pages/site_config.py:27
+msgid "Managed by local NGINX"
+msgstr ""
+
+#: pages/admin.py:108 pages/site_config.py:38
+msgid "Require HTTPS"
+msgstr ""
+
+#: pages/admin.py:157 pages/admin.py:167
+msgid ""
+"Managed NGINX configuration staged. Run network-setup.sh to apply changes."
+msgstr ""
+
+#: pages/admin.py:180
+#, fuzzy
+#| msgid "No charge points found."
+msgid "No site fixtures found."
+msgstr "No se encontraron puntos de carga."
+
+#: pages/admin.py:190
+#, fuzzy, python-format
+#| msgid "Error: %(error)s"
+msgid "%(fixture)s: %(error)s"
+msgstr "Error: %(error)s"
+
+#: pages/admin.py:199
+#, python-format
+msgid "Reloaded %(count)d site fixture."
+msgid_plural "Reloaded %(count)d site fixtures."
+msgstr[0] ""
+msgstr[1] ""
+
+#: pages/admin.py:345
+msgid ""
+"No default modules were reloaded because the required node roles are missing."
+msgstr ""
+
+#: pages/admin.py:353
+#, python-format
+msgid "%(count)d module created"
+msgid_plural "%(count)d modules created"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pages/admin.py:362
+#, python-format
+msgid "%(count)d module updated"
+msgid_plural "%(count)d modules updated"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pages/admin.py:371
+#, python-format
+msgid "%(count)d landing created"
+msgid_plural "%(count)d landings created"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pages/admin.py:380
+#, python-format
+msgid "%(count)d landing updated"
+msgid_plural "%(count)d landings updated"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pages/admin.py:390
+#, python-format
+msgid "Reloaded default modules for %(roles)d role(s). %(details)s."
+msgstr ""
+
+#: pages/admin.py:394
+#, python-format
+msgid "Reloaded default modules for %(roles)d role(s)."
+msgstr ""
+
+#: pages/admin.py:401
+#, python-format
+msgid "Default modules are already up to date for %(roles)d role(s)."
+msgstr ""
+
+#: pages/admin.py:462
+msgid ""
+"Landing leads are not being recorded because Celery is not running on this "
+"node."
+msgstr ""
+
+#: pages/admin.py:468
+msgid "Landing"
+msgstr ""
+
+#: pages/admin.py:476
+msgid "Referrer"
+msgstr ""
+
+#: pages/admin.py:744
+msgid "GitHub issue"
+msgstr ""
+
+#: pages/admin.py:759
+msgid "Not created"
+msgstr ""
+
+#: pages/admin.py:761
+msgid "Create GitHub issues"
+msgstr ""
+
+#: pages/admin.py:775
+#, python-format
+msgid "Unable to create a GitHub issue for %(story)s: %(error)s"
+msgstr ""
+
+#: pages/admin.py:796
+msgid "Configure GitHub credentials."
+msgstr ""
+
+#: pages/admin.py:815
+#, python-format
+msgid "Created %(count)d GitHub issue."
+msgid_plural "Created %(count)d GitHub issues."
+msgstr[0] ""
+msgstr[1] ""
+
+#: pages/admin.py:827
+#, python-format
+msgid ""
+"Skipped %(count)d feedback item (issue already exists or was throttled)."
+msgid_plural ""
+"Skipped %(count)d feedback items (issues already exist or were throttled)."
+msgstr[0] ""
+msgstr[1] ""
+
+#: pages/admin.py:916
+msgid "The log file could not be read. Check server permissions and try again."
+msgstr ""
+
+#: pages/admin.py:919
+msgid "The requested log could not be found."
+msgstr ""
+
+#: pages/admin.py:922
+#, python-format
+msgid "The logs directory could not be found at %(path)s."
+msgstr ""
+
+#: pages/admin.py:926
+#, python-format
+msgid "No log files were found in %(path)s."
+msgstr ""
+
+#: pages/admin.py:933 pages/templates/admin/log_viewer.html:4
+#: pages/templates/admin/log_viewer.html:61
+#: pages/templates/admin/log_viewer.html:68
+msgid "Log viewer"
+msgstr ""
+
+#: pages/forms.py:21 pages/forms.py:99
+msgid "Authenticator code"
+msgstr ""
+
+#: pages/forms.py:35
+msgid "The authenticator code is invalid or has expired."
+msgstr ""
+
+#: pages/forms.py:36 pages/templates/pages/login.html:70
+msgid "Enter the code from your authenticator app."
+msgstr ""
+
+#: pages/forms.py:37
+msgid "Enter your password."
+msgstr ""
+
+#: pages/forms.py:112
+msgid "The provided code is invalid or has expired."
+msgstr ""
+
+#: pages/forms.py:113
+msgid "Generate a new authenticator secret before confirming it."
+msgstr ""
+
+#: pages/forms.py:180
+#, fuzzy
+#| msgid "Name (email or pseudonym)"
+msgid "Name, email or pseudonym"
+msgstr "Nombre (correo electrónico o seudónimo)"
+
+#: pages/forms.py:192
+msgid "Feedback must be 400 characters or fewer."
+msgstr ""
+
+#: pages/models.py:90
+msgid "Modules"
+msgstr ""
+
+#: pages/models.py:244
+msgid "Landing Lead"
+msgstr ""
+
+#: pages/models.py:245
+msgid "Landing Leads"
+msgstr ""
+
+#: pages/models.py:311
+msgid "Default Landing"
+msgstr ""
+
+#: pages/models.py:312
+#, fuzzy
+#| msgid "Meter Readings"
+msgid "Default Landings"
+msgstr "Lecturas de medidor"
+
+#: pages/models.py:384 pages/models.py:386 pages/models.py:388
+msgid "Select a node role, security group, or user."
+msgstr ""
+
+#: pages/models.py:395 pages/models.py:398 pages/models.py:401
+msgid "Only one of node role, security group, or user may be set."
+msgstr ""
+
+#: pages/models.py:408
+msgid "Landscape"
+msgstr ""
+
+#: pages/models.py:409
+msgid "Portrait"
+msgstr ""
+
+#: pages/models.py:426
+msgid "Orientation used when rendering the PDF download."
+msgstr ""
+
+#: pages/models.py:487
+msgid "View History"
+msgstr ""
+
+#: pages/models.py:488
+msgid "View Histories"
+msgstr ""
+
+#: pages/models.py:513
+msgid "Rate your experience from 1 (lowest) to 5 (highest)."
+msgstr ""
+
+#: pages/models.py:517
+#, fuzzy
+#| msgid "Share details about your experience (max 400 characters)"
+msgid "Share more about your experience."
+msgstr "Comparte detalles sobre tu experiencia (máx. 400 caracteres)"
+
+#: pages/models.py:521
+msgid "Request a screenshot capture for this feedback."
+msgstr ""
+
+#: pages/models.py:536
+msgid "Internal owner for this feedback."
+msgstr ""
+
+#: pages/models.py:542
+msgid "Number of the GitHub issue created for this feedback."
+msgstr ""
+
+#: pages/models.py:546
+msgid "Link to the GitHub issue created for this feedback."
+msgstr ""
+
+#: pages/models.py:551
+msgid "User Story"
+msgstr ""
+
+#: pages/models.py:552
+msgid "User Stories"
+msgstr ""
+
+#: pages/models.py:555 pages/models.py:582 pages/views.py:1173
+msgid "Anonymous"
+msgstr ""
+
+#: pages/models.py:574
+#, python-format
+msgid "Feedback for %(path)s (%(rating)s/5)"
+msgstr ""
+
+#: pages/site_config.py:29
+msgid "Include this site when staging the local NGINX configuration."
+msgstr ""
+
+#: pages/site_config.py:40
+msgid ""
+"Redirect HTTP traffic to HTTPS when the staged NGINX configuration is "
+"applied."
+msgstr ""
+
+#: pages/templates/admin/app_list.html:11
 #, python-format
 msgid "Models in the %(name)s application"
 msgstr ""
 
-#: pages/templates/admin/app_list.html:12
+#: pages/templates/admin/app_list.html:15
+#: pages/templates/admin_doc/model_index.html:30
 msgid "Model name"
 msgstr ""
 
-#: pages/templates/admin/app_list.html:13
+#: pages/templates/admin/app_list.html:16
 #, fuzzy
 #| msgid "Constellation"
 msgid "Model actions"
 msgstr "Constellation"
 
-#: pages/templates/admin/app_list.html:14
+#: pages/templates/admin/app_list.html:17
 msgid "Add link"
 msgstr ""
 
-#: pages/templates/admin/app_list.html:15
+#: pages/templates/admin/app_list.html:18
 msgid "Change or view list link"
 msgstr ""
 
-#: pages/templates/admin/app_list.html:41
+#: pages/templates/admin/app_list.html:32
+msgid "Installed"
+msgstr ""
+
+#: pages/templates/admin/app_list.html:34
+msgid "Missing"
+msgstr ""
+
+#: pages/templates/admin/app_list.html:46 pages/tests.py:2579
+#, python-format
+msgid ""
+"%(released_allowed)s released and allowed RFIDs out of %(registered)s "
+"registered RFIDs"
+msgstr ""
+
+#: pages/templates/admin/app_list.html:58 pages/tests.py:2599
+#, python-format
+msgid ""
+"%(available)s chargers reporting Available status with a CP number, out of "
+"%(total)s total Available chargers. %(missing)s Available chargers are "
+"missing a connector number."
+msgstr ""
+
+#: pages/templates/admin/app_list.html:62
+#, python-format
+msgid "%(available)s chargers reporting Available status with a CP number."
+msgstr ""
+
+#: pages/templates/admin/app_list.html:73
+#, python-format
+msgid "%(open_count)s open lead"
+msgid_plural "%(open_count)s open leads"
+msgstr[0] ""
+msgstr[1] ""
+
+#: pages/templates/admin/app_list.html:95
 msgid "Add"
 msgstr ""
 
-#: pages/templates/admin/app_list.html:49
-msgid "View"
-msgstr ""
-
-#: pages/templates/admin/app_list.html:51
-msgid "Change"
-msgstr ""
-
-#: pages/templates/admin/app_list.html:64
+#: pages/templates/admin/app_list.html:119
 msgid "You don’t have permission to view or edit anything."
 msgstr ""
 
@@ -531,292 +4894,96 @@ msgstr ""
 msgid "Django site admin"
 msgstr ""
 
-#: pages/templates/admin/base_site.html:83
-msgid "Django administration"
+#: pages/templates/admin/base_site.html:752
+msgid "View site"
 msgstr ""
 
-#: pages/templates/admin/index.html:209
-msgid "Future actions"
-msgstr "Acciones futuras"
-
-#: pages/templates/admin/index.html:240
-#: pages/templates/admin/pages/viewhistory/traffic_graph.html:4
-#: pages/templates/admin/pages/viewhistory/traffic_graph.html:29
-msgid "Public site traffic"
-msgstr "Tráfico del sitio público"
-
-#: pages/templates/admin/index.html:140
-#: pages/templates/admin/index.html:150
-msgid "None available"
-msgstr ""
-
-#: pages/templates/admin/index.html:145
-msgid "Recent actions"
-msgstr ""
-
-#: pages/templates/admin/index.html:146
-msgid "My actions"
-msgstr ""
-
-#: pages/templates/admin/index.html:155
-msgid "Added:"
-msgstr ""
-
-#: pages/templates/admin/index.html:155
-msgid "Changed:"
-msgstr ""
-
-#: pages/templates/admin/index.html:155
-msgid "Deleted:"
-msgstr ""
-
-#: pages/templates/admin/index.html:165
-msgid "Unknown content"
-msgstr ""
-
-#: pages/templates/admin/sites/site/change_list.html:7
+#: pages/templates/admin/base_site.html:757
+#: pages/templates/admin_doc/commands.html:7
+#: pages/templates/admin_doc/index.html:7
+#: pages/templates/admin_doc/index.html:10
+#: pages/templates/admin_doc/index.html:14
+#: pages/templates/admin_doc/manual_detail.html:7
+#: pages/templates/admin_doc/manuals.html:7
+#: pages/templates/admin_doc/model_graphs.html:7
+#: pages/templates/admin_doc/model_index.html:9
+#: pages/templates/registration/password_change_form.html:7
 #, fuzzy
-#| msgid "Register current host"
-msgid "Register Current"
-msgstr "Registrar anfitrión actual"
+#| msgid "Constellation"
+msgid "Documentation"
+msgstr "Constellation"
 
-#: pages/templates/pages/base.html:67
-#: pages/templates/pages/login.html:4
-#: pages/templates/pages/login.html:9
-msgid "Login"
+#: pages/templates/admin/base_site.html:766
+msgid "My User"
 msgstr ""
 
-#: pages/templates/pages/base.html:72
-#: pages/templates/pages/base.html:99
-msgid "Dark Mode"
-msgstr "Modo Oscuro"
-
-#: pages/templates/pages/base.html:99
-msgid "Light Mode"
-msgstr "Modo Claro"
-
-#: pages/templates/pages/login.html:14
-msgid "Username"
+#: pages/templates/admin/base_site.html:773
+#: pages/templates/registration/password_change_form.html:7
+msgid "Change password"
 msgstr ""
 
-#: pages/templates/pages/login.html:18
-msgid "Password"
+#: pages/templates/admin/base_site.html:777
+#: pages/templates/registration/password_change_form.html:10
+msgid "Log out"
 msgstr ""
 
-#: pages/templates/pages/login.html:22
-msgid "Log in"
+#: pages/templates/admin/change_form.html:33
+#, python-format
+msgid "Add %(name)s"
 msgstr ""
 
-#: awg/models.py:24
-msgid "Cable Size"
-msgstr "Tamaño de cable"
+#: pages/templates/admin/favorite_confirm.html:5
+msgid "Add Favorite"
+msgstr ""
 
-#: awg/models.py:25
-msgid "Cable Sizes"
-msgstr "Tamaños de cable"
+#: pages/templates/admin/favorite_confirm.html:8
+#, python-format
+msgid "Add %(name)s to your favorites?"
+msgstr ""
 
-#: awg/models.py:52
-msgid "Conduit Fill"
-msgstr "Llenado de conducto"
-
-#: awg/models.py:53
-msgid "Conduit Fills"
-msgstr "Llenados de conducto"
-
-#: awg/models.py:77
-msgid "Calculator Template"
-msgstr "Plantilla de calculadora"
-
-#: awg/models.py:78
-msgid "Calculator Templates"
-msgstr "Plantillas de calculadora"
-
-#: ocpp/models.py:22
-msgid "Charge Location"
-msgstr "Ubicación de Carga"
-
-#: ocpp/models.py:23
-msgid "Charge Locations"
-msgstr "Ubicaciones de Carga"
-
-#: ocpp/models.py:44
-msgid "Charge Point"
-msgstr "Punto de Carga"
-
-#: ocpp/models.py:31
-msgid "Require RFID Authorization"
-msgstr "Requiere autorización RFID"
-
-#: ocpp/models.py:48
-msgid "Display Name"
-msgstr "Nombre para mostrar"
-
-#: ocpp/models.py:140
-msgid "Transaction"
-msgstr "Transacción"
-
-#: ocpp/models.py:175
-msgid "CP Transactions"
-msgstr "Transacciones CP"
-
-#: ocpp/models.py:194
-msgid "Meter Reading"
-msgstr "Lectura de medidor"
-
-#: ocpp/models.py:195
-msgid "Meter Readings"
-msgstr "Lecturas de medidor"
-
-#: ocpp/models.py:204
-msgid "WS Port"
-msgstr "Puerto WS"
-
-#: ocpp/models.py:209
-msgid "Delay"
-msgstr "Retardo"
-
-#: ocpp/models.py:219
-msgid "CP Simulator"
-msgstr "Simulador CP"
-
-#: ocpp/models.py:220
-msgid "CP Simulators"
-msgstr "Simuladores CP"
-
-#: core/models.py:921
-msgid "License Plate"
-msgstr "Placa"
-
-#: core/templates/core/release_progress.html:24 pages/templates/core/release_progress.html:24
-msgid "Fixture changes"
-msgstr "Cambios de fixtures"
-
-#: core/templates/core/release_progress.html:28 pages/templates/core/release_progress.html:28
-msgid "Fixture"
-msgstr "Fixture"
-
-#: core/templates/core/release_progress.html:29 pages/templates/core/release_progress.html:29
-msgid "Entries"
-msgstr "Entradas"
-
-#: core/templates/core/release_progress.html:30 pages/templates/core/release_progress.html:30
-msgid "Models"
-msgstr "Modelos"
-
-#: config/settings.py:409
-msgid "Italian"
-msgstr "Italiano"
-
-#: config/settings.py:410
-msgid "German"
-msgstr "Alemán"
-
-#: ocpp/views.py:26 ocpp/templates/ocpp/charger_page.html:18
-msgid "Charging"
-msgstr "Cargando"
-
-#: ocpp/views.py:28
-msgid "Available"
-msgstr "Disponible"
-
-#: ocpp/views.py:29
-msgid "Offline"
-msgstr "Sin conexión"
-
-#: ocpp/views.py:747 ocpp/views.py:934
-msgid "Charger timestamps"
-msgstr "Marcas de tiempo del cargador"
-
-#: ocpp/templates/ocpp/charger_status.html:132
-msgid "Select a connector to view live chart data."
-msgstr "Seleccione un conector para ver los datos de la gráfica en vivo."
-
-#: core/admin.py:3293 core/admin.py:3297
-msgid "RFID Release Form"
-msgstr "Formulario de entrega RFID"
-
-#: core/admin.py:3310
-msgid "%(datetime)s %(timezone)s"
-msgstr "%(datetime)s %(timezone)s"
-
-#: core/admin.py:3314
-msgid "Generated on: %(date)s"
-msgstr "Generado el: %(date)s"
-
-#: core/admin.py:3322
-msgid "Label"
-msgstr "Etiqueta"
-
-#: core/models.py:1830
-msgid "Black"
-msgstr "Negro"
-
-#: core/models.py:1831
-msgid "White"
-msgstr "Blanco"
-
-#: core/models.py:1832
-msgid "Blue"
-msgstr "Azul"
-
-#: core/models.py:1833
-msgid "Red"
-msgstr "Rojo"
-
-#: core/models.py:1834
-msgid "Green"
-msgstr "Verde"
-
-#: core/models.py:1846
-msgid "MIFARE Classic"
-msgstr "MIFARE Classic"
-
-#: core/models.py:1847
-msgid "NTAG215"
-msgstr "NTAG215"
-
-#: core/admin.py:3323
-msgid "RFID"
-msgstr "RFID"
-
-#: core/admin.py:3324
-msgid "Custom label"
+#: pages/templates/admin/favorite_confirm.html:10
+#: pages/templates/admin/favorite_list.html:13
+#, fuzzy
+#| msgid "Custom label"
+msgid "Custom Label"
 msgstr "Etiqueta personalizada"
 
-#: core/admin.py:3325
-msgid "Color"
-msgstr "Color"
+#: pages/templates/admin/favorite_confirm.html:13
+#: pages/templates/admin/favorite_list.html:14
+msgid "Mark as User Data"
+msgstr ""
 
-#: core/admin.py:3326
-msgid "Type"
-msgstr "Tipo"
+#: pages/templates/admin/favorite_confirm.html:16
+#: pages/templates/admin/favorite_list.html:30
+#: pages/templates/admin/submit_line.html:3
+msgid "Save"
+msgstr ""
 
-#: core/admin.py:3358
-msgid "Issuer Signature: ______________________________"
-msgstr "Firma del emisor: ______________________________"
+#: pages/templates/admin/favorite_list.html:5
+msgid "Favorites"
+msgstr ""
 
-#: core/admin.py:3362
-msgid "Receiver Signature: ______________________________"
-msgstr "Firma del receptor: ______________________________"
+#: pages/templates/admin/favorite_list.html:24
+msgid "Remove"
+msgstr ""
 
-#: core/admin.py:3368
-msgid "Issuer Name: ______________________________"
-msgstr "Nombre del emisor: ______________________________"
+#: pages/templates/admin/favorite_list.html:33
+msgid "Remove all favorites"
+msgstr ""
 
-#: core/admin.py:3372
-msgid "Receiver Name: ______________________________"
-msgstr "Nombre del receptor: ______________________________"
+#: pages/templates/admin/favorite_list.html:35
+msgid "No favorites."
+msgstr ""
 
-#: core/admin.py:3397
-msgid "Select at least one RFID to print the release form."
-msgstr "Seleccione al menos un RFID para imprimir el formulario de entrega."
-
-#: core/admin.py:3406
-msgid "Print Release Form"
-msgstr "Imprimir formulario de entrega"
+#: pages/templates/admin/includes/related_models_section.html:4
+#, fuzzy
+#| msgid "Models"
+msgid "Related Models"
+msgstr "Modelos"
 
 #: pages/templates/admin/includes/user_story_feedback.html:9
-#: pages/templates/pages/base.html:394
+#: pages/templates/admin/includes/user_story_feedback.html:19
+#: pages/templates/pages/base.html:394 pages/templates/pages/base.html:404
 msgid "Share your feedback"
 msgstr "Comparte tus comentarios"
 
@@ -831,7 +4998,7 @@ msgid "Tell us how this page worked for you."
 msgstr "Cuéntanos cómo funcionó esta página para ti."
 
 #: pages/templates/admin/includes/user_story_feedback.html:35
-#: pages/templates/pages/base.html:420
+#: pages/templates/pages/base.html:420 pages/templates/pages/base.html:498
 msgid "Close"
 msgstr "Cerrar"
 
@@ -936,6 +5103,838 @@ msgid "We could not submit your feedback. Please try again."
 msgstr "No pudimos enviar tus comentarios. Inténtalo de nuevo."
 
 #: pages/templates/admin/includes/user_story_feedback.html:251
-#: pages/templates/pages/base.html:850
+#: pages/templates/pages/base.html:849
 msgid "Network error. Please try again."
 msgstr "Error de red. Inténtalo de nuevo."
+
+#: pages/templates/admin/index.html:203
+msgid "Log Viewer"
+msgstr ""
+
+#: pages/templates/admin/index.html:205
+msgid "Datasette"
+msgstr ""
+
+#: pages/templates/admin/index.html:221
+msgid "Future actions"
+msgstr "Acciones futuras"
+
+#: pages/templates/admin/index.html:233
+msgid "Release manager tasks"
+msgstr ""
+
+#: pages/templates/admin/index.html:260
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:4
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:29
+msgid "Public site traffic"
+msgstr "Tráfico del sitio público"
+
+#: pages/templates/admin/index.html:262
+msgid "Mini chart of public visits"
+msgstr ""
+
+#: pages/templates/admin/index.html:263 pages/templates/admin/index.html:401
+msgid "No visit data yet."
+msgstr ""
+
+#: pages/templates/admin/index.html:265
+msgid "Open full report"
+msgstr ""
+
+#: pages/templates/admin/index.html:268
+msgid "Recent actions"
+msgstr ""
+
+#: pages/templates/admin/index.html:269
+msgid "My actions"
+msgstr ""
+
+#: pages/templates/admin/index.html:278
+msgid "Added:"
+msgstr ""
+
+#: pages/templates/admin/index.html:278
+msgid "Changed:"
+msgstr ""
+
+#: pages/templates/admin/index.html:278
+msgid "Deleted:"
+msgstr ""
+
+#: pages/templates/admin/index.html:288
+msgid "Unknown content"
+msgstr ""
+
+#: pages/templates/admin/index.html:447
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:122
+msgid "Unable to load visit data at this time."
+msgstr ""
+
+#: pages/templates/admin/log_viewer.html:69
+msgid "Select log file"
+msgstr ""
+
+#: pages/templates/admin/log_viewer.html:72
+msgid "Choose a log file"
+msgstr ""
+
+#: pages/templates/admin/log_viewer.html:89
+msgid "Log copied to your clipboard."
+msgstr ""
+
+#: pages/templates/admin/log_viewer.html:90
+msgid "Copy failed. Use your browser copy command instead."
+msgstr ""
+
+#: pages/templates/admin/log_viewer.html:91
+msgid "Copy to clipboard"
+msgstr ""
+
+#: pages/templates/admin/log_viewer.html:93
+#, python-format
+msgid "Viewing %(name)s"
+msgstr ""
+
+#: pages/templates/admin/model_graph.html:95
+msgid "Model graph"
+msgstr ""
+
+#: pages/templates/admin/model_graph.html:100
+msgid "model graph"
+msgstr ""
+
+#: pages/templates/admin/model_graph.html:101
+#, python-format
+msgid ""
+"This diagram is rendered with Graphviz and reflects the models registered in "
+"the %(app_verbose_name)s admin group, including their relationships."
+msgstr ""
+
+#: pages/templates/admin/model_graph.html:106
+msgid "Diagram controls"
+msgstr ""
+
+#: pages/templates/admin/model_graph.html:107
+msgid "Zoom in"
+msgstr ""
+
+#: pages/templates/admin/model_graph.html:108
+msgid "Zoom out"
+msgstr ""
+
+#: pages/templates/admin/model_graph.html:109
+msgid "Reset view"
+msgstr ""
+
+#: pages/templates/admin/model_graph.html:111
+#: pages/templates/admin_doc/manual_detail.html:47
+#: pages/templates/admin_doc/manuals.html:23
+#: pages/templates/pages/manual_detail.html:37
+#: pages/templates/pages/manual_list.html:30
+msgid "Download PDF"
+msgstr ""
+
+#: pages/templates/admin/model_graph.html:123
+msgid "Unable to render the diagram. Check the server logs for details."
+msgstr ""
+
+#: pages/templates/admin/model_graph.html:130
+msgid "Included models"
+msgstr ""
+
+#: pages/templates/admin/pages/module/change_list.html:8
+msgid "Reload Default Modules"
+msgstr ""
+
+#: pages/templates/admin/pages/viewhistory/change_list.html:6
+msgid "Traffic graph"
+msgstr ""
+
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:30
+msgid ""
+"Daily visits for the most frequently viewed public pages over the last 30 "
+"days."
+msgstr ""
+
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:31
+msgid "Back to entries"
+msgstr ""
+
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:33
+msgid "Line chart showing visit counts per day"
+msgstr ""
+
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:34
+msgid "No visit data is available yet."
+msgstr ""
+
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:69
+msgid "Range"
+msgstr ""
+
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:72
+msgid "Pages"
+msgstr ""
+
+#: pages/templates/admin/pages/viewhistory/traffic_graph.html:102
+msgid "Visits"
+msgstr ""
+
+#: pages/templates/admin/sites/site/change_list.html:7
+#, fuzzy
+#| msgid "Register current host"
+msgid "Register Current"
+msgstr "Registrar anfitrión actual"
+
+#: pages/templates/admin/sites/site/change_list.html:13
+msgid "Reload site fixtures"
+msgstr ""
+
+#: pages/templates/admin/submit_line.html:4
+msgid "Delete"
+msgstr ""
+
+#: pages/templates/admin/submit_line.html:5
+msgid "Save as new"
+msgstr ""
+
+#: pages/templates/admin/submit_line.html:6
+msgid "Save and add another"
+msgstr ""
+
+#: pages/templates/admin/submit_line.html:7
+msgid "Save and continue editing"
+msgstr ""
+
+#: pages/templates/admin/submit_line.html:8
+msgid "Save as a copy"
+msgstr ""
+
+#: pages/templates/admin_doc/commands.html:8
+#: pages/templates/admin_doc/commands.html:11
+#: pages/templates/admin_doc/commands.html:14
+#: pages/templates/admin_doc/index.html:32
+msgid "Commands"
+msgstr ""
+
+#: pages/templates/admin_doc/commands.html:21
+msgid "Arguments"
+msgstr ""
+
+#: pages/templates/admin_doc/commands.html:29
+msgid "Options"
+msgstr ""
+
+#: pages/templates/admin_doc/index.html:18
+msgid "List of all the template tags and their functions."
+msgstr ""
+
+#: pages/templates/admin_doc/index.html:21
+msgid ""
+"Filters are actions which can be applied to variables in a template to alter "
+"the output."
+msgstr ""
+
+#: pages/templates/admin_doc/index.html:24
+msgid ""
+"Models are descriptions of all the objects in the system and their "
+"associated fields. Each model has a list of fields which can be accessed as "
+"template variables"
+msgstr ""
+
+#: pages/templates/admin_doc/index.html:26
+#: pages/templates/admin_doc/model_graphs.html:8
+#: pages/templates/admin_doc/model_graphs.html:11
+#: pages/templates/admin_doc/model_graphs.html:14
+#, fuzzy
+#| msgid "Models"
+msgid "Model Graphs"
+msgstr "Modelos"
+
+#: pages/templates/admin_doc/index.html:27
+msgid ""
+"Visual diagrams of admin models grouped by application with links to their "
+"documentation."
+msgstr ""
+
+#: pages/templates/admin_doc/index.html:29
+msgid "Views"
+msgstr ""
+
+#: pages/templates/admin_doc/index.html:30
+msgid ""
+"Each page on the public site is generated by a view. The view defines which "
+"template is used to generate the page and which objects are available to "
+"that template."
+msgstr ""
+
+#: pages/templates/admin_doc/index.html:33
+msgid "Management commands and their available parameters."
+msgstr ""
+
+#: pages/templates/admin_doc/index.html:35
+msgid "Bookmarklets"
+msgstr ""
+
+#: pages/templates/admin_doc/index.html:36
+msgid "Tools for your browser to quickly access admin functionality."
+msgstr ""
+
+#: pages/templates/admin_doc/index.html:38
+#: pages/templates/admin_doc/manual_detail.html:8
+#: pages/templates/admin_doc/manuals.html:8
+#: pages/templates/admin_doc/manuals.html:11
+#: pages/templates/admin_doc/manuals.html:15
+#: pages/templates/pages/manual_list.html:3 pages/views.py:1230
+msgid "Manuals"
+msgstr ""
+
+#: pages/templates/admin_doc/index.html:39
+msgid "Available user manuals and their descriptions."
+msgstr ""
+
+#: pages/templates/admin_doc/manuals.html:22
+#: pages/templates/pages/manual_detail.html:32
+#: pages/templates/pages/manual_list.html:22
+msgid "Languages"
+msgstr ""
+
+#: pages/templates/admin_doc/model_graphs.html:21
+#, python-format
+msgid ""
+"This admin group contains %(model_count)s model registered in the interface."
+msgid_plural ""
+"This admin group contains %(model_count)s models registered in the interface."
+msgstr[0] ""
+msgstr[1] ""
+
+#: pages/templates/admin_doc/model_graphs.html:24
+msgid "View model graph"
+msgstr ""
+
+#: pages/templates/admin_doc/model_graphs.html:26
+msgid "Open admin group"
+msgstr ""
+
+#: pages/templates/admin_doc/model_graphs.html:43
+msgid "No admin model graphs are available."
+msgstr ""
+
+#: pages/templates/admin_doc/model_index.html:18
+#, fuzzy
+#| msgid "Constellation"
+msgid "Model documentation"
+msgstr "Constellation"
+
+#: pages/templates/admin_doc/model_index.html:52
+#, fuzzy
+#| msgid "Models"
+msgid "Model groups"
+msgstr "Modelos"
+
+#: pages/templates/core/release_progress.html:231
+msgid "Pending TODOs"
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:4
+msgid "Authenticator setup"
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:12
+msgid "Authenticator app enrollment"
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:13
+msgid "Use an authenticator app to generate one-time codes for logging in."
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:16
+msgid "An authenticator app is currently registered for your account."
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:20
+msgid ""
+"No authenticator app is registered yet. Generate a secret to get started."
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:29
+msgid "Generate a new secret"
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:31
+msgid "Replace authenticator secret"
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:33
+msgid "Generate authenticator secret"
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:40
+msgid "Scan and confirm"
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:43
+msgid "Authenticator QR code"
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:48
+msgid ""
+"If you cannot scan the QR code, enter this key in your authenticator app:"
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:52
+msgid "After scanning, enter a code from your app to confirm enrollment."
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:79
+msgid "Confirm code"
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:89
+msgid "Remove authenticator"
+msgstr ""
+
+#: pages/templates/pages/authenticator_setup.html:94
+msgid ""
+"Password-based logins remain available even when an authenticator app is "
+"enabled."
+msgstr ""
+
+#: pages/templates/pages/base.html:343
+msgid "Opens in a new tab"
+msgstr ""
+
+#: pages/templates/pages/base.html:352 pages/templates/pages/base.html:517
+msgid "Dark Mode"
+msgstr "Modo Oscuro"
+
+#: pages/templates/pages/base.html:366
+msgid "Admin"
+msgstr ""
+
+#: pages/templates/pages/base.html:366 pages/templates/pages/login.html:4
+#: pages/templates/pages/login.html:9
+msgid "Login"
+msgstr ""
+
+#: pages/templates/pages/base.html:372
+msgid "Staff"
+msgstr ""
+
+#: pages/templates/pages/base.html:372
+msgid "Not staff"
+msgstr ""
+
+#: pages/templates/pages/base.html:376 pages/templates/pages/base.html:497
+msgid "Share"
+msgstr ""
+
+#: pages/templates/pages/base.html:501
+msgid "Link copied to clipboard"
+msgstr ""
+
+#: pages/templates/pages/base.html:517
+msgid "Light Mode"
+msgstr "Modo Claro"
+
+#: pages/templates/pages/client_report.html:4
+msgid "Consumer Report"
+msgstr ""
+
+#: pages/templates/pages/client_report.html:87
+#, python-format
+msgid "Please <a href=\"%(login_url)s\">log in</a> to generate client reports."
+msgstr ""
+
+#: pages/templates/pages/client_report.html:91
+msgid "Please log in to generate client reports."
+msgstr ""
+
+#: pages/templates/pages/client_report.html:105
+msgid "Reporting period"
+msgstr ""
+
+#: pages/templates/pages/client_report.html:156
+msgid "Delivery and ownership"
+msgstr ""
+
+#: pages/templates/pages/client_report.html:158
+msgid "Control who receives the report and how it is scheduled for delivery."
+msgstr ""
+
+#: pages/templates/pages/client_report.html:193
+msgid "Generate report"
+msgstr ""
+
+#: pages/templates/pages/csrf_failure.html:7
+msgid "Unable to complete the request."
+msgstr ""
+
+#: pages/templates/pages/csrf_failure.html:8
+msgid "You will be redirected to the home page shortly."
+msgstr ""
+
+#: pages/templates/pages/invitation_login.html:4
+#: pages/templates/pages/invitation_login.html:9
+#, fuzzy
+#| msgid "Email Pattern"
+msgid "Email invitation"
+msgstr "Patrón de correo electrónico"
+
+#: pages/templates/pages/invitation_login.html:14 pages/views.py:884
+msgid "New password"
+msgstr ""
+
+#: pages/templates/pages/invitation_login.html:18 pages/views.py:887
+msgid "Confirm password"
+msgstr ""
+
+#: pages/templates/pages/invitation_login.html:21
+msgid "Set password"
+msgstr ""
+
+#: pages/templates/pages/invitation_login.html:22
+msgid "Continue without password"
+msgstr ""
+
+#: pages/templates/pages/login.html:73
+msgid "Log in"
+msgstr ""
+
+#: pages/templates/pages/login.html:79 pages/templates/pages/login.html:82
+msgid "Use Password"
+msgstr ""
+
+#: pages/templates/pages/login.html:80 pages/templates/pages/login.html:82
+msgid "Use Authenticator app"
+msgstr ""
+
+#: pages/templates/pages/login.html:88
+#: pages/templates/pages/request_invite.html:9
+msgid "Request email invitation"
+msgstr ""
+
+#: pages/templates/pages/manual_detail.html:33
+#: pages/templates/pages/manual_list.html:23
+msgid "Not specified"
+msgstr ""
+
+#: pages/templates/pages/manual_list.html:7
+msgid "Explore official guides, wiring diagrams, and deployment runbooks."
+msgstr ""
+
+#: pages/templates/pages/manual_list.html:27
+msgid "View manual"
+msgstr ""
+
+#: pages/templates/pages/manual_list.html:39
+msgid "No manuals are available yet."
+msgstr ""
+
+#: pages/templates/pages/readme.html:15
+msgid "Scan this page"
+msgstr ""
+
+#: pages/templates/pages/readme.html:21
+msgid "QR code linking to this page"
+msgstr ""
+
+#: pages/templates/pages/request_invite.html:4
+msgid "Request invitation"
+msgstr ""
+
+#: pages/templates/pages/request_invite.html:12
+msgid "If the email exists, an invitation has been sent."
+msgstr ""
+
+#: pages/templates/pages/request_invite.html:30
+msgid "Email"
+msgstr ""
+
+#: pages/templates/pages/request_invite.html:46 pages/views.py:756
+msgid "Comment"
+msgstr ""
+
+#: pages/templates/pages/request_invite.html:58
+msgid "Send invitation"
+msgstr ""
+
+#: pages/templates/registration/password_change_form.html:32
+msgid ""
+"Please enter your old password, for security’s sake, and then enter your new "
+"password twice so we can verify you typed it in correctly."
+msgstr ""
+
+#: pages/templates/registration/password_change_form.html:60
+msgid "Change my password"
+msgstr ""
+
+#: pages/templates/registration/password_change_form.html:61
+msgid "Request temporary password"
+msgstr ""
+
+#: pages/views.py:331
+msgid ""
+"Graphviz executables are required to download the diagram as a PDF. Install "
+"Graphviz on the server and try again."
+msgstr ""
+
+#: pages/views.py:346
+msgid ""
+"An error occurred while generating the PDF diagram. Check the server logs "
+"for details."
+msgstr ""
+
+#: pages/views.py:368
+msgid ""
+"Graphviz executables are required to render this diagram. Install Graphviz "
+"on the server and try again."
+msgstr ""
+
+#: pages/views.py:380
+msgid ""
+"An error occurred while rendering the diagram. Check the server logs for "
+"details."
+msgstr ""
+
+#: pages/views.py:386
+#, python-format
+msgid "%(app)s model diagram"
+msgstr ""
+
+#: pages/views.py:391
+msgid "Graphviz did not return any diagram output."
+msgstr ""
+
+#: pages/views.py:420
+#, python-format
+msgid "%(app)s model graph"
+msgstr ""
+
+#: pages/views.py:609
+msgid "This page is reserved for members only. Please log in to continue."
+msgstr ""
+
+#: pages/views.py:675
+msgid ""
+"Scan the QR code with your authenticator app, then enter a code below to "
+"confirm enrollment."
+msgstr ""
+
+#: pages/views.py:690
+msgid ""
+"Authenticator app confirmed. You can now log in with codes from your device."
+msgstr ""
+
+#: pages/views.py:701
+msgid "Authenticator enrollment removed. Password logins remain available."
+msgstr ""
+
+#: pages/views.py:740
+#, fuzzy
+#| msgid "We could not submit your feedback. Please try again."
+msgid "We could not process your request. Please try again."
+msgstr "No pudimos enviar tus comentarios. Inténtalo de nuevo."
+
+#: pages/views.py:743
+msgid "That was a little too fast. Please wait a moment and try again."
+msgstr ""
+
+#: pages/views.py:746
+#, fuzzy
+#| msgid "We could not submit your feedback. Please try again."
+msgid ""
+"We could not verify your submission. Please reload the page and try again."
+msgstr "No pudimos enviar tus comentarios. Inténtalo de nuevo."
+
+#: pages/views.py:749
+msgid "We've already received a few requests. Please try again later."
+msgstr ""
+
+#: pages/views.py:760
+msgid "Leave blank"
+msgstr ""
+
+#: pages/views.py:834
+msgid "Your invitation link"
+msgstr ""
+
+#: pages/views.py:835
+#, python-format
+msgid "Use the following link to access your account: %(link)s"
+msgstr ""
+
+#: pages/views.py:896
+msgid "Passwords do not match"
+msgstr ""
+
+#: pages/views.py:908
+msgid "Invalid invitation link"
+msgstr ""
+
+#: pages/views.py:938
+msgid "Date range"
+msgstr ""
+
+#: pages/views.py:939 pages/views.py:962
+msgid "Week"
+msgstr ""
+
+#: pages/views.py:940 pages/views.py:968
+msgid "Month"
+msgstr ""
+
+#: pages/views.py:947
+msgid "Choose how the reporting window will be calculated."
+msgstr ""
+
+#: pages/views.py:950
+msgid "Start date"
+msgstr ""
+
+#: pages/views.py:953
+msgid "First day included when using a custom date range."
+msgstr ""
+
+#: pages/views.py:956
+msgid "End date"
+msgstr ""
+
+#: pages/views.py:959
+msgid "Last day included when using a custom date range."
+msgstr ""
+
+#: pages/views.py:965
+msgid "Generates the report for the ISO week that you select."
+msgstr ""
+
+#: pages/views.py:971
+msgid "Generates the report for the calendar month that you select."
+msgstr ""
+
+#: pages/views.py:977
+msgid "Sets who owns the report schedule and is listed as the requestor."
+msgstr ""
+
+#: pages/views.py:981
+#, fuzzy
+#| msgid "Email Patterns"
+msgid "Email destinations"
+msgstr "Patrones de correo electrónico"
+
+#: pages/views.py:984
+msgid "Separate addresses with commas or new lines."
+msgstr ""
+
+#: pages/views.py:987
+msgid "Recurrence"
+msgstr ""
+
+#: pages/views.py:990
+msgid "Defines how often the report should be generated automatically."
+msgstr ""
+
+#: pages/views.py:993
+msgid "Disable email delivery"
+msgstr ""
+
+#: pages/views.py:995
+msgid "Generate files without sending emails."
+msgstr ""
+
+#: pages/views.py:1009
+#, fuzzy
+#| msgid "Please provide feedback!"
+msgid "Please provide start and end dates."
+msgstr "¡Por favor, envía tus comentarios!"
+
+#: pages/views.py:1013
+msgid "Please select a week."
+msgstr ""
+
+#: pages/views.py:1021
+msgid "Please select a month."
+msgstr ""
+
+#: pages/views.py:1057
+msgid "You must log in to generate client reports."
+msgstr ""
+
+#: pages/views.py:1086
+msgid ""
+"Client reports can only be generated periodically. Please wait before trying "
+"again."
+msgstr ""
+
+#: pages/views.py:1115
+msgid ""
+"Client report schedule created; future reports will be generated "
+"automatically."
+msgstr ""
+
+#: pages/views.py:1148
+#, python-format
+msgid "You can only submit feedback once every %(minutes)s minutes."
+msgstr ""
+
+#: teams/admin.py:142
+msgid "Test/calibrate selected device"
+msgstr ""
+
+#: teams/admin.py:152
+msgid "Select exactly one device to calibrate."
+msgstr ""
+
+#: teams/admin.py:160
+msgid "Enter the current authenticator code to test the device."
+msgstr ""
+
+#: teams/admin.py:179
+#, python-format
+msgid "Too many failed attempts. Try again after %(time)s."
+msgstr ""
+
+#: teams/admin.py:183
+msgid "Too many failed attempts. Try again later."
+msgstr ""
+
+#: teams/admin.py:187
+msgid "Verification is not allowed at this time."
+msgstr ""
+
+#: teams/admin.py:194
+msgid "Token accepted. The device has been calibrated."
+msgstr ""
+
+#: teams/admin.py:200
+msgid "Token rejected. The device was not calibrated."
+msgstr ""
+
+#: teams/admin.py:226
+#, python-format
+msgid "User datum saved to %(path)s"
+msgstr ""
+
+#: teams/apps.py:8
+msgid "6. Workgroup"
+msgstr "6. Grupo de trabajo"
+
+#: teams/forms.py:13
+msgid "Issuer"
+msgstr ""
+
+#: teams/forms.py:75
+msgid "OTP"
+msgstr ""
+
+#: teams/forms.py:78
+msgid ""
+"Enter the current authenticator code when running the calibration action."
+msgstr ""
+
+#: teams/forms.py:87
+msgid "Enter your one-time password for testing"
+msgstr ""
+
+#~ msgid "Alt text"
+#~ msgstr "Texto alternativo"

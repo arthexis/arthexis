@@ -7,6 +7,7 @@ app_name = "pages"
 urlpatterns = [
     path("", views.index, name="index"),
     path("readme/", views.readme, name="readme"),
+    path("readme/<path:doc>", views.readme, name="readme-document"),
     path("sitemap.xml", views.sitemap, name="pages-sitemap"),
     path("release/", views.release_admin_redirect, name="release-admin"),
     path("client-report/", views.client_report, name="client-report"),
