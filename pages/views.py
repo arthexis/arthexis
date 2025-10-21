@@ -970,6 +970,9 @@ def invitation_login(request, uidb64, token):
     return render(request, "pages/invitation_login.html", {"form": form})
 
 
+MONTH_INPUT_FORMATS = list(forms.DateField().input_formats) + ["%Y-%m"]
+
+
 class ClientReportForm(forms.Form):
     PERIOD_CHOICES = [
         ("range", _("Date range")),
@@ -1004,6 +1007,7 @@ class ClientReportForm(forms.Form):
     month = forms.DateField(
         label=_("Month"),
         required=False,
+        input_formats=MONTH_INPUT_FORMATS,
         widget=forms.DateInput(attrs={"type": "month"}),
         help_text=_("Generates the report for the calendar month that you select."),
     )
