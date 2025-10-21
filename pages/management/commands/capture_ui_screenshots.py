@@ -28,7 +28,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--output-dir",
             default="artifacts/ui-screens",
-            help="Directory where screenshot artefacts will be written.",
+            help="Directory where screenshot artifacts will be written.",
         )
 
     def handle(self, *args, **options):
@@ -58,4 +58,4 @@ class Command(BaseCommand):
                         f"Captured '{spec.slug}' to {result.image_path.relative_to(output_dir)}"
                     )
                 )
-                self.stdout.write(f"Base64 artefact stored at {result.base64_path}")
+                self.stdout.write(f"Base64 artifact stored at {result.base64_path}")
