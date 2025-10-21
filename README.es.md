@@ -94,6 +94,28 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
 ### 4. Administración
 Visita [`http://localhost:8000/admin/`](http://localhost:8000/admin/) para el [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) y [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) para la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
 
+## Sigilos
+
+Los sigilos son tokens entre corchetes como `[ENV.SMTP_PASSWORD]` que Arthexis expande en tiempo de ejecución. Permiten referenciar secretos de configuración, metadatos del sistema o registros de otras aplicaciones sin duplicar valores en el proyecto.
+
+### Sintaxis resumida
+
+- `[PREFIX.KEY]` &mdash; devuelve un campo o atributo. Los guiones y las mayúsculas/minúsculas se normalizan automáticamente.
+- `[PREFIX=IDENTIFICADOR.CAMPO]` &mdash; selecciona un registro concreto por clave primaria o por cualquier campo único.
+- `[PREFIX:CAMPO=VALOR.ATRIBUTO]` &mdash; filtra por un campo personalizado en lugar de la clave primaria.
+- `[PREFIX.CAMPO=[OTRO.SIGILO]]` &mdash; permite anidar sigilos; el valor después de `=` se resuelve antes que el token externo.
+- `[PREFIX]` &mdash; para prefijos de entidad devuelve el objeto serializado en JSON; para prefijos de configuración se resuelve en una cadena vacía si falta la clave.
+
+La plataforma incluye tres prefijos de configuración:
+
+- `ENV` lee variables de entorno.
+- `CONF` lee ajustes de Django.
+- `SYS` expone información del sistema calculada, como metadatos de compilación.
+
+Los prefijos adicionales se definen mediante **Sigil Roots**, que vinculan un código corto (por ejemplo `ROLE`, `ODOO` o `USER`) con un modelo de Django. Puedes revisarlos desde **Admin &rarr; Sigil Builder** (`/admin/sigil-builder/`), que también ofrece una consola de pruebas.
+
+Los prefijos desconocidos permanecen sin cambios (por ejemplo `[UNKNOWN.VALUE]`) y se registran en los logs. Cuando la CLI opcional `gway` está instalada, el resolvedor intenta delegar los tokens sin resolver antes de devolver el texto original.
+
 ## Soporte
 
 Contáctenos en [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) o visite nuestro [sitio web](https://www.gelectriic.com/) para [servicios profesionales](https://es.wikipedia.org/wiki/Servicios_profesionales) y [soporte comercial](https://es.wikipedia.org/wiki/Soporte_t%C3%A9cnico).

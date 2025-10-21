@@ -94,6 +94,28 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
 ### 4. Administration
 [`http://localhost:8000/admin/`](http://localhost:8000/admin/) für den [Django-Admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) und [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) für die [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) aufrufen. Verwende `--port` mit den Startskripten oder dem Installer, wenn ein anderer Port benötigt wird.
 
+## Sigils
+
+Sigils sind Platzhalter in eckigen Klammern wie `[ENV.SMTP_PASSWORD]`, die Arthexis zur Laufzeit auflöst. Sie ermöglichen es, Konfigurationsgeheimnisse, Systemmetadaten oder Datensätze aus anderen Apps einzubinden, ohne Werte zu duplizieren.
+
+### Syntax im Überblick
+
+- `[PREFIX.KEY]` &mdash; gibt ein Feld oder Attribut zurück. Bindestriche sowie Groß- und Kleinschreibung werden automatisch normalisiert.
+- `[PREFIX=IDENTIFIER.FELD]` &mdash; wählt einen bestimmten Datensatz über Primärschlüssel oder ein anderes eindeutiges Feld aus.
+- `[PREFIX:FELD=WERT.ATTRIBUT]` &mdash; filtert über ein benutzerdefiniertes Feld anstelle des Primärschlüssels.
+- `[PREFIX.FELD=[ANDERER.SIGIL]]` &mdash; verschachtelt Sigils; der Wert nach `=` wird vor dem äußeren Token aufgelöst.
+- `[PREFIX]` &mdash; bei Entitätspräfixen liefert dies das serialisierte Objekt als JSON; bei Konfigurationspräfixen ergibt es eine leere Zeichenfolge, wenn der Schlüssel fehlt.
+
+Die Plattform bringt drei Konfigurationspräfixe mit:
+
+- `ENV` liest Umgebungsvariablen.
+- `CONF` liest Django-Einstellungen.
+- `SYS` stellt berechnete Systeminformationen wie Build-Metadaten bereit.
+
+Weitere Präfixe werden über **Sigil Roots** definiert, die einen Kurznamen (z. B. `ROLE`, `ODOO` oder `USER`) einem Django-Modell zuordnen. In **Admin &rarr; Sigil Builder** (`/admin/sigil-builder/`) kannst du sie einsehen und die Auflösung testen.
+
+Unbekannte Präfixe bleiben unverändert (z. B. `[UNKNOWN.VALUE]`) und werden protokolliert. Ist das optionale `gway`-CLI installiert, versucht der Resolver, nicht aufgelöste Tokens dorthin weiterzuleiten, bevor der Originaltext zurückgegeben wird.
+
 ## Support
 
 Kontakt per [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) oder besuche unsere [Webseite](https://www.gelectriic.com/) für [professionelle Dienstleistungen](https://de.wikipedia.org/wiki/Dienstleistung) und [kommerziellen Support](https://de.wikipedia.org/wiki/Technischer_Support).
