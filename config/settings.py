@@ -585,7 +585,7 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = "en-us"
 
 LANGUAGES = [
-    ("es", _("Spanish")),
+    ("es", _("Spanish (Latin America)")),
     ("en", _("English")),
     ("it", _("Italian")),
     ("de", _("German")),
