@@ -1,3 +1,4 @@
+import datetime
 import os
 import sys
 from pathlib import Path
@@ -28,3 +29,16 @@ class ClientReportFormTests(SimpleTestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn("Please select a week.", form.non_field_errors())
+
+    def test_month_period_accepts_html_month_value(self):
+        form = ClientReportForm(
+            data={
+                "period": "month",
+                "month": "2023-09",
+                "recurrence": ClientReportSchedule.PERIODICITY_NONE,
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["start"], datetime.date(2023, 9, 1))
+        self.assertEqual(form.cleaned_data["end"], datetime.date(2023, 9, 30))
