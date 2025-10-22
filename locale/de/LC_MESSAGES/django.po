@@ -70,8 +70,8 @@ msgid "Power Leads"
 msgstr ""
 
 #: awg/templates/awg/calculator.html:3
-msgid "AWG Calculator"
-msgstr "AWG-Rechner"
+msgid "AWG Cable Calculator"
+msgstr "AWG-Kabelrechner"
 
 #: awg/templates/awg/calculator.html:11
 msgid "Cable & Conduit Calculator"

@@ -313,7 +313,7 @@ def find_awg(
 
 
 @csrf_exempt
-@landing(_lazy("AWG Calculator"))
+@landing(_lazy("AWG Cable Calculator"))
 def calculator(request):
     """Display the AWG calculator form and results using a template."""
     def _extract_client_ip() -> str | None:
