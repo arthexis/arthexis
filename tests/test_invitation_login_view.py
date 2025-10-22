@@ -1,5 +1,7 @@
 from unittest.mock import Mock, patch
 
+import pytest
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.test import TestCase
@@ -81,6 +83,7 @@ class InvitationLoginViewTests(TestCase):
         session = self.client.session
         self.assertEqual(session.get("_auth_user_id"), str(user.pk))
 
+    @pytest.mark.feature("ap-router")
     @patch("pages.views.public_wifi.resolve_mac_address", return_value="aa:bb:cc:dd:ee:ff")
     @patch("pages.views.public_wifi.grant_public_access")
     def test_wifi_provisioning_attempted_when_feature_enabled(
@@ -104,6 +107,7 @@ class InvitationLoginViewTests(TestCase):
         self.assertTrue(mock_resolve_mac.called)
         mock_grant_public_access.assert_called_once_with(user, "aa:bb:cc:dd:ee:ff")
 
+    @pytest.mark.feature("ap-router")
     @patch("pages.views.public_wifi.resolve_mac_address", return_value=None)
     @patch("pages.views.public_wifi.grant_public_access")
     def test_wifi_provisioning_uses_fallback_mac_when_available(
