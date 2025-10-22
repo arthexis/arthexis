@@ -11,7 +11,8 @@ from .models import Module
 _FAVICON_DIR = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data"
 _FAVICON_FILENAMES = {
     "default": "favicon.txt",
-    "Constellation": "favicon_constellation.txt",
+    "Watchtower": "favicon_watchtower.txt",
+    "Constellation": "favicon_watchtower.txt",
     "Control": "favicon_control.txt",
     "Satellite": "favicon_satellite.txt",
 }

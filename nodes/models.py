@@ -41,6 +41,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+ROLE_RENAMES: dict[str, str] = {"Constellation": "Watchtower"}
+
+
 class NodeRoleManager(models.Manager):
     def get_by_natural_key(self, name: str):
         return self.get(name=name)
@@ -188,7 +191,8 @@ class Node(Entity):
 
     DEFAULT_BADGE_COLOR = "#28a745"
     ROLE_BADGE_COLORS = {
-        "Constellation": "#daa520",  # goldenrod
+        "Watchtower": "#daa520",  # goldenrod
+        "Constellation": "#daa520",  # legacy alias
         "Control": "#673ab7",  # deep purple
         "Interface": "#0dcaf0",  # cyan
     }
@@ -337,6 +341,7 @@ class Node(Entity):
         }
         role_lock = Path(settings.BASE_DIR) / "locks" / "role.lck"
         role_name = role_lock.read_text().strip() if role_lock.exists() else "Terminal"
+        role_name = ROLE_RENAMES.get(role_name, role_name)
         desired_role = NodeRole.objects.filter(name=role_name).first()
 
         if node:
@@ -1831,8 +1836,14 @@ class NetMessage(Entity):
             "Terminal": ["Terminal"],
             "Control": ["Control", "Terminal"],
             "Satellite": ["Satellite", "Control", "Terminal"],
+            "Watchtower": [
+                "Watchtower",
+                "Satellite",
+                "Control",
+                "Terminal",
+            ],
             "Constellation": [
-                "Constellation",
+                "Watchtower",
                 "Satellite",
                 "Control",
                 "Terminal",

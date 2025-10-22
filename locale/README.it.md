@@ -53,7 +53,7 @@ Costellazione Arthexis è distribuita in quattro ruoli di nodo pensati per diver
       <td valign="top"><strong>Periferia multi-dispositivo, rete e acquisizione dati</strong><br />Funzionalità: AP Router, Celery Queue, NGINX Server, RFID Scanner</td>
     </tr>
     <tr>
-      <td valign="top"><strong>Constellation</strong></td>
+      <td valign="top"><strong>Watchtower</strong></td>
       <td valign="top"><strong>Cloud multiutente e orchestrazione</strong><br />Funzionalità: Celery Queue, NGINX Server</td>
     </tr>
   </tbody>
@@ -66,7 +66,7 @@ Costellazione Arthexis è distribuita in quattro ruoli di nodo pensati per diver
 - **[Windows](https://it.wikipedia.org/wiki/Microsoft_Windows)**: apri [PowerShell](https://learn.microsoft.com/powershell/) o [Git Bash](https://gitforwindows.org/) ed esegui lo stesso comando.
 
 ### 2. Avvio e arresto
-I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza installazione; i ruoli Control, Satellite e Constellation richiedono prima l'installazione. Entrambi i metodi ascoltano su [`http://localhost:8000/`](http://localhost:8000/) per impostazione predefinita.
+I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza installazione; i ruoli Control, Satellite e Watchtower richiedono prima l'installazione. Entrambi i metodi ascoltano su [`http://localhost:8000/`](http://localhost:8000/) per impostazione predefinita.
 
 - **[VS Code](https://code.visualstudio.com/)**
    - Apri la cartella e vai al pannello **Run and Debug** (`Ctrl+Shift+D`).

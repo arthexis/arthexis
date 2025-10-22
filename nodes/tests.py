@@ -71,16 +71,16 @@ from core.models import Package, PackageRelease, SecurityGroup, RFID, EnergyAcco
 
 class NodeBadgeColorTests(TestCase):
     def setUp(self):
-        self.constellation, _ = NodeRole.objects.get_or_create(name="Constellation")
+        self.watchtower, _ = NodeRole.objects.get_or_create(name="Watchtower")
         self.control, _ = NodeRole.objects.get_or_create(name="Control")
 
-    def test_constellation_role_defaults_to_goldenrod(self):
+    def test_watchtower_role_defaults_to_goldenrod(self):
         node = Node.objects.create(
-            hostname="constellation",
+            hostname="watchtower",
             address="10.1.0.1",
             port=8000,
             mac_address="00:aa:bb:cc:dd:01",
-            role=self.constellation,
+            role=self.watchtower,
         )
         self.assertEqual(node.badge_color, "#daa520")
 
@@ -100,7 +100,7 @@ class NodeBadgeColorTests(TestCase):
             address="10.1.0.3",
             port=8002,
             mac_address="00:aa:bb:cc:dd:03",
-            role=self.constellation,
+            role=self.watchtower,
             badge_color="#123456",
         )
         self.assertEqual(node.badge_color, "#123456")
@@ -181,7 +181,7 @@ class NodeGetLocalTests(TestCase):
 
     def test_register_current_updates_role_from_lock_file(self):
         NodeRole.objects.get_or_create(name="Terminal")
-        NodeRole.objects.get_or_create(name="Constellation")
+        NodeRole.objects.get_or_create(name="Watchtower")
         with TemporaryDirectory() as tmp:
             base = Path(tmp)
             lock_dir = base / "locks"
@@ -206,7 +206,7 @@ class NodeGetLocalTests(TestCase):
             self.assertTrue(created)
             self.assertEqual(node.role.name, "Terminal")
 
-            role_file.write_text("Constellation")
+            role_file.write_text("Watchtower")
             with override_settings(BASE_DIR=base):
                 with (
                     patch(
@@ -225,7 +225,27 @@ class NodeGetLocalTests(TestCase):
 
             self.assertFalse(created_again)
             node.refresh_from_db()
-            self.assertEqual(node.role.name, "Constellation")
+            self.assertEqual(node.role.name, "Watchtower")
+
+            role_file.write_text("Constellation")
+            with override_settings(BASE_DIR=base):
+                with (
+                    patch(
+                        "nodes.models.Node.get_current_mac",
+                        return_value="00:aa:bb:cc:dd:ee",
+                    ),
+                    patch("nodes.models.socket.gethostname", return_value="role-host"),
+                    patch(
+                        "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
+                    ),
+                    patch("nodes.models.revision.get_revision", return_value="rev"),
+                    patch.object(Node, "ensure_keys"),
+                    patch.object(Node, "notify_peers_of_update"),
+                ):
+                    Node.register_current()
+
+            node.refresh_from_db()
+            self.assertEqual(node.role.name, "Watchtower")
 
     def test_register_current_respects_node_hostname_env(self):
         with TemporaryDirectory() as tmp:
@@ -2594,11 +2614,11 @@ class NetMessageAdminTests(TransactionTestCase):
 class NetMessageReachTests(TestCase):
     def setUp(self):
         self.roles = {}
-        for name in ["Terminal", "Control", "Satellite", "Constellation"]:
+        for name in ["Terminal", "Control", "Satellite", "Watchtower"]:
             self.roles[name], _ = NodeRole.objects.get_or_create(name=name)
         self.nodes = {}
         for idx, name in enumerate(
-            ["Terminal", "Control", "Satellite", "Constellation"], start=1
+            ["Terminal", "Control", "Satellite", "Watchtower"], start=1
         ):
             self.nodes[name] = Node.objects.create(
                 hostname=name.lower(),
@@ -2642,15 +2662,15 @@ class NetMessageReachTests(TestCase):
         self.assertEqual(mock_post.call_count, 3)
 
     @patch("requests.post")
-    def test_constellation_reach_prioritizes_constellation(self, mock_post):
+    def test_watchtower_reach_prioritizes_watchtower(self, mock_post):
         msg = NetMessage.objects.create(
-            subject="s", body="b", reach=self.roles["Constellation"]
+            subject="s", body="b", reach=self.roles["Watchtower"]
         )
         with patch.object(Node, "get_local", return_value=None):
             msg.propagate()
         roles = set(msg.propagated_to.values_list("role__name", flat=True))
         self.assertEqual(
-            roles, {"Constellation", "Satellite", "Control", "Terminal"}
+            roles, {"Watchtower", "Satellite", "Control", "Terminal"}
         )
         self.assertEqual(mock_post.call_count, 4)
 
@@ -3707,7 +3727,7 @@ class NodeRoleAdminTests(TestCase):
 
 class NodeFeatureFixtureTests(TestCase):
     def test_rfid_scanner_fixture_includes_control_role(self):
-        for name in ("Terminal", "Satellite", "Constellation", "Control"):
+        for name in ("Terminal", "Satellite", "Watchtower", "Control"):
             NodeRole.objects.get_or_create(name=name)
         fixture_path = (
             Path(__file__).resolve().parent

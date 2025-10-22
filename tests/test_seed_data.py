@@ -97,6 +97,8 @@ class EntityInheritanceTests(TestCase):
             "core.SecurityGroup",
             "core.TOTPDeviceSettings",
             "ocpp.DataTransferMessage",
+            "ocpp.ChargerConfiguration",
+            "nodes.PendingNetMessage",
             "pages.Manual",
             "pages.SiteProxy",
             "teams.SecurityGroup",
@@ -588,5 +590,5 @@ class SeedDataViewTests(TestCase):
         names = set(NodeRole.objects.values_list("name", flat=True))
         self.assertEqual(
             names,
-            {"Terminal", "Constellation", "Control", "Satellite"},
+            {"Terminal", "Watchtower", "Control", "Satellite", "Interface"},
         )

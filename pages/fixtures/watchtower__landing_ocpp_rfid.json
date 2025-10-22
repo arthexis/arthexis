@@ -5,7 +5,7 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "module": ["Constellation", "/ocpp/"],
+      "module": ["Watchtower", "/ocpp/"],
       "path": "/ocpp/rfid/",
       "label": "RFID Tag Validator",
       "enabled": true,

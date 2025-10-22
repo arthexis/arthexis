@@ -4,10 +4,10 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "node_role": ["Constellation"],
-      "application": ["pages"],
-      "path": "/read/",
-      "menu": "Cookbooks",
+      "node_role": ["Watchtower"],
+      "application": ["ocpp"],
+      "path": "/ocpp/",
+      "menu": "Chargers",
       "is_default": false,
       "favicon": ""
     }

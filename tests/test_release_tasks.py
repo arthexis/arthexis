@@ -31,7 +31,7 @@ def _setup_tmp(monkeypatch, tmp_path):
     return tmp_path
 
 
-@pytest.mark.role("Constellation")
+@pytest.mark.role("Watchtower")
 def test_no_upgrade_triggers_startup(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.0")
@@ -70,7 +70,7 @@ def test_no_upgrade_triggers_startup(monkeypatch, tmp_path):
     assert run_recorder.find("./upgrade.sh") is None
 
 
-@pytest.mark.role("Constellation")
+@pytest.mark.role("Watchtower")
 def test_upgrade_shows_message(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.0")
@@ -123,7 +123,7 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
     assert first_call["kwargs"].get("kwargs") == {"attempt": 1}
 
 
-@pytest.mark.role("Constellation")
+@pytest.mark.role("Watchtower")
 def test_stable_mode_skips_patch_upgrade(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.2.3")
@@ -173,7 +173,7 @@ def test_stable_mode_skips_patch_upgrade(monkeypatch, tmp_path):
     assert run_recorder.find("./upgrade.sh") is None
 
 
-@pytest.mark.role("Constellation")
+@pytest.mark.role("Watchtower")
 def test_stable_mode_triggers_minor_upgrade(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.2.3")
@@ -237,7 +237,7 @@ def test_stable_mode_triggers_minor_upgrade(monkeypatch, tmp_path):
     assert first_call["kwargs"].get("kwargs") == {"attempt": 1}
 
 
-@pytest.mark.role("Constellation")
+@pytest.mark.role("Watchtower")
 def test_verify_auto_upgrade_health_reverts_and_records_revision(
     monkeypatch, tmp_path
 ):
@@ -289,7 +289,7 @@ def test_verify_auto_upgrade_health_reverts_and_records_revision(
     assert skip_file.read_text().strip() == "deadbeef"
 
 
-@pytest.mark.role("Constellation")
+@pytest.mark.role("Watchtower")
 def test_check_github_updates_skips_blocked_revision(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     locks = base / "locks"

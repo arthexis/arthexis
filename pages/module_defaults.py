@@ -10,7 +10,7 @@ LandingDefinition = tuple[str, str]
 
 
 ROLE_MODULE_DEFAULTS: Mapping[str, tuple[ModuleDefinition, ...]] = {
-    "Constellation": (
+    "Watchtower": (
         {
             "application": "ocpp",
             "path": "/ocpp/",
