@@ -22,6 +22,8 @@ from .models import (
     PowerLead,
 )
 
+from .constants import CONDUIT_LABELS
+
 
 class AWG(int):
     """Represents an AWG gauge as an integer.
@@ -248,6 +250,9 @@ def find_awg(
                                     conduit=c,
                                 )
                                 result["conduit"] = c
+                                result["conduit_label"] = CONDUIT_LABELS.get(
+                                    str(c).lower(), str(c).upper()
+                                )
                                 result["pipe_inch"] = fill["size_inch"]
                             return result
                         if perc < best_perc:
@@ -263,6 +268,9 @@ def find_awg(
                                     conduit=c,
                                 )
                                 result["conduit"] = c
+                                result["conduit_label"] = CONDUIT_LABELS.get(
+                                    str(c).lower(), str(c).upper()
+                                )
                                 result["pipe_inch"] = fill["size_inch"]
                             return result
                         if perc < best_perc:
@@ -284,6 +292,9 @@ def find_awg(
                         conduit=c,
                     )
                     best["conduit"] = c
+                    best["conduit_label"] = CONDUIT_LABELS.get(
+                        str(c).lower(), str(c).upper()
+                    )
                     best["pipe_inch"] = fill["size_inch"]
                 return best
 

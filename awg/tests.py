@@ -117,7 +117,7 @@ class AWGCalculatorTests(TestCase):
         self.assertContains(resp, "AWG Size</th>")
         self.assertContains(resp, "8")
         self.assertContains(resp, "Voltage Drop")
-        self.assertContains(resp, "EMT")
+        self.assertContains(resp, "EMT (Thin-wall)")
         self.assertContains(resp, "Calculate Again")
 
     def test_power_lead_created(self):
