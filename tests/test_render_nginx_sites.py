@@ -1,6 +1,11 @@
 import json
 
+import pytest
+
 from scripts.helpers.render_nginx_sites import apply_sites
+
+
+pytestmark = [pytest.mark.feature("nginx-server")]
 
 
 def test_apply_sites_generates_http_config(tmp_path):
