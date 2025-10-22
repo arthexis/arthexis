@@ -2,6 +2,7 @@ import os
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
+import pytest
 
 try:  # Use the pytest-specific setup when available for database readiness
     from tests.conftest import safe_setup as _safe_setup  # type: ignore
@@ -1337,6 +1338,7 @@ class NodeRegisterCurrentTests(TestCase):
         existing_role.refresh_from_db()
         self.assertEqual(existing_role.description, "updated via attachment")
 
+    @pytest.mark.feature("clipboard-poll")
     def test_clipboard_polling_creates_task(self):
         feature, _ = NodeFeature.objects.get_or_create(
             slug="clipboard-poll", defaults={"display": "Clipboard Poll"}
@@ -1354,6 +1356,7 @@ class NodeRegisterCurrentTests(TestCase):
         NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
         self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
 
+    @pytest.mark.feature("screenshot-poll")
     def test_screenshot_polling_creates_task(self):
         feature, _ = NodeFeature.objects.get_or_create(
             slug="screenshot-poll", defaults={"display": "Screenshot Poll"}
@@ -1482,6 +1485,7 @@ class NodeAdminTests(TestCase):
         action_url = reverse("admin:core_rfid_scan")
         self.assertContains(response, f'href="{action_url}"')
 
+    @pytest.mark.feature("rpi-camera")
     def test_node_feature_list_shows_all_actions_for_rpi_camera(self):
         node = self._create_local_node()
         feature, _ = NodeFeature.objects.get_or_create(
@@ -1494,6 +1498,7 @@ class NodeAdminTests(TestCase):
         self.assertContains(response, f'href="{snapshot_url}"')
         self.assertContains(response, f'href="{stream_url}"')
 
+    @pytest.mark.feature("audio-capture")
     def test_node_feature_list_shows_waveform_action_when_enabled(self):
         node = self._create_local_node()
         feature, _ = NodeFeature.objects.get_or_create(
@@ -1504,6 +1509,7 @@ class NodeAdminTests(TestCase):
         action_url = reverse("admin:nodes_nodefeature_view_waveform")
         self.assertContains(response, f'href="{action_url}"')
 
+    @pytest.mark.feature("screenshot-poll")
     def test_node_feature_list_hides_default_action_when_disabled(self):
         self._create_local_node()
         NodeFeature.objects.get_or_create(
@@ -1596,6 +1602,7 @@ class NodeAdminTests(TestCase):
             response, reverse("admin:nodes_node_register_current")
         )
 
+    @pytest.mark.feature("screenshot-poll")
     @patch("nodes.admin.capture_screenshot")
     def test_capture_site_screenshot_from_admin(self, mock_capture_screenshot):
         screenshot_dir = settings.LOG_DIR / "screenshots"
@@ -1682,6 +1689,7 @@ class NodeAdminTests(TestCase):
         self.assertContains(response, proxy_url)
 
 
+    @pytest.mark.feature("screenshot-poll")
     @override_settings(SCREENSHOT_SOURCES=["/one", "/two"])
     @patch("nodes.admin.capture_screenshot")
     def test_take_screenshots_action(self, mock_capture):
@@ -1714,6 +1722,7 @@ class NodeAdminTests(TestCase):
         samples = list(ContentSample.objects.filter(kind=ContentSample.IMAGE))
         self.assertEqual(samples[0].transaction_uuid, samples[1].transaction_uuid)
 
+    @pytest.mark.feature("screenshot-poll")
     @patch("nodes.admin.capture_screenshot")
     def test_take_screenshot_default_action_creates_sample(
         self, mock_capture_screenshot
@@ -1788,6 +1797,7 @@ class NodeAdminTests(TestCase):
             response, "Completed 0 of 1 feature check(s) successfully.", html=False
         )
 
+    @pytest.mark.feature("screenshot-poll")
     def test_enable_selected_features_enables_manual_feature(self):
         node = self._create_local_node()
         feature, _ = NodeFeature.objects.get_or_create(
@@ -1832,6 +1842,7 @@ class NodeAdminTests(TestCase):
             html=False,
         )
 
+    @pytest.mark.feature("screenshot-poll")
     def test_take_screenshot_default_action_requires_enabled_feature(self):
         self._create_local_node()
         NodeFeature.objects.get_or_create(
@@ -1846,6 +1857,7 @@ class NodeAdminTests(TestCase):
         self.assertEqual(ContentSample.objects.count(), 0)
         self.assertContains(response, "Screenshot Poll feature is not enabled")
 
+    @pytest.mark.feature("rpi-camera")
     @patch("nodes.admin.capture_rpi_snapshot")
     def test_take_snapshot_default_action_creates_sample(self, mock_snapshot):
         node = self._create_local_node()
@@ -1868,6 +1880,7 @@ class NodeAdminTests(TestCase):
         change_url = reverse("admin:nodes_contentsample_change", args=[sample.pk])
         self.assertEqual(response.redirect_chain[-1][0], change_url)
 
+    @pytest.mark.feature("rpi-camera")
     def test_view_stream_requires_enabled_feature(self):
         self._create_local_node()
         NodeFeature.objects.get_or_create(
@@ -1883,6 +1896,7 @@ class NodeAdminTests(TestCase):
             response, "Raspberry Pi Camera feature is not enabled on this node."
         )
 
+    @pytest.mark.feature("rpi-camera")
     def test_view_stream_renders_when_feature_enabled(self):
         node = self._create_local_node()
         feature, _ = NodeFeature.objects.get_or_create(
@@ -1898,6 +1912,7 @@ class NodeAdminTests(TestCase):
         self.assertContains(response, expected_stream)
         self.assertContains(response, "camera-stream__frame")
 
+    @pytest.mark.feature("rpi-camera")
     def test_view_stream_uses_configured_stream_url(self):
         node = self._create_local_node()
         feature, _ = NodeFeature.objects.get_or_create(
@@ -1915,6 +1930,7 @@ class NodeAdminTests(TestCase):
         self.assertEqual(response.context_data["stream_embed"], "iframe")
         self.assertContains(response, configured_stream)
 
+    @pytest.mark.feature("rpi-camera")
     def test_view_stream_detects_mjpeg_stream(self):
         node = self._create_local_node()
         feature, _ = NodeFeature.objects.get_or_create(
@@ -1931,6 +1947,7 @@ class NodeAdminTests(TestCase):
         self.assertEqual(response.context_data["stream_embed"], "mjpeg")
         self.assertContains(response, "<img", html=False)
 
+    @pytest.mark.feature("rpi-camera")
     def test_view_stream_marks_rtsp_stream_as_unsupported(self):
         node = self._create_local_node()
         feature, _ = NodeFeature.objects.get_or_create(
@@ -1947,6 +1964,7 @@ class NodeAdminTests(TestCase):
         self.assertEqual(response.context_data["stream_embed"], "unsupported")
         self.assertContains(response, "camera-stream__unsupported")
 
+    @pytest.mark.feature("audio-capture")
     def test_view_waveform_requires_enabled_feature(self):
         self._create_local_node()
         NodeFeature.objects.get_or_create(
@@ -1962,6 +1980,7 @@ class NodeAdminTests(TestCase):
             response, "Audio Capture feature is not enabled on this node."
         )
 
+    @pytest.mark.feature("audio-capture")
     def test_view_waveform_renders_when_feature_enabled(self):
         node = self._create_local_node()
         feature, _ = NodeFeature.objects.get_or_create(
@@ -3426,6 +3445,7 @@ class ContentSampleTransactionTests(TestCase):
             sample1.save()
 
 
+@pytest.mark.feature("clipboard-poll")
 class ContentSampleAdminTests(TestCase):
     def setUp(self):
         User = get_user_model()
@@ -3602,6 +3622,7 @@ class EmailOutboxTests(TestCase):
 
 
 class ClipboardTaskTests(TestCase):
+    @pytest.mark.feature("clipboard-poll")
     @patch("nodes.tasks.pyperclip.paste")
     def test_sample_clipboard_task_creates_sample(self, mock_paste):
         mock_paste.return_value = "task text"
@@ -3626,6 +3647,7 @@ class ClipboardTaskTests(TestCase):
             ContentSample.objects.filter(kind=ContentSample.TEXT).count(), 1
         )
 
+    @pytest.mark.feature("screenshot-poll")
     @patch("nodes.tasks.capture_screenshot")
     def test_capture_node_screenshot_task(self, mock_capture):
         node = Node.objects.create(
@@ -3648,6 +3670,7 @@ class ClipboardTaskTests(TestCase):
         self.assertEqual(screenshot.path, "screenshots/test.png")
         self.assertEqual(screenshot.method, "TASK")
 
+    @pytest.mark.feature("screenshot-poll")
     @patch("nodes.tasks.capture_screenshot")
     def test_capture_node_screenshot_handles_error(self, mock_capture):
         Node.objects.create(
@@ -3739,6 +3762,7 @@ class NodeFeatureFixtureTests(TestCase):
         role_names = set(feature.roles.values_list("name", flat=True))
         self.assertIn("Control", role_names)
 
+    @pytest.mark.feature("ap-router")
     def test_ap_router_fixture_limits_roles(self):
         for name in ("Control", "Satellite"):
             NodeRole.objects.get_or_create(name=name)
@@ -3789,6 +3813,7 @@ class NodeFeatureTests(TestCase):
         self.assertEqual(action.url_name, "admin:nodes_nodefeature_celery_report")
         self.assertEqual(feature.get_default_action(), action)
 
+    @pytest.mark.feature("rpi-camera")
     def test_rpi_camera_feature_has_multiple_actions(self):
         feature = NodeFeature.objects.create(
             slug="rpi-camera", display="Raspberry Pi Camera"
@@ -3799,6 +3824,7 @@ class NodeFeatureTests(TestCase):
         self.assertIn("Take a Snapshot", labels)
         self.assertIn("View stream", labels)
 
+    @pytest.mark.feature("audio-capture")
     def test_audio_capture_feature_has_view_waveform_action(self):
         feature = NodeFeature.objects.create(
             slug="audio-capture", display="Audio Capture"
@@ -3976,6 +4002,7 @@ class NodeFeatureTests(TestCase):
         )
         self.assertEqual(mock_find_command.call_count, 2)
 
+    @pytest.mark.feature("ap-router")
     @patch("nodes.models.Node._hosts_gelectriic_ap", return_value=True)
     def test_ap_router_detection(self, mock_hosts):
         control_role, _ = NodeRole.objects.get_or_create(name="Control")
@@ -3995,6 +4022,7 @@ class NodeFeatureTests(TestCase):
             NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
         )
 
+    @pytest.mark.feature("ap-router")
     @patch("nodes.models.Node._hosts_gelectriic_ap", return_value=True)
     def test_ap_router_detection_with_public_mode_lock(self, mock_hosts):
         control_role, _ = NodeRole.objects.get_or_create(name="Control")
@@ -4019,6 +4047,7 @@ class NodeFeatureTests(TestCase):
             NodeFeatureAssignment.objects.filter(node=node, feature=router).exists()
         )
 
+    @pytest.mark.feature("ap-router")
     @patch("nodes.models.Node._hosts_gelectriic_ap", side_effect=[True, False])
     def test_ap_router_removed_when_not_hosting(self, mock_hosts):
         control_role, _ = NodeRole.objects.get_or_create(name="Control")

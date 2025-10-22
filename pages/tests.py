@@ -3,6 +3,7 @@ import os
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 import django
+import pytest
 
 django.setup()
 
@@ -508,6 +509,7 @@ class InvitationTests(TestCase):
         lead = InviteLead.objects.get()
         self.assertEqual(lead.mac_address, "aa:bb:cc:dd:ee:ff")
 
+    @pytest.mark.feature("ap-router")
     @patch("pages.views.public_wifi.grant_public_access")
     @patch(
         "pages.views.public_wifi.resolve_mac_address",
@@ -1360,6 +1362,7 @@ class SiteAdminRegisterCurrentTests(TestCase):
         self.assertEqual(site.name, "")
 
 
+@pytest.mark.feature("screenshot-poll")
 class SiteAdminScreenshotTests(TestCase):
     def setUp(self):
         self.client = Client()
