@@ -177,7 +177,7 @@
 
     toggleButton.addEventListener('click', function (event) {
       event.preventDefault();
-      const checkboxes = form.querySelectorAll('.approve-checkbox');
+      const checkboxes = form.querySelectorAll('input[type="checkbox"][name$="-mark_done"]');
       checkboxes.forEach(function (checkbox) {
         if (checkbox.disabled) {
           return;
