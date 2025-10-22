@@ -29,7 +29,7 @@ ENABLE_DATASETTE=true
 START_SERVICES=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest|--stable] [--satellite] [--terminal] [--control] [--constellation] [--celery] [--lcd-screen|--no-lcd-screen] [--datasette|--no-datasette] [--clean] [--start]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest|--stable] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--lcd-screen|--no-lcd-screen] [--datasette|--no-datasette] [--clean] [--start]" >&2
     exit 1
 }
 
@@ -227,14 +227,27 @@ while [[ $# -gt 0 ]]; do
             REQUIRES_REDIS=true
             shift
             ;;
-        --constellation)
-            require_nginx "constellation"
+        --watchtower)
+            require_nginx "watchtower"
             AUTO_UPGRADE=true
             NGINX_MODE="public"
             SERVICE="arthexis"
             ENABLE_CELERY=true
             LATEST=false
-            NODE_ROLE="Constellation"
+            NODE_ROLE="Watchtower"
+            REQUIRES_REDIS=true
+            shift
+            ;;
+        --constellation)
+            echo "The Constellation role has been renamed to Watchtower." >&2
+            echo "Use --watchtower for future invocations." >&2
+            require_nginx "watchtower"
+            AUTO_UPGRADE=true
+            NGINX_MODE="public"
+            SERVICE="arthexis"
+            ENABLE_CELERY=true
+            LATEST=false
+            NODE_ROLE="Watchtower"
             REQUIRES_REDIS=true
             shift
             ;;

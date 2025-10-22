@@ -32,7 +32,7 @@ this workflow to recover safely:
 Following these steps ensures you do not lose work while recovering from an
 interrupted upgrade.
 
-Control and Constellation nodes now automate this recovery during
+Control and Watchtower nodes now automate this recovery during
 ``./upgrade.sh`` by aborting incomplete rebases/merges and realigning to the
 latest ``origin/<branch>`` commit before pulling. The manual steps above remain
 helpful for Terminal nodes or when running Git commands outside the upgrade

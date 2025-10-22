@@ -15,7 +15,7 @@ from nodes.models import EmailOutbox
 
 
 @pytest.mark.role("Satellite")
-@pytest.mark.role("Constellation")
+@pytest.mark.role("Watchtower")
 class EmailTransactionTests(TestCase):
     def setUp(self):
         self.user = User.objects.create(username="owner")

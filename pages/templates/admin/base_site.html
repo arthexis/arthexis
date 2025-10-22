@@ -34,8 +34,8 @@
 {% if badge_node and badge_node.role %}
   {% if badge_node.role.name == "Control" %}
 <link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_control.txt' %}">
-  {% elif badge_node.role.name == "Constellation" %}
-<link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_constellation.txt' %}">
+  {% elif badge_node.role.name == "Watchtower" or badge_node.role.name == "Constellation" %}
+<link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_watchtower.txt' %}">
   {% elif badge_node.role.name == "Satellite" %}
 <link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_satellite.txt' %}">
   {% else %}

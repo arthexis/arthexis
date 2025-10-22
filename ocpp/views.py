@@ -744,12 +744,12 @@ def dashboard(request):
     node = Node.get_local()
     role = node.role if node else None
     role_name = role.name if role else ""
-    allow_anonymous_roles = {"Constellation", "Satellite"}
+    allow_anonymous_roles = {"Watchtower", "Constellation", "Satellite"}
     if not request.user.is_authenticated and role_name not in allow_anonymous_roles:
         return redirect_to_login(
             request.get_full_path(), login_url=reverse("pages:login")
         )
-    is_constellation = role_name == "Constellation"
+    is_watchtower = role_name in {"Watchtower", "Constellation"}
     chargers = []
     for charger in _visible_chargers(request.user):
         tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
@@ -766,7 +766,7 @@ def dashboard(request):
     ws_url = f"{scheme}://{host}/ocpp/<CHARGE_POINT_ID>/"
     context = {
         "chargers": chargers,
-        "show_demo_notice": is_constellation,
+        "show_demo_notice": is_watchtower,
         "demo_ws_url": ws_url,
         "ws_rate_limit": store.MAX_CONNECTIONS_PER_IP,
     }

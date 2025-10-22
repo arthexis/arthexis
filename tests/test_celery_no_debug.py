@@ -10,6 +10,7 @@ pytestmark = [pytest.mark.feature("celery-queue")]
 @pytest.mark.parametrize(
     "role",
     [
+        "Watchtower",
         "Constellation",
         "Satellite",
         "Control",

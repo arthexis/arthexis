@@ -75,7 +75,7 @@ class DummyPOP:
 
 
 @pytest.mark.role("Satellite")
-@pytest.mark.role("Constellation")
+@pytest.mark.role("Watchtower")
 class EmailInboxTests(TestCase):
     @patch("imaplib.IMAP4_SSL", new=lambda h, p: DummyIMAP(h, p))
     def test_imap_connection_success(self):

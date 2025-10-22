@@ -30,7 +30,7 @@ LOCK_DIR="$BASE_DIR/locks"
 DB_FILE="$BASE_DIR/db.sqlite3"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette|--no-datasette] [--check] [--auto-upgrade|--no-auto-upgrade] [--refresh-maintenance] [--satellite|--terminal|--control|--constellation]" >&2
+    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--datasette|--no-datasette] [--check] [--auto-upgrade|--no-auto-upgrade] [--refresh-maintenance] [--satellite|--terminal|--control|--watchtower]" >&2
     exit 1
 }
 
@@ -356,9 +356,19 @@ while [[ $# -gt 0 ]]; do
             REQUIRES_REDIS=true
             shift
             ;;
+        --watchtower)
+            require_nginx "watchtower"
+            NODE_ROLE="Watchtower"
+            ENABLE_CELERY=true
+            NGINX_MODE="public"
+            REQUIRES_REDIS=true
+            shift
+            ;;
         --constellation)
-            require_nginx "constellation"
-            NODE_ROLE="Constellation"
+            echo "The Constellation role has been renamed to Watchtower." >&2
+            echo "Use --watchtower for future invocations." >&2
+            require_nginx "watchtower"
+            NODE_ROLE="Watchtower"
             ENABLE_CELERY=true
             NGINX_MODE="public"
             REQUIRES_REDIS=true

@@ -12,7 +12,7 @@ from typing import Iterable
 FIXTURE_ROOT = Path("nodes/fixtures")
 FEATURE_FIXTURE_GLOB = "node_features__*.json"
 ROLE_FIXTURE_GLOB = "node_roles__*.json"
-DEFAULT_ROLES = ["Constellation", "Control", "Satellite", "Terminal"]
+DEFAULT_ROLES = ["Watchtower", "Control", "Satellite", "Terminal"]
 
 DATABASE_PATTERNS = (
     "*/migrations/*.py",

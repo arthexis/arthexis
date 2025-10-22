@@ -53,7 +53,7 @@ Die Arthexis-Konstellation wird in vier Node-Rollen ausgeliefert, die auf unters
       <td valign="top"><strong>Edge-Betrieb mit mehreren Geräten, Netzwerk und Datenerfassung</strong><br />Funktionen: AP Router, Celery Queue, NGINX Server, RFID Scanner</td>
     </tr>
     <tr>
-      <td valign="top"><strong>Constellation</strong></td>
+      <td valign="top"><strong>Watchtower</strong></td>
       <td valign="top"><strong>Cloud-Orchestrierung für mehrere Nutzer</strong><br />Funktionen: Celery Queue, NGINX Server</td>
     </tr>
   </tbody>
@@ -66,7 +66,7 @@ Die Arthexis-Konstellation wird in vier Node-Rollen ausgeliefert, die auf unters
 - **[Windows](https://de.wikipedia.org/wiki/Microsoft_Windows)**: Öffne [PowerShell](https://learn.microsoft.com/powershell/) oder [Git Bash](https://gitforwindows.org/) und führe denselben Befehl aus.
 
 ### 2. Starten und Stoppen
-Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation gestartet werden; die Rollen Control, Satellite und Constellation müssen vorher installiert werden. Beide Ansätze lauschen standardmäßig auf [`http://localhost:8000/`](http://localhost:8000/).
+Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation gestartet werden; die Rollen Control, Satellite und Watchtower müssen vorher installiert werden. Beide Ansätze lauschen standardmäßig auf [`http://localhost:8000/`](http://localhost:8000/).
 
 - **[VS Code](https://code.visualstudio.com/)**
    - Ordner öffnen und zum Bereich **Run and Debug** (`Ctrl+Shift+D`) wechseln.

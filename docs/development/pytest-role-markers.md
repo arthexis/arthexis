@@ -1,7 +1,7 @@
 # Pytest node role and feature markers
 
 The CI pipeline now runs the full baseline test suite for every node role
-(Constellation, Control, Satellite, and Terminal). Role-specific and hardware
+(Watchtower, Control, Satellite, and Terminal). Role-specific and hardware
 feature checks are enabled on top of that baseline by annotating tests with
 pytest markers. This keeps the common smoke coverage consistent while still
 allowing specialised suites to run only where they make sense.

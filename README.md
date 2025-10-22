@@ -55,7 +55,7 @@ Arthexis Constellation ships in four node roles tailored to different deployment
       <td valign="top"><strong>Multi-Device Edge, Network &amp; Data Acquisition</strong><br />Features: AP Router, Celery Queue, NGINX Server, RFID Scanner</td>
     </tr>
     <tr>
-      <td valign="top"><strong>Constellation</strong></td>
+      <td valign="top"><strong>Watchtower</strong></td>
       <td valign="top"><strong>Multi-User Cloud &amp; Orchestration</strong><br />Features: Celery Queue, NGINX Server</td>
     </tr>
   </tbody>
@@ -68,7 +68,7 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 - **[Windows](https://en.wikipedia.org/wiki/Microsoft_Windows)**: open [PowerShell](https://learn.microsoft.com/powershell/) or [Git Bash](https://gitforwindows.org/) and run the same command.
 
 ### 2. Start and stop
-Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Constellation roles require installation first. Both approaches listen on [`http://localhost:8000/`](http://localhost:8000/) by default.
+Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Both approaches listen on [`http://localhost:8000/`](http://localhost:8000/) by default.
 
 - **[VS Code](https://code.visualstudio.com/)**
    - Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).

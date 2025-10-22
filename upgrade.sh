@@ -40,7 +40,7 @@ cleanup_non_terminal_git_state() {
   local role="$1"
 
   case "$role" in
-    Control|Constellation)
+    Control|Constellation|Watchtower)
       ;;
     *)
       return
@@ -68,7 +68,7 @@ auto_realign_branch_for_role() {
   local branch="$2"
 
   case "$role" in
-    Control|Constellation)
+    Control|Constellation|Watchtower)
       ;;
     *)
       return

@@ -5,9 +5,9 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "module": ["Constellation", "/ocpp/"],
-      "path": "/ocpp/evcs/simulator/",
-      "label": "Charge Point Simulator",
+      "module": ["Watchtower", "/ocpp/"],
+      "path": "/ocpp/",
+      "label": "CPMS Online Dashboard",
       "enabled": true,
       "description": ""
     }

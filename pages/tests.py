@@ -1618,10 +1618,10 @@ class RoleLandingRedirectTests(TestCase):
         )
 
 
-class ConstellationNavTests(TestCase):
+class WatchtowerNavTests(TestCase):
     def setUp(self):
         self.client = Client()
-        role, _ = NodeRole.objects.get_or_create(name="Constellation")
+        role, _ = NodeRole.objects.get_or_create(name="Watchtower")
         Node.objects.update_or_create(
             mac_address=Node.get_current_mac(),
             defaults={
@@ -1644,43 +1644,43 @@ class ConstellationNavTests(TestCase):
                 settings.BASE_DIR,
                 "pages",
                 "fixtures",
-                "constellation__application_ocpp.json",
+                "watchtower__application_ocpp.json",
             ),
             Path(
                 settings.BASE_DIR,
                 "pages",
                 "fixtures",
-                "constellation__module_ocpp.json",
+                "watchtower__module_ocpp.json",
             ),
             Path(
                 settings.BASE_DIR,
                 "pages",
                 "fixtures",
-                "constellation__landing_ocpp_dashboard.json",
+                "watchtower__landing_ocpp_dashboard.json",
             ),
             Path(
                 settings.BASE_DIR,
                 "pages",
                 "fixtures",
-                "constellation__landing_ocpp_cp_simulator.json",
+                "watchtower__landing_ocpp_cp_simulator.json",
             ),
             Path(
                 settings.BASE_DIR,
                 "pages",
                 "fixtures",
-                "constellation__landing_ocpp_rfid.json",
+                "watchtower__landing_ocpp_rfid.json",
             ),
             Path(
                 settings.BASE_DIR,
                 "pages",
                 "fixtures",
-                "constellation__module_readme.json",
+                "watchtower__module_readme.json",
             ),
             Path(
                 settings.BASE_DIR,
                 "pages",
                 "fixtures",
-                "constellation__landing_readme.json",
+                "watchtower__landing_readme.json",
             ),
         ]
         call_command("loaddata", *map(str, fixtures))
@@ -1693,13 +1693,13 @@ class ConstellationNavTests(TestCase):
         self.assertNotIn("RFID", nav_labels)
         self.assertTrue(
             Module.objects.filter(
-                path="/ocpp/", node_role__name="Constellation"
+                path="/ocpp/", node_role__name="Watchtower"
             ).exists()
         )
         self.assertFalse(
             Module.objects.filter(
-                path="/ocpp/rfid/validator/",
-                node_role__name="Constellation",
+                path="/ocpp/rfid/",
+                node_role__name="Watchtower",
                 is_deleted=False,
             ).exists()
         )
@@ -2139,7 +2139,7 @@ class ModuleAdminReloadActionTests(TestCase):
             password="pw",
         )
         self.client.force_login(self.superuser)
-        self.role, _ = NodeRole.objects.get_or_create(name="Constellation")
+        self.role, _ = NodeRole.objects.get_or_create(name="Watchtower")
         Application.objects.get_or_create(name="ocpp")
         Application.objects.get_or_create(name="awg")
         Site.objects.update_or_create(
@@ -2381,12 +2381,12 @@ class LandingCreationTests(TestCase):
 
 
 class LandingFixtureTests(TestCase):
-    def test_constellation_fixture_loads_without_duplicates(self):
+    def test_watchtower_fixture_loads_without_duplicates(self):
         from glob import glob
 
-        NodeRole.objects.get_or_create(name="Constellation")
+        NodeRole.objects.get_or_create(name="Watchtower")
         fixtures = glob(
-            str(Path(settings.BASE_DIR, "pages", "fixtures", "constellation__*.json"))
+            str(Path(settings.BASE_DIR, "pages", "fixtures", "watchtower__*.json"))
         )
         fixtures = sorted(
             fixtures,
@@ -2396,7 +2396,7 @@ class LandingFixtureTests(TestCase):
         )
         call_command("loaddata", *fixtures)
         call_command("loaddata", *fixtures)
-        module = Module.objects.get(path="/ocpp/", node_role__name="Constellation")
+        module = Module.objects.get(path="/ocpp/", node_role__name="Watchtower")
         module.create_landings()
         self.assertEqual(
             module.landings.filter(path="/ocpp/rfid/validator/").count(), 1
@@ -2553,9 +2553,9 @@ class FaviconTests(TestCase):
             )
             self.assertContains(resp, b64)
 
-    def test_constellation_nodes_use_goldenrod_favicon(self):
+    def test_watchtower_nodes_use_goldenrod_favicon(self):
         with override_settings(MEDIA_ROOT=self.tmpdir):
-            role, _ = NodeRole.objects.get_or_create(name="Constellation")
+            role, _ = NodeRole.objects.get_or_create(name="Watchtower")
             Node.objects.update_or_create(
                 mac_address=Node.get_current_mac(),
                 defaults={
@@ -2570,7 +2570,7 @@ class FaviconTests(TestCase):
             resp = self.client.get(reverse("pages:index"))
             b64 = (
                 Path(settings.BASE_DIR)
-                .joinpath("pages", "fixtures", "data", "favicon_constellation.txt")
+                .joinpath("pages", "fixtures", "data", "favicon_watchtower.txt")
                 .read_text()
                 .strip()
             )

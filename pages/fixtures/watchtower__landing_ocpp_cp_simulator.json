@@ -5,9 +5,9 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "module": ["Constellation", "/ocpp/"],
-      "path": "/ocpp/rfid/validator/",
-      "label": "RFID Tag Validator",
+      "module": ["Watchtower", "/ocpp/"],
+      "path": "/ocpp/simulator/",
+      "label": "Charge Point Simulator",
       "enabled": true,
       "description": ""
     }

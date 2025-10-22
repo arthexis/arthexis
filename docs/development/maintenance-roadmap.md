@@ -15,7 +15,7 @@
   - Introduce a `requirements.txt` shim or `pip install .[dev]` guidance for contributors to keep the installation footprint predictable.
 
 ## 3. Establish a Single Source of Truth for Node Roles
-- **Current state:** Node role names (Terminal, Control, Satellite, Constellation) are duplicated across Python modules and shell scripts, making it easy for the definitions to drift. 【F:config/settings.py†L123-L132】【F:config/celery.py†L9-L24】【F:install.sh†L200-L239】【F:switch-role.sh†L84-L144】
+- **Current state:** Node role names (Terminal, Control, Satellite, Watchtower) are duplicated across Python modules and shell scripts, making it easy for the definitions to drift. 【F:config/settings.py†L123-L132】【F:config/celery.py†L9-L24】【F:install.sh†L200-L239】【F:switch-role.sh†L84-L144】
 - **Proposed actions:**
   - Create a shared constants module (e.g. `core/node_roles.py`) that exposes an enum or typed mapping of supported roles for Python code, and generate a small sourced shell script (e.g. via `scripts/export-node-roles.sh`) to expose the same list to shell utilities.
   - Update settings, Celery initialization, and management commands to consume the centralized constants.
