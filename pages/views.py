@@ -1012,7 +1012,7 @@ class ClientReportForm(forms.Form):
         queryset=get_user_model().objects.all(),
         required=False,
         help_text=_(
-            "Sets who owns the report schedule and is listed as the requestor."
+            "Sets who owns the report schedule and is listed as the requester."
         ),
     )
     destinations = forms.CharField(
