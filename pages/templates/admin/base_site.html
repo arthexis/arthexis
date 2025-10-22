@@ -1,5 +1,33 @@
 {% extends "admin/base.html" %}
-{% load i18n %}
+{% load i18n static %}
+{% block dark-mode-vars %}
+  <link rel="stylesheet" href="{% static "admin/css/dark_mode.css" %}">
+  <script>
+    (function () {
+      const defaultTheme = 'light';
+      let theme = defaultTheme;
+
+      try {
+        const storage = window.localStorage;
+        const storedTheme = storage.getItem('theme');
+        const validThemes = ['light', 'dark', 'auto'];
+
+        if (storedTheme === null) {
+          storage.setItem('theme', defaultTheme);
+        } else if (validThemes.indexOf(storedTheme) !== -1) {
+          theme = storedTheme;
+        } else {
+          storage.setItem('theme', defaultTheme);
+        }
+      } catch (error) {
+        theme = defaultTheme;
+      }
+
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
+  <script src="{% static "admin/js/theme.js" %}"></script>
+{% endblock %}
 {% block title %}{% if title %}{{ title }} | {% endif %}{{ site_title|default:_('Django site admin') }}{% endblock %}
 {% block extrahead %}
 {{ block.super }}
