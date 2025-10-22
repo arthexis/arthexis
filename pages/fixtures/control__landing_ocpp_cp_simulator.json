@@ -5,7 +5,7 @@
       "is_seed_data": true,
       "is_deleted": false,
       "module": ["Control", "/ocpp/"],
-      "path": "/ocpp/simulator/",
+      "path": "/ocpp/evcs/simulator/",
       "label": "Charge Point Simulator",
       "enabled": true,
       "description": ""

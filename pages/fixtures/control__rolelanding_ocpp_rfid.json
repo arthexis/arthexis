@@ -5,7 +5,7 @@
       "is_seed_data": true,
       "is_deleted": false,
       "node_role": ["Control"],
-      "landing": ["Control", "/ocpp/", "/ocpp/rfid/"]
+      "landing": ["Control", "/ocpp/", "/ocpp/rfid/validator/"]
     }
   }
 ]

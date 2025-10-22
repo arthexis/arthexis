@@ -5,7 +5,7 @@
       "is_seed_data": true,
       "is_deleted": false,
       "node_role": ["Satellite"],
-      "landing": ["Satellite", "/ocpp/", "/ocpp/"]
+      "landing": ["Satellite", "/ocpp/", "/ocpp/cpms/dashboard/"]
     }
   }
 ]

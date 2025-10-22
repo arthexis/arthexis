@@ -3,7 +3,7 @@
     "model": "core.todo",
     "fields": {
       "request": "Validate screen RFID Scanner",
-      "url": "/ocpp/rfid/",
+      "url": "/ocpp/rfid/validator/",
       "request_details": "Ensure both the single and table modes render correctly, record scans, show the running total, and display command output messages without stray percent symbols."
     }
   }
