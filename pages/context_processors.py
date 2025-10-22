@@ -73,19 +73,24 @@ def nav_links(request):
             required_groups = getattr(
                 view_func, "required_security_groups", frozenset()
             )
+            blocked_reason = None
             if required_groups:
                 requires_login = True
-                setattr(landing, "requires_login", True)
                 if not user_is_authenticated:
-                    continue
-                if not user_is_superuser and not (
+                    blocked_reason = "login"
+                elif not user_is_superuser and not (
                     user_group_names & set(required_groups)
                 ):
-                    continue
+                    blocked_reason = "permission"
             elif requires_login and not user_is_authenticated:
-                setattr(landing, "requires_login", True)
-            if staff_only and not request.user.is_staff:
-                continue
+                blocked_reason = "login"
+
+            if staff_only and not getattr(request.user, "is_staff", False):
+                if blocked_reason != "login":
+                    blocked_reason = "permission"
+
+            landing.nav_is_locked = bool(blocked_reason)
+            landing.nav_lock_reason = blocked_reason
             landings.append(landing)
         if landings:
             normalized_module_path = module.path.rstrip("/") or "/"
