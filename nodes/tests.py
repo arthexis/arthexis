@@ -2282,6 +2282,9 @@ class NodeProxyGatewayTests(TestCase):
             mac_address="aa:bb:cc:dd:ee:aa",
             public_key=public_key,
         )
+        self.interface_role, _ = NodeRole.objects.get_or_create(name="Interface")
+        self.node.role = self.interface_role
+        self.node.save(update_fields=["role"])
         patcher = patch("requests.post")
         self.addCleanup(patcher.stop)
         self.mock_requests_post = patcher.start()
@@ -2338,6 +2341,51 @@ class NodeProxyGatewayTests(TestCase):
         self.assertEqual(self.client.session.get("_auth_user_id"), str(user.pk))
         second = self.client.get(parsed.path)
         self.assertEqual(second.status_code, 410)
+
+    def test_proxy_session_rejects_unregistered_non_interface(self):
+        terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.node.role = terminal_role
+        self.node.current_relation = Node.Relation.PEER
+        self.node.save(update_fields=["role", "current_relation"])
+
+        payload = {
+            "requester": str(self.node.uuid),
+            "user": {
+                "username": "proxy-user",
+            },
+        }
+        body, signature = self._sign(payload)
+        response = self.client.post(
+            reverse("node-proxy-session"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json().get("detail"), "pre-registration required")
+
+    def test_proxy_session_allows_pre_registered_non_interface(self):
+        terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.node.role = terminal_role
+        self.node.current_relation = Node.Relation.UPSTREAM
+        self.node.save(update_fields=["role", "current_relation"])
+
+        payload = {
+            "requester": str(self.node.uuid),
+            "user": {
+                "username": "proxy-user",
+                "email": "proxy@example.com",
+            },
+        }
+        body, signature = self._sign(payload)
+        response = self.client.post(
+            reverse("node-proxy-session"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("login_url", response.json())
 
     def test_proxy_execute_lists_nodes(self):
         Node.objects.create(
@@ -2416,6 +2464,53 @@ class NodeProxyGatewayTests(TestCase):
         self.assertTrue(models)
         suite_names = {entry.get("suite_name") for entry in models}
         self.assertIn("Nodes", suite_names)
+
+    def test_proxy_execute_rejects_unregistered_non_interface(self):
+        terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.node.role = terminal_role
+        self.node.current_relation = Node.Relation.PEER
+        self.node.save(update_fields=["role", "current_relation"])
+
+        payload = {
+            "requester": str(self.node.uuid),
+            "action": "schema",
+            "credentials": {
+                "username": "suite-user",
+                "password": "secret",
+            },
+        }
+        body, signature = self._sign(payload)
+        response = self.client.post(
+            reverse("node-proxy-execute"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json().get("detail"), "pre-registration required")
+
+    def test_proxy_execute_allows_pre_registered_non_interface(self):
+        terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.node.role = terminal_role
+        self.node.current_relation = Node.Relation.DOWNSTREAM
+        self.node.save(update_fields=["role", "current_relation"])
+
+        payload = {
+            "requester": str(self.node.uuid),
+            "action": "schema",
+            "credentials": {
+                "username": "suite-user",
+                "password": "secret",
+            },
+        }
+        body, signature = self._sign(payload)
+        response = self.client.post(
+            reverse("node-proxy-execute"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 200)
 
 
 class NodeRFIDAPITests(TestCase):

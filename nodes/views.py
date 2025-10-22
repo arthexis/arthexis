@@ -41,6 +41,12 @@ from .utils import capture_screenshot, save_screenshot
 PROXY_TOKEN_SALT = "nodes.proxy.session"
 PROXY_TOKEN_TIMEOUT = 300
 PROXY_CACHE_PREFIX = "nodes:proxy-session:"
+INTERFACE_ROLE_NAME = "Interface"
+PROXY_AUTHORIZED_RELATIONS = {
+    Node.Relation.UPSTREAM,
+    Node.Relation.DOWNSTREAM,
+    Node.Relation.SELF,
+}
 
 
 def _load_signed_node(request, requester_id: str):
@@ -61,6 +67,15 @@ def _load_signed_node(request, requester_id: str):
     except Exception:
         return None, JsonResponse({"detail": "invalid signature"}, status=403)
     return node, None
+
+
+def _authorize_proxy_requester(node: Node):
+    role_name = (getattr(node.role, "name", "") or "").strip().lower()
+    if role_name == INTERFACE_ROLE_NAME.lower():
+        return None
+    if node.current_relation in PROXY_AUTHORIZED_RELATIONS:
+        return None
+    return JsonResponse({"detail": "pre-registration required"}, status=403)
 
 
 def _sanitize_proxy_target(target: str | None, request) -> str:
@@ -647,6 +662,9 @@ def proxy_session(request):
     node, error_response = _load_signed_node(request, requester)
     if error_response is not None:
         return error_response
+    auth_error = _authorize_proxy_requester(node)
+    if auth_error is not None:
+        return auth_error
 
     user_payload = payload.get("user") or {}
     username = str(user_payload.get("username", "")).strip()
@@ -787,6 +805,9 @@ def proxy_execute(request):
     node, error_response = _load_signed_node(request, requester)
     if error_response is not None:
         return error_response
+    auth_error = _authorize_proxy_requester(node)
+    if auth_error is not None:
+        return auth_error
 
     action = str(payload.get("action", "")).strip().lower()
     if not action:
