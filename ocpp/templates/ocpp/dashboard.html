@@ -93,4 +93,9 @@
     {% endfor %}
   </tbody>
 </table>
+{% if request.user.is_staff %}
+<p class="text-center mt-3">
+  <a href="{% url 'admin:ocpp_charger_changelist' %}">{% trans "Configure" %}</a>
+</p>
+{% endif %}
 {% endblock %}
