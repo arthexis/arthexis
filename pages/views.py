@@ -439,7 +439,7 @@ def admin_model_graph(request, app_label: str):
     return response
 
 
-def _render_readme(request, role, doc: str | None = None):
+def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace:
     app = (
         Module.objects.filter(node_role=role, is_default=True)
         .select_related("application")
@@ -448,9 +448,8 @@ def _render_readme(request, role, doc: str | None = None):
     app_slug = app.path.strip("/") if app else ""
     root_base = Path(settings.BASE_DIR).resolve()
     readme_base = (root_base / app_slug).resolve() if app_slug else root_base
-    lang = getattr(request, "LANGUAGE_CODE", "")
-    lang = lang.replace("_", "-").lower()
-    candidates = []
+    candidates: list[Path] = []
+
     if doc:
         normalized = doc.strip().replace("\\", "/")
         while normalized.startswith("./"):
@@ -501,21 +500,70 @@ def _render_readme(request, role, doc: str | None = None):
                 if short != lang:
                     candidates.append(root_base / f"README.{short}.md")
             candidates.append(root_base / "README.md")
+
     readme_file = next((p for p in candidates if p.exists()), None)
     if readme_file is None:
         raise Http404("Document not found")
-    text = readme_file.read_text(encoding="utf-8")
-    html, toc_html = _render_markdown_with_toc(text)
+
     title = "README" if readme_file.name.startswith("README") else readme_file.stem
+    return SimpleNamespace(
+        file=readme_file,
+        title=title,
+        root_base=root_base,
+    )
+
+
+def _relative_readme_path(readme_file: Path, root_base: Path) -> str | None:
+    try:
+        return readme_file.relative_to(root_base).as_posix()
+    except ValueError:
+        return None
+
+
+def _render_readme(request, role, doc: str | None = None):
+    lang = getattr(request, "LANGUAGE_CODE", "")
+    lang = lang.replace("_", "-").lower()
+    document = _locate_readme_document(role, doc, lang)
+    text = document.file.read_text(encoding="utf-8")
+    html, toc_html = _render_markdown_with_toc(text)
+    relative_path = _relative_readme_path(document.file, document.root_base)
+    user = getattr(request, "user", None)
+    can_edit = bool(
+        relative_path
+        and user
+        and user.is_authenticated
+        and user.is_superuser
+    )
+    edit_url = None
+    if can_edit:
+        try:
+            edit_url = reverse("pages:readme-edit", kwargs={"doc": relative_path})
+        except NoReverseMatch:
+            edit_url = None
     context = {
         "content": html,
-        "title": title,
+        "title": document.title,
         "toc": toc_html,
         "page_url": request.build_absolute_uri(),
+        "edit_url": edit_url,
     }
     response = render(request, "pages/readme.html", context)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])
     return response
+
+
+class MarkdownDocumentForm(forms.Form):
+    content = forms.CharField(
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 24,
+                "spellcheck": "false",
+            }
+        ),
+        required=False,
+        strip=False,
+    )
 
 
 @landing("Home")
@@ -571,6 +619,57 @@ def readme(request, doc=None):
     node = Node.get_local()
     role = node.role if node else None
     return _render_readme(request, role, doc)
+
+
+def readme_edit(request, doc):
+    user = getattr(request, "user", None)
+    if not (user and user.is_authenticated and user.is_superuser):
+        raise PermissionDenied
+
+    node = Node.get_local()
+    role = node.role if node else None
+    lang = getattr(request, "LANGUAGE_CODE", "")
+    lang = lang.replace("_", "-").lower()
+    document = _locate_readme_document(role, doc, lang)
+    relative_path = _relative_readme_path(document.file, document.root_base)
+    if relative_path:
+        read_url = reverse("pages:readme-document", kwargs={"doc": relative_path})
+    else:
+        read_url = reverse("pages:readme")
+
+    if request.method == "POST":
+        form = MarkdownDocumentForm(request.POST)
+        if form.is_valid():
+            content = form.cleaned_data["content"]
+            try:
+                document.file.write_text(content, encoding="utf-8")
+            except OSError:
+                logger.exception("Failed to update markdown document %s", document.file)
+                messages.error(
+                    request,
+                    _("Unable to save changes. Please try again."),
+                )
+            else:
+                messages.success(request, _("Document saved successfully."))
+                if relative_path:
+                    return redirect("pages:readme-edit", doc=relative_path)
+                return redirect("pages:readme")
+    else:
+        try:
+            initial_text = document.file.read_text(encoding="utf-8")
+        except OSError:
+            logger.exception("Failed to read markdown document %s", document.file)
+            messages.error(request, _("Unable to load the document for editing."))
+            return redirect("pages:readme")
+        form = MarkdownDocumentForm(initial={"content": initial_text})
+
+    context = {
+        "form": form,
+        "title": document.title,
+        "relative_path": relative_path,
+        "read_url": read_url,
+    }
+    return render(request, "pages/readme_edit.html", context)
 
 
 def sitemap(request):
