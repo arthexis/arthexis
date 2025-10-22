@@ -10,6 +10,119 @@
     .EasyMDEContainer .CodeMirror-scroll {
       min-height: 26rem;
     }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror,
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-scroll {
+      background-color: var(--bs-body-bg);
+      color: var(--bs-body-color);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror {
+      border-color: var(--bs-border-color, rgba(255, 255, 255, 0.2));
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-gutters {
+      background-color: var(--bs-dark-bg-subtle, rgba(255, 255, 255, 0.05));
+      border-right: 1px solid var(--bs-border-color, rgba(255, 255, 255, 0.2));
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-linenumber {
+      color: var(--bs-secondary-color, #adb5bd);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-guttermarker {
+      color: var(--bs-body-color, #f8f9fa);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-guttermarker-subtle,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-statusbar {
+      color: var(--bs-secondary-color, #adb5bd);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-cursor {
+      border-left-color: var(--bs-body-color, #f8f9fa);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-placeholder {
+      color: var(--bs-secondary-color, #adb5bd);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-activeline-background {
+      background-color: rgba(255, 255, 255, 0.08);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-selected,
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-focused .CodeMirror-selected {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-line::selection,
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-line > span::selection,
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-line > span > span::selection {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-line::-moz-selection,
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-line > span::-moz-selection,
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-line > span > span::-moz-selection {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar {
+      background-color: var(--bs-dark, #343a40);
+      border-color: var(--bs-border-color, rgba(255, 255, 255, 0.2));
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar button {
+      color: var(--bs-body-color, #f8f9fa);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar button .fa,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar button svg,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar button svg path {
+      color: var(--bs-body-color, #f8f9fa);
+      fill: currentColor;
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar button:after {
+      color: inherit;
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar button.active,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar button:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+      border-color: var(--bs-border-color, rgba(255, 255, 255, 0.2));
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview-side,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview-full {
+      background-color: var(--bs-body-bg);
+      color: var(--bs-body-color);
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview pre {
+      background-color: var(--bs-dark-bg-subtle, rgba(255, 255, 255, 0.05));
+      color: inherit;
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview table td,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview table th {
+      border-color: var(--bs-border-color, rgba(255, 255, 255, 0.2));
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview a {
+      color: var(--bs-link-color, var(--bs-primary, #0d6efd));
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-preview-side {
+      border-color: var(--bs-border-color, rgba(255, 255, 255, 0.2));
+    }
+
+    html[data-bs-theme='dark'] .EasyMDEContainer .CodeMirror-fullscreen,
+    html[data-bs-theme='dark'] .EasyMDEContainer .editor-toolbar.fullscreen {
+      background-color: var(--bs-body-bg);
+    }
   </style>
 {% endblock %}
 
