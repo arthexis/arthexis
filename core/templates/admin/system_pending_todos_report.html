@@ -148,6 +148,9 @@
         </tbody>
       </table>
       <div class="submit-row">
+        <button type="button" class="button" data-toggle-approvals>
+          {% trans "Toggle selections" %}
+        </button>
         <button type="submit" name="action" value="save" class="button default">
           {% trans "Save changes" %}
         </button>
@@ -160,4 +163,29 @@
     <p class="help-empty">{% trans "No pending TODOs require approval." %}</p>
   {% endif %}
 </div>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const form = document.querySelector('.pending-todos-form');
+    if (!form) {
+      return;
+    }
+
+    const toggleButton = form.querySelector('[data-toggle-approvals]');
+    if (!toggleButton) {
+      return;
+    }
+
+    toggleButton.addEventListener('click', function (event) {
+      event.preventDefault();
+      const checkboxes = form.querySelectorAll('input[type="checkbox"][name$="-mark_done"]');
+      checkboxes.forEach(function (checkbox) {
+        if (checkbox.disabled) {
+          return;
+        }
+        checkbox.checked = !checkbox.checked;
+        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
+  });
+</script>
 {% endblock %}
