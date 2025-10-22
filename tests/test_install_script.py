@@ -1,6 +1,8 @@
 from pathlib import Path
 import re
 
+import pytest
+
 
 def test_install_script_runs_migrate():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
@@ -57,6 +59,7 @@ def test_install_script_runs_env_refresh():
     assert "env-refresh.sh" in content
 
 
+@pytest.mark.feature("nginx-server")
 def test_install_script_requires_nginx_for_roles():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()
