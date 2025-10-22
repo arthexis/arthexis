@@ -6,7 +6,7 @@
       "is_seed_data": true,
       "is_deleted": false,
       "module": ["Satellite", "/ocpp/"],
-      "path": "/ocpp/",
+      "path": "/ocpp/cpms/dashboard/",
       "label": "CPMS Online Dashboard",
       "enabled": true,
       "description": ""

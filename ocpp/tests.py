@@ -2181,12 +2181,12 @@ class SimulatorLandingTests(TestCase):
     @skip("Navigation links unavailable in test environment")
     def test_simulator_app_link_in_nav(self):
         resp = self.client.get(reverse("pages:index"))
-        self.assertContains(resp, "/ocpp/")
-        self.assertNotContains(resp, "/ocpp/simulator/")
+        self.assertContains(resp, "/ocpp/cpms/dashboard/")
+        self.assertNotContains(resp, "/ocpp/evcs/simulator/")
         self.client.force_login(self.user)
         resp = self.client.get(reverse("pages:index"))
-        self.assertContains(resp, "/ocpp/")
-        self.assertContains(resp, "/ocpp/simulator/")
+        self.assertContains(resp, "/ocpp/cpms/dashboard/")
+        self.assertContains(resp, "/ocpp/evcs/simulator/")
 
     def test_cp_simulator_redirects_to_login(self):
         response = self.client.get(reverse("cp-simulator"))
