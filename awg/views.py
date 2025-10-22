@@ -23,6 +23,14 @@ from .models import (
 )
 
 
+CONDUIT_LABELS: dict[str, str] = {
+    "emt": _lazy("EMT (Thin-wall)"),
+    "imc": _lazy("IMC (Intermediate)"),
+    "rmc": _lazy("RMC (Heavy-wall)"),
+    "fmc": _lazy("FMC (Flex)"),
+}
+
+
 class AWG(int):
     """Represents an AWG gauge as an integer.
     Positive numbers are thin wires (e.g., 14),
@@ -248,6 +256,9 @@ def find_awg(
                                     conduit=c,
                                 )
                                 result["conduit"] = c
+                                result["conduit_label"] = CONDUIT_LABELS.get(
+                                    str(c).lower(), str(c).upper()
+                                )
                                 result["pipe_inch"] = fill["size_inch"]
                             return result
                         if perc < best_perc:
@@ -263,6 +274,9 @@ def find_awg(
                                     conduit=c,
                                 )
                                 result["conduit"] = c
+                                result["conduit_label"] = CONDUIT_LABELS.get(
+                                    str(c).lower(), str(c).upper()
+                                )
                                 result["pipe_inch"] = fill["size_inch"]
                             return result
                         if perc < best_perc:
@@ -284,6 +298,9 @@ def find_awg(
                         conduit=c,
                     )
                     best["conduit"] = c
+                    best["conduit_label"] = CONDUIT_LABELS.get(
+                        str(c).lower(), str(c).upper()
+                    )
                     best["pipe_inch"] = fill["size_inch"]
                 return best
 

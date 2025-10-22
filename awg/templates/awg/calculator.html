@@ -57,10 +57,10 @@
         <label class="form-label" for="conduit">{% trans "Conduit:" %}</label>
         <select id="conduit" name="conduit" class="form-select">
           <option value="" {% if not form.conduit %}selected{% endif %}></option>
-          <option value="emt" {% if form.conduit == "emt" %}selected{% endif %}>{% trans "EMT" %}</option>
-          <option value="imc" {% if form.conduit == "imc" %}selected{% endif %}>{% trans "IMC" %}</option>
-          <option value="rmc" {% if form.conduit == "rmc" %}selected{% endif %}>{% trans "RMC" %}</option>
-          <option value="fmc" {% if form.conduit == "fmc" %}selected{% endif %}>{% trans "FMC" %}</option>
+          <option value="emt" {% if form.conduit == "emt" %}selected{% endif %}>{% trans "EMT (Thin-wall)" %}</option>
+          <option value="imc" {% if form.conduit == "imc" %}selected{% endif %}>{% trans "IMC (Intermediate)" %}</option>
+          <option value="rmc" {% if form.conduit == "rmc" %}selected{% endif %}>{% trans "RMC (Heavy-wall)" %}</option>
+          <option value="fmc" {% if form.conduit == "fmc" %}selected{% endif %}>{% trans "FMC (Flex)" %}</option>
         </select>
       </div>
       <div class="mb-3">
@@ -129,7 +129,7 @@
             <tr><th>{% trans "Voltage at End" %}</th><td>{{ result.vend|floatformat:2 }} V</td></tr>
             <tr><th>{% trans "Temperature Rating" %}</th><td>{{ result.temperature }}C</td></tr>
             {% if result.conduit %}
-            <tr><th>{% trans "Conduit" %}</th><td>{{ result.conduit|upper }} {{ result.pipe_inch }}&quot;</td></tr>
+            <tr><th>{% trans "Conduit" %}</th><td>{{ result.conduit_label }} {{ result.pipe_inch }}&quot;</td></tr>
             {% endif %}
           </tbody>
         </table>
