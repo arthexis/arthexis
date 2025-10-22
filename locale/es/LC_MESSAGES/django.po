@@ -133,21 +133,21 @@ msgstr "90C (194F)"
 msgid "Conduit:"
 msgstr "Conducto:"
 
-#: awg/templates/awg/calculator.html:60
-msgid "EMT"
-msgstr "EMT"
+#: awg/constants.py:8 awg/templates/awg/calculator.html:60
+msgid "EMT (Thin-wall)"
+msgstr "EMT (pared delgada)"
 
-#: awg/templates/awg/calculator.html:61
-msgid "IMC"
-msgstr "IMC"
+#: awg/constants.py:9 awg/templates/awg/calculator.html:61
+msgid "IMC (Intermediate)"
+msgstr "IMC (intermedia)"
 
-#: awg/templates/awg/calculator.html:62
-msgid "RMC"
-msgstr "RMC"
+#: awg/constants.py:10 awg/templates/awg/calculator.html:62
+msgid "RMC (Heavy-wall)"
+msgstr "RMC (pared gruesa)"
 
-#: awg/templates/awg/calculator.html:63
-msgid "FMC"
-msgstr "FMC"
+#: awg/constants.py:11 awg/templates/awg/calculator.html:63
+msgid "FMC (Flex)"
+msgstr "FMC (flexible)"
 
 #: awg/templates/awg/calculator.html:67
 msgid "Max AWG:"

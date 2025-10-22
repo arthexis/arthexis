@@ -22,13 +22,7 @@ from .models import (
     PowerLead,
 )
 
-
-CONDUIT_LABELS: dict[str, str] = {
-    "emt": _lazy("EMT (Thin-wall)"),
-    "imc": _lazy("IMC (Intermediate)"),
-    "rmc": _lazy("RMC (Heavy-wall)"),
-    "fmc": _lazy("FMC (Flex)"),
-}
+from .constants import CONDUIT_LABELS
 
 
 class AWG(int):

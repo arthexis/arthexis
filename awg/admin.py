@@ -2,6 +2,7 @@ from django.contrib import admin
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
+from .constants import CONDUIT_CHOICES
 from .models import CableSize, ConduitFill, CalculatorTemplate, EnergyTariff, PowerLead
 from core.user_data import EntityModelAdmin
 
@@ -53,12 +54,7 @@ class CalculatorTemplateForm(forms.ModelForm):
         required=False,
     )
     conduit = forms.ChoiceField(
-        choices=[
-            ("emt", "EMT"),
-            ("imc", "IMC"),
-            ("rmc", "RMC"),
-            ("fmc", "FMC"),
-        ],
+        choices=CONDUIT_CHOICES,
         required=False,
     )
     ground = forms.TypedChoiceField(
