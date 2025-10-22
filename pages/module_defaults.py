@@ -26,7 +26,7 @@ ROLE_MODULE_DEFAULTS: Mapping[str, tuple[ModuleDefinition, ...]] = {
             "path": "/awg/",
             "menu": "",
             "landings": (
-                ("/awg/", "AWG Calculator"),
+                ("/awg/", "AWG Cable Calculator"),
                 ("/awg/energy-tariff/", "Energy Tariff Calculator"),
             ),
         },
