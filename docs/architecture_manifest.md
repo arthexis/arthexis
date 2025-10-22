@@ -27,3 +27,9 @@ keeps the per-role jobs concise without sacrificing coverage.
 
 With this simplified approach most changes automatically exercise all roles,
 and only feature-specific suites need explicit annotation.
+
+## Current feature suites
+
+- `celery-queue` – `tests/test_celery_no_debug.py` verifies the worker starts
+  without debug logging and `tests/test_auto_upgrade_scheduler.py` ensures the
+  periodic upgrade task is registered against Celery.

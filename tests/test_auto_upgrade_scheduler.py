@@ -1,6 +1,10 @@
+import pytest
+
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
 from core.auto_upgrade import ensure_auto_upgrade_periodic_task, AUTO_UPGRADE_TASK_NAME, AUTO_UPGRADE_TASK_PATH
+
+pytestmark = [pytest.mark.feature("celery-queue")]
 
 
 def test_ensure_auto_upgrade_task_skips_without_lock(tmp_path):
