@@ -3,20 +3,52 @@
 
 {% block content %}
 <div id="content-main">
-  <h2>{% trans "Environment" %}</h2>
-  <input type="text" id="env-vars-filter" placeholder="{% trans 'Filter' %}" />
-  <table id="env-vars-table">
-    <thead>
-      <tr><th>{% trans "Name" %}</th><th>{% trans "Value" %}</th></tr>
-    </thead>
-    <tbody>
-    {% for key, value in env_vars %}
-      <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
-    {% empty %}
-      <tr><td colspan="2">{% trans "No environment variables." %}</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  {% if environment_tasks %}
+    <div class="module environment-tasks">
+      <h2>{% trans "Environment Tasks" %}</h2>
+      <table class="table table-striped environment-tasks-table">
+        <thead>
+          <tr>
+            <th scope="col">{% trans "Task" %}</th>
+            <th scope="col">{% trans "Description" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for task in environment_tasks %}
+            <tr>
+              <th scope="row"><a href="{{ task.url }}">{{ task.name }}</a></th>
+              <td>{{ task.description }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="2">{% trans "No environment tasks are available." %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+  <div class="module environment-variables">
+    <h2>{% trans "Environment Variables" %}</h2>
+    <div class="environment-filter">
+      <input type="text" id="env-vars-filter" placeholder="{% trans 'Filter' %}" />
+    </div>
+    <table id="env-vars-table" class="table table-striped">
+      <thead>
+        <tr>
+          <th scope="col">{% trans "Name" %}</th>
+          <th scope="col">{% trans "Value" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for key, value in env_vars %}
+        <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
+      {% empty %}
+        <tr><td colspan="2">{% trans "No environment variables." %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 <script>
   function setupFilter(inputId, tableId) {

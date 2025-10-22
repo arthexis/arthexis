@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Environment",
+      "url": "/admin/environment/",
+      "request_details": "Confirm the Environment Tasks table appears only for superusers, links to the network-setup configuration page, and displays command results after running the script."
+    }
+  }
+]
