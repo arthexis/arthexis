@@ -1,0 +1,68 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrahead %}{{ block.super }}{{ form.media }}{% endblock %}
+
+{% block content %}
+<div id="content-main" class="environment-task environment-task-network-setup">
+  <div class="module environment-task-form-module">
+    <h2>{{ title }}</h2>
+    <p class="help">{{ task_description }}</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <fieldset class="module aligned">
+        {% if form.non_field_errors %}
+          <div class="form-row errors">
+            {{ form.non_field_errors }}
+          </div>
+        {% endif %}
+        {% for field in form %}
+          <div class="form-row{% if field.errors %} errors{% endif %}">
+            {{ field.errors }}
+            {{ field.label_tag }} {{ field }}
+            {% if field.help_text %}<p class="help">{{ field.help_text }}</p>{% endif %}
+          </div>
+        {% endfor %}
+      </fieldset>
+      <div class="submit-row">
+        <button type="submit" class="button default">{% trans "Run network-setup" %}</button>
+        <a href="{{ back_url }}" class="button">{% trans "Back to Environment" %}</a>
+      </div>
+    </form>
+  </div>
+  {% if command_result %}
+    <div class="module environment-task-output">
+      <h3>{% trans "Command output" %}</h3>
+      <p class="help">
+        {% if command_result.succeeded %}
+          {% trans "The command completed successfully." %}
+        {% else %}
+          {% trans "The command exited with an error." %}
+        {% endif %}
+      </p>
+      <dl class="command-summary">
+        <dt>{% trans "Command" %}</dt>
+        <dd><code>{{ command_result.command }}</code></dd>
+        <dt>{% trans "Exit status" %}</dt>
+        <dd>{{ command_result.returncode }}</dd>
+      </dl>
+      <div class="command-stream command-stdout">
+        <h4>{% trans "Standard output" %}</h4>
+        {% if command_result.stdout %}
+          <pre>{{ command_result.stdout|default_if_none:"" }}</pre>
+        {% else %}
+          <p>{% trans "No output captured." %}</p>
+        {% endif %}
+      </div>
+      <div class="command-stream command-stderr">
+        <h4>{% trans "Standard error" %}</h4>
+        {% if command_result.stderr %}
+          <pre>{{ command_result.stderr|default_if_none:"" }}</pre>
+        {% else %}
+          <p>{% trans "No error output captured." %}</p>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
