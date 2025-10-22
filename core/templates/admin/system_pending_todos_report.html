@@ -138,7 +138,7 @@
                   </div>
                 {% endif %}
                 <label class="checkbox">
-                  {{ form.mark_done }}
+                  {{ form.mark_done.as_widget(attrs={'class': 'approve-checkbox'}) }}
                   <span>{% trans "Approve" %}</span>
                 </label>
               </td>
