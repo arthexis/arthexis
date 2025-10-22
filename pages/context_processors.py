@@ -100,7 +100,7 @@ def nav_links(request):
                     landings = [landings[0]]
             app_name = getattr(module.application, "name", "").lower()
             if app_name == "awg":
-                module.menu = "Calculate"
+                module.menu = "Calculators"
             elif module.path.rstrip("/").lower() == "/man":
                 module.menu = "Manual"
             module.enabled_landings = landings

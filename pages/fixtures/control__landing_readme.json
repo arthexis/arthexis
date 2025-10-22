@@ -6,7 +6,7 @@
       "is_deleted": false,
       "module": ["Control", "/read/"],
       "path": "/read/",
-      "label": "Cookbook",
+      "label": "Cookbooks",
       "enabled": true,
       "description": ""
     }

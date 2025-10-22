@@ -1479,17 +1479,17 @@ class NavAppsTests(TestCase):
         )
         app = Application.objects.create(name="Readme")
         Module.objects.create(
-            node_role=role, application=app, path="/", is_default=True, menu="Cookbook"
+            node_role=role, application=app, path="/", is_default=True, menu="Cookbooks"
         )
 
     def test_nav_pill_renders(self):
         resp = self.client.get(reverse("pages:index"))
-        self.assertContains(resp, "COOKBOOK")
+        self.assertContains(resp, "COOKBOOKS")
         self.assertContains(resp, "badge rounded-pill")
 
     def test_nav_pill_renders_with_port(self):
         resp = self.client.get(reverse("pages:index"), HTTP_HOST="127.0.0.1:8000")
-        self.assertContains(resp, "COOKBOOK")
+        self.assertContains(resp, "COOKBOOKS")
 
     def test_nav_pill_uses_menu_field(self):
         site_app = Module.objects.get()
@@ -1497,7 +1497,7 @@ class NavAppsTests(TestCase):
         site_app.save()
         resp = self.client.get(reverse("pages:index"))
         self.assertContains(resp, 'badge rounded-pill text-bg-secondary">DOCS')
-        self.assertNotContains(resp, 'badge rounded-pill text-bg-secondary">COOKBOOK')
+        self.assertNotContains(resp, 'badge rounded-pill text-bg-secondary">COOKBOOKS')
 
     def test_app_without_root_url_excluded(self):
         role = NodeRole.objects.get(name="Terminal")
@@ -1627,9 +1627,15 @@ class ConstellationNavTests(TestCase):
             },
         )
         Site.objects.update_or_create(
-            id=1, defaults={"domain": "testserver", "name": ""}
+            id=1, defaults={"domain": "arthexis.com", "name": "Arthexis"}
         )
         fixtures = [
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "default__application_pages.json",
+            ),
             Path(
                 settings.BASE_DIR,
                 "pages",
@@ -1660,6 +1666,18 @@ class ConstellationNavTests(TestCase):
                 "fixtures",
                 "constellation__landing_ocpp_rfid.json",
             ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "constellation__module_readme.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "constellation__landing_readme.json",
+            ),
         ]
         call_command("loaddata", *map(str, fixtures))
 
@@ -1688,6 +1706,13 @@ class ConstellationNavTests(TestCase):
         )
         landing_labels = [landing.label for landing in ocpp_module.enabled_landings]
         self.assertIn("RFID Tag Validator", landing_labels)
+
+    @override_settings(ALLOWED_HOSTS=["testserver", "arthexis.com"])
+    def test_cookbooks_pill_visible_for_arthexis(self):
+        resp = self.client.get(
+            reverse("pages:index"), HTTP_HOST="arthexis.com"
+        )
+        self.assertContains(resp, 'badge rounded-pill text-bg-secondary">COOKBOOKS')
 
     def test_ocpp_dashboard_visible(self):
         resp = self.client.get(reverse("pages:index"))
@@ -1885,7 +1910,7 @@ class ControlNavTests(TestCase):
     def test_readme_pill_visible(self):
         resp = self.client.get(reverse("pages:readme"))
         self.assertContains(resp, 'href="/read/"')
-        self.assertContains(resp, 'badge rounded-pill text-bg-secondary">COOKBOOK')
+        self.assertContains(resp, 'badge rounded-pill text-bg-secondary">COOKBOOKS')
 
     def test_cookbook_pill_has_no_dropdown(self):
         module = Module.objects.get(node_role__name="Control", path="/read/")
@@ -1900,7 +1925,7 @@ class ControlNavTests(TestCase):
 
         self.assertContains(
             resp,
-            '<a class="nav-link" href="/read/"><span class="badge rounded-pill text-bg-secondary">COOKBOOK</span></a>',
+            '<a class="nav-link" href="/read/"><span class="badge rounded-pill text-bg-secondary">COOKBOOKS</span></a>',
             html=True,
         )
         self.assertNotContains(resp, 'dropdown-item" href="/man/"')
@@ -2007,7 +2032,7 @@ class SatelliteNavTests(TestCase):
     def test_readme_pill_visible(self):
         resp = self.client.get(reverse("pages:readme"))
         self.assertContains(resp, 'href="/read/"')
-        self.assertContains(resp, 'badge rounded-pill text-bg-secondary">COOKBOOK')
+        self.assertContains(resp, 'badge rounded-pill text-bg-secondary">COOKBOOKS')
 
 
 class PowerNavTests(TestCase):
@@ -2042,7 +2067,7 @@ class PowerNavTests(TestCase):
                 power_module = module
                 break
         self.assertIsNotNone(power_module)
-        self.assertEqual(power_module.menu_label.upper(), "CALCULATE")
+        self.assertEqual(power_module.menu_label.upper(), "CALCULATORS")
         landing_labels = {landing.label for landing in power_module.enabled_landings}
         self.assertIn("AWG Calculator", landing_labels)
 
