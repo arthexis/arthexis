@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 from datetime import timedelta
 
+import pytest
+
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
@@ -20,6 +22,9 @@ from django.utils.translation import gettext as _
 from core.models import RFID, ClientReport, EnergyAccount, ClientReportSchedule
 from ocpp.models import Charger, Transaction
 from pages.views import ClientReportForm
+
+
+pytestmark = [pytest.mark.django_db, pytest.mark.feature("rfid-scanner")]
 
 
 class ClientReportGenerationTests(TestCase):

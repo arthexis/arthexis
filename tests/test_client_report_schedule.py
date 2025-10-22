@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 from datetime import timedelta
 
+import pytest
+
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
@@ -19,6 +21,9 @@ from django.contrib.auth import get_user_model
 from core.models import ClientReportSchedule, EnergyAccount, RFID
 from nodes.models import NetMessage, NodeRole
 from ocpp.models import Charger, Transaction
+
+
+pytestmark = [pytest.mark.django_db, pytest.mark.feature("rfid-scanner")]
 
 
 class ClientReportScheduleRunTests(TestCase):
