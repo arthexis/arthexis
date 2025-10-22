@@ -204,6 +204,16 @@ class Charger(Entity):
         related_name="chargers",
     )
     last_path = models.CharField(max_length=255, blank=True)
+    configuration = models.ForeignKey(
+        "ChargerConfiguration",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="chargers",
+        help_text=_(
+            "Latest GetConfiguration response received from this charge point."
+        ),
+    )
     manager_node = models.ForeignKey(
         "nodes.Node",
         on_delete=models.SET_NULL,
@@ -583,6 +593,51 @@ class Charger(Entity):
             if has_data:
                 raise ProtectedError("Purge data before deleting charger.", [])
         super().delete(*args, **kwargs)
+
+
+class ChargerConfiguration(models.Model):
+    """Persisted configuration package returned by a charge point."""
+
+    charger_identifier = models.CharField(_("Serial Number"), max_length=100)
+    connector_id = models.PositiveIntegerField(
+        _("Connector ID"),
+        null=True,
+        blank=True,
+        help_text=_("Connector that returned this configuration (if specified)."),
+    )
+    configuration_keys = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_("Entries from the configurationKey list."),
+    )
+    unknown_keys = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_("Keys returned in the unknownKey list."),
+    )
+    raw_payload = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=_("Raw payload returned by the GetConfiguration call."),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = _("CP Configuration")
+        verbose_name_plural = _("CP Configurations")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        connector = (
+            _("connector %(number)s") % {"number": self.connector_id}
+            if self.connector_id is not None
+            else _("all connectors")
+        )
+        return _("%(serial)s configuration (%(connector)s)") % {
+            "serial": self.charger_identifier,
+            "connector": connector,
+        }
 
 
 class Transaction(Entity):

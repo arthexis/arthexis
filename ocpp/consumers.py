@@ -20,7 +20,13 @@ from config.offline import requires_network
 from . import store
 from decimal import Decimal
 from django.utils.dateparse import parse_datetime
-from .models import Transaction, Charger, MeterValue, DataTransferMessage
+from .models import (
+    Transaction,
+    Charger,
+    ChargerConfiguration,
+    MeterValue,
+    DataTransferMessage,
+)
 from .reference_utils import host_is_local_loopback
 from .evcs_discovery import (
     DEFAULT_CONSOLE_PORT,
@@ -738,6 +744,53 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         task.add_done_callback(lambda _: setattr(self, "_consumption_task", None))
         self._consumption_task = task
 
+    def _persist_configuration_result(
+        self, payload: dict, connector_hint: int | str | None
+    ) -> ChargerConfiguration | None:
+        if not isinstance(payload, dict):
+            return None
+
+        connector_value: int | None = None
+        if connector_hint not in (None, ""):
+            try:
+                connector_value = int(connector_hint)
+            except (TypeError, ValueError):
+                connector_value = None
+
+        normalized_entries: list[dict[str, object]] = []
+        for entry in payload.get("configurationKey") or []:
+            if not isinstance(entry, dict):
+                continue
+            key = str(entry.get("key") or "")
+            normalized: dict[str, object] = {"key": key}
+            if "value" in entry:
+                normalized["value"] = entry.get("value")
+            normalized["readonly"] = bool(entry.get("readonly"))
+            normalized_entries.append(normalized)
+
+        unknown_values: list[str] = []
+        for value in payload.get("unknownKey") or []:
+            if value is None:
+                continue
+            unknown_values.append(str(value))
+
+        try:
+            raw_payload = json.loads(json.dumps(payload, ensure_ascii=False))
+        except (TypeError, ValueError):
+            raw_payload = payload
+
+        configuration = ChargerConfiguration.objects.create(
+            charger_identifier=self.charger_id,
+            connector_id=connector_value,
+            configuration_keys=normalized_entries,
+            unknown_keys=unknown_values,
+            raw_payload=raw_payload,
+        )
+        Charger.objects.filter(charger_id=self.charger_id).update(
+            configuration=configuration
+        )
+        return configuration
+
     async def _handle_call_result(self, message_id: str, payload: dict | None) -> None:
         metadata = store.pop_pending_call(message_id)
         if not metadata:
@@ -799,6 +852,17 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 f"GetConfiguration result: {payload_text}",
                 log_type="charger",
             )
+            configuration = await database_sync_to_async(
+                self._persist_configuration_result
+            )(payload_data, metadata.get("connector_id"))
+            if configuration:
+                if self.charger and self.charger.charger_id == self.charger_id:
+                    self.charger.configuration = configuration
+                if (
+                    self.aggregate_charger
+                    and self.aggregate_charger.charger_id == self.charger_id
+                ):
+                    self.aggregate_charger.configuration = configuration
             store.record_pending_call_result(
                 message_id,
                 metadata=metadata,

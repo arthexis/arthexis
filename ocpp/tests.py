@@ -61,6 +61,7 @@ from config.asgi import application
 from .models import (
     Transaction,
     Charger,
+    ChargerConfiguration,
     Simulator,
     MeterReading,
     Location,
@@ -714,6 +715,13 @@ class CSMSConsumerTests(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
+        await database_sync_to_async(Charger.objects.get_or_create)(
+            charger_id="CFGRES", connector_id=1
+        )
+        await database_sync_to_async(Charger.objects.get_or_create)(
+            charger_id="CFGRES", connector_id=2
+        )
+
         message_id = "cfg-result"
         payload = {
             "configurationKey": [
@@ -743,6 +751,31 @@ class CSMSConsumerTests(TransactionTestCase):
             any("GetConfiguration result" in entry for entry in log_entries)
         )
         self.assertNotIn(message_id, store.pending_calls)
+
+        configuration = await database_sync_to_async(
+            lambda: ChargerConfiguration.objects.order_by("-created_at").first()
+        )()
+        self.assertIsNotNone(configuration)
+        self.assertEqual(configuration.charger_identifier, "CFGRES")
+        self.assertEqual(
+            configuration.configuration_keys,
+            [
+                {
+                    "key": "AllowOfflineTxForUnknownId",
+                    "value": "false",
+                    "readonly": True,
+                }
+            ],
+        )
+        self.assertEqual(configuration.unknown_keys, [])
+        config_ids = await database_sync_to_async(
+            lambda: set(
+                Charger.objects.filter(charger_id="CFGRES").values_list(
+                    "configuration_id", flat=True
+                )
+            )
+        )()
+        self.assertEqual(config_ids, {configuration.pk})
 
         await communicator.disconnect()
         store.clear_log(log_key, log_type="charger")
