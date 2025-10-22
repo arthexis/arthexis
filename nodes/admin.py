@@ -248,6 +248,7 @@ class NodeAdmin(EntityModelAdmin):
                     "address",
                     "mac_address",
                     "port",
+                    "message_queue_length",
                     "role",
                     "current_relation",
                 )

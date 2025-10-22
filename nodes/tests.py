@@ -58,11 +58,12 @@ from .models import (
     NodeFeature,
     NodeFeatureAssignment,
     NetMessage,
+    PendingNetMessage,
     NodeManager,
     DNSRecord,
 )
 from .backends import OutboxEmailBackend
-from .tasks import capture_node_screenshot, sample_clipboard
+from .tasks import capture_node_screenshot, poll_unreachable_upstream, sample_clipboard
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from core.models import Package, PackageRelease, SecurityGroup, RFID, EnergyAccount
@@ -2936,6 +2937,238 @@ class NetMessagePropagationTests(TestCase):
 
         self.assertEqual(msg.propagated_to.count(), len(self.remotes))
         self.assertTrue(msg.complete)
+
+
+class NetMessageQueueTests(TestCase):
+    def setUp(self):
+        self.role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.feature, _ = NodeFeature.objects.get_or_create(
+            slug="celery-queue", defaults={"display": "Celery Queue"}
+        )
+
+    def test_propagate_queues_unreachable_downstream(self):
+        local = Node.objects.create(
+            hostname="local",
+            address="10.0.0.1",
+            port=8000,
+            mac_address="00:11:22:33:44:10",
+            role=self.role,
+            public_endpoint="local",
+        )
+        downstream = Node.objects.create(
+            hostname="downstream",
+            address="10.0.0.2",
+            port=8001,
+            mac_address="00:11:22:33:44:11",
+            role=self.role,
+            current_relation=Node.Relation.DOWNSTREAM,
+        )
+        message = NetMessage.objects.create(subject="Queued", body="Body", reach=self.role)
+        with patch.object(Node, "get_local", return_value=local), patch.object(
+            Node, "get_private_key", return_value=None
+        ), patch("core.notifications.notify", return_value=False), patch(
+            "requests.post", side_effect=Exception("fail")
+        ):
+            message.propagate()
+
+        entry = PendingNetMessage.objects.get(node=downstream, message=message)
+        self.assertIn(str(downstream.uuid), entry.seen)
+        self.assertGreater(entry.stale_at, timezone.now())
+
+    def test_queue_limit_enforced(self):
+        downstream = Node.objects.create(
+            hostname="limit",
+            address="10.0.0.3",
+            port=8002,
+            mac_address="00:11:22:33:44:12",
+            role=self.role,
+            current_relation=Node.Relation.DOWNSTREAM,
+            message_queue_length=1,
+        )
+        msg1 = NetMessage.objects.create(subject="Old", body="One", reach=self.role)
+        msg2 = NetMessage.objects.create(subject="New", body="Two", reach=self.role)
+
+        msg1.queue_for_node(downstream, [str(downstream.uuid)])
+        msg2.queue_for_node(downstream, [str(downstream.uuid)])
+
+        entries = list(PendingNetMessage.objects.filter(node=downstream))
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].message, msg2)
+
+    def test_queue_duplicate_updates_stale(self):
+        downstream = Node.objects.create(
+            hostname="dup",
+            address="10.0.0.4",
+            port=8003,
+            mac_address="00:11:22:33:44:13",
+            role=self.role,
+            current_relation=Node.Relation.DOWNSTREAM,
+        )
+        message = NetMessage.objects.create(subject="Dup", body="Dup", reach=self.role)
+        first = timezone.now()
+        second = first + timedelta(minutes=5)
+        with patch(
+            "nodes.models.timezone.now", side_effect=[first, second, second]
+        ):
+            message.queue_for_node(downstream, ["first"])
+            message.queue_for_node(downstream, ["second"])
+
+        entry = PendingNetMessage.objects.get(node=downstream, message=message)
+        self.assertEqual(entry.seen, ["second"])
+        self.assertEqual(entry.queued_at, second)
+        self.assertEqual(entry.stale_at, second + timedelta(hours=1))
+
+    def test_pull_endpoint_returns_and_clears_messages(self):
+        local_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        downstream_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        local = Node.objects.create(
+            hostname="hub",
+            address="10.0.0.5",
+            port=8004,
+            mac_address="00:11:22:33:44:14",
+            role=self.role,
+            public_endpoint="hub",
+        )
+        downstream = Node.objects.create(
+            hostname="remote",
+            address="10.0.0.6",
+            port=8005,
+            mac_address="00:11:22:33:44:15",
+            role=self.role,
+            current_relation=Node.Relation.DOWNSTREAM,
+            public_key=downstream_key.public_key()
+            .public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode(),
+        )
+        message = NetMessage.objects.create(subject="Fresh", body="Body", reach=self.role)
+        stale_message = NetMessage.objects.create(subject="Stale", body="Body", reach=self.role)
+        now = timezone.now()
+        PendingNetMessage.objects.create(
+            node=downstream,
+            message=message,
+            seen=[str(downstream.uuid)],
+            stale_at=now + timedelta(minutes=30),
+        )
+        stale_entry = PendingNetMessage.objects.create(
+            node=downstream,
+            message=stale_message,
+            seen=["stale"],
+            stale_at=now - timedelta(minutes=5),
+        )
+        PendingNetMessage.objects.filter(pk=stale_entry.pk).update(
+            queued_at=now - timedelta(minutes=5)
+        )
+
+        def fake_get_private(node_obj):
+            if node_obj.pk == local.pk:
+                return local_key
+            return None
+
+        payload = {"requester": str(downstream.uuid)}
+        body = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        signature = base64.b64encode(
+            downstream_key.sign(
+                body.encode(),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+        ).decode()
+
+        with patch.object(Node, "get_local", return_value=local), patch.object(
+            Node, "get_private_key", return_value=local_key
+        ):
+            response = self.client.post(
+                reverse("net-message-pull"),
+                data=body,
+                content_type="application/json",
+                HTTP_X_SIGNATURE=signature,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data.get("messages", [])), 1)
+        payload_data = data["messages"][0]["payload"]
+        self.assertEqual(payload_data["uuid"], str(message.uuid))
+        self.assertFalse(
+            PendingNetMessage.objects.filter(node=downstream, message=message).exists()
+        )
+        self.assertFalse(
+            PendingNetMessage.objects.filter(
+                node=downstream, message=stale_message
+            ).exists()
+        )
+        response_signature = data["messages"][0]["signature"]
+        local_public = local_key.public_key()
+        local_public.verify(
+            base64.b64decode(response_signature),
+            json.dumps(payload_data, separators=(",", ":"), sort_keys=True).encode(),
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+
+    def test_poll_task_fetches_messages(self):
+        local_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        upstream_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        local = Node.objects.create(
+            hostname="downstream",
+            address="10.0.0.7",
+            port=8006,
+            mac_address="00:11:22:33:44:16",
+            role=self.role,
+            public_endpoint="downstream",
+        )
+        upstream = Node.objects.create(
+            hostname="upstream",
+            address="127.0.0.2",
+            port=8010,
+            mac_address="00:11:22:33:44:17",
+            role=self.role,
+            current_relation=Node.Relation.UPSTREAM,
+            public_key=upstream_key.public_key()
+            .public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode(),
+        )
+        NodeFeatureAssignment.objects.create(node=local, feature=self.feature)
+        payload = {
+            "uuid": str(uuid.uuid4()),
+            "subject": "Update",
+            "body": "Body",
+            "seen": [str(local.uuid)],
+            "origin": str(upstream.uuid),
+            "sender": str(upstream.uuid),
+        }
+        payload_text = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        payload_signature = base64.b64encode(
+            upstream_key.sign(
+                payload_text.encode(),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+        ).decode()
+        response = MagicMock()
+        response.ok = True
+        response.json.return_value = {
+            "messages": [{"payload": payload, "signature": payload_signature}]
+        }
+
+        with patch.object(Node, "get_local", return_value=local), patch.object(
+            Node, "get_private_key", return_value=local_key
+        ), patch("nodes.tasks.requests.post", return_value=response) as mock_post, patch.object(
+            NetMessage, "propagate"
+        ) as mock_propagate:
+            poll_unreachable_upstream()
+
+        created = NetMessage.objects.get(uuid=payload["uuid"])
+        self.assertEqual(created.subject, "Update")
+        self.assertEqual(created.node_origin, upstream)
+        mock_post.assert_called_once()
+        mock_propagate.assert_called_once()
 
 
 class NetMessageSignatureTests(TestCase):

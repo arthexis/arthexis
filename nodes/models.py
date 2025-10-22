@@ -203,6 +203,10 @@ class Node(Entity):
     address = models.GenericIPAddressField()
     mac_address = models.CharField(max_length=17, unique=True, null=True, blank=True)
     port = models.PositiveIntegerField(default=8000)
+    message_queue_length = models.PositiveSmallIntegerField(
+        default=10,
+        help_text="Maximum queued NetMessages to retain for this peer.",
+    )
     badge_color = models.CharField(max_length=7, default=DEFAULT_BADGE_COLOR)
     role = models.ForeignKey(NodeRole, on_delete=models.SET_NULL, null=True, blank=True)
     current_relation = models.CharField(
@@ -491,6 +495,27 @@ class Node(Entity):
             self.public_key = pub_path.read_text()
             self.save(update_fields=["public_key"])
 
+    def get_private_key(self):
+        """Return the private key for this node if available."""
+
+        if not self.public_endpoint:
+            return None
+        try:
+            self.ensure_keys()
+        except Exception:
+            return None
+        priv_path = (
+            Path(self.base_path or settings.BASE_DIR)
+            / "security"
+            / f"{self.public_endpoint}"
+        )
+        try:
+            return serialization.load_pem_private_key(
+                priv_path.read_bytes(), password=None
+            )
+        except Exception:
+            return None
+
     @property
     def is_local(self):
         """Determine if this node represents the current host."""
@@ -765,6 +790,7 @@ class Node(Entity):
         self._sync_screenshot_task(screenshot_enabled)
         self._sync_landing_lead_task(celery_enabled)
         self._sync_ocpp_session_report_task(celery_enabled)
+        self._sync_upstream_poll_task(celery_enabled)
 
     def _sync_clipboard_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -869,6 +895,28 @@ class Node(Entity):
             )
         except (OperationalError, ProgrammingError):
             logger.debug("Skipping OCPP session report task sync; tables not ready")
+
+    def _sync_upstream_poll_task(self, celery_enabled: bool):
+        if not self.is_local:
+            return
+
+        from django_celery_beat.models import IntervalSchedule, PeriodicTask
+
+        task_name = "nodes_poll_upstream_messages"
+        if celery_enabled:
+            schedule, _ = IntervalSchedule.objects.get_or_create(
+                every=1, period=IntervalSchedule.MINUTES
+            )
+            PeriodicTask.objects.update_or_create(
+                name=task_name,
+                defaults={
+                    "interval": schedule,
+                    "task": "nodes.tasks.poll_unreachable_upstream",
+                    "enabled": True,
+                },
+            )
+        else:
+            PeriodicTask.objects.filter(name=task_name).delete()
 
     def send_mail(
         self,
@@ -1508,6 +1556,193 @@ class NetMessage(Entity):
                     self.pk,
                 )
 
+    def _build_payload(
+        self,
+        *,
+        sender_id: str | None,
+        origin_uuid: str | None,
+        reach_name: str | None,
+        seen: list[str],
+    ) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "uuid": str(self.uuid),
+            "subject": self.subject,
+            "body": self.body,
+            "seen": list(seen),
+            "reach": reach_name,
+            "sender": sender_id,
+            "origin": origin_uuid,
+        }
+        if self.attachments:
+            payload["attachments"] = self.attachments
+        if self.filter_node:
+            payload["filter_node"] = str(self.filter_node.uuid)
+        if self.filter_node_feature:
+            payload["filter_node_feature"] = self.filter_node_feature.slug
+        if self.filter_node_role:
+            payload["filter_node_role"] = self.filter_node_role.name
+        if self.filter_current_relation:
+            payload["filter_current_relation"] = self.filter_current_relation
+        if self.filter_installed_version:
+            payload["filter_installed_version"] = self.filter_installed_version
+        if self.filter_installed_revision:
+            payload["filter_installed_revision"] = self.filter_installed_revision
+        return payload
+
+    @staticmethod
+    def _serialize_payload(payload: dict[str, object]) -> str:
+        return json.dumps(payload, separators=(",", ":"), sort_keys=True)
+
+    @staticmethod
+    def _sign_payload(payload_json: str, private_key) -> str | None:
+        if not private_key:
+            return None
+        try:
+            signature = private_key.sign(
+                payload_json.encode(),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+        except Exception:
+            return None
+        return base64.b64encode(signature).decode()
+
+    def queue_for_node(self, node: "Node", seen: list[str]) -> None:
+        """Queue this message for later delivery to ``node``."""
+
+        if node.current_relation != Node.Relation.DOWNSTREAM:
+            return
+
+        now = timezone.now()
+        expires_at = now + timedelta(hours=1)
+        normalized_seen = [str(value) for value in seen]
+        entry, created = PendingNetMessage.objects.get_or_create(
+            node=node,
+            message=self,
+            defaults={
+                "seen": normalized_seen,
+                "stale_at": expires_at,
+            },
+        )
+        if created:
+            entry.queued_at = now
+            entry.save(update_fields=["queued_at"])
+        else:
+            entry.seen = normalized_seen
+            entry.stale_at = expires_at
+            entry.queued_at = now
+            entry.save(update_fields=["seen", "stale_at", "queued_at"])
+        self._trim_queue(node)
+
+    def clear_queue_for_node(self, node: "Node") -> None:
+        PendingNetMessage.objects.filter(node=node, message=self).delete()
+
+    def _trim_queue(self, node: "Node") -> None:
+        limit = max(int(node.message_queue_length or 0), 0)
+        if limit == 0:
+            PendingNetMessage.objects.filter(node=node).delete()
+            return
+        qs = PendingNetMessage.objects.filter(node=node).order_by("-queued_at")
+        keep_ids = list(qs.values_list("pk", flat=True)[:limit])
+        if keep_ids:
+            PendingNetMessage.objects.filter(node=node).exclude(pk__in=keep_ids).delete()
+        else:
+            qs.delete()
+
+    @classmethod
+    def receive_payload(
+        cls,
+        data: dict[str, object],
+        *,
+        sender: "Node",
+    ) -> "NetMessage":
+        msg_uuid = data.get("uuid")
+        if not msg_uuid:
+            raise ValueError("uuid required")
+        subject = (data.get("subject") or "")[:64]
+        body = (data.get("body") or "")[:256]
+        attachments = cls.normalize_attachments(data.get("attachments"))
+        reach_name = data.get("reach")
+        reach_role = None
+        if reach_name:
+            reach_role = NodeRole.objects.filter(name=reach_name).first()
+        filter_node_uuid = data.get("filter_node")
+        filter_node = None
+        if filter_node_uuid:
+            filter_node = Node.objects.filter(uuid=filter_node_uuid).first()
+        filter_feature_slug = data.get("filter_node_feature")
+        filter_feature = None
+        if filter_feature_slug:
+            filter_feature = NodeFeature.objects.filter(slug=filter_feature_slug).first()
+        filter_role_name = data.get("filter_node_role")
+        filter_role = None
+        if filter_role_name:
+            filter_role = NodeRole.objects.filter(name=filter_role_name).first()
+        filter_relation_value = data.get("filter_current_relation")
+        filter_relation = ""
+        if filter_relation_value:
+            relation = Node.normalize_relation(filter_relation_value)
+            filter_relation = relation.value if relation else ""
+        filter_installed_version = (data.get("filter_installed_version") or "")[:20]
+        filter_installed_revision = (data.get("filter_installed_revision") or "")[:40]
+        seen_values = data.get("seen", [])
+        if not isinstance(seen_values, list):
+            seen_values = list(seen_values)  # type: ignore[arg-type]
+        normalized_seen = [str(value) for value in seen_values if value is not None]
+        origin_id = data.get("origin")
+        origin_node = None
+        if origin_id:
+            origin_node = Node.objects.filter(uuid=origin_id).first()
+        if not origin_node:
+            origin_node = sender
+        msg, created = cls.objects.get_or_create(
+            uuid=msg_uuid,
+            defaults={
+                "subject": subject,
+                "body": body,
+                "reach": reach_role,
+                "node_origin": origin_node,
+                "attachments": attachments or None,
+                "filter_node": filter_node,
+                "filter_node_feature": filter_feature,
+                "filter_node_role": filter_role,
+                "filter_current_relation": filter_relation,
+                "filter_installed_version": filter_installed_version,
+                "filter_installed_revision": filter_installed_revision,
+            },
+        )
+        if not created:
+            msg.subject = subject
+            msg.body = body
+            update_fields = ["subject", "body"]
+            if reach_role and msg.reach_id != reach_role.id:
+                msg.reach = reach_role
+                update_fields.append("reach")
+            if msg.node_origin_id is None and origin_node:
+                msg.node_origin = origin_node
+                update_fields.append("node_origin")
+            if attachments and msg.attachments != attachments:
+                msg.attachments = attachments
+                update_fields.append("attachments")
+            field_updates = {
+                "filter_node": filter_node,
+                "filter_node_feature": filter_feature,
+                "filter_node_role": filter_role,
+                "filter_current_relation": filter_relation,
+                "filter_installed_version": filter_installed_version,
+                "filter_installed_revision": filter_installed_revision,
+            }
+            for field, value in field_updates.items():
+                if getattr(msg, field) != value:
+                    setattr(msg, field, value)
+                    update_fields.append(field)
+            if update_fields:
+                msg.save(update_fields=update_fields)
+        if attachments:
+            msg.apply_attachments(attachments)
+        msg.propagate(seen=normalized_seen)
+        return msg
+
     def propagate(self, seen: list[str] | None = None):
         from core.notifications import notify
         import random
@@ -1542,17 +1777,7 @@ class NetMessage(Entity):
             local_id = str(local.uuid)
             if local_id not in seen:
                 seen.append(local_id)
-            priv_path = (
-                Path(local.base_path or settings.BASE_DIR)
-                / "security"
-                / f"{local.public_endpoint}"
-            )
-            try:
-                private_key = serialization.load_pem_private_key(
-                    priv_path.read_bytes(), password=None
-                )
-            except Exception:
-                private_key = None
+            private_key = local.get_private_key()
         for node_id in seen:
             node = Node.objects.filter(uuid=node_id).first()
             if node and (not local or node.pk != local.pk):
@@ -1652,54 +1877,36 @@ class NetMessage(Entity):
         selected_ids = [str(n.uuid) for n in selected]
         payload_seen = seen_list + selected_ids
         for node in selected:
-            payload = {
-                "uuid": str(self.uuid),
-                "subject": self.subject,
-                "body": self.body,
-                "seen": payload_seen,
-                "reach": reach_name,
-                "sender": local_id,
-                "origin": origin_uuid,
-            }
-            if self.attachments:
-                payload["attachments"] = self.attachments
-            if self.filter_node:
-                payload["filter_node"] = str(self.filter_node.uuid)
-            if self.filter_node_feature:
-                payload["filter_node_feature"] = self.filter_node_feature.slug
-            if self.filter_node_role:
-                payload["filter_node_role"] = self.filter_node_role.name
-            if self.filter_current_relation:
-                payload["filter_current_relation"] = self.filter_current_relation
-            if self.filter_installed_version:
-                payload["filter_installed_version"] = self.filter_installed_version
-            if self.filter_installed_revision:
-                payload["filter_installed_revision"] = self.filter_installed_revision
-            payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+            payload = self._build_payload(
+                sender_id=local_id,
+                origin_uuid=origin_uuid,
+                reach_name=reach_name,
+                seen=payload_seen,
+            )
+            payload_json = self._serialize_payload(payload)
             headers = {"Content-Type": "application/json"}
-            if private_key:
-                try:
-                    signature = private_key.sign(
-                        payload_json.encode(),
-                        padding.PKCS1v15(),
-                        hashes.SHA256(),
-                    )
-                    headers["X-Signature"] = base64.b64encode(signature).decode()
-                except Exception:
-                    pass
+            signature = self._sign_payload(payload_json, private_key)
+            if signature:
+                headers["X-Signature"] = signature
+            success = False
             try:
-                requests.post(
+                response = requests.post(
                     f"http://{node.address}:{node.port}/nodes/net-message/",
                     data=payload_json,
                     headers=headers,
                     timeout=1,
                 )
+                success = bool(response.ok)
             except Exception:
                 logger.exception(
                     "Failed to propagate NetMessage %s to node %s",
                     self.pk,
                     node.pk,
                 )
+            if success:
+                self.clear_queue_for_node(node)
+            else:
+                self.queue_for_node(node, payload_seen)
             self.propagated_to.add(node)
 
         save_fields: list[str] = []
@@ -1710,6 +1917,32 @@ class NetMessage(Entity):
         if save_fields:
             self.save(update_fields=save_fields)
 
+
+class PendingNetMessage(models.Model):
+    """Queued :class:`NetMessage` awaiting delivery to a downstream node."""
+
+    node = models.ForeignKey(
+        Node, on_delete=models.CASCADE, related_name="pending_net_messages"
+    )
+    message = models.ForeignKey(
+        NetMessage,
+        on_delete=models.CASCADE,
+        related_name="pending_deliveries",
+    )
+    seen = models.JSONField(default=list)
+    queued_at = models.DateTimeField(auto_now_add=True)
+    stale_at = models.DateTimeField()
+
+    class Meta:
+        unique_together = ("node", "message")
+        ordering = ("queued_at",)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.message_id} → {self.node_id}"
+
+    @property
+    def is_stale(self) -> bool:
+        return self.stale_at <= timezone.now()
 
 class ContentSample(Entity):
     """Collected content such as text snippets or screenshots."""

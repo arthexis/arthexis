@@ -34,13 +34,7 @@ from core.models import RFID
 
 from .rfid_sync import apply_rfid_payload, serialize_rfid
 
-from .models import (
-    Node,
-    NetMessage,
-    NodeFeature,
-    NodeRole,
-    node_information_updated,
-)
+from .models import Node, NetMessage, PendingNetMessage, node_information_updated
 from .utils import capture_screenshot, save_screenshot
 
 
@@ -983,85 +977,99 @@ def net_message(request):
     except Exception:
         return JsonResponse({"detail": "invalid signature"}, status=403)
 
-    msg_uuid = data.get("uuid")
-    subject = data.get("subject", "")
-    body = data.get("body", "")
-    attachments = NetMessage.normalize_attachments(data.get("attachments"))
-    reach_name = data.get("reach")
-    reach_role = None
-    if reach_name:
-        reach_role = NodeRole.objects.filter(name=reach_name).first()
-    filter_node_uuid = data.get("filter_node")
-    filter_node = None
-    if filter_node_uuid:
-        filter_node = Node.objects.filter(uuid=filter_node_uuid).first()
-    filter_feature_slug = data.get("filter_node_feature")
-    filter_feature = None
-    if filter_feature_slug:
-        filter_feature = NodeFeature.objects.filter(slug=filter_feature_slug).first()
-    filter_role_name = data.get("filter_node_role")
-    filter_role = None
-    if filter_role_name:
-        filter_role = NodeRole.objects.filter(name=filter_role_name).first()
-    filter_relation_value = data.get("filter_current_relation")
-    filter_relation = ""
-    if filter_relation_value:
-        relation = Node.normalize_relation(filter_relation_value)
-        filter_relation = relation.value if relation else ""
-    filter_installed_version = (data.get("filter_installed_version") or "")[:20]
-    filter_installed_revision = (data.get("filter_installed_revision") or "")[:40]
-    seen = data.get("seen", [])
-    origin_id = data.get("origin")
-    origin_node = None
-    if origin_id:
-        origin_node = Node.objects.filter(uuid=origin_id).first()
-    if not origin_node:
-        origin_node = node
-    if not msg_uuid:
-        return JsonResponse({"detail": "uuid required"}, status=400)
-    msg, created = NetMessage.objects.get_or_create(
-        uuid=msg_uuid,
-        defaults={
-            "subject": subject[:64],
-            "body": body[:256],
-            "reach": reach_role,
-            "node_origin": origin_node,
-            "attachments": attachments or None,
-            "filter_node": filter_node,
-            "filter_node_feature": filter_feature,
-            "filter_node_role": filter_role,
-            "filter_current_relation": filter_relation,
-            "filter_installed_version": filter_installed_version,
-            "filter_installed_revision": filter_installed_revision,
-        },
-    )
-    if not created:
-        msg.subject = subject[:64]
-        msg.body = body[:256]
-        update_fields = ["subject", "body"]
-        if reach_role and msg.reach_id != reach_role.id:
-            msg.reach = reach_role
-            update_fields.append("reach")
-        if msg.node_origin_id is None and origin_node:
-            msg.node_origin = origin_node
-            update_fields.append("node_origin")
-        if attachments and msg.attachments != attachments:
-            msg.attachments = attachments
-            update_fields.append("attachments")
-        field_updates = {
-            "filter_node": filter_node,
-            "filter_node_feature": filter_feature,
-            "filter_node_role": filter_role,
-            "filter_current_relation": filter_relation,
-            "filter_installed_version": filter_installed_version,
-            "filter_installed_revision": filter_installed_revision,
-        }
-        for field, value in field_updates.items():
-            if getattr(msg, field) != value:
-                setattr(msg, field, value)
-                update_fields.append(field)
-        msg.save(update_fields=update_fields)
-    if attachments:
-        msg.apply_attachments(attachments)
-    msg.propagate(seen=seen)
+    try:
+        msg = NetMessage.receive_payload(data, sender=node)
+    except ValueError as exc:
+        return JsonResponse({"detail": str(exc)}, status=400)
     return JsonResponse({"status": "propagated", "complete": msg.complete})
+
+
+@csrf_exempt
+def net_message_pull(request):
+    """Allow downstream nodes to retrieve queued network messages."""
+
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required"}, status=405)
+    try:
+        data = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "invalid json"}, status=400)
+
+    requester = data.get("requester")
+    if not requester:
+        return JsonResponse({"detail": "requester required"}, status=400)
+    signature = request.headers.get("X-Signature")
+    if not signature:
+        return JsonResponse({"detail": "signature required"}, status=403)
+
+    node = Node.objects.filter(uuid=requester).first()
+    if not node or not node.public_key:
+        return JsonResponse({"detail": "unknown requester"}, status=403)
+    try:
+        public_key = serialization.load_pem_public_key(node.public_key.encode())
+        public_key.verify(
+            base64.b64decode(signature),
+            request.body,
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+    except Exception:
+        return JsonResponse({"detail": "invalid signature"}, status=403)
+
+    local = Node.get_local()
+    if not local:
+        return JsonResponse({"detail": "local node unavailable"}, status=503)
+    private_key = local.get_private_key()
+    if not private_key:
+        return JsonResponse({"detail": "signing unavailable"}, status=503)
+
+    entries = (
+        PendingNetMessage.objects.select_related(
+            "message",
+            "message__filter_node",
+            "message__filter_node_feature",
+            "message__filter_node_role",
+            "message__node_origin",
+        )
+        .filter(node=node)
+        .order_by("queued_at")
+    )
+    messages: list[dict[str, object]] = []
+    expired_ids: list[int] = []
+    delivered_ids: list[int] = []
+
+    origin_fallback = str(local.uuid)
+
+    for entry in entries:
+        if entry.is_stale:
+            expired_ids.append(entry.pk)
+            continue
+        message = entry.message
+        reach_source = message.filter_node_role or message.reach
+        reach_name = reach_source.name if reach_source else None
+        origin_node = message.node_origin
+        origin_uuid = str(origin_node.uuid) if origin_node else origin_fallback
+        sender_id = str(local.uuid)
+        seen = [str(value) for value in entry.seen]
+        payload = message._build_payload(
+            sender_id=sender_id,
+            origin_uuid=origin_uuid,
+            reach_name=reach_name,
+            seen=seen,
+        )
+        payload_json = message._serialize_payload(payload)
+        payload_signature = message._sign_payload(payload_json, private_key)
+        if not payload_signature:
+            logger.warning(
+                "Unable to sign queued NetMessage %s for node %s", message.pk, node.pk
+            )
+            continue
+        messages.append({"payload": payload, "signature": payload_signature})
+        delivered_ids.append(entry.pk)
+
+    if expired_ids:
+        PendingNetMessage.objects.filter(pk__in=expired_ids).delete()
+    if delivered_ids:
+        PendingNetMessage.objects.filter(pk__in=delivered_ids).delete()
+
+    return JsonResponse({"messages": messages})
