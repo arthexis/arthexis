@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import unittest.mock as mock
 from unittest.mock import patch, call, MagicMock
 from django.core import mail
+from django.core.cache import cache
 from django.core.mail import EmailMessage
 from django.core.management import call_command
 import socket
@@ -38,6 +39,7 @@ from django.contrib.auth.models import Permission
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from django.conf import settings
 from django.utils import timezone
+from urllib.parse import urlparse
 from dns import resolver as dns_resolver
 from . import dns as dns_utils
 from selenium.common.exceptions import WebDriverException
@@ -110,6 +112,7 @@ class NodeTests(TestCase):
         self.user = User.objects.create_user(username="nodeuser", password="pwd")
         self.client.force_login(self.user)
         NodeRole.objects.get_or_create(name="Terminal")
+        NodeRole.objects.get_or_create(name="Interface")
 
 
 class NodeGetLocalDatabaseUnavailableTests(SimpleTestCase):
@@ -348,6 +351,43 @@ class NodeGetLocalTests(TestCase):
 
         self.assertNotEqual(node_one.public_endpoint, node_two.public_endpoint)
         self.assertTrue(node_two.public_endpoint.startswith("duplicate-host-"))
+
+    def test_register_node_assigns_interface_role_and_returns_uuid(self):
+        NodeRole.objects.get_or_create(name="Interface")
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_bytes = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode()
+        token = "interface-token"
+        signature = base64.b64encode(
+            private_key.sign(
+                token.encode(),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+        ).decode()
+        mac = "aa:bb:cc:dd:ee:99"
+        payload = {
+            "hostname": "interface",
+            "address": "127.0.0.1",
+            "port": 8443,
+            "mac_address": mac,
+            "public_key": public_bytes,
+            "token": token,
+            "signature": signature,
+            "role": "Interface",
+        }
+        response = self.client.post(
+            reverse("register-node"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("uuid", data)
+        node = Node.objects.get(mac_address=mac)
+        self.assertEqual(node.role.name, "Interface")
 
     def test_register_node_feature_toggle(self):
         NodeFeature.objects.get_or_create(
@@ -1580,6 +1620,47 @@ class NodeAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data:image/png;base64")
 
+    @patch("nodes.admin.requests.post")
+    def test_proxy_view_uses_remote_login_url(self, mock_post):
+        self.client.get(reverse("admin:nodes_node_register_current"))
+        local_node = Node.objects.get()
+        remote = Node.objects.create(
+            hostname="remote",
+            address="192.0.2.10",
+            port=8443,
+            mac_address="aa:bb:cc:dd:ee:ff",
+        )
+        mock_post.return_value = SimpleNamespace(
+            ok=True,
+            json=lambda: {
+                "login_url": "https://remote.example/nodes/proxy/login/token",
+                "expires": "2025-01-01T00:00:00",
+            },
+            status_code=200,
+            text="ok",
+        )
+        response = self.client.get(
+            reverse("admin:nodes_node_proxy", args=[remote.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "admin/nodes/node/proxy.html")
+        self.assertContains(response, "<iframe", html=False)
+        mock_post.assert_called()
+        payload = json.loads(mock_post.call_args[1]["data"])
+        self.assertEqual(payload.get("requester"), str(local_node.uuid))
+
+    def test_proxy_link_displayed_for_remote_nodes(self):
+        Node.objects.create(
+            hostname="remote",
+            address="203.0.113.1",
+            port=8000,
+            mac_address="aa:aa:aa:aa:aa:01",
+        )
+        response = self.client.get(reverse("admin:nodes_node_changelist"))
+        proxy_url = reverse("admin:nodes_node_proxy", args=[1])
+        self.assertContains(response, proxy_url)
+
+
     @override_settings(SCREENSHOT_SOURCES=["/one", "/two"])
     @patch("nodes.admin.capture_screenshot")
     def test_take_screenshots_action(self, mock_capture):
@@ -2180,6 +2261,160 @@ class NodeAdminTests(TestCase):
         post_data = json.loads(mock_post.call_args.kwargs["data"])
         self.assertEqual(post_data["hostname"], local.hostname)
         self.assertEqual(post_data["mac_address"], local.mac_address)
+
+
+class NodeProxyGatewayTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.client = Client()
+        self.private_key = rsa.generate_private_key(
+            public_exponent=65537, key_size=2048
+        )
+        public_key = self.private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode()
+        self.node = Node.objects.create(
+            hostname="requester",
+            address="127.0.0.1",
+            port=8000,
+            mac_address="aa:bb:cc:dd:ee:aa",
+            public_key=public_key,
+        )
+        patcher = patch("requests.post")
+        self.addCleanup(patcher.stop)
+        self.mock_requests_post = patcher.start()
+        self.mock_requests_post.return_value = SimpleNamespace(
+            ok=True,
+            status_code=200,
+            json=lambda: {},
+            text="",
+        )
+
+    def tearDown(self):
+        cache.clear()
+
+    def _sign(self, payload):
+        body = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        signature = base64.b64encode(
+            self.private_key.sign(
+                body.encode(), padding.PKCS1v15(), hashes.SHA256()
+            )
+        ).decode()
+        return body, signature
+
+    def test_proxy_session_creates_login_url(self):
+        payload = {
+            "requester": str(self.node.uuid),
+            "user": {
+                "username": "proxy-user",
+                "email": "proxy@example.com",
+                "first_name": "Proxy",
+                "last_name": "User",
+                "is_staff": True,
+                "is_superuser": True,
+                "groups": [],
+                "permissions": [],
+            },
+            "target": "/admin/",
+        }
+        body, signature = self._sign(payload)
+        response = self.client.post(
+            reverse("node-proxy-session"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("login_url", data)
+        user = get_user_model().objects.get(username="proxy-user")
+        self.assertTrue(user.is_staff)
+        parsed = urlparse(data["login_url"])
+        login_response = self.client.get(parsed.path)
+        self.assertEqual(login_response.status_code, 302)
+        self.assertEqual(login_response["Location"], "/admin/")
+        self.assertEqual(self.client.session.get("_auth_user_id"), str(user.pk))
+        second = self.client.get(parsed.path)
+        self.assertEqual(second.status_code, 410)
+
+    def test_proxy_execute_lists_nodes(self):
+        Node.objects.create(
+            hostname="target",
+            address="127.0.0.5",
+            port=8010,
+            mac_address="aa:bb:cc:dd:ee:bb",
+        )
+        payload = {
+            "requester": str(self.node.uuid),
+            "action": "list",
+            "model": "nodes.Node",
+            "filters": {"hostname": "target"},
+            "credentials": {
+                "username": "suite-user",
+                "password": "secret",
+                "first_name": "Suite",
+                "last_name": "User",
+            },
+        }
+        body, signature = self._sign(payload)
+        response = self.client.post(
+            reverse("node-proxy-execute"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data.get("objects", [])), 1)
+        record = data["objects"][0]
+        self.assertEqual(record["fields"]["hostname"], "target")
+        user = get_user_model().objects.get(username="suite-user")
+        self.assertTrue(user.is_superuser)
+
+    def test_proxy_execute_requires_valid_password_for_existing_user(self):
+        User = get_user_model()
+        User.objects.create_user(username="suite-user", password="correct")
+        payload = {
+            "requester": str(self.node.uuid),
+            "action": "list",
+            "model": "nodes.Node",
+            "credentials": {
+                "username": "suite-user",
+                "password": "wrong",
+            },
+        }
+        body, signature = self._sign(payload)
+        response = self.client.post(
+            reverse("node-proxy-execute"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_proxy_execute_schema_returns_models(self):
+        payload = {
+            "requester": str(self.node.uuid),
+            "action": "schema",
+            "credentials": {
+                "username": "suite-user",
+                "password": "secret",
+            },
+        }
+        body, signature = self._sign(payload)
+        response = self.client.post(
+            reverse("node-proxy-execute"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        models = data.get("models", [])
+        self.assertTrue(models)
+        suite_names = {entry.get("suite_name") for entry in models}
+        self.assertIn("Nodes", suite_names)
 
 
 class NodeRFIDAPITests(TestCase):

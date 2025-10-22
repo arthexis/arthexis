@@ -1,0 +1,11 @@
+[
+  {
+    "model": "nodes.noderole",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Interface",
+      "description": "Notebook & API Interface"
+    }
+  }
+]
