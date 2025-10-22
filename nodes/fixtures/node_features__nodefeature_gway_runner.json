@@ -6,7 +6,11 @@
       "is_deleted": false,
       "slug": "gway-runner",
       "display": "gway Runner",
-      "roles": []
+      "roles": [
+        [
+          "Terminal"
+        ]
+      ]
     }
   }
 ]

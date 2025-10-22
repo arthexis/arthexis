@@ -1,5 +1,7 @@
 import os
 from unittest import mock
+
+import pytest
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
 from django.test import TestCase, override_settings
@@ -417,6 +419,7 @@ class SigilResolutionTests(TestCase):
                 "sys-lower",
             )
 
+    @pytest.mark.feature("gway-runner")
     def test_gway_fallback_invoked_for_unknown_sigil(self):
         sigil_resolver._find_gway_command.cache_clear()
         self.addCleanup(sigil_resolver._find_gway_command.cache_clear)
@@ -444,6 +447,7 @@ class SigilResolutionTests(TestCase):
         self.assertTrue(kwargs.get("text"))
         self.assertEqual(kwargs.get("timeout"), 1)
 
+    @pytest.mark.feature("gway-runner")
     def test_gway_timeout_respects_wizard_mode(self):
         sigil_resolver._find_gway_command.cache_clear()
         self.addCleanup(sigil_resolver._find_gway_command.cache_clear)
@@ -466,6 +470,7 @@ class SigilResolutionTests(TestCase):
         _, kwargs = mock_run.call_args
         self.assertEqual(kwargs.get("timeout"), 60)
 
+    @pytest.mark.feature("gway-runner")
     def test_gway_timeout_expired_returns_none(self):
         sigil_resolver._find_gway_command.cache_clear()
         self.addCleanup(sigil_resolver._find_gway_command.cache_clear)
