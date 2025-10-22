@@ -8,6 +8,7 @@ django.setup()
 from django.test import Client, TestCase, RequestFactory, override_settings
 from django.urls import reverse
 from django.http import HttpRequest
+from django.contrib import messages
 import csv
 import json
 import importlib.util
