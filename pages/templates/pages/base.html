@@ -320,6 +320,7 @@
         }
       }
     </style>
+    {% block extra_head %}{% endblock %}
   </head>
   <body class="p-3 pb-0 d-flex flex-column min-vh-100">
     <div class="container flex-grow-1 mb-5">
@@ -904,5 +905,6 @@
       <symbol viewBox="0 0 24 24" width="1.5rem" height="1.5rem" id="icon-star"><path d="M0 0h24v24H0z" fill="none"/><path d="m12 17.27 5.18 3.11-1.64-5.92L20.5 9.5l-6.09-.52L12 3l-2.41 5.98-6.09.52 4.96 4.96-1.64 5.92z"/></symbol>
     </svg>
     {% include "core/version_check.html" %}
+    {% block extra_scripts %}{% endblock %}
   </body>
 </html>

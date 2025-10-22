@@ -26,6 +26,13 @@
   </div>
   {% endif %}
   <div class="{% if toc %}col-12 col-lg-9{% else %}col-12{% endif %}">
+    {% if edit_url %}
+      <div class="d-flex justify-content-end mb-3">
+        <a class="btn btn-outline-primary btn-sm" href="{{ edit_url }}">
+          {% trans "Edit document" %}
+        </a>
+      </div>
+    {% endif %}
     <div class="markdown-body">
       {{ content|safe }}
     </div>
