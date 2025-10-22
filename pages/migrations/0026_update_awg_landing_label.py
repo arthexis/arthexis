@@ -14,7 +14,7 @@ def _manager(model, name):
     return model.objects
 
 
-def _set_awg_label(apps, label):
+def _set_awg_label(apps, *, from_label, to_label):
     Module = apps.get_model("pages", "Module")
     Landing = apps.get_model("pages", "Landing")
 
@@ -23,34 +23,23 @@ def _set_awg_label(apps, label):
 
     modules = module_manager.filter(path=AWG_PATH)
     for module in modules:
-        landings = landing_manager.filter(module=module, path=AWG_LANDING_PATH)
+        landings = landing_manager.filter(
+            module=module,
+            path=AWG_LANDING_PATH,
+            label=from_label,
+        )
         for landing in landings:
-            updates = []
-            if landing.label != label:
-                landing.label = label
-                updates.append("label")
-            if landing.description:
-                landing.description = ""
-                updates.append("description")
-            if not landing.enabled:
-                landing.enabled = True
-                updates.append("enabled")
-            if getattr(landing, "is_deleted", False):
-                landing.is_deleted = False
-                updates.append("is_deleted")
-            if not getattr(landing, "is_seed_data", False):
-                landing.is_seed_data = True
-                updates.append("is_seed_data")
-            if updates:
-                landing.save(update_fields=updates)
+            if landing.label != to_label:
+                landing.label = to_label
+                landing.save(update_fields=["label"])
 
 
 def update_awg_label(apps, schema_editor):
-    _set_awg_label(apps, NEW_LABEL)
+    _set_awg_label(apps, from_label=OLD_LABEL, to_label=NEW_LABEL)
 
 
 def revert_awg_label(apps, schema_editor):
-    _set_awg_label(apps, OLD_LABEL)
+    _set_awg_label(apps, from_label=NEW_LABEL, to_label=OLD_LABEL)
 
 
 class Migration(migrations.Migration):
