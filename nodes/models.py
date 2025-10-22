@@ -190,6 +190,7 @@ class Node(Entity):
     ROLE_BADGE_COLORS = {
         "Constellation": "#daa520",  # goldenrod
         "Control": "#673ab7",  # deep purple
+        "Interface": "#0dcaf0",  # cyan
     }
 
     class Relation(models.TextChoices):
@@ -1826,6 +1827,7 @@ class NetMessage(Entity):
         reach_source = self.filter_node_role or self.reach
         reach_name = reach_source.name if reach_source else None
         role_map = {
+            "Interface": ["Interface", "Terminal"],
             "Terminal": ["Terminal"],
             "Control": ["Control", "Terminal"],
             "Satellite": ["Satellite", "Control", "Terminal"],

@@ -1,0 +1,139 @@
+{% load i18n static %}
+<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE|default:'en' }}">
+<head>
+  <meta charset="utf-8">
+  <title>{% blocktrans with host=node.hostname %}Proxy session for {{ host }}{% endblocktrans %}</title>
+  <style>
+    body {
+      margin: 0;
+      background: #f1f5f9;
+      color: #0f172a;
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .proxy-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem 1.5rem;
+      background: #0f172a;
+      color: #e2e8f0;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.25);
+    }
+    .proxy-details {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      min-width: 0;
+    }
+    .proxy-name {
+      margin: 0;
+      font-weight: 600;
+      font-size: 1.1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .proxy-meta {
+      margin: 0;
+      font-size: 0.85rem;
+      color: rgba(226, 232, 240, 0.75);
+    }
+    .proxy-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .proxy-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.55rem 1rem;
+      border-radius: 0.75rem;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+      border: 1px solid transparent;
+      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+    .proxy-button-primary {
+      background: #38bdf8;
+      color: #0f172a;
+      border-color: rgba(56, 189, 248, 0.85);
+    }
+    .proxy-button-primary:hover {
+      background: #0ea5e9;
+      border-color: rgba(14, 165, 233, 0.9);
+      color: #0f172a;
+    }
+    .proxy-button-secondary {
+      background: transparent;
+      color: #e2e8f0;
+      border-color: rgba(226, 232, 240, 0.35);
+    }
+    .proxy-button-secondary:hover {
+      background: rgba(226, 232, 240, 0.12);
+      color: #f8fafc;
+    }
+    .proxy-frame {
+      flex: 1 1 auto;
+      width: 100%;
+      border: 0;
+      background: #ffffff;
+    }
+    .proxy-error {
+      margin: 2rem auto;
+      max-width: 640px;
+      background: #fef2f2;
+      color: #b91c1c;
+      border: 1px solid rgba(185, 28, 28, 0.25);
+      border-radius: 0.75rem;
+      padding: 1.25rem 1.5rem;
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    .proxy-error p {
+      margin: 0.25rem 0 0;
+    }
+    .proxy-error p:first-child {
+      margin-top: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="proxy-bar">
+    <div class="proxy-details">
+      <p class="proxy-name">
+        {{ node.hostname }}
+        {% if node.address %}<span>• {{ node.address }}{% if node.port %}:{% endif %}{% if node.port %}{{ node.port }}{% endif %}</span>{% endif %}
+      </p>
+      {% if expires %}
+      <p class="proxy-meta">{% blocktrans %}Session expires at {{ expires }}{% endblocktrans %}</p>
+      {% endif %}
+    </div>
+    <div class="proxy-actions">
+      {% if frame_url %}
+      <a href="{{ frame_url }}" target="_blank" rel="noopener" class="proxy-button proxy-button-primary">{% trans "Open in new tab" %}</a>
+      {% endif %}
+      <a href="{% url 'admin:nodes_node_changelist' %}" class="proxy-button proxy-button-secondary">{% trans "Back to nodes" %}</a>
+    </div>
+  </div>
+  {% if frame_url %}
+  <iframe src="{{ frame_url }}" class="proxy-frame" title="{% blocktrans with host=node.hostname %}Proxy session for {{ host }}{% endblocktrans %}"></iframe>
+  {% else %}
+  <div class="proxy-error">
+    <p>{% trans "Unable to load the remote dashboard." %}</p>
+    {% if messages %}
+      {% for message in messages %}
+        <p>{{ message }}</p>
+      {% endfor %}
+    {% endif %}
+  </div>
+  {% endif %}
+</body>
+</html>
