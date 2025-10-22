@@ -2103,6 +2103,23 @@ class PowerNavTests(TestCase):
         self.assertIn("AWG Cable Calculator", landing_labels)
         self.assertIn("Energy Tariff Calculator", landing_labels)
 
+    def test_locked_landing_shows_lock_icon(self):
+        resp = self.client.get(reverse("pages:index"))
+        html = resp.content.decode()
+        energy_index = html.find("Energy Tariff Calculator")
+        self.assertGreaterEqual(energy_index, 0)
+        icon_index = html.find("dropdown-lock-icon", energy_index, energy_index + 300)
+        self.assertGreaterEqual(icon_index, 0)
+
+    def test_lock_icon_disappears_after_login(self):
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("pages:index"))
+        html = resp.content.decode()
+        energy_index = html.find("Energy Tariff Calculator")
+        self.assertGreaterEqual(energy_index, 0)
+        icon_index = html.find("dropdown-lock-icon", energy_index, energy_index + 300)
+        self.assertEqual(icon_index, -1)
+
 
 class StaffNavVisibilityTests(TestCase):
     def setUp(self):
