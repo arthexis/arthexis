@@ -1722,7 +1722,7 @@ msgstr ""
 #: nodes/templates/admin/nodes/nodefeature/celery_report.html:41
 #: ocpp/templates/ocpp/dashboard.html:79
 msgid "Name"
-msgstr ""
+msgstr "Name"
 
 #: core/templates/admin/config.html:10 core/templates/admin/environment.html:10
 msgid "Value"
@@ -2682,7 +2682,7 @@ msgstr ""
 #: ocpp/templates/ocpp/charger_status.html:73
 #: ocpp/templates/ocpp/dashboard.html:81
 msgid "Status"
-msgstr ""
+msgstr "Status"
 
 #: core/templates/core/release_progress.html:390 pages/admin.py:472
 msgid "Path"
@@ -3618,7 +3618,7 @@ msgstr "Zukünftige Aktionen"
 #: ocpp/templates/ocpp/charger_status.html:38
 #: ocpp/templates/ocpp/dashboard.html:80 ocpp/views.py:320
 msgid "Serial Number"
-msgstr ""
+msgstr "Seriennummer"
 
 #: ocpp/models.py:69
 msgid "Display Name"
@@ -3689,17 +3689,13 @@ msgid "Security groups that can view this charge point."
 msgstr ""
 
 #: ocpp/models.py:269 ocpp/templates/admin/ocpp/location/change_form.html:9
-#, fuzzy
-#| msgid "Charger timestamps"
 msgid "Charge Point"
-msgstr "Zeitstempel der Ladestation"
+msgstr "Ladepunkt"
 
 #: ocpp/models.py:270 ocpp/templates/ocpp/dashboard.html:4
 #: ocpp/templates/ocpp/dashboard.html:7
-#, fuzzy
-#| msgid "Charger timestamps"
 msgid "Charge Points"
-msgstr "Zeitstempel der Ladestation"
+msgstr "Ladepunkte"
 
 #: ocpp/models.py:306
 msgid "Serial Number cannot be blank."
@@ -4099,27 +4095,30 @@ msgstr ""
 
 #: ocpp/templates/ocpp/dashboard.html:14
 msgid "Dismiss demo notice"
-msgstr ""
+msgstr "Demo-Hinweis schließen"
 
 #: ocpp/templates/ocpp/dashboard.html:16
 msgid "Demo OCPP 1.6 CPMS (Charge Point Management System)"
-msgstr ""
+msgstr "Demo OCPP 1.6 CPMS (Ladepunkt-Management-System)"
 
 #: ocpp/templates/ocpp/dashboard.html:17
 msgid "Everyone is welcome to use this demo to test their charge points."
-msgstr ""
+msgstr "Alle sind eingeladen, diese Demo zu nutzen, um ihre Ladepunkte zu testen."
 
 #: ocpp/templates/ocpp/dashboard.html:18
 #, python-format
 msgid ""
 "Rate limiting applies (maximum %(limit)s simultaneous connections per IP)."
 msgstr ""
+"Es gilt eine Ratenbegrenzung (maximal %(limit)s gleichzeitige Verbindungen pro IP)."
 
 #: ocpp/templates/ocpp/dashboard.html:19
 msgid ""
 "Use the following WebSocket URL format, replacing &lt;CHARGE_POINT_ID&gt; "
 "with your charge point identifier:"
 msgstr ""
+"Verwenden Sie das folgende WebSocket-URL-Format und ersetzen Sie &lt;CHARGE_POINT_ID&gt; "
+"durch den Bezeichner Ihres Ladepunkts:"
 
 #: ocpp/templates/ocpp/dashboard.html:22
 msgid ""
@@ -4128,10 +4127,13 @@ msgid ""
 "<code>charge_point_id</code>, <code>chargeBoxId</code>, <code>charge_box_id</"
 "code>, or <code>chargerId</code>."
 msgstr ""
+"Sie können den Bezeichner auch als Query-Parameter mit einem der folgenden Namen "
+"angeben: <code>cid</code>, <code>chargePointId</code>, <code>charge_point_id</code>, "
+"<code>chargeBoxId</code>, <code>charge_box_id</code> oder <code>chargerId</code>."
 
 #: ocpp/templates/ocpp/dashboard.html:92
 msgid "No charge points found."
-msgstr ""
+msgstr "Keine Ladepunkte gefunden."
 
 #: ocpp/templates/rfid/scanner.html:7 ocpp/templates/rfid/scanner.html:409
 msgid "Local Scanner"

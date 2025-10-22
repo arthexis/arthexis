@@ -1733,7 +1733,7 @@ msgstr "Constellation"
 #: nodes/templates/admin/nodes/nodefeature/celery_report.html:41
 #: ocpp/templates/ocpp/dashboard.html:79
 msgid "Name"
-msgstr ""
+msgstr "Nombre"
 
 #: core/templates/admin/config.html:10 core/templates/admin/environment.html:10
 #, fuzzy
@@ -2714,7 +2714,7 @@ msgstr ""
 #: ocpp/templates/ocpp/charger_status.html:73
 #: ocpp/templates/ocpp/dashboard.html:81
 msgid "Status"
-msgstr ""
+msgstr "Estado"
 
 #: core/templates/core/release_progress.html:390 pages/admin.py:472
 msgid "Path"
@@ -4147,27 +4147,30 @@ msgstr ""
 
 #: ocpp/templates/ocpp/dashboard.html:14
 msgid "Dismiss demo notice"
-msgstr ""
+msgstr "Descartar aviso de demostración"
 
 #: ocpp/templates/ocpp/dashboard.html:16
 msgid "Demo OCPP 1.6 CPMS (Charge Point Management System)"
-msgstr ""
+msgstr "Demostración OCPP 1.6 CPMS (Sistema de gestión de puntos de carga)"
 
 #: ocpp/templates/ocpp/dashboard.html:17
 msgid "Everyone is welcome to use this demo to test their charge points."
-msgstr ""
+msgstr "Todos son bienvenidos a usar esta demostración para probar sus puntos de carga."
 
 #: ocpp/templates/ocpp/dashboard.html:18
 #, python-format
 msgid ""
 "Rate limiting applies (maximum %(limit)s simultaneous connections per IP)."
 msgstr ""
+"Se aplica un límite de tasa (máximo %(limit)s conexiones simultáneas por IP)."
 
 #: ocpp/templates/ocpp/dashboard.html:19
 msgid ""
 "Use the following WebSocket URL format, replacing &lt;CHARGE_POINT_ID&gt; "
 "with your charge point identifier:"
 msgstr ""
+"Utilice el siguiente formato de URL de WebSocket, reemplazando &lt;CHARGE_POINT_ID&gt; "
+"con el identificador de su punto de carga:"
 
 #: ocpp/templates/ocpp/dashboard.html:22
 msgid ""
@@ -4176,6 +4179,10 @@ msgid ""
 "<code>charge_point_id</code>, <code>chargeBoxId</code>, <code>charge_box_id</"
 "code>, or <code>chargerId</code>."
 msgstr ""
+"También puede proporcionar el identificador como un parámetro de consulta usando "
+"cualquiera de los siguientes nombres: <code>cid</code>, <code>chargePointId</code>, "
+"<code>charge_point_id</code>, <code>chargeBoxId</code>, <code>charge_box_id</code> o "
+"<code>chargerId</code>."
 
 #: ocpp/templates/ocpp/dashboard.html:92
 msgid "No charge points found."
