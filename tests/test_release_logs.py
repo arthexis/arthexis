@@ -24,10 +24,14 @@ def test_run_tests_uses_custom_command(monkeypatch, tmp_path):
 
     def fake_run(cmd, capture_output, text):
         calls.append(cmd)
-        return types.SimpleNamespace(returncode=0, stdout="out", stderr="")
+        return types.SimpleNamespace(
+            returncode=0, stdout="custom-out", stderr="custom-err"
+        )
 
     monkeypatch.setattr(release.subprocess, "run", fake_run)
 
     proc = release.run_tests(log_path=log_file, command=["pytest", "-k", "smoke"])
     assert proc.returncode == 0
     assert calls == [["pytest", "-k", "smoke"]]
+    assert log_file.exists()
+    assert log_file.read_text() == "custom-outcustom-err"
