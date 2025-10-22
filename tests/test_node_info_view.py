@@ -1,6 +1,8 @@
 import uuid
 from unittest.mock import patch
 
+import pytest
+
 from django.test import Client, TestCase
 from django.urls import reverse
 
@@ -49,6 +51,7 @@ class NodeInfoViewTests(TestCase):
         self.assertEqual(payload["hostname"], "arthexis.com")
         self.assertEqual(payload["address"], "arthexis.com")
 
+    @pytest.mark.feature("gway-runner")
     def test_node_info_ignores_localhost_domain(self):
         mac = Node.get_current_mac()
         slug = f"test-node-{uuid.uuid4().hex}"
