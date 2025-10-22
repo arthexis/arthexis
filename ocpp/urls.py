@@ -3,8 +3,8 @@ from django.urls import include, path
 from . import views
 
 urlpatterns = [
-    path("", views.dashboard, name="ocpp-dashboard"),
-    path("simulator/", views.cp_simulator, name="cp-simulator"),
+    path("cpms/dashboard/", views.dashboard, name="ocpp-dashboard"),
+    path("evcs/simulator/", views.cp_simulator, name="cp-simulator"),
     path("chargers/", views.charger_list, name="charger-list"),
     path("chargers/<str:cid>/", views.charger_detail, name="charger-detail"),
     path(
@@ -46,5 +46,5 @@ urlpatterns = [
         views.charger_status,
         name="charger-status-connector",
     ),
-    path("rfid/", include("ocpp.rfid.urls")),
+    path("rfid/validator/", include("ocpp.rfid.urls")),
 ]

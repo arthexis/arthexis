@@ -1562,20 +1562,22 @@ class RoleLandingRedirectTests(TestCase):
 
     def test_satellite_redirects_to_dashboard(self):
         target = self._configure_role_landing(
-            "Satellite", "/ocpp/", "CPMS Online Dashboard"
+            "Satellite", "/ocpp/cpms/dashboard/", "CPMS Online Dashboard"
         )
         resp = self.client.get(reverse("pages:index"))
         self.assertRedirects(resp, target, fetch_redirect_response=False)
 
     def test_control_redirects_to_rfid(self):
         target = self._configure_role_landing(
-            "Control", "/ocpp/rfid/", "RFID Tag Validator"
+            "Control", "/ocpp/rfid/validator/", "RFID Tag Validator"
         )
         resp = self.client.get(reverse("pages:index"))
         self.assertRedirects(resp, target, fetch_redirect_response=False)
 
     def test_security_group_redirect_takes_priority(self):
-        self._configure_role_landing("Control", "/ocpp/rfid/", "RFID Tag Validator")
+        self._configure_role_landing(
+            "Control", "/ocpp/rfid/validator/", "RFID Tag Validator"
+        )
         role = self.node.role
         group = SecurityGroup.objects.create(name="Operators")
         group_landing = self._ensure_landing(role, "/ocpp/group/", "Group Landing")
@@ -1592,7 +1594,9 @@ class RoleLandingRedirectTests(TestCase):
         )
 
     def test_user_redirect_overrides_group_with_higher_priority(self):
-        self._configure_role_landing("Control", "/ocpp/rfid/", "RFID Tag Validator")
+        self._configure_role_landing(
+            "Control", "/ocpp/rfid/validator/", "RFID Tag Validator"
+        )
         role = self.node.role
         group = SecurityGroup.objects.create(name="Operators")
         group_landing = self._ensure_landing(role, "/ocpp/group/", "Group Landing")
@@ -1694,7 +1698,7 @@ class ConstellationNavTests(TestCase):
         )
         self.assertFalse(
             Module.objects.filter(
-                path="/ocpp/rfid/",
+                path="/ocpp/rfid/validator/",
                 node_role__name="Constellation",
                 is_deleted=False,
             ).exists()
@@ -1716,7 +1720,7 @@ class ConstellationNavTests(TestCase):
 
     def test_ocpp_dashboard_visible(self):
         resp = self.client.get(reverse("pages:index"))
-        self.assertContains(resp, 'href="/ocpp/"')
+        self.assertContains(resp, 'href="/ocpp/cpms/dashboard/"')
 
 
 class ReleaseModuleNavTests(TestCase):
@@ -1858,7 +1862,7 @@ class ControlNavTests(TestCase):
         self.client.force_login(user)
         resp = self.client.get(reverse("pages:index"))
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, 'href="/ocpp/"')
+        self.assertContains(resp, 'href="/ocpp/cpms/dashboard/"')
         self.assertContains(
             resp, 'badge rounded-pill text-bg-secondary">CHARGERS'
         )
@@ -2117,12 +2121,12 @@ class StaffNavVisibilityTests(TestCase):
     def test_nonstaff_pill_hidden(self):
         self.client.login(username="user", password="pw")
         resp = self.client.get(reverse("pages:index"))
-        self.assertContains(resp, 'href="/ocpp/"')
+        self.assertContains(resp, 'href="/ocpp/cpms/dashboard/"')
 
     def test_staff_sees_pill(self):
         self.client.login(username="staff", password="pw")
         resp = self.client.get(reverse("pages:index"))
-        self.assertContains(resp, 'href="/ocpp/"')
+        self.assertContains(resp, 'href="/ocpp/cpms/dashboard/"')
 
 
 class ModuleAdminReloadActionTests(TestCase):
@@ -2173,7 +2177,11 @@ class ModuleAdminReloadActionTests(TestCase):
         )
         self.assertSetEqual(
             charger_landings,
-            {"/ocpp/", "/ocpp/simulator/", "/ocpp/rfid/"},
+            {
+                "/ocpp/cpms/dashboard/",
+                "/ocpp/evcs/simulator/",
+                "/ocpp/rfid/validator/",
+            },
         )
 
         calculator_landings = set(
@@ -2390,7 +2398,9 @@ class LandingFixtureTests(TestCase):
         call_command("loaddata", *fixtures)
         module = Module.objects.get(path="/ocpp/", node_role__name="Constellation")
         module.create_landings()
-        self.assertEqual(module.landings.filter(path="/ocpp/rfid/").count(), 1)
+        self.assertEqual(
+            module.landings.filter(path="/ocpp/rfid/validator/").count(), 1
+        )
 
 
 class AllowedHostSubnetTests(TestCase):

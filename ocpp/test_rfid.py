@@ -771,7 +771,9 @@ class RFIDLandingTests(TestCase):
         app = Application.objects.create(name="Ocpp")
         module = Module.objects.create(node_role=role, application=app, path="/ocpp/")
         module.create_landings()
-        self.assertTrue(module.landings.filter(path="/ocpp/rfid/").exists())
+        self.assertTrue(
+            module.landings.filter(path="/ocpp/rfid/validator/").exists()
+        )
 
 
 class ScannerTemplateTests(TestCase):
