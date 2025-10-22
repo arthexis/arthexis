@@ -9,7 +9,7 @@ from core.backends import RFIDBackend
 from core.models import EnergyAccount, RFID
 
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.feature("rfid-scanner")]
 
 
 @pytest.fixture

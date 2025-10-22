@@ -6,6 +6,9 @@ from unittest.mock import Mock
 import pytest
 
 
+pytestmark = [pytest.mark.feature("rfid-scanner")]
+
+
 @pytest.fixture
 def always_on_module():
     module = importlib.import_module("ocpp.rfid.always_on")
