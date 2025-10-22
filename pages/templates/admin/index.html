@@ -47,12 +47,24 @@
         margin: 0 0 16px;
     }
     .dashboard-side .release-manager-link {
-        color: #fff;
+        color: var(--body-fg, #212529);
     }
     .dashboard-side .release-manager-link:focus,
     .dashboard-side .release-manager-link:hover {
-        color: #fff;
+        color: var(--body-fg, #212529);
         text-decoration: underline;
+    }
+    html[data-theme="dark"] .dashboard-side .release-manager-link,
+    html[data-theme="dark"] .dashboard-side .release-manager-link:focus,
+    html[data-theme="dark"] .dashboard-side .release-manager-link:hover {
+        color: #fff;
+    }
+    @media (prefers-color-scheme: dark) {
+        html[data-theme="auto"] .dashboard-side .release-manager-link,
+        html[data-theme="auto"] .dashboard-side .release-manager-link:focus,
+        html[data-theme="auto"] .dashboard-side .release-manager-link:hover {
+            color: #fff;
+        }
     }
     .dashboard-side p {
         padding: 0 16px;
