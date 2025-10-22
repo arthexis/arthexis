@@ -7,7 +7,7 @@
       "node_role": ["Control"],
       "application": ["pages"],
       "path": "/read/",
-      "menu": "Cookbook",
+      "menu": "Cookbooks",
       "is_default": false,
       "favicon": ""
     }
