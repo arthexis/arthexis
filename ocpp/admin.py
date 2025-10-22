@@ -16,6 +16,7 @@ from asgiref.sync import async_to_sync
 
 from .models import (
     Charger,
+    ChargerConfiguration,
     Simulator,
     MeterValue,
     Transaction,
@@ -106,6 +107,82 @@ class LogViewAdminMixin:
             "log_identifier": identifier,
         }
         return TemplateResponse(request, self.log_template_name, context)
+
+
+@admin.register(ChargerConfiguration)
+class ChargerConfigurationAdmin(admin.ModelAdmin):
+    list_display = ("charger_identifier", "connector_display", "created_at")
+    list_filter = ("connector_id",)
+    search_fields = ("charger_identifier",)
+    readonly_fields = (
+        "charger_identifier",
+        "connector_id",
+        "created_at",
+        "updated_at",
+        "linked_chargers",
+        "configuration_keys_display",
+        "unknown_keys_display",
+        "raw_payload_display",
+    )
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "charger_identifier",
+                    "connector_id",
+                    "linked_chargers",
+                    "created_at",
+                    "updated_at",
+                )
+            },
+        ),
+        (
+            "Payload",
+            {
+                "fields": (
+                    "configuration_keys_display",
+                    "unknown_keys_display",
+                    "raw_payload_display",
+                )
+            },
+        ),
+    )
+
+    @admin.display(description="Connector")
+    def connector_display(self, obj):
+        if obj.connector_id is None:
+            return "All"
+        return obj.connector_id
+
+    @admin.display(description="Linked charge points")
+    def linked_chargers(self, obj):
+        if obj.pk is None:
+            return ""
+        linked = [charger.identity_slug() for charger in obj.chargers.all()]
+        if not linked:
+            return "-"
+        return ", ".join(sorted(linked))
+
+    def _render_json(self, data):
+        from django.utils.html import format_html
+
+        if not data:
+            return "-"
+        formatted = json.dumps(data, indent=2, ensure_ascii=False)
+        return format_html("<pre>{}</pre>", formatted)
+
+    @admin.display(description="configurationKey")
+    def configuration_keys_display(self, obj):
+        return self._render_json(obj.configuration_keys)
+
+    @admin.display(description="unknownKey")
+    def unknown_keys_display(self, obj):
+        return self._render_json(obj.unknown_keys)
+
+    @admin.display(description="Raw payload")
+    def raw_payload_display(self, obj):
+        return self._render_json(obj.raw_payload)
 
 
 @admin.register(Location)
@@ -207,7 +284,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         ),
         (
             "Configuration",
-            {"fields": ("public_display", "require_rfid")},
+            {"fields": ("public_display", "require_rfid", "configuration")},
         ),
         (
             "References",
@@ -236,6 +313,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "availability_request_status",
         "availability_request_status_at",
         "availability_request_details",
+        "configuration",
     )
     list_display = (
         "display_name_with_fallback",
