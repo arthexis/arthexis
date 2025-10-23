@@ -81,9 +81,15 @@ class RFIDBackend:
         if not rfid_value:
             return None
 
-        tag = RFID.objects.filter(rfid=rfid_value).first()
-        if not tag or not tag.allowed:
+        tag = RFID.matching_queryset(rfid_value).filter(allowed=True).first()
+        if not tag:
             return None
+
+        update_fields: list[str] = []
+        if tag.adopt_rfid(rfid_value):
+            update_fields.append("rfid")
+        if update_fields:
+            tag.save(update_fields=update_fields)
 
         command = (tag.external_command or "").strip()
         if command:

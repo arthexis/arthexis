@@ -1,3 +1,4 @@
+from collections import defaultdict
 from io import BytesIO
 import os
 
@@ -2909,7 +2910,7 @@ class CopyRFIDForm(forms.Form):
         normalized = (cleaned or "").strip().upper()
         if not normalized:
             raise forms.ValidationError(_("RFID value is required."))
-        if RFID.objects.filter(rfid=normalized).exists():
+        if RFID.matching_queryset(normalized).exists():
             raise forms.ValidationError(
                 _("An RFID with this value already exists.")
             )
@@ -2943,6 +2944,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         "print_card_labels",
         "print_release_form",
         "copy_rfids",
+        "merge_rfids",
         "toggle_selected_user_data",
         "toggle_selected_released",
         "toggle_selected_allowed",
@@ -3176,6 +3178,145 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         )
         context["media"] = self.media + form.media
         return TemplateResponse(request, "admin/core/rfid/copy.html", context)
+
+    @admin.action(description=_("Merge RFID cards"))
+    def merge_rfids(self, request, queryset):
+        tags = list(queryset.prefetch_related("energy_accounts"))
+        if len(tags) < 2:
+            self.message_user(
+                request,
+                _("Select at least two RFIDs to merge."),
+                level=messages.WARNING,
+            )
+            return None
+
+        normalized_map: dict[int, str] = {}
+        groups: defaultdict[str, list[RFID]] = defaultdict(list)
+        unmatched = 0
+        for tag in tags:
+            normalized = RFID.normalize_code(tag.rfid)
+            normalized_map[tag.pk] = normalized
+            if not normalized:
+                unmatched += 1
+                continue
+            prefix = normalized[: RFID.MATCH_PREFIX_LENGTH]
+            groups[prefix].append(tag)
+
+        merge_groups: list[list[RFID]] = []
+        skipped = unmatched
+        for prefix, group in groups.items():
+            if len(group) < 2:
+                skipped += len(group)
+                continue
+            group.sort(
+                key=lambda item: (
+                    len(normalized_map.get(item.pk, "")),
+                    normalized_map.get(item.pk, ""),
+                    item.pk,
+                )
+            )
+            merge_groups.append(group)
+
+        if not merge_groups:
+            self.message_user(
+                request,
+                _("No matching RFIDs were found to merge."),
+                level=messages.WARNING,
+            )
+            return None
+
+        merged_tags = 0
+        merged_groups = 0
+        conflicting_accounts = 0
+        with transaction.atomic():
+            for group in merge_groups:
+                canonical = group[0]
+                update_fields: set[str] = set()
+                existing_account_ids = set(
+                    canonical.energy_accounts.values_list("pk", flat=True)
+                )
+                for tag in group[1:]:
+                    other_value = normalized_map.get(tag.pk, "")
+                    if canonical.adopt_rfid(other_value):
+                        update_fields.add("rfid")
+                        normalized_map[canonical.pk] = RFID.normalize_code(
+                            canonical.rfid
+                        )
+                    accounts = list(tag.energy_accounts.all())
+                    if accounts:
+                        transferable: list[EnergyAccount] = []
+                        for account in accounts:
+                            if existing_account_ids and account.pk not in existing_account_ids:
+                                conflicting_accounts += 1
+                                continue
+                            transferable.append(account)
+                        if transferable:
+                            canonical.energy_accounts.add(*transferable)
+                            existing_account_ids.update(
+                                account.pk for account in transferable
+                            )
+                    if tag.allowed and not canonical.allowed:
+                        canonical.allowed = True
+                        update_fields.add("allowed")
+                    if tag.released and not canonical.released:
+                        canonical.released = True
+                        update_fields.add("released")
+                    if tag.key_a_verified and not canonical.key_a_verified:
+                        canonical.key_a_verified = True
+                        update_fields.add("key_a_verified")
+                    if tag.key_b_verified and not canonical.key_b_verified:
+                        canonical.key_b_verified = True
+                        update_fields.add("key_b_verified")
+                    if tag.last_seen_on and (
+                        not canonical.last_seen_on
+                        or tag.last_seen_on > canonical.last_seen_on
+                    ):
+                        canonical.last_seen_on = tag.last_seen_on
+                        update_fields.add("last_seen_on")
+                    if not canonical.origin_node and tag.origin_node_id:
+                        canonical.origin_node = tag.origin_node
+                        update_fields.add("origin_node")
+                    merged_tags += 1
+                    tag.delete()
+                if update_fields:
+                    canonical.save(update_fields=sorted(update_fields))
+                merged_groups += 1
+
+        if merged_tags:
+            self.message_user(
+                request,
+                ngettext(
+                    "Merged %(removed)d RFID into %(groups)d canonical record.",
+                    "Merged %(removed)d RFIDs into %(groups)d canonical records.",
+                    merged_tags,
+                )
+                % {"removed": merged_tags, "groups": merged_groups},
+                level=messages.SUCCESS,
+            )
+
+        if skipped:
+            self.message_user(
+                request,
+                ngettext(
+                    "Skipped %(count)d RFID because it did not share the first %(length)d characters with another selection.",
+                    "Skipped %(count)d RFIDs because they did not share the first %(length)d characters with another selection.",
+                    skipped,
+                )
+                % {"count": skipped, "length": RFID.MATCH_PREFIX_LENGTH},
+                level=messages.WARNING,
+            )
+
+        if conflicting_accounts:
+            self.message_user(
+                request,
+                ngettext(
+                    "Skipped %(count)d energy account because the RFID was already linked to a different account.",
+                    "Skipped %(count)d energy accounts because the RFID was already linked to a different account.",
+                    conflicting_accounts,
+                )
+                % {"count": conflicting_accounts},
+                level=messages.WARNING,
+            )
 
     def _render_card_labels(
         self,
