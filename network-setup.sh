@@ -47,6 +47,10 @@ AP_NAME_LOWER=""
 SKIP_AP=false
 ETH0_SUBNET=129
 ETH0_PREFIX=16
+ETH0_MODE="shared"
+ETH0_CLIENT_ADDRESS=""
+ETH0_CLIENT_GATEWAY=""
+FORCED_ETH0_MODE="${ETH0_MODE_OVERRIDE:-}"
 AP_SET_PASSWORD=false
 OTHER_OPTIONS_USED=false
 validate_subnet_value() {
@@ -393,6 +397,128 @@ find_existing_ap_connection() {
     if [[ -n "$candidate" ]]; then
         printf '%s' "$candidate"
     fi
+    return 0
+}
+
+eth0_detect_foreign_dhcp() {
+    ETH0_CLIENT_ADDRESS=""
+    ETH0_CLIENT_GATEWAY=""
+
+    if [[ -n "$FORCED_ETH0_MODE" ]]; then
+        case "$FORCED_ETH0_MODE" in
+            shared|client)
+                ETH0_MODE="$FORCED_ETH0_MODE"
+                ;;
+            *)
+                echo "Warning: invalid forced eth0 mode '$FORCED_ETH0_MODE'; defaulting to shared." >&2
+                ETH0_MODE="shared"
+                ;;
+        esac
+        return 0
+    fi
+
+    if ! command -v dhclient >/dev/null 2>&1; then
+        ETH0_MODE="shared"
+        return 0
+    fi
+
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    local lease_file="$tmpdir/lease"
+    local pid_file="$tmpdir/pid"
+    local output=""
+    local -a dhclient_cmd=(dhclient -1 -v -d -sf /bin/true -lf "$lease_file" -pf "$pid_file" eth0)
+
+    if command -v timeout >/dev/null 2>&1; then
+        output=$(timeout 8s "${dhclient_cmd[@]}" 2>&1 || true)
+    else
+        output=$("${dhclient_cmd[@]}" 2>&1 || true)
+    fi
+
+    if [[ -f "$pid_file" ]]; then
+        local pid
+        pid=$(<"$pid_file")
+        if [[ -n "$pid" ]]; then
+            kill "$pid" 2>/dev/null || true
+        fi
+        rm -f "$pid_file"
+    fi
+
+    if [[ -s "$lease_file" ]]; then
+        ETH0_MODE="client"
+        ETH0_CLIENT_ADDRESS=$(awk '/fixed-address/ {print $2}' "$lease_file" | tr -d ';' | tail -n1)
+        ETH0_CLIENT_GATEWAY=$(awk '/option routers/ {print $3}' "$lease_file" | tr -d ';' | tail -n1)
+    else
+        ETH0_MODE="shared"
+    fi
+
+    rm -f "$lease_file"
+    rmdir "$tmpdir" 2>/dev/null || true
+
+    if [[ $ETH0_MODE == "client" ]]; then
+        local details=""
+        if [[ -n "$ETH0_CLIENT_ADDRESS" ]]; then
+            details="address $ETH0_CLIENT_ADDRESS"
+        fi
+        if [[ -n "$ETH0_CLIENT_GATEWAY" ]]; then
+            if [[ -n "$details" ]]; then
+                details+="; "
+            fi
+            details+="gateway $ETH0_CLIENT_GATEWAY"
+        fi
+        if [[ -n "$details" ]]; then
+            echo "Detected DHCP offer on eth0 ($details)."
+        else
+            if [[ "$output" =~ DHCPOFFER ]]; then
+                echo "Detected DHCP offer on eth0."
+            else
+                echo "Detected DHCP response on eth0."
+            fi
+        fi
+    fi
+
+    return 0
+}
+
+ensure_evcs_nat_rules() {
+    local downstream="eth0"
+    local -a upstreams=(wlan0 wlan1)
+
+    if [[ $# -gt 0 ]]; then
+        downstream="$1"
+        shift
+    fi
+
+    if [[ $# -gt 0 ]]; then
+        upstreams=()
+        while [[ $# -gt 0 ]]; do
+            upstreams+=("$1")
+            shift
+        done
+    fi
+
+    if ! command -v iptables >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if command -v sysctl >/dev/null 2>&1; then
+        sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
+    fi
+
+    local upstream
+    for upstream in "${upstreams[@]}"; do
+        [[ -z "$upstream" ]] && continue
+        if ! ip link show "$upstream" >/dev/null 2>&1; then
+            continue
+        fi
+        iptables -t nat -C POSTROUTING -o "$upstream" -j MASQUERADE 2>/dev/null || \
+            iptables -t nat -A POSTROUTING -o "$upstream" -j MASQUERADE
+        iptables -C FORWARD -i "$downstream" -o "$upstream" -j ACCEPT 2>/dev/null || \
+            iptables -A FORWARD -i "$downstream" -o "$upstream" -j ACCEPT
+        iptables -C FORWARD -i "$upstream" -o "$downstream" -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
+            iptables -A FORWARD -i "$upstream" -o "$downstream" -m state --state RELATED,ESTABLISHED -j ACCEPT
+    done
+
     return 0
 }
 
@@ -866,29 +992,74 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
         echo "Warning: device eth0 not found; skipping eth0 configuration." >&2
     else
         nmcli device disconnect eth0 >/dev/null 2>&1 || true
-        nmcli -t -f NAME,DEVICE connection show | awk -F: -v protect="$PROTECTED_CONN" '$2=="eth0" && $1!=protect {print $1}' |
+        eth0_detect_foreign_dhcp
+
+        keep_conn="eth0-shared"
+        if [[ $ETH0_MODE == "client" ]]; then
+            keep_conn="eth0-dhcp"
+        fi
+
+        nmcli -t -f NAME,DEVICE connection show | awk -F: -v protect="$PROTECTED_CONN" -v keep="$keep_conn" '$2=="eth0" && $1!=protect && $1!=keep {print $1}' |
             while read -r con; do
                 nmcli connection delete "$con"
             done
-        eth0_ip="192.168.${ETH0_SUBNET}.10/${ETH0_PREFIX}"
-        if nmcli -t -f NAME connection show | grep -Fxq "eth0-shared"; then
-            nmcli connection modify eth0-shared \
-                connection.interface-name eth0 \
-                ipv4.method shared \
-                ipv4.addresses "$eth0_ip" \
-                ipv4.never-default yes \
-                ipv4.route-metric 10000 \
-                ipv6.method ignore \
-                ipv6.never-default yes \
-                connection.autoconnect yes \
-                connection.autoconnect-priority 0
+
+        if [[ $ETH0_MODE == "client" ]]; then
+            client_msg="Configuring eth0 as DHCP client"
+            if [[ -n "$ETH0_CLIENT_ADDRESS" ]]; then
+                client_msg+=" ($ETH0_CLIENT_ADDRESS"
+                if [[ -n "$ETH0_CLIENT_GATEWAY" ]]; then
+                    client_msg+=" via $ETH0_CLIENT_GATEWAY"
+                fi
+                client_msg+=")"
+            elif [[ -n "$ETH0_CLIENT_GATEWAY" ]]; then
+                client_msg+=" (gateway $ETH0_CLIENT_GATEWAY)"
+            fi
+            echo "$client_msg."
+
+            nmcli connection delete eth0-shared >/dev/null 2>&1 || true
+            if nmcli -t -f NAME connection show | grep -Fxq "eth0-dhcp"; then
+                nmcli connection modify eth0-dhcp \
+                    connection.interface-name eth0 \
+                    ipv4.method auto \
+                    ipv4.never-default yes \
+                    ipv4.route-metric 10000 \
+                    ipv6.method ignore \
+                    ipv6.never-default yes \
+                    connection.autoconnect yes \
+                    connection.autoconnect-priority 0
+            else
+                nmcli connection add type ethernet ifname eth0 con-name eth0-dhcp autoconnect yes \
+                    ipv4.method auto ipv4.never-default yes ipv4.route-metric 10000 \
+                    ipv6.method ignore ipv6-never-default yes \
+                    connection.autoconnect-priority 0
+            fi
+            nmcli connection up eth0-dhcp >/dev/null 2>&1 || true
+            ensure_evcs_nat_rules eth0
         else
-            nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect yes \
-                ipv4.method shared ipv4.addresses "$eth0_ip" ipv4.never-default yes \
-                ipv4.route-metric 10000 ipv6.method ignore ipv6-never-default yes \
-                connection.autoconnect-priority 0
+            echo "Configuring eth0 in shared mode."
+            nmcli connection delete eth0-dhcp >/dev/null 2>&1 || true
+            eth0_ip="192.168.${ETH0_SUBNET}.10/${ETH0_PREFIX}"
+            if nmcli -t -f NAME connection show | grep -Fxq "eth0-shared"; then
+                nmcli connection modify eth0-shared \
+                    connection.interface-name eth0 \
+                    ipv4.method shared \
+                    ipv4.addresses "$eth0_ip" \
+                    ipv4.never-default yes \
+                    ipv4.route-metric 10000 \
+                    ipv6.method ignore \
+                    ipv6.never-default yes \
+                    connection.autoconnect yes \
+                    connection.autoconnect-priority 0
+            else
+                nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect yes \
+                    ipv4.method shared ipv4.addresses "$eth0_ip" ipv4.never-default yes \
+                    ipv4.route-metric 10000 ipv6.method ignore ipv6-never-default yes \
+                    connection.autoconnect-priority 0
+            fi
+            nmcli connection up eth0-shared >/dev/null 2>&1 || true
+            ensure_evcs_nat_rules eth0
         fi
-        nmcli connection up eth0-shared >/dev/null 2>&1 || true
     fi
 
     if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
