@@ -2176,8 +2176,8 @@ class RFID(Entity):
                 return tag, True
         raise IntegrityError("Unable to allocate label id for scanned RFID")
 
-    @staticmethod
-    def get_account_by_rfid(value):
+    @classmethod
+    def get_account_by_rfid(cls, value):
         """Return the energy account associated with an RFID code if it exists."""
         try:
             EnergyAccount = apps.get_model("core", "EnergyAccount")
