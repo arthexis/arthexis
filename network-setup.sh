@@ -16,9 +16,13 @@ cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 mkdir -p "$LOCK_DIR"
 
+DEFAULT_ETH0_SUBNET_PREFIX="192.168"
+DEFAULT_ETH0_SUBNET_SUFFIX="129"
+DEFAULT_ETH0_SUBNET_BASE="${DEFAULT_ETH0_SUBNET_PREFIX}.${DEFAULT_ETH0_SUBNET_SUFFIX}"
+
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet N[/P]] [--ap-set-password]
+Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet SUBNET[/P]] [--ap-set-password]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --no-firewall   Skip firewall port validation.
@@ -27,8 +31,8 @@ Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i]
   --no-watchdog   Skip installing the WiFi watchdog service.
   --vnc           Require validating that a VNC service is enabled.
   --no-vnc        Skip validating that a VNC service is enabled (default).
-  --subnet N[/P]  Configure eth0 on the 192.168.N.0/P subnet (default: 129/16).
-                  Accepts prefix lengths of 16 or 24.
+  --subnet SUBNET[/P]  Configure eth0 on the SUBNET.0/P subnet (default: ${DEFAULT_ETH0_SUBNET_BASE}/16).
+                       SUBNET may be Z (uses ${DEFAULT_ETH0_SUBNET_PREFIX}.Z) or X.Y.Z. Prefix must be 16 or 24.
   --ap-set-password  Update the configured access point password without running other setup steps.
 USAGE
 }
@@ -45,11 +49,11 @@ AP_NAME="$DEFAULT_AP_NAME"
 AP_SPECIFIED=false
 AP_NAME_LOWER=""
 SKIP_AP=false
-ETH0_SUBNET=129
+ETH0_SUBNET_BASE="$DEFAULT_ETH0_SUBNET_BASE"
 ETH0_PREFIX=16
 AP_SET_PASSWORD=false
 OTHER_OPTIONS_USED=false
-validate_subnet_value() {
+validate_subnet_octet() {
     local value="$1"
     if [[ ! "$value" =~ ^[0-9]+$ ]]; then
         echo "Error: --subnet requires an integer between 0 and 254." >&2
@@ -57,6 +61,30 @@ validate_subnet_value() {
     fi
     if (( value < 0 || value > 254 )); then
         echo "Error: --subnet requires an integer between 0 and 254." >&2
+        exit 1
+    fi
+}
+validate_subnet_triplet() {
+    local value="$1"
+    local IFS='.'
+    read -r -a octets <<< "$value"
+    if [[ ${#octets[@]} -ne 3 ]]; then
+        echo "Error: --subnet requires three octets in the form X.Y.Z." >&2
+        exit 1
+    fi
+    for i in "${!octets[@]}"; do
+        local octet="${octets[$i]}"
+        if [[ ! "$octet" =~ ^[0-9]+$ ]]; then
+            echo "Error: --subnet octets must be integers between 0 and 255." >&2
+            exit 1
+        fi
+        if (( octet < 0 || octet > 255 )); then
+            echo "Error: --subnet octets must be integers between 0 and 255." >&2
+            exit 1
+        fi
+    done
+    if (( octets[2] > 254 )); then
+        echo "Error: --subnet third octet must be between 0 and 254." >&2
         exit 1
     fi
 }
@@ -79,13 +107,25 @@ set_subnet_and_prefix() {
         subnet="${value%%/*}"
         prefix="${value##*/}"
         if [[ -z "$subnet" || -z "$prefix" ]]; then
-            echo "Error: --subnet requires a value in the form N or N/P." >&2
+            echo "Error: --subnet requires a value in the form Z, X.Y.Z, Z/P, or X.Y.Z/P." >&2
             exit 1
         fi
     fi
-    validate_subnet_value "$subnet"
+    if [[ -z "$subnet" ]]; then
+        echo "Error: --subnet requires a value in the form Z, X.Y.Z, Z/P, or X.Y.Z/P." >&2
+        exit 1
+    fi
+    if [[ "$subnet" =~ ^[0-9]+$ ]]; then
+        validate_subnet_octet "$subnet"
+        ETH0_SUBNET_BASE="${DEFAULT_ETH0_SUBNET_PREFIX}.${subnet}"
+    elif [[ "$subnet" =~ ^[0-9]+(\.[0-9]+){2}$ ]]; then
+        validate_subnet_triplet "$subnet"
+        ETH0_SUBNET_BASE="$subnet"
+    else
+        echo "Error: --subnet requires a value in the form Z, X.Y.Z, Z/P, or X.Y.Z/P." >&2
+        exit 1
+    fi
     validate_prefix_value "$prefix"
-    ETH0_SUBNET="$subnet"
     ETH0_PREFIX="$prefix"
 }
 while [[ $# -gt 0 ]]; do
@@ -870,7 +910,7 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
             while read -r con; do
                 nmcli connection delete "$con"
             done
-        eth0_ip="192.168.${ETH0_SUBNET}.10/${ETH0_PREFIX}"
+        eth0_ip="${ETH0_SUBNET_BASE}.10/${ETH0_PREFIX}"
         if nmcli -t -f NAME connection show | grep -Fxq "eth0-shared"; then
             nmcli connection modify eth0-shared \
                 connection.interface-name eth0 \
