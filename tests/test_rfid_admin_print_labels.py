@@ -17,7 +17,7 @@ from django.http import HttpResponse
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from core.models import RFID
+from core.models import EnergyAccount, RFID
 
 
 pytestmark = [pytest.mark.feature("rfid-scanner")]
@@ -132,3 +132,86 @@ class RFIDAdminPrintLabelsTests(TestCase):
         )
         self.assertTrue(response.content.startswith(b"%PDF"))
         self.assertGreater(len(response.content), 500)
+
+
+class RFIDAdminMergeTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="rfid-merge-admin",
+            email="merge@example.com",
+            password="password",
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.url = reverse("admin:core_rfid_changelist")
+
+    def test_merge_rfids_compacts_to_shortest_identifier(self):
+        account_b = EnergyAccount.objects.create(name="Account B")
+        canonical = RFID.objects.create(rfid="75075E74", allowed=False, released=False)
+        duplicate = RFID.objects.create(rfid="75075E74962580", allowed=True, released=True)
+        duplicate.energy_accounts.add(account_b)
+
+        response = self.client.post(
+            self.url,
+            data={
+                "action": "merge_rfids",
+                ACTION_CHECKBOX_NAME: [str(canonical.pk), str(duplicate.pk)],
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Merged 1 RFID into 1 canonical record.")
+        self.assertFalse(RFID.objects.filter(pk=duplicate.pk).exists())
+
+        canonical.refresh_from_db()
+        self.assertEqual(canonical.rfid, "75075E74")
+        self.assertTrue(canonical.allowed)
+        self.assertTrue(canonical.released)
+        self.assertQuerySetEqual(
+            canonical.energy_accounts.order_by("pk").values_list("pk", flat=True),
+            [account_b.pk],
+            ordered=True,
+        )
+
+    def test_merge_rfids_skips_non_matching_selection(self):
+        canonical = RFID.objects.create(rfid="A1B2C3D4")
+        account_a = EnergyAccount.objects.create(name="Account A")
+        canonical.energy_accounts.add(account_a)
+        duplicate = RFID.objects.create(rfid="A1B2C3D4FFEEDD")
+        account_b = EnergyAccount.objects.create(name="Account B")
+        duplicate.energy_accounts.add(account_b)
+        outsider = RFID.objects.create(rfid="DDCCBBAA")
+
+        response = self.client.post(
+            self.url,
+            data={
+                "action": "merge_rfids",
+                ACTION_CHECKBOX_NAME: [
+                    str(canonical.pk),
+                    str(duplicate.pk),
+                    str(outsider.pk),
+                ],
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Skipped 1 RFID because it did not share the first 8 characters with another selection.",
+        )
+        self.assertContains(
+            response,
+            "Skipped 1 energy account because the RFID was already linked to a different account.",
+        )
+
+        self.assertTrue(RFID.objects.filter(pk=canonical.pk).exists())
+        self.assertTrue(RFID.objects.filter(pk=outsider.pk).exists())
+        self.assertFalse(RFID.objects.filter(pk=duplicate.pk).exists())
+        self.assertQuerySetEqual(
+            canonical.energy_accounts.order_by("pk").values_list("pk", flat=True),
+            [account_a.pk],
+            ordered=True,
+        )

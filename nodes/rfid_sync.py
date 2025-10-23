@@ -99,7 +99,7 @@ def apply_rfid_payload(
         last_seen = entry.get("last_seen_on")
         defaults["last_seen_on"] = parse_datetime(last_seen) if last_seen else None
 
-    obj, created = RFID.objects.update_or_create(rfid=rfid_value, defaults=defaults)
+    obj, created = RFID.update_or_create_from_code(rfid_value, defaults=defaults)
 
     outcome.instance = obj
     outcome.created = created

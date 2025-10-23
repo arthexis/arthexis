@@ -56,9 +56,9 @@ class Command(BaseCommand):
                         released_filter == "true"
                     ):
                         continue
-                    tag, _ = RFID.objects.update_or_create(
-                        rfid=rfid.upper(),
-                        defaults={
+                    tag, _ = RFID.update_or_create_from_code(
+                        rfid,
+                        {
                             "custom_label": custom_label,
                             "allowed": allowed,
                             "color": color,

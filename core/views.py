@@ -1788,9 +1788,9 @@ def rfid_batch(request):
             else:
                 post_auth_command = post_auth_command.strip()
 
-            tag, _ = RFID.objects.update_or_create(
-                rfid=rfid.upper(),
-                defaults={
+            tag, _ = RFID.update_or_create_from_code(
+                rfid,
+                {
                     "allowed": allowed,
                     "color": color,
                     "released": released,

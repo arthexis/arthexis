@@ -58,6 +58,19 @@ def test_authenticate_returns_none_when_account_has_no_user(backend):
     assert backend.authenticate(request=None, rfid="fed654") is None
 
 
+def test_authenticate_matches_by_prefix(backend, user):
+    account = EnergyAccount.objects.create(name="Prefix Account", user=user)
+    tag = RFID.objects.create(rfid="75075E74962580")
+    account.rfids.add(tag)
+
+    authenticated = backend.authenticate(request=None, rfid="75075E74")
+
+    assert authenticated == user
+
+    tag.refresh_from_db()
+    assert tag.rfid == "75075E74"
+
+
 def test_get_user(backend, user):
     assert backend.get_user(user.pk) == user
     assert backend.get_user(999999) is None
@@ -94,3 +107,35 @@ def test_register_scan_updates_existing_endianness():
     first_tag.refresh_from_db()
     assert first_tag.rfid == "A1B2C3D4"
     assert first_tag.endianness == RFID.BIG_ENDIAN
+
+
+def test_register_scan_prefers_shortest_identifier():
+    RFID.objects.all().delete()
+
+    tag, created = RFID.register_scan("75075E74962580", endianness=RFID.BIG_ENDIAN)
+    assert created is True
+
+    result, created_again = RFID.register_scan("75075E74", endianness=RFID.BIG_ENDIAN)
+
+    assert created_again is False
+    assert result.pk == tag.pk
+
+    tag.refresh_from_db()
+    assert tag.rfid == "75075E74"
+
+
+def test_update_or_create_from_code_matches_prefix():
+    tag = RFID.objects.create(rfid="CAFEBEEF123456", allowed=False, released=False)
+
+    updated, created = RFID.update_or_create_from_code(
+        "CAFEBEEF",
+        {"allowed": True, "released": True},
+    )
+
+    assert created is False
+    assert updated.pk == tag.pk
+
+    tag.refresh_from_db()
+    assert tag.rfid == "CAFEBEEF"
+    assert tag.allowed is True
+    assert tag.released is True

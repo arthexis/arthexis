@@ -301,11 +301,18 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         """Return the energy account for the provided RFID if valid."""
         if not id_tag:
             return None
-        return await database_sync_to_async(
-            EnergyAccount.objects.filter(
-                rfids__rfid=id_tag.upper(), rfids__allowed=True
-            ).first
-        )()
+
+        def _resolve() -> EnergyAccount | None:
+            matches = CoreRFID.matching_queryset(id_tag).filter(allowed=True)
+            if not matches.exists():
+                return None
+            return (
+                EnergyAccount.objects.filter(rfids__in=matches)
+                .distinct()
+                .first()
+            )
+
+        return await database_sync_to_async(_resolve)()
 
     async def _ensure_rfid_seen(self, id_tag: str) -> CoreRFID | None:
         """Ensure an RFID record exists and update its last seen timestamp."""

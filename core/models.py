@@ -5,7 +5,7 @@ from django.contrib.auth.models import (
 )
 from django.db import DatabaseError, IntegrityError, connections, models, transaction
 from django.db.models import Q
-from django.db.models.functions import Lower
+from django.db.models.functions import Lower, Length
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
@@ -1764,6 +1764,7 @@ class RFID(Entity):
     """RFID tag that may be assigned to one account."""
 
     label_id = models.AutoField(primary_key=True, db_column="label_id")
+    MATCH_PREFIX_LENGTH = 8
     rfid = models.CharField(
         max_length=255,
         unique=True,
@@ -1940,6 +1941,108 @@ class RFID(Entity):
         return str(self.label_id)
 
     @classmethod
+    def normalize_code(cls, value: str) -> str:
+        """Return ``value`` normalized for comparisons."""
+
+        return "".join((value or "").split()).upper()
+
+    def adopt_rfid(self, candidate: str) -> bool:
+        """Adopt ``candidate`` as the stored RFID if it is a better match."""
+
+        normalized = type(self).normalize_code(candidate)
+        if not normalized:
+            return False
+        current = type(self).normalize_code(self.rfid)
+        if current == normalized:
+            return False
+        if not current:
+            self.rfid = normalized
+            return True
+        reversed_current = type(self).reverse_uid(current)
+        if reversed_current and reversed_current == normalized:
+            self.rfid = normalized
+            return True
+        if len(normalized) < len(current):
+            self.rfid = normalized
+            return True
+        if len(normalized) == len(current) and normalized < current:
+            self.rfid = normalized
+            return True
+        return False
+
+    @classmethod
+    def matching_queryset(cls, value: str) -> models.QuerySet["RFID"]:
+        """Return RFID records matching ``value`` using prefix comparison."""
+
+        normalized = cls.normalize_code(value)
+        if not normalized:
+            return cls.objects.none()
+
+        conditions: list[Q] = []
+        candidate = normalized
+        if candidate:
+            conditions.append(Q(rfid=candidate))
+        alternate = cls.reverse_uid(candidate)
+        if alternate and alternate != candidate:
+            conditions.append(Q(rfid=alternate))
+
+        prefix_length = min(len(candidate), cls.MATCH_PREFIX_LENGTH)
+        if prefix_length:
+            prefix = candidate[:prefix_length]
+            conditions.append(Q(rfid__startswith=prefix))
+            if alternate and alternate != candidate:
+                alt_prefix = alternate[:prefix_length]
+                if alt_prefix:
+                    conditions.append(Q(rfid__startswith=alt_prefix))
+
+        query: Q | None = None
+        for condition in conditions:
+            query = condition if query is None else query | condition
+
+        if query is None:
+            return cls.objects.none()
+
+        queryset = cls.objects.filter(query).distinct()
+        return queryset.annotate(rfid_length=Length("rfid")).order_by(
+            "rfid_length", "rfid", "pk"
+        )
+
+    @classmethod
+    def find_match(cls, value: str) -> "RFID | None":
+        """Return the best matching RFID for ``value`` if it exists."""
+
+        return cls.matching_queryset(value).first()
+
+    @classmethod
+    def update_or_create_from_code(
+        cls, value: str, defaults: dict[str, Any] | None = None
+    ) -> tuple["RFID", bool]:
+        """Update or create an RFID using relaxed matching rules."""
+
+        normalized = cls.normalize_code(value)
+        if not normalized:
+            raise ValueError("RFID value is required")
+
+        defaults_map = defaults.copy() if defaults else {}
+        existing = cls.find_match(normalized)
+        if existing:
+            update_fields: set[str] = set()
+            if existing.adopt_rfid(normalized):
+                update_fields.add("rfid")
+            for field_name, new_value in defaults_map.items():
+                if getattr(existing, field_name) != new_value:
+                    setattr(existing, field_name, new_value)
+                    update_fields.add(field_name)
+            if update_fields:
+                existing.save(update_fields=sorted(update_fields))
+            return existing, False
+
+        create_kwargs = defaults_map
+        create_kwargs["rfid"] = normalized
+        tag = cls.objects.create(**create_kwargs)
+        return tag, True
+
+    @classmethod
     def normalize_endianness(cls, value: object) -> str:
         """Return a valid endianness value, defaulting to BIG."""
 
@@ -2033,25 +2136,12 @@ class RFID(Entity):
     ) -> tuple["RFID", bool]:
         """Return or create an RFID that was detected via scanning."""
 
-        normalized = "".join((rfid or "").split()).upper()
+        normalized = cls.normalize_code(rfid)
         desired_endianness = cls.normalize_endianness(endianness)
-        alternate = None
-        if normalized and len(normalized) % 2 == 0:
-            bytes_list = [normalized[i : i + 2] for i in range(0, len(normalized), 2)]
-            bytes_list.reverse()
-            alternate_candidate = "".join(bytes_list)
-            if alternate_candidate != normalized:
-                alternate = alternate_candidate
-
-        existing = None
-        if normalized:
-            existing = cls.objects.filter(rfid=normalized).first()
-        if not existing and alternate:
-            existing = cls.objects.filter(rfid=alternate).first()
+        existing = cls.find_match(normalized)
         if existing:
             update_fields: list[str] = []
-            if normalized and existing.rfid != normalized:
-                existing.rfid = normalized
+            if existing.adopt_rfid(normalized):
                 update_fields.append("rfid")
             if existing.endianness != desired_endianness:
                 existing.endianness = desired_endianness
@@ -2079,7 +2169,7 @@ class RFID(Entity):
                     tag = cls.objects.create(**create_kwargs)
                     cls._reset_label_sequence()
             except IntegrityError:
-                existing = cls.objects.filter(rfid=normalized).first()
+                existing = cls.find_match(normalized)
                 if existing:
                     return existing, False
             else:
@@ -2093,9 +2183,14 @@ class RFID(Entity):
             EnergyAccount = apps.get_model("core", "EnergyAccount")
         except LookupError:  # pragma: no cover - energy accounts app optional
             return None
-        return EnergyAccount.objects.filter(
-            rfids__rfid=value.upper(), rfids__allowed=True
-        ).first()
+        matches = cls.matching_queryset(value).filter(allowed=True)
+        if not matches.exists():
+            return None
+        return (
+            EnergyAccount.objects.filter(rfids__in=matches)
+            .distinct()
+            .first()
+        )
 
     class Meta:
         verbose_name = "RFID"

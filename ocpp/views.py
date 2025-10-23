@@ -230,12 +230,13 @@ def _transaction_rfid_details(
         if cache is not None and cache_key in cache:
             return cache[cache_key]
         tag = (
-            RFID.objects.filter(rfid=normalized)
+            RFID.matching_queryset(normalized)
             .only("pk", "label_id", "custom_label")
             .first()
         )
         rfid_url = None
         label_value = None
+        canonical_value = normalized
         if tag:
             try:
                 rfid_url = reverse("admin:core_rfid_change", args=[tag.pk])
@@ -246,11 +247,12 @@ def _transaction_rfid_details(
                 label_value = custom_label
             elif tag.label_id is not None:
                 label_value = str(tag.label_id)
-        display_value = label_value or normalized
+            canonical_value = tag.rfid or canonical_value
+        display_value = label_value or canonical_value
         details = {
             "value": display_value,
             "url": rfid_url,
-            "uid": normalized,
+            "uid": canonical_value,
             "type": "rfid",
             "display_label": gettext("RFID"),
         }
