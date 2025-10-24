@@ -91,9 +91,7 @@ from .models import (
     SecurityGroup,
     InviteLead,
     PublicWifiAccess,
-    AssistantProfile,
     Todo,
-    hash_key,
 )
 from .user_data import (
     EntityModelAdmin,
@@ -110,8 +108,6 @@ from .rfid_import_export import (
     parse_accounts,
     serialize_accounts,
 )
-from .mcp import process as mcp_process
-from .mcp.server import resolve_base_urls
 from . import release as release_utils
 
 logger = logging.getLogger(__name__)
@@ -1304,46 +1300,6 @@ class ReleaseManagerInlineForm(ProfileFormMixin, forms.ModelForm):
         }
 
 
-class AssistantProfileInlineForm(ProfileFormMixin, forms.ModelForm):
-    user_key = forms.CharField(
-        required=False,
-        widget=forms.PasswordInput(render_value=True),
-        help_text="Provide a plain key to create or rotate credentials.",
-    )
-    profile_fields = ("assistant_name", "user_key", "scopes", "is_active")
-
-    class Meta:
-        model = AssistantProfile
-        fields = ("assistant_name", "scopes", "is_active")
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not self.instance.pk and "is_active" in self.fields:
-            self.fields["is_active"].initial = False
-
-    def clean(self):
-        cleaned = super().clean()
-        if cleaned.get("DELETE"):
-            return cleaned
-        if not self.instance.pk and not cleaned.get("user_key"):
-            if cleaned.get("scopes") or cleaned.get("is_active"):
-                raise forms.ValidationError(
-                    "Provide a user key to create an assistant profile."
-                )
-        return cleaned
-
-    def save(self, commit=True):
-        instance = super().save(commit=False)
-        user_key = self.cleaned_data.get("user_key")
-        if user_key:
-            instance.user_key_hash = hash_key(user_key)
-            instance.last_used_at = None
-        if commit:
-            instance.save()
-            self.save_m2m()
-        return instance
-
-
 PROFILE_INLINE_CONFIG = {
     OdooProfile: {
         "form": OdooProfileInlineForm,
@@ -1474,12 +1430,6 @@ PROFILE_INLINE_CONFIG = {
             "secondary_pypi_url",
         ),
     },
-    AssistantProfile: {
-        "form": AssistantProfileInlineForm,
-        "fields": ("assistant_name", "user_key", "scopes", "is_active"),
-        "readonly_fields": ("user_key_hash", "created_at", "last_used_at"),
-        "template": "admin/edit_inline/profile_stacked.html",
-    },
 }
 
 
@@ -1526,7 +1476,6 @@ PROFILE_MODELS = (
     EmailOutbox,
     SocialProfile,
     ReleaseManager,
-    AssistantProfile,
 )
 USER_PROFILE_INLINES = [
     _build_profile_inline(model, "user") for model in PROFILE_MODELS
@@ -2011,188 +1960,6 @@ class EmailInboxAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmi
             "opts": self.model._meta,
         }
         return TemplateResponse(request, "admin/core/emailinbox/search.html", context)
-
-
-@admin.register(AssistantProfile)
-class AssistantProfileAdmin(
-    ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
-):
-    list_display = ("assistant_name", "owner", "created_at", "last_used_at", "is_active")
-    readonly_fields = ("user_key_hash", "created_at", "last_used_at")
-
-    change_form_template = "admin/workgroupassistantprofile_change_form.html"
-    change_list_template = "admin/assistantprofile_change_list.html"
-    change_actions = ["my_profile_action"]
-    changelist_actions = ["my_profile"]
-    fieldsets = (
-        ("Owner", {"fields": ("user", "group")}),
-        ("Credentials", {"fields": ("user_key_hash",)}),
-        (
-            "Configuration",
-            {
-                "fields": (
-                    "assistant_name",
-                    "scopes",
-                    "is_active",
-                    "created_at",
-                    "last_used_at",
-                )
-            },
-        ),
-    )
-
-    def owner(self, obj):
-        return obj.owner_display()
-
-    owner.short_description = "Owner"
-
-    def get_urls(self):
-        urls = super().get_urls()
-        opts = self.model._meta
-        app_label = opts.app_label
-        model_name = opts.model_name
-        custom = [
-            path(
-                "<path:object_id>/generate-key/",
-                self.admin_site.admin_view(self.generate_key),
-                name=f"{app_label}_{model_name}_generate_key",
-            ),
-            path(
-                "server/start/",
-                self.admin_site.admin_view(self.start_server),
-                name=f"{app_label}_{model_name}_start_server",
-            ),
-            path(
-                "server/stop/",
-                self.admin_site.admin_view(self.stop_server),
-                name=f"{app_label}_{model_name}_stop_server",
-            ),
-            path(
-                "server/status/",
-                self.admin_site.admin_view(self.server_status),
-                name=f"{app_label}_{model_name}_status",
-            ),
-        ]
-        return custom + urls
-
-    def changelist_view(self, request, extra_context=None):
-        extra_context = extra_context or {}
-        status = mcp_process.get_status()
-        opts = self.model._meta
-        app_label = opts.app_label
-        model_name = opts.model_name
-        extra_context.update(
-            {
-                "mcp_status": status,
-                "mcp_server_actions": {
-                    "start": reverse(f"admin:{app_label}_{model_name}_start_server"),
-                    "stop": reverse(f"admin:{app_label}_{model_name}_stop_server"),
-                    "status": reverse(f"admin:{app_label}_{model_name}_status"),
-                },
-            }
-        )
-        return super().changelist_view(request, extra_context=extra_context)
-
-    def _redirect_to_changelist(self):
-        opts = self.model._meta
-        return HttpResponseRedirect(
-            reverse(f"admin:{opts.app_label}_{opts.model_name}_changelist")
-        )
-
-    def generate_key(self, request, object_id, *args, **kwargs):
-        profile = self.get_object(request, object_id)
-        if profile is None:
-            return HttpResponseRedirect("../")
-        if profile.user is None:
-            self.message_user(
-                request,
-                "Assign a user before generating a key.",
-                level=messages.ERROR,
-            )
-            return HttpResponseRedirect("../")
-        profile, key = AssistantProfile.issue_key(profile.user)
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": self.model._meta,
-            "original": profile,
-            "user_key": key,
-        }
-        return TemplateResponse(request, "admin/assistantprofile_key.html", context)
-
-    def render_change_form(
-        self, request, context, add=False, change=False, form_url="", obj=None
-    ):
-        response = super().render_change_form(
-            request, context, add=add, change=change, form_url=form_url, obj=obj
-        )
-        config = dict(getattr(settings, "MCP_SIGIL_SERVER", {}))
-        host = config.get("host") or "127.0.0.1"
-        port = config.get("port", 8800)
-        base_url, issuer_url = resolve_base_urls(config)
-        mount_path = config.get("mount_path") or "/"
-        display_base_url = base_url or f"http://{host}:{port}"
-        display_issuer_url = issuer_url or display_base_url
-        chat_endpoint = f"{display_base_url.rstrip('/')}/api/chat/"
-        if isinstance(response, dict):
-            response.setdefault("mcp_server_host", host)
-            response.setdefault("mcp_server_port", port)
-            response.setdefault("mcp_server_base_url", display_base_url)
-            response.setdefault("mcp_server_issuer_url", display_issuer_url)
-            response.setdefault("mcp_server_mount_path", mount_path)
-            response.setdefault("mcp_server_chat_endpoint", chat_endpoint)
-        else:
-            context_data = getattr(response, "context_data", None)
-            if context_data is not None:
-                context_data.setdefault("mcp_server_host", host)
-                context_data.setdefault("mcp_server_port", port)
-                context_data.setdefault("mcp_server_base_url", display_base_url)
-                context_data.setdefault("mcp_server_issuer_url", display_issuer_url)
-                context_data.setdefault("mcp_server_mount_path", mount_path)
-                context_data.setdefault("mcp_server_chat_endpoint", chat_endpoint)
-        return response
-
-    def start_server(self, request):
-        try:
-            pid = mcp_process.start_server()
-        except mcp_process.ServerAlreadyRunningError as exc:
-            self.message_user(request, str(exc), level=messages.WARNING)
-        except mcp_process.ServerStartError as exc:
-            self.message_user(request, str(exc), level=messages.ERROR)
-        else:
-            self.message_user(
-                request,
-                f"Started MCP server (PID {pid}).",
-                level=messages.SUCCESS,
-            )
-        return self._redirect_to_changelist()
-
-    def stop_server(self, request):
-        try:
-            pid = mcp_process.stop_server()
-        except mcp_process.ServerNotRunningError as exc:
-            self.message_user(request, str(exc), level=messages.WARNING)
-        except mcp_process.ServerStopError as exc:
-            self.message_user(request, str(exc), level=messages.ERROR)
-        else:
-            self.message_user(
-                request,
-                f"Stopped MCP server (PID {pid}).",
-                level=messages.SUCCESS,
-            )
-        return self._redirect_to_changelist()
-
-    def server_status(self, request):
-        status = mcp_process.get_status()
-        if status["running"]:
-            msg = f"MCP server is running (PID {status['pid']})."
-            level = messages.INFO
-        else:
-            msg = "MCP server is not running."
-            level = messages.WARNING
-        if status.get("last_error"):
-            msg = f"{msg} {status['last_error']}"
-        self.message_user(request, msg, level=level)
-        return self._redirect_to_changelist()
 
 
 class EnergyCreditInline(admin.TabularInline):

@@ -6,12 +6,10 @@ import re
 
 from core.admin import PROFILE_INLINE_CONFIG, ProfileInlineFormSet
 from core.models import (
-    AssistantProfile,
     EmailInbox,
     OdooProfile,
     ReleaseManager,
     SecurityGroup as CoreSecurityGroup,
-    hash_key,
 )
 from nodes.models import EmailOutbox
 from teams.models import SecurityGroup as TeamsSecurityGroup
@@ -63,9 +61,6 @@ class ProfileInlineDeletionTests(TestCase):
                 "pypi_url": "https://upload.pypi.org/legacy/",
                 "secondary_pypi_url": "https://pypi.example.com/simple/",
             }
-        if model is AssistantProfile:
-            # ``issue_key`` handles creation and hashing; scopes get filled below.
-            return {"scopes": ["assist"], "is_active": True}
         raise AssertionError(f"Unsupported profile model {model!r}")
 
     def _blank_form_values(self, model):
@@ -107,35 +102,10 @@ class ProfileInlineDeletionTests(TestCase):
                 "secondary_pypi_url": "",
                 "user_datum": "",
             }
-        if model is AssistantProfile:
-            return {
-                "user_key": "",
-                "scopes": "",
-                "is_active": "",
-                "user_datum": "",
-            }
         raise AssertionError(f"Unsupported profile model {model!r}")
 
     def _create_profile(self, model, owner, owner_field="user"):
         initial = self._initial_profile_data(model)
-        if model is AssistantProfile:
-            if owner_field == "user":
-                profile, _plain = AssistantProfile.issue_key(owner)
-            else:
-                profile = AssistantProfile.objects.create(
-                    user=None,
-                    group=owner if owner_field == "group" else None,
-                    user_key_hash=hash_key("inline-test-key"),
-                    scopes=[],
-                    is_active=True,
-                )
-            update_fields = []
-            for field, value in initial.items():
-                setattr(profile, field, value)
-                update_fields.append(field)
-            if update_fields:
-                profile.save(update_fields=update_fields)
-            return profile
         kwargs = {owner_field: owner}
         kwargs.update(initial)
         return model.objects.create(**kwargs)
@@ -153,13 +123,7 @@ class ProfileInlineDeletionTests(TestCase):
         return data
 
     def test_blank_submission_marks_profiles_for_deletion(self):
-        profiles = [
-            OdooProfile,
-            EmailInbox,
-            EmailOutbox,
-            ReleaseManager,
-            AssistantProfile,
-        ]
+        profiles = [OdooProfile, EmailInbox, EmailOutbox, ReleaseManager]
         for index, model in enumerate(profiles, start=1):
             with self.subTest(model=model._meta.label_lower):
                 user = self.user_model.objects.create_user(f"profile-owner-{index}")
@@ -192,13 +156,7 @@ class ProfileInlineDeletionTests(TestCase):
                 self.assertFalse(model.objects.filter(pk=profile.pk).exists())
 
     def test_blank_submission_marks_group_profiles_for_deletion(self):
-        profiles = [
-            OdooProfile,
-            EmailInbox,
-            EmailOutbox,
-            ReleaseManager,
-            AssistantProfile,
-        ]
+        profiles = [OdooProfile, EmailInbox, EmailOutbox, ReleaseManager]
         for index, model in enumerate(profiles, start=1):
             with self.subTest(model=model._meta.label_lower):
                 group = CoreSecurityGroup.objects.create(name=f"profile-group-{index}")

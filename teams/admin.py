@@ -17,7 +17,6 @@ from core.admin import (
     EmailCollectorAdmin,
     ReleaseManagerAdmin,
     OdooProfileAdmin,
-    AssistantProfileAdmin,
 )
 from core.models import (
     InviteLead as CoreInviteLead,
@@ -27,7 +26,6 @@ from core.models import (
     EmailCollector as CoreEmailCollector,
     ReleaseManager as CoreReleaseManager,
     OdooProfile as CoreOdooProfile,
-    AssistantProfile as CoreAssistantProfile,
 )
 from core.user_data import (
     UserDatumAdminMixin,
@@ -51,7 +49,6 @@ from .models import (
     EmailOutbox,
     PowerLead,
     OdooProfile,
-    AssistantProfile,
     TOTPDevice,
 )
 
@@ -104,11 +101,6 @@ class PowerLeadAdminProxy(CorePowerLeadAdmin):
 
 @admin.register(OdooProfile)
 class OdooProfileAdminProxy(OdooProfileAdmin):
-    pass
-
-
-@admin.register(AssistantProfile)
-class AssistantProfileAdminProxy(AssistantProfileAdmin):
     pass
 
 

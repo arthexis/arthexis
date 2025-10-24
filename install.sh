@@ -118,48 +118,6 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/0
 EOF
 }
 
-remove_mcp_proxy_block() {
-    local conf="$1"
-    sudo python3 - "$conf" <<'PY'
-import pathlib
-import sys
-
-path = pathlib.Path(sys.argv[1])
-lines = path.read_text().splitlines()
-out = []
-skip_redirect = False
-skip_proxy = False
-brace_depth = 0
-
-for line in lines:
-    stripped = line.strip()
-    if not skip_redirect and stripped.startswith("location = /mcp {"):
-        skip_redirect = True
-        brace_depth = line.count('{') - line.count('}')
-        if brace_depth <= 0:
-            skip_redirect = False
-        continue
-    if skip_redirect:
-        brace_depth += line.count('{') - line.count('}')
-        if brace_depth <= 0:
-            skip_redirect = False
-        continue
-
-    if not skip_proxy and stripped.startswith("# Model Context Protocol server (SSE)"):
-        skip_proxy = True
-        continue
-    if skip_proxy:
-        if stripped.startswith("#DATASETTE_START"):
-            skip_proxy = False
-            out.append(line)
-        continue
-
-    out.append(line)
-
-path.write_text("\n".join(out) + "\n")
-PY
-}
-
 ensure_i2c_packages() {
     if ! python3 -c 'import smbus' >/dev/null 2>&1 \
         && ! python3 -c 'import smbus2' >/dev/null 2>&1; then
@@ -441,23 +399,6 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Model Context Protocol server (SSE)
-    location = /mcp {
-        return 301 /mcp/;
-    }
-
-    location /mcp/ {
-        proxy_pass http://127.0.0.1:MCP_PORT_PLACEHOLDER/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Cache-Control "no-cache";
-        proxy_buffering off;
-        proxy_cache off;
-        proxy_read_timeout 3600;
-    }
     #DATASETTE_START
     location /data/ {
         auth_request /datasette-auth/;
@@ -505,23 +446,6 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Model Context Protocol server (SSE)
-    location = /mcp {
-        return 301 /mcp/;
-    }
-
-    location /mcp/ {
-        proxy_pass http://127.0.0.1:MCP_PORT_PLACEHOLDER/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Cache-Control "no-cache";
-        proxy_buffering off;
-        proxy_cache off;
-        proxy_read_timeout 3600;
-    }
     #DATASETTE_START
     location /data/ {
         auth_request /datasette-auth/;
@@ -541,16 +465,6 @@ NGINXCONF
 fi
 
 sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
-MCP_PROXY_PORT_RAW="${MCP_SIGIL_PORT:-8800}"
-MCP_PROXY_PORT="${MCP_PROXY_PORT_RAW//[[:space:]]/}"
-MCP_PROXY_PORT="${MCP_PROXY_PORT#[Mm][Cc][Pp]_}"
-MCP_PROXY_PORT="${MCP_PROXY_PORT%/}"
-if [[ ! "$MCP_PROXY_PORT" =~ ^[0-9]+$ ]]; then
-    echo "Warning: Invalid MCP_SIGIL_PORT value '$MCP_PROXY_PORT_RAW'. Skipping MCP nginx configuration." >&2
-    remove_mcp_proxy_block "$NGINX_CONF"
-else
-    sudo sed -i "s/MCP_PORT_PLACEHOLDER/$MCP_PROXY_PORT/" "$NGINX_CONF"
-fi
 if [ "$ENABLE_DATASETTE" = true ]; then
     sudo sed -i "s/DATA_PORT_PLACEHOLDER/$DATASETTE_PORT/" "$NGINX_CONF"
     sudo sed -i '/#DATASETTE_START/d;/#DATASETTE_END/d' "$NGINX_CONF"

@@ -22,7 +22,6 @@ import hashlib
 import hmac
 import os
 import subprocess
-import secrets
 import re
 from io import BytesIO
 from django.core.files.base import ContentFile
@@ -519,16 +518,8 @@ class User(Entity, AbstractUser):
         return self._direct_profile("OdooProfile")
 
     @property
-    def assistant_profile(self):
-        return self._direct_profile("AssistantProfile")
-
-    @property
     def social_profile(self):
         return self._direct_profile("SocialProfile")
-
-    @property
-    def chat_profile(self):
-        return self.assistant_profile
 
 
 class UserPhoneNumber(Entity):
@@ -3702,73 +3693,6 @@ def _rfid_unique_energy_account(
                 raise ValidationError(
                     "RFID tags may only be assigned to one energy account."
                 )
-
-
-def hash_key(key: str) -> str:
-    """Return a SHA-256 hash for ``key``."""
-
-    return hashlib.sha256(key.encode()).hexdigest()
-
-
-class AssistantProfile(Profile):
-    """Stores a hashed user key used by the assistant for authentication.
-
-    The plain-text ``user_key`` is generated server-side and shown only once.
-    Users must supply this key in the ``Authorization: Bearer <user_key>``
-    header when requesting protected endpoints. Only the hash is stored.
-    """
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    profile_fields = ("assistant_name", "user_key_hash", "scopes", "is_active")
-    assistant_name = models.CharField(max_length=100, default="Assistant")
-    user_key_hash = models.CharField(max_length=64, unique=True)
-    scopes = models.JSONField(default=list, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    last_used_at = models.DateTimeField(null=True, blank=True)
-    is_active = models.BooleanField(default=True)
-
-    class Meta:
-        db_table = "workgroup_assistantprofile"
-        verbose_name = "Assistant Profile"
-        verbose_name_plural = "Assistant Profiles"
-        constraints = [
-            models.CheckConstraint(
-                check=(
-                    (Q(user__isnull=False) & Q(group__isnull=True))
-                    | (Q(user__isnull=True) & Q(group__isnull=False))
-                ),
-                name="assistantprofile_requires_owner",
-            )
-        ]
-
-    @classmethod
-    def issue_key(cls, user) -> tuple["AssistantProfile", str]:
-        """Create or update a profile and return it with a new plain key."""
-
-        key = secrets.token_hex(32)
-        key_hash = hash_key(key)
-        if user is None:
-            raise ValueError("Assistant profiles require a user instance")
-
-        profile, _ = cls.objects.update_or_create(
-            user=user,
-            defaults={
-                "user_key_hash": key_hash,
-                "last_used_at": None,
-                "is_active": True,
-            },
-        )
-        return profile, key
-
-    def touch(self) -> None:
-        """Record that the key was used."""
-
-        self.last_used_at = timezone.now()
-        self.save(update_fields=["last_used_at"])
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.assistant_name or "AssistantProfile"
-
 
 def validate_relative_url(value: str) -> None:
     if not value:
