@@ -1051,10 +1051,12 @@ fi
 
 
 if [[ $RUN_ROUTING == true ]]; then
-    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "eth0" ]]; then
-        :
-    else
-        ip route del default dev eth0 2>/dev/null || true
+    if [[ "$ETH0_MODE_EFFECTIVE" != "client" ]]; then
+        if [[ $UNSAFE == false && "$PROTECTED_DEV" == "eth0" ]]; then
+            :
+        else
+            ip route del default dev eth0 2>/dev/null || true
+        fi
     fi
     if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
         :
@@ -1062,12 +1064,30 @@ if [[ $RUN_ROUTING == true ]]; then
         ip route del default dev wlan0 2>/dev/null || true
     fi
 
-    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
-        echo "Skipping default route change to preserve '$PROTECTED_CONN'."
-    else
-        WLAN0_GW=$(nmcli -g IP4.GATEWAY device show wlan0 2>/dev/null | head -n1)
-        if [[ -n "$WLAN0_GW" ]]; then
-            ip route replace default via "$WLAN0_GW" dev wlan0 2>/dev/null || true
+    DEFAULT_ROUTE_SET=false
+    if [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
+        if [[ $UNSAFE == false && "$PROTECTED_DEV" == "eth0" ]]; then
+            echo "Skipping default route change to preserve '$PROTECTED_CONN'."
+            DEFAULT_ROUTE_SET=true
+        else
+            ETH0_GW=$(nmcli -g IP4.GATEWAY device show eth0 2>/dev/null | head -n1)
+            if [[ -n "$ETH0_GW" ]]; then
+                ip route replace default via "$ETH0_GW" dev eth0 2>/dev/null || true
+                DEFAULT_ROUTE_SET=true
+            else
+                echo "Warning: No gateway reported for eth0; falling back to wlan0." >&2
+            fi
+        fi
+    fi
+
+    if [[ $DEFAULT_ROUTE_SET == false ]]; then
+        if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
+            echo "Skipping default route change to preserve '$PROTECTED_CONN'."
+        else
+            WLAN0_GW=$(nmcli -g IP4.GATEWAY device show wlan0 2>/dev/null | head -n1)
+            if [[ -n "$WLAN0_GW" ]]; then
+                ip route replace default via "$WLAN0_GW" dev wlan0 2>/dev/null || true
+            fi
         fi
     fi
 
