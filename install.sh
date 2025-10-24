@@ -541,14 +541,12 @@ NGINXCONF
 fi
 
 sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
-MCP_PROXY_PORT="${MCP_SIGIL_PORT:-8800}"
-if [[ "$MCP_PROXY_PORT" == MCP_* ]]; then
-    MCP_PROXY_PORT="${MCP_PROXY_PORT#MCP_}"
-fi
-# Remove any incidental whitespace characters that may be present
-MCP_PROXY_PORT="${MCP_PROXY_PORT//[[:space:]]/}"
+MCP_PROXY_PORT_RAW="${MCP_SIGIL_PORT:-8800}"
+MCP_PROXY_PORT="${MCP_PROXY_PORT_RAW//[[:space:]]/}"
+MCP_PROXY_PORT="${MCP_PROXY_PORT#[Mm][Cc][Pp]_}"
+MCP_PROXY_PORT="${MCP_PROXY_PORT%/}"
 if [[ ! "$MCP_PROXY_PORT" =~ ^[0-9]+$ ]]; then
-    echo "Warning: Invalid MCP_SIGIL_PORT value '$MCP_PROXY_PORT'. Skipping MCP nginx configuration." >&2
+    echo "Warning: Invalid MCP_SIGIL_PORT value '$MCP_PROXY_PORT_RAW'. Skipping MCP nginx configuration." >&2
     remove_mcp_proxy_block "$NGINX_CONF"
 else
     sudo sed -i "s/MCP_PORT_PLACEHOLDER/$MCP_PROXY_PORT/" "$NGINX_CONF"
