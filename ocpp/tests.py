@@ -2335,6 +2335,36 @@ class ChargerAdminTests(TestCase):
         resp = self.client.get(url)
         self.assertContains(resp, "AdminLoc")
 
+    def test_admin_changelist_displays_quick_stats(self):
+        charger = Charger.objects.create(charger_id="STATMAIN", display_name="Main EVCS")
+        connector = Charger.objects.create(
+            charger_id="STATMAIN", connector_id=1, display_name="Connector 1"
+        )
+        start = timezone.now() - timedelta(minutes=30)
+        Transaction.objects.create(
+            charger=connector,
+            start_time=start,
+            stop_time=start + timedelta(minutes=10),
+            meter_start=1000,
+            meter_stop=6000,
+        )
+
+        url = reverse("admin:ocpp_charger_changelist")
+        resp = self.client.get(url)
+
+        self.assertContains(resp, "Total kW")
+        self.assertContains(resp, "Today kW")
+        self.assertContains(resp, "5.00")
+
+    def test_admin_changelist_indents_connectors(self):
+        Charger.objects.create(charger_id="INDENTMAIN")
+        Charger.objects.create(charger_id="INDENTMAIN", connector_id=1)
+
+        url = reverse("admin:ocpp_charger_changelist")
+        resp = self.client.get(url)
+
+        self.assertContains(resp, 'class="charger-connector-entry"')
+
     def test_last_fields_are_read_only(self):
         now = timezone.now()
         charger = Charger.objects.create(

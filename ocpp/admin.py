@@ -2,11 +2,12 @@ from django.contrib import admin, messages
 from django import forms
 
 import asyncio
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 import json
 
 from django.shortcuts import redirect
 from django.utils import formats, timezone, translation
+from django.utils.html import format_html
 from django.urls import path
 from django.http import HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -318,7 +319,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     list_display = (
         "display_name_with_fallback",
         "connector_number",
-        "serial_number_display",
+        "charger_name_display",
         "require_rfid_display",
         "public_display",
         "last_heartbeat",
@@ -429,14 +430,22 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
 
     @admin.display(description="Display Name", ordering="display_name")
     def display_name_with_fallback(self, obj):
+        name = self._charger_display_name(obj)
+        if obj.connector_id is not None:
+            return format_html(
+                '<span class="charger-connector-entry">{}</span>', name
+            )
+        return name
+
+    @admin.display(description="Charger", ordering="display_name")
+    def charger_name_display(self, obj):
+        return self._charger_display_name(obj)
+
+    def _charger_display_name(self, obj):
         if obj.display_name:
             return obj.display_name
         if obj.location:
             return obj.location.name
-        return obj.charger_id
-
-    @admin.display(description="Serial Number", ordering="charger_id")
-    def serial_number_display(self, obj):
         return obj.charger_id
 
     def location_name(self, obj):
@@ -799,6 +808,44 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         return 0.0
 
     session_kw.short_description = "Session kW"
+
+    def changelist_view(self, request, extra_context=None):
+        response = super().changelist_view(request, extra_context=extra_context)
+        if hasattr(response, "context_data"):
+            cl = response.context_data.get("cl")
+            if cl is not None:
+                response.context_data.update(
+                    self._charger_quick_stats_context(cl.queryset)
+                )
+        return response
+
+    def _charger_quick_stats_context(self, queryset):
+        chargers = list(queryset)
+        stats = {"total_kw": 0.0, "today_kw": 0.0}
+        if not chargers:
+            return {"charger_quick_stats": stats}
+
+        parent_ids = {c.charger_id for c in chargers if c.connector_id is None}
+        start, end = self._today_range()
+
+        for charger in chargers:
+            include_totals = True
+            if charger.connector_id is not None and charger.charger_id in parent_ids:
+                include_totals = False
+            if include_totals:
+                stats["total_kw"] += charger.total_kw
+                stats["today_kw"] += charger.total_kw_for_range(start, end)
+
+        stats = {key: round(value, 2) for key, value in stats.items()}
+        return {"charger_quick_stats": stats}
+
+    def _today_range(self):
+        today = timezone.localdate()
+        start = datetime.combine(today, time.min)
+        if timezone.is_naive(start):
+            start = timezone.make_aware(start, timezone.get_current_timezone())
+        end = start + timedelta(days=1)
+        return start, end
 
 
 @admin.register(Simulator)
