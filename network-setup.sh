@@ -18,7 +18,7 @@ mkdir -p "$LOCK_DIR"
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet N[/P]] [--ap-set-password]
+Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet N[/P]] [--eth0-mode MODE] [--ap-set-password]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --no-firewall   Skip firewall port validation.
@@ -29,6 +29,8 @@ Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i]
   --no-vnc        Skip validating that a VNC service is enabled (default).
   --subnet N[/P]  Configure eth0 on the 192.168.N.0/P subnet (default: 129/16).
                   Accepts prefix lengths of 16 or 24.
+                  Ignored when eth0 operates in client mode.
+  --eth0-mode MODE  Set eth0 mode to shared, client, or auto (default: auto).
   --ap-set-password  Update the configured access point password without running other setup steps.
 USAGE
 }
@@ -47,6 +49,12 @@ AP_NAME_LOWER=""
 SKIP_AP=false
 ETH0_SUBNET=129
 ETH0_PREFIX=16
+ETH0_MODE="auto"
+ETH0_MODE_EFFECTIVE="auto"
+ETH0_CONNECTION_SHARED="eth0-shared"
+ETH0_CONNECTION_CLIENT="eth0-client"
+ETH0_CONNECTION_NAME="$ETH0_CONNECTION_SHARED"
+ETH0_SUBNET_SPECIFIED=false
 AP_SET_PASSWORD=false
 OTHER_OPTIONS_USED=false
 validate_subnet_value() {
@@ -87,6 +95,18 @@ set_subnet_and_prefix() {
     validate_prefix_value "$prefix"
     ETH0_SUBNET="$subnet"
     ETH0_PREFIX="$prefix"
+}
+
+validate_eth0_mode() {
+    local value="$1"
+    case "$value" in
+        shared|client|auto)
+            ;;
+        *)
+            echo "Error: --eth0-mode must be one of shared, client, or auto." >&2
+            exit 1
+            ;;
+    esac
 }
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -139,6 +159,7 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             set_subnet_and_prefix "$2"
+            ETH0_SUBNET_SPECIFIED=true
             OTHER_OPTIONS_USED=true
             shift
             ;;
@@ -149,6 +170,31 @@ while [[ $# -gt 0 ]]; do
             fi
             subnet_value="${1#--subnet=}"
             set_subnet_and_prefix "$subnet_value"
+            ETH0_SUBNET_SPECIFIED=true
+            OTHER_OPTIONS_USED=true
+            ;;
+        --eth0-mode)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --eth0-mode requires a value." >&2
+                exit 1
+            fi
+            validate_eth0_mode "$2"
+            ETH0_MODE="$2"
+            OTHER_OPTIONS_USED=true
+            shift
+            ;;
+        --eth0-mode=*)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
+            mode_value="${1#--eth0-mode=}"
+            validate_eth0_mode "$mode_value"
+            ETH0_MODE="$mode_value"
             OTHER_OPTIONS_USED=true
             ;;
         --no-firewall)
@@ -396,6 +442,50 @@ find_existing_ap_connection() {
     return 0
 }
 
+detect_eth0_mode_auto() {
+    local detected="shared"
+    local reason=""
+    local active_conn
+    active_conn=$(nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null |
+        awk -F: '$2=="eth0" {print $1; exit}' || true)
+    if [[ -n "$active_conn" ]]; then
+        local method
+        method=$(nmcli -g ipv4.method connection show "$active_conn" 2>/dev/null | head -n1 || true)
+        if [[ "$method" == "auto" ]]; then
+            detected="client"
+            reason="active connection '$active_conn'"
+        elif [[ "$method" == "shared" ]]; then
+            detected="shared"
+            reason="active connection '$active_conn'"
+        fi
+    fi
+
+    if [[ -z "$reason" && "$PROTECTED_DEV" == "eth0" ]]; then
+        detected="client"
+        reason="default route via eth0"
+    fi
+
+    if [[ -z "$reason" ]]; then
+        if nmcli -t -f NAME connection show 2>/dev/null | grep -Fxq "$ETH0_CONNECTION_CLIENT"; then
+            local stored_method
+            stored_method=$(nmcli -g ipv4.method connection show "$ETH0_CONNECTION_CLIENT" 2>/dev/null | head -n1 || true)
+            if [[ "$stored_method" == "auto" ]]; then
+                detected="client"
+                reason="stored profile '$ETH0_CONNECTION_CLIENT'"
+            fi
+        fi
+    fi
+
+    ETH0_MODE_EFFECTIVE="$detected"
+    if [[ -n "$reason" ]]; then
+        echo "Auto-detected eth0 mode '$ETH0_MODE_EFFECTIVE' based on $reason."
+    elif [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
+        echo "Auto-detected eth0 mode 'client'."
+    else
+        echo "Auto-detected eth0 mode 'shared'."
+    fi
+}
+
 if [[ $AP_SET_PASSWORD == true ]]; then
     if ! command -v nmcli >/dev/null 2>&1; then
         echo "nmcli (NetworkManager) is required." >&2
@@ -543,6 +633,23 @@ if [[ $INITIAL_CONNECTIVITY == true ]]; then
     fi
 fi
 
+if [[ "$ETH0_MODE" == "auto" ]]; then
+    detect_eth0_mode_auto
+else
+    ETH0_MODE_EFFECTIVE="$ETH0_MODE"
+    echo "Forcing eth0 mode '$ETH0_MODE'; skipping DHCP detection."
+fi
+
+if [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
+    ETH0_CONNECTION_NAME="$ETH0_CONNECTION_CLIENT"
+else
+    ETH0_CONNECTION_NAME="$ETH0_CONNECTION_SHARED"
+fi
+
+if [[ "$ETH0_MODE_EFFECTIVE" == "client" && $ETH0_SUBNET_SPECIFIED == true ]]; then
+    echo "Note: --subnet is ignored when eth0 operates in client mode."
+fi
+
 # Determine access point name and password before running steps
 HYPERLINE_NAME="hyperline"
 AP_NAME_LOWER="$(printf '%s' "$AP_NAME" | tr '[:upper:]' '[:lower:]')"
@@ -665,7 +772,7 @@ if [[ $RUN_AP == true ]]; then
                 ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
                 wifi.band bg "${security_args[@]}"
         fi
-        nmcli connection up eth0-shared || true
+        nmcli connection up "$ETH0_CONNECTION_NAME" || true
         if ! nmcli connection up "$AP_NAME" ifname wlan0; then
             echo "Failed to activate access point connection '$AP_NAME' on wlan0." >&2
             exit 1
@@ -866,29 +973,49 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
         echo "Warning: device eth0 not found; skipping eth0 configuration." >&2
     else
         nmcli device disconnect eth0 >/dev/null 2>&1 || true
-        nmcli -t -f NAME,DEVICE connection show | awk -F: -v protect="$PROTECTED_CONN" '$2=="eth0" && $1!=protect {print $1}' |
+        target_conn="$ETH0_CONNECTION_NAME"
+        nmcli -t -f NAME,DEVICE connection show | awk -F: -v protect="$PROTECTED_CONN" -v target="$target_conn" '$2=="eth0" && $1!=protect && $1!=target {print $1}' |
             while read -r con; do
                 nmcli connection delete "$con"
             done
-        eth0_ip="192.168.${ETH0_SUBNET}.10/${ETH0_PREFIX}"
-        if nmcli -t -f NAME connection show | grep -Fxq "eth0-shared"; then
-            nmcli connection modify eth0-shared \
-                connection.interface-name eth0 \
-                ipv4.method shared \
-                ipv4.addresses "$eth0_ip" \
-                ipv4.never-default yes \
-                ipv4.route-metric 10000 \
-                ipv6.method ignore \
-                ipv6.never-default yes \
-                connection.autoconnect yes \
-                connection.autoconnect-priority 0
+        if [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
+            if nmcli -t -f NAME connection show | grep -Fxq "$ETH0_CONNECTION_CLIENT"; then
+                nmcli connection modify "$ETH0_CONNECTION_CLIENT" \
+                    connection.interface-name eth0 \
+                    ipv4.method auto \
+                    ipv4.never-default no \
+                    ipv4.route-metric 100 \
+                    ipv6.method ignore \
+                    ipv6.never-default yes \
+                    connection.autoconnect yes \
+                    connection.autoconnect-priority 0
+            else
+                nmcli connection add type ethernet ifname eth0 con-name "$ETH0_CONNECTION_CLIENT" autoconnect yes \
+                    ipv4.method auto ipv4.never-default no ipv4.route-metric 100 \
+                    ipv6.method ignore ipv6-never-default yes \
+                    connection.autoconnect-priority 0
+            fi
         else
-            nmcli connection add type ethernet ifname eth0 con-name eth0-shared autoconnect yes \
-                ipv4.method shared ipv4.addresses "$eth0_ip" ipv4.never-default yes \
-                ipv4.route-metric 10000 ipv6.method ignore ipv6-never-default yes \
-                connection.autoconnect-priority 0
+            eth0_ip="192.168.${ETH0_SUBNET}.10/${ETH0_PREFIX}"
+            if nmcli -t -f NAME connection show | grep -Fxq "$ETH0_CONNECTION_SHARED"; then
+                nmcli connection modify "$ETH0_CONNECTION_SHARED" \
+                    connection.interface-name eth0 \
+                    ipv4.method shared \
+                    ipv4.addresses "$eth0_ip" \
+                    ipv4.never-default yes \
+                    ipv4.route-metric 10000 \
+                    ipv6.method ignore \
+                    ipv6.never-default yes \
+                    connection.autoconnect yes \
+                    connection.autoconnect-priority 0
+            else
+                nmcli connection add type ethernet ifname eth0 con-name "$ETH0_CONNECTION_SHARED" autoconnect yes \
+                    ipv4.method shared ipv4.addresses "$eth0_ip" ipv4.never-default yes \
+                    ipv4.route-metric 10000 ipv6.method ignore ipv6-never-default yes \
+                    connection.autoconnect-priority 0
+            fi
         fi
-        nmcli connection up eth0-shared >/dev/null 2>&1 || true
+        nmcli connection up "$target_conn" >/dev/null 2>&1 || true
     fi
 
     if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
