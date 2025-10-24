@@ -500,9 +500,11 @@ fi
 
 sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
 MCP_PROXY_PORT="${MCP_SIGIL_PORT:-8800}"
-if [[ "$MCP_PROXY_PORT" =~ ^MCP_[0-9]+$ ]]; then
+if [[ "$MCP_PROXY_PORT" == MCP_* ]]; then
     MCP_PROXY_PORT="${MCP_PROXY_PORT#MCP_}"
 fi
+# Remove any incidental whitespace characters that may be present
+MCP_PROXY_PORT="${MCP_PROXY_PORT//[[:space:]]/}"
 if [[ ! "$MCP_PROXY_PORT" =~ ^[0-9]+$ ]]; then
     echo "Invalid MCP_SIGIL_PORT value: '$MCP_PROXY_PORT'. Expected a numeric port."
     exit 1
