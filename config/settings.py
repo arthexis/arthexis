@@ -445,10 +445,23 @@ CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
 
 
 # MCP sigil resolver configuration
-def _env_int(name: str, default: int) -> int:
+def _env_int(name: str, default: int, *, allow_mcp_prefix: bool = False) -> int:
+    raw_value = os.environ.get(name)
+    if raw_value in {None, ""}:
+        return default
+
+    if allow_mcp_prefix and isinstance(raw_value, str) and raw_value.startswith("MCP_"):
+        candidate = raw_value[len("MCP_") :]
+        if candidate.isdigit():
+            raw_value = candidate
+
     try:
-        return int(os.environ.get(name, default))
-    except (TypeError, ValueError):  # pragma: no cover - defensive
+        return int(raw_value)
+    except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+        if allow_mcp_prefix:
+            raise ImproperlyConfigured(
+                f"{name} must be a numeric value optionally prefixed with 'MCP_'."
+            ) from exc
         return default
 
 
@@ -461,7 +474,7 @@ def _split_env_list(name: str) -> list[str]:
 
 MCP_SIGIL_SERVER = {
     "host": os.environ.get("MCP_SIGIL_HOST", "127.0.0.1"),
-    "port": _env_int("MCP_SIGIL_PORT", 8800),
+    "port": _env_int("MCP_SIGIL_PORT", 8800, allow_mcp_prefix=True),
     "api_keys": _split_env_list("MCP_SIGIL_API_KEYS"),
     "required_scopes": ["sigils:read"],
     "issuer_url": os.environ.get("MCP_SIGIL_ISSUER_URL"),
