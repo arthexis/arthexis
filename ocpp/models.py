@@ -544,6 +544,20 @@ class Charger(Entity):
             return qs
         return qs.filter(pk=self.pk)
 
+    def total_kw_for_range(
+        self,
+        start=None,
+        end=None,
+    ) -> float:
+        """Return total energy delivered within ``start``/``end`` window."""
+
+        from . import store
+
+        total = 0.0
+        for charger in self._target_chargers():
+            total += charger._total_kw_range_single(store, start, end)
+        return total
+
     def _total_kw_single(self, store_module) -> float:
         """Return total kW for this specific charger identity."""
 
@@ -562,6 +576,40 @@ class Charger(Entity):
             kw = tx_active.kw
             if kw:
                 total += kw
+        return total
+
+    def _total_kw_range_single(self, store_module, start=None, end=None) -> float:
+        """Return total kW for a date range for this charger."""
+
+        tx_active = None
+        if self.connector_id is not None:
+            tx_active = store_module.get_transaction(self.charger_id, self.connector_id)
+
+        qs = self.transactions.all()
+        if start is not None:
+            qs = qs.filter(start_time__gte=start)
+        if end is not None:
+            qs = qs.filter(start_time__lt=end)
+        if tx_active and tx_active.pk is not None:
+            qs = qs.exclude(pk=tx_active.pk)
+
+        total = 0.0
+        for tx in qs:
+            kw = tx.kw
+            if kw:
+                total += kw
+
+        if tx_active:
+            start_time = getattr(tx_active, "start_time", None)
+            include = True
+            if start is not None and start_time and start_time < start:
+                include = False
+            if end is not None and start_time and start_time >= end:
+                include = False
+            if include:
+                kw = tx_active.kw
+                if kw:
+                    total += kw
         return total
 
     def purge(self):
