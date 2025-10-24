@@ -450,10 +450,27 @@ def _env_int(name: str, default: int, *, allow_mcp_prefix: bool = False) -> int:
     if raw_value in {None, ""}:
         return default
 
-    if allow_mcp_prefix and isinstance(raw_value, str) and raw_value.startswith("MCP_"):
-        candidate = raw_value[len("MCP_") :]
-        if candidate.isdigit():
-            raw_value = candidate
+    if isinstance(raw_value, str):
+        trimmed = raw_value.strip()
+
+        if allow_mcp_prefix:
+            candidate = trimmed.rstrip("/")
+            lowered = candidate.lower()
+            while lowered.startswith("mcp_"):
+                candidate = candidate[4:]
+                lowered = candidate.lower()
+            candidate = candidate.rstrip("/")
+            if candidate.isdigit():
+                return int(candidate)
+            raise ImproperlyConfigured(
+                f"{name} must be a numeric value optionally prefixed with 'MCP_'."
+            )
+
+        trimmed = trimmed.rstrip("/")
+        if trimmed.isdigit():
+            return int(trimmed)
+
+        raw_value = trimmed
 
     try:
         return int(raw_value)
