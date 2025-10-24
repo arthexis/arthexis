@@ -427,6 +427,7 @@ eth0_detect_foreign_dhcp() {
     local lease_file="$tmpdir/lease"
     local pid_file="$tmpdir/pid"
     local output=""
+    local offer_detected=false
     local -a dhclient_cmd=(dhclient -1 -v -d -sf /bin/true -lf "$lease_file" -pf "$pid_file" eth0)
 
     if command -v timeout >/dev/null 2>&1; then
@@ -445,9 +446,17 @@ eth0_detect_foreign_dhcp() {
     fi
 
     if [[ -s "$lease_file" ]]; then
-        ETH0_MODE="client"
+        offer_detected=true
         ETH0_CLIENT_ADDRESS=$(awk '/fixed-address/ {print $2}' "$lease_file" | tr -d ';' | tail -n1)
         ETH0_CLIENT_GATEWAY=$(awk '/option routers/ {print $3}' "$lease_file" | tr -d ';' | tail -n1)
+    elif [[ "$output" =~ DHCPOFFER ]]; then
+        offer_detected=true
+    elif [[ "$output" =~ DHCPACK ]]; then
+        offer_detected=true
+    fi
+
+    if [[ $offer_detected == true ]]; then
+        ETH0_MODE="client"
     else
         ETH0_MODE="shared"
     fi
