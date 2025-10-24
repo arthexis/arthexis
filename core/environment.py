@@ -71,7 +71,7 @@ class NetworkSetupForm(forms.Form):
     ethernet_subnet = forms.CharField(
         label=_("Ethernet subnet"),
         required=False,
-        help_text=_("Provide N or N/P (prefix 16 or 24) to supply --subnet."),
+        help_text=_("Provide Z, Z/P (prefix 16 or 24), X.Y.Z, or X.Y.Z/P to supply --subnet."),
     )
     update_ap_password_only = forms.BooleanField(
         label=_("Update access point password only"),
@@ -84,16 +84,35 @@ class NetworkSetupForm(forms.Form):
         if not value:
             return ""
         raw = value.strip()
-        match = re.fullmatch(r"(?P<subnet>\d{1,3})(?:/(?P<prefix>\d{1,2}))?", raw)
+        match = re.fullmatch(
+            r"(?P<first>\d{1,3})(?:\.(?P<second>\d{1,3})\.(?P<third>\d{1,3}))?(?:/(?P<prefix>\d{1,2}))?",
+            raw,
+        )
         if not match:
             raise forms.ValidationError(
-                _("Enter a subnet in the form N or N/P with prefix 16 or 24."),
+                _("Enter a subnet in the form Z, Z/P, X.Y.Z, or X.Y.Z/P with prefix 16 or 24."),
             )
-        subnet = int(match.group("subnet"))
-        if subnet < 0 or subnet > 254:
-            raise forms.ValidationError(
-                _("Subnet value must be between 0 and 254."),
-            )
+        first_octet = int(match.group("first"))
+        second = match.group("second")
+        third = match.group("third")
+        if second is not None and third is not None:
+            octets = [first_octet, int(second), int(third)]
+            for octet in octets:
+                if octet < 0 or octet > 255:
+                    raise forms.ValidationError(
+                        _("Subnet octets must be between 0 and 255."),
+                    )
+            if octets[2] > 254:
+                raise forms.ValidationError(
+                    _("The third subnet octet must be between 0 and 254."),
+                )
+            subnet_value = ".".join(str(octet) for octet in octets)
+        else:
+            if first_octet < 0 or first_octet > 254:
+                raise forms.ValidationError(
+                    _("Subnet value must be between 0 and 254."),
+                )
+            subnet_value = str(first_octet)
         prefix_value = match.group("prefix")
         if prefix_value:
             prefix = int(prefix_value)
@@ -101,8 +120,8 @@ class NetworkSetupForm(forms.Form):
                 raise forms.ValidationError(
                     _("Subnet prefix must be 16 or 24."),
                 )
-            return f"{subnet}/{prefix}"
-        return str(subnet)
+            return f"{subnet_value}/{prefix}"
+        return subnet_value
 
     def clean(self) -> dict:
         cleaned_data = super().clean()

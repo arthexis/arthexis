@@ -16,6 +16,10 @@ cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 mkdir -p "$LOCK_DIR"
 
+DEFAULT_ETH0_SUBNET_PREFIX="192.168"
+DEFAULT_ETH0_SUBNET_SUFFIX="129"
+DEFAULT_ETH0_SUBNET_BASE="${DEFAULT_ETH0_SUBNET_PREFIX}.${DEFAULT_ETH0_SUBNET_SUFFIX}"
+
 usage() {
     cat <<USAGE
 Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet N[/P]] [--eth0-mode MODE] [--ap-set-password]
@@ -47,7 +51,7 @@ AP_NAME="$DEFAULT_AP_NAME"
 AP_SPECIFIED=false
 AP_NAME_LOWER=""
 SKIP_AP=false
-ETH0_SUBNET=129
+ETH0_SUBNET_BASE="$DEFAULT_ETH0_SUBNET_BASE"
 ETH0_PREFIX=16
 ETH0_MODE="auto"
 ETH0_MODE_EFFECTIVE="auto"
@@ -57,7 +61,7 @@ ETH0_CONNECTION_NAME="$ETH0_CONNECTION_SHARED"
 ETH0_SUBNET_SPECIFIED=false
 AP_SET_PASSWORD=false
 OTHER_OPTIONS_USED=false
-validate_subnet_value() {
+validate_subnet_octet() {
     local value="$1"
     if [[ ! "$value" =~ ^[0-9]+$ ]]; then
         echo "Error: --subnet requires an integer between 0 and 254." >&2
@@ -65,6 +69,30 @@ validate_subnet_value() {
     fi
     if (( value < 0 || value > 254 )); then
         echo "Error: --subnet requires an integer between 0 and 254." >&2
+        exit 1
+    fi
+}
+validate_subnet_triplet() {
+    local value="$1"
+    local IFS='.'
+    read -r -a octets <<< "$value"
+    if [[ ${#octets[@]} -ne 3 ]]; then
+        echo "Error: --subnet requires three octets in the form X.Y.Z." >&2
+        exit 1
+    fi
+    for i in "${!octets[@]}"; do
+        local octet="${octets[$i]}"
+        if [[ ! "$octet" =~ ^[0-9]+$ ]]; then
+            echo "Error: --subnet octets must be integers between 0 and 255." >&2
+            exit 1
+        fi
+        if (( octet < 0 || octet > 255 )); then
+            echo "Error: --subnet octets must be integers between 0 and 255." >&2
+            exit 1
+        fi
+    done
+    if (( octets[2] > 254 )); then
+        echo "Error: --subnet third octet must be between 0 and 254." >&2
         exit 1
     fi
 }
@@ -87,13 +115,25 @@ set_subnet_and_prefix() {
         subnet="${value%%/*}"
         prefix="${value##*/}"
         if [[ -z "$subnet" || -z "$prefix" ]]; then
-            echo "Error: --subnet requires a value in the form N or N/P." >&2
+            echo "Error: --subnet requires a value in the form Z, X.Y.Z, Z/P, or X.Y.Z/P." >&2
             exit 1
         fi
     fi
-    validate_subnet_value "$subnet"
+    if [[ -z "$subnet" ]]; then
+        echo "Error: --subnet requires a value in the form Z, X.Y.Z, Z/P, or X.Y.Z/P." >&2
+        exit 1
+    fi
+    if [[ "$subnet" =~ ^[0-9]+$ ]]; then
+        validate_subnet_octet "$subnet"
+        ETH0_SUBNET_BASE="${DEFAULT_ETH0_SUBNET_PREFIX}.${subnet}"
+    elif [[ "$subnet" =~ ^[0-9]+(\.[0-9]+){2}$ ]]; then
+        validate_subnet_triplet "$subnet"
+        ETH0_SUBNET_BASE="$subnet"
+    else
+        echo "Error: --subnet requires a value in the form Z, X.Y.Z, Z/P, or X.Y.Z/P." >&2
+        exit 1
+    fi
     validate_prefix_value "$prefix"
-    ETH0_SUBNET="$subnet"
     ETH0_PREFIX="$prefix"
 }
 
