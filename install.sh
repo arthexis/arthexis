@@ -160,6 +160,32 @@ path.write_text("\n".join(out) + "\n")
 PY
 }
 
+sanitize_mcp_proxy_port() {
+    local raw="$1"
+
+    # Remove all whitespace characters to avoid accidental spaces or newlines
+    raw="${raw//[[:space:]]/}"
+
+    # Allow optional "MCP_" prefixes (case-insensitive). Some environments add
+    # this sigil to clarify the value is MCP-related, but nginx requires a
+    # numeric port.
+    while [[ "$raw" =~ ^[Mm][Cc][Pp]_ ]]; do
+        raw="${raw#[Mm][Cc][Pp]_}"
+    done
+
+    # Trim any trailing slashes that may have been copied from URLs.
+    while [[ "$raw" == */ ]]; do
+        raw="${raw%/}"
+    done
+
+    if [[ "$raw" =~ ^[0-9]+$ ]]; then
+        printf '%s' "$raw"
+        return 0
+    fi
+
+    return 1
+}
+
 ensure_i2c_packages() {
     if ! python3 -c 'import smbus' >/dev/null 2>&1 \
         && ! python3 -c 'import smbus2' >/dev/null 2>&1; then
@@ -542,14 +568,11 @@ fi
 
 sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
 MCP_PROXY_PORT_RAW="${MCP_SIGIL_PORT:-8800}"
-MCP_PROXY_PORT="${MCP_PROXY_PORT_RAW//[[:space:]]/}"
-MCP_PROXY_PORT="${MCP_PROXY_PORT#[Mm][Cc][Pp]_}"
-MCP_PROXY_PORT="${MCP_PROXY_PORT%/}"
-if [[ ! "$MCP_PROXY_PORT" =~ ^[0-9]+$ ]]; then
+if MCP_PROXY_PORT="$(sanitize_mcp_proxy_port "$MCP_PROXY_PORT_RAW")"; then
+    sudo sed -i "s/MCP_PORT_PLACEHOLDER/$MCP_PROXY_PORT/" "$NGINX_CONF"
+else
     echo "Warning: Invalid MCP_SIGIL_PORT value '$MCP_PROXY_PORT_RAW'. Skipping MCP nginx configuration." >&2
     remove_mcp_proxy_block "$NGINX_CONF"
-else
-    sudo sed -i "s/MCP_PORT_PLACEHOLDER/$MCP_PROXY_PORT/" "$NGINX_CONF"
 fi
 if [ "$ENABLE_DATASETTE" = true ]; then
     sudo sed -i "s/DATA_PORT_PLACEHOLDER/$DATASETTE_PORT/" "$NGINX_CONF"
