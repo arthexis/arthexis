@@ -22,7 +22,6 @@ from awg.models import CalculatorTemplate
 from core.models import (
     OdooProfile as CoreOdooProfile,
     ReleaseManager as CoreReleaseManager,
-    AssistantProfile as CoreAssistantProfile,
     Todo,
 )
 from core.user_data import dump_user_fixture, load_user_fixtures, _resolve_fixture_user
@@ -122,7 +121,6 @@ class UserDataAdminTests(TransactionTestCase):
 
     def test_user_user_data_fixture_includes_profiles(self):
         release_manager = CoreReleaseManager.objects.create(user=self.user)
-        chat_profile, _ = CoreAssistantProfile.issue_key(self.user)
         core_profile = CoreOdooProfile.objects.get(pk=self.profile.pk)
         UserModel = get_user_model()
         admin_model = None
@@ -171,12 +169,10 @@ class UserDataAdminTests(TransactionTestCase):
 
         run_formset(core_profile)
         run_formset(release_manager)
-        run_formset(chat_profile)
 
         expected_paths = [
             self.data_dir / f"core_odooprofile_{core_profile.pk}.json",
             self.data_dir / f"core_releasemanager_{release_manager.pk}.json",
-            self.data_dir / f"core_assistantprofile_{chat_profile.pk}.json",
         ]
         for path in expected_paths:
             with self.subTest(path=path.name):
@@ -186,7 +182,7 @@ class UserDataAdminTests(TransactionTestCase):
         self.assertFalse(user_fixture.exists())
 
         core_user = UserModel.objects.get(pk=self.user.pk)
-        profile_instances = [core_profile, release_manager, chat_profile]
+        profile_instances = [core_profile, release_manager]
         for instance in [core_user] + profile_instances:
             with self.subTest(instance=instance._meta.label_lower):
                 type(instance).all_objects.filter(pk=instance.pk).update(

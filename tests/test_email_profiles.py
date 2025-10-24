@@ -96,7 +96,6 @@ class UserAdminProfileTests(TestCase):
         profile_urls = [
             reverse("admin:teams_odooprofile_changelist"),
             reverse("admin:teams_releasemanager_changelist"),
-            reverse("admin:teams_assistantprofile_changelist"),
             reverse("admin:teams_emailinbox_changelist"),
             reverse("admin:teams_emailoutbox_changelist"),
         ]
@@ -129,7 +128,6 @@ class UserAdminProfileTests(TestCase):
             "emailinbox",
             "emailoutbox",
             "releasemanager",
-            "assistantprofile",
         )
         for prefix in prefixes:
             with self.subTest(prefix=prefix):
@@ -150,7 +148,6 @@ class UserAdminProfileTests(TestCase):
             "emailinbox",
             "emailoutbox",
             "releasemanager",
-            "assistantprofile",
         )
         for prefix in prefixes:
             with self.subTest(prefix=prefix):

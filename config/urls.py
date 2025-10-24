@@ -156,7 +156,6 @@ urlpatterns = [
     ),
     path("admin/", admin.site.urls),
     path("i18n/setlang/", csrf_exempt(set_language), name="set_language"),
-    path("api/", include("core.workgroup_urls")),
     path("", include("pages.urls")),
 ]
 
