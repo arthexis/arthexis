@@ -500,6 +500,13 @@ fi
 
 sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
 MCP_PROXY_PORT="${MCP_SIGIL_PORT:-8800}"
+if [[ "$MCP_PROXY_PORT" =~ ^MCP_[0-9]+$ ]]; then
+    MCP_PROXY_PORT="${MCP_PROXY_PORT#MCP_}"
+fi
+if [[ ! "$MCP_PROXY_PORT" =~ ^[0-9]+$ ]]; then
+    echo "Invalid MCP_SIGIL_PORT value: '$MCP_PROXY_PORT'. Expected a numeric port."
+    exit 1
+fi
 sudo sed -i "s/MCP_PORT_PLACEHOLDER/$MCP_PROXY_PORT/" "$NGINX_CONF"
 if [ "$ENABLE_DATASETTE" = true ]; then
     sudo sed -i "s/DATA_PORT_PLACEHOLDER/$DATASETTE_PORT/" "$NGINX_CONF"
