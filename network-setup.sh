@@ -22,7 +22,7 @@ DEFAULT_ETH0_SUBNET_BASE="${DEFAULT_ETH0_SUBNET_PREFIX}.${DEFAULT_ETH0_SUBNET_SU
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet N[/P]] [--eth0-mode MODE] [--ap-set-password]
+Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet N[/P]] [--eth0-mode MODE] [--ap-set-password] [--status] [--dhcp-server] [--dhcp-client]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --no-firewall   Skip firewall port validation.
@@ -35,6 +35,9 @@ Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i]
                   Accepts prefix lengths of 16 or 24.
                   Ignored when eth0 operates in client mode.
   --eth0-mode MODE  Set eth0 mode to shared, client, or auto (default: auto).
+  --dhcp-server   Force eth0 into shared mode (DHCP server).
+  --dhcp-client   Force eth0 into client mode (DHCP client).
+  --status        Print the current network configuration summary and exit.
   --ap-set-password  Update the configured access point password without running other setup steps.
 USAGE
 }
@@ -61,6 +64,192 @@ ETH0_CONNECTION_NAME="$ETH0_CONNECTION_SHARED"
 ETH0_SUBNET_SPECIFIED=false
 AP_SET_PASSWORD=false
 OTHER_OPTIONS_USED=false
+STATUS_ONLY=false
+DHCP_OVERRIDE=""
+ETH0_MODE_SPECIFIED=false
+
+join_by() {
+    local sep="$1"
+    shift
+    local first=1
+    local item
+    for item in "$@"; do
+        if (( first )); then
+            printf '%s' "$item"
+            first=0
+        else
+            printf '%s%s' "$sep" "$item"
+        fi
+    done
+}
+
+describe_device_status() {
+    local dev="$1"
+    local state
+    state=$(nmcli -t -f DEVICE,STATE device status 2>/dev/null | awk -F: -v dev="$dev" '$1==dev {print $2; exit}' || true)
+    if [[ -z "$state" ]]; then
+        echo "  $dev: device not detected"
+        return
+    fi
+
+    local connection
+    connection=$(nmcli -g GENERAL.CONNECTION device show "$dev" 2>/dev/null | head -n1 | tr -d '\n')
+    if [[ "$connection" == "--" ]]; then
+        connection=""
+    fi
+
+    local method=""
+    if [[ -n "$connection" ]]; then
+        method=$(nmcli -g ipv4.method connection show "$connection" 2>/dev/null | head -n1 || true)
+    fi
+
+    local role
+    case "$method" in
+        shared)
+            role="DHCP server (NetworkManager shared mode)"
+            ;;
+        auto)
+            role="DHCP client (automatic)"
+            ;;
+        manual)
+            role="Static IPv4 configuration"
+            ;;
+        disabled)
+            role="IPv4 disabled"
+            ;;
+        "")
+            if [[ "$state" == "unmanaged" ]]; then
+                role="Unmanaged"
+            else
+                role="No IPv4 configuration reported"
+            fi
+            ;;
+        *)
+            role="IPv4 method: $method"
+            ;;
+    esac
+
+    local -a ipv4_list=()
+    mapfile -t ipv4_list < <(ip -o -4 addr show dev "$dev" 2>/dev/null | awk '{print $4}' || true)
+    local ipv4="none"
+    if (( ${#ipv4_list[@]} > 0 )); then
+        ipv4=$(join_by ", " "${ipv4_list[@]}")
+    fi
+
+    local -a ipv6_list=()
+    mapfile -t ipv6_list < <(ip -o -6 addr show dev "$dev" scope global 2>/dev/null | awk '{print $4}' || true)
+    local ipv6="none"
+    if (( ${#ipv6_list[@]} > 0 )); then
+        ipv6=$(join_by ", " "${ipv6_list[@]}")
+    fi
+
+    echo "  $dev:"
+    echo "    State: ${state:-unknown}"
+    echo "    Connection: ${connection:-none}"
+    echo "    IPv4 role: $role"
+    echo "    IPv4 addresses: $ipv4"
+    echo "    IPv6 addresses: $ipv6"
+}
+
+describe_service_status() {
+    local service="$1"
+    local label="$2"
+    if ! systemctl show "${service}.service" >/dev/null 2>&1; then
+        echo "  $label: service not installed"
+        return
+    fi
+
+    local active
+    active=$(systemctl show -p ActiveState --value "${service}.service" 2>/dev/null || true)
+    [[ -z "$active" ]] && active="unknown"
+
+    local enabled
+    enabled=$(systemctl is-enabled "${service}.service" 2>/dev/null || true)
+    [[ -z "$enabled" ]] && enabled="unknown"
+
+    echo "  $label: ${active} (enabled: ${enabled})"
+}
+
+print_network_status() {
+    if ! command -v nmcli >/dev/null 2>&1; then
+        echo "nmcli (NetworkManager) is required to inspect network status." >&2
+        return 1
+    fi
+
+    local eth0_connection=""
+    local eth0_method=""
+    local eth0_state
+    eth0_state=$(nmcli -t -f DEVICE,STATE device status 2>/dev/null | awk -F: '$1=="eth0" {print $2; exit}' || true)
+    if [[ -n "$eth0_state" ]]; then
+        eth0_connection=$(nmcli -g GENERAL.CONNECTION device show eth0 2>/dev/null | head -n1 | tr -d '\n')
+        if [[ "$eth0_connection" == "--" ]]; then
+            eth0_connection=""
+        fi
+        if [[ -n "$eth0_connection" ]]; then
+            eth0_method=$(nmcli -g ipv4.method connection show "$eth0_connection" 2>/dev/null | head -n1 || true)
+        fi
+    fi
+
+    local -a eth0_ipv4_list=()
+    mapfile -t eth0_ipv4_list < <(ip -o -4 addr show dev eth0 2>/dev/null | awk '{print $4}' || true)
+    local eth0_primary_ip=""
+    if (( ${#eth0_ipv4_list[@]} > 0 )); then
+        eth0_primary_ip="${eth0_ipv4_list[0]}"
+    fi
+
+    local dhcp_summary
+    case "$eth0_method" in
+        shared)
+            if [[ -n "$eth0_primary_ip" ]]; then
+                dhcp_summary="DHCP summary: eth0 is providing DHCP service via NetworkManager shared mode (IP ${eth0_primary_ip})."
+            else
+                dhcp_summary="DHCP summary: eth0 is providing DHCP service via NetworkManager shared mode."
+            fi
+            ;;
+        auto)
+            if [[ -n "$eth0_primary_ip" ]]; then
+                dhcp_summary="DHCP summary: eth0 is configured as a DHCP client (address ${eth0_primary_ip})."
+            else
+                dhcp_summary="DHCP summary: eth0 is configured as a DHCP client (awaiting lease)."
+            fi
+            ;;
+        manual)
+            if [[ -n "$eth0_primary_ip" ]]; then
+                dhcp_summary="DHCP summary: eth0 uses a static IPv4 configuration (${eth0_primary_ip})."
+            else
+                dhcp_summary="DHCP summary: eth0 uses a static IPv4 configuration with no IPv4 address reported."
+            fi
+            ;;
+        disabled)
+            dhcp_summary="DHCP summary: eth0 IPv4 networking is disabled."
+            ;;
+        "")
+            if [[ -z "$eth0_state" ]]; then
+                dhcp_summary="DHCP summary: eth0 device not detected."
+            else
+                dhcp_summary="DHCP summary: eth0 has no active IPv4 configuration."
+            fi
+            ;;
+        *)
+            dhcp_summary="DHCP summary: eth0 IPv4 method is '$eth0_method'."
+            ;;
+    esac
+
+    echo "$dhcp_summary"
+    echo ""
+    echo "Network configuration summary:"
+    describe_device_status eth0
+    describe_device_status wlan0
+    describe_device_status wlan1
+
+    echo ""
+    echo "Network service status:"
+    describe_service_status NetworkManager "NetworkManager"
+    describe_service_status ssh "SSH daemon"
+    describe_service_status wifi-watchdog "WiFi watchdog"
+    describe_service_status wlan1-refresh "wlan1 refresh"
+    describe_service_status nginx "nginx"
+}
 validate_subnet_octet() {
     local value="$1"
     if [[ ! "$value" =~ ^[0-9]+$ ]]; then
@@ -218,12 +407,17 @@ while [[ $# -gt 0 ]]; do
                 echo "Error: --ap-set-password cannot be combined with other options." >&2
                 exit 1
             fi
+            if [[ -n "$DHCP_OVERRIDE" ]]; then
+                echo "Error: --eth0-mode cannot be combined with --dhcp-server or --dhcp-client." >&2
+                exit 1
+            fi
             if [[ $# -lt 2 ]]; then
                 echo "Error: --eth0-mode requires a value." >&2
                 exit 1
             fi
             validate_eth0_mode "$2"
             ETH0_MODE="$2"
+            ETH0_MODE_SPECIFIED=true
             OTHER_OPTIONS_USED=true
             shift
             ;;
@@ -233,8 +427,13 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             mode_value="${1#--eth0-mode=}"
+            if [[ -n "$DHCP_OVERRIDE" ]]; then
+                echo "Error: --eth0-mode cannot be combined with --dhcp-server or --dhcp-client." >&2
+                exit 1
+            fi
             validate_eth0_mode "$mode_value"
             ETH0_MODE="$mode_value"
+            ETH0_MODE_SPECIFIED=true
             OTHER_OPTIONS_USED=true
             ;;
         --no-firewall)
@@ -295,6 +494,49 @@ while [[ $# -gt 0 ]]; do
             VNC_OPTION_SET=true
             OTHER_OPTIONS_USED=true
             ;;
+        --dhcp-server)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
+            if [[ -n "$DHCP_OVERRIDE" ]]; then
+                echo "Error: --dhcp-server cannot be combined with --dhcp-client." >&2
+                exit 1
+            fi
+            if [[ $ETH0_MODE_SPECIFIED == true ]]; then
+                echo "Error: --dhcp-server cannot be combined with --eth0-mode." >&2
+                exit 1
+            fi
+            DHCP_OVERRIDE="shared"
+            ETH0_MODE="shared"
+            ETH0_MODE_SPECIFIED=true
+            OTHER_OPTIONS_USED=true
+            ;;
+        --dhcp-client)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
+            if [[ -n "$DHCP_OVERRIDE" ]]; then
+                echo "Error: --dhcp-client cannot be combined with --dhcp-server." >&2
+                exit 1
+            fi
+            if [[ $ETH0_MODE_SPECIFIED == true ]]; then
+                echo "Error: --dhcp-client cannot be combined with --eth0-mode." >&2
+                exit 1
+            fi
+            DHCP_OVERRIDE="client"
+            ETH0_MODE="client"
+            ETH0_MODE_SPECIFIED=true
+            OTHER_OPTIONS_USED=true
+            ;;
+        --status)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
+            STATUS_ONLY=true
+            ;;
         --ap-set-password)
             if [[ $AP_SET_PASSWORD == true ]]; then
                 echo "Error: --ap-set-password can only be specified once." >&2
@@ -322,6 +564,23 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+
+if [[ $STATUS_ONLY == true ]]; then
+    if [[ $AP_SET_PASSWORD == true ]]; then
+        echo "Error: --status cannot be combined with --ap-set-password." >&2
+        exit 1
+    fi
+    if [[ $OTHER_OPTIONS_USED == true ]]; then
+        echo "Error: --status cannot be combined with other options." >&2
+        exit 1
+    fi
+    if ! command -v nmcli >/dev/null 2>&1; then
+        echo "nmcli (NetworkManager) is required." >&2
+        exit 1
+    fi
+    print_network_status
+    exit 0
+fi
 
 if [[ $EUID -ne 0 ]]; then
     echo "This script must be run as root" >&2
@@ -677,7 +936,13 @@ if [[ "$ETH0_MODE" == "auto" ]]; then
     detect_eth0_mode_auto
 else
     ETH0_MODE_EFFECTIVE="$ETH0_MODE"
-    echo "Forcing eth0 mode '$ETH0_MODE'; skipping DHCP detection."
+    if [[ "$ETH0_MODE" == "shared" ]]; then
+        echo "Forcing eth0 mode 'shared' (DHCP server); skipping automatic detection."
+    elif [[ "$ETH0_MODE" == "client" ]]; then
+        echo "Forcing eth0 mode 'client' (DHCP client); skipping automatic detection."
+    else
+        echo "Forcing eth0 mode '$ETH0_MODE'; skipping DHCP detection."
+    fi
 fi
 
 if [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
@@ -835,6 +1100,7 @@ if [[ $RUN_AP == true ]]; then
             echo "Access point $AP_NAME failed to start." >&2
             exit 1
         fi
+        echo "Access point '$AP_NAME' is active on wlan0 with NetworkManager providing shared DHCP (10.42.0.1/16)."
     fi
 fi
 
@@ -861,6 +1127,7 @@ EOF
             systemctl daemon-reload
             systemctl enable "$WLAN1_REFRESH_SERVICE" >/dev/null 2>&1 || true
             "$WLAN1_REFRESH_SCRIPT" || true
+            echo "wlan1 refresh service '${WLAN1_REFRESH_SERVICE}' installed and enabled."
         fi
     fi
 fi
@@ -888,6 +1155,7 @@ EOF
         systemctl daemon-reload
         systemctl enable "$WATCHDOG_SERVICE" >/dev/null 2>&1 || true
         systemctl restart "$WATCHDOG_SERVICE" || true
+        echo "WiFi watchdog service '${WATCHDOG_SERVICE}' enabled and running."
     fi
 else
     WATCHDOG_SERVICE="wifi-watchdog"
@@ -896,6 +1164,7 @@ else
         systemctl disable "$WATCHDOG_SERVICE" || true
         rm -f "/etc/systemd/system/${WATCHDOG_SERVICE}.service"
         systemctl daemon-reload
+        echo "WiFi watchdog service '${WATCHDOG_SERVICE}' disabled."
     fi
 fi
 
@@ -1018,6 +1287,7 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
             while read -r con; do
                 nmcli connection delete "$con"
             done
+        eth0_ip=""
         if [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
             if nmcli -t -f NAME connection show | grep -Fxq "$ETH0_CONNECTION_CLIENT"; then
                 nmcli connection modify "$ETH0_CONNECTION_CLIENT" \
@@ -1036,7 +1306,7 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
                     connection.autoconnect-priority 0
             fi
         else
-            eth0_ip="192.168.${ETH0_SUBNET}.10/${ETH0_PREFIX}"
+            eth0_ip="${ETH0_SUBNET_BASE}.10/${ETH0_PREFIX}"
             if nmcli -t -f NAME connection show | grep -Fxq "$ETH0_CONNECTION_SHARED"; then
                 nmcli connection modify "$ETH0_CONNECTION_SHARED" \
                     connection.interface-name eth0 \
@@ -1056,6 +1326,11 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
             fi
         fi
         nmcli connection up "$target_conn" >/dev/null 2>&1 || true
+        if [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
+            echo "Configured eth0 for DHCP client mode via NetworkManager profile '$ETH0_CONNECTION_CLIENT'."
+        else
+            echo "Configured eth0 for DHCP server mode via NetworkManager profile '$ETH0_CONNECTION_SHARED' (${eth0_ip})."
+        fi
     fi
 
     if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
@@ -1169,3 +1444,5 @@ fi
 nmcli radio wifi on >/dev/null 2>&1 || true
 nmcli device set wlan1 managed yes >/dev/null 2>&1 || true
 nmcli device connect wlan1 >/dev/null 2>&1 || true
+
+print_network_status
