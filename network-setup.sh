@@ -1308,7 +1308,7 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
             else
                 nmcli connection add type ethernet ifname eth0 con-name "$ETH0_CONNECTION_CLIENT" autoconnect yes \
                     ipv4.method auto ipv4.never-default no ipv4.route-metric 100 \
-                    ipv6.method ignore ipv6-never-default yes \
+                    ipv6.method ignore ipv6.never-default yes \
                     connection.autoconnect-priority 0
             fi
         else
@@ -1327,7 +1327,7 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
             else
                 nmcli connection add type ethernet ifname eth0 con-name "$ETH0_CONNECTION_SHARED" autoconnect yes \
                     ipv4.method shared ipv4.addresses "$eth0_ip" ipv4.never-default yes \
-                    ipv4.route-metric 10000 ipv6.method ignore ipv6-never-default yes \
+                    ipv4.route-metric 10000 ipv6.method ignore ipv6.never-default yes \
                     connection.autoconnect-priority 0
             fi
         fi
