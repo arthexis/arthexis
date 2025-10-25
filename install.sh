@@ -166,10 +166,6 @@ while [[ $# -gt 0 ]]; do
             ENABLE_CELERY=true
             shift
             ;;
-            shift
-            ;;
-            shift
-            ;;
         --lcd-screen)
             ENABLE_LCD_SCREEN=true
             DISABLE_LCD_SCREEN=false
