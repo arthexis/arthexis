@@ -120,18 +120,6 @@ if [ -n "$SERVICE" ] && systemctl list-unit-files | grep -Fq "${SERVICE}.service
         fi
         rm -f "$LOCK_DIR/celery.lck"
     fi
-    if [ -f "$LOCK_DIR/datasette.lck" ]; then
-        DATASETTE_SERVICE="datasette-$SERVICE"
-        if systemctl list-unit-files | grep -Fq "${DATASETTE_SERVICE}.service"; then
-            sudo systemctl stop "$DATASETTE_SERVICE" || true
-            sudo systemctl disable "$DATASETTE_SERVICE" || true
-            DATASETTE_SERVICE_FILE="/etc/systemd/system/${DATASETTE_SERVICE}.service"
-            if [ -f "$DATASETTE_SERVICE_FILE" ]; then
-                sudo rm "$DATASETTE_SERVICE_FILE"
-            fi
-        fi
-        rm -f "$LOCK_DIR/datasette.lck"
-    fi
     rm -f "$LOCK_DIR/service.lck"
 else
     pkill -f "manage.py runserver" || true

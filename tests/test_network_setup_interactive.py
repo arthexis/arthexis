@@ -29,3 +29,13 @@ def test_network_setup_firewall_ports_include_camera_stream() -> None:
     script = REPO_ROOT / "network-setup.sh"
     script_contents = script.read_text()
     assert "PORTS=(22 21114 8554)" in script_contents
+
+
+def test_network_setup_skips_watchdog_when_service_missing() -> None:
+    """The watchdog step should warn and continue when no service lock exists."""
+
+    script = REPO_ROOT / "network-setup.sh"
+    script_contents = script.read_text()
+    assert (
+        "Warning: WiFi watchdog requires the Arthexis suite to be configured as a systemd service; skipping watchdog installation." in script_contents
+    )

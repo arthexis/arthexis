@@ -3221,47 +3221,6 @@ class AdminModelGraphViewTests(TestCase):
         self.assertEqual(kwargs.get("format"), "pdf")
 
 
-class DatasetteTests(TestCase):
-    def setUp(self):
-        self.client = Client()
-        User = get_user_model()
-        self.user = User.objects.create_user(username="ds", password="pwd")
-        Site.objects.update_or_create(id=1, defaults={"name": "Terminal"})
-
-    def test_datasette_auth_endpoint(self):
-        resp = self.client.get(reverse("pages:datasette-auth"))
-        self.assertEqual(resp.status_code, 401)
-        self.client.force_login(self.user)
-        resp = self.client.get(reverse("pages:datasette-auth"))
-        self.assertEqual(resp.status_code, 200)
-
-    def test_navbar_includes_datasette_when_enabled(self):
-        lock_dir = Path(settings.BASE_DIR) / "locks"
-        lock_dir.mkdir(exist_ok=True)
-        lock_file = lock_dir / "datasette.lck"
-        try:
-            lock_file.touch()
-            resp = self.client.get(reverse("pages:index"))
-            self.assertContains(resp, 'href="/data/"')
-        finally:
-            lock_file.unlink(missing_ok=True)
-
-    def test_admin_home_includes_datasette_button_when_enabled(self):
-        lock_dir = Path(settings.BASE_DIR) / "locks"
-        lock_dir.mkdir(exist_ok=True)
-        lock_file = lock_dir / "datasette.lck"
-        try:
-            lock_file.touch()
-            self.user.is_staff = True
-            self.user.is_superuser = True
-            self.user.save()
-            self.client.force_login(self.user)
-            resp = self.client.get(reverse("admin:index"))
-            self.assertContains(resp, 'href="/data/"')
-            self.assertContains(resp, ">Datasette<")
-        finally:
-            lock_file.unlink(missing_ok=True)
-
 
 class UserStorySubmissionTests(TestCase):
     def setUp(self):

@@ -34,23 +34,9 @@ def test_install_script_excludes_particle_flag():
     assert "--particle" not in content
 
 
-def test_install_script_includes_datasette_flag():
-    script_path = Path(__file__).resolve().parent.parent / "install.sh"
-    content = script_path.read_text()
-    assert "--datasette" in content
 
 
-def test_install_script_sets_up_datasette_service():
-    script_path = Path(__file__).resolve().parent.parent / "install.sh"
-    content = script_path.read_text()
-    assert "datasette-$SERVICE" in content
-    assert "datasette serve" in content
 
-
-def test_install_script_restricts_datasette_access():
-    script_path = Path(__file__).resolve().parent.parent / "install.sh"
-    content = script_path.read_text()
-    assert "auth_request /datasette-auth/" in content
 
 
 def test_install_script_runs_env_refresh():
@@ -63,8 +49,14 @@ def test_install_script_runs_env_refresh():
 def test_install_script_requires_nginx_for_roles():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()
-    for role in ("satellite", "control", "constellation"):
-        assert f'require_nginx "{role}"' in content
+    expected_requirements = {
+        "satellite": "satellite",
+        "control": "control",
+        "constellation": "watchtower",
+    }
+    for flag, requirement in expected_requirements.items():
+        assert f"--{flag}" in content
+        assert f'require_nginx "{requirement}"' in content
 
 
 def test_install_script_role_defaults():
