@@ -425,6 +425,8 @@ fi
 
 sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
 
+sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
+
 if arthexis_can_manage_nginx; then
     arthexis_refresh_nginx_maintenance "$SCRIPT_DIR" "$NGINX_CONF"
 fi
