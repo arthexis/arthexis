@@ -25,11 +25,10 @@ CLEAN=false
 ENABLE_CONTROL=false
 NODE_ROLE="Terminal"
 REQUIRES_REDIS=false
-ENABLE_DATASETTE=true
 START_SERVICES=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest|--stable] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--lcd-screen|--no-lcd-screen] [--datasette|--no-datasette] [--clean] [--start]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest|--stable] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--lcd-screen|--no-lcd-screen] [--clean] [--start]" >&2
     exit 1
 }
 
@@ -167,14 +166,6 @@ while [[ $# -gt 0 ]]; do
             ENABLE_CELERY=true
             shift
             ;;
-        --datasette)
-            ENABLE_DATASETTE=true
-            shift
-            ;;
-        --no-datasette)
-            ENABLE_DATASETTE=false
-            shift
-            ;;
         --lcd-screen)
             ENABLE_LCD_SCREEN=true
             DISABLE_LCD_SCREEN=false
@@ -270,7 +261,6 @@ if [ -z "$PORT" ]; then
     fi
 fi
 
-DATASETTE_PORT=$((PORT + 1))
 
 BASE_DIR="$SCRIPT_DIR"
 cd "$BASE_DIR"
@@ -325,12 +315,6 @@ if [ "$ENABLE_CONTROL" != true ]; then
     rm -f "$RFID_LOCK"
 fi
 
-DATASETTE_LOCK="$LOCK_DIR/datasette.lck"
-if [ "$ENABLE_DATASETTE" = true ]; then
-    touch "$DATASETTE_LOCK"
-else
-    rm -f "$DATASETTE_LOCK"
-fi
 
 # Create virtual environment if missing
 if [ ! -d .venv ]; then
@@ -398,21 +382,6 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
-
-    #DATASETTE_START
-    location /data/ {
-        auth_request /datasette-auth/;
-        error_page 401 =302 /login/?next=$request_uri;
-        proxy_pass http://127.0.0.1:DATASETTE_PORT_PLACEHOLDER/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    #DATASETTE_END
 }
 NGINXCONF
 else
@@ -445,31 +414,12 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
-
-    #DATASETTE_START
-    location /data/ {
-        auth_request /datasette-auth/;
-        error_page 401 =302 /login/?next=$request_uri;
-        proxy_pass http://127.0.0.1:DATASETTE_PORT_PLACEHOLDER/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    #DATASETTE_END
 }
 NGINXCONF
 fi
 
-if [ "$ENABLE_DATASETTE" = true ]; then
-    sudo sed -i "s/DATASETTE_PORT_PLACEHOLDER/$DATASETTE_PORT/" "$NGINX_CONF"
-    sudo sed -i '/#DATASETTE_START/d;/#DATASETTE_END/d' "$NGINX_CONF"
-else
-    sudo sed -i '/#DATASETTE_START/,/#DATASETTE_END/d' "$NGINX_CONF"
-fi
+
+sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
 
 sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
 
@@ -503,13 +453,6 @@ else
     echo "Requirements unchanged. Skipping installation."
 fi
 
-if [ "$ENABLE_DATASETTE" = true ]; then
-    if [ -f "$PIP_INSTALL_HELPER" ] && command -v python >/dev/null 2>&1; then
-        python "$PIP_INSTALL_HELPER" datasette
-    else
-        pip install datasette
-    fi
-fi
 
 if [ "$ENABLE_CONTROL" = true ]; then
     echo "Checking for RFID scanner hardware..."
@@ -598,33 +541,10 @@ User=$(id -un)
 WantedBy=multi-user.target
 BEATSERVICEEOF
     fi
-    if [ "$ENABLE_DATASETTE" = true ]; then
-        DATASETTE_SERVICE="datasette-$SERVICE"
-        DATASETTE_SERVICE_FILE="/etc/systemd/system/${DATASETTE_SERVICE}.service"
-        sudo bash -c "cat > '$DATASETTE_SERVICE_FILE'" <<DATASETTESERVICEEOF
-[Unit]
-Description=Datasette for $SERVICE
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=$BASE_DIR
-ExecStart=$BASE_DIR/.venv/bin/datasette serve $DB_FILE --host 127.0.0.1 --port $DATASETTE_PORT --setting base_url /data/
-Restart=always
-User=$(id -un)
-
-[Install]
-WantedBy=multi-user.target
-DATASETTESERVICEEOF
-    fi
     sudo systemctl daemon-reload
     sudo systemctl enable "$SERVICE"
     if [ "$ENABLE_CELERY" = true ]; then
         sudo systemctl enable "$CELERY_SERVICE" "$CELERY_BEAT_SERVICE"
-    fi
-    if [ "$ENABLE_DATASETTE" = true ]; then
-        sudo systemctl enable "$DATASETTE_SERVICE"
-        sudo systemctl restart "$DATASETTE_SERVICE"
     fi
 fi
 
@@ -666,23 +586,6 @@ elif [ "$DISABLE_LCD_SCREEN" = true ]; then
     fi
 fi
 
-if [ "$ENABLE_DATASETTE" != true ]; then
-    if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
-        SERVICE="$(cat "$LOCK_DIR/service.lck")"
-    fi
-    if [ -n "$SERVICE" ]; then
-        DATASETTE_SERVICE="datasette-$SERVICE"
-        if systemctl list-unit-files | grep -Fq "${DATASETTE_SERVICE}.service"; then
-            sudo systemctl stop "$DATASETTE_SERVICE" || true
-            sudo systemctl disable "$DATASETTE_SERVICE" || true
-            DATASETTE_SERVICE_FILE="/etc/systemd/system/${DATASETTE_SERVICE}.service"
-            if [ -f "$DATASETTE_SERVICE_FILE" ]; then
-                sudo rm "$DATASETTE_SERVICE_FILE"
-            fi
-            sudo systemctl daemon-reload
-        fi
-    fi
-fi
 
 if [ "$AUTO_UPGRADE" = true ]; then
     rm -f AUTO_UPGRADE
@@ -722,9 +625,6 @@ elif [ -n "$SERVICE" ]; then
     if [ "$ENABLE_CELERY" = true ]; then
         sudo systemctl restart "celery-$SERVICE"
         sudo systemctl restart "celery-beat-$SERVICE"
-    fi
-    if [ "$ENABLE_DATASETTE" = true ]; then
-        sudo systemctl restart "datasette-$SERVICE"
     fi
 fi
 

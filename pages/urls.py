@@ -21,7 +21,6 @@ urlpatterns = [
         views.invitation_login,
         name="invitation-login",
     ),
-    path("datasette-auth/", views.datasette_auth, name="datasette-auth"),
     path("man/", views.manual_list, name="manual-list"),
     path("man/<slug:slug>/", views.manual_detail, name="manual-detail"),
     path("man/<slug:slug>/pdf/", views.manual_pdf, name="manual-pdf"),

@@ -221,9 +221,6 @@
     <a class="button" href="{% url 'admin:config' %}">{% translate 'Django Settings' %}</a>
     <a class="button" href="{% url 'admin:sigil_builder' %}">{% translate 'Sigil Builder' %}</a>
     <a class="button" href="{% url 'admin:log_viewer' %}">{% translate 'Log Viewer' %}</a>
-    {% if datasette_enabled %}
-      <a class="button" href="/data/">{% translate 'Datasette' %}</a>
-    {% endif %}
   </div>
 </div>
 {% endblock %}
