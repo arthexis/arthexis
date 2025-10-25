@@ -53,6 +53,23 @@ def test_install_script_restricts_datasette_access():
     assert "auth_request /datasette-auth/" in content
 
 
+def test_install_script_uses_unique_datasette_placeholder():
+    script_path = Path(__file__).resolve().parent.parent / "install.sh"
+    content = script_path.read_text()
+    assert "DATASETTE_PORT_PLACEHOLDER" in content
+    assert "DATA_PORT_PLACEHOLDER" not in content
+
+
+def test_install_script_updates_datasette_port_before_app_port():
+    script_path = Path(__file__).resolve().parent.parent / "install.sh"
+    content = script_path.read_text()
+    datasette_rewrite = "s/DATASETTE_PORT_PLACEHOLDER/$DATASETTE_PORT/"
+    port_rewrite = "s/PORT_PLACEHOLDER/$PORT/"
+    assert datasette_rewrite in content
+    assert port_rewrite in content
+    assert content.index(datasette_rewrite) < content.index(port_rewrite)
+
+
 def test_install_script_runs_env_refresh():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()
@@ -63,8 +80,14 @@ def test_install_script_runs_env_refresh():
 def test_install_script_requires_nginx_for_roles():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()
-    for role in ("satellite", "control", "constellation"):
-        assert f'require_nginx "{role}"' in content
+    expected_requirements = {
+        "satellite": "satellite",
+        "control": "control",
+        "constellation": "watchtower",
+    }
+    for flag, requirement in expected_requirements.items():
+        assert f"--{flag}" in content
+        assert f'require_nginx "{requirement}"' in content
 
 
 def test_install_script_role_defaults():

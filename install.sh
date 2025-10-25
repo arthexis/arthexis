@@ -403,7 +403,7 @@ server {
     location /data/ {
         auth_request /datasette-auth/;
         error_page 401 =302 /login/?next=$request_uri;
-        proxy_pass http://127.0.0.1:DATA_PORT_PLACEHOLDER/;
+        proxy_pass http://127.0.0.1:DATASETTE_PORT_PLACEHOLDER/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -450,7 +450,7 @@ server {
     location /data/ {
         auth_request /datasette-auth/;
         error_page 401 =302 /login/?next=$request_uri;
-        proxy_pass http://127.0.0.1:DATA_PORT_PLACEHOLDER/;
+        proxy_pass http://127.0.0.1:DATASETTE_PORT_PLACEHOLDER/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -464,13 +464,14 @@ server {
 NGINXCONF
 fi
 
-sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
 if [ "$ENABLE_DATASETTE" = true ]; then
-    sudo sed -i "s/DATA_PORT_PLACEHOLDER/$DATASETTE_PORT/" "$NGINX_CONF"
+    sudo sed -i "s/DATASETTE_PORT_PLACEHOLDER/$DATASETTE_PORT/" "$NGINX_CONF"
     sudo sed -i '/#DATASETTE_START/d;/#DATASETTE_END/d' "$NGINX_CONF"
 else
     sudo sed -i '/#DATASETTE_START/,/#DATASETTE_END/d' "$NGINX_CONF"
 fi
+
+sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
 
 if arthexis_can_manage_nginx; then
     arthexis_refresh_nginx_maintenance "$SCRIPT_DIR" "$NGINX_CONF"
