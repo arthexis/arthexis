@@ -9,10 +9,12 @@
     &rsaquo;
     <a href="{% url 'admin:nodes_node_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
     &rsaquo;
-    {% if operation == 'import' %}
-        {% trans 'Import RFID results' %}
-    {% else %}
+    {% if operation == 'export' %}
         {% trans 'Export RFID results' %}
+    {% elif operation == 'fetch' %}
+        {% trans 'Fetch RFID results' %}
+    {% else %}
+        {% trans 'Import RFID results' %}
     {% endif %}
 </div>
 {% endblock %}
@@ -20,10 +22,12 @@
 {% block content %}
 <div class="module" id="rfid-sync-results">
     <h2>
-        {% if operation == 'import' %}
-            {% trans 'Import RFID results' %}
-        {% else %}
+        {% if operation == 'export' %}
             {% trans 'Export RFID results' %}
+        {% elif operation == 'fetch' %}
+            {% trans 'Fetch RFID results' %}
+        {% else %}
+            {% trans 'Import RFID results' %}
         {% endif %}
     </h2>
     {% if setup_error %}
