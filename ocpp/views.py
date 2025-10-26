@@ -1,6 +1,7 @@
 import json
 import uuid
 from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import datetime, time, timedelta
 from types import SimpleNamespace
 
 from django.http import Http404, HttpResponse, JsonResponse
@@ -752,8 +753,48 @@ def dashboard(request):
             request.get_full_path(), login_url=reverse("pages:login")
         )
     is_watchtower = role_name in {"Watchtower", "Constellation"}
-    chargers = []
-    for charger in _visible_chargers(request.user):
+    visible_chargers = (
+        _visible_chargers(request.user)
+        .select_related("location")
+        .order_by("charger_id", "connector_id")
+    )
+    stats_cache: dict[int, dict[str, float]] = {}
+
+    def _charger_display_name(charger: Charger) -> str:
+        if charger.display_name:
+            return charger.display_name
+        if charger.location:
+            return charger.location.name
+        return charger.charger_id
+
+    today = timezone.localdate()
+    tz = timezone.get_current_timezone()
+    day_start = datetime.combine(today, time.min)
+    if timezone.is_naive(day_start):
+        day_start = timezone.make_aware(day_start, tz)
+    day_end = day_start + timedelta(days=1)
+
+    def _charger_stats(charger: Charger) -> dict[str, float]:
+        cache_key = charger.pk or id(charger)
+        if cache_key not in stats_cache:
+            stats_cache[cache_key] = {
+                "total_kw": charger.total_kw,
+                "today_kw": charger.total_kw_for_range(day_start, day_end),
+            }
+        return stats_cache[cache_key]
+
+    def _status_url(charger: Charger) -> str:
+        return _reverse_connector_url(
+            "charger-status",
+            charger.charger_id,
+            charger.connector_slug,
+        )
+
+    chargers: list[dict[str, object]] = []
+    charger_groups: list[dict[str, object]] = []
+    group_lookup: dict[str, dict[str, object]] = {}
+
+    for charger in visible_chargers:
         tx_obj = store.get_transaction(charger.charger_id, charger.connector_id)
         if not tx_obj:
             tx_obj = (
@@ -761,13 +802,54 @@ def dashboard(request):
                 .order_by("-start_time")
                 .first()
             )
+        has_session = _has_active_session(tx_obj)
         state, color = _charger_state(charger, tx_obj)
-        chargers.append({"charger": charger, "state": state, "color": color})
+        if (
+            charger.connector_id is not None
+            and not has_session
+            and (charger.last_status or "").strip().casefold() == "charging"
+        ):
+            state, color = STATUS_BADGE_MAP["charging"]
+        entry = {
+            "charger": charger,
+            "state": state,
+            "color": color,
+            "display_name": _charger_display_name(charger),
+            "stats": _charger_stats(charger),
+            "status_url": _status_url(charger),
+        }
+        chargers.append(entry)
+        if charger.connector_id is None:
+            group = {"parent": entry, "children": []}
+            charger_groups.append(group)
+            group_lookup[charger.charger_id] = group
+        else:
+            group = group_lookup.get(charger.charger_id)
+            if group is None:
+                group = {"parent": None, "children": []}
+                charger_groups.append(group)
+                group_lookup[charger.charger_id] = group
+            group["children"].append(entry)
+
+    for group in charger_groups:
+        parent_entry = group.get("parent")
+        if not parent_entry or not group["children"]:
+            continue
+        connector_statuses = [
+            (child["charger"].last_status or "").strip().casefold()
+            for child in group["children"]
+            if child["charger"].connector_id is not None
+        ]
+        if connector_statuses and all(status == "charging" for status in connector_statuses):
+            label, badge_color = STATUS_BADGE_MAP["charging"]
+            parent_entry["state"] = label
+            parent_entry["color"] = badge_color
     scheme = "wss" if request.is_secure() else "ws"
     host = request.get_host()
     ws_url = f"{scheme}://{host}/ocpp/<CHARGE_POINT_ID>/"
     context = {
         "chargers": chargers,
+        "charger_groups": charger_groups,
         "show_demo_notice": is_watchtower,
         "demo_ws_url": ws_url,
         "ws_rate_limit": store.MAX_CONNECTIONS_PER_IP,

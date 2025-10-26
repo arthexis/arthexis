@@ -4825,6 +4825,59 @@ class LiveUpdateViewTests(TestCase):
         )
         self.assertEqual(aggregate_entry["state"], available_label)
 
+    def test_dashboard_groups_connectors_under_parent(self):
+        aggregate = Charger.objects.create(charger_id="GROUPED")
+        first = Charger.objects.create(
+            charger_id=aggregate.charger_id, connector_id=1
+        )
+        second = Charger.objects.create(
+            charger_id=aggregate.charger_id, connector_id=2
+        )
+
+        resp = self.client.get(reverse("ocpp-dashboard"))
+        self.assertEqual(resp.status_code, 200)
+        groups = resp.context["charger_groups"]
+        target = next(
+            group
+            for group in groups
+            if group.get("parent")
+            and group["parent"]["charger"].pk == aggregate.pk
+        )
+        child_ids = [item["charger"].pk for item in target["children"]]
+        self.assertEqual(child_ids, [first.pk, second.pk])
+
+    def test_dashboard_includes_energy_totals(self):
+        aggregate = Charger.objects.create(charger_id="KWSTATS")
+        now = timezone.now()
+        Transaction.objects.create(
+            charger=aggregate,
+            start_time=now - timedelta(hours=1),
+            stop_time=now,
+            meter_start=0,
+            meter_stop=3000,
+        )
+        past_start = now - timedelta(days=2)
+        Transaction.objects.create(
+            charger=aggregate,
+            start_time=past_start,
+            stop_time=past_start + timedelta(hours=1),
+            meter_start=0,
+            meter_stop=1000,
+        )
+
+        resp = self.client.get(reverse("ocpp-dashboard"))
+        self.assertEqual(resp.status_code, 200)
+        groups = resp.context["charger_groups"]
+        target = next(
+            group
+            for group in groups
+            if group.get("parent")
+            and group["parent"]["charger"].pk == aggregate.pk
+        )
+        stats = target["parent"]["stats"]
+        self.assertAlmostEqual(stats["total_kw"], 4.0, places=2)
+        self.assertAlmostEqual(stats["today_kw"], 3.0, places=2)
+
     def test_cp_simulator_includes_interval(self):
         resp = self.client.get(reverse("cp-simulator"))
         self.assertEqual(resp.context["request"].live_update_interval, 5)
