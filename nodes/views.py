@@ -204,6 +204,60 @@ def _get_host_domain(request) -> str:
     return ""
 
 
+def _normalize_port(value: str | int | None) -> int | None:
+    """Return ``value`` as an integer port number when valid."""
+
+    if value in (None, ""):
+        return None
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        return None
+    if port <= 0 or port > 65535:
+        return None
+    return port
+
+
+def _get_host_port(request) -> int | None:
+    """Return the port implied by the current request if available."""
+
+    forwarded_port = request.headers.get("X-Forwarded-Port") or request.META.get(
+        "HTTP_X_FORWARDED_PORT"
+    )
+    port = _normalize_port(forwarded_port)
+    if port:
+        return port
+
+    try:
+        host = request.get_host()
+    except Exception:  # pragma: no cover - defensive
+        host = ""
+    if host:
+        _, host_port = split_domain_port(host)
+        port = _normalize_port(host_port)
+        if port:
+            return port
+
+    forwarded_proto = request.headers.get("X-Forwarded-Proto", "")
+    if forwarded_proto:
+        scheme = forwarded_proto.split(",")[0].strip().lower()
+        if scheme == "https":
+            return 443
+        if scheme == "http":
+            return 80
+
+    if request.is_secure():
+        return 443
+
+    scheme = getattr(request, "scheme", "")
+    if scheme.lower() == "https":
+        return 443
+    if scheme.lower() == "http":
+        return 80
+
+    return None
+
+
 def _get_advertised_address(request, node) -> str:
     """Return the best address for the client to reach this node."""
 
@@ -245,6 +299,11 @@ def node_info(request):
     token = request.GET.get("token", "")
     host_domain = _get_host_domain(request)
     advertised_address = _get_advertised_address(request, node)
+    advertised_port = node.port
+    if host_domain:
+        host_port = _get_host_port(request)
+        if host_port:
+            advertised_port = host_port
     if host_domain:
         hostname = host_domain
         if advertised_address and advertised_address != node.address:
@@ -257,7 +316,7 @@ def node_info(request):
     data = {
         "hostname": hostname,
         "address": address,
-        "port": node.port,
+        "port": advertised_port,
         "mac_address": node.mac_address,
         "public_key": node.public_key,
         "features": list(node.features.values_list("slug", flat=True)),
