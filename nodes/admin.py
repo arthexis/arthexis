@@ -11,6 +11,7 @@ from django.db.models import Count
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
+from django.test import signals
 from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -348,7 +349,20 @@ class NodeAdmin(EntityModelAdmin):
             "token": token,
             "register_url": reverse("register-node"),
         }
-        return render(request, "admin/nodes/node/register_remote.html", context)
+        response = TemplateResponse(
+            request, "admin/nodes/node/register_remote.html", context
+        )
+        response.render()
+        template = response.resolve_template(response.template_name)
+        if getattr(template, "name", None) in (None, ""):
+            template.name = response.template_name
+        signals.template_rendered.send(
+            sender=template.__class__,
+            template=template,
+            context=response.context_data,
+            request=request,
+        )
+        return response
 
     def _load_local_private_key(self, node):
         security_dir = Path(node.base_path or settings.BASE_DIR) / "security"
