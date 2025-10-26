@@ -3457,6 +3457,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                 "toggle_url": toggle_url,
                 "toggle_label": toggle_label,
                 "public_view_url": public_view_url,
+                "deep_read_url": reverse("rfid-scan-deep"),
             }
         )
         context["title"] = _("Scan RFIDs")
