@@ -2356,14 +2356,14 @@ class ChargerAdminTests(TestCase):
         self.assertContains(resp, "Today kW")
         self.assertContains(resp, "5.00")
 
-    def test_admin_changelist_indents_connectors(self):
+    def test_admin_changelist_does_not_indent_connectors(self):
         Charger.objects.create(charger_id="INDENTMAIN")
         Charger.objects.create(charger_id="INDENTMAIN", connector_id=1)
 
         url = reverse("admin:ocpp_charger_changelist")
         resp = self.client.get(url)
 
-        self.assertContains(resp, 'class="charger-connector-entry"')
+        self.assertNotContains(resp, "charger-connector-entry")
 
     def test_last_fields_are_read_only(self):
         now = timezone.now()

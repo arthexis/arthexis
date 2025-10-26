@@ -431,10 +431,6 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     @admin.display(description="Display Name", ordering="display_name")
     def display_name_with_fallback(self, obj):
         name = self._charger_display_name(obj)
-        if obj.connector_id is not None:
-            return format_html(
-                '<span class="charger-connector-entry">{}</span>', name
-            )
         return name
 
     @admin.display(description="Charger", ordering="display_name")
