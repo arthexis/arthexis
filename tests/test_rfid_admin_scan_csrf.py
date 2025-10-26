@@ -36,6 +36,10 @@ class AdminRfidScanCsrfTests(TestCase):
         response = self.client.post(reverse("admin:core_rfid_scan"))
         self.assertEqual(response.status_code, 200)
 
+    def test_scan_view_includes_deep_read_url(self):
+        response = self.client.get(reverse("admin:core_rfid_scan"))
+        self.assertContains(response, reverse("rfid-scan-deep"))
+
 
 class AdminRfidScanNextTests(TestCase):
     def setUp(self):
