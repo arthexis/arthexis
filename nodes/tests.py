@@ -742,6 +742,55 @@ class NodeGetLocalTests(TestCase):
         self.assertEqual(node.current_relation, Node.Relation.UPSTREAM)
 
 
+class NodeInfoViewTests(TestCase):
+    def setUp(self):
+        self.mac = "02:00:00:00:00:01"
+        self.patcher = patch("nodes.models.Node.get_current_mac", return_value=self.mac)
+        self.patcher.start()
+        self.addCleanup(self.patcher.stop)
+        self.node = Node.objects.create(
+            hostname="local",
+            address="10.0.0.10",
+            port=8000,
+            mac_address=self.mac,
+            public_endpoint="local",
+            current_relation=Node.Relation.SELF,
+        )
+        self.url = reverse("node-info")
+
+    def test_returns_https_port_for_secure_domain_request(self):
+        with self.settings(ALLOWED_HOSTS=["arthexis.com"]):
+            response = self.client.get(
+                self.url,
+                secure=True,
+                HTTP_HOST="arthexis.com",
+            )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["port"], 443)
+
+    def test_returns_http_port_for_plain_domain_request(self):
+        with self.settings(ALLOWED_HOSTS=["arthexis.com"]):
+            response = self.client.get(
+                self.url,
+                HTTP_HOST="arthexis.com",
+            )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["port"], 80)
+
+    def test_preserves_explicit_port_in_host_header(self):
+        with self.settings(ALLOWED_HOSTS=["arthexis.com"]):
+            response = self.client.get(
+                self.url,
+                secure=True,
+                HTTP_HOST="arthexis.com:8443",
+            )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["port"], 8443)
+
+
 class RegisterVisitorNodeMessageTests(TestCase):
     def setUp(self):
         self.client = Client()
