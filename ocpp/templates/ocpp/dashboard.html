@@ -78,19 +78,46 @@
     <tr>
       <th>{% trans "Name" %}</th>
       <th>{% trans "Serial Number" %}</th>
+      <th class="text-end">{% trans "Total kW" %}</th>
+      <th class="text-end">{% trans "Today's kW" %}</th>
       <th>{% trans "Status" %}</th>
     </tr>
   </thead>
   <tbody>
-    {% for item in chargers %}
-    <tr>
-      <td><a href="{% url 'charger-status' item.charger.charger_id %}">{{ item.charger.name|default:item.charger.charger_id }}</a></td>
-      <td>{{ item.charger.charger_id }}</td>
-      <td><span class="badge" style="background-color: {{ item.color }};">{{ item.state }}</span></td>
-    </tr>
-    {% empty %}
-    <tr><td colspan="3">{% trans "No charge points found." %}</td></tr>
-    {% endfor %}
+    {% if charger_groups %}
+      {% for group in charger_groups %}
+        {% if group.parent %}
+        <tr>
+          <td>
+            <a href="{{ group.parent.status_url }}">{{ group.parent.display_name }}</a>
+          </td>
+          <td>{{ group.parent.charger.charger_id }}</td>
+          <td class="text-end">{{ group.parent.stats.total_kw|floatformat:2 }}</td>
+          <td class="text-end">{{ group.parent.stats.today_kw|floatformat:2 }}</td>
+          <td>
+            <span class="badge" style="background-color: {{ group.parent.color }};">{{ group.parent.state }}</span>
+          </td>
+        </tr>
+        {% endif %}
+        {% for item in group.children %}
+        <tr>
+          <td class="ps-4">
+            <a href="{{ item.status_url }}">{{ item.display_name }}</a>
+          </td>
+          <td>
+            {{ item.charger.charger_id }}{% if item.charger.connector_id %} #{{ item.charger.connector_id }}{% endif %}
+          </td>
+          <td class="text-end">{{ item.stats.total_kw|floatformat:2 }}</td>
+          <td class="text-end">{{ item.stats.today_kw|floatformat:2 }}</td>
+          <td>
+            <span class="badge" style="background-color: {{ item.color }};">{{ item.state }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      {% endfor %}
+    {% else %}
+    <tr><td colspan="5">{% trans "No charge points found." %}</td></tr>
+    {% endif %}
   </tbody>
 </table>
 {% if request.user.is_staff %}
