@@ -54,7 +54,7 @@ pillow==11.3.0
 prompt_toolkit==3.0.51
 psutil==7.1.1
 psycopg==3.2.9
-psycopg-binary==3.2.11
+psycopg-binary==3.2.12
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pycparser==2.22
