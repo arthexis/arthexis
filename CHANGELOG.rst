@@ -4,6 +4,34 @@ Changelog
 Unreleased
 ----------
 
+- 38e81196 chore(deps): bump psycopg-binary from 3.2.11 to 3.2.12 (#2442)
+- 353f6d65 chore(deps): bump zope-interface from 7.2 to 8.0.1 (#2444)
+- f4709de8 Remove connector indentation from admin charger list (#2445)
+- cad26b54 Restore admin breadcrumbs on local node registration (#2432)
+- a2038b13 Fix advertised port for secure node info requests (#2430)
+- 53984f50 Fix admin RFID scanner deep read endpoint (#2429)
+- 26664ec5 Add fetch RFIDs admin action (#2428)
+- ead3910b Fix EasyMDE toolbar icons by loading Font Awesome (#2427)
+- cba94025 Enhance OCPP dashboard layout and metrics (#2426)
+- b8b1a988 Fix nmcli ipv6 property name (#2425)
+- 0ed3f51b Remove Datasette support (#2424)
+- 2d5578e6 Fix watchdog service guard and datasette port substitution (#2423)
+- 6ec6ac67 Add status reporting and DHCP overrides to network setup (#2422)
+- 93132527 Improve charger admin changelist grouping and stats (#2421)
+- 57ffaf49 Remove MCP and assistant profile features (#2420)
+- 29bccb9b Sanitize MCP sigil port values for nginx configuration (#2419)
+- bd11de35 Normalize MCP_SIGIL_PORT parsing before templating nginx (#2418)
+- 353bc676 Update watchtower dashboard landing to CPMS (#2417)
+- ffa30369 Normalize MCP prefix when configuring nginx (#2416)
+- 115c71ab Sanitize MCP SIGIL port for nginx config (#2415)
+- 734acc69 Add eth0 mode override support to network setup script (#2414)
+- 60a2dc6a Allow network setup to accept full subnet overrides (#2412)
+- 0e11ab15 Shrink pill menu icons to prevent overflow (#2411)
+- df4535bf chore: record publish metadata for v0.1.20
+
+v0.1.20 (2025-10-22)
+--------------------
+
 - 2823a6ea Fix RFID account lookup class method (#2410)
 - bb7b9880 Support RFID prefix matching and admin merge (#2409)
 - 3f407eab Add conduit descriptors to AWG calculator (#2402)

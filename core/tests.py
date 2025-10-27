@@ -1290,11 +1290,10 @@ class ReleaseProcessTests(TestCase):
         run.assert_any_call(["git", "clean", "-fd"], check=False)
 
     @mock.patch("core.views.PackageRelease.dump_fixture")
-    @mock.patch("core.views._ensure_release_todo")
     @mock.patch("core.views._sync_with_origin_main")
     @mock.patch("core.views.subprocess.run")
     def test_pre_release_syncs_with_main(
-        self, run, sync_main, ensure_todo, dump_fixture
+        self, run, sync_main, dump_fixture
     ):
         import subprocess as sp
 
@@ -1306,11 +1305,6 @@ class ReleaseProcessTests(TestCase):
             return sp.CompletedProcess(cmd, 0)
 
         run.side_effect = fake_run
-        ensure_todo.return_value = (
-            mock.Mock(request="Create release pkg 1.0.1", url="", request_details=""),
-            Path("core/fixtures/todos__next_release.json"),
-        )
-
         version_path = Path("VERSION")
         original_version = version_path.read_text(encoding="utf-8")
 
