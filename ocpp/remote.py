@@ -228,6 +228,7 @@ def apply_remote_snapshot(node, payload):
                 ),
                 "diagnostics_location": entry.get("diagnostics_location"),
                 "node_origin": node,
+                "manager_node": node,
             }
 
             if not isinstance(defaults["last_meter_values"], dict):
