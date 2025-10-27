@@ -1,5 +1,5 @@
 {% extends "pages/base.html" %}
-{% load i18n %}
+{% load i18n humanize %}
 
 {% block title %}{% trans "Charge Points" %}{% endblock %}
 
@@ -81,6 +81,7 @@
       <th class="text-end">{% trans "Total kW" %}</th>
       <th class="text-end">{% trans "Today's kW" %}</th>
       <th>{% trans "Status" %}</th>
+      <th>{% trans "Last Seen" %}</th>
     </tr>
   </thead>
   <tbody>
@@ -97,6 +98,15 @@
           <td>
             <span class="badge" style="background-color: {{ group.parent.color }};">{{ group.parent.state }}</span>
           </td>
+          <td>
+            {% if group.parent.last_seen %}
+              <time datetime="{{ group.parent.last_seen|date:'c' }}" title="{{ group.parent.last_seen|date:'DATETIME_FORMAT' }}">
+                {{ group.parent.last_seen|naturaltime }}
+              </time>
+            {% else %}
+              &mdash;
+            {% endif %}
+          </td>
         </tr>
         {% endif %}
         {% for item in group.children %}
@@ -112,11 +122,20 @@
           <td>
             <span class="badge" style="background-color: {{ item.color }};">{{ item.state }}</span>
           </td>
+          <td>
+            {% if item.last_seen %}
+              <time datetime="{{ item.last_seen|date:'c' }}" title="{{ item.last_seen|date:'DATETIME_FORMAT' }}">
+                {{ item.last_seen|naturaltime }}
+              </time>
+            {% else %}
+              &mdash;
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       {% endfor %}
     {% else %}
-    <tr><td colspan="5">{% trans "No charge points found." %}</td></tr>
+    <tr><td colspan="6">{% trans "No charge points found." %}</td></tr>
     {% endif %}
   </tbody>
 </table>

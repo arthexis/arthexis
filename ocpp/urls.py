@@ -6,6 +6,7 @@ urlpatterns = [
     path("cpms/dashboard/", views.dashboard, name="ocpp-dashboard"),
     path("evcs/simulator/", views.cp_simulator, name="cp-simulator"),
     path("chargers/", views.charger_list, name="charger-list"),
+    path("remote/chargers/", views.remote_charger_snapshot, name="remote-charger-snapshot"),
     path("chargers/<str:cid>/", views.charger_detail, name="charger-detail"),
     path(
         "chargers/<str:cid>/connector/<slug:connector>/",

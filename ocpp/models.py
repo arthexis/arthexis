@@ -44,6 +44,13 @@ class Location(Entity):
         verbose_name_plural = _("Charge Locations")
 
 
+def get_default_node_origin() -> int | None:
+    """Return the primary key of the local node for default assignments."""
+
+    node = Node.get_local()
+    return node.pk if node else None
+
+
 class Charger(Entity):
     """Known charge point."""
 
@@ -214,6 +221,14 @@ class Charger(Entity):
             "Latest GetConfiguration response received from this charge point."
         ),
     )
+    node_origin = models.ForeignKey(
+        "nodes.Node",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="origin_chargers",
+        default=get_default_node_origin,
+    )
     manager_node = models.ForeignKey(
         "nodes.Node",
         on_delete=models.SET_NULL,
@@ -236,6 +251,14 @@ class Charger(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.charger_id
+
+    @property
+    def origin_node(self) -> Node | None:
+        """Return the node this charger originated from."""
+
+        if self.node_origin_id:
+            return self.node_origin
+        return Node.get_local()
 
     @classmethod
     def visible_for_user(cls, user):

@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from datetime import timedelta
 import contextlib
 import os
 import sys
@@ -352,6 +353,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.humanize",
     "import_export",
     "django_object_actions",
     "django.contrib.sites",
@@ -661,5 +663,9 @@ CELERY_BEAT_SCHEDULE = {
     "heartbeat": {
         "task": "core.tasks.heartbeat",
         "schedule": crontab(minute="*/5"),
+    },
+    "remote-charger-sync": {
+        "task": "ocpp.tasks.sync_remote_chargers",
+        "schedule": timedelta(minutes=1),
     },
 }

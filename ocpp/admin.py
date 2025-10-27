@@ -1,5 +1,6 @@
 from django.contrib import admin, messages
 from django import forms
+from django.utils.translation import gettext_lazy as _
 
 import asyncio
 from datetime import datetime, time, timedelta
@@ -243,6 +244,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                     "connector_id",
                     "language",
                     "location",
+                    "node_origin",
                     "last_path",
                     "last_heartbeat",
                     "last_meter_values",
@@ -322,6 +324,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "charger_name_display",
         "require_rfid_display",
         "public_display",
+        "origin_label",
         "last_heartbeat",
         "session_kw",
         "total_kw_display",
@@ -353,6 +356,18 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
 
     require_rfid_display.boolean = True
     require_rfid_display.short_description = "RFID Auth"
+
+    @admin.display(description=_("Origin"))
+    def origin_label(self, obj):
+        node = obj.origin_node
+        if not node or getattr(node, "is_local", False):
+            return _("Local")
+        for attr in ("hostname", "public_endpoint", "address"):
+            value = getattr(node, attr, "") or ""
+            value = value.strip()
+            if value:
+                return value
+        return str(node)
 
     def page_link(self, obj):
         from django.utils.html import format_html

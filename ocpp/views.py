@@ -1,4 +1,6 @@
+import base64
 import json
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone as dt_timezone
 from datetime import datetime, time, timedelta
@@ -17,6 +19,7 @@ from django.urls import NoReverseMatch, reverse
 from django.conf import settings
 from django.utils import translation, timezone
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 
 from asgiref.sync import async_to_sync
 
@@ -37,6 +40,11 @@ from .evcs import (
 )
 from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 
+logger = logging.getLogger(__name__)
+
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+
 
 CALL_ACTION_LABELS = {
     "RemoteStartTransaction": _("Remote start transaction"),
@@ -55,6 +63,61 @@ CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
     "Reset": {"Accepted"},
     "TriggerMessage": {"Accepted"},
 }
+
+
+def _load_signed_node(request, requester_id: str):
+    signature = request.headers.get("X-Signature")
+    if not signature:
+        return None, JsonResponse({"detail": "signature required"}, status=403)
+
+    node = Node.objects.filter(uuid=requester_id).first()
+    if not node or not node.public_key:
+        return None, JsonResponse({"detail": "unknown requester"}, status=403)
+
+    try:
+        public_key = serialization.load_pem_public_key(node.public_key.encode())
+        public_key.verify(
+            base64.b64decode(signature),
+            request.body,
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+    except Exception:
+        logger.warning("Invalid signature from %s", requester_id)
+        return None, JsonResponse({"detail": "invalid signature"}, status=403)
+
+    return node, None
+
+
+def _serialize_transaction_snapshot(transaction: Transaction) -> dict[str, object]:
+    return {
+        "connector_id": transaction.connector_id,
+        "meter_start": transaction.meter_start,
+        "meter_stop": transaction.meter_stop,
+        "start_time": transaction.start_time.isoformat(),
+        "stop_time": transaction.stop_time.isoformat()
+        if transaction.stop_time
+        else None,
+        "received_start_time": transaction.received_start_time.isoformat()
+        if transaction.received_start_time
+        else None,
+        "received_stop_time": transaction.received_stop_time.isoformat()
+        if transaction.received_stop_time
+        else None,
+        "rfid": transaction.rfid,
+        "vid": transaction.vid,
+        "vin": transaction.vin,
+        "voltage_start": transaction.voltage_start,
+        "voltage_stop": transaction.voltage_stop,
+        "current_import_start": transaction.current_import_start,
+        "current_import_stop": transaction.current_import_stop,
+        "current_offered_start": transaction.current_offered_start,
+        "current_offered_stop": transaction.current_offered_stop,
+        "temperature_start": transaction.temperature_start,
+        "temperature_stop": transaction.temperature_stop,
+        "soc_start": transaction.soc_start,
+        "soc_stop": transaction.soc_stop,
+    }
 
 
 def _format_details(value: object) -> str:
@@ -635,6 +698,107 @@ def charger_list(request):
     return JsonResponse({"chargers": data})
 
 
+@csrf_exempt
+def remote_charger_snapshot(request):
+    """Return a signed snapshot of public chargers for remote nodes."""
+
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required"}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "invalid json"}, status=400)
+
+    requester = payload.get("requester")
+    if not requester:
+        return JsonResponse({"detail": "requester required"}, status=400)
+
+    _, error_response = _load_signed_node(request, requester)
+    if error_response is not None:
+        return error_response
+
+    local_node = Node.get_local()
+    chargers = (
+        Charger.objects.filter(public_display=True)
+        .select_related("location", "node_origin")
+        .prefetch_related("transactions")
+    )
+    if local_node:
+        chargers = chargers.filter(
+            Q(node_origin__isnull=True) | Q(node_origin=local_node)
+        )
+    else:
+        chargers = chargers.filter(node_origin__isnull=True)
+
+    data: list[dict[str, object]] = []
+    for charger in chargers:
+        entry: dict[str, object] = {
+            "charger_id": charger.charger_id,
+            "connector_id": charger.connector_id,
+            "display_name": charger.display_name,
+            "location": charger.location.name if charger.location else None,
+            "public_display": charger.public_display,
+            "require_rfid": charger.require_rfid,
+            "language": charger.language,
+            "last_path": charger.last_path,
+            "last_heartbeat": (
+                charger.last_heartbeat.isoformat()
+                if charger.last_heartbeat
+                else None
+            ),
+            "last_meter_values": charger.last_meter_values,
+            "last_status": charger.last_status,
+            "last_status_timestamp": (
+                charger.last_status_timestamp.isoformat()
+                if charger.last_status_timestamp
+                else None
+            ),
+            "last_error_code": charger.last_error_code,
+            "last_status_vendor_info": charger.last_status_vendor_info,
+            "firmware_status": charger.firmware_status,
+            "firmware_status_info": charger.firmware_status_info,
+            "firmware_timestamp": (
+                charger.firmware_timestamp.isoformat()
+                if charger.firmware_timestamp
+                else None
+            ),
+            "availability_state": charger.availability_state,
+            "availability_state_updated_at": (
+                charger.availability_state_updated_at.isoformat()
+                if charger.availability_state_updated_at
+                else None
+            ),
+            "availability_requested_state": charger.availability_requested_state,
+            "availability_requested_at": (
+                charger.availability_requested_at.isoformat()
+                if charger.availability_requested_at
+                else None
+            ),
+            "availability_request_status": charger.availability_request_status,
+            "availability_request_status_at": (
+                charger.availability_request_status_at.isoformat()
+                if charger.availability_request_status_at
+                else None
+            ),
+            "availability_request_details": charger.availability_request_details,
+            "diagnostics_status": charger.diagnostics_status,
+            "diagnostics_timestamp": (
+                charger.diagnostics_timestamp.isoformat()
+                if charger.diagnostics_timestamp
+                else None
+            ),
+            "diagnostics_location": charger.diagnostics_location,
+            "transactions": [
+                _serialize_transaction_snapshot(tx)
+                for tx in charger.transactions.order_by("start_time")
+            ],
+        }
+        data.append(entry)
+
+    return JsonResponse({"chargers": data})
+
+
 @api_login_required
 def charger_detail(request, cid, connector=None):
     charger, connector_slug = _get_charger(cid, connector)
@@ -783,6 +947,24 @@ def dashboard(request):
             }
         return stats_cache[cache_key]
 
+    def _last_seen(charger: Charger) -> datetime | None:
+        candidates = [
+            charger.last_status_timestamp,
+            charger.last_heartbeat,
+            charger.firmware_timestamp,
+            charger.availability_state_updated_at,
+            charger.availability_requested_at,
+            charger.availability_request_status_at,
+        ]
+        available = [value for value in candidates if value is not None]
+        if not available:
+            return None
+        latest = max(available)
+        try:
+            return timezone.localtime(latest)
+        except Exception:
+            return latest
+
     def _status_url(charger: Charger) -> str:
         return _reverse_connector_url(
             "charger-status",
@@ -817,6 +999,7 @@ def dashboard(request):
             "display_name": _charger_display_name(charger),
             "stats": _charger_stats(charger),
             "status_url": _status_url(charger),
+            "last_seen": _last_seen(charger),
         }
         chargers.append(entry)
         if charger.connector_id is None:
@@ -835,6 +1018,16 @@ def dashboard(request):
         parent_entry = group.get("parent")
         if not parent_entry or not group["children"]:
             continue
+        child_seen = [
+            child.get("last_seen")
+            for child in group["children"]
+            if child.get("last_seen") is not None
+        ]
+        if child_seen:
+            latest_child = max(child_seen)
+            parent_seen = parent_entry.get("last_seen")
+            if parent_seen is None or latest_child > parent_seen:
+                parent_entry["last_seen"] = latest_child
         connector_statuses = [
             (child["charger"].last_status or "").strip().casefold()
             for child in group["children"]

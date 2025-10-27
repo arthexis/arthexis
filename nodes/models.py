@@ -373,6 +373,75 @@ class Node(Entity):
         node.notify_peers_of_update()
         return node, created
 
+    @classmethod
+    def load_local_credentials(cls):
+        """Return the local node and its private key if available."""
+
+        node = cls.get_local()
+        if node is None:
+            try:
+                node, _ = cls.register_current()
+            except Exception as exc:  # pragma: no cover - unexpected errors
+                return None, None, str(exc)
+
+        endpoint = (node.public_endpoint or "").strip()
+        if not endpoint:
+            return node, None, "Local node public endpoint is not configured."
+
+        security_dir = Path(node.base_path or settings.BASE_DIR) / "security"
+        priv_path = security_dir / endpoint
+        if not priv_path.exists():
+            return node, None, "Local node private key not found."
+
+        try:
+            private_key = serialization.load_pem_private_key(
+                priv_path.read_bytes(), password=None
+            )
+        except Exception as exc:  # pragma: no cover - unexpected errors
+            return node, None, f"Failed to load private key: {exc}"
+
+        return node, private_key, None
+
+    def iter_remote_urls(self, path: str):
+        """Yield candidate URLs for communicating with this node."""
+
+        host_candidates: list[str] = []
+        for attr in ("public_endpoint", "address", "hostname"):
+            value = getattr(self, attr, "") or ""
+            value = value.strip()
+            if value and value not in host_candidates:
+                host_candidates.append(value)
+
+        port = self.port or 8000
+        normalized_path = path if path.startswith("/") else f"/{path}"
+        seen: set[str] = set()
+
+        for host in host_candidates:
+            formatted_host = host
+            if ":" in host and not host.startswith("["):
+                formatted_host = f"[{host}]"
+
+            if port == 80:
+                candidates = [
+                    f"http://{formatted_host}{normalized_path}",
+                    f"https://{formatted_host}{normalized_path}",
+                ]
+            elif port == 443:
+                candidates = [
+                    f"https://{formatted_host}{normalized_path}",
+                    f"http://{formatted_host}:{port}{normalized_path}",
+                ]
+            else:
+                candidates = [
+                    f"http://{formatted_host}:{port}{normalized_path}",
+                    f"https://{formatted_host}:{port}{normalized_path}",
+                ]
+
+            for candidate in candidates:
+                if candidate not in seen:
+                    seen.add(candidate)
+                    yield candidate
+
     def notify_peers_of_update(self):
         """Attempt to update this node's registration with known peers."""
 

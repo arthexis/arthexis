@@ -12,6 +12,7 @@ from core import mailer
 from nodes.models import Node
 
 from .models import MeterValue, Transaction
+from .remote import apply_remote_snapshot, fetch_remote_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -187,3 +188,43 @@ def send_daily_session_report() -> int:
         "Sent OCPP session report for %s to %s", today.isoformat(), ", ".join(recipients)
     )
     return len(transactions)
+
+
+@shared_task
+def sync_remote_chargers() -> int:
+    """Fetch charger snapshots from remote nodes and update local records."""
+
+    local_node, private_key, error = Node.load_local_credentials()
+    if error:
+        logger.debug("Skipping remote charger sync: %s", error)
+        return 0
+    if not local_node or private_key is None:
+        logger.debug("Skipping remote charger sync: credentials unavailable")
+        return 0
+
+    total_changes = 0
+
+    remote_nodes = (
+        Node.objects.exclude(pk=local_node.pk)
+        .exclude(public_key="")
+        .select_related("role")
+    )
+
+    for node in remote_nodes:
+        if node.is_local:
+            continue
+        snapshot, fetch_error = fetch_remote_snapshot(node, local_node, private_key)
+        if fetch_error:
+            logger.debug("Remote charger sync failed for %s: %s", node, fetch_error)
+            continue
+        created, updated, transactions_synced = apply_remote_snapshot(node, snapshot)
+        total_changes += created + updated
+        logger.info(
+            "Synchronized chargers from %s (created=%s, updated=%s, transactions=%s)",
+            node,
+            created,
+            updated,
+            transactions_synced,
+        )
+
+    return total_changes

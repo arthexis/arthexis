@@ -42,6 +42,7 @@ from .reports import (
 )
 
 from core.admin import EmailOutboxAdminForm
+from ocpp.remote import apply_remote_snapshot, fetch_remote_snapshot
 from .models import (
     Node,
     EmailOutbox,
@@ -284,6 +285,7 @@ class NodeAdmin(EntityModelAdmin):
         "register_visitor",
         "run_task",
         "take_screenshots",
+        "discover_charge_points",
         "fetch_rfids_from_selected",
         "import_rfids_from_selected",
         "export_rfids_to_selected",
@@ -429,7 +431,7 @@ class NodeAdmin(EntityModelAdmin):
         }
 
         last_error = ""
-        for url in self._iter_remote_urls(node, "/nodes/proxy/session/"):
+        for url in node.iter_remote_urls("/nodes/proxy/session/"):
             try:
                 response = requests.post(url, data=body, headers=headers, timeout=5)
             except RequestException as exc:
@@ -545,7 +547,7 @@ class NodeAdmin(EntityModelAdmin):
             }
 
         last_error = ""
-        for url in self._iter_remote_urls(node, "/nodes/info/"):
+        for url in node.iter_remote_urls("/nodes/info/"):
             try:
                 response = requests.get(url, timeout=5)
             except RequestException as exc:
@@ -660,7 +662,7 @@ class NodeAdmin(EntityModelAdmin):
         headers = {"Content-Type": "application/json"}
 
         last_error = ""
-        for url in self._iter_remote_urls(node, "/nodes/register/"):
+        for url in node.iter_remote_urls("/nodes/register/"):
             try:
                 response = requests.post(
                     url,
@@ -675,45 +677,6 @@ class NodeAdmin(EntityModelAdmin):
                 return {"ok": True, "url": url, "message": "Remote updated."}
             last_error = f"{response.status_code} {response.text}"
         return {"ok": False, "message": last_error or "Unable to reach remote node."}
-
-    def _iter_remote_urls(self, node, path):
-        host_candidates = []
-        for attr in ("public_endpoint", "address", "hostname"):
-            value = getattr(node, attr, "") or ""
-            value = value.strip()
-            if value and value not in host_candidates:
-                host_candidates.append(value)
-
-        port = node.port or 8000
-        normalized_path = path if path.startswith("/") else f"/{path}"
-        seen = set()
-
-        for host in host_candidates:
-            formatted_host = host
-            if ":" in host and not host.startswith("["):
-                formatted_host = f"[{host}]"
-
-            candidates = []
-            if port == 80:
-                candidates = [
-                    f"http://{formatted_host}{normalized_path}",
-                    f"https://{formatted_host}{normalized_path}",
-                ]
-            elif port == 443:
-                candidates = [
-                    f"https://{formatted_host}{normalized_path}",
-                    f"http://{formatted_host}:{port}{normalized_path}",
-                ]
-            else:
-                candidates = [
-                    f"http://{formatted_host}:{port}{normalized_path}",
-                    f"https://{formatted_host}:{port}{normalized_path}",
-                ]
-
-            for candidate in candidates:
-                if candidate not in seen:
-                    seen.add(candidate)
-                    yield candidate
 
     def register_visitor_view(self, request):
         """Exchange registration data with the visiting node."""
@@ -804,6 +767,101 @@ class NodeAdmin(EntityModelAdmin):
                     count += 1
         self.message_user(request, f"{count} screenshots captured", messages.SUCCESS)
 
+    @admin.action(description=_("Discover Charge Points"))
+    def discover_charge_points(self, request, queryset):
+        local_node, private_key, error = Node.load_local_credentials()
+        if error:
+            self.message_user(request, error, messages.ERROR)
+            return None
+        if not local_node or private_key is None:
+            self.message_user(
+                request,
+                _("Local node credentials are not available."),
+                messages.ERROR,
+            )
+            return None
+
+        total_processed = 0
+        total_created = 0
+        total_updated = 0
+
+        for node in queryset:
+            if node.is_local:
+                self.message_user(
+                    request,
+                    _("%(node)s represents the local host; skipping discovery.")
+                    % {"node": node},
+                    messages.INFO,
+                )
+                continue
+            if not node.public_key:
+                self.message_user(
+                    request,
+                    _("%(node)s does not have a registered public key; skipping.")
+                    % {"node": node},
+                    messages.WARNING,
+                )
+                continue
+
+            payload, fetch_error = fetch_remote_snapshot(
+                node, local_node, private_key
+            )
+            if fetch_error:
+                self.message_user(
+                    request,
+                    f"{node}: {fetch_error}",
+                    messages.ERROR,
+                )
+                continue
+
+            created, updated, _ = apply_remote_snapshot(node, payload)
+            total_processed += 1
+            total_created += created
+            total_updated += updated
+
+            if created or updated:
+                self.message_user(
+                    request,
+                    _(
+                        "%(node)s: discovered %(created)s new and %(updated)s "
+                        "updated charge point(s)."
+                    )
+                    % {
+                        "node": node,
+                        "created": created,
+                        "updated": updated,
+                    },
+                    messages.SUCCESS,
+                )
+            else:
+                self.message_user(
+                    request,
+                    _("%(node)s: no charge point changes detected.")
+                    % {"node": node},
+                    messages.INFO,
+                )
+
+        if total_processed == 0:
+            self.message_user(
+                request,
+                _("No remote nodes were processed."),
+                messages.INFO,
+            )
+        else:
+            self.message_user(
+                request,
+                _(
+                    "Processed %(count)s node(s): %(created)s created, "
+                    "%(updated)s updated charge point(s)."
+                )
+                % {
+                    "count": total_processed,
+                    "created": total_created,
+                    "updated": total_updated,
+                },
+                messages.SUCCESS,
+            )
+
     def _init_rfid_result(self, node):
         return {
             "node": node,
@@ -824,31 +882,7 @@ class NodeAdmin(EntityModelAdmin):
         return result
 
     def _load_local_node_credentials(self):
-        local_node = Node.get_local()
-        if not local_node:
-            return None, None, _("Local node is not registered.")
-
-        endpoint = (local_node.public_endpoint or "").strip()
-        if not endpoint:
-            return local_node, None, _(
-                "Local node public endpoint is not configured."
-            )
-
-        security_dir = Path(local_node.base_path or settings.BASE_DIR) / "security"
-        priv_path = security_dir / endpoint
-        if not priv_path.exists():
-            return local_node, None, _("Local node private key not found.")
-
-        try:
-            private_key = serialization.load_pem_private_key(
-                priv_path.read_bytes(), password=None
-            )
-        except Exception as exc:  # pragma: no cover - unexpected key errors
-            return local_node, None, _("Failed to load private key: %(error)s") % {
-                "error": exc
-            }
-
-        return local_node, private_key, None
+        return Node.load_local_credentials()
 
     def _sign_payload(self, private_key, payload: str) -> str:
         return base64.b64encode(
