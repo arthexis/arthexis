@@ -1,1 +1,20 @@
-[{"model": "core.packagerelease", "pk": 1, "fields": {"is_seed_data": false, "is_user_data": false, "is_deleted": false, "package": 2, "release_manager": null, "version": "1.0", "revision": "", "changelog": "", "pypi_url": "", "github_url": "", "release_on": null}}]
+[
+  {
+    "model": "core.packagerelease",
+    "fields": {
+      "is_seed_data": false,
+      "is_user_data": false,
+      "is_deleted": false,
+      "package": [
+        "arthexis"
+      ],
+      "release_manager": null,
+      "version": "1.0",
+      "revision": "",
+      "changelog": "",
+      "pypi_url": "",
+      "github_url": "",
+      "release_on": null
+    }
+  }
+]

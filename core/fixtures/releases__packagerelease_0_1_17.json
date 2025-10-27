@@ -1,1 +1,23 @@
-[{"model": "core.packagerelease", "pk": 17, "fields": {"is_seed_data": false, "is_user_data": false, "is_deleted": false, "package": 1, "release_manager": 1, "version": "0.1.17", "revision": "e68dc7e36453e33325ab36324295acb7fa6e92b1", "changelog": "- e7092812 Hide completed release manager todos from admin dashboard (#2299)\n- 39f37301 fix: skip release checklist when no todos (#2298)\n- 9255c684 feat(admin): show completed release todos to superusers (#2297)\n- af98b554 feat: add assistant name to assistant profile (#2296)\n- 3ca1a9ce Log instructions when release checklist blocks publish (#2295)\n- 681fbb60 Remove gway auto-upgrade hook (#2294)\n- d61fe732 Adjust charger status table columns and add energy totals (#2293)\n- b1049030 Handle publish resume requests without a step parameter (#2292)\n- 505065aa Add RFID endianness selection to scanner workflows (#2289)\n- 8ea923be Add CLI command to validate RFID values (#2290)\n- 2821b048 Add admin toggles for RFID released and allowed flags (#2288)\n- 9c316cd4 Use custom login route for authentication redirects (#2287)\n- 793b72b6 Add AP password update flag to network setup script (#2286)\n- eae4cdb8 Fix release manager security group fixture (#2285)\n- e445aa34 Require opt-in to reopen latest changelog release (#2284)\n- 404360d5 Improve changelog range selection (#2283)\n- 498b9934 Treat finishing status as available after sessions (#2282)\n- 15aaa142 Improve charger_status connector filtering and log tailing (#2281)\n- 69f3aacc Add admin action to toggle RFID authentication (#2280)\n- 409c4559 Handle missing last net message endpoint on admin dashboard (#2279)\n- b19f5a69 Fix stale charger statuses and add admin recheck action (#2278)\n- 9a85c373 Add charger status management command (#2276)\n- a1007caf Handle publish warnings after PyPI success (#2275)", "pypi_url": "https://pypi.org/project/arthexis/0.1.17/", "github_url": "", "release_on": "2025-10-19T02:44:08.210Z"}}]
+[
+  {
+    "model": "core.packagerelease",
+    "fields": {
+      "is_seed_data": false,
+      "is_user_data": false,
+      "is_deleted": false,
+      "package": [
+        "arthexis"
+      ],
+      "release_manager": [
+        "arthexis",
+        "arthexis"
+      ],
+      "version": "0.1.17",
+      "revision": "e68dc7e36453e33325ab36324295acb7fa6e92b1",
+      "changelog": "- e7092812 Hide completed release manager todos from admin dashboard (#2299)\n- 39f37301 fix: skip release checklist when no todos (#2298)\n- 9255c684 feat(admin): show completed release todos to superusers (#2297)\n- af98b554 feat: add assistant name to assistant profile (#2296)\n- 3ca1a9ce Log instructions when release checklist blocks publish (#2295)\n- 681fbb60 Remove gway auto-upgrade hook (#2294)\n- d61fe732 Adjust charger status table columns and add energy totals (#2293)\n- b1049030 Handle publish resume requests without a step parameter (#2292)\n- 505065aa Add RFID endianness selection to scanner workflows (#2289)\n- 8ea923be Add CLI command to validate RFID values (#2290)\n- 2821b048 Add admin toggles for RFID released and allowed flags (#2288)\n- 9c316cd4 Use custom login route for authentication redirects (#2287)\n- 793b72b6 Add AP password update flag to network setup script (#2286)\n- eae4cdb8 Fix release manager security group fixture (#2285)\n- e445aa34 Require opt-in to reopen latest changelog release (#2284)\n- 404360d5 Improve changelog range selection (#2283)\n- 498b9934 Treat finishing status as available after sessions (#2282)\n- 15aaa142 Improve charger_status connector filtering and log tailing (#2281)\n- 69f3aacc Add admin action to toggle RFID authentication (#2280)\n- 409c4559 Handle missing last net message endpoint on admin dashboard (#2279)\n- b19f5a69 Fix stale charger statuses and add admin recheck action (#2278)\n- 9a85c373 Add charger status management command (#2276)\n- a1007caf Handle publish warnings after PyPI success (#2275)",
+      "pypi_url": "https://pypi.org/project/arthexis/0.1.17/",
+      "github_url": "",
+      "release_on": "2025-10-19T02:44:08.210Z"
+    }
+  }
+]

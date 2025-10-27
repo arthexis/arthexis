@@ -17,6 +17,7 @@ from django.dispatch import receiver
 from django.views.decorators.debug import sensitive_variables
 from datetime import time as datetime_time, timedelta
 import logging
+import json
 from django.contrib.contenttypes.models import ContentType
 import hashlib
 import hmac
@@ -3414,7 +3415,13 @@ class PackageRelease(Entity):
         for release in cls.objects.all():
             name = f"releases__packagerelease_{release.version.replace('.', '_')}.json"
             path = base / name
-            data = serializers.serialize("json", [release])
+            data = serializers.serialize(
+                "json",
+                [release],
+                use_natural_foreign_keys=True,
+                use_natural_primary_keys=True,
+            )
+            data = json.dumps(json.loads(data), indent=2) + "\n"
             expected.add(name)
             try:
                 current = path.read_text(encoding="utf-8")

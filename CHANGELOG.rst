@@ -4,6 +4,9 @@ Changelog
 Unreleased
 ----------
 
+- 42d313b8 chore: record publish metadata for v1.0
+- ceaf9380 chore: sync release fixtures and changelog
+- 674a98c5 Remove release TODO generation requirement
 - 38e81196 chore(deps): bump psycopg-binary from 3.2.11 to 3.2.12 (#2442)
 - 353f6d65 chore(deps): bump zope-interface from 7.2 to 8.0.1 (#2444)
 - f4709de8 Remove connector indentation from admin charger list (#2445)
