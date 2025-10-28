@@ -167,6 +167,52 @@
         color: var(--body-quiet-color);
         font-style: italic;
     }
+    #google-calendar-module {
+        margin-bottom: 16px;
+    }
+    #google-calendar-module .calendar-event-list {
+        list-style: none;
+        padding: 0 16px 8px;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    #google-calendar-module .calendar-event {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    #google-calendar-module .calendar-event-title {
+        font-weight: 600;
+        text-decoration: none;
+        color: inherit;
+    }
+    #google-calendar-module .calendar-event-title:focus,
+    #google-calendar-module .calendar-event-title:hover {
+        text-decoration: underline;
+    }
+    #google-calendar-module .calendar-event-time,
+    #google-calendar-module .calendar-event-location {
+        padding: 0;
+        margin: 0;
+        color: var(--body-quiet-color);
+    }
+    #google-calendar-module .calendar-empty,
+    #google-calendar-module .calendar-link {
+        padding: 0 16px 16px;
+        margin: 0;
+    }
+    #google-calendar-module .calendar-link a {
+        color: var(--body-quiet-color);
+        text-decoration: none;
+        font-weight: 600;
+    }
+    #google-calendar-module .calendar-link a:focus,
+    #google-calendar-module .calendar-link a:hover {
+        text-decoration: underline;
+        color: var(--link-fg);
+    }
     .dashboard-side .actionlist .recent-action-object {
         display: inline-flex;
         align-items: baseline;
@@ -395,6 +441,42 @@
         <p class="todo-empty">{% translate 'No pending TODOs' %}</p>
         {% endif %}
     </div>
+    {% user_google_calendar as google_calendar %}
+    {% if google_calendar %}
+    <div class="module" id="google-calendar-module">
+        <h2>{{ google_calendar.title }}</h2>
+        {% if google_calendar.events %}
+        <ul class="calendar-event-list">
+            {% for event in google_calendar.events %}
+            <li class="calendar-event">
+                {% if event.html_link %}
+                <a class="calendar-event-title" href="{{ event.html_link }}" target="_blank" rel="noopener noreferrer">
+                    {{ event.summary|default:_('Untitled event') }}
+                </a>
+                {% else %}
+                <span class="calendar-event-title">{{ event.summary|default:_('Untitled event') }}</span>
+                {% endif %}
+                <p class="calendar-event-time">
+                    {% if event.all_day %}
+                        {{ event.start|localtime|date:"DATE_FORMAT" }}
+                    {% else %}
+                        {{ event.start|localtime|date:"SHORT_DATETIME_FORMAT" }}
+                    {% endif %}
+                </p>
+                {% if event.location %}
+                <p class="calendar-event-location">{{ event.location }}</p>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="calendar-empty">{% translate 'No upcoming events' %}</p>
+        {% endif %}
+        {% if google_calendar.calendar_url %}
+        <p class="calendar-link"><a href="{{ google_calendar.calendar_url }}" target="_blank" rel="noopener noreferrer">{% translate 'Open full calendar' %}</a></p>
+        {% endif %}
+    </div>
+    {% endif %}
     <div class="module" id="viewhistory-mini-module">
         <h2>{% translate 'Public site traffic' %}</h2>
         <div class="chart-wrapper">
