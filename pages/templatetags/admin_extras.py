@@ -530,10 +530,13 @@ def future_action_items(context):
     )
 
     def _serialize(todo: Todo, *, completed: bool):
+        details = (todo.request_details or "").strip()
+        condition = (todo.on_done_condition or "").strip()
         data = {
             "url": reverse("todo-focus", args=[todo.pk]),
             "label": todo.request,
-            "details": todo.request_details,
+            "details": details,
+            "condition": condition,
             "completed": completed,
         }
         if completed:
