@@ -1,6 +1,7 @@
 import logging
 import os
 import socket
+import sys
 import threading
 import time
 from pathlib import Path
@@ -66,12 +67,22 @@ def _startup_notification() -> None:
 def _trigger_startup_notification(**_: object) -> None:
     """Attempt to send the startup notification in the background."""
 
+    if _is_running_migration_command():
+        logger.debug("Startup notification skipped: running migration command")
+        return
+
     try:
         connections["default"].ensure_connection()
     except OperationalError:
         logger.exception("Startup notification skipped: database unavailable")
         return
     _startup_notification()
+
+
+def _is_running_migration_command() -> bool:
+    """Return ``True`` when Django's ``migrate`` command is executing."""
+
+    return len(sys.argv) > 1 and sys.argv[1] == "migrate"
 
 
 class NodesConfig(AppConfig):
