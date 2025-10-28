@@ -3412,6 +3412,17 @@ class StartupHandlerTests(TestCase):
 
         mock_start.assert_called_once()
 
+    def test_handler_skips_during_migrate_command(self):
+        import sys
+
+        from nodes.apps import _trigger_startup_notification
+
+        with patch("nodes.apps._startup_notification") as mock_start:
+            with patch.object(sys, "argv", ["manage.py", "migrate"]):
+                _trigger_startup_notification()
+
+        mock_start.assert_not_called()
+
 
 class NotificationManagerTests(TestCase):
     def test_send_writes_trimmed_lines(self):
