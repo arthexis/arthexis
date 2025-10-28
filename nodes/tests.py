@@ -48,6 +48,7 @@ from .classifiers import run_default_classifiers
 from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
 from django.db.utils import DatabaseError
 
+from .admin import NodeAdmin
 from .models import (
     Node,
     EmailOutbox,
@@ -843,6 +844,16 @@ class NodeInfoViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["port"], 8443)
+
+    def test_includes_role_in_payload(self):
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.node.role = role
+        self.node.save(update_fields=["role"])
+
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("role"), "Terminal")
 
 
 class RegisterVisitorNodeMessageTests(TestCase):
@@ -1704,6 +1715,60 @@ class NodeAdminTests(TestCase):
         self.assertNotContains(
             response, reverse("admin:nodes_node_register_current")
         )
+
+    def test_apply_remote_node_info_updates_role(self):
+        terminal, _ = NodeRole.objects.get_or_create(name="Terminal")
+        control, _ = NodeRole.objects.get_or_create(name="Control")
+        node = Node.objects.create(
+            hostname="remote-node",
+            address="10.0.0.20",
+            port=8001,
+            mac_address="00:11:22:33:44:aa",
+            role=terminal,
+        )
+        admin_instance = NodeAdmin(Node, admin.site)
+
+        payload = {
+            "hostname": node.hostname,
+            "address": node.address,
+            "port": node.port,
+            "role": "Control",
+        }
+
+        changed = admin_instance._apply_remote_node_info(node, payload)
+        node.refresh_from_db()
+
+        self.assertIn("role", changed)
+        self.assertEqual(node.role, control)
+        self.assertTrue(control.node_set.filter(pk=node.pk).exists())
+        self.assertFalse(terminal.node_set.filter(pk=node.pk).exists())
+
+    def test_apply_remote_node_info_accepts_role_name_key(self):
+        terminal, _ = NodeRole.objects.get_or_create(name="Terminal")
+        control, _ = NodeRole.objects.get_or_create(name="Control")
+        node = Node.objects.create(
+            hostname="role-name-node",
+            address="10.0.0.21",
+            port=8002,
+            mac_address="00:11:22:33:44:bb",
+            role=terminal,
+        )
+        admin_instance = NodeAdmin(Node, admin.site)
+
+        payload = {
+            "hostname": node.hostname,
+            "address": node.address,
+            "port": node.port,
+            "role_name": "Control",
+        }
+
+        changed = admin_instance._apply_remote_node_info(node, payload)
+        node.refresh_from_db()
+
+        self.assertIn("role", changed)
+        self.assertEqual(node.role, control)
+        self.assertTrue(control.node_set.filter(pk=node.pk).exists())
+        self.assertFalse(terminal.node_set.filter(pk=node.pk).exists())
 
     @pytest.mark.feature("screenshot-poll")
     @patch("nodes.admin.capture_screenshot")
