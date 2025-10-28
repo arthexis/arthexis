@@ -47,13 +47,28 @@ class AdminSystemViewTests(TestCase):
         with self.assertRaises(NoReverseMatch):
             reverse("admin:system_command", args=["check"])
 
-    @mock.patch("core.system._open_changelog_entries", return_value=[{"sha": "abc12345", "message": "Fix bug"}])
-    def test_changelog_report_page_displays_changelog(self, mock_entries):
+    @mock.patch(
+        "core.system._latest_release_changelog",
+        return_value={
+            "title": "v0.1.21 (2025-10-27)",
+            "entries": [{"sha": "def67890", "message": "Add feature"}],
+        },
+    )
+    @mock.patch(
+        "core.system._open_changelog_entries",
+        return_value=[{"sha": "abc12345", "message": "Fix bug"}],
+    )
+    def test_changelog_report_page_displays_changelog(
+        self, mock_open_entries, mock_latest_release
+    ):
         self.client.force_login(self.superuser)
         response = self.client.get(reverse("admin:system-changelog-report"))
         self.assertContains(response, "Open Changelog")
         self.assertContains(response, "abc12345")
-        mock_entries.assert_called_once_with()
+        self.assertContains(response, "Last Release Changelog")
+        self.assertContains(response, "def67890")
+        mock_open_entries.assert_called_once_with()
+        mock_latest_release.assert_called_once_with()
 
     @mock.patch("core.system._regenerate_changelog")
     def test_changelog_report_recalculate_triggers_regeneration(self, mock_regenerate):

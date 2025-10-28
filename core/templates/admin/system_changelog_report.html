@@ -93,5 +93,37 @@
       <p class="help">{% trans "No pending changelog entries." %}</p>
     {% endif %}
   </div>
+  <div class="module latest-release-changelog">
+    <h2>{% trans "Last Release Changelog" %}</h2>
+    {% if latest_release_changelog.title %}
+      <p class="help">
+        {% blocktrans with release_title=latest_release_changelog.title %}
+          Entries from {{ release_title }} are shown for reference.
+        {% endblocktrans %}
+      </p>
+      {% if latest_release_changelog.entries %}
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th scope="col">{% trans "Commit" %}</th>
+              <th scope="col">{% trans "Message" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for entry in latest_release_changelog.entries %}
+            <tr>
+              <td><code>{{ entry.sha }}</code></td>
+              <td>{{ entry.message|default:"" }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="help">{% trans "No entries recorded for the latest release." %}</p>
+      {% endif %}
+    {% else %}
+      <p class="help">{% trans "No previous releases have been recorded yet." %}</p>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}
