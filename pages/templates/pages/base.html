@@ -912,7 +912,9 @@
       </script>
     {% if request.live_update_interval %}
     <script>
+      {% block live_update_script %}
       setInterval(() => location.reload(), {{ request.live_update_interval }} * 1000);
+      {% endblock %}
     </script>
     {% endif %}
     <svg xmlns="http://www.w3.org/2000/svg" class="base-svgs">
