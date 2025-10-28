@@ -1776,6 +1776,28 @@ class NodeAdminTests(TestCase):
         proxy_url = reverse("admin:nodes_node_proxy", args=[1])
         self.assertContains(response, proxy_url)
 
+    def test_iter_remote_urls_handles_hostname_with_path_and_port(self):
+        node_admin = admin.site._registry[Node]
+        remote = SimpleNamespace(
+            public_endpoint="",
+            address="",
+            hostname="example.com/interface",
+            port=8443,
+        )
+
+        urls = list(node_admin._iter_remote_urls(remote, "/nodes/proxy/session/"))
+
+        self.assertIn(
+            "https://example.com:8443/interface/nodes/proxy/session/",
+            urls,
+        )
+        self.assertIn(
+            "http://example.com:8443/interface/nodes/proxy/session/",
+            urls,
+        )
+        combined = "".join(urls)
+        self.assertNotIn("interface:8443", combined)
+
 
     @pytest.mark.feature("screenshot-poll")
     @override_settings(SCREENSHOT_SOURCES=["/one", "/two"])
