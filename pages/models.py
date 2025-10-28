@@ -7,7 +7,7 @@ from django.db.models import Q
 from core.entity import Entity
 from core.models import Lead, SecurityGroup
 from django.contrib.sites.models import Site
-from nodes.models import NodeRole
+from nodes.models import ContentSample, NodeRole
 from django.apps import apps as django_apps
 from django.utils.text import slugify
 from django.utils.translation import gettext, gettext_lazy as _
@@ -544,6 +544,14 @@ class UserStory(Lead):
     github_issue_url = models.URLField(
         blank=True,
         help_text=_("Link to the GitHub issue created for this feedback."),
+    )
+    screenshot = models.ForeignKey(
+        ContentSample,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="user_stories",
+        help_text=_("Screenshot captured for this feedback."),
     )
 
     class Meta:

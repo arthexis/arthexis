@@ -3229,6 +3229,14 @@ class UserStorySubmissionTests(TestCase):
         self.url = reverse("pages:user-story-submit")
         User = get_user_model()
         self.user = User.objects.create_user(username="feedbacker", password="pwd")
+        self.capture_patcher = patch("pages.views.capture_screenshot", autospec=True)
+        self.save_patcher = patch("pages.views.save_screenshot", autospec=True)
+        self.mock_capture = self.capture_patcher.start()
+        self.mock_save = self.save_patcher.start()
+        self.mock_capture.return_value = Path("/tmp/fake.png")
+        self.mock_save.return_value = None
+        self.addCleanup(self.capture_patcher.stop)
+        self.addCleanup(self.save_patcher.stop)
 
     def test_authenticated_submission_defaults_to_username(self):
         self.client.force_login(self.user)
@@ -3257,6 +3265,34 @@ class UserStorySubmissionTests(TestCase):
         self.assertEqual(story.referer, "https://example.test/wizard/step-1/")
         self.assertEqual(story.user_agent, "FeedbackBot/1.0")
         self.assertEqual(story.ip_address, "127.0.0.1")
+
+    def test_screenshot_request_links_saved_sample(self):
+        self.client.force_login(self.user)
+        screenshot_file = Path("/tmp/fake.png")
+        self.mock_capture.return_value = screenshot_file
+        sample = ContentSample.objects.create(kind=ContentSample.IMAGE)
+        self.mock_save.return_value = sample
+
+        response = self.client.post(
+            self.url,
+            {
+                "rating": 5,
+                "comments": "Loved the experience!",
+                "path": "/wizard/step-1/",
+                "take_screenshot": "1",
+            },
+            HTTP_REFERER="https://example.test/wizard/step-1/",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        story = UserStory.objects.get()
+        self.assertEqual(story.screenshot, sample)
+        self.mock_capture.assert_called_once_with("https://example.test/wizard/step-1/")
+        self.mock_save.assert_called_once_with(
+            screenshot_file,
+            method="USER_STORY",
+            user=self.user,
+        )
 
     def test_anonymous_submission_uses_provided_name(self):
         response = self.client.post(
@@ -3325,6 +3361,10 @@ class UserStorySubmissionTests(TestCase):
         story = UserStory.objects.get()
         self.assertFalse(story.take_screenshot)
         self.assertIsNone(story.owner)
+        self.assertIsNone(story.screenshot)
+        self.assertEqual(story.status, UserStory.Status.OPEN)
+        self.mock_capture.assert_not_called()
+        self.mock_save.assert_not_called()
 
     def test_rate_limit_blocks_repeated_submissions(self):
         payload = {
