@@ -4,6 +4,10 @@ Changelog
 Unreleased
 ----------
 
+
+v0.1.21 (2025-10-27)
+--------------------
+
 - 11467c2a Remove release TODO generation requirement (#2447)
 - 38e81196 chore(deps): bump psycopg-binary from 3.2.11 to 3.2.12 (#2442)
 - 353f6d65 chore(deps): bump zope-interface from 7.2 to 8.0.1 (#2444)
