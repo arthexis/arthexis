@@ -75,6 +75,7 @@ from datetime import timedelta
 from io import StringIO
 from django.conf import settings
 from django.utils import timezone
+from django.utils.html import escape
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, call, patch
 from types import SimpleNamespace
@@ -3010,7 +3011,11 @@ class FavoriteTests(TestCase):
         todo = Todo.objects.create(request="Do thing")
         resp = self.client.get(reverse("admin:index"))
         done_url = reverse("todo-done", args=[todo.pk])
-        self.assertContains(resp, todo.request)
+        tooltip = escape(todo.request)
+        self.assertContains(resp, f'title="{tooltip}"')
+        self.assertContains(resp, f'aria-label="{tooltip}"')
+        task_label = gettext("Task %(counter)s") % {"counter": 1}
+        self.assertContains(resp, task_label)
         self.assertContains(resp, f'action="{done_url}"')
         self.assertContains(resp, "DONE")
 
@@ -3038,7 +3043,8 @@ class FavoriteTests(TestCase):
 
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "Release manager tasks")
-        self.assertContains(resp, "Check fallback")
+        tooltip = escape("Check fallback")
+        self.assertContains(resp, f'title="{tooltip}"')
 
     def test_dashboard_shows_todos_without_release_manager_profile(self):
         Todo.objects.create(request="Unrestricted task")
@@ -3046,7 +3052,8 @@ class FavoriteTests(TestCase):
 
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "Release manager tasks")
-        self.assertContains(resp, "Unrestricted task")
+        tooltip = escape("Unrestricted task")
+        self.assertContains(resp, f'title="{tooltip}"')
 
     def test_dashboard_excludes_todo_changelist_link(self):
         ct = ContentType.objects.get_for_model(Todo)
@@ -3070,7 +3077,8 @@ class FavoriteTests(TestCase):
         self.client.force_login(other_user)
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "Release manager tasks")
-        self.assertContains(resp, todo.request)
+        tooltip = escape(todo.request)
+        self.assertContains(resp, f'title="{tooltip}"')
 
     def test_dashboard_shows_todos_for_non_terminal_node(self):
         todo = Todo.objects.create(request="Terminal Tasks")
@@ -3081,7 +3089,8 @@ class FavoriteTests(TestCase):
         self.node.save(update_fields=["role"])
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "Release manager tasks")
-        self.assertContains(resp, todo.request)
+        tooltip = escape(todo.request)
+        self.assertContains(resp, f'title="{tooltip}"')
 
     def test_dashboard_shows_todos_for_delegate_release_manager(self):
         todo = Todo.objects.create(request="Delegate Task")
@@ -3103,7 +3112,8 @@ class FavoriteTests(TestCase):
         self.client.force_login(operator)
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "Release manager tasks")
-        self.assertContains(resp, todo.request)
+        tooltip = escape(todo.request)
+        self.assertContains(resp, f'title="{tooltip}"')
 
 
 class AdminIndexQueryRegressionTests(TestCase):
