@@ -860,22 +860,28 @@ def favorite_toggle(request, ct_id):
     ct = get_object_or_404(ContentType, pk=ct_id)
     fav = Favorite.objects.filter(user=request.user, content_type=ct).first()
     next_url = request.GET.get("next")
-    if fav:
-        return redirect(next_url or "admin:favorite_list")
     if request.method == "POST":
+        if fav and request.POST.get("remove"):
+            fav.delete()
+            return redirect(next_url or "admin:index")
         label = request.POST.get("custom_label", "").strip()
         user_data = request.POST.get("user_data") == "on"
-        Favorite.objects.create(
-            user=request.user,
-            content_type=ct,
-            custom_label=label,
-            user_data=user_data,
-        )
+        if fav:
+            fav.custom_label = label
+            fav.user_data = user_data
+            fav.save(update_fields=["custom_label", "user_data"])
+        else:
+            Favorite.objects.create(
+                user=request.user,
+                content_type=ct,
+                custom_label=label,
+                user_data=user_data,
+            )
         return redirect(next_url or "admin:index")
     return render(
         request,
         "admin/favorite_confirm.html",
-        {"content_type": ct, "next": next_url},
+        {"content_type": ct, "favorite": fav, "next": next_url},
     )
 
 

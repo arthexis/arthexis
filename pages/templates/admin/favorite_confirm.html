@@ -2,18 +2,33 @@
 {% load i18n %}
 
 {% block content %}
-<h1>{% translate "Add Favorite" %}</h1>
+<h1>
+  {% if favorite %}
+    {% translate "Update Favorite" %}
+  {% else %}
+    {% translate "Add Favorite" %}
+  {% endif %}
+</h1>
 <form method="post" class="favorite-confirm-form">
   {% csrf_token %}
-  <p>{% blocktranslate with name=content_type.name %}Add {{ name }} to your favorites?{% endblocktranslate %}</p>
   <p>
-    <label>{% translate "Custom Label" %}: <input type="text" name="custom_label" value=""></label>
+    {% if favorite %}
+      {% blocktranslate with name=content_type.name %}Update your favorite for {{ name }}.{% endblocktranslate %}
+    {% else %}
+      {% blocktranslate with name=content_type.name %}Add {{ name }} to your favorites?{% endblocktranslate %}
+    {% endif %}
   </p>
   <p>
-    <label><input type="checkbox" name="user_data"> {% translate "Mark as User Data" %}</label>
+    <label>{% translate "Custom Label" %}: <input type="text" name="custom_label" value="{{ favorite.custom_label|default_if_none:'' }}"></label>
+  </p>
+  <p>
+    <label><input type="checkbox" name="user_data" {% if favorite and favorite.user_data %}checked{% endif %}> {% translate "Mark as User Data" %}</label>
   </p>
   <div class="submit-row">
     <input type="submit" value="{% translate 'Save' %}" class="default">
+    {% if favorite %}
+      <button type="submit" name="remove" value="1" class="deletelink">{% translate "Remove" %}</button>
+    {% endif %}
     {% url 'admin:index' as admin_index %}
     <a href="{{ next|default:admin_index }}">{% translate "Cancel" %}</a>
   </div>
