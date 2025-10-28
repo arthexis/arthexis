@@ -16,7 +16,7 @@ import base64
 from django.utils import timezone
 from django.utils.text import slugify
 from django.conf import settings
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as datetime_timezone
 import uuid
 import os
 import shutil
@@ -481,7 +481,24 @@ class Node(Entity):
         security_dir.mkdir(parents=True, exist_ok=True)
         priv_path = security_dir / f"{self.public_endpoint}"
         pub_path = security_dir / f"{self.public_endpoint}.pub"
-        if not priv_path.exists() or not pub_path.exists():
+        regenerate = not priv_path.exists() or not pub_path.exists()
+        if not regenerate:
+            key_max_age = getattr(settings, "NODE_KEY_MAX_AGE", timedelta(days=90))
+            if key_max_age is not None:
+                try:
+                    priv_mtime = datetime.fromtimestamp(
+                        priv_path.stat().st_mtime, tz=datetime_timezone.utc
+                    )
+                    pub_mtime = datetime.fromtimestamp(
+                        pub_path.stat().st_mtime, tz=datetime_timezone.utc
+                    )
+                except OSError:
+                    regenerate = True
+                else:
+                    cutoff = timezone.now() - key_max_age
+                    if priv_mtime < cutoff or pub_mtime < cutoff:
+                        regenerate = True
+        if regenerate:
             private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
             private_bytes = private_key.private_bytes(
                 encoding=serialization.Encoding.PEM,
@@ -494,8 +511,10 @@ class Node(Entity):
             )
             priv_path.write_bytes(private_bytes)
             pub_path.write_bytes(public_bytes)
-            self.public_key = public_bytes.decode()
-            self.save(update_fields=["public_key"])
+            public_text = public_bytes.decode()
+            if self.public_key != public_text:
+                self.public_key = public_text
+                self.save(update_fields=["public_key"])
         elif not self.public_key:
             self.public_key = pub_path.read_text()
             self.save(update_fields=["public_key"])

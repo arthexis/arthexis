@@ -743,6 +743,59 @@ class NodeGetLocalTests(TestCase):
         self.assertEqual(node.current_relation, Node.Relation.UPSTREAM)
 
 
+class NodeEnsureKeysTests(TestCase):
+    def setUp(self):
+        self.tempdir = TemporaryDirectory()
+        self.base = Path(self.tempdir.name)
+        self.override = override_settings(BASE_DIR=self.base)
+        self.override.enable()
+        self.node = Node.objects.create(
+            hostname="ensure-host",
+            address="127.0.0.1",
+            port=8000,
+            mac_address="00:11:22:33:44:55",
+        )
+
+    def tearDown(self):
+        self.override.disable()
+        self.tempdir.cleanup()
+
+    def test_regenerates_missing_keys(self):
+        self.node.ensure_keys()
+        security_dir = self.base / "security"
+        priv_path = security_dir / self.node.public_endpoint
+        pub_path = security_dir / f"{self.node.public_endpoint}.pub"
+        original_public = self.node.public_key
+        priv_path.unlink()
+        pub_path.unlink()
+
+        self.node.ensure_keys()
+
+        self.assertTrue(priv_path.exists())
+        self.assertTrue(pub_path.exists())
+        self.assertNotEqual(self.node.public_key, original_public)
+
+    def test_regenerates_outdated_keys(self):
+        self.node.ensure_keys()
+        security_dir = self.base / "security"
+        priv_path = security_dir / self.node.public_endpoint
+        pub_path = security_dir / f"{self.node.public_endpoint}.pub"
+        original_private = priv_path.read_bytes()
+        original_public = pub_path.read_bytes()
+
+        old_time = (timezone.now() - timedelta(seconds=5)).timestamp()
+        os.utime(priv_path, (old_time, old_time))
+        os.utime(pub_path, (old_time, old_time))
+
+        with override_settings(NODE_KEY_MAX_AGE=timedelta(seconds=1)):
+            self.node.ensure_keys()
+
+        self.node.refresh_from_db()
+        self.assertNotEqual(priv_path.read_bytes(), original_private)
+        self.assertNotEqual(pub_path.read_bytes(), original_public)
+        self.assertNotEqual(self.node.public_key, original_public.decode())
+
+
 class NodeInfoViewTests(TestCase):
     def setUp(self):
         self.mac = "02:00:00:00:00:01"
