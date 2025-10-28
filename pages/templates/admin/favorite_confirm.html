@@ -19,10 +19,10 @@
     {% endif %}
   </p>
   <p>
-    <label>{% translate "Custom Label" %}: <input type="text" name="custom_label" value="{{ favorite.custom_label|default_if_none:'' }}"></label>
+    <label>{% translate "Priority" %}: <input type="number" name="priority" value="0"></label>
   </p>
   <p>
-    <label><input type="checkbox" name="user_data" {% if favorite and favorite.user_data %}checked{% endif %}> {% translate "Mark as User Data" %}</label>
+    <label><input type="checkbox" name="user_data"> {% translate "Mark as User Data" %}</label>
   </p>
   <div class="submit-row">
     <input type="submit" value="{% translate 'Save' %}" class="default">

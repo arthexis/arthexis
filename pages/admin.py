@@ -866,17 +866,18 @@ def favorite_toggle(request, ct_id):
             return redirect(next_url or "admin:index")
         label = request.POST.get("custom_label", "").strip()
         user_data = request.POST.get("user_data") == "on"
-        if fav:
-            fav.custom_label = label
-            fav.user_data = user_data
-            fav.save(update_fields=["custom_label", "user_data"])
-        else:
-            Favorite.objects.create(
-                user=request.user,
-                content_type=ct,
-                custom_label=label,
-                user_data=user_data,
-            )
+        priority_raw = request.POST.get("priority", "").strip()
+        try:
+            priority = int(priority_raw)
+        except (TypeError, ValueError):
+            priority = 0
+        Favorite.objects.create(
+            user=request.user,
+            content_type=ct,
+            custom_label=label,
+            user_data=user_data,
+            priority=priority,
+        )
         return redirect(next_url or "admin:index")
     return render(
         request,
@@ -886,14 +887,37 @@ def favorite_toggle(request, ct_id):
 
 
 def favorite_list(request):
-    favorites = Favorite.objects.filter(user=request.user).select_related(
-        "content_type"
+    favorites = (
+        Favorite.objects.filter(user=request.user)
+        .select_related("content_type")
+        .order_by("priority", "pk")
     )
     if request.method == "POST":
-        selected = request.POST.getlist("user_data")
+        selected = set(request.POST.getlist("user_data"))
         for fav in favorites:
-            fav.user_data = str(fav.pk) in selected
-            fav.save(update_fields=["user_data"])
+            update_fields = []
+            user_selected = str(fav.pk) in selected
+            if fav.user_data != user_selected:
+                fav.user_data = user_selected
+                update_fields.append("user_data")
+
+            priority_raw = request.POST.get(f"priority_{fav.pk}", "").strip()
+            if priority_raw:
+                try:
+                    priority = int(priority_raw)
+                except (TypeError, ValueError):
+                    priority = fav.priority
+                else:
+                    if fav.priority != priority:
+                        fav.priority = priority
+                        update_fields.append("priority")
+            else:
+                if fav.priority != 0:
+                    fav.priority = 0
+                    update_fields.append("priority")
+
+            if update_fields:
+                fav.save(update_fields=update_fields)
         return redirect("admin:favorite_list")
     return render(request, "admin/favorite_list.html", {"favorites": favorites})
 
