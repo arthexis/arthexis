@@ -320,6 +320,7 @@ def node_info(request):
         "mac_address": node.mac_address,
         "public_key": node.public_key,
         "features": list(node.features.values_list("slug", flat=True)),
+        "role": node.role.name if node.role_id else "",
     }
 
     if token:
