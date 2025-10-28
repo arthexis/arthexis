@@ -60,3 +60,59 @@ def favorite_from_map(favorites_map, ct_id):
     if not favorites_map or not ct_id:
         return None
     return favorites_map.get(ct_id)
+
+
+@register.simple_tag
+def favorite_entries(app_list, favorites_map):
+    if not app_list or not favorites_map:
+        return []
+
+    entries = []
+    ct_cache = {}
+
+    for app in app_list:
+        if isinstance(app, dict):
+            app_label = app.get("app_label")
+            models = app.get("models", [])
+        else:
+            app_label = getattr(app, "app_label", None)
+            models = getattr(app, "models", None)
+
+        if not app_label or not models:
+            continue
+
+        for model in models:
+            if isinstance(model, dict):
+                object_name = model.get("object_name")
+            else:
+                object_name = getattr(model, "object_name", None)
+            if not object_name:
+                continue
+
+            cache_key = (app_label, object_name)
+            if cache_key in ct_cache:
+                ct_id = ct_cache[cache_key]
+            else:
+                try:
+                    model_class = apps.get_model(app_label, object_name)
+                except LookupError:
+                    ct_id = None
+                else:
+                    ct_id = ContentType.objects.get_for_model(model_class).id
+                ct_cache[cache_key] = ct_id
+
+            if not ct_id:
+                continue
+
+            favorite = favorites_map.get(ct_id)
+            if not favorite:
+                continue
+
+            entries.append({
+                "app": app,
+                "model": model,
+                "favorite": favorite,
+                "ct_id": ct_id,
+            })
+
+    return entries

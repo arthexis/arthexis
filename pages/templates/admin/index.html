@@ -46,26 +46,6 @@
         padding: 0 16px;
         margin: 0 0 16px;
     }
-    .dashboard-side .release-manager-link {
-        color: var(--body-fg, #212529);
-    }
-    .dashboard-side .release-manager-link:focus,
-    .dashboard-side .release-manager-link:hover {
-        color: var(--body-fg, #212529);
-        text-decoration: underline;
-    }
-    html[data-theme="dark"] .dashboard-side .release-manager-link,
-    html[data-theme="dark"] .dashboard-side .release-manager-link:focus,
-    html[data-theme="dark"] .dashboard-side .release-manager-link:hover {
-        color: #fff;
-    }
-    @media (prefers-color-scheme: dark) {
-        html[data-theme="auto"] .dashboard-side .release-manager-link,
-        html[data-theme="auto"] .dashboard-side .release-manager-link:focus,
-        html[data-theme="auto"] .dashboard-side .release-manager-link:hover {
-            color: #fff;
-        }
-    }
     .dashboard-side p {
         padding: 0 16px;
     }
@@ -150,51 +130,6 @@
         display: block;
         width: 100%;
     }
-    .dashboard-side .actionlist li {
-        position: relative;
-    }
-    .dashboard-side .actionlist li .todo-details {
-        display: none;
-        position: absolute;
-        left: 0;
-        top: calc(100% + 4px);
-        background: var(--body-bg);
-        border: 1px solid var(--hairline-color);
-        border-radius: 6px;
-        padding: 12px;
-        z-index: 1000;
-        width: 280px;
-        max-width: calc(100vw - 48px);
-        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
-        color: var(--body-fg);
-        line-height: 1.4;
-        background-clip: padding-box;
-        overflow-wrap: anywhere;
-    }
-    .dashboard-side .actionlist li:hover .todo-details,
-    .dashboard-side .actionlist li:focus-within .todo-details {
-        display: block;
-    }
-    .dashboard-side .actionlist li .todo-details-section + .todo-details-section {
-        margin-top: 12px;
-    }
-    .dashboard-side .actionlist li .todo-details-heading {
-        display: block;
-        margin-bottom: 4px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--body-quiet-color);
-    }
-    .dashboard-side .actionlist li .todo-details-text {
-        margin: 0;
-        font-size: 0.875rem;
-        color: inherit;
-    }
-    .dashboard-side .actionlist li .todo-details-condition {
-        font-family: var(--font-family-monospace, var(--font-family-code, monospace));
-    }
     #viewhistory-mini-module {
         margin-top: 16px;
     }
@@ -215,21 +150,6 @@
     #viewhistory-mini-module .chart-link {
         padding: 0 16px 16px;
         margin: 0;
-    }
-    .todo-status {
-        float: right;
-        font-size: 0.75rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-    }
-    .todo-status-completed {
-        color: var(--body-quiet-color);
-    }
-    .todo-status-date {
-        font-weight: 400;
-        text-transform: none;
-        letter-spacing: normal;
     }
   </style>
 {% endblock %}
@@ -262,58 +182,6 @@
     {% include "admin/app_list.html" with app_list=app_list show_changelinks=True show_model_badges=True %}
   </div>
 <div class="dashboard-side" id="recent-boxes">
-    <div class="module" id="future-actions-module">
-        <h2>{% translate 'Future actions' %}</h2>
-        {% future_action_items as future_items %}
-        {% if future_items.models %}
-            <ul class="actionlist">
-                {% for item in future_items.models %}
-                <li class="changelink"><a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Change {{ item.label|capfirst }}</a></li>
-                {% endfor %}
-            </ul>
-        {% endif %}
-        {% if future_items.todos %}
-            <h3>
-              <a href="{% url 'admin:system-pending-todos-report' %}" class="release-manager-link">
-                {% translate 'Release manager tasks' %}
-              </a>
-            </h3>
-            <ul class="actionlist">
-                {% for todo in future_items.todos %}
-                <li class="changelink">
-                    <a href="{{ todo.url }}?next={{ request.get_full_path|urlencode }}" class="todo-link"{% if todo.details or todo.condition %} aria-describedby="todo-details-{{ forloop.counter }}"{% endif %}>{{ todo.label }}</a>
-                    {% if todo.details or todo.condition %}
-                    <div class="todo-details" id="todo-details-{{ forloop.counter }}" role="tooltip">
-                        {% if todo.details %}
-                        <div class="todo-details-section">
-                            <span class="todo-details-heading">{% translate 'Description' %}</span>
-                            <p class="todo-details-text">{{ todo.details|linebreaksbr }}</p>
-                        </div>
-                        {% endif %}
-                        {% if todo.condition %}
-                        <div class="todo-details-section">
-                            <span class="todo-details-heading">{% translate 'Required conditions' %}</span>
-                            <p class="todo-details-text todo-details-condition">{{ todo.condition|linebreaksbr }}</p>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endif %}
-                    {% if todo.completed %}
-                    <span class="todo-status todo-status-completed">{% translate 'Completed' %}{% if todo.done_on %} <span class="todo-status-date">({{ todo.done_on|date:"SHORT_DATETIME_FORMAT" }})</span>{% endif %}</span>
-                    {% else %}
-                    <form method="post" action="{{ todo.done_url }}" style="display:inline; float:right;">
-                        {% csrf_token %}
-                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                        <button class="button" title="Done" style="padding-bottom:2px;">DONE</button>
-                    </form>
-                    {% endif %}
-                </li>
-                {% endfor %}
-            </ul>
-        {% elif not future_items.models %}
-            <p>{% translate 'None available' %}</p>
-        {% endif %}
-    </div>
     <div class="module" id="viewhistory-mini-module">
         <h2>{% translate 'Public site traffic' %}</h2>
         <div class="chart-wrapper">
