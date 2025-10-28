@@ -287,22 +287,24 @@
               <a
                 href="{{ todo.url }}?next={{ request.get_full_path|urlencode }}"
                 class="todo-link"
-                {% if todo.label %}
+                {% if todo.details %}
+                  title="{{ todo.details }}"
+                  aria-describedby="todo-detail-{{ forloop.counter }}"
+                {% elif todo.label %}
                   title="{{ todo.label }}"
-                  aria-label="{{ todo.label }}"
                 {% endif %}
               >
-                {% blocktrans with counter=forloop.counter %}Task {{ counter }}{% endblocktrans %}
+                {{ todo.label|default:_("Task") }}
               </a>
+              {% if todo.details %}
+              <span class="visually-hidden" id="todo-detail-{{ forloop.counter }}">{{ todo.details }}</span>
+              {% endif %}
               <form method="post" action="{{ todo.done_url }}" class="todo-form">
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ request.get_full_path }}">
                 <button type="submit">{% translate 'DONE' %}</button>
               </form>
             </div>
-            {% if todo.details %}
-            <div class="todo-details">{{ todo.details }}</div>
-            {% endif %}
             {% if todo.condition %}
             <p class="todo-condition">{{ todo.condition }}</p>
             {% endif %}
