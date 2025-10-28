@@ -1,5 +1,6 @@
 import base64
 import logging
+from datetime import timedelta
 from pathlib import Path
 
 from django.db import models
@@ -9,6 +10,7 @@ from core.models import Lead, SecurityGroup
 from django.contrib.sites.models import Site
 from nodes.models import ContentSample, NodeRole
 from django.apps import apps as django_apps
+from django.utils import timezone
 from django.utils.text import slugify
 from django.utils.translation import gettext, gettext_lazy as _
 from importlib import import_module
@@ -489,6 +491,14 @@ class ViewHistory(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.method} {self.path} ({self.status_code})"
+
+    @classmethod
+    def purge_older_than(cls, *, days: int) -> int:
+        """Delete history entries recorded more than ``days`` days ago."""
+
+        cutoff = timezone.now() - timedelta(days=days)
+        deleted, _ = cls.objects.filter(visited_at__lt=cutoff).delete()
+        return deleted
 
 
 class Favorite(Entity):
