@@ -3860,7 +3860,11 @@ class Todo(Entity):
         content = json.dumps(data, indent=2, ensure_ascii=False)
         if not content.endswith("\n"):
             content += "\n"
-        fixture_path.write_text(content, encoding="utf-8")
+
+        try:
+            fixture_path.write_text(content, encoding="utf-8")
+        except OSError:
+            logger.exception("Failed to write TODO fixture %s", fixture_path)
 
     def _apply_fixture_fields(self, fields: dict[str, object]) -> bool:
         changed = False
