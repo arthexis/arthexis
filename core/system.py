@@ -1186,6 +1186,14 @@ class PendingTodoForm(forms.ModelForm):
         for name in ["request_details", "on_done_condition"]:
             self.fields[name].widget.attrs.setdefault("class", "vLargeTextField")
 
+        mark_done_widget = self.fields["mark_done"].widget
+        existing_classes = mark_done_widget.attrs.get("class", "").split()
+        if "approve-checkbox" not in existing_classes:
+            existing_classes.append("approve-checkbox")
+        mark_done_widget.attrs["class"] = " ".join(
+            class_name for class_name in existing_classes if class_name
+        )
+
 
 PendingTodoFormSet = modelformset_factory(Todo, form=PendingTodoForm, extra=0)
 
