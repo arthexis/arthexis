@@ -4,7 +4,9 @@
     "fields": {
       "request": "Validate screen Charge Point Log Viewer",
       "url": "/ocpp/log/<charger-id>/",
-      "request_details": "Confirm the CP log viewer slider exposes the 20/40/100/All options, defaults to 20 lines, and that the download link beside the file name retrieves the complete log."
+      "request_details": "Confirm the CP log viewer slider exposes the 20/40/100/All options, defaults to 20 lines, and that the download link beside the file name retrieves the complete log.",
+      "done_on": null,
+      "is_deleted": false
     }
   }
 ]

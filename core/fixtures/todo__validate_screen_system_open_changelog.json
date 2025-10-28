@@ -4,7 +4,9 @@
     "fields": {
       "request": "Validate screen System Open Changelog",
       "url": "/admin/system/",
-      "request_details": "Verify the Open Changelog section lists any unreleased changelog entries and hides when empty."
+      "request_details": "Verify the Open Changelog section lists any unreleased changelog entries and hides when empty.",
+      "done_on": null,
+      "is_deleted": false
     }
   }
 ]

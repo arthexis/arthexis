@@ -4,7 +4,9 @@
     "fields": {
       "request": "Validate screen Charge Point Simulator",
       "url": "/ocpp/evcs/simulator/",
-      "request_details": "Ensure the member-only notice appears when unauthenticated users are redirected to log in."
+      "request_details": "Ensure the member-only notice appears when unauthenticated users are redirected to log in.",
+      "done_on": null,
+      "is_deleted": false
     }
   }
 ]

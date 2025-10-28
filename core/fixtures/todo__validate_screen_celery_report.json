@@ -4,7 +4,9 @@
     "fields": {
       "request": "Validate screen Celery Report",
       "url": "/admin/nodes/nodefeature/celery-report/",
-      "request_details": "Verify the Celery report displays scheduled tasks and log entries for each reporting window."
+      "request_details": "Verify the Celery report displays scheduled tasks and log entries for each reporting window.",
+      "done_on": null,
+      "is_deleted": false
     }
   }
 ]

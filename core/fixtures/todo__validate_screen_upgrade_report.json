@@ -4,7 +4,9 @@
     "fields": {
       "request": "Validate screen Upgrade Report",
       "url": "/admin/system/upgrade-report/",
-      "request_details": "Ensure the upgrade report view renders the settings, schedule, and recent activity sections using live upgrade data, and verify the manual \"Run upgrade check\" action triggers the expected task."
+      "request_details": "Ensure the upgrade report view renders the settings, schedule, and recent activity sections using live upgrade data, and verify the manual \"Run upgrade check\" action triggers the expected task.",
+      "done_on": null,
+      "is_deleted": false
     }
   }
 ]

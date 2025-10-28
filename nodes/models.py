@@ -1542,6 +1542,7 @@ class NetMessage(Entity):
         payload = attachments if attachments is not None else self.attachments or []
         if not payload:
             return
+
         try:
             objects = list(
                 serializers.deserialize(

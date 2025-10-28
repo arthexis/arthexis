@@ -4,7 +4,9 @@
     "fields": {
       "request": "Validate screen Package Release publish progress",
       "url": "/admin/core/packagerelease/",
-      "request_details": "Open a package release from the changelist, start the Publish flow, and confirm warnings appear when PyPI uploads succeed but git tagging requires manual follow-up."
+      "request_details": "Open a package release from the changelist, start the Publish flow, and confirm warnings appear when PyPI uploads succeed but git tagging requires manual follow-up.",
+      "done_on": null,
+      "is_deleted": false
     }
   }
 ]
