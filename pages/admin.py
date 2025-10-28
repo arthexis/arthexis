@@ -694,6 +694,7 @@ class UserStoryAdmin(EntityModelAdmin):
         "status",
         "submitted_at",
         "github_issue_display",
+        "screenshot_display",
         "take_screenshot",
         "owner",
         "assign_to",
@@ -722,6 +723,7 @@ class UserStoryAdmin(EntityModelAdmin):
         "submitted_at",
         "github_issue_number",
         "github_issue_url",
+        "screenshot_display",
     )
     ordering = ("-submitted_at",)
     fields = (
@@ -729,6 +731,7 @@ class UserStoryAdmin(EntityModelAdmin):
         "rating",
         "comments",
         "take_screenshot",
+        "screenshot_display",
         "path",
         "user",
         "owner",
@@ -758,6 +761,21 @@ class UserStoryAdmin(EntityModelAdmin):
             )
         if obj.github_issue_number is not None:
             return f"#{obj.github_issue_number}"
+        return ""
+
+    @admin.display(description=_("Screenshot"), ordering="screenshot")
+    def screenshot_display(self, obj):
+        if not obj.screenshot_id:
+            return ""
+        try:
+            url = reverse("admin:nodes_contentsample_change", args=[obj.screenshot_id])
+        except NoReverseMatch:
+            return obj.screenshot.path
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
+            url,
+            _("View screenshot"),
+        )
         return _("Not created")
 
     @admin.action(description=_("Create GitHub issues"))
