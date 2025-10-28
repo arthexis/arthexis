@@ -404,6 +404,25 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
 /* Align delete button with other submit-row buttons */
 .submit-row a.deletelink {
     margin-left: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 0.625rem 0.9375rem;
+    min-height: 2.1875rem;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: var(--delete-button-bg, #ba2121);
+    color: var(--button-fg);
+    font-weight: 600;
+    text-transform: uppercase;
+    text-decoration: none;
+}
+
+.submit-row a.deletelink:focus,
+.submit-row a.deletelink:hover {
+    background: var(--delete-button-hover-bg, #a41515);
+    color: var(--button-fg);
 }
 
 /* Keep dual-selector widgets oriented left-to-right */
