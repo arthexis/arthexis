@@ -198,6 +198,41 @@ class LoginViewTests(TestCase):
         )
         self.assertRedirects(resp, "/nodes/list/")
 
+    def test_homepage_excludes_version_banner_for_anonymous(self):
+        response = self.client.get(reverse("pages:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "__versionCheckInitialized")
+
+    def test_homepage_includes_version_banner_for_staff(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("pages:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "__versionCheckInitialized")
+
+
+class AdminTemplateVersionBannerTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.staff = User.objects.create_user(
+            username="admin-staff", password="pwd", is_staff=True
+        )
+
+    def test_admin_login_excludes_version_banner_for_anonymous(self):
+        response = self.client.get(reverse("admin:login"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "__versionCheckInitialized")
+
+    def test_admin_dashboard_includes_version_banner_for_staff(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "__versionCheckInitialized")
+
     def test_staff_redirects_next_when_specified(self):
         resp = self.client.post(
             reverse("pages:login") + "?next=/nodes/list/",
