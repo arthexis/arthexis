@@ -365,6 +365,7 @@ def request_temp_password(request):
     )
 
 
+@staff_member_required
 @require_GET
 def version_info(request):
     """Return the running application version and Git revision."""
