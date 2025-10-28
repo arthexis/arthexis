@@ -3786,6 +3786,120 @@ class Todo(Entity):
             return field.evaluate(self)
         return ConditionCheckResult(True, "")
 
+    def save(self, *args, **kwargs):
+        created = self.pk is None
+        tracked_fields = {"done_on", "is_deleted"}
+        update_fields = kwargs.get("update_fields")
+        monitor_changes = not created and (
+            update_fields is None or tracked_fields.intersection(update_fields)
+        )
+        previous_state = None
+        if monitor_changes:
+            previous_state = (
+                type(self)
+                .all_objects.filter(pk=self.pk)
+                .values("done_on", "is_deleted")
+                .first()
+            )
+        super().save(*args, **kwargs)
+
+        if created:
+            return
+
+        previous_done_on = previous_state["done_on"] if previous_state else None
+        previous_is_deleted = previous_state["is_deleted"] if previous_state else False
+        if previous_done_on == self.done_on and previous_is_deleted == self.is_deleted:
+            return
+
+        self._update_fixture_state()
+
+    def _update_fixture_state(self) -> None:
+        if not self.is_seed_data:
+            return
+
+        request_text = (self.request or "").strip()
+        if not request_text:
+            return
+
+        slug = self._fixture_slug(request_text)
+        if not slug:
+            return
+
+        base_dir = Path(settings.BASE_DIR)
+        fixture_path = base_dir / "core" / "fixtures" / f"todo__{slug}.json"
+        if not fixture_path.exists():
+            return
+
+        try:
+            with fixture_path.open("r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except Exception:
+            logger.exception("Failed to read TODO fixture %s", fixture_path)
+            return
+
+        if not isinstance(data, list):
+            return
+
+        updated = False
+        normalized_request = request_text.lower()
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            fields = item.get("fields")
+            if not isinstance(fields, dict):
+                continue
+            candidate = (fields.get("request") or "").strip().lower()
+            if candidate != normalized_request:
+                continue
+            if self._apply_fixture_fields(fields):
+                updated = True
+
+        if not updated:
+            return
+
+        content = json.dumps(data, indent=2, ensure_ascii=False)
+        if not content.endswith("\n"):
+            content += "\n"
+
+        try:
+            fixture_path.write_text(content, encoding="utf-8")
+        except OSError:
+            logger.exception("Failed to write TODO fixture %s", fixture_path)
+
+    def _apply_fixture_fields(self, fields: dict[str, object]) -> bool:
+        changed = False
+
+        def _assign(key: str, value: object) -> None:
+            nonlocal changed
+            if fields.get(key) != value:
+                fields[key] = value
+                changed = True
+
+        _assign("request", self.request or "")
+        _assign("url", self.url or "")
+        _assign("request_details", self.request_details or "")
+
+        if self.done_on:
+            done_value = timezone.localtime(self.done_on)
+            _assign("done_on", done_value.isoformat())
+        else:
+            if fields.get("done_on") is not None:
+                fields["done_on"] = None
+                changed = True
+
+        if self.is_deleted:
+            _assign("is_deleted", True)
+        elif fields.get("is_deleted"):
+            fields["is_deleted"] = False
+            changed = True
+
+        return changed
+
+    @staticmethod
+    def _fixture_slug(value: str) -> str:
+        slug = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+        return slug
+
 
 class TOTPDeviceSettings(models.Model):
     """Per-device configuration options for authenticator enrollments."""

@@ -4,7 +4,9 @@
     "fields": {
       "request": "Validate Datasette proxy port substitution",
       "url": "",
-      "request_details": "Perform a satellite installation after an upgrade and verify nginx.conf rewrites the Datasette upstream to the numeric port instead of leaving a DATA_ placeholder so nginx -t succeeds."
+      "request_details": "Perform a satellite installation after an upgrade and verify nginx.conf rewrites the Datasette upstream to the numeric port instead of leaving a DATA_ placeholder so nginx -t succeeds.",
+      "done_on": null,
+      "is_deleted": false
     }
   }
 ]

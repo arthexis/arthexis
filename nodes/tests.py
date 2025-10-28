@@ -67,7 +67,7 @@ from .backends import OutboxEmailBackend
 from .tasks import capture_node_screenshot, poll_unreachable_upstream, sample_clipboard
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
-from core.models import Package, PackageRelease, SecurityGroup, RFID, EnergyAccount
+from core.models import Package, PackageRelease, SecurityGroup, RFID, EnergyAccount, Todo
 from requests.exceptions import SSLError
 
 

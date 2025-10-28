@@ -2224,6 +2224,75 @@ class TodoDoneTests(TestCase):
         self.assertIsNotNone(todo.done_on)
         self.assertFalse(todo.is_deleted)
 
+    def test_mark_done_updates_seed_fixture(self):
+        todo = Todo.objects.create(request="Task", is_seed_data=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            fixture_dir = base / "core" / "fixtures"
+            fixture_dir.mkdir(parents=True)
+            fixture_path = fixture_dir / "todo__task.json"
+            fixture_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "model": "core.todo",
+                            "fields": {
+                                "request": "Task",
+                                "url": "",
+                                "request_details": "",
+                            },
+                        }
+                    ],
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with override_settings(BASE_DIR=base):
+                resp = self.client.post(reverse("todo-done", args=[todo.pk]))
+
+            self.assertRedirects(resp, reverse("admin:index"))
+            data = json.loads(fixture_path.read_text(encoding="utf-8"))
+            self.assertEqual(len(data), 1)
+            fields = data[0]["fields"]
+            self.assertIn("done_on", fields)
+            self.assertTrue(fields["done_on"])
+            self.assertFalse(fields.get("is_deleted", False))
+
+    def test_soft_delete_updates_seed_fixture(self):
+        todo = Todo.objects.create(request="Task", is_seed_data=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            fixture_dir = base / "core" / "fixtures"
+            fixture_dir.mkdir(parents=True)
+            fixture_path = fixture_dir / "todo__task.json"
+            fixture_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "model": "core.todo",
+                            "fields": {
+                                "request": "Task",
+                                "url": "",
+                                "request_details": "",
+                            },
+                        }
+                    ],
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with override_settings(BASE_DIR=base):
+                todo.delete()
+
+            data = json.loads(fixture_path.read_text(encoding="utf-8"))
+            self.assertEqual(len(data), 1)
+            fields = data[0]["fields"]
+            self.assertTrue(fields.get("is_deleted"))
+
     def test_mark_done_missing_task_refreshes(self):
         todo = Todo.objects.create(request="Task", is_seed_data=True)
         todo.delete()

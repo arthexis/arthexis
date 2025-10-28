@@ -4,7 +4,9 @@
     "fields": {
       "request": "Review release publish rebase failure guidance",
       "url": "",
-      "request_details": "Trigger a release publish where the automatic rebase fails and confirm the log now includes the manual git fetch/rebase/push instructions so release managers know how to finish the sync."
+      "request_details": "Trigger a release publish where the automatic rebase fails and confirm the log now includes the manual git fetch/rebase/push instructions so release managers know how to finish the sync.",
+      "done_on": null,
+      "is_deleted": false
     }
   }
 ]
