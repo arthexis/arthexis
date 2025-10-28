@@ -18,6 +18,7 @@ from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urlparse, urlsplit, urlunsplit
 import base64
 import ipaddress
@@ -309,13 +310,42 @@ class NodeAdmin(EntityModelAdmin):
     def visit_link(self, obj):
         if not obj:
             return ""
-        try:
-            url = reverse("admin:nodes_node_change", args=[obj.pk])
-        except NoReverseMatch:
+        if obj.is_local:
+            try:
+                url = reverse("admin:index")
+            except NoReverseMatch:
+                return ""
+            return format_html(
+                '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
+                url,
+                _("Visit"),
+            )
+
+        host_values: list[str] = []
+        for attr in ("hostname", "address", "public_endpoint"):
+            value = getattr(obj, attr, "") or ""
+            cleaned = value.strip()
+            if cleaned and cleaned not in host_values:
+                host_values.append(cleaned)
+
+        remote_url = ""
+        for host in host_values:
+            temp_node = SimpleNamespace(
+                public_endpoint=host,
+                address="",
+                hostname="",
+                port=obj.port,
+            )
+            remote_url = next(self._iter_remote_urls(temp_node, "/admin/"), "")
+            if remote_url:
+                break
+
+        if not remote_url:
             return ""
+
         return format_html(
             '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
-            url,
+            remote_url,
             _("Visit"),
         )
 
