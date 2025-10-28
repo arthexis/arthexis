@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Admin dashboard recent actions",
+      "url": "/admin/",
+      "request_details": "Confirm the Recent actions panel shows the object's primary key in parentheses next to the name and that each row displays the action timestamp to the right of the model name."
+    }
+  }
+]
