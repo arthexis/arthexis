@@ -3331,6 +3331,40 @@ class UserStorySubmissionTests(TestCase):
         self.assertEqual(story.user_agent, "FeedbackBot/1.0")
         self.assertEqual(story.ip_address, "127.0.0.1")
 
+    def test_superuser_submission_creates_triage_todo(self):
+        Todo.objects.all().delete()
+        superuser = get_user_model().objects.create_superuser(
+            username="overseer", email="overseer@example.com", password="pwd"
+        )
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": "local-node",
+                "address": "127.0.0.1",
+                "port": 8000,
+                "public_endpoint": "local-node",
+            },
+        )
+        self.client.force_login(superuser)
+        comments = "Review analytics dashboard flow"
+        response = self.client.post(
+            self.url,
+            {
+                "rating": 5,
+                "comments": comments,
+                "path": "/reports/analytics/",
+                "take_screenshot": "0",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Todo.objects.count(), 1)
+        todo = Todo.objects.get()
+        self.assertEqual(todo.request, f"Triage {comments}")
+        self.assertTrue(todo.is_user_data)
+        self.assertEqual(todo.original_user, superuser)
+        self.assertTrue(todo.original_user_is_authenticated)
+        self.assertEqual(todo.origin_node, Node.get_local())
+
     def test_screenshot_request_links_saved_sample(self):
         self.client.force_login(self.user)
         screenshot_file = Path("/tmp/fake.png")
