@@ -27,6 +27,15 @@
   </div>
 {% endif %}
 
+{% if debug_error %}
+  <div class="messagelist">
+    <div class="warning">
+      <strong>Debug details</strong>
+      <pre>{{ debug_error }}</pre>
+    </div>
+  </div>
+{% endif %}
+
 {% if form_error %}
   <div class="messagelist">
     <div class="error">{{ form_error }}</div>

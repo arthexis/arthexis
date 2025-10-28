@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 from django.contrib.admin.sites import site as default_site
 from django.contrib.messages.storage.fallback import FallbackStorage
+from django.contrib.auth.models import Permission
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -259,3 +260,38 @@ class ProductAdminRegisterFromOdooTests(TestCase):
         self.assertRedirects(
             response, reverse("admin:core_product_change", args=[product.pk])
         )
+
+    @patch.object(OdooProfile, "execute", side_effect=Exception("RPC failed"))
+    def test_view_shows_debug_details_for_superuser(self, mock_execute):
+        self._create_profile()
+        url = reverse("admin:core_product_register_from_odoo")
+        response = self.client.get(url)
+        self.assertContains(response, "Unable to fetch products from Odoo.")
+        self.assertContains(response, "Debug details")
+        self.assertContains(response, "Exception: Exception: RPC failed")
+
+    @patch.object(OdooProfile, "execute", side_effect=Exception("RPC failed"))
+    def test_view_hides_debug_details_for_staff(self, mock_execute):
+        staff = User.objects.create_user(
+            username="staff-user",
+            email="staff@example.com",
+            password="pwd",
+            is_staff=True,
+        )
+        permission = Permission.objects.get(codename="view_product")
+        staff.user_permissions.add(permission)
+        self.client.logout()
+        self.client.force_login(staff)
+        OdooProfile.objects.create(
+            user=staff,
+            host="http://odoo",
+            database="db",
+            username="api",
+            password="secret",
+            verified_on=timezone.now(),
+            odoo_uid=7,
+        )
+        url = reverse("admin:core_product_register_from_odoo")
+        response = self.client.get(url)
+        self.assertContains(response, "Unable to fetch products from Odoo.")
+        self.assertNotContains(response, "Debug details")
