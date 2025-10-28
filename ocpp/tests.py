@@ -2887,6 +2887,28 @@ class SimulatorAdminTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    def test_auto_registered_charger_location_name_sanitized(self):
+        async def exercise():
+            communicator = WebsocketCommunicator(
+                application, "/?cid=ACME%20Charger%20%231"
+            )
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+
+            await communicator.disconnect()
+
+            def fetch_location_name() -> str:
+                charger = (
+                    Charger.objects.select_related("location")
+                    .get(charger_id="ACME Charger #1")
+                )
+                return charger.location.name
+
+            location_name = await database_sync_to_async(fetch_location_name)()
+            self.assertEqual(location_name, "ACME_Charger_1")
+
+        async_to_sync(exercise)()
+
     async def test_query_string_cid_supported(self):
         communicator = WebsocketCommunicator(application, "/?cid=QSERIAL")
         connected, _ = await communicator.connect()
@@ -3323,6 +3345,10 @@ class ChargerLocationTests(TestCase):
         first.location.save()
         second = Charger.objects.create(charger_id="SHARE", connector_id=2)
         self.assertEqual(second.location, first.location)
+
+    def test_location_name_sanitized_when_auto_created(self):
+        charger = Charger.objects.create(charger_id="Name With spaces!#1")
+        self.assertEqual(charger.location.name, "Name_With_spaces_1")
 
 
 class MeterReadingTests(TransactionTestCase):
