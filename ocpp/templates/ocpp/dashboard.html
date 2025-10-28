@@ -83,41 +83,8 @@
       <th>{% trans "Status" %}</th>
     </tr>
   </thead>
-  <tbody>
-    {% if charger_groups %}
-      {% for group in charger_groups %}
-        {% if group.parent %}
-        <tr>
-          <td>
-            <a href="{{ group.parent.status_url }}">{{ group.parent.display_name }}</a>
-          </td>
-          <td>{{ group.parent.charger.charger_id }}</td>
-          <td class="text-end">{{ group.parent.stats.total_kw|floatformat:2 }}</td>
-          <td class="text-end">{{ group.parent.stats.today_kw|floatformat:2 }}</td>
-          <td>
-            <span class="badge" style="background-color: {{ group.parent.color }};">{{ group.parent.state }}</span>
-          </td>
-        </tr>
-        {% endif %}
-        {% for item in group.children %}
-        <tr>
-          <td class="ps-4">
-            <a href="{{ item.status_url }}">{{ item.display_name }}</a>
-          </td>
-          <td>
-            {{ item.charger.charger_id }}{% if item.charger.connector_id %} #{{ item.charger.connector_id }}{% endif %}
-          </td>
-          <td class="text-end">{{ item.stats.total_kw|floatformat:2 }}</td>
-          <td class="text-end">{{ item.stats.today_kw|floatformat:2 }}</td>
-          <td>
-            <span class="badge" style="background-color: {{ item.color }};">{{ item.state }}</span>
-          </td>
-        </tr>
-        {% endfor %}
-      {% endfor %}
-    {% else %}
-    <tr><td colspan="5">{% trans "No charge points found." %}</td></tr>
-    {% endif %}
+  <tbody data-dashboard-table-body>
+    {% include "ocpp/includes/dashboard_table_rows.html" %}
   </tbody>
 </table>
 {% if request.user.is_staff %}
@@ -125,4 +92,57 @@
   <a href="{% url 'admin:ocpp_charger_changelist' %}">{% trans "Configure" %}</a>
 </p>
 {% endif %}
+{% endblock %}
+
+{% block live_update_script %}
+      (function () {
+        const intervalSeconds = Number({{ request.live_update_interval|default_if_none:5 }});
+        if (!intervalSeconds || intervalSeconds < 0) {
+          return;
+        }
+        const tableBody = document.querySelector('[data-dashboard-table-body]');
+        if (!tableBody) {
+          return;
+        }
+        const requestUrl = new URL(window.location.href, window.location.origin);
+        requestUrl.searchParams.set('partial', 'table');
+        const fetchUrl = requestUrl.toString();
+
+        async function refreshTable() {
+          try {
+            const response = await fetch(fetchUrl, {
+              headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+              },
+              credentials: 'same-origin',
+            });
+            if (!response.ok) {
+              return;
+            }
+            const data = await response.json();
+            if (!data || typeof data.html !== 'string') {
+              return;
+            }
+            tableBody.innerHTML = data.html;
+          } catch (error) {
+            console.error('Failed to refresh dashboard table', error);
+          }
+        }
+
+        refreshTable();
+
+        setInterval(() => {
+          if (document.visibilityState === 'hidden') {
+            return;
+          }
+          refreshTable();
+        }, intervalSeconds * 1000);
+
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            refreshTable();
+          }
+        });
+      })();
 {% endblock %}

@@ -8,6 +8,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.http.request import split_domain_port
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404, render, resolve_url
+from django.template.loader import render_to_string
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
@@ -854,6 +855,11 @@ def dashboard(request):
         "demo_ws_url": ws_url,
         "ws_rate_limit": store.MAX_CONNECTIONS_PER_IP,
     }
+    if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.GET.get("partial") == "table":
+        html = render_to_string(
+            "ocpp/includes/dashboard_table_rows.html", context, request=request
+        )
+        return JsonResponse({"html": html})
     return render(request, "ocpp/dashboard.html", context)
 
 
