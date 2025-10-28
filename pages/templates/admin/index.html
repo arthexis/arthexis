@@ -58,6 +58,72 @@
         margin-bottom: 10px;
         padding-left: 18px;
     }
+    #release-manager-todos {
+        margin-bottom: 16px;
+    }
+    #release-manager-todos .todo-list {
+        list-style: none;
+        padding: 0 16px 8px;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    #release-manager-todos .todo-item {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    #release-manager-todos .todo-item-main {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+    #release-manager-todos .todo-link {
+        font-weight: 600;
+        text-decoration: none;
+        color: inherit;
+    }
+    #release-manager-todos .todo-link:focus,
+    #release-manager-todos .todo-link:hover {
+        text-decoration: underline;
+    }
+    #release-manager-todos .todo-form {
+        margin: 0;
+    }
+    #release-manager-todos .todo-form button {
+        border: none;
+        border-radius: 999px;
+        padding: 0.25rem 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        background: var(--button-bg, #0d6efd);
+        color: var(--button-fg, #fff);
+        cursor: pointer;
+    }
+    #release-manager-todos .todo-form button:focus,
+    #release-manager-todos .todo-form button:hover {
+        filter: brightness(1.1);
+    }
+    #release-manager-todos .todo-details {
+        padding: 8px 12px;
+        margin: 0;
+        border-left: 2px solid var(--hairline-color);
+        color: var(--body-quiet-color);
+    }
+    #release-manager-todos .todo-condition {
+        padding: 0 16px;
+        margin: 0;
+        color: var(--body-quiet-color);
+        font-size: 0.9em;
+    }
+    #release-manager-todos .todo-empty {
+        padding: 0 16px 16px;
+        margin: 0;
+        color: var(--body-quiet-color);
+        font-style: italic;
+    }
     .dashboard-side .actionlist .recent-action-object {
         display: inline-flex;
         align-items: baseline;
@@ -210,6 +276,34 @@
     {% include "admin/app_list.html" with app_list=app_list show_changelinks=True show_model_badges=True %}
   </div>
 <div class="dashboard-side" id="recent-boxes">
+    {% future_action_items as future_actions %}
+    <div class="module" id="release-manager-todos">
+        <h2>{% translate 'Release manager tasks' %}</h2>
+        {% if future_actions.todos %}
+        <ul class="todo-list">
+          {% for todo in future_actions.todos %}
+          <li class="todo-item">
+            <div class="todo-item-main">
+              <a href="{{ todo.url }}?next={{ request.get_full_path|urlencode }}" class="todo-link">{{ todo.label }}</a>
+              <form method="post" action="{{ todo.done_url }}" class="todo-form">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit">{% translate 'DONE' %}</button>
+              </form>
+            </div>
+            {% if todo.details %}
+            <div class="todo-details">{{ todo.details }}</div>
+            {% endif %}
+            {% if todo.condition %}
+            <p class="todo-condition">{{ todo.condition }}</p>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="todo-empty">{% translate 'No pending TODOs' %}</p>
+        {% endif %}
+    </div>
     <div class="module" id="viewhistory-mini-module">
         <h2>{% translate 'Public site traffic' %}</h2>
         <div class="chart-wrapper">

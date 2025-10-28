@@ -2765,6 +2765,12 @@ class FavoriteTests(TestCase):
         self.assertContains(resp, reverse("admin:pages_application_changelist"))
         self.assertContains(resp, reverse("admin:nodes_noderole_changelist"))
 
+    def test_dashboard_shows_empty_todo_state(self):
+        Todo.objects.all().delete()
+        resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, "Release manager tasks")
+        self.assertContains(resp, "No pending TODOs")
+
     def test_dashboard_merges_duplicate_future_actions(self):
         ct = ContentType.objects.get_for_model(NodeRole)
         Favorite.objects.create(user=self.user, content_type=ct)
