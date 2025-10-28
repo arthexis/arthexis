@@ -101,6 +101,72 @@ def _open_changelog_entries() -> list[dict[str, str]]:
     return entries
 
 
+def _latest_release_changelog() -> dict[str, object]:
+    """Return the most recent tagged release entries for display."""
+
+    changelog_path = Path("CHANGELOG.rst")
+    try:
+        text = changelog_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return {"title": "", "entries": []}
+
+    lines = text.splitlines()
+    state = "before"
+    release_title = ""
+    entries: list[dict[str, str]] = []
+
+    for raw_line in lines:
+        stripped = raw_line.strip()
+
+        if state == "before":
+            if stripped == "Unreleased":
+                state = "unreleased-heading"
+            continue
+
+        if state == "unreleased-heading":
+            if set(stripped) == {"-"}:
+                state = "unreleased-body"
+            else:
+                state = "unreleased-body"
+            continue
+
+        if state == "unreleased-body":
+            if not stripped:
+                state = "after-unreleased"
+            continue
+
+        if state == "after-unreleased":
+            if not stripped:
+                continue
+            release_title = stripped
+            state = "release-heading"
+            continue
+
+        if state == "release-heading":
+            if set(stripped) == {"-"}:
+                state = "release-body"
+            else:
+                state = "release-body"
+            continue
+
+        if state == "release-body":
+            if not stripped:
+                if entries:
+                    break
+                continue
+            if not stripped.startswith("- "):
+                break
+            trimmed = stripped[2:].strip()
+            if not trimmed:
+                continue
+            parts = trimmed.split(" ", 1)
+            sha = parts[0]
+            message = parts[1] if len(parts) > 1 else ""
+            entries.append({"sha": sha, "message": message})
+
+    return {"title": release_title, "entries": entries}
+
+
 def _exclude_changelog_entries(shas: Iterable[str]) -> int:
     """Remove entries matching ``shas`` from the changelog.
 
@@ -1073,6 +1139,7 @@ def _system_changelog_report_view(request):
         {
             "title": _("Changelog Report"),
             "open_changelog_entries": _open_changelog_entries(),
+            "latest_release_changelog": _latest_release_changelog(),
         }
     )
     return TemplateResponse(request, "admin/system_changelog_report.html", context)
