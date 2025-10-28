@@ -18,8 +18,9 @@ from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlparse, urlsplit, urlunsplit
 import base64
+import ipaddress
 import json
 import subprocess
 import uuid
@@ -676,40 +677,91 @@ class NodeAdmin(EntityModelAdmin):
         return {"ok": False, "message": last_error or "Unable to reach remote node."}
 
     def _iter_remote_urls(self, node, path):
-        host_candidates = []
+        host_candidates: list[str] = []
         for attr in ("public_endpoint", "address", "hostname"):
             value = getattr(node, attr, "") or ""
-            value = value.strip()
-            if value and value not in host_candidates:
-                host_candidates.append(value)
+            cleaned = value.strip()
+            if cleaned and cleaned not in host_candidates:
+                host_candidates.append(cleaned)
 
-        port = node.port or 8000
+        default_port = node.port or 8000
         normalized_path = path if path.startswith("/") else f"/{path}"
-        seen = set()
+        seen: set[str] = set()
 
         for host in host_candidates:
+            if "://" in host:
+                parsed = urlparse(host)
+                netloc = parsed.netloc or parsed.path
+                base_path = (parsed.path or "").rstrip("/")
+                if base_path:
+                    combined_path = f"{base_path}{normalized_path}"
+                else:
+                    combined_path = normalized_path
+                primary = urlunsplit((parsed.scheme, netloc, combined_path, "", ""))
+                if primary not in seen:
+                    seen.add(primary)
+                    yield primary
+                if parsed.scheme == "https":
+                    fallback = urlunsplit(("http", netloc, combined_path, "", ""))
+                    if fallback not in seen:
+                        seen.add(fallback)
+                        yield fallback
+                elif parsed.scheme == "http":
+                    alternate = urlunsplit(("https", netloc, combined_path, "", ""))
+                    if alternate not in seen:
+                        seen.add(alternate)
+                        yield alternate
+                continue
+
+            port_override: int | None = None
             formatted_host = host
-            if ":" in host and not host.startswith("["):
-                formatted_host = f"[{host}]"
 
-            candidates = []
-            if port == 80:
-                candidates = [
-                    f"http://{formatted_host}{normalized_path}",
-                    f"https://{formatted_host}{normalized_path}",
-                ]
-            elif port == 443:
-                candidates = [
-                    f"https://{formatted_host}{normalized_path}",
-                    f"http://{formatted_host}:{port}{normalized_path}",
-                ]
+            if host.startswith("[") and "]" in host:
+                end = host.index("]")
+                core_host = host[1:end]
+                remainder = host[end + 1 :]
+                if remainder.startswith(":"):
+                    try:
+                        port_override = int(remainder[1:])
+                    except ValueError:
+                        port_override = None
+                formatted_host = f"[{core_host}]"
             else:
-                candidates = [
-                    f"http://{formatted_host}:{port}{normalized_path}",
-                    f"https://{formatted_host}:{port}{normalized_path}",
-                ]
+                try:
+                    ip_obj = ipaddress.ip_address(host)
+                except ValueError:
+                    parts = host.rsplit(":", 1)
+                    if len(parts) == 2 and parts[1].isdigit():
+                        formatted_host = parts[0]
+                        port_override = int(parts[1])
+                    else:
+                        formatted_host = host
+                    try:
+                        ip_obj = ipaddress.ip_address(formatted_host)
+                    except ValueError:
+                        ip_obj = None
+                else:
+                    formatted_host = host
 
-            for candidate in candidates:
+                if (
+                    ip_obj is not None
+                    and ip_obj.version == 6
+                    and not formatted_host.startswith("[")
+                ):
+                    formatted_host = f"[{formatted_host}]"
+
+            effective_port = port_override if port_override is not None else default_port
+
+            for scheme, scheme_default_port in (("https", 443), ("http", 80)):
+                base = f"{scheme}://{formatted_host}"
+                if effective_port and (
+                    port_override is not None or effective_port != scheme_default_port
+                ):
+                    explicit = f"{base}:{effective_port}{normalized_path}"
+                    if explicit not in seen:
+                        seen.add(explicit)
+                        yield explicit
+                candidate = f"{base}{normalized_path}"
                 if candidate not in seen:
                     seen.add(candidate)
                     yield candidate

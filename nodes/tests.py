@@ -68,6 +68,7 @@ from .tasks import capture_node_screenshot, poll_unreachable_upstream, sample_cl
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from core.models import Package, PackageRelease, SecurityGroup, RFID, EnergyAccount
+from requests.exceptions import SSLError
 
 
 class NodeBadgeColorTests(TestCase):
@@ -1724,6 +1725,44 @@ class NodeAdminTests(TestCase):
         self.assertContains(response, "<iframe", html=False)
         mock_post.assert_called()
         payload = json.loads(mock_post.call_args[1]["data"])
+        self.assertEqual(payload.get("requester"), str(local_node.uuid))
+
+    @patch("nodes.admin.requests.post")
+    def test_proxy_view_falls_back_to_http_after_ssl_error(self, mock_post):
+        self.client.get(reverse("admin:nodes_node_register_current"))
+        remote = Node.objects.create(
+            hostname="remote-https",
+            address="198.51.100.20",
+            port=443,
+            mac_address="aa:bb:cc:dd:ee:10",
+        )
+        local_node = Node.get_local()
+        success_response = SimpleNamespace(
+            ok=True,
+            json=lambda: {
+                "login_url": "http://remote.example/nodes/proxy/login/token",
+                "expires": "2025-01-01T00:00:00",
+            },
+            status_code=200,
+            text="ok",
+        )
+        mock_post.side_effect = [
+            SSLError("wrong version number"),
+            success_response,
+        ]
+
+        response = self.client.get(
+            reverse("admin:nodes_node_proxy", args=[remote.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_post.call_count, 2)
+        first_url = mock_post.call_args_list[0].args[0]
+        second_url = mock_post.call_args_list[1].args[0]
+        self.assertTrue(first_url.startswith("https://"))
+        self.assertTrue(second_url.startswith("http://"))
+        self.assertIn("/nodes/proxy/session/", second_url)
+        payload = json.loads(mock_post.call_args_list[-1].kwargs["data"])
         self.assertEqual(payload.get("requester"), str(local_node.uuid))
 
     def test_proxy_link_displayed_for_remote_nodes(self):
