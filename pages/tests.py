@@ -2688,6 +2688,12 @@ class FavoriteTests(TestCase):
         self.assertEqual(fav.custom_label, "Apps")
         self.assertTrue(fav.user_data)
 
+    def test_add_favorite_defaults_user_data_checked(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        url = reverse("admin:favorite_toggle", args=[ct.id])
+        resp = self.client.get(url)
+        self.assertContains(resp, 'name="user_data" checked')
+
     def test_add_favorite_with_priority(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
         url = reverse("admin:favorite_toggle", args=[ct.id])
