@@ -1035,6 +1035,8 @@ class DataTransferMessage(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        verbose_name = _("Data Message")
+        verbose_name_plural = _("Data Messages")
         indexes = [
             models.Index(
                 fields=["ocpp_message_id"],
