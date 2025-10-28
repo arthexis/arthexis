@@ -15,6 +15,7 @@
             <th scope="col">{% translate 'Change or view list link' %}</th>
           </tr>
         </thead>
+        <tbody>
         {% for entry in favorite_entries %}
           {% with app=entry.app model=entry.model fav=entry.favorite ct_id=entry.ct_id model_name=model.object_name|lower %}
             <tr class="model-{{ model_name }}{% if model.admin_url in request.path|urlencode %} current-model{% endif %}">
@@ -106,16 +107,23 @@
             </tr>
           {% endwith %}
         {% endfor %}
+        </tbody>
       </table>
     </div>
   {% endif %}
   {% celery_feature_enabled as celery_enabled %}
   {% for app in app_list %}
     {% if app.app_label != 'django_celery_beat' or celery_enabled %}
-    <div class="app-{{ app.app_label }} module{% if app.app_url in request.path|urlencode %} current-app{% endif %}">
+    <div class="app-{{ app.app_label }} module{% if app.app_url in request.path|urlencode %} current-app{% endif %}" data-app-label="{{ app.app_label }}">
       <table>
         <caption class="app-caption">
-          <a href="{{ app.app_url }}" class="section" title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}">{{ app.name }} MODELS</a>
+          <div class="app-caption-inner">
+            <a href="{{ app.app_url }}" class="section" title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}">{{ app.name }} MODELS</a>
+            {% blocktranslate with name=app.name asvar toggle_label %}Toggle {{ name }} section{% endblocktranslate %}
+            <button type="button" class="app-collapse-toggle" aria-expanded="true" aria-controls="app-{{ app.app_label }}-models" data-app-label="{{ app.app_label }}">
+              <span class="visually-hidden">{{ toggle_label }}</span>
+            </button>
+          </div>
         </caption>
         <thead class="visually-hidden">
           <tr>
@@ -125,6 +133,7 @@
             <th scope="col">{% translate 'Change or view list link' %}</th>
           </tr>
         </thead>
+        <tbody id="app-{{ app.app_label }}-models">
         {% for model in app.models %}
           {% with model_name=model.object_name|lower %}
             {% favorite_ct_id app.app_label model.object_name as ct_id %}
@@ -220,6 +229,7 @@
             {% endif %}
           {% endwith %}
         {% endfor %}
+        </tbody>
       </table>
     </div>
     {% endif %}

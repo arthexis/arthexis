@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Admin dashboard collapsible sections",
+      "url": "/admin/",
+      "request_details": "Ensure each admin module on the dashboard can be collapsed with the arrow control, expands again when toggled, and remembers its state after a page reload.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]
