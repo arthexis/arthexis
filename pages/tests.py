@@ -2674,14 +2674,31 @@ class FavoriteTests(TestCase):
         resp = self.client.get(url)
         self.assertContains(resp, f'href="{next_url}"')
 
-    def test_existing_favorite_redirects_to_list(self):
+    def test_existing_favorite_shows_update_form(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        favorite = Favorite.objects.create(
+            user=self.user, content_type=ct, custom_label="Apps", user_data=True
+        )
+        url = reverse("admin:favorite_toggle", args=[ct.id])
+        resp = self.client.get(url)
+        self.assertContains(resp, "Update Favorite")
+        self.assertContains(resp, "value=\"Apps\"")
+        self.assertContains(resp, "checked")
+        self.assertContains(resp, "name=\"remove\"")
+
+        resp = self.client.post(url, {"custom_label": "Apps Updated"})
+        self.assertRedirects(resp, reverse("admin:index"))
+        favorite.refresh_from_db()
+        self.assertEqual(favorite.custom_label, "Apps Updated")
+        self.assertFalse(favorite.user_data)
+
+    def test_remove_existing_favorite_from_toggle(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
         Favorite.objects.create(user=self.user, content_type=ct)
         url = reverse("admin:favorite_toggle", args=[ct.id])
-        resp = self.client.get(url)
-        self.assertRedirects(resp, reverse("admin:favorite_list"))
-        resp = self.client.get(reverse("admin:favorite_list"))
-        self.assertContains(resp, ct.name)
+        resp = self.client.post(url, {"remove": "1"})
+        self.assertRedirects(resp, reverse("admin:index"))
+        self.assertFalse(Favorite.objects.filter(user=self.user, content_type=ct).exists())
 
     def test_update_user_data_from_list(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")

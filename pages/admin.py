@@ -860,9 +860,10 @@ def favorite_toggle(request, ct_id):
     ct = get_object_or_404(ContentType, pk=ct_id)
     fav = Favorite.objects.filter(user=request.user, content_type=ct).first()
     next_url = request.GET.get("next")
-    if fav:
-        return redirect(next_url or "admin:favorite_list")
     if request.method == "POST":
+        if fav and request.POST.get("remove"):
+            fav.delete()
+            return redirect(next_url or "admin:index")
         label = request.POST.get("custom_label", "").strip()
         user_data = request.POST.get("user_data") == "on"
         priority_raw = request.POST.get("priority", "").strip()
@@ -881,7 +882,7 @@ def favorite_toggle(request, ct_id):
     return render(
         request,
         "admin/favorite_confirm.html",
-        {"content_type": ct, "next": next_url},
+        {"content_type": ct, "favorite": fav, "next": next_url},
     )
 
 
