@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate TODO system end-to-end",
+      "url": "/admin/core/todo/",
+      "request_details": "Walk through the new TODO management workflow, ensuring release managers can create, update, and resolve tasks while confirming status changes propagate to the dashboard and API consumers."
+    }
+  }
+]

@@ -14,6 +14,7 @@
 - Remember to store generated image files in base64 since binary files are not allowed in the repo.
 - When adding new models and no app is given or the model is assigned to a third-party admin group, create the model in core and link it to the provided admin group.
 - Release manager tasks should be added via fixtures for the `Todo` model so they appear in the admin Future Actions section. Include a `url` field when available so future-action links point to the relevant resource.
+- When recently added or updated features require end-user validation, create a new Release manager `Todo` fixture describing the manual scenario so the change is exercised before release.
   - When you provide a Django admin URL, confirm that the view actually exists. Use the `admin:<app>_<model>_<action>` route names with ``reverse`` (for example, ``python manage.py shell -c "from django.urls import reverse; print(reverse('admin:core_todo_changelist'))"``) or check the registered admin classes before linking. If there is no accessible admin page, leave the ``url`` blank and add guidance in ``request_details`` instead of pointing to a nonexistent path.
 - Whenever a user reports a repeated error or regression, create a corresponding Release manager `Todo` to review and validate the implemented solution.
 - Follow the UI and visual design guidelines in `DESIGN.md` when making any interface changes.
