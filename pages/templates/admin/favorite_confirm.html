@@ -21,9 +21,11 @@
   <p>
     <label>{% translate "Priority" %}: <input type="number" name="priority" value="0"></label>
   </p>
-  <p>
-    <label><input type="checkbox" name="user_data"> {% translate "Mark as User Data" %}</label>
-  </p>
+  {% with is_checked=favorite.user_data if favorite else True %}
+    <p>
+      <label><input type="checkbox" name="user_data"{% if is_checked %} checked{% endif %}> {% translate "Mark as User Data" %}</label>
+    </p>
+  {% endwith %}
   <div class="submit-row">
     <input type="submit" value="{% translate 'Save' %}" class="default">
     {% if favorite %}
