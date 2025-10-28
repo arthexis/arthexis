@@ -83,6 +83,7 @@ from .models import (
     OdooProfile,
     OpenPayProfile,
     EmailInbox,
+    GoogleCalendarProfile,
     SocialProfile,
     EmailCollector,
     Package,
@@ -1005,6 +1006,41 @@ class OpenPayProfileAdminForm(forms.ModelForm):
         )
 
 
+class GoogleCalendarProfileAdminForm(forms.ModelForm):
+    """Admin form for :class:`core.models.GoogleCalendarProfile`."""
+
+    api_key = forms.CharField(
+        widget=forms.PasswordInput(render_value=True),
+        required=False,
+        help_text="Leave blank to keep the current key.",
+    )
+
+    class Meta:
+        model = GoogleCalendarProfile
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["api_key"].initial = ""
+            self.initial["api_key"] = ""
+        else:
+            self.fields["api_key"].required = True
+
+    def clean_api_key(self):
+        key = self.cleaned_data.get("api_key")
+        if not key and self.instance.pk:
+            return keep_existing("api_key")
+        return key
+
+    def _post_clean(self):
+        super()._post_clean()
+        _restore_sigil_values(
+            self,
+            ["calendar_id", "api_key", "display_name", "timezone"],
+        )
+
+
 class MaskedPasswordFormMixin:
     """Mixin that hides stored passwords while allowing updates."""
 
@@ -1222,6 +1258,15 @@ class OpenPayProfileInlineForm(ProfileFormMixin, OpenPayProfileAdminForm):
         return cleaned
 
 
+class GoogleCalendarProfileInlineForm(
+    ProfileFormMixin, GoogleCalendarProfileAdminForm
+):
+    profile_fields = GoogleCalendarProfile.profile_fields
+
+    class Meta(GoogleCalendarProfileAdminForm.Meta):
+        exclude = ("user", "group")
+
+
 class EmailInboxInlineForm(ProfileFormMixin, EmailInboxAdminForm):
     profile_fields = EmailInbox.profile_fields
 
@@ -1345,6 +1390,16 @@ PROFILE_INLINE_CONFIG = {
             ),
         ),
         "readonly_fields": ("verified_on", "verification_reference"),
+    },
+    GoogleCalendarProfile: {
+        "form": GoogleCalendarProfileInlineForm,
+        "fields": (
+            "display_name",
+            "calendar_id",
+            "api_key",
+            "max_events",
+            "timezone",
+        ),
     },
     EmailInbox: {
         "form": EmailInboxInlineForm,
@@ -1816,6 +1871,44 @@ class OpenPayProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
     verify_credentials_action.label = _("Test credentials")
     verify_credentials_action.short_description = _("Test credentials")
 
+
+class GoogleCalendarProfileAdmin(
+    ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
+):
+    form = GoogleCalendarProfileAdminForm
+    list_display = ("owner", "calendar_identifier", "max_events")
+    search_fields = (
+        "display_name",
+        "calendar_id",
+        "user__username",
+        "group__name",
+    )
+    changelist_actions = ["my_profile"]
+    change_actions = ["my_profile_action"]
+    fieldsets = (
+        (_("Owner"), {"fields": ("user", "group")}),
+        (
+            _("Calendar"),
+            {
+                "fields": (
+                    "display_name",
+                    "calendar_id",
+                    "api_key",
+                    "max_events",
+                    "timezone",
+                )
+            },
+        ),
+    )
+
+    @admin.display(description=_("Owner"))
+    def owner(self, obj):
+        return obj.owner_display()
+
+    @admin.display(description=_("Calendar"))
+    def calendar_identifier(self, obj):
+        display = obj.get_display_name()
+        return display or obj.resolved_calendar_id()
 
 class EmailSearchForm(forms.Form):
     subject = forms.CharField(
