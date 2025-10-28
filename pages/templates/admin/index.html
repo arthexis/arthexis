@@ -89,6 +89,49 @@
     #release-manager-todos .todo-link:hover {
         text-decoration: underline;
     }
+    .todo-tooltip {
+        position: absolute;
+        visibility: hidden;
+        opacity: 0;
+        transition: opacity 120ms ease-in-out;
+        transform: translateX(-50%);
+        pointer-events: none;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        border: 1px solid var(--hairline-color);
+        background: var(--body-bg);
+        color: var(--body-fg);
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+        max-width: 280px;
+        font-size: 0.85rem;
+        line-height: 1.4;
+        z-index: 1000;
+        text-align: left;
+    }
+    .todo-tooltip::before,
+    .todo-tooltip::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        pointer-events: none;
+    }
+    .todo-tooltip::before {
+        bottom: -9px;
+        border-width: 9px 9px 0 9px;
+        border-style: solid;
+        border-color: var(--hairline-color) transparent transparent transparent;
+    }
+    .todo-tooltip::after {
+        bottom: -8px;
+        border-width: 8px 8px 0 8px;
+        border-style: solid;
+        border-color: var(--body-bg) transparent transparent transparent;
+    }
+    .todo-tooltip.is-visible {
+        visibility: visible;
+        opacity: 1;
+    }
     #release-manager-todos .todo-form {
         margin: 0;
     }
@@ -373,6 +416,114 @@
 
 {% block extrahead %}
   {{ block.super }}
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const todoLinks = Array.from(
+        document.querySelectorAll('#release-manager-todos .todo-link'),
+      );
+
+      if (!todoLinks.length) {
+        return;
+      }
+
+      const tooltip = document.createElement('div');
+      tooltip.className = 'todo-tooltip';
+      tooltip.setAttribute('role', 'tooltip');
+      document.body.appendChild(tooltip);
+
+      const OFFSET = 12;
+      let activeLink = null;
+
+      const storeTooltipText = (link) => {
+        if (!link.dataset.todoTooltip) {
+          const title = link.getAttribute('title');
+          if (title) {
+            link.dataset.todoTooltip = title;
+          }
+        }
+        return link.dataset.todoTooltip || '';
+      };
+
+      const removeNativeTitle = (link) => {
+        if (link.hasAttribute('title')) {
+          const title = link.getAttribute('title');
+          if (title) {
+            link.dataset.todoTooltip = title;
+          }
+          link.removeAttribute('title');
+        }
+      };
+
+      const restoreNativeTitle = (link) => {
+        const title = link.dataset.todoTooltip;
+        if (title && !link.hasAttribute('title')) {
+          link.setAttribute('title', title);
+        }
+      };
+
+      const positionTooltip = (link) => {
+        const rect = link.getBoundingClientRect();
+        const tooltipRect = tooltip.getBoundingClientRect();
+        const left = rect.left + window.scrollX + rect.width / 2;
+        const top = rect.top + window.scrollY - tooltipRect.height - OFFSET;
+
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+      };
+
+      const showTooltip = (link) => {
+        const text = storeTooltipText(link);
+        if (!text) {
+          return;
+        }
+
+        removeNativeTitle(link);
+
+        tooltip.textContent = text;
+        tooltip.classList.add('is-visible');
+        positionTooltip(link);
+        activeLink = link;
+      };
+
+      const hideTooltip = (link) => {
+        if (!link) {
+          return;
+        }
+
+        tooltip.classList.remove('is-visible');
+        tooltip.textContent = '';
+        restoreNativeTitle(link);
+
+        if (activeLink === link) {
+          activeLink = null;
+        }
+      };
+
+      const updateTooltipPosition = () => {
+        if (!activeLink || !tooltip.classList.contains('is-visible')) {
+          return;
+        }
+
+        positionTooltip(activeLink);
+      };
+
+      todoLinks.forEach((link) => {
+        link.addEventListener('mouseenter', () => showTooltip(link));
+        link.addEventListener('focus', () => showTooltip(link));
+        link.addEventListener('mouseleave', () => hideTooltip(link));
+        link.addEventListener('blur', () => hideTooltip(link));
+      });
+
+      window.addEventListener('scroll', updateTooltipPosition, true);
+      window.addEventListener('resize', updateTooltipPosition);
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && activeLink) {
+          hideTooltip(activeLink);
+        }
+      });
+    });
+  </script>
   <script>
     window.addEventListener('DOMContentLoaded', () => {
       const canvas = document.getElementById('viewhistory-mini-chart');
