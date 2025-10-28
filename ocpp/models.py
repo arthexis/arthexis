@@ -48,6 +48,7 @@ class Charger(Entity):
     """Known charge point."""
 
     _PLACEHOLDER_SERIAL_RE = re.compile(r"^<[^>]+>$")
+    _AUTO_LOCATION_SANITIZE_RE = re.compile(r"[^0-9A-Za-z_-]+")
 
     OPERATIVE_STATUSES = {
         "Available",
@@ -324,6 +325,16 @@ class Charger(Entity):
             )
         return normalized
 
+    @classmethod
+    def sanitize_auto_location_name(cls, value: str) -> str:
+        """Return a location name containing only safe characters."""
+
+        sanitized = cls._AUTO_LOCATION_SANITIZE_RE.sub("_", value)
+        sanitized = re.sub(r"_+", "_", sanitized).strip("_")
+        if not sanitized:
+            return "Charger"
+        return sanitized
+
     AGGREGATE_CONNECTOR_SLUG = "all"
 
     def identity_tuple(self) -> tuple[str, int | None]:
@@ -459,7 +470,8 @@ class Charger(Entity):
             if existing:
                 self.location = existing.location
             else:
-                location, _ = Location.objects.get_or_create(name=self.charger_id)
+                auto_name = type(self).sanitize_auto_location_name(self.charger_id)
+                location, _ = Location.objects.get_or_create(name=auto_name)
                 self.location = location
             if update_list is not None and "location" not in update_list:
                 update_list.append("location")
