@@ -71,8 +71,10 @@ import base64
 import json
 import tempfile
 import shutil
+from datetime import timedelta
 from io import StringIO
 from django.conf import settings
+from django.utils import timezone
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, call, patch
 from types import SimpleNamespace
@@ -815,6 +817,35 @@ class ViewHistoryLoggingTests(TestCase):
         self.assertEqual(lead.landing, landing)
         self.assertEqual(lead.path, "/")
         self.assertEqual(lead.referer, "https://example.com/ref")
+
+    def test_pages_config_purges_old_view_history(self):
+        ViewHistory.objects.all().delete()
+
+        old_entry = ViewHistory.objects.create(
+            path="/old/",
+            method="GET",
+            status_code=200,
+            status_text="OK",
+        )
+        new_entry = ViewHistory.objects.create(
+            path="/recent/",
+            method="GET",
+            status_code=200,
+            status_text="OK",
+        )
+
+        ViewHistory.objects.filter(pk=old_entry.pk).update(
+            visited_at=timezone.now() - timedelta(days=20)
+        )
+        ViewHistory.objects.filter(pk=new_entry.pk).update(
+            visited_at=timezone.now() - timedelta(days=10)
+        )
+
+        config = django_apps.get_app_config("pages")
+        config._purge_view_history()
+
+        self.assertFalse(ViewHistory.objects.filter(pk=old_entry.pk).exists())
+        self.assertTrue(ViewHistory.objects.filter(pk=new_entry.pk).exists())
 
     def test_landing_visit_does_not_record_lead_without_celery(self):
         role = NodeRole.objects.create(name="no-celery-role")
