@@ -284,7 +284,6 @@ class NodeAdmin(EntityModelAdmin):
         "register_visitor",
         "run_task",
         "take_screenshots",
-        "fetch_rfids_from_selected",
         "import_rfids_from_selected",
         "export_rfids_to_selected",
     ]
@@ -999,17 +998,19 @@ class NodeAdmin(EntityModelAdmin):
         result["status"] = self._status_from_result(result)
         return result
 
-    def _run_rfid_fetch(self, request, queryset, *, operation):
+    def _run_rfid_import(self, request, queryset):
         nodes = list(queryset)
         local_node, private_key, error = self._load_local_node_credentials()
         if error:
             results = [self._skip_result(node, error) for node in nodes]
-            return self._render_rfid_sync(request, operation, results, setup_error=error)
+            return self._render_rfid_sync(
+                request, "import", results, setup_error=error
+            )
 
         if not nodes:
             return self._render_rfid_sync(
                 request,
-                operation,
+                "import",
                 [],
                 setup_error=_("No nodes selected."),
             )
@@ -1032,15 +1033,11 @@ class NodeAdmin(EntityModelAdmin):
                 continue
             results.append(self._process_import_from_node(node, payload, headers))
 
-        return self._render_rfid_sync(request, operation, results)
-
-    @admin.action(description=_("Fetch RFIDs from selected"))
-    def fetch_rfids_from_selected(self, request, queryset):
-        return self._run_rfid_fetch(request, queryset, operation="fetch")
+        return self._render_rfid_sync(request, "import", results)
 
     @admin.action(description=_("Import RFIDs from selected"))
     def import_rfids_from_selected(self, request, queryset):
-        return self._run_rfid_fetch(request, queryset, operation="import")
+        return self._run_rfid_import(request, queryset)
 
     @admin.action(description=_("Export RFIDs to selected"))
     def export_rfids_to_selected(self, request, queryset):
