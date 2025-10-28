@@ -3715,9 +3715,9 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             self.message_user(request, str(exc), messages.ERROR)
             return
         releases = resp.json().get("releases", {})
-        created = 0
         updated = 0
         restored = 0
+        missing: list[str] = []
 
         for version, files in releases.items():
             release_on = self._release_on_from_files(files)
@@ -3742,23 +3742,11 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 if update_fields:
                     release.save(update_fields=update_fields)
                 continue
-            PackageRelease.objects.create(
-                package=package,
-                release_manager=package.release_manager,
-                version=version,
-                revision="",
-                pypi_url=f"https://pypi.org/project/{package.name}/{version}/",
-                release_on=release_on,
-            )
-            created += 1
+            missing.append(version)
 
-        if created or updated or restored:
+        if updated or restored:
             PackageRelease.dump_fixture()
             message_parts = []
-            if created:
-                message_parts.append(
-                    f"Created {created} release{'s' if created != 1 else ''} from PyPI"
-                )
             if updated:
                 message_parts.append(
                     f"Updated release date for {updated} release"
@@ -3769,8 +3757,17 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                     f"Restored {restored} release{'s' if restored != 1 else ''}"
                 )
             self.message_user(request, "; ".join(message_parts), messages.SUCCESS)
-        else:
-            self.message_user(request, "No new releases found", messages.INFO)
+        elif not missing:
+            self.message_user(request, "No matching releases found", messages.INFO)
+
+        if missing:
+            versions = ", ".join(sorted(missing))
+            count = len(missing)
+            message = (
+                "Manual creation required for "
+                f"{count} release{'s' if count != 1 else ''}: {versions}"
+            )
+            self.message_user(request, message, messages.WARNING)
 
     refresh_from_pypi.label = "Refresh from PyPI"
     refresh_from_pypi.short_description = "Refresh from PyPI"

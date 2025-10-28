@@ -1969,7 +1969,7 @@ class PackageReleaseAdminActionTests(TestCase):
 
     @mock.patch("core.admin.PackageRelease.dump_fixture")
     @mock.patch("core.admin.requests.get")
-    def test_refresh_from_pypi_creates_releases(self, mock_get, dump):
+    def test_refresh_from_pypi_reports_missing_releases(self, mock_get, dump):
         mock_get.return_value.raise_for_status.return_value = None
         mock_get.return_value.json.return_value = {
             "releases": {
@@ -1982,13 +1982,17 @@ class PackageReleaseAdminActionTests(TestCase):
             }
         }
         self.admin.refresh_from_pypi(self.request, PackageRelease.objects.none())
-        new_release = PackageRelease.objects.get(version="1.1.0")
-        self.assertEqual(new_release.revision, "")
-        self.assertEqual(
-            new_release.release_on,
-            datetime(2024, 2, 2, 15, 45, tzinfo=datetime_timezone.utc),
+        self.assertFalse(
+            PackageRelease.objects.filter(version="1.1.0").exists()
         )
-        dump.assert_called_once()
+        dump.assert_not_called()
+        self.assertIn(
+            (
+                "Manual creation required for 1 release: 1.1.0",
+                messages.WARNING,
+            ),
+            self.messages,
+        )
 
     @mock.patch("core.admin.PackageRelease.dump_fixture")
     @mock.patch("core.admin.requests.get")
