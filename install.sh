@@ -7,6 +7,8 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/nginx_maintenance.sh
 . "$SCRIPT_DIR/scripts/helpers/nginx_maintenance.sh"
+# shellcheck source=scripts/helpers/desktop_shortcuts.sh
+. "$SCRIPT_DIR/scripts/helpers/desktop_shortcuts.sh"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -631,4 +633,6 @@ fi
 if [ "$START_SERVICES" = true ]; then
     "$BASE_DIR/start.sh"
 fi
+
+arthexis_refresh_desktop_shortcuts "$BASE_DIR"
 

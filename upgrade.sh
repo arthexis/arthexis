@@ -6,6 +6,8 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$BASE_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/nginx_maintenance.sh
 . "$BASE_DIR/scripts/helpers/nginx_maintenance.sh"
+# shellcheck source=scripts/helpers/desktop_shortcuts.sh
+. "$BASE_DIR/scripts/helpers/desktop_shortcuts.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -597,3 +599,5 @@ if [[ $NO_RESTART -eq 0 ]]; then
   nohup ./start.sh >/dev/null 2>&1 &
   echo "Services restart triggered"
 fi
+
+arthexis_refresh_desktop_shortcuts "$BASE_DIR"
