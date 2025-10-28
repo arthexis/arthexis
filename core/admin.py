@@ -2416,8 +2416,30 @@ class ProductAdmin(EntityModelAdmin):
                 ],
                 limit=0,
             )
-        except Exception:
+        except Exception as exc:
+            logger.exception(
+                "Failed to fetch Odoo products for user %s (profile_id=%s, host=%s, database=%s)",
+                getattr(getattr(request, "user", None), "pk", None),
+                getattr(profile, "pk", None),
+                getattr(profile, "host", None),
+                getattr(profile, "database", None),
+            )
             context["error"] = _("Unable to fetch products from Odoo.")
+            if getattr(request.user, "is_superuser", False):
+                fault = getattr(exc, "faultString", "")
+                message = str(exc)
+                details = [
+                    f"Host: {getattr(profile, 'host', '')}",
+                    f"Database: {getattr(profile, 'database', '')}",
+                    f"User ID: {getattr(profile, 'odoo_uid', '')}",
+                ]
+                if fault and fault != message:
+                    details.append(f"Fault: {fault}")
+                if message:
+                    details.append(f"Exception: {type(exc).__name__}: {message}")
+                else:
+                    details.append(f"Exception type: {type(exc).__name__}")
+                context["debug_error"] = "\n".join(details)
             return context, []
 
         context["has_credentials"] = True
