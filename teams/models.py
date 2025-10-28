@@ -6,6 +6,7 @@ from core.models import (
     EmailCollector as CoreEmailCollector,
     ReleaseManager as CoreReleaseManager,
     OdooProfile as CoreOdooProfile,
+    GoogleCalendarProfile as CoreGoogleCalendarProfile,
 )
 from awg.models import PowerLead as CorePowerLead
 from django_otp.plugins.otp_totp.models import (
@@ -95,5 +96,13 @@ class TOTPDevice(CoreTOTPDevice):
         app_label = "teams"
         verbose_name = CoreTOTPDevice._meta.verbose_name
         verbose_name_plural = CoreTOTPDevice._meta.verbose_name_plural
+
+
+class GoogleCalendarProfile(CoreGoogleCalendarProfile):
+    class Meta:
+        proxy = True
+        app_label = "django_celery_beat"
+        verbose_name = CoreGoogleCalendarProfile._meta.verbose_name
+        verbose_name_plural = CoreGoogleCalendarProfile._meta.verbose_name_plural
 
 

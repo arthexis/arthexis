@@ -62,6 +62,7 @@ from core.models import (
     RFID,
     ReleaseManager,
     SecurityGroup,
+    GoogleCalendarProfile,
     Todo,
     TOTPDeviceSettings,
 )
@@ -751,6 +752,66 @@ class AdminSidebarTests(TestCase):
         url = reverse("admin:nodes_node_changelist")
         resp = self.client.get(url)
         self.assertContains(resp, 'id="admin-collapsible-apps"')
+
+
+class AdminGoogleCalendarSidebarTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="calendar_admin", password="pwd", email="admin@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "test", "domain": "testserver"}
+        )
+        Node.objects.create(hostname="testserver", address="127.0.0.1")
+
+    def test_calendar_module_hidden_without_profile(self):
+        resp = self.client.get(reverse("admin:index"))
+        self.assertNotContains(resp, 'id="google-calendar-module"', html=False)
+
+    @patch("core.models.GoogleCalendarProfile.fetch_events")
+    def test_calendar_module_shows_events_for_user(self, fetch_events):
+        fetch_events.return_value = [
+            {
+                "summary": "Standup",
+                "start": timezone.now(),
+                "end": None,
+                "all_day": False,
+                "html_link": "https://calendar.google.com/event",
+                "location": "HQ",
+            }
+        ]
+        GoogleCalendarProfile.objects.create(
+            user=self.admin,
+            calendar_id="example@group.calendar.google.com",
+            api_key="secret",
+            display_name="Team Calendar",
+        )
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resp, 'id="google-calendar-module"', html=False)
+        self.assertContains(resp, "Standup")
+        self.assertContains(resp, "Open full calendar")
+        fetch_events.assert_called_once()
+
+    @patch("core.models.GoogleCalendarProfile.fetch_events")
+    def test_calendar_module_uses_group_profile(self, fetch_events):
+        fetch_events.return_value = []
+        group = SecurityGroup.objects.create(name="Calendar Group")
+        self.admin.groups.add(group)
+        GoogleCalendarProfile.objects.create(
+            group=group,
+            calendar_id="group@calendar.google.com",
+            api_key="secret",
+        )
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resp, 'id="google-calendar-module"', html=False)
+        fetch_events.assert_called_once()
 
 
 class ViewHistoryLoggingTests(TestCase):

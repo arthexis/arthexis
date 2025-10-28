@@ -17,6 +17,7 @@ from core.admin import (
     EmailCollectorAdmin,
     ReleaseManagerAdmin,
     OdooProfileAdmin,
+    GoogleCalendarProfileAdmin,
 )
 from core.models import (
     InviteLead as CoreInviteLead,
@@ -50,6 +51,7 @@ from .models import (
     PowerLead,
     OdooProfile,
     TOTPDevice,
+    GoogleCalendarProfile,
 )
 
 
@@ -101,6 +103,11 @@ class PowerLeadAdminProxy(CorePowerLeadAdmin):
 
 @admin.register(OdooProfile)
 class OdooProfileAdminProxy(OdooProfileAdmin):
+    pass
+
+
+@admin.register(GoogleCalendarProfile)
+class GoogleCalendarProfileAdminProxy(GoogleCalendarProfileAdmin):
     pass
 
 
