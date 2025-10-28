@@ -689,14 +689,17 @@ class NodeAdmin(EntityModelAdmin):
         seen: set[str] = set()
 
         for host in host_candidates:
+            base_path = ""
+            formatted_host = host
+            port_override: int | None = None
+
             if "://" in host:
                 parsed = urlparse(host)
                 netloc = parsed.netloc or parsed.path
                 base_path = (parsed.path or "").rstrip("/")
-                if base_path:
-                    combined_path = f"{base_path}{normalized_path}"
-                else:
-                    combined_path = normalized_path
+                combined_path = (
+                    f"{base_path}{normalized_path}" if base_path else normalized_path
+                )
                 primary = urlunsplit((parsed.scheme, netloc, combined_path, "", ""))
                 if primary not in seen:
                     seen.add(primary)
@@ -713,55 +716,57 @@ class NodeAdmin(EntityModelAdmin):
                         yield alternate
                 continue
 
-            port_override: int | None = None
-            formatted_host = host
-
             if host.startswith("[") and "]" in host:
                 end = host.index("]")
                 core_host = host[1:end]
                 remainder = host[end + 1 :]
                 if remainder.startswith(":"):
-                    try:
-                        port_override = int(remainder[1:])
-                    except ValueError:
-                        port_override = None
+                    remainder = remainder[1:]
+                    port_part, sep, path_tail = remainder.partition("/")
+                    if port_part:
+                        try:
+                            port_override = int(port_part)
+                        except ValueError:
+                            port_override = None
+                    if sep:
+                        base_path = f"/{path_tail}".rstrip("/")
+                elif "/" in remainder:
+                    _, _, path_tail = remainder.partition("/")
+                    base_path = f"/{path_tail}".rstrip("/")
                 formatted_host = f"[{core_host}]"
             else:
+                if "/" in host:
+                    host_only, _, path_tail = host.partition("/")
+                    formatted_host = host_only or host
+                    base_path = f"/{path_tail}".rstrip("/")
                 try:
-                    ip_obj = ipaddress.ip_address(host)
+                    ip_obj = ipaddress.ip_address(formatted_host)
                 except ValueError:
-                    parts = host.rsplit(":", 1)
+                    parts = formatted_host.rsplit(":", 1)
                     if len(parts) == 2 and parts[1].isdigit():
                         formatted_host = parts[0]
                         port_override = int(parts[1])
-                    else:
-                        formatted_host = host
                     try:
                         ip_obj = ipaddress.ip_address(formatted_host)
                     except ValueError:
                         ip_obj = None
                 else:
-                    formatted_host = host
-
-                if (
-                    ip_obj is not None
-                    and ip_obj.version == 6
-                    and not formatted_host.startswith("[")
-                ):
-                    formatted_host = f"[{formatted_host}]"
+                    if ip_obj.version == 6 and not formatted_host.startswith("["):
+                        formatted_host = f"[{formatted_host}]"
 
             effective_port = port_override if port_override is not None else default_port
+            combined_path = f"{base_path}{normalized_path}" if base_path else normalized_path
 
             for scheme, scheme_default_port in (("https", 443), ("http", 80)):
                 base = f"{scheme}://{formatted_host}"
                 if effective_port and (
                     port_override is not None or effective_port != scheme_default_port
                 ):
-                    explicit = f"{base}:{effective_port}{normalized_path}"
+                    explicit = f"{base}:{effective_port}{combined_path}"
                     if explicit not in seen:
                         seen.add(explicit)
                         yield explicit
-                candidate = f"{base}{normalized_path}"
+                candidate = f"{base}{combined_path}"
                 if candidate not in seen:
                     seen.add(candidate)
                     yield candidate
