@@ -1,4 +1,3 @@
-import json
 import subprocess
 from pathlib import Path
 
@@ -86,23 +85,8 @@ EOF
     release.refresh_from_db()
     assert release.changelog == "- script generated entry"
 
-    fixture_one = todo_fixture_dir / "todos__create_release_pkg_1_2_1.json"
-    assert fixture_one.exists()
-    fixture_data = json.loads(fixture_one.read_text(encoding="utf-8"))
-    assert fixture_data[0]["fields"]["request"] == "Create release pkg 1.2.1"
-    assert (
-        fixture_data[0]["fields"]["generated_for_version"]
-        == release.version
-    )
-    assert (
-        fixture_data[0]["fields"]["generated_for_revision"]
-        == release.revision
-    )
-
-    todo_one = Todo.objects.get(request="Create release pkg 1.2.1")
-    assert todo_one.is_seed_data
-    assert todo_one.generated_for_version == release.version
-    assert todo_one.generated_for_revision == release.revision
+    assert not list(todo_fixture_dir.glob("todos__*.json"))
+    assert not Todo.objects.filter(request__icontains="Create release pkg").exists()
 
     diff_cached = subprocess.run(
         ["git", "diff", "--cached", "--name-only"],
@@ -123,12 +107,11 @@ EOF
         return lines[0], lines[1:]
 
     head_msg, head_files = show_commit("HEAD")
-    assert head_msg == "chore: add release TODO for pkg"
-    assert fixture_one.as_posix() in head_files
+    assert head_msg == "pre-release commit 1.2.0"
+    assert {"CHANGELOG.rst", "VERSION"}.issubset(set(head_files))
 
     prev_msg, prev_files = show_commit("HEAD^")
-    assert prev_msg == "pre-release commit 1.2.0"
-    assert {"CHANGELOG.rst", "VERSION"}.issubset(set(prev_files))
+    assert prev_msg == "Initial commit for integration test"
 
     release_fixture_one = Path("core/fixtures/releases__packagerelease_1_2_0.json")
     assert release_fixture_one.exists()
@@ -167,13 +150,8 @@ EOF
     changelog_text = Path("CHANGELOG.rst").read_text(encoding="utf-8")
     assert "Fix fallback integration coverage (#42)" in changelog_text
 
-    fixture_two = todo_fixture_dir / "todos__create_release_pkg_1_2_2.json"
-    assert fixture_two.exists()
-    fixture_two_data = json.loads(fixture_two.read_text(encoding="utf-8"))
-    assert fixture_two_data[0]["fields"]["request"] == "Create release pkg 1.2.2"
-    assert not Todo.objects.filter(request="Create release pkg 1.2.1").exists()
-    todo_two = Todo.objects.get(request="Create release pkg 1.2.2")
-    assert todo_two.is_seed_data
+    assert not list(todo_fixture_dir.glob("todos__*.json"))
+    assert not Todo.objects.filter(request__icontains="Create release pkg").exists()
 
     second_diff = subprocess.run(
         ["git", "diff", "--cached", "--name-only"],
@@ -184,12 +162,11 @@ EOF
     assert second_diff.stdout.strip() == ""
 
     head_msg_two, head_files_two = show_commit("HEAD")
-    assert head_msg_two == "chore: add release TODO for pkg"
-    assert fixture_two.as_posix() in head_files_two
+    assert head_msg_two == "pre-release commit 1.2.1"
+    assert {"CHANGELOG.rst", "VERSION"}.issubset(set(head_files_two))
 
     prev_msg_two, prev_files_two = show_commit("HEAD^")
-    assert prev_msg_two == "pre-release commit 1.2.1"
-    assert {"CHANGELOG.rst", "VERSION"}.issubset(set(prev_files_two))
+    assert prev_msg_two == "Fix fallback integration coverage (#42)"
 
     release_fixture_two = Path("core/fixtures/releases__packagerelease_1_2_1.json")
     assert release_fixture_two.exists()

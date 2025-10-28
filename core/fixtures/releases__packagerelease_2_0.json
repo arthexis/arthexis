@@ -1,0 +1,20 @@
+[
+  {
+    "model": "core.packagerelease",
+    "fields": {
+      "is_seed_data": false,
+      "is_user_data": false,
+      "is_deleted": false,
+      "package": [
+        "arthexis"
+      ],
+      "release_manager": null,
+      "version": "2.0",
+      "revision": "42d313b802e4af0972029284ff2461bdedaf2259",
+      "changelog": "",
+      "pypi_url": "",
+      "github_url": "",
+      "release_on": null
+    }
+  }
+]

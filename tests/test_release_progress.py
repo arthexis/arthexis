@@ -1,6 +1,5 @@
 import os
 import sys
-import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -903,35 +902,7 @@ class ReleaseProgressViewTests(TestCase):
         self.assertEqual(self.release.changelog, "- pending change")
         session = self.client.session
         ctx = session.get(session_key, {})
-        self.assertEqual(
-            ctx.get("release_todo_previous_version"), self.release.version
-        )
-
-    def test_ensure_release_todo_targets_next_patch_after_bump(self):
-        self.release.version = "0.9.1"
-        self.release.save(update_fields=["version"])
-
-        tmp_dir = Path("tmp_todos_version_bumped")
-        tmp_dir.mkdir(exist_ok=True)
-        self.addCleanup(lambda: shutil.rmtree(tmp_dir, ignore_errors=True))
-
-        with mock.patch("core.views.TODO_FIXTURE_DIR", tmp_dir):
-            todo, fixture_path = core_views._ensure_release_todo(
-                self.release, previous_version="0.9.0"
-            )
-
-        expected_request = "Create release pkg 0.9.2"
-        self.assertEqual(todo.request, expected_request)
-        self.assertEqual(todo.generated_for_version, self.release.version)
-        self.assertEqual(todo.generated_for_revision, self.release.revision)
-        data = json.loads(fixture_path.read_text(encoding="utf-8"))
-        self.assertEqual(data[0]["fields"]["request"], expected_request)
-        self.assertEqual(
-            data[0]["fields"]["generated_for_version"], self.release.version
-        )
-        self.assertEqual(
-            data[0]["fields"]["generated_for_revision"], self.release.revision
-        )
+        self.assertNotIn("release_todo_previous_version", ctx)
 
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     @mock.patch("core.views.release_utils.network_available", return_value=False)
@@ -948,7 +919,6 @@ class ReleaseProgressViewTests(TestCase):
         )
 
         commands: list[list[str]] = []
-        fixture_filename = "todos__create_release_pkg_1_0_1.json"
         changelog_entry = "- abcdef12 Fix fallback generation output (#42)"
 
         def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
@@ -978,11 +948,6 @@ class ReleaseProgressViewTests(TestCase):
             if (
                 cmd[:3] == ["git", "diff", "--cached"]
                 and any(part.endswith("CHANGELOG.rst") for part in cmd)
-            ):
-                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
-            if (
-                cmd[:3] == ["git", "diff", "--cached"]
-                and any(part.endswith(fixture_filename) for part in cmd)
             ):
                 return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
@@ -1032,81 +997,24 @@ class ReleaseProgressViewTests(TestCase):
             self.release.version,
         )
         self.assertIn(changelog_entry, Path("CHANGELOG.rst").read_text(encoding="utf-8"))
-        expected_request = "Create release pkg 1.0.1"
-        self.assertFalse(Todo.objects.filter(request=expected_request).exists())
-        fixture_path = tmp_dir / fixture_filename
-        self.assertFalse(fixture_path.exists())
-        self.assertNotIn(
-            "Committed TODO fixture tmp_todos_pre_release_fallback/"
-            "todos__create_release_pkg_1_0_1.json",
-            log_content,
+        self.assertFalse(
+            Todo.objects.filter(request__icontains="Create release pkg").exists()
         )
+        self.assertFalse(list(tmp_dir.glob("todos__*.json")))
+        self.assertNotIn("Committed TODO fixture", log_content)
         self.assertIn("Recorded changelog notes for v1.0", log_content)
         self.release.refresh_from_db()
         self.assertEqual(self.release.changelog, changelog_entry)
         session = self.client.session
         ctx = session.get(session_key, {})
-        self.assertEqual(
-            ctx.get("release_todo_previous_version"), self.release.version
-        )
-
-    def test_record_release_todo_commits_fixture(self):
-        tmp_dir = Path("tmp_todos_record_release")
-        tmp_dir.mkdir(exist_ok=True)
-        self.addCleanup(lambda: shutil.rmtree(tmp_dir, ignore_errors=True))
-
-        ctx = {"release_todo_previous_version": self.release.version}
-        log_path = Path("logs") / "record_release_todo.log"
-        self.addCleanup(lambda: log_path.unlink(missing_ok=True))
-        commands: list[list[str]] = []
-        fixture_filename = "todos__create_release_pkg_1_0_1.json"
-        fixture_path = tmp_dir / fixture_filename
-
-        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
-            commands.append(cmd)
-            if (
-                cmd[:4] == ["git", "diff", "--cached", "--quiet"]
-                and any(part.endswith(fixture_filename) or part == str(fixture_path) for part in cmd)
-            ):
-                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-
-        with mock.patch("core.views.TODO_FIXTURE_DIR", tmp_dir):
-            with mock.patch("core.views.subprocess.run", side_effect=fake_run):
-                core_views._record_release_todo(self.release, ctx, log_path)
-
-        expected_request = "Create release pkg 1.0.1"
-        todo = Todo.objects.get(request=expected_request)
-        self.assertTrue(todo.is_seed_data)
-        self.assertEqual(todo.generated_for_version, self.release.version)
-        self.assertEqual(todo.generated_for_revision, self.release.revision)
-        self.assertEqual(todo.url, reverse("admin:core_packagerelease_changelist"))
-        self.assertIsNone(todo.done_on)
-        self.assertTrue(fixture_path.exists())
-        data = json.loads(fixture_path.read_text(encoding="utf-8"))
-        self.assertEqual(data[0]["fields"]["request"], expected_request)
-        self.assertEqual(
-            data[0]["fields"]["url"], reverse("admin:core_packagerelease_changelist")
-        )
-        self.assertEqual(
-            data[0]["fields"]["generated_for_version"], self.release.version
-        )
-        self.assertEqual(
-            data[0]["fields"]["generated_for_revision"], self.release.revision
-        )
-        log_content = log_path.read_text(encoding="utf-8")
-        self.assertIn(f"Added TODO: {expected_request}", log_content)
-        self.assertIn(
-            "Committed TODO fixture tmp_todos_record_release/todos__create_release_pkg_1_0_1.json",
-            log_content,
-        )
         self.assertNotIn("release_todo_previous_version", ctx)
-        self.assertIn(["git", "commit", "-m", "chore: add release TODO for pkg"], commands)
 
     @mock.patch("core.views.release_utils.promote")
     @mock.patch("core.views.PackageRelease.dump_fixture")
     @mock.patch("core.views._ensure_origin_main_unchanged")
-    def test_build_step_commits_todo_after_success(self, ensure_main, dump_fixture, promote):
+    def test_build_step_skips_todo_creation_on_success(
+        self, ensure_main, dump_fixture, promote
+    ):
         commands: list[list[str]] = []
 
         def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
@@ -1120,24 +1028,24 @@ class ReleaseProgressViewTests(TestCase):
             "log": self.log_name,
             "started": True,
             "todos_ack": True,
-            "release_todo_previous_version": self.release.version,
         }
         session.save()
 
         with mock.patch("core.views._has_remote", return_value=False):
             with mock.patch("core.views.subprocess.run", side_effect=fake_run):
-                with mock.patch("core.views._record_release_todo") as record_mock:
-                    url = reverse("release-progress", args=[self.release.pk, "publish"])
-                    response = self.client.get(f"{url}?step=5")
+                url = reverse("release-progress", args=[self.release.pk, "publish"])
+                response = self.client.get(f"{url}?step=5")
         self.assertEqual(response.status_code, 200)
-        record_mock.assert_called_once()
+        self.assertFalse(Todo.objects.exists())
         updated_session = self.client.session.get(session_key, {})
         self.assertEqual(updated_session.get("step"), 6)
 
     @mock.patch("core.views.release_utils.promote", side_effect=Exception("build failed"))
     @mock.patch("core.views.PackageRelease.dump_fixture")
     @mock.patch("core.views._ensure_origin_main_unchanged")
-    def test_build_step_failure_does_not_commit_todo(self, ensure_main, dump_fixture, promote):
+    def test_build_step_failure_keeps_state_without_todo(
+        self, ensure_main, dump_fixture, promote
+    ):
         commands: list[list[str]] = []
 
         def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
@@ -1151,21 +1059,18 @@ class ReleaseProgressViewTests(TestCase):
             "log": self.log_name,
             "started": True,
             "todos_ack": True,
-            "release_todo_previous_version": self.release.version,
         }
         session.save()
 
         with mock.patch("core.views._has_remote", return_value=False):
             with mock.patch("core.views.subprocess.run", side_effect=fake_run):
-                with mock.patch("core.views._record_release_todo") as record_mock:
-                    url = reverse("release-progress", args=[self.release.pk, "publish"])
-                    response = self.client.get(f"{url}?step=5")
+                url = reverse("release-progress", args=[self.release.pk, "publish"])
+                response = self.client.get(f"{url}?step=5")
         self.assertEqual(response.status_code, 200)
-        record_mock.assert_not_called()
         self.assertFalse(Todo.objects.exists())
         updated_session = self.client.session.get(session_key, {})
         self.assertEqual(updated_session.get("error"), "build failed")
-        self.assertEqual(updated_session.get("release_todo_previous_version"), self.release.version)
+        self.assertNotIn("release_todo_previous_version", updated_session)
         self.assertEqual(updated_session.get("step"), 5)
 
     def test_todo_done_marks_timestamp(self):

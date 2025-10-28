@@ -19,7 +19,6 @@ from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.template.response import TemplateResponse
 from django.utils import timezone
 from django.utils.html import strip_tags
-from django.utils.text import slugify
 from django.utils.translation import gettext as _
 from django.urls import NoReverseMatch, reverse
 from django.views.decorators.csrf import csrf_exempt
@@ -693,29 +692,6 @@ def _next_patch_version(version: str) -> str:
     return f"{parsed.major}.{parsed.minor}.{parsed.micro + 1}"
 
 
-def _write_todo_fixture(todo: Todo) -> Path:
-    safe_request = todo.request.replace(".", " ")
-    slug = slugify(safe_request).replace("-", "_")
-    if not slug:
-        slug = "todo"
-    path = TODO_FIXTURE_DIR / f"todos__{slug}.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    data = [
-        {
-            "model": "core.todo",
-            "fields": {
-                "request": todo.request,
-                "url": todo.url,
-                "request_details": todo.request_details,
-                "generated_for_version": todo.generated_for_version,
-                "generated_for_revision": todo.generated_for_revision,
-            },
-        }
-    ]
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    return path
-
-
 def _should_use_python_changelog(exc: OSError) -> bool:
     winerror = getattr(exc, "winerror", None)
     if winerror in {193}:
@@ -734,46 +710,6 @@ def _generate_changelog_with_python(log_path: Path) -> None:
         content += "\n"
     changelog_path.write_text(content, encoding="utf-8")
     _append_log(log_path, "Regenerated CHANGELOG.rst using Python fallback")
-
-
-def _ensure_release_todo(
-    release, *, previous_version: str | None = None
-) -> tuple[Todo, Path]:
-    previous_version = (previous_version or "").strip()
-    target_version = _next_patch_version(release.version)
-    if previous_version:
-        try:
-            from packaging.version import InvalidVersion, Version
-
-            parsed_previous = Version(previous_version)
-            parsed_target = Version(target_version)
-        except InvalidVersion:
-            pass
-        else:
-            if parsed_target <= parsed_previous:
-                target_version = _next_patch_version(previous_version)
-    request = f"Create release {release.package.name} {target_version}"
-    try:
-        url = reverse("admin:core_packagerelease_changelist")
-    except NoReverseMatch:
-        url = ""
-    todo, _ = Todo.all_objects.update_or_create(
-        request__iexact=request,
-        defaults={
-            "request": request,
-            "url": url,
-            "request_details": "",
-            "generated_for_version": release.version or "",
-            "generated_for_revision": release.revision or "",
-            "is_seed_data": True,
-            "is_deleted": False,
-            "is_user_data": False,
-            "done_on": None,
-            "on_done_condition": "",
-        },
-    )
-    fixture_path = _write_todo_fixture(todo)
-    return todo, fixture_path
 
 
 def _todo_blocks_publish(todo: Todo, release: PackageRelease) -> bool:
@@ -1226,36 +1162,6 @@ def _step_changelog_docs(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "CHANGELOG and documentation review recorded")
 
 
-def _record_release_todo(
-    release, ctx, log_path: Path, *, previous_version: str | None = None
-) -> None:
-    previous_version = previous_version or ctx.pop(
-        "release_todo_previous_version",
-        getattr(release, "_repo_version_before_sync", ""),
-    )
-    todo, fixture_path = _ensure_release_todo(
-        release, previous_version=previous_version
-    )
-    fixture_display = _format_path(fixture_path)
-    _append_log(log_path, f"Added TODO: {todo.request}")
-    _append_log(log_path, f"Wrote TODO fixture {fixture_display}")
-    subprocess.run(["git", "add", str(fixture_path)], check=True)
-    _append_log(log_path, f"Staged TODO fixture {fixture_display}")
-    fixture_diff = subprocess.run(
-        ["git", "diff", "--cached", "--quiet", "--", str(fixture_path)],
-        check=False,
-    )
-    if fixture_diff.returncode != 0:
-        commit_message = f"chore: add release TODO for {release.package.name}"
-        subprocess.run(["git", "commit", "-m", commit_message], check=True)
-        _append_log(log_path, f"Committed TODO fixture {fixture_display}")
-    else:
-        _append_log(
-            log_path,
-            f"No changes detected for TODO fixture {fixture_display}; skipping commit",
-        )
-
-
 def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Execute pre-release actions")
     if ctx.get("dry_run"):
@@ -1329,7 +1235,6 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
         for path in staged_release_fixtures:
             subprocess.run(["git", "reset", "HEAD", str(path)], check=False)
             _append_log(log_path, f"Unstaged release fixture {_format_path(path)}")
-    ctx["release_todo_previous_version"] = repo_version_before_sync
     _append_log(log_path, "Pre-release actions complete")
 
 
@@ -1383,7 +1288,6 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
         _push_release_changes(log_path)
         PackageRelease.dump_fixture()
         _append_log(log_path, "Updated release fixtures")
-        _record_release_todo(release, ctx, log_path)
     except Exception:
         _clean_repo()
         raise
