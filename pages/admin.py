@@ -595,7 +595,23 @@ class ViewHistoryAdmin(EntityModelAdmin):
         )
 
     def traffic_data_view(self, request):
-        return JsonResponse(self._build_chart_data())
+        return JsonResponse(
+            self._build_chart_data(days=self._resolve_requested_days(request))
+        )
+
+    def _resolve_requested_days(self, request, default: int = 30) -> int:
+        raw_value = request.GET.get("days")
+        if raw_value in (None, ""):
+            return default
+
+        try:
+            days = int(raw_value)
+        except (TypeError, ValueError):
+            return default
+
+        minimum = 1
+        maximum = 90
+        return max(minimum, min(days, maximum))
 
     def _build_chart_data(self, days: int = 30, max_pages: int = 8) -> dict:
         end_date = timezone.localdate()

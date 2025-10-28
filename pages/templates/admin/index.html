@@ -642,8 +642,14 @@
         });
       };
 
+      const chartDataUrl = new URL(
+        '{% url "admin:pages_viewhistory_traffic_data" %}',
+        window.location,
+      );
+      chartDataUrl.searchParams.set('days', '7');
+
       const fetchData = () =>
-        fetch('{% url "admin:pages_viewhistory_traffic_data" %}', {
+        fetch(chartDataUrl.toString(), {
           headers: { Accept: 'application/json' },
         }).then((response) => (response.ok ? response.json() : Promise.reject()));
 

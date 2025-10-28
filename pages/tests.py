@@ -980,6 +980,44 @@ class ViewHistoryAdminTests(TestCase):
         self.assertEqual(totals.get("/"), 2)
         self.assertEqual(totals.get("/about/"), 1)
 
+    def test_graph_data_endpoint_respects_days_parameter(self):
+        ViewHistory.all_objects.all().delete()
+        reference_date = date(2025, 5, 1)
+        tz = timezone.get_current_timezone()
+        path = "/range/"
+
+        for offset in range(10):
+            entry = ViewHistory.objects.create(
+                path=path,
+                method="GET",
+                status_code=200,
+                status_text="OK",
+                error_message="",
+                view_name="pages:index",
+            )
+            visited_date = reference_date - timedelta(days=offset)
+            visited_at = timezone.make_aware(
+                datetime.combine(visited_date, datetime_time(12, 0)), tz
+            )
+            entry.visited_at = visited_at
+            entry.save(update_fields=["visited_at"])
+
+        url = reverse("admin:pages_viewhistory_traffic_data")
+        with patch("pages.admin.timezone.localdate", return_value=reference_date):
+            resp = self.client.get(url, {"days": 7})
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+
+        self.assertEqual(len(data.get("labels", [])), 7)
+        self.assertEqual(data.get("meta", {}).get("start"), (reference_date - timedelta(days=6)).isoformat())
+        self.assertEqual(data.get("meta", {}).get("end"), reference_date.isoformat())
+
+        totals = {
+            dataset["label"]: sum(dataset["data"]) for dataset in data.get("datasets", [])
+        }
+        self.assertEqual(totals.get(path), 7)
+
     def test_graph_data_includes_late_evening_visits(self):
         target_date = date(2025, 9, 27)
         entry = ViewHistory.objects.create(
