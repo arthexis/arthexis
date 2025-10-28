@@ -235,6 +235,7 @@ class NodeAdmin(EntityModelAdmin):
         "role",
         "relation",
         "last_seen",
+        "visit_link",
         "proxy_link",
     )
     search_fields = ("hostname", "address", "mac_address")
@@ -303,6 +304,20 @@ class NodeAdmin(EntityModelAdmin):
         except NoReverseMatch:
             return ""
         return format_html('<a class="button" href="{}">{}</a>', url, _("Proxy"))
+
+    @admin.display(description=_("Visit"))
+    def visit_link(self, obj):
+        if not obj:
+            return ""
+        try:
+            url = reverse("admin:nodes_node_change", args=[obj.pk])
+        except NoReverseMatch:
+            return ""
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
+            url,
+            _("Visit"),
+        )
 
     def get_urls(self):
         urls = super().get_urls()
