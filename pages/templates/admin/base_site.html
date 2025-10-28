@@ -150,7 +150,9 @@ document.addEventListener('DOMContentLoaded', function () {
     setInterval(update, 1000);
 });
 </script>
+{% if request.user.is_authenticated and request.user.is_staff %}
 {% include "core/version_check.html" %}
+{% endif %}
 {% endblock %}
 {% block extrastyle %}
 {{ block.super }}
