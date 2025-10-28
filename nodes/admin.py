@@ -643,6 +643,17 @@ class NodeAdmin(EntityModelAdmin):
                 setattr(node, field, value)
                 changed.append(field)
 
+        role_value = payload.get("role") or payload.get("role_name")
+        if role_value is not None:
+            role_name = str(role_value).strip()
+            if role_name:
+                desired_role = NodeRole.objects.filter(name=role_name).first()
+            else:
+                desired_role = None
+            if desired_role and node.role_id != desired_role.id:
+                node.role = desired_role
+                changed.append("role")
+
         node.last_seen = timezone.now()
         if "last_seen" not in changed:
             changed.append("last_seen")
