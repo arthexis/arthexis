@@ -10,6 +10,7 @@ Use this checklist to decide when to add `Todo` fixtures so release management a
 ## GUI Validation
 - [ ] After modifying any view, template, or other GUI element, add a `Todo` fixture titled `Validate screen [Screen]`.
 - [ ] Set the `url` for the fixture to the screen requiring manual validation.
+- [ ] When launching or significantly changing an end-user feature, add a `Todo` fixture summarizing the scenario customers must validate before release.
 
 ## Stub Completion
 - [ ] When introducing stub code, raise a `NotImplemented` exception in the implementation.
