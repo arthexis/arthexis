@@ -87,7 +87,7 @@ class NodeFeatureAssignmentInline(admin.TabularInline):
 
 class DeployDNSRecordsForm(forms.Form):
     manager = forms.ModelChoiceField(
-        label="Node Manager",
+        label="Node Profile",
         queryset=NodeManager.objects.none(),
         help_text="Credentials used to authenticate with the DNS provider.",
     )

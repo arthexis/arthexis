@@ -1088,8 +1088,8 @@ class NodeManager(Profile):
     )
 
     class Meta:
-        verbose_name = "Node Manager"
-        verbose_name_plural = "Node Managers"
+        verbose_name = "Node Profile"
+        verbose_name_plural = "Node Profiles"
 
     def __str__(self) -> str:
         owner = self.owner_display()
