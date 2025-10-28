@@ -284,7 +284,16 @@
           {% for todo in future_actions.todos %}
           <li class="todo-item">
             <div class="todo-item-main">
-              <a href="{{ todo.url }}?next={{ request.get_full_path|urlencode }}" class="todo-link">{{ todo.label }}</a>
+              <a
+                href="{{ todo.url }}?next={{ request.get_full_path|urlencode }}"
+                class="todo-link"
+                {% if todo.label %}
+                  title="{{ todo.label }}"
+                  aria-label="{{ todo.label }}"
+                {% endif %}
+              >
+                {% blocktrans with counter=forloop.counter %}Task {{ counter }}{% endblocktrans %}
+              </a>
               <form method="post" action="{{ todo.done_url }}" class="todo-form">
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ request.get_full_path }}">
