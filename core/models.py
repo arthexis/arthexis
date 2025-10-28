@@ -3726,6 +3726,26 @@ class Todo(Entity):
     generated_for_revision = models.CharField(max_length=40, blank=True, default="")
     done_on = models.DateTimeField(null=True, blank=True)
     on_done_condition = ConditionTextField(blank=True, default="")
+    origin_node = models.ForeignKey(
+        "nodes.Node",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="originated_todos",
+        help_text="Node where this TODO was generated.",
+    )
+    original_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="originated_todos",
+        help_text="User responsible for creating this TODO.",
+    )
+    original_user_is_authenticated = models.BooleanField(
+        default=False,
+        help_text="Whether the originating user was authenticated during creation.",
+    )
 
     objects = TodoManager()
 
