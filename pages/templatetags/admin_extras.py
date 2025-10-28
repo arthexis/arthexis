@@ -20,7 +20,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.dispatch import receiver
 
-from core.models import Lead, RFID, Todo
+from core.models import Lead, RFID, Todo, GoogleCalendarProfile
 from ocpp.models import Charger
 from core.entity import Entity, user_data_flag_updated
 
@@ -548,6 +548,34 @@ def future_action_items(context):
     todos: list[dict[str, object]] = [_serialize(todo, completed=False) for todo in active_todos]
 
     return {"models": model_items, "todos": todos}
+
+
+@register.simple_tag(takes_context=True)
+def user_google_calendar(context):
+    """Return Google Calendar details for the authenticated user."""
+
+    request = context.get("request")
+    user = getattr(request, "user", None)
+    if not user or not user.is_authenticated:
+        return None
+
+    profile = user.get_profile(GoogleCalendarProfile)
+    if not profile:
+        return None
+
+    events = profile.fetch_events()
+    title = str(GoogleCalendarProfile._meta.verbose_name)
+    display_name = profile.get_display_name()
+    calendar_url = profile.build_calendar_url()
+
+    return {
+        "title": title,
+        "display_name": display_name,
+        "events": events,
+        "calendar_url": calendar_url,
+        "identifier": profile.resolved_calendar_id(),
+        "profile": profile,
+    }
 
 
 @register.simple_tag(takes_context=True)
