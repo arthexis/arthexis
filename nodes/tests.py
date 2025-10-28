@@ -1776,6 +1776,29 @@ class NodeAdminTests(TestCase):
         proxy_url = reverse("admin:nodes_node_proxy", args=[1])
         self.assertContains(response, proxy_url)
 
+    def test_visit_link_uses_local_admin_dashboard_for_local_node(self):
+        node_admin = admin.site._registry[Node]
+        local_node = self._create_local_node()
+
+        link_html = node_admin.visit_link(local_node)
+
+        self.assertIn(reverse("admin:index"), link_html)
+        self.assertIn("target=\"_blank\"", link_html)
+
+    def test_visit_link_prefers_remote_hostname_for_dashboard(self):
+        node_admin = admin.site._registry[Node]
+        remote = Node.objects.create(
+            hostname="remote.example.com",
+            address="198.51.100.20",
+            port=8443,
+            mac_address="aa:bb:cc:dd:ee:ff",
+        )
+
+        link_html = node_admin.visit_link(remote)
+
+        self.assertIn("https://remote.example.com:8443/admin/", link_html)
+        self.assertIn("target=\"_blank\"", link_html)
+
     def test_iter_remote_urls_handles_hostname_with_path_and_port(self):
         node_admin = admin.site._registry[Node]
         remote = SimpleNamespace(
