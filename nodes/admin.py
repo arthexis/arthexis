@@ -284,7 +284,6 @@ class NodeAdmin(EntityModelAdmin):
         "register_visitor",
         "run_task",
         "take_screenshots",
-        "fetch_rfids_from_selected",
         "import_rfids_from_selected",
         "export_rfids_to_selected",
     ]
