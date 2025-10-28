@@ -115,4 +115,6 @@ def favorite_entries(app_list, favorites_map):
                 "ct_id": ct_id,
             })
 
+    entries.sort(key=lambda entry: (entry["favorite"].priority, entry["favorite"].pk))
+
     return entries

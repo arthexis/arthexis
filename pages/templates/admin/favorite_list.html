@@ -11,6 +11,7 @@
       <tr>
         <th>{% translate "Model" %}</th>
         <th>{% translate "Custom Label" %}</th>
+        <th>{% translate "Priority" %}</th>
         <th>{% translate "Mark as User Data" %}</th>
         <th></th>
       </tr>
@@ -20,6 +21,10 @@
       <tr>
         <td>{{ fav.content_type.name }}</td>
         <td>{{ fav.custom_label }}</td>
+        <td>
+          <label class="visually-hidden" for="id_priority_{{ fav.pk }}">{% translate "Priority" %}</label>
+          <input type="number" id="id_priority_{{ fav.pk }}" name="priority_{{ fav.pk }}" value="{{ fav.priority }}">
+        </td>
         <td><input type="checkbox" name="user_data" value="{{ fav.pk }}" {% if fav.user_data %}checked{% endif %}></td>
         <td><a href="{% url 'admin:favorite_delete' fav.pk %}">{% translate "Remove" %}</a></td>
       </tr>

@@ -2657,6 +2657,14 @@ class FavoriteTests(TestCase):
         self.assertEqual(fav.custom_label, "Apps")
         self.assertTrue(fav.user_data)
 
+    def test_add_favorite_with_priority(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        url = reverse("admin:favorite_toggle", args=[ct.id])
+        resp = self.client.post(url, {"priority": "7"})
+        self.assertRedirects(resp, reverse("admin:index"))
+        fav = Favorite.objects.get(user=self.user, content_type=ct)
+        self.assertEqual(fav.priority, 7)
+
     def test_cancel_link_uses_next(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
         next_url = reverse("admin:pages_application_changelist")
@@ -2683,6 +2691,15 @@ class FavoriteTests(TestCase):
         self.assertRedirects(resp, url)
         fav.refresh_from_db()
         self.assertTrue(fav.user_data)
+
+    def test_update_priority_from_list(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        fav = Favorite.objects.create(user=self.user, content_type=ct, priority=3)
+        url = reverse("admin:favorite_list")
+        resp = self.client.post(url, {f"priority_{fav.pk}": "12"})
+        self.assertRedirects(resp, url)
+        fav.refresh_from_db()
+        self.assertEqual(fav.priority, 12)
 
     def test_dashboard_includes_favorites_and_user_data(self):
         fav_ct = ContentType.objects.get_by_natural_key("pages", "application")
