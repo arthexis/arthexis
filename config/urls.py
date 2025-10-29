@@ -135,6 +135,11 @@ urlpatterns = [
         name="todo-done",
     ),
     path(
+        "admin/core/todos/<int:pk>/delete/",
+        core_views.todo_delete,
+        name="todo-delete",
+    ),
+    path(
         "admin/core/todos/<int:pk>/snapshot/",
         core_views.todo_snapshot,
         name="todo-snapshot",
