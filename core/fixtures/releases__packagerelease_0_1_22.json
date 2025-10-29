@@ -2,15 +2,18 @@
   {
     "model": "core.packagerelease",
     "fields": {
-      "is_seed_data": true,
+      "is_seed_data": false,
       "is_user_data": false,
       "is_deleted": false,
       "package": [
         "arthexis"
       ],
-      "release_manager": null,
-      "version": "2.0",
-      "revision": "42d313b802e4af0972029284ff2461bdedaf2259",
+      "release_manager": [
+        "arthexis",
+        "arthexis"
+      ],
+      "version": "0.1.22",
+      "revision": "b320833550b13295e236caaa907aad6d36a28beb",
       "changelog": "",
       "pypi_url": "",
       "github_url": "",
