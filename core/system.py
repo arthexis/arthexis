@@ -1219,6 +1219,7 @@ def _system_pending_todos_report_view(request):
                 has_changes = form.has_changed()
                 if mark_done and todo.done_on is None:
                     todo.done_on = timezone.now()
+                    todo.populate_done_metadata(request.user)
                     approved_count += 1
                     has_changes = True
                 if has_changes:

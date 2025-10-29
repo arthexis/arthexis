@@ -2380,7 +2380,16 @@ def todo_done(request, pk: int):
         messages.error(request, _format_condition_failure(todo, result))
         return redirect(redirect_to)
     todo.done_on = timezone.now()
-    todo.save(update_fields=["done_on"])
+    todo.populate_done_metadata(request.user)
+    todo.save(
+        update_fields=[
+            "done_on",
+            "done_node",
+            "done_version",
+            "done_revision",
+            "done_username",
+        ]
+    )
     return redirect(redirect_to)
 
 
