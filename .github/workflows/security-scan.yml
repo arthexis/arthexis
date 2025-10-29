@@ -19,7 +19,7 @@ jobs:
 
       - name: Run ZAP baseline scan
         id: zap_scan
-        uses: zaproxy/action-baseline@v0.14.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: https://arthexis.com
           cmd_options: >-
