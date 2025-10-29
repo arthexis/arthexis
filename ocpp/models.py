@@ -675,6 +675,14 @@ class ChargerConfiguration(models.Model):
         blank=True,
         help_text=_("Keys returned in the unknownKey list."),
     )
+    evcs_snapshot_at = models.DateTimeField(
+        _("EVCS snapshot at"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Timestamp when this configuration was received from the charge point."
+        ),
+    )
     raw_payload = models.JSONField(
         default=dict,
         blank=True,

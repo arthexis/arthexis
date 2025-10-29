@@ -55,6 +55,7 @@ from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
 from pages.models import Application, Module
 from nodes.models import Node, NodeRole
+from django.contrib.admin.sites import AdminSite
 
 from config.asgi import application
 
@@ -67,6 +68,7 @@ from .models import (
     Location,
     DataTransferMessage,
 )
+from .admin import ChargerConfigurationAdmin
 from .consumers import CSMSConsumer
 from .views import dispatch_action, _transaction_rfid_details, _usage_timeline
 from .status_display import STATUS_BADGE_MAP
@@ -81,7 +83,12 @@ from .simulator import SimulatorConfig, ChargePointSimulator
 from .evcs import simulate, SimulatorState, _simulators
 import re
 from datetime import datetime, timedelta, timezone as dt_timezone
-from .tasks import purge_meter_readings, send_daily_session_report
+from .tasks import (
+    purge_meter_readings,
+    send_daily_session_report,
+    check_charge_point_configuration,
+    schedule_daily_charge_point_configuration_checks,
+)
 from django.db import close_old_connections
 from django.db.utils import OperationalError
 from urllib.parse import unquote, urlparse
@@ -757,6 +764,7 @@ class CSMSConsumerTests(TransactionTestCase):
         )()
         self.assertIsNotNone(configuration)
         self.assertEqual(configuration.charger_identifier, "CFGRES")
+        self.assertIsNotNone(configuration.evcs_snapshot_at)
         self.assertEqual(
             configuration.configuration_keys,
             [
@@ -2612,6 +2620,81 @@ class ChargerAdminTests(TestCase):
             store.pending_calls.clear()
             store.clear_log(log_key, log_type="charger")
             store.clear_log(pending_key, log_type="charger")
+
+
+class ChargerConfigurationAdminUnitTests(TestCase):
+    def setUp(self):
+        self.admin = ChargerConfigurationAdmin(ChargerConfiguration, AdminSite())
+        self.request_factory = RequestFactory()
+
+    def test_origin_display_returns_evcs_when_snapshot_present(self):
+        configuration = ChargerConfiguration.objects.create(
+            charger_identifier="CFG-EVCS",
+            evcs_snapshot_at=timezone.now(),
+        )
+        self.assertEqual(self.admin.origin_display(configuration), "EVCS")
+
+    def test_origin_display_returns_local_without_snapshot(self):
+        configuration = ChargerConfiguration.objects.create(
+            charger_identifier="CFG-LOCAL",
+        )
+        self.assertEqual(self.admin.origin_display(configuration), "Local")
+
+    def test_save_model_resets_snapshot_timestamp(self):
+        configuration = ChargerConfiguration.objects.create(
+            charger_identifier="CFG-SAVE",
+            evcs_snapshot_at=timezone.now(),
+        )
+        request = self.request_factory.post("/admin/ocpp/chargerconfiguration/")
+        self.admin.save_model(request, configuration, form=None, change=True)
+        configuration.refresh_from_db()
+        self.assertIsNone(configuration.evcs_snapshot_at)
+
+
+class ConfigurationTaskTests(TestCase):
+    def tearDown(self):
+        store.pending_calls.clear()
+
+    def test_check_charge_point_configuration_dispatches_request(self):
+        charger = Charger.objects.create(charger_id="TASKCFG")
+        ws = DummyWebSocket()
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        pending_key = store.pending_key(charger.charger_id)
+        store.clear_log(log_key, log_type="charger")
+        store.clear_log(pending_key, log_type="charger")
+        store.set_connection(charger.charger_id, charger.connector_id, ws)
+        try:
+            result = check_charge_point_configuration.run(charger.pk)
+            self.assertTrue(result)
+            self.assertEqual(len(ws.sent), 1)
+            frame = json.loads(ws.sent[0])
+            self.assertEqual(frame[0], 2)
+            self.assertEqual(frame[2], "GetConfiguration")
+            self.assertIn(frame[1], store.pending_calls)
+        finally:
+            store.pop_connection(charger.charger_id, charger.connector_id)
+            store.pending_calls.clear()
+            store.clear_log(log_key, log_type="charger")
+            store.clear_log(pending_key, log_type="charger")
+
+    def test_check_charge_point_configuration_without_connection(self):
+        charger = Charger.objects.create(charger_id="TASKNOCONN")
+        result = check_charge_point_configuration.run(charger.pk)
+        self.assertFalse(result)
+
+    def test_schedule_daily_checks_only_includes_root_chargers(self):
+        eligible = Charger.objects.create(charger_id="TASKROOT")
+        Charger.objects.create(charger_id="TASKCONN", connector_id=1)
+        with patch("ocpp.tasks.check_charge_point_configuration.delay") as mock_delay:
+            scheduled = schedule_daily_charge_point_configuration_checks.run()
+        self.assertEqual(scheduled, 1)
+        mock_delay.assert_called_once_with(eligible.pk)
+
+    def test_schedule_daily_checks_returns_zero_without_chargers(self):
+        with patch("ocpp.tasks.check_charge_point_configuration.delay") as mock_delay:
+            scheduled = schedule_daily_charge_point_configuration_checks.run()
+        self.assertEqual(scheduled, 0)
+        mock_delay.assert_not_called()
 
 
 class LocationAdminTests(TestCase):
