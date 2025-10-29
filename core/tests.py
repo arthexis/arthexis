@@ -2188,11 +2188,20 @@ class PackageAdminPrepareNextReleaseTests(TestCase):
 
     def test_prepare_next_release_active_creates_release(self):
         PackageRelease.all_objects.filter(package=self.package).delete()
-        request = self.factory.get("/admin/core/package/prepare-next-release/")
+        request = self.factory.post("/admin/core/package/prepare-next-release/")
         response = self.admin.prepare_next_release_active(request)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             PackageRelease.all_objects.filter(package=self.package).count(), 1
+        )
+
+    def test_prepare_next_release_active_get_not_allowed(self):
+        PackageRelease.all_objects.filter(package=self.package).delete()
+        request = self.factory.get("/admin/core/package/prepare-next-release/")
+        response = self.admin.prepare_next_release_active(request)
+        self.assertEqual(response.status_code, 405)
+        self.assertFalse(
+            PackageRelease.all_objects.filter(package=self.package).exists()
         )
 
 
