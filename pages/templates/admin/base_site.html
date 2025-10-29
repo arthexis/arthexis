@@ -86,6 +86,25 @@ document.addEventListener('DOMContentLoaded', function () {
     toggleEmptyGroups();
 });
 </script>
+<script id="admin-sidebar-collapse-toggle-visibility">
+document.addEventListener('DOMContentLoaded', function () {
+    const sidebar = document.getElementById('nav-sidebar');
+    if (!sidebar) {
+        return;
+    }
+
+    const toggles = sidebar.querySelectorAll('.app-collapse-toggle');
+    if (!toggles.length) {
+        return;
+    }
+
+    toggles.forEach(function (button) {
+        button.hidden = true;
+        button.setAttribute('aria-hidden', 'true');
+        button.setAttribute('tabindex', '-1');
+    });
+});
+</script>
 {% now "c" as current_time %}
 {% now "T" as current_tz %}
 <script id="admin-server-clock">
