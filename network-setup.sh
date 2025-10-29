@@ -295,6 +295,44 @@ discover_dhcp_server() {
     return 1
 }
 
+discover_gateway_address() {
+    local dev="$1"
+    local gateway=""
+
+    gateway=$(nmcli -g IP4.GATEWAY device show "$dev" 2>/dev/null | head -n1 || true)
+    if [[ -n "$gateway" ]]; then
+        printf '%s\n' "$gateway"
+        return 0
+    fi
+
+    local options=""
+    options=$(nmcli -g DHCP4.OPTION device show "$dev" 2>/dev/null || true)
+    if [[ -n "$options" ]]; then
+        gateway=$(awk -F'=' '/option routers/ {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); split($2, routers, ","); gsub(/^[[:space:]]+|[[:space:]]+$/, "", routers[1]); print routers[1]; exit}' <<<"$options")
+    fi
+
+    if [[ -z "$gateway" ]]; then
+        gateway=$(ip route show dev "$dev" 2>/dev/null | awk '/default/ {print $3; exit}' || true)
+    fi
+
+    if [[ -z "$gateway" ]]; then
+        local candidate
+        for candidate in 192.168.129.1 192.168.1.1; do
+            if ping -c1 -W1 "$candidate" >/dev/null 2>&1; then
+                gateway="$candidate"
+                break
+            fi
+        done
+    fi
+
+    if [[ -n "$gateway" ]]; then
+        printf '%s\n' "$gateway"
+        return 0
+    fi
+
+    return 1
+}
+
 ensure_dhcp_client_registration() {
     local dev="$1"
     local wait_seconds="${2:-15}"
@@ -1467,15 +1505,9 @@ if [[ $RUN_ROUTING == true ]]; then
             echo "Skipping default route change to preserve '$PROTECTED_CONN'."
             DEFAULT_ROUTE_SET=true
         else
-            ETH0_GW=$(nmcli -g IP4.GATEWAY device show eth0 2>/dev/null | head -n1 || true)
+            ETH0_GW=$(discover_gateway_address eth0 || true)
             if [[ -z "$ETH0_GW" && -n "$ETH0_DHCP_SERVER" ]]; then
-                ETH0_GW="$ETH0_DHCP_SERVER"
-            fi
-            if [[ -z "$ETH0_GW" ]]; then
-                ETH0_GW=$(discover_dhcp_server eth0 || true)
-                if [[ -n "$ETH0_GW" ]]; then
-                    echo "Using discovered DHCP server $ETH0_GW as default gateway for eth0."
-                fi
+                echo "Warning: DHCP server $ETH0_DHCP_SERVER is not known to be a gateway; skipping eth0 default route." >&2
             fi
             if [[ -n "$ETH0_GW" ]]; then
                 ip route replace default via "$ETH0_GW" dev eth0 2>/dev/null || true
