@@ -883,22 +883,51 @@ def favorite_toggle(request, ct_id):
         label = request.POST.get("custom_label", "").strip()
         user_data = request.POST.get("user_data") == "on"
         priority_raw = request.POST.get("priority", "").strip()
-        try:
-            priority = int(priority_raw)
-        except (TypeError, ValueError):
-            priority = 0
-        Favorite.objects.create(
-            user=request.user,
-            content_type=ct,
-            custom_label=label,
-            user_data=user_data,
-            priority=priority,
-        )
+        if fav:
+            default_priority = fav.priority
+        else:
+            default_priority = 0
+        if priority_raw:
+            try:
+                priority = int(priority_raw)
+            except (TypeError, ValueError):
+                priority = default_priority
+        else:
+            priority = default_priority
+
+        if fav:
+            update_fields = []
+            if fav.custom_label != label:
+                fav.custom_label = label
+                update_fields.append("custom_label")
+            if fav.user_data != user_data:
+                fav.user_data = user_data
+                update_fields.append("user_data")
+            if fav.priority != priority:
+                fav.priority = priority
+                update_fields.append("priority")
+            if update_fields:
+                fav.save(update_fields=update_fields)
+        else:
+            Favorite.objects.create(
+                user=request.user,
+                content_type=ct,
+                custom_label=label,
+                user_data=user_data,
+                priority=priority,
+            )
         return redirect(next_url or "admin:index")
     return render(
         request,
         "admin/favorite_confirm.html",
-        {"content_type": ct, "favorite": fav, "next": next_url},
+        {
+            "content_type": ct,
+            "favorite": fav,
+            "next": next_url,
+            "initial_label": fav.custom_label if fav else "",
+            "initial_priority": fav.priority if fav else 0,
+            "is_checked": fav.user_data if fav else True,
+        },
     )
 
 
