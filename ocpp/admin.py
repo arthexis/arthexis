@@ -112,12 +112,19 @@ class LogViewAdminMixin:
 
 @admin.register(ChargerConfiguration)
 class ChargerConfigurationAdmin(admin.ModelAdmin):
-    list_display = ("charger_identifier", "connector_display", "created_at")
+    list_display = (
+        "charger_identifier",
+        "connector_display",
+        "origin_display",
+        "created_at",
+    )
     list_filter = ("connector_id",)
     search_fields = ("charger_identifier",)
     readonly_fields = (
         "charger_identifier",
         "connector_id",
+        "origin_display",
+        "evcs_snapshot_at",
         "created_at",
         "updated_at",
         "linked_chargers",
@@ -132,6 +139,8 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
                 "fields": (
                     "charger_identifier",
                     "connector_id",
+                    "origin_display",
+                    "evcs_snapshot_at",
                     "linked_chargers",
                     "created_at",
                     "updated_at",
@@ -184,6 +193,16 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
     @admin.display(description="Raw payload")
     def raw_payload_display(self, obj):
         return self._render_json(obj.raw_payload)
+
+    @admin.display(description="Origin")
+    def origin_display(self, obj):
+        if obj.evcs_snapshot_at:
+            return "EVCS"
+        return "Local"
+
+    def save_model(self, request, obj, form, change):
+        obj.evcs_snapshot_at = None
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Location)

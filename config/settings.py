@@ -662,4 +662,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "core.tasks.heartbeat",
         "schedule": crontab(minute="*/5"),
     },
+    "ocpp_configuration_check": {
+        "task": "ocpp.tasks.schedule_daily_charge_point_configuration_checks",
+        "schedule": crontab(minute=0, hour=0),
+    },
 }
