@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import django
+from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -18,6 +21,7 @@ else:  # pragma: no cover - fallback when pytest fixtures are unavailable
     django.setup()
 
 from core.models import Package, PackageRelease
+from core.user_data import dump_user_fixture
 
 
 class PackageReleaseMigrationTests(SimpleTestCase):
@@ -58,3 +62,32 @@ class PackageReleaseLatestTests(TestCase):
         )
 
         self.assertEqual(PackageRelease.latest(), active_release)
+
+
+class PackageReleaseUserDataTests(TestCase):
+    def test_delete_removes_user_data_fixture(self) -> None:
+        User = get_user_model()
+        user = User.objects.create_superuser(
+            username="releaseuser", email="release@example.com", password="pw"
+        )
+
+        with TemporaryDirectory() as data_dir:
+            user.data_path = data_dir
+            user.save(update_fields=["data_path"])
+
+            package = Package.objects.create(name="fixture-pkg")
+            release = PackageRelease.objects.create(
+                package=package,
+                version="3.4.5",
+            )
+
+            dump_user_fixture(release, user)
+
+            fixture_path = Path(data_dir) / user.username / (
+                f"core_packagerelease_{release.pk}.json"
+            )
+            self.assertTrue(fixture_path.exists())
+
+            release.delete()
+
+            self.assertFalse(fixture_path.exists())
