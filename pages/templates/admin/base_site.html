@@ -46,26 +46,6 @@
 {% else %}
 <link rel="icon" href="data:image/png;base64,{% include 'admin/favicon.txt' %}">
 {% endif %}
-<script id="admin-collapsible-apps">
-document.addEventListener('DOMContentLoaded', function () {
-    const modules = document.querySelectorAll('#nav-sidebar .module');
-    const current = document.querySelector('#nav-sidebar .module.current-app');
-    modules.forEach(function (module, index) {
-        const header = module.querySelector('h2');
-        const content = module.querySelector('ul, table');
-        if (header && content) {
-            header.addEventListener('click', function () {
-                module.classList.toggle('collapsed');
-            });
-        }
-
-        // Collapse all groups by default except for the current one.
-        if (module !== current && !(current == null && index === modules.length - 1)) {
-            module.classList.add('collapsed');
-        }
-    });
-});
-</script>
 <script id="admin-filter-empty-groups">
 document.addEventListener('DOMContentLoaded', function () {
     const nav = document.getElementById('nav-filter');
@@ -93,25 +73,10 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
-        // If searching, expand groups with matches. Otherwise collapse all but current visible group.
-        if (query) {
-            visibleModules.forEach(function (module) {
-                module.classList.remove('collapsed');
-            });
-        } else {
-            const current = sidebar.querySelector('.module.current-app');
-            visibleModules.forEach(function (module) {
-                if (module === current) {
-                    module.classList.remove('collapsed');
-                } else {
-                    module.classList.add('collapsed');
-                }
-            });
-            if (!current && visibleModules.length) {
-                const last = visibleModules[visibleModules.length - 1];
-                last.classList.remove('collapsed');
-            }
-        }
+        // Ensure modules remain expanded while filtering and during normal navigation.
+        visibleModules.forEach(function (module) {
+            module.classList.remove('collapsed');
+        });
     }
 
     nav.addEventListener('change', toggleEmptyGroups);
@@ -244,19 +209,7 @@ body:not(.login) #site-badges .badge a {
 
 body:not(.login) .badge-unknown {background-color:#6c757d;}
 #nav-sidebar .module h2 {
-    cursor: pointer;
-}
-#nav-sidebar .module h2::after {
-    content: '\25BC';
-    float: right;
-    transition: transform 0.2s;
-}
-#nav-sidebar .module.collapsed h2::after {
-    transform: rotate(-90deg);
-}
-#nav-sidebar .module.collapsed ul,
-#nav-sidebar .module.collapsed table {
-    display: none;
+    cursor: default;
 }
 .form-row {
     margin-top: 0;
