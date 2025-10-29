@@ -401,7 +401,7 @@
 {% block content %}
 <div class="dashboard" id="admin-dashboard">
   <div id="content-main" class="dashboard-main">
-    {% include "admin/app_list.html" with app_list=app_list show_changelinks=True show_model_badges=True %}
+    {% include "admin/dashboard_app_list.html" with app_list=app_list %}
   </div>
 <div class="dashboard-side" id="recent-boxes">
     {% future_action_items as future_actions %}

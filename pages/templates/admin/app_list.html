@@ -10,9 +10,6 @@
         <thead class="visually-hidden">
           <tr>
             <th scope="col">{% translate 'Model name' %}</th>
-            <th scope="col">{% translate 'Model actions' %}</th>
-            <th scope="col">{% translate 'Add link' %}</th>
-            <th scope="col">{% translate 'Change or view list link' %}</th>
           </tr>
         </thead>
         <tbody>
@@ -35,75 +32,7 @@
                 {% else %}
                   {{ fav.custom_label|default:model.name }}
                 {% endif %}
-                {% if show_model_badges %}
-                  {% if model.object_name == 'RFID' %}
-                    {% rfid_release_stats as rfid_stats %}
-                    {% if rfid_stats %}
-                      {% blocktranslate with released_allowed=rfid_stats.released_allowed registered=rfid_stats.total asvar rfid_badge_label trimmed %}
-                        {{ released_allowed }} released and allowed RFIDs out of {{ registered }} registered RFIDs
-                      {% endblocktranslate %}
-                      <span class="rfid-release-badge" aria-label="{{ rfid_badge_label }}" title="{{ rfid_badge_label }}">
-                        {{ rfid_stats.released_allowed }} / {{ rfid_stats.total }}
-                      </span>
-                    {% endif %}
-                  {% endif %}
-                  {% if model.object_name == 'Charger' %}
-                    {% charger_availability_stats as charger_stats %}
-                    {% if charger_stats %}
-                      {% if charger_stats.available_missing_cp_number %}
-                        {% blocktranslate with available=charger_stats.available_with_cp_number total=charger_stats.available_total missing=charger_stats.available_missing_cp_number asvar charger_badge_label trimmed %}
-                          {{ available }} chargers reporting Available status with a CP number, out of {{ total }} total Available chargers. {{ missing }} Available chargers are missing a connector number.
-                        {% endblocktranslate %}
-                      {% else %}
-                        {% blocktranslate with available=charger_stats.available_with_cp_number total=charger_stats.available_total asvar charger_badge_label trimmed %}
-                          {{ available }} chargers reporting Available status with a CP number.
-                        {% endblocktranslate %}
-                      {% endif %}
-                      <span class="charger-availability-badge" aria-label="{{ charger_badge_label }}" title="{{ charger_badge_label }}">
-                        {{ charger_stats.available_with_cp_number }} / {{ charger_stats.available_total }}
-                      </span>
-                    {% endif %}
-                  {% endif %}
-                  {% lead_open_count app.app_label model.object_name as lead_open_count %}
-                  {% if lead_open_count is not None %}
-                    {% blocktranslate count open_count=lead_open_count asvar lead_open_label trimmed %}
-                      {{ open_count }} open lead
-                    {% plural %}
-                      {{ open_count }} open leads
-                    {% endblocktranslate %}
-                    <span class="lead-open-badge" aria-label="{{ lead_open_label }}" title="{{ lead_open_label }}">{{ lead_open_count }}</span>
-                  {% endif %}
-                {% endif %}
               </th>
-
-              {% if model.admin_url and show_changelinks %}
-                {% model_admin_actions app.app_label model.object_name as extra_actions %}
-                <td class="actions">
-                  {% for action in extra_actions %}
-                    <a href="{{ action.url }}" class="actionlink" aria-describedby="favorites-{{ app.app_label }}-{{ model_name }}">{{ action.label }}</a>{% if not forloop.last %}&nbsp;{% endif %}
-                  {% endfor %}
-                </td>
-              {% else %}
-                <td class="actions"></td>
-              {% endif %}
-
-              {% if model.add_url %}
-                <td><a href="{{ model.add_url }}" class="addlink" aria-describedby="favorites-{{ app.app_label }}-{{ model_name }}">{% translate 'Add' %}</a></td>
-              {% else %}
-                <td></td>
-              {% endif %}
-
-              {% if model.admin_url and show_changelinks %}
-                <td>
-                  {% if model.view_only %}
-                    <a href="{{ model.admin_url }}" class="viewlink" aria-describedby="favorites-{{ app.app_label }}-{{ model_name }}">{% translate 'View' %}</a>
-                  {% else %}
-                    <a href="{{ model.admin_url }}" class="changelink" aria-describedby="favorites-{{ app.app_label }}-{{ model_name }}" target="_blank" rel="noopener noreferrer">{% translate 'Change' %}</a>
-                  {% endif %}
-                </td>
-              {% elif show_changelinks %}
-                <td></td>
-              {% endif %}
             </tr>
           {% endwith %}
         {% endfor %}
@@ -117,16 +46,11 @@
     <div class="app-{{ app.app_label }} module{% if app.app_url in request.path|urlencode %} current-app{% endif %}" data-app-label="{{ app.app_label }}">
       <table>
         <caption class="app-caption">
-          <div class="app-caption-inner">
-            <a href="{{ app.app_url }}" class="section" title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}">{{ app.name }}</a>
-          </div>
+          <a href="{{ app.app_url }}" class="section" title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}">{{ app.name }}</a>
         </caption>
         <thead class="visually-hidden">
           <tr>
             <th scope="col">{% translate 'Model name' %}</th>
-            <th scope="col">{% translate 'Model actions' %}</th>
-            <th scope="col">{% translate 'Add link' %}</th>
-            <th scope="col">{% translate 'Change or view list link' %}</th>
           </tr>
         </thead>
         <tbody id="app-{{ app.app_label }}-models">
@@ -152,75 +76,7 @@
                 {% else %}
                   {{ fav.custom_label|default:model.name }}
                 {% endif %}
-                {% if show_model_badges %}
-                  {% if model.object_name == 'RFID' %}
-                    {% rfid_release_stats as rfid_stats %}
-                    {% if rfid_stats %}
-                      {% blocktranslate with released_allowed=rfid_stats.released_allowed registered=rfid_stats.total asvar rfid_badge_label trimmed %}
-                        {{ released_allowed }} released and allowed RFIDs out of {{ registered }} registered RFIDs
-                      {% endblocktranslate %}
-                      <span class="rfid-release-badge" aria-label="{{ rfid_badge_label }}" title="{{ rfid_badge_label }}">
-                        {{ rfid_stats.released_allowed }} / {{ rfid_stats.total }}
-                      </span>
-                    {% endif %}
-                  {% endif %}
-                  {% if model.object_name == 'Charger' %}
-                    {% charger_availability_stats as charger_stats %}
-                    {% if charger_stats %}
-                      {% if charger_stats.available_missing_cp_number %}
-                        {% blocktranslate with available=charger_stats.available_with_cp_number total=charger_stats.available_total missing=charger_stats.available_missing_cp_number asvar charger_badge_label trimmed %}
-                          {{ available }} chargers reporting Available status with a CP number, out of {{ total }} total Available chargers. {{ missing }} Available chargers are missing a connector number.
-                        {% endblocktranslate %}
-                      {% else %}
-                        {% blocktranslate with available=charger_stats.available_with_cp_number total=charger_stats.available_total asvar charger_badge_label trimmed %}
-                          {{ available }} chargers reporting Available status with a CP number.
-                        {% endblocktranslate %}
-                      {% endif %}
-                      <span class="charger-availability-badge" aria-label="{{ charger_badge_label }}" title="{{ charger_badge_label }}">
-                        {{ charger_stats.available_with_cp_number }} / {{ charger_stats.available_total }}
-                      </span>
-                    {% endif %}
-                  {% endif %}
-                  {% lead_open_count app.app_label model.object_name as lead_open_count %}
-                  {% if lead_open_count is not None %}
-                    {% blocktranslate count open_count=lead_open_count asvar lead_open_label trimmed %}
-                      {{ open_count }} open lead
-                    {% plural %}
-                      {{ open_count }} open leads
-                    {% endblocktranslate %}
-                    <span class="lead-open-badge" aria-label="{{ lead_open_label }}" title="{{ lead_open_label }}">{{ lead_open_count }}</span>
-                  {% endif %}
-                {% endif %}
               </th>
-
-              {% if model.admin_url and show_changelinks %}
-                {% model_admin_actions app.app_label model.object_name as extra_actions %}
-                <td class="actions">
-                  {% for action in extra_actions %}
-                    <a href="{{ action.url }}" class="actionlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{{ action.label }}</a>{% if not forloop.last %}&nbsp;{% endif %}
-                  {% endfor %}
-                </td>
-              {% else %}
-                <td class="actions"></td>
-              {% endif %}
-
-              {% if model.add_url %}
-                <td><a href="{{ model.add_url }}" class="addlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'Add' %}</a></td>
-              {% else %}
-                <td></td>
-              {% endif %}
-
-              {% if model.admin_url and show_changelinks %}
-                <td>
-                  {% if model.view_only %}
-                    <a href="{{ model.admin_url }}" class="viewlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'View' %}</a>
-                  {% else %}
-                    <a href="{{ model.admin_url }}" class="changelink" aria-describedby="{{ app.app_label }}-{{ model_name }}" target="_blank" rel="noopener noreferrer">{% translate 'Change' %}</a>
-                  {% endif %}
-                </td>
-              {% elif show_changelinks %}
-                <td></td>
-              {% endif %}
             </tr>
             {% endif %}
           {% endwith %}
