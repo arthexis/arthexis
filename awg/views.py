@@ -66,7 +66,10 @@ def _parse_ground(value: Union[str, int, None]) -> tuple[int, str]:
         if stripped == "[1]":
             return 1, "[1]"
         value = stripped
-    return int(value), ""
+    try:
+        return int(value), ""
+    except (TypeError, ValueError):
+        raise ValueError(_("Ground must be 0, 1, or [1]."))
 
 
 def _format_ground_output(amount: int, label: str) -> str:
@@ -132,13 +135,32 @@ def find_awg(
     but utilises Django's ORM instead of raw SQL.
     """
 
-    amps = int(amps)
-    meters = int(meters)
-    volts = int(volts)
-    max_lines = 1 if max_lines in (None, "") else int(max_lines)
-    max_awg = None if max_awg in (None, "") else AWG(max_awg)
-    phases = int(phases)
-    temperature = None if temperature in (None, "", "auto") else int(temperature)
+    def _coerce_int(value, label, *, required=True, default=None):
+        if value in (None, "", "None"):
+            if not required:
+                return default
+            raise ValueError(_("%(field)s is required.") % {"field": label})
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            raise ValueError(_("%(field)s must be a whole number.") % {"field": label})
+
+    amps = _coerce_int(amps, _lazy("Amps"))
+    meters = _coerce_int(meters, _lazy("Meters"))
+    volts = _coerce_int(volts, _lazy("Volts"))
+    max_lines = _coerce_int(max_lines, _lazy("Max Lines"), required=False, default=1)
+    if max_awg in (None, ""):
+        max_awg = None
+    else:
+        try:
+            max_awg = AWG(max_awg)
+        except (TypeError, ValueError):
+            raise ValueError(_("Max AWG must be a valid gauge value."))
+    phases = _coerce_int(phases, _lazy("Phases"))
+    if temperature in (None, "", "auto"):
+        temperature = None
+    else:
+        temperature = _coerce_int(temperature, _lazy("Temperature"))
     ground_value, ground_label = _parse_ground(ground)
     ground_options = [ground_value]
     if ground_label == "[1]":
@@ -360,17 +382,10 @@ def calculator(request):
         lead_values = {
             k: v for k, v in request.POST.items() if k != "csrfmiddlewaretoken"
         }
-        PowerLead.objects.create(
-            user=request.user if request.user.is_authenticated else None,
-            values=lead_values,
-            path=request.path,
-            referer=request.META.get("HTTP_REFERER", ""),
-            user_agent=request.META.get("HTTP_USER_AGENT", ""),
-            ip_address=_extract_client_ip(),
-        )
         max_awg = request.POST.get("max_awg") or None
         conduit_field = request.POST.get("conduit")
         conduit_arg = None if conduit_field in (None, "") else conduit_field
+        malformed = False
         try:
             result = find_awg(
                 meters=request.POST.get("meters"),
@@ -386,11 +401,21 @@ def calculator(request):
             )
         except Exception as exc:  # pragma: no cover - defensive
             context["error"] = str(exc)
+            malformed = True
         else:
             if result.get("awg") == "n/a":
                 context["no_cable"] = True
             else:
                 context["result"] = result
+        PowerLead.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            values=lead_values,
+            path=request.path,
+            referer=request.META.get("HTTP_REFERER", ""),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            ip_address=_extract_client_ip(),
+            malformed=malformed,
+        )
     context["templates"] = CalculatorTemplate.objects.filter(
         show_in_pages=True
     ).order_by("name")

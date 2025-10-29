@@ -124,8 +124,15 @@ class CalculatorTemplateAdmin(EntityModelAdmin):
 
 @admin.register(PowerLead)
 class PowerLeadAdmin(EntityModelAdmin):
-    list_display = ("created_on", "user", "status", "assign_to", "ip_address")
-    list_filter = ("status",)
+    list_display = (
+        "created_on",
+        "user",
+        "status",
+        "assign_to",
+        "ip_address",
+        "malformed",
+    )
+    list_filter = ("status", "malformed")
     search_fields = ("user__username", "ip_address")
     raw_id_fields = ("assign_to",)
     readonly_fields = (
@@ -136,6 +143,7 @@ class PowerLeadAdmin(EntityModelAdmin):
         "user_agent",
         "ip_address",
         "values",
+        "malformed",
     )
 
 

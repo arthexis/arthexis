@@ -138,6 +138,7 @@ class AWGCalculatorTests(TestCase):
         self.assertEqual(lead.values["meters"], "10")
         self.assertEqual(lead.user_agent, "tester")
         self.assertEqual(lead.status, PowerLead.Status.OPEN)
+        self.assertFalse(lead.malformed)
 
     def test_power_lead_stores_forwarded_for_ip(self):
         url = reverse("awg:calculator")
@@ -160,6 +161,64 @@ class AWGCalculatorTests(TestCase):
         )
         lead = PowerLead.objects.get()
         self.assertEqual(lead.ip_address, "203.0.113.5")
+
+    def test_invalid_max_awg_reports_error(self):
+        url = reverse("awg:calculator")
+        data = {
+            "meters": "10",
+            "amps": "40",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "1",
+            "max_awg": "ZAP",
+        }
+        resp = self.client.post(url, data)
+        self.assertContains(resp, "Error: Max AWG must be a valid gauge value.")
+        lead = PowerLead.objects.get()
+        self.assertTrue(lead.malformed)
+        self.assertEqual(lead.values["max_awg"], "ZAP")
+
+    def test_invalid_numeric_field_reports_error(self):
+        url = reverse("awg:calculator")
+        data = {
+            "meters": "oops",
+            "amps": "40",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "1",
+        }
+        resp = self.client.post(url, data)
+        self.assertContains(resp, "Error: Meters must be a whole number.")
+        lead = PowerLead.objects.get()
+        self.assertTrue(lead.malformed)
+        self.assertEqual(lead.values["meters"], "oops")
+
+    def test_invalid_ground_reports_error(self):
+        url = reverse("awg:calculator")
+        data = {
+            "meters": "10",
+            "amps": "40",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "ZAP",
+        }
+        resp = self.client.post(url, data)
+        self.assertContains(resp, "Error: Ground must be 0, 1, or [1].")
+        lead = PowerLead.objects.get()
+        self.assertTrue(lead.malformed)
+        self.assertEqual(lead.values["ground"], "ZAP")
 
     def test_no_cable_found(self):
         url = reverse("awg:calculator")
