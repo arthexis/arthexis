@@ -138,6 +138,7 @@ class AWGCalculatorTests(TestCase):
         self.assertEqual(lead.values["meters"], "10")
         self.assertEqual(lead.user_agent, "tester")
         self.assertEqual(lead.status, PowerLead.Status.OPEN)
+        self.assertFalse(lead.malformed)
 
     def test_power_lead_stores_forwarded_for_ip(self):
         url = reverse("awg:calculator")
@@ -177,7 +178,9 @@ class AWGCalculatorTests(TestCase):
         }
         resp = self.client.post(url, data)
         self.assertContains(resp, "Error: Max AWG must be a valid gauge value.")
-        self.assertFalse(PowerLead.objects.exists())
+        lead = PowerLead.objects.get()
+        self.assertTrue(lead.malformed)
+        self.assertEqual(lead.values["max_awg"], "ZAP")
 
     def test_invalid_numeric_field_reports_error(self):
         url = reverse("awg:calculator")
@@ -194,7 +197,9 @@ class AWGCalculatorTests(TestCase):
         }
         resp = self.client.post(url, data)
         self.assertContains(resp, "Error: Meters must be a whole number.")
-        self.assertFalse(PowerLead.objects.exists())
+        lead = PowerLead.objects.get()
+        self.assertTrue(lead.malformed)
+        self.assertEqual(lead.values["meters"], "oops")
 
     def test_invalid_ground_reports_error(self):
         url = reverse("awg:calculator")
@@ -211,7 +216,9 @@ class AWGCalculatorTests(TestCase):
         }
         resp = self.client.post(url, data)
         self.assertContains(resp, "Error: Ground must be 0, 1, or [1].")
-        self.assertFalse(PowerLead.objects.exists())
+        lead = PowerLead.objects.get()
+        self.assertTrue(lead.malformed)
+        self.assertEqual(lead.values["ground"], "ZAP")
 
     def test_no_cable_found(self):
         url = reverse("awg:calculator")

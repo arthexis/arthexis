@@ -160,6 +160,7 @@ class PowerLead(Lead):
     """Lead generated from AWG calculator usage."""
 
     values = models.JSONField()
+    malformed = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = _("Power Lead")

@@ -385,6 +385,7 @@ def calculator(request):
         max_awg = request.POST.get("max_awg") or None
         conduit_field = request.POST.get("conduit")
         conduit_arg = None if conduit_field in (None, "") else conduit_field
+        malformed = False
         try:
             result = find_awg(
                 meters=request.POST.get("meters"),
@@ -400,19 +401,21 @@ def calculator(request):
             )
         except Exception as exc:  # pragma: no cover - defensive
             context["error"] = str(exc)
+            malformed = True
         else:
-            PowerLead.objects.create(
-                user=request.user if request.user.is_authenticated else None,
-                values=lead_values,
-                path=request.path,
-                referer=request.META.get("HTTP_REFERER", ""),
-                user_agent=request.META.get("HTTP_USER_AGENT", ""),
-                ip_address=_extract_client_ip(),
-            )
             if result.get("awg") == "n/a":
                 context["no_cable"] = True
             else:
                 context["result"] = result
+        PowerLead.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            values=lead_values,
+            path=request.path,
+            referer=request.META.get("HTTP_REFERER", ""),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            ip_address=_extract_client_ip(),
+            malformed=malformed,
+        )
     context["templates"] = CalculatorTemplate.objects.filter(
         show_in_pages=True
     ).order_by("name")
