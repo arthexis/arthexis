@@ -12,7 +12,7 @@ from nodes.models import ContentSample, NodeRole
 from django.apps import apps as django_apps
 from django.utils import timezone
 from django.utils.text import slugify
-from django.utils.translation import gettext, gettext_lazy as _
+from django.utils.translation import gettext, gettext_lazy as _, get_language_info
 from importlib import import_module
 from django.urls import URLPattern
 from django.conf import settings
@@ -565,6 +565,11 @@ class UserStory(Lead):
         related_name="user_stories",
         help_text=_("Screenshot captured for this feedback."),
     )
+    language_code = models.CharField(
+        max_length=15,
+        blank=True,
+        help_text=_("Language selected when the feedback was submitted."),
+    )
 
     class Meta:
         ordering = ["-submitted_at"]
@@ -609,6 +614,21 @@ class UserStory(Lead):
             f"**Name:** {name}",
             f"**Screenshot requested:** {screenshot_requested}",
         ]
+
+        language_code = (self.language_code or "").strip()
+        if language_code:
+            normalized = language_code.replace("_", "-").lower()
+            try:
+                info = get_language_info(normalized)
+            except KeyError:
+                language_display = ""
+            else:
+                language_display = info.get("name_local") or info.get("name") or ""
+
+            if language_display:
+                lines.append(f"**Language:** {language_display} ({normalized})")
+            else:
+                lines.append(f"**Language:** {normalized}")
 
         if self.submitted_at:
             lines.append(f"**Submitted at:** {self.submitted_at.isoformat()}")

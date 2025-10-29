@@ -36,7 +36,12 @@ from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from core import mailer, public_wifi
 from core.backends import TOTP_DEVICE_NAME
-from django.utils.translation import gettext as _
+from django.utils.translation import get_language, gettext as _
+
+try:  # pragma: no cover - compatibility shim for Django versions without constant
+    from django.utils.translation import LANGUAGE_SESSION_KEY
+except ImportError:  # pragma: no cover - fallback when constant is unavailable
+    LANGUAGE_SESSION_KEY = "_language"
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from django.core.cache import cache
@@ -1423,6 +1428,25 @@ def client_report(request):
     return render(request, "pages/client_report.html", context)
 
 
+def _get_request_language_code(request) -> str:
+    language_code = ""
+    if hasattr(request, "session"):
+        language_code = request.session.get(LANGUAGE_SESSION_KEY, "")
+    if not language_code:
+        cookie_name = getattr(settings, "LANGUAGE_COOKIE_NAME", "django_language")
+        language_code = request.COOKIES.get(cookie_name, "")
+    if not language_code:
+        language_code = getattr(request, "LANGUAGE_CODE", "") or ""
+    if not language_code:
+        language_code = get_language() or ""
+
+    language_code = language_code.strip()
+    if not language_code:
+        return ""
+
+    return language_code.replace("_", "-").lower()[:15]
+
+
 @require_POST
 def submit_user_story(request):
     throttle_seconds = getattr(settings, "USER_STORY_THROTTLE_SECONDS", 300)
@@ -1467,6 +1491,9 @@ def submit_user_story(request):
         story.user_agent = request.META.get("HTTP_USER_AGENT", "")
         story.ip_address = client_ip or None
         story.is_user_data = True
+        language_code = _get_request_language_code(request)
+        if language_code:
+            story.language_code = language_code
         story.save()
         if request.user.is_authenticated and request.user.is_superuser:
             comment_text = (story.comments or "").strip()

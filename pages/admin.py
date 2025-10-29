@@ -705,6 +705,7 @@ class UserStoryAdmin(EntityModelAdmin):
     actions = ["create_github_issues"]
     list_display = (
         "name",
+        "language_code",
         "rating",
         "path",
         "status",
@@ -720,6 +721,7 @@ class UserStoryAdmin(EntityModelAdmin):
         "name",
         "comments",
         "path",
+        "language_code",
         "referer",
         "github_issue_url",
         "ip_address",
@@ -732,6 +734,7 @@ class UserStoryAdmin(EntityModelAdmin):
         "path",
         "user",
         "owner",
+        "language_code",
         "referer",
         "user_agent",
         "ip_address",
@@ -749,6 +752,7 @@ class UserStoryAdmin(EntityModelAdmin):
         "take_screenshot",
         "screenshot_display",
         "path",
+        "language_code",
         "user",
         "owner",
         "status",
