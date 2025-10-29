@@ -13,6 +13,7 @@ from django.http import (
     JsonResponse,
     HttpResponseBase,
     HttpResponseRedirect,
+    HttpResponseNotAllowed,
 )
 from django.template.response import TemplateResponse
 from django.conf import settings
@@ -606,6 +607,8 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     change_actions = ["create_repository_action", "prepare_next_release_action"]
 
     def _prepare(self, request, package):
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
         from pathlib import Path
         from packaging.version import Version
 
