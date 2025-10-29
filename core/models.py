@@ -3914,6 +3914,17 @@ class Todo(Entity):
     generated_for_version = models.CharField(max_length=20, blank=True, default="")
     generated_for_revision = models.CharField(max_length=40, blank=True, default="")
     done_on = models.DateTimeField(null=True, blank=True)
+    done_node = models.ForeignKey(
+        "nodes.Node",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="completed_todos",
+        help_text="Node where this TODO was completed.",
+    )
+    done_version = models.CharField(max_length=20, blank=True, default="")
+    done_revision = models.CharField(max_length=40, blank=True, default="")
+    done_username = models.CharField(max_length=150, blank=True, default="")
     on_done_condition = ConditionTextField(blank=True, default="")
     origin_node = models.ForeignKey(
         "nodes.Node",
@@ -3977,7 +3988,15 @@ class Todo(Entity):
 
     def save(self, *args, **kwargs):
         created = self.pk is None
-        tracked_fields = {"done_on", "is_deleted"}
+        tracked_fields = {
+            "done_on",
+            "done_node",
+            "done_node_id",
+            "done_revision",
+            "done_username",
+            "done_version",
+            "is_deleted",
+        }
         update_fields = kwargs.get("update_fields")
         monitor_changes = not created and (
             update_fields is None or tracked_fields.intersection(update_fields)
@@ -3987,7 +4006,14 @@ class Todo(Entity):
             previous_state = (
                 type(self)
                 .all_objects.filter(pk=self.pk)
-                .values("done_on", "is_deleted")
+                .values(
+                    "done_on",
+                    "done_node_id",
+                    "done_revision",
+                    "done_username",
+                    "done_version",
+                    "is_deleted",
+                )
                 .first()
             )
         super().save(*args, **kwargs)
@@ -3997,10 +4023,75 @@ class Todo(Entity):
 
         previous_done_on = previous_state["done_on"] if previous_state else None
         previous_is_deleted = previous_state["is_deleted"] if previous_state else False
-        if previous_done_on == self.done_on and previous_is_deleted == self.is_deleted:
+        previous_done_node = (
+            previous_state["done_node_id"] if previous_state else None
+        )
+        previous_done_revision = (
+            previous_state["done_revision"] if previous_state else ""
+        )
+        previous_done_username = (
+            previous_state["done_username"] if previous_state else ""
+        )
+        previous_done_version = (
+            previous_state["done_version"] if previous_state else ""
+        )
+        if (
+            previous_done_on == self.done_on
+            and previous_is_deleted == self.is_deleted
+            and previous_done_node == getattr(self, "done_node_id", None)
+            and previous_done_revision == self.done_revision
+            and previous_done_username == self.done_username
+            and previous_done_version == self.done_version
+        ):
             return
 
         self._update_fixture_state()
+
+    def populate_done_metadata(self, user=None) -> None:
+        """Populate metadata fields for a completed TODO."""
+
+        node = None
+        try:  # pragma: no cover - defensive import guard
+            from nodes.models import Node  # type: ignore
+        except Exception:  # pragma: no cover - when app not ready
+            Node = None
+
+        if Node is not None:
+            try:
+                node = Node.get_local()
+            except Exception:  # pragma: no cover - fallback on errors
+                node = None
+        self.done_node = node if node else None
+
+        version_value = ""
+        revision_value = ""
+        if node is not None:
+            version_value = (node.installed_version or "").strip()
+            revision_value = (node.installed_revision or "").strip()
+
+        if not version_value:
+            version_path = Path(settings.BASE_DIR) / "VERSION"
+            try:
+                version_value = version_path.read_text(encoding="utf-8").strip()
+            except OSError:
+                version_value = ""
+
+        if not revision_value:
+            try:
+                revision_value = revision_utils.get_revision() or ""
+            except Exception:  # pragma: no cover - defensive fallback
+                revision_value = ""
+
+        username_value = ""
+        if user is not None and getattr(user, "is_authenticated", False):
+            try:
+                username_value = user.get_username() or ""
+            except Exception:  # pragma: no cover - fallback to attribute
+                username_value = getattr(user, "username", "") or ""
+
+        self.done_version = version_value
+        self.done_revision = revision_value
+        self.done_username = username_value
 
     def _update_fixture_state(self) -> None:
         if not self.is_seed_data:
@@ -4067,6 +4158,9 @@ class Todo(Entity):
         _assign("request", self.request or "")
         _assign("url", self.url or "")
         _assign("request_details", self.request_details or "")
+        _assign("done_version", self.done_version or "")
+        _assign("done_revision", self.done_revision or "")
+        _assign("done_username", self.done_username or "")
 
         if self.done_on:
             done_value = timezone.localtime(self.done_on)

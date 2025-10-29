@@ -2216,13 +2216,22 @@ class TodoDoneTests(TestCase):
         User.objects.create_superuser("admin", "admin@example.com", "pw")
         self.client.force_login(User.objects.get(username="admin"))
 
-    def test_mark_done_sets_timestamp(self):
+    @mock.patch("core.models.revision_utils.get_revision", return_value="rev123")
+    def test_mark_done_sets_timestamp(self, _get_revision):
         todo = Todo.objects.create(request="Task", is_seed_data=True)
         resp = self.client.post(reverse("todo-done", args=[todo.pk]))
         self.assertRedirects(resp, reverse("admin:index"))
         todo.refresh_from_db()
         self.assertIsNotNone(todo.done_on)
         self.assertFalse(todo.is_deleted)
+        self.assertIsNone(todo.done_node)
+        version_path = Path(settings.BASE_DIR) / "VERSION"
+        expected_version = ""
+        if version_path.exists():
+            expected_version = version_path.read_text(encoding="utf-8").strip()
+        self.assertEqual(todo.done_version, expected_version)
+        self.assertEqual(todo.done_revision, "rev123")
+        self.assertEqual(todo.done_username, "admin")
 
     def test_mark_done_updates_seed_fixture(self):
         todo = Todo.objects.create(request="Task", is_seed_data=True)
@@ -2250,7 +2259,10 @@ class TodoDoneTests(TestCase):
             )
 
             with override_settings(BASE_DIR=base):
-                resp = self.client.post(reverse("todo-done", args=[todo.pk]))
+                with mock.patch(
+                    "core.models.revision_utils.get_revision", return_value="rev456"
+                ):
+                    resp = self.client.post(reverse("todo-done", args=[todo.pk]))
 
             self.assertRedirects(resp, reverse("admin:index"))
             data = json.loads(fixture_path.read_text(encoding="utf-8"))
@@ -2259,6 +2271,9 @@ class TodoDoneTests(TestCase):
             self.assertIn("done_on", fields)
             self.assertTrue(fields["done_on"])
             self.assertFalse(fields.get("is_deleted", False))
+            self.assertIn("done_version", fields)
+            self.assertEqual(fields.get("done_revision"), "rev456")
+            self.assertEqual(fields.get("done_username"), "admin")
 
     def test_soft_delete_updates_seed_fixture(self):
         todo = Todo.objects.create(request="Task", is_seed_data=True)
