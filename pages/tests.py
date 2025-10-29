@@ -94,6 +94,7 @@ from datetime import (
 from django.core import mail
 from django.utils import timezone
 from django.utils.text import slugify
+from django.utils import translation
 from django.utils.translation import gettext
 from django_otp import DEVICE_ID_SESSION_KEY
 from django_otp.oath import TOTP
@@ -3486,6 +3487,30 @@ class UserStorySubmissionTests(TestCase):
         self.assertEqual(story.referer, "https://example.test/wizard/step-1/")
         self.assertEqual(story.user_agent, "FeedbackBot/1.0")
         self.assertEqual(story.ip_address, "127.0.0.1")
+        expected_language = (translation.get_language() or "").split("-")[0]
+        self.assertTrue(story.language_code)
+        self.assertTrue(
+            story.language_code.startswith(expected_language),
+            story.language_code,
+        )
+
+    def test_submission_records_request_language(self):
+        self.client.cookies[settings.LANGUAGE_COOKIE_NAME] = "es"
+        with translation.override("es"):
+            response = self.client.post(
+                self.url,
+                {
+                    "rating": 4,
+                    "comments": "Buena experiencia",
+                    "path": "/es/soporte/",
+                    "take_screenshot": "1",
+                },
+                HTTP_ACCEPT_LANGUAGE="es",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        story = UserStory.objects.get()
+        self.assertEqual(story.language_code, "es")
 
     def test_superuser_submission_creates_triage_todo(self):
         Todo.objects.all().delete()
@@ -3723,6 +3748,8 @@ class UserStoryAdminActionTests(TestCase):
             comments="Helpful notes",
             take_screenshot=True,
         )
+        self.story.language_code = "es"
+        self.story.save(update_fields=["language_code"])
         self.admin = UserStoryAdmin(UserStory, admin.site)
 
     def _build_request(self):
@@ -3756,6 +3783,8 @@ class UserStoryAdminActionTests(TestCase):
         args, kwargs = mock_create_issue.call_args
         self.assertIn("Feedback for", args[0])
         self.assertIn("**Rating:**", args[1])
+        self.assertIn("**Language:**", args[1])
+        self.assertIn("(es)", args[1])
         self.assertEqual(kwargs.get("labels"), ["feedback"])
         self.assertEqual(
             kwargs.get("fingerprint"), f"user-story:{self.story.pk}"
