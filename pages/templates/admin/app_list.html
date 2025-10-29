@@ -119,10 +119,13 @@
         <caption class="app-caption">
           <div class="app-caption-inner">
             <a href="{{ app.app_url }}" class="section" title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}">{{ app.name }} MODELS</a>
-            {% blocktranslate with name=app.name asvar toggle_label %}Toggle {{ name }} section{% endblocktranslate %}
-            <button type="button" class="app-collapse-toggle" aria-expanded="true" aria-controls="app-{{ app.app_label }}-models" data-app-label="{{ app.app_label }}">
-              <span class="visually-hidden">{{ toggle_label }}</span>
-            </button>
+            {#
+              The admin sidebar previously exposed a collapse toggle control from the
+              default Django admin. The sidebar modules are always expanded in our
+              custom theme and the toggle offered no functionality, while rendering
+              as a distracting circular button. Remove the redundant button entirely
+              to avoid showing an inert control in the navigation.
+            #}
           </div>
         </caption>
         <thead class="visually-hidden">
