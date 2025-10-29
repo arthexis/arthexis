@@ -690,16 +690,17 @@ def _ensure_origin_main_unchanged(log_path: Path) -> None:
 def _next_patch_version(version: str) -> str:
     from packaging.version import InvalidVersion, Version
 
+    cleaned = version.rstrip("+")
     try:
-        parsed = Version(version)
+        parsed = Version(cleaned)
     except InvalidVersion:
-        parts = version.split(".")
+        parts = cleaned.split(".") if cleaned else []
         for index in range(len(parts) - 1, -1, -1):
             segment = parts[index]
             if segment.isdigit():
                 parts[index] = str(int(segment) + 1)
                 return ".".join(parts)
-        return version
+        return cleaned or version
     return f"{parsed.major}.{parsed.minor}.{parsed.micro + 1}"
 
 
@@ -768,7 +769,9 @@ def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
     version_path = Path("VERSION")
     if version_path.exists():
         try:
-            repo_version = Version(version_path.read_text(encoding="utf-8").strip())
+            raw_version = version_path.read_text(encoding="utf-8").strip()
+            cleaned_version = raw_version.rstrip("+") or "0.0.0"
+            repo_version = Version(cleaned_version)
         except InvalidVersion:
             repo_version = None
 
@@ -1110,10 +1113,12 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
     version_path = Path("VERSION")
     if version_path.exists():
         current = version_path.read_text(encoding="utf-8").strip()
-        if current and Version(release.version) < Version(current):
-            raise Exception(
-                f"Version {release.version} is older than existing {current}"
-            )
+        if current:
+            current_clean = current.rstrip("+") or "0.0.0"
+            if Version(release.version) < Version(current_clean):
+                raise Exception(
+                    f"Version {release.version} is older than existing {current}"
+                )
 
     _append_log(log_path, f"Checking if version {release.version} exists on PyPI")
     if release_utils.network_available():
