@@ -721,18 +721,18 @@ class AdminDashboardAppListTests(TestCase):
 
     def test_horologia_hidden_without_celery_feature(self):
         resp = self.client.get(reverse("admin:index"))
-        self.assertNotContains(resp, "5. Horologia MODELS")
+        self.assertNotContains(resp, "5. Horologia</a>")
 
     def test_horologia_visible_with_celery_feature(self):
         feature = NodeFeature.objects.create(slug="celery-queue", display="Celery Queue")
         NodeFeatureAssignment.objects.create(node=self.node, feature=feature)
         resp = self.client.get(reverse("admin:index"))
-        self.assertContains(resp, "5. Horologia MODELS")
+        self.assertContains(resp, "5. Horologia</a>")
 
     def test_horologia_visible_with_celery_lock(self):
         self.celery_lock.write_text("")
         resp = self.client.get(reverse("admin:index"))
-        self.assertContains(resp, "5. Horologia MODELS")
+        self.assertContains(resp, "5. Horologia</a>")
 
 class AdminSidebarTests(TestCase):
     def setUp(self):

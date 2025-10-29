@@ -118,14 +118,7 @@
       <table>
         <caption class="app-caption">
           <div class="app-caption-inner">
-            <a href="{{ app.app_url }}" class="section" title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}">{{ app.name }} MODELS</a>
-            {#
-              The admin sidebar previously exposed a collapse toggle control from the
-              default Django admin. The sidebar modules are always expanded in our
-              custom theme and the toggle offered no functionality, while rendering
-              as a distracting circular button. Remove the redundant button entirely
-              to avoid showing an inert control in the navigation.
-            #}
+            <a href="{{ app.app_url }}" class="section" title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}">{{ app.name }}</a>
           </div>
         </caption>
         <thead class="visually-hidden">
