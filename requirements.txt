@@ -21,7 +21,7 @@ click-plugins==1.1.1.2
 click-repl==0.3.0
 colorama==0.4.6
 constantly==23.10.4
-cron-descriptor==1.4.5
+cron-descriptor==2.0.6
 cryptography==45.0.5
 daphne==4.2.1
 diff-match-patch==20241021
