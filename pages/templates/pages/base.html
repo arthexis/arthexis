@@ -476,19 +476,41 @@
           <form id="user-story-form" method="post" action="{% url 'pages:user-story-submit' %}">
             {% csrf_token %}
             <input type="hidden" name="path" value="{{ request.get_full_path|default:'/' }}">
+          {% if request.user.is_authenticated %}
             <div class="mb-3">
-              <label for="user-story-name" class="form-label">{% trans 'Name (email or pseudonym)' %}</label>
+              <label for="user-story-name" class="form-label">{% trans 'Username' %}</label>
               <input
                 type="text"
                 class="form-control"
                 id="user-story-name"
                 name="name"
                 maxlength="40"
-                value="{% if request.user.is_authenticated %}{{ request.user.username|slice:':40' }}{% endif %}"
-                placeholder="{% trans 'Share how we should address you' %}"
+                value="{{ request.user.username|slice:':40' }}"
+                readonly
               >
-              <div class="form-text">{% trans 'Leave blank to submit anonymously.' %}</div>
+              <div class="form-text">
+                {% blocktrans with username=request.user.username %}
+                  We'll include your username "{{ username }}" with this feedback. We may contact you via email if your feedback is utilized.
+                {% endblocktrans %}
+              </div>
             </div>
+          {% else %}
+            <div class="mb-3">
+              <label for="user-story-name" class="form-label">{% trans 'Email address' %}</label>
+              <input
+                type="email"
+                class="form-control"
+                id="user-story-name"
+                name="name"
+                maxlength="40"
+                placeholder="{% trans 'name@example.com' %}"
+                autocomplete="email"
+                inputmode="email"
+                required
+              >
+              <div class="form-text">{% trans 'We may contact you via email if your feedback is utilized.' %}</div>
+            </div>
+          {% endif %}
             <div class="mb-3">
               <span class="form-label d-block">{% trans 'Your experience on this page' %}</span>
               <div class="user-story-feedback-options">
