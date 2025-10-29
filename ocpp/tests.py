@@ -68,7 +68,7 @@ from .models import (
     DataTransferMessage,
 )
 from .consumers import CSMSConsumer
-from .views import dispatch_action, _transaction_rfid_details
+from .views import dispatch_action, _transaction_rfid_details, _usage_timeline
 from .status_display import STATUS_BADGE_MAP
 from core.models import EnergyAccount, EnergyCredit, Reference, RFID, SecurityGroup
 from . import store
@@ -4453,6 +4453,122 @@ class ChargerStatusViewTests(TestCase):
         self.assertAlmostEqual(values[1], 0.02)
         self.assertAlmostEqual(resp.context["tx"].kw, 0.02)
         store.transactions.pop(key, None)
+
+    def test_usage_timeline_rendered_when_chart_unavailable(self):
+        original_logs = store.logs["charger"]
+        store.logs["charger"] = {}
+        self.addCleanup(lambda: store.logs.__setitem__("charger", original_logs))
+        fixed_now = timezone.now().replace(microsecond=0)
+        charger = Charger.objects.create(charger_id="TL1", connector_id=1)
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+
+        def build_entry(delta, status):
+            timestamp = fixed_now - delta
+            payload = {
+                "connectorId": 1,
+                "status": status,
+                "timestamp": timestamp.isoformat(),
+            }
+            prefix = (timestamp.strftime("%Y-%m-%d %H:%M:%S.%f"))[:-3]
+            return f"{prefix} StatusNotification processed: {json.dumps(payload, sort_keys=True)}"
+
+        store.logs["charger"][log_key] = [
+            build_entry(timedelta(days=2), "Available"),
+            build_entry(timedelta(days=1), "Charging"),
+            build_entry(timedelta(hours=12), "Available"),
+        ]
+
+        data, _window = _usage_timeline(charger, [], now=fixed_now)
+        self.assertEqual(len(data), 1)
+        statuses = {segment["status"] for segment in data[0]["segments"]}
+        self.assertIn("charging", statuses)
+        self.assertIn("available", statuses)
+
+        with patch("ocpp.views.timezone.now", return_value=fixed_now):
+            resp = self.client.get(
+                reverse(
+                    "charger-status-connector",
+                    args=[charger.charger_id, charger.connector_slug],
+                )
+            )
+
+        self.assertContains(resp, "Usage (last 7 days)")
+        self.assertContains(resp, "usage-timeline-segment usage-charging")
+
+    def test_usage_timeline_includes_multiple_connectors(self):
+        original_logs = store.logs["charger"]
+        store.logs["charger"] = {}
+        self.addCleanup(lambda: store.logs.__setitem__("charger", original_logs))
+        fixed_now = timezone.now().replace(microsecond=0)
+        aggregate = Charger.objects.create(charger_id="TLAGG")
+        connector_one = Charger.objects.create(charger_id="TLAGG", connector_id=1)
+        connector_two = Charger.objects.create(charger_id="TLAGG", connector_id=2)
+
+        def build_entry(connector_id, delta, status):
+            timestamp = fixed_now - delta
+            payload = {
+                "connectorId": connector_id,
+                "status": status,
+                "timestamp": timestamp.isoformat(),
+            }
+            prefix = (timestamp.strftime("%Y-%m-%d %H:%M:%S.%f"))[:-3]
+            key = store.identity_key(aggregate.charger_id, connector_id)
+            store.logs["charger"].setdefault(key, []).append(
+                f"{prefix} StatusNotification processed: {json.dumps(payload, sort_keys=True)}"
+            )
+
+        build_entry(1, timedelta(days=3), "Available")
+        build_entry(2, timedelta(days=2), "Charging")
+
+        overview = [{"charger": connector_one}, {"charger": connector_two}]
+        data, _window = _usage_timeline(aggregate, overview, now=fixed_now)
+        self.assertEqual(len(data), 2)
+        self.assertTrue(all(entry["segments"] for entry in data))
+
+        with patch("ocpp.views.timezone.now", return_value=fixed_now):
+            resp = self.client.get(reverse("charger-status", args=[aggregate.charger_id]))
+
+        self.assertContains(resp, "Usage (last 7 days)")
+        self.assertContains(resp, connector_one.connector_label)
+        self.assertContains(resp, connector_two.connector_label)
+
+    def test_usage_timeline_merges_repeated_status_entries(self):
+        original_logs = store.logs["charger"]
+        store.logs["charger"] = {}
+        self.addCleanup(lambda: store.logs.__setitem__("charger", original_logs))
+        fixed_now = timezone.now().replace(microsecond=0)
+        charger = Charger.objects.create(
+            charger_id="TLDEDUP",
+            connector_id=1,
+            last_status="Available",
+        )
+
+        def build_entry(delta, status):
+            timestamp = fixed_now - delta
+            payload = {
+                "connectorId": 1,
+                "status": status,
+                "timestamp": timestamp.isoformat(),
+            }
+            prefix = (timestamp.strftime("%Y-%m-%d %H:%M:%S.%f"))[:-3]
+            return f"{prefix} StatusNotification processed: {json.dumps(payload, sort_keys=True)}"
+
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.logs["charger"][log_key] = [
+            build_entry(timedelta(days=6, hours=12), "Available"),
+            build_entry(timedelta(days=5), "Available"),
+            build_entry(timedelta(days=3, hours=6), "Charging"),
+            build_entry(timedelta(days=2), "Charging"),
+            build_entry(timedelta(days=1), "Available"),
+        ]
+
+        data, window = _usage_timeline(charger, [], now=fixed_now)
+        self.assertIsNotNone(window)
+        self.assertEqual(len(data), 1)
+        segments = data[0]["segments"]
+        self.assertGreaterEqual(len(segments), 1)
+        statuses = [segment["status"] for segment in segments]
+        self.assertEqual(statuses, ["available", "charging", "available"])
 
     def test_diagnostics_status_displayed(self):
         reported_at = timezone.now().replace(microsecond=0)

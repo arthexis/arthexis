@@ -1,7 +1,6 @@
 import json
 import uuid
-from datetime import datetime, timedelta, timezone as dt_timezone
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone as dt_timezone
 from types import SimpleNamespace
 
 from django.http import Http404, HttpResponse, JsonResponse
@@ -16,7 +15,7 @@ from django.utils.translation import gettext_lazy as _, gettext, ngettext
 from django.utils.text import slugify
 from django.urls import NoReverseMatch, reverse
 from django.conf import settings
-from django.utils import translation, timezone
+from django.utils import translation, timezone, formats
 from django.core.exceptions import ValidationError
 
 from asgiref.sync import async_to_sync
@@ -27,6 +26,8 @@ from nodes.models import Node
 
 from pages.utils import landing
 from core.liveupdate import live_update
+
+from django.utils.dateparse import parse_datetime
 
 from . import store
 from .models import Transaction, Charger, DataTransferMessage, RFID
@@ -336,6 +337,272 @@ def _connector_overview(
             }
         )
     return overview
+
+
+def _normalize_timeline_status(value: str | None) -> str | None:
+    """Normalize raw charger status strings into timeline buckets."""
+
+    normalized = (value or "").strip().lower()
+    if not normalized:
+        return None
+    charging_states = {
+        "charging",
+        "finishing",
+        "suspendedev",
+        "suspendedevse",
+        "occupied",
+    }
+    available_states = {"available", "preparing", "reserved"}
+    offline_states = {"faulted", "unavailable", "outofservice"}
+    if normalized in charging_states:
+        return "charging"
+    if normalized in offline_states:
+        return "offline"
+    if normalized in available_states:
+        return "available"
+    # Treat other states as available for the initial implementation.
+    return "available"
+
+
+def _timeline_labels() -> dict[str, str]:
+    """Return translated labels for timeline statuses."""
+
+    return {
+        "offline": gettext("Offline"),
+        "available": gettext("Available"),
+        "charging": gettext("Charging"),
+    }
+
+
+def _format_segment_range(start: datetime, end: datetime) -> tuple[str, str]:
+    """Return localized display values for a timeline range."""
+
+    start_display = formats.date_format(
+        timezone.localtime(start), "SHORT_DATETIME_FORMAT"
+    )
+    end_display = formats.date_format(timezone.localtime(end), "SHORT_DATETIME_FORMAT")
+    return start_display, end_display
+
+
+def _collect_status_events(
+    charger: Charger,
+    connector: Charger,
+    window_start: datetime,
+    window_end: datetime,
+) -> tuple[list[tuple[datetime, str]], tuple[datetime, str] | None]:
+    """Parse log entries into ordered status events for the connector."""
+
+    connector_id = connector.connector_id
+    serial = connector.charger_id
+    keys = [store.identity_key(serial, connector_id)]
+    if connector_id is not None:
+        keys.append(store.identity_key(serial, None))
+        keys.append(store.pending_key(serial))
+
+    seen_entries: set[str] = set()
+    events: list[tuple[datetime, str]] = []
+    latest_before_window: tuple[datetime, str] | None = None
+
+    for key in keys:
+        for entry in store.get_logs(key, log_type="charger"):
+            if entry in seen_entries:
+                continue
+            seen_entries.add(entry)
+            if len(entry) < 24:
+                continue
+            timestamp_raw = entry[:23]
+            message = entry[24:].strip()
+            try:
+                log_timestamp = datetime.strptime(
+                    timestamp_raw, "%Y-%m-%d %H:%M:%S.%f"
+                ).replace(tzinfo=dt_timezone.utc)
+            except ValueError:
+                continue
+
+            event_time = log_timestamp
+            status_bucket: str | None = None
+
+            if message.startswith("StatusNotification processed:"):
+                payload_text = message.split(":", 1)[1].strip()
+                try:
+                    payload = json.loads(payload_text)
+                except json.JSONDecodeError:
+                    continue
+                target_id = payload.get("connectorId")
+                if connector_id is not None:
+                    try:
+                        normalized_target = int(target_id)
+                    except (TypeError, ValueError):
+                        normalized_target = None
+                    if normalized_target not in {connector_id, None}:
+                        continue
+                raw_status = payload.get("status")
+                status_bucket = _normalize_timeline_status(
+                    raw_status if isinstance(raw_status, str) else None
+                )
+                payload_timestamp = payload.get("timestamp")
+                if isinstance(payload_timestamp, str):
+                    parsed = parse_datetime(payload_timestamp)
+                    if parsed is not None:
+                        if timezone.is_naive(parsed):
+                            parsed = timezone.make_aware(parsed, timezone=dt_timezone.utc)
+                        event_time = parsed
+            elif message.startswith("Connected"):
+                status_bucket = "available"
+            elif message.startswith("Closed"):
+                status_bucket = "offline"
+
+            if not status_bucket:
+                continue
+
+            if event_time < window_start:
+                if (
+                    latest_before_window is None
+                    or event_time > latest_before_window[0]
+                ):
+                    latest_before_window = (event_time, status_bucket)
+                continue
+            if event_time > window_end:
+                continue
+            events.append((event_time, status_bucket))
+
+    events.sort(key=lambda item: item[0])
+
+    deduped_events: list[tuple[datetime, str]] = []
+    for event_time, state in events:
+        if deduped_events and deduped_events[-1][1] == state:
+            continue
+        deduped_events.append((event_time, state))
+
+    return deduped_events, latest_before_window
+
+
+def _usage_timeline(
+    charger: Charger,
+    connector_overview: list[dict],
+    *,
+    now: datetime | None = None,
+) -> tuple[list[dict], tuple[str, str] | None]:
+    """Build usage timeline data for inactive chargers."""
+
+    if now is None:
+        now = timezone.now()
+    window_end = now
+    window_start = now - timedelta(days=7)
+
+    if charger.connector_id is not None:
+        connectors = [charger]
+    else:
+        connectors = [
+            item["charger"]
+            for item in connector_overview
+            if item.get("charger") and item["charger"].connector_id is not None
+        ]
+        if not connectors:
+            connectors = [
+                sibling
+                for sibling in _connector_set(charger)
+                if sibling.connector_id is not None
+            ]
+
+    seen_ids: set[int] = set()
+    labels = _timeline_labels()
+    timeline_entries: list[dict] = []
+    window_display: tuple[str, str] | None = None
+
+    if window_start < window_end:
+        window_display = _format_segment_range(window_start, window_end)
+
+    for connector in connectors:
+        if connector.connector_id is None:
+            continue
+        if connector.connector_id in seen_ids:
+            continue
+        seen_ids.add(connector.connector_id)
+
+        events, prior_event = _collect_status_events(
+            charger, connector, window_start, window_end
+        )
+        fallback_state = _normalize_timeline_status(connector.last_status)
+        if fallback_state is None:
+            fallback_state = (
+                "available"
+                if store.is_connected(connector.charger_id, connector.connector_id)
+                else "offline"
+            )
+        current_state = fallback_state
+        if prior_event is not None:
+            current_state = prior_event[1]
+        segments: list[dict] = []
+        previous_time = window_start
+        total_seconds = (window_end - window_start).total_seconds()
+
+        for event_time, state in events:
+            if event_time <= window_start:
+                current_state = state
+                continue
+            if event_time > window_end:
+                break
+            if state == current_state:
+                continue
+            segment_start = max(previous_time, window_start)
+            segment_end = min(event_time, window_end)
+            if segment_end > segment_start:
+                duration = (segment_end - segment_start).total_seconds()
+                start_display, end_display = _format_segment_range(
+                    segment_start, segment_end
+                )
+                segments.append(
+                    {
+                        "status": current_state,
+                        "label": labels.get(current_state, current_state.title()),
+                        "start_display": start_display,
+                        "end_display": end_display,
+                        "duration": max(duration, 1.0),
+                    }
+                )
+            current_state = state
+            previous_time = max(event_time, window_start)
+
+        if previous_time < window_end:
+            segment_start = max(previous_time, window_start)
+            segment_end = window_end
+            if segment_end > segment_start:
+                duration = (segment_end - segment_start).total_seconds()
+                start_display, end_display = _format_segment_range(
+                    segment_start, segment_end
+                )
+                segments.append(
+                    {
+                        "status": current_state,
+                        "label": labels.get(current_state, current_state.title()),
+                        "start_display": start_display,
+                        "end_display": end_display,
+                        "duration": max(duration, 1.0),
+                    }
+                )
+
+        if not segments and total_seconds > 0:
+            start_display, end_display = _format_segment_range(window_start, window_end)
+            segments.append(
+                {
+                    "status": current_state,
+                    "label": labels.get(current_state, current_state.title()),
+                    "start_display": start_display,
+                    "end_display": end_display,
+                    "duration": max(total_seconds, 1.0),
+                }
+            )
+
+        if segments:
+            timeline_entries.append(
+                {
+                    "label": connector.connector_label,
+                    "segments": segments,
+                }
+            )
+
+    return timeline_entries, window_display
 
 
 def _live_sessions(charger: Charger) -> list[tuple[Charger, Transaction]]:
@@ -1220,6 +1487,9 @@ def charger_status(request, cid, connector=None):
     connector_overview = [
         item for item in overview if item["charger"].connector_id is not None
     ]
+    usage_timeline, usage_timeline_window = _usage_timeline(
+        charger, connector_overview
+    )
     search_url = _reverse_connector_url("charger-session-search", cid, connector_slug)
     configuration_url = None
     if request.user.is_staff:
@@ -1286,6 +1556,8 @@ def charger_status(request, cid, connector=None):
             "pagination_query": pagination_query,
             "session_query": session_query,
             "chart_should_animate": chart_should_animate,
+            "usage_timeline": usage_timeline,
+            "usage_timeline_window": usage_timeline_window,
         },
     )
 

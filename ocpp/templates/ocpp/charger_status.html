@@ -29,6 +29,60 @@
     .text-update {
       animation: text-update-fade 1s ease-out;
     }
+    .usage-timeline-card {
+      background: var(--bs-body-bg, #fff);
+    }
+    .usage-timeline-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .usage-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .usage-legend-swatch {
+      width: 18px;
+      height: 8px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+    .usage-legend-swatch.usage-offline,
+    .usage-timeline-segment.usage-offline {
+      background-image: repeating-linear-gradient(
+        135deg,
+        rgba(220, 53, 69, 0.85),
+        rgba(220, 53, 69, 0.85) 8px,
+        rgba(220, 53, 69, 0.45) 8px,
+        rgba(220, 53, 69, 0.45) 16px
+      );
+      background-color: rgba(220, 53, 69, 0.85);
+    }
+    .usage-legend-swatch.usage-available,
+    .usage-timeline-segment.usage-available {
+      background-color: rgba(0, 0, 0, 0.12);
+    }
+    .usage-legend-swatch.usage-charging,
+    .usage-timeline-segment.usage-charging {
+      background-color: #198754;
+    }
+    .usage-timeline-entry:not(:last-child) {
+      margin-bottom: 1.25rem;
+    }
+    .usage-timeline-bar {
+      display: flex;
+      align-items: stretch;
+      min-height: 18px;
+      border-radius: 999px;
+      overflow: hidden;
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+    .usage-timeline-segment {
+      flex-basis: 0;
+      min-width: 2px;
+      display: block;
+    }
   </style>
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start align-items-stretch gap-3 mb-3">
       <div>
@@ -142,9 +196,43 @@
       <canvas id="kw-chart" style="width:100%;height:300px;"></canvas>
       {{ chart_data|json_script:"chart-data" }}
       {% else %}
+      {% if usage_timeline %}
+      <div class="usage-timeline-card border rounded-3 p-3">
+        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 mb-3">
+          <h2 class="h5 mb-0">{% trans "Usage (last 7 days)" %}</h2>
+          {% if usage_timeline_window %}
+          <div class="small text-muted">{{ usage_timeline_window.0 }} &ndash; {{ usage_timeline_window.1 }}</div>
+          {% endif %}
+        </div>
+        <div class="usage-timeline-legend small text-muted mb-3">
+          <span class="usage-legend-item"><span class="usage-legend-swatch usage-offline"></span> {% trans "Offline" %}</span>
+          <span class="usage-legend-item"><span class="usage-legend-swatch usage-available"></span> {% trans "Available" %}</span>
+          <span class="usage-legend-item"><span class="usage-legend-swatch usage-charging"></span> {% trans "Charging" %}</span>
+        </div>
+        <div class="usage-timeline-list">
+          {% for entry in usage_timeline %}
+          <div class="usage-timeline-entry">
+            <div class="fw-semibold mb-2">{{ entry.label }}</div>
+            <div class="usage-timeline-bar" role="list">
+              {% for segment in entry.segments %}
+              <span class="usage-timeline-segment usage-{{ segment.status }}" role="listitem" style="flex-grow: {{ segment.duration }};" title="{{ segment.label }} · {{ segment.start_display }} → {{ segment.end_display }}" aria-label="{{ segment.label }} · {{ segment.start_display }} → {{ segment.end_display }}"></span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% if usage_timeline_window %}
+        <div class="d-flex justify-content-between small text-muted mt-3">
+          <span>{{ usage_timeline_window.0 }}</span>
+          <span>{{ usage_timeline_window.1 }}</span>
+        </div>
+        {% endif %}
+      </div>
+      {% else %}
       <div class="alert alert-info" role="alert">
         {% trans "Select a connector to view live chart data." %}
       </div>
+      {% endif %}
       {% endif %}
     </div>
   </div>
