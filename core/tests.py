@@ -2397,6 +2397,79 @@ class TodoDoneTests(TestCase):
         self.assertTrue(todo.is_seed_data)
 
 
+class TodoDeleteTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User.objects.create_superuser("admin", "admin@example.com", "pw")
+        self.client.force_login(User.objects.get(username="admin"))
+
+    def test_delete_marks_task_deleted(self):
+        todo = Todo.objects.create(request="Task", is_seed_data=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with override_settings(BASE_DIR=base):
+                resp = self.client.post(reverse("todo-delete", args=[todo.pk]))
+        self.assertRedirects(resp, reverse("admin:index"))
+        todo.refresh_from_db()
+        self.assertTrue(todo.is_deleted)
+        self.assertIsNone(todo.done_on)
+
+    def test_delete_updates_seed_fixture(self):
+        todo = Todo.objects.create(request="Task", is_seed_data=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            fixture_dir = base / "core" / "fixtures"
+            fixture_dir.mkdir(parents=True)
+            fixture_path = fixture_dir / "todo__task.json"
+            fixture_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "model": "core.todo",
+                            "fields": {
+                                "request": "Task",
+                                "url": "",
+                                "request_details": "",
+                            },
+                        }
+                    ],
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with override_settings(BASE_DIR=base):
+                resp = self.client.post(reverse("todo-delete", args=[todo.pk]))
+                self.assertRedirects(resp, reverse("admin:index"))
+                data = json.loads(fixture_path.read_text(encoding="utf-8"))
+        self.assertEqual(len(data), 1)
+        fields = data[0]["fields"]
+        self.assertTrue(fields.get("is_deleted"))
+
+    def test_delete_seed_creates_missing_fixture(self):
+        todo = Todo.objects.create(request="Task", is_seed_data=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            fixture_dir = base / "core" / "fixtures"
+            with override_settings(BASE_DIR=base):
+                resp = self.client.post(reverse("todo-delete", args=[todo.pk]))
+                self.assertRedirects(resp, reverse("admin:index"))
+            fixture_path = fixture_dir / "todo__task.json"
+            self.assertTrue(fixture_path.exists())
+            data = json.loads(fixture_path.read_text(encoding="utf-8"))
+        self.assertEqual(len(data), 1)
+        fields = data[0]["fields"]
+        self.assertTrue(fields.get("is_deleted"))
+
+    def test_delete_missing_task_redirects(self):
+        todo = Todo.objects.create(request="Task")
+        todo.is_deleted = True
+        todo.save(update_fields=["is_deleted"])
+        resp = self.client.post(reverse("todo-delete", args=[todo.pk]))
+        self.assertRedirects(resp, reverse("admin:index"))
+
+
 class TodoFocusViewTests(TestCase):
     def setUp(self):
         self.client = Client()
@@ -2414,6 +2487,7 @@ class TodoFocusViewTests(TestCase):
         self.assertEqual(resp["X-Frame-Options"], "SAMEORIGIN")
         self.assertContains(resp, f'src="{todo.url}"')
         self.assertContains(resp, "Done")
+        self.assertContains(resp, "Delete")
         self.assertContains(resp, "Back")
         self.assertContains(resp, "Take Snapshot")
         snapshot_url = reverse("todo-snapshot", args=[todo.pk])
