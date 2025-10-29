@@ -1,5 +1,6 @@
 import base64
 import logging
+import mimetypes
 from pathlib import Path
 from types import SimpleNamespace
 import datetime
@@ -21,7 +22,8 @@ from django import forms
 from django.apps import apps as django_apps
 from utils.decorators import security_group_required
 from utils.sites import get_site
-from django.http import Http404, HttpResponse, JsonResponse
+from django.contrib.staticfiles import finders
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from nodes.models import Node
 from nodes.utils import capture_screenshot, save_screenshot
@@ -39,8 +41,8 @@ from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from django.core.cache import cache
 from django.views.decorators.cache import never_cache
-from django.utils.cache import patch_vary_headers
-from django.core.exceptions import PermissionDenied
+from django.utils.cache import patch_cache_control, patch_vary_headers
+from django.core.exceptions import PermissionDenied, SuspiciousFileOperation
 from django.utils.text import slugify, Truncator
 from django.core.validators import EmailValidator
 from django.db.models import Q
@@ -60,9 +62,26 @@ except ImportError:  # pragma: no cover - handled gracefully in views
     CalledProcessError = ExecutableNotFound = None
 
 import markdown
+from django.utils._os import safe_join
 
 
 MARKDOWN_EXTENSIONS = ["toc", "tables", "mdx_truly_sane_lists"]
+
+MARKDOWN_IMAGE_PATTERN = re.compile(
+    r"(?P<prefix><img\b[^>]*\bsrc=[\"\'])(?P<scheme>(?:static|work))://(?P<path>[^\"\']+)(?P<suffix>[\"\'])",
+    re.IGNORECASE,
+)
+
+ALLOWED_IMAGE_EXTENSIONS = {
+    ".apng",
+    ".avif",
+    ".gif",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".svg",
+    ".webp",
+}
 
 
 def _render_markdown_with_toc(text: str) -> tuple[str, str]:
@@ -70,6 +89,7 @@ def _render_markdown_with_toc(text: str) -> tuple[str, str]:
 
     md = markdown.Markdown(extensions=MARKDOWN_EXTENSIONS)
     html = md.convert(text)
+    html = _rewrite_markdown_asset_links(html)
     toc_html = md.toc
     toc_html = _strip_toc_wrapper(toc_html)
     return html, toc_html
@@ -84,6 +104,66 @@ def _strip_toc_wrapper(toc_html: str) -> str:
         if toc_html.endswith("</div>"):
             toc_html = toc_html[: -len("</div>")]
     return toc_html.strip()
+
+
+def _rewrite_markdown_asset_links(html: str) -> str:
+    """Rewrite asset links that reference local asset schemes."""
+
+    def _replace(match: re.Match[str]) -> str:
+        scheme = match.group("scheme").lower()
+        asset_path = match.group("path").lstrip("/")
+        if not asset_path:
+            return match.group(0)
+        extension = Path(asset_path).suffix.lower()
+        if extension not in ALLOWED_IMAGE_EXTENSIONS:
+            return match.group(0)
+        try:
+            asset_url = reverse(
+                "pages:readme-asset",
+                kwargs={"source": scheme, "asset": asset_path},
+            )
+        except NoReverseMatch:
+            return match.group(0)
+        return f"{match.group('prefix')}{escape(asset_url)}{match.group('suffix')}"
+
+    return MARKDOWN_IMAGE_PATTERN.sub(_replace, html)
+
+
+def _resolve_static_asset(path: str) -> Path:
+    normalized = path.lstrip("/")
+    if not normalized:
+        raise Http404("Asset not found")
+    resolved = finders.find(normalized)
+    if not resolved:
+        raise Http404("Asset not found")
+    if isinstance(resolved, (list, tuple)):
+        resolved = resolved[0]
+    file_path = Path(resolved)
+    if file_path.is_dir():
+        raise Http404("Asset not found")
+    return file_path
+
+
+def _resolve_work_asset(user, path: str) -> Path:
+    if not (user and getattr(user, "is_authenticated", False)):
+        raise PermissionDenied
+    normalized = path.lstrip("/")
+    if not normalized:
+        raise Http404("Asset not found")
+    username = getattr(user, "get_username", None)
+    if callable(username):
+        username = username()
+    else:
+        username = getattr(user, "username", "")
+    username_component = Path(str(username or user.pk)).name
+    base_work = Path(settings.BASE_DIR) / "work"
+    try:
+        user_dir = Path(safe_join(str(base_work), username_component))
+        asset_path = Path(safe_join(str(user_dir), normalized))
+    except SuspiciousFileOperation as exc:
+        logger.warning("Rejected suspicious work asset path: %s", normalized, exc_info=exc)
+        raise Http404("Asset not found") from exc
+    return asset_path
 from pages.utils import landing
 from core.liveupdate import live_update
 from django_otp import login as otp_login
@@ -489,19 +569,33 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
                     continue
                 candidates.append(candidate)
     else:
+        default_readme = readme_base / "README.md"
+        root_default: Path | None = None
         if lang:
             candidates.append(readme_base / f"README.{lang}.md")
             short = lang.split("-")[0]
             if short != lang:
                 candidates.append(readme_base / f"README.{short}.md")
-        candidates.append(readme_base / "README.md")
         if readme_base != root_base:
+            candidates.append(default_readme)
             if lang:
                 candidates.append(root_base / f"README.{lang}.md")
                 short = lang.split("-")[0]
                 if short != lang:
                     candidates.append(root_base / f"README.{short}.md")
-            candidates.append(root_base / "README.md")
+            root_default = root_base / "README.md"
+        else:
+            root_default = default_readme
+        locale_base = root_base / "locale"
+        if locale_base.exists():
+            if lang:
+                candidates.append(locale_base / f"README.{lang}.md")
+                short = lang.split("-")[0]
+                if short != lang:
+                    candidates.append(locale_base / f"README.{short}.md")
+            candidates.append(locale_base / "README.md")
+        if root_default is not None:
+            candidates.append(root_default)
 
     readme_file = next((p for p in candidates if p.exists()), None)
     if readme_file is None:
@@ -551,6 +645,44 @@ def _render_readme(request, role, doc: str | None = None):
     }
     response = render(request, "pages/readme.html", context)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])
+    return response
+
+
+def readme_asset(request, source: str, asset: str):
+    source_normalized = (source or "").lower()
+    if source_normalized == "static":
+        file_path = _resolve_static_asset(asset)
+    elif source_normalized == "work":
+        file_path = _resolve_work_asset(getattr(request, "user", None), asset)
+    else:
+        raise Http404("Asset not found")
+
+    if not file_path.exists() or not file_path.is_file():
+        raise Http404("Asset not found")
+
+    extension = file_path.suffix.lower()
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        raise Http404("Asset not found")
+
+    try:
+        file_handle = file_path.open("rb")
+    except OSError as exc:  # pragma: no cover - unexpected filesystem error
+        logger.warning("Unable to open asset %s", file_path, exc_info=exc)
+        raise Http404("Asset not found") from exc
+
+    content_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+    response = FileResponse(file_handle, content_type=content_type)
+    try:
+        response["Content-Length"] = str(file_path.stat().st_size)
+    except OSError:  # pragma: no cover - filesystem race
+        pass
+
+    if source_normalized == "work":
+        patch_cache_control(response, private=True, no_store=True)
+        patch_vary_headers(response, ["Cookie"])
+    else:
+        patch_cache_control(response, public=True, max_age=3600)
+
     return response
 
 
