@@ -496,6 +496,16 @@ def _sync_with_origin_main(log_path: Path) -> None:
         if stderr:
             _append_log(log_path, "git errors:\n" + stderr)
 
+        status = subprocess.run(
+            ["git", "status"], capture_output=True, text=True, check=False
+        )
+        status_output = (status.stdout or "").strip()
+        status_errors = (status.stderr or "").strip()
+        if status_output:
+            _append_log(log_path, "git status:\n" + status_output)
+        if status_errors:
+            _append_log(log_path, "git status errors:\n" + status_errors)
+
         branch = _current_branch() or "(detached HEAD)"
         instructions = [
             "Manual intervention required to finish syncing with origin/main.",
