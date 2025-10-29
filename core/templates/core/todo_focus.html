@@ -90,6 +90,15 @@
     .todo-button-snapshot:hover {
       background: #0284c7;
     }
+    .todo-button-delete {
+      background: #dc2626;
+      color: #ffffff;
+      border-color: #b91c1c;
+      box-shadow: 0 1px 4px rgba(220, 38, 38, 0.25);
+    }
+    .todo-button-delete:hover {
+      background: #b91c1c;
+    }
     .todo-button.is-busy {
       opacity: 0.7;
       pointer-events: none;
@@ -102,7 +111,8 @@
     .todo-button-back:hover {
       background: rgba(148, 163, 184, 0.12);
     }
-    .todo-done-form {
+    .todo-done-form,
+    .todo-delete-form {
       margin: 0;
     }
     .todo-auth-callout {
@@ -189,6 +199,10 @@
         {% csrf_token %}
         <input type="hidden" name="next" value="{{ next_url }}">
         <button type="submit" class="todo-button todo-button-done">{% trans "Done" %}</button>
+      </form>
+      <form method="post" action="{{ delete_url }}" class="todo-delete-form">
+        {% csrf_token %}
+        <button type="submit" class="todo-button todo-button-delete">{% trans "Delete" %}</button>
       </form>
       <a href="{{ next_url }}" class="todo-button todo-button-back">{% trans "Back" %}</a>
     </div>

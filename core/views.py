@@ -2361,6 +2361,7 @@ def todo_focus(request, pk: int):
         "focus_auth": focus_auth,
         "next_url": _get_return_url(request),
         "done_url": reverse("todo-done", args=[todo.pk]),
+        "delete_url": reverse("todo-delete", args=[todo.pk]),
         "snapshot_url": reverse("todo-snapshot", args=[todo.pk]),
     }
     return render(request, "core/todo_focus.html", context)
@@ -2380,6 +2381,19 @@ def todo_done(request, pk: int):
         return redirect(redirect_to)
     todo.done_on = timezone.now()
     todo.save(update_fields=["done_on"])
+    return redirect(redirect_to)
+
+
+@staff_member_required
+@require_POST
+def todo_delete(request, pk: int):
+    redirect_to = reverse("admin:index")
+    try:
+        todo = Todo.objects.get(pk=pk, is_deleted=False)
+    except Todo.DoesNotExist:
+        return redirect(redirect_to)
+    todo.is_deleted = True
+    todo.save(update_fields=["is_deleted"])
     return redirect(redirect_to)
 
 
