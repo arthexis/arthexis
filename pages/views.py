@@ -1444,12 +1444,12 @@ def submit_user_story(request):
             )
 
     data = request.POST.copy()
-    if request.user.is_authenticated and not data.get("name"):
+    if request.user.is_authenticated:
         data["name"] = request.user.get_username()[:40]
     if not data.get("path"):
         data["path"] = request.get_full_path()
 
-    form = UserStoryForm(data)
+    form = UserStoryForm(data, user=request.user)
     if request.user.is_authenticated:
         form.instance.user = request.user
 
@@ -1458,8 +1458,7 @@ def submit_user_story(request):
         if request.user.is_authenticated:
             story.user = request.user
             story.owner = request.user
-            if not story.name:
-                story.name = request.user.get_username()[:40]
+            story.name = request.user.get_username()[:40]
         if not story.name:
             story.name = str(_("Anonymous"))[:40]
         story.path = (story.path or request.get_full_path())[:500]

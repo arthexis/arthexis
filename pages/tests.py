@@ -3549,11 +3549,11 @@ class UserStorySubmissionTests(TestCase):
             user=self.user,
         )
 
-    def test_anonymous_submission_uses_provided_name(self):
+    def test_anonymous_submission_uses_provided_email(self):
         response = self.client.post(
             self.url,
             {
-                "name": "Guest Reviewer",
+                "name": "guest@example.com",
                 "rating": 3,
                 "comments": "It was fine.",
                 "path": "/status/",
@@ -3563,7 +3563,7 @@ class UserStorySubmissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(UserStory.objects.count(), 1)
         story = UserStory.objects.get()
-        self.assertEqual(story.name, "Guest Reviewer")
+        self.assertEqual(story.name, "guest@example.com")
         self.assertIsNone(story.user)
         self.assertIsNone(story.owner)
         self.assertEqual(story.comments, "It was fine.")
@@ -3585,7 +3585,7 @@ class UserStorySubmissionTests(TestCase):
         self.assertFalse(UserStory.objects.exists())
         self.assertIn("rating", data.get("errors", {}))
 
-    def test_anonymous_submission_without_name_uses_fallback(self):
+    def test_anonymous_submission_without_email_returns_errors(self):
         response = self.client.post(
             self.url,
             {
@@ -3595,18 +3595,32 @@ class UserStorySubmissionTests(TestCase):
                 "take_screenshot": "1",
             },
         )
-        self.assertEqual(response.status_code, 200)
-        story = UserStory.objects.get()
-        self.assertEqual(story.name, "Anonymous")
-        self.assertIsNone(story.user)
-        self.assertIsNone(story.owner)
-        self.assertTrue(story.take_screenshot)
-        self.assertEqual(story.status, UserStory.Status.OPEN)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(UserStory.objects.exists())
+        data = response.json()
+        self.assertIn("name", data.get("errors", {}))
+
+    def test_anonymous_submission_with_invalid_email_returns_errors(self):
+        response = self.client.post(
+            self.url,
+            {
+                "name": "Guest Reviewer",
+                "rating": 3,
+                "comments": "Needs improvement.",
+                "path": "/feedback/",
+                "take_screenshot": "1",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(UserStory.objects.exists())
+        data = response.json()
+        self.assertIn("name", data.get("errors", {}))
 
     def test_submission_without_screenshot_request(self):
         response = self.client.post(
             self.url,
             {
+                "name": "guest@example.com",
                 "rating": 4,
                 "comments": "Skip the screenshot, please.",
                 "path": "/feedback/",
@@ -3623,6 +3637,7 @@ class UserStorySubmissionTests(TestCase):
 
     def test_rate_limit_blocks_repeated_submissions(self):
         payload = {
+            "name": "guest@example.com",
             "rating": 4,
             "comments": "Pretty good",
             "path": "/feedback/",

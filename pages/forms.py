@@ -171,15 +171,35 @@ class UserStoryForm(forms.ModelForm):
             "comments": forms.Textarea(attrs={"rows": 4, "maxlength": 400}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
         super().__init__(*args, **kwargs)
-        self.fields["name"].required = False
-        self.fields["name"].widget.attrs.update(
-            {
-                "maxlength": 40,
-                "placeholder": _("Name, email or pseudonym"),
-            }
-        )
+
+        if user is not None and user.is_authenticated:
+            name_field = self.fields["name"]
+            name_field.required = False
+            name_field.label = _("Username")
+            name_field.initial = (user.get_username() or "")[:40]
+            name_field.widget.attrs.update(
+                {
+                    "maxlength": 40,
+                    "readonly": "readonly",
+                }
+            )
+        else:
+            self.fields["name"] = forms.EmailField(
+                label=_("Email address"),
+                max_length=40,
+                required=True,
+                widget=forms.EmailInput(
+                    attrs={
+                        "maxlength": 40,
+                        "placeholder": _("name@example.com"),
+                        "autocomplete": "email",
+                        "inputmode": "email",
+                    }
+                ),
+            )
         self.fields["take_screenshot"].initial = True
         self.fields["rating"].widget = forms.RadioSelect(
             choices=[(i, str(i)) for i in range(1, 6)]
@@ -194,5 +214,8 @@ class UserStoryForm(forms.ModelForm):
         return comments
 
     def clean_name(self):
+        if self.user is not None and self.user.is_authenticated:
+            return (self.user.get_username() or "")[:40]
+
         name = (self.cleaned_data.get("name") or "").strip()
         return name[:40]
