@@ -163,7 +163,27 @@ def _resolve_work_asset(user, path: str) -> Path:
     except SuspiciousFileOperation as exc:
         logger.warning("Rejected suspicious work asset path: %s", normalized, exc_info=exc)
         raise Http404("Asset not found") from exc
-    return asset_path
+    try:
+        user_dir_resolved = user_dir.resolve(strict=True)
+    except FileNotFoundError as exc:
+        logger.warning(
+            "Work directory missing for asset request: %s", user_dir, exc_info=exc
+        )
+        raise Http404("Asset not found") from exc
+    try:
+        asset_resolved = asset_path.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise Http404("Asset not found") from exc
+    try:
+        asset_resolved.relative_to(user_dir_resolved)
+    except ValueError as exc:
+        logger.warning(
+            "Rejected work asset outside directory: %s", asset_resolved, exc_info=exc
+        )
+        raise Http404("Asset not found") from exc
+    if asset_resolved.is_dir():
+        raise Http404("Asset not found")
+    return asset_resolved
 from pages.utils import landing
 from core.liveupdate import live_update
 from django_otp import login as otp_login
