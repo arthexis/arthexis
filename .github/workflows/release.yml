@@ -15,7 +15,7 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/}
           python scripts/capture_migration_state.py "${VERSION#v}"
       - name: Publish artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: migration-plan
           path: releases/${GITHUB_REF#refs/tags/}/migration-plan.txt
