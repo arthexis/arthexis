@@ -696,6 +696,51 @@ class ReleaseProgressViewTests(TestCase):
         self.assertNotContains(response, 'name="approve"')
         self.assertContains(response, "Publishing credentials required")
 
+    def test_release_manager_approval_uses_current_user_profile(self):
+        url = reverse("release-progress", args=[self.release.pk, "publish"])
+        User = get_user_model()
+        try:
+            arthexis = User.all_objects.get(username="arthexis")
+        except User.DoesNotExist:
+            arthexis = User.objects.create_user(
+                username="arthexis",
+                email="arthexis@example.com",
+                password="password123",
+            )
+        arthexis_manager = ReleaseManager.objects.filter(user=arthexis).first()
+        if arthexis_manager is None:
+            arthexis_manager = ReleaseManager.objects.create(user=arthexis)
+        else:
+            arthexis_manager.pypi_token = ""
+            arthexis_manager.pypi_username = ""
+            arthexis_manager.pypi_password = ""
+            arthexis_manager.save(
+                update_fields=["pypi_token", "pypi_username", "pypi_password"]
+            )
+        self.release.release_manager = arthexis_manager
+        self.release.save(update_fields=["release_manager"])
+
+        ReleaseManager.objects.create(user=self.user, pypi_token="user-token")
+
+        session = self.client.session
+        session_key = f"release_publish_{self.release.pk}"
+        session[session_key] = {
+            "step": 7,
+            "log": self.log_name,
+            "started": True,
+            "todos_ack": True,
+        }
+        session.save()
+
+        response = self.client.get(f"{url}?step=7")
+
+        self.assertTrue(response.context["approval_credentials_ready"])
+        self.assertFalse(response.context["approval_credentials_missing"])
+        self.assertNotIn(
+            "Release manager publishing credentials missing",
+            response.context["log_content"],
+        )
+
     @mock.patch.dict(os.environ, {"PYPI_API_TOKEN": "token-from-env"}, clear=False)
     def test_release_manager_approval_uses_environment_credentials(self):
         url = reverse("release-progress", args=[self.release.pk, "publish"])

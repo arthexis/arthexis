@@ -2,11 +2,11 @@
   {
     "model": "core.packagerelease",
     "fields": {
-      "is_seed_data": true,
+      "is_seed_data": false,
       "is_user_data": false,
       "is_deleted": false,
       "package": [
-        "arthexis"
+        "pkg"
       ],
       "release_manager": null,
       "version": "1.0",

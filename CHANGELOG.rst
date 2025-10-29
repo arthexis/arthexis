@@ -4,6 +4,10 @@ Changelog
 Unreleased
 ----------
 
+
+v0.1.22 (2025-10-28)
+--------------------
+
 - 2fcb9d74 chore: update version and fixtures
 - 59cca11e Remove duplicate connector label on charger public view (#2506)
 - b3208335 chore: log git status on rebase failure (#2505)
