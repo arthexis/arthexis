@@ -67,6 +67,7 @@ OTHER_OPTIONS_USED=false
 STATUS_ONLY=false
 DHCP_OVERRIDE=""
 ETH0_MODE_SPECIFIED=false
+ETH0_DHCP_SERVER=""
 
 join_by() {
     local sep="$1"
@@ -236,6 +237,13 @@ print_network_status() {
     esac
 
     echo "$dhcp_summary"
+    if [[ "$eth0_method" == "auto" ]]; then
+        local detected_server=""
+        detected_server=$(discover_dhcp_server eth0 2>/dev/null || true)
+        if [[ -n "$detected_server" ]]; then
+            echo "Detected DHCP server for eth0: $detected_server"
+        fi
+    fi
     echo ""
     echo "Network configuration summary:"
     describe_device_status eth0
@@ -249,6 +257,73 @@ print_network_status() {
     describe_service_status wifi-watchdog "WiFi watchdog"
     describe_service_status wlan1-refresh "wlan1 refresh"
     describe_service_status nginx "nginx"
+}
+
+discover_dhcp_server() {
+    local dev="$1"
+    local server=""
+
+    local options=""
+    options=$(nmcli -g DHCP4.OPTION device show "$dev" 2>/dev/null || true)
+    if [[ -n "$options" ]]; then
+        server=$(awk -F'=' '/dhcp_server_identifier/ {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit}' <<<"$options")
+    fi
+
+    if [[ -z "$server" ]]; then
+        server=$(nmcli -g IP4.GATEWAY device show "$dev" 2>/dev/null | head -n1 || true)
+    fi
+
+    if [[ -z "$server" ]]; then
+        server=$(ip route show dev "$dev" 2>/dev/null | awk '/default/ {print $3; exit}' || true)
+    fi
+
+    if [[ -z "$server" ]]; then
+        local candidate
+        for candidate in 192.168.129.1 192.168.1.1; do
+            if ping -c1 -W1 "$candidate" >/dev/null 2>&1; then
+                server="$candidate"
+                break
+            fi
+        done
+    fi
+
+    if [[ -n "$server" ]]; then
+        printf '%s\n' "$server"
+        return 0
+    fi
+
+    return 1
+}
+
+ensure_dhcp_client_registration() {
+    local dev="$1"
+    local wait_seconds="${2:-15}"
+    local elapsed=0
+    local lease_ip=""
+
+    nmcli device connect "$dev" >/dev/null 2>&1 || true
+
+    while (( elapsed < wait_seconds )); do
+        lease_ip=$(nmcli -g IP4.ADDRESS device show "$dev" 2>/dev/null | head -n1 || true)
+        if [[ -n "$lease_ip" ]]; then
+            break
+        fi
+        sleep 1
+        ((elapsed++))
+    done
+
+    if [[ -n "$lease_ip" ]]; then
+        echo "Confirmed IPv4 lease on $dev ($lease_ip)."
+    else
+        echo "Warning: No IPv4 lease reported on $dev after waiting ${wait_seconds}s." >&2
+    fi
+
+    ETH0_DHCP_SERVER=$(discover_dhcp_server "$dev" || true)
+    if [[ -n "$ETH0_DHCP_SERVER" ]]; then
+        echo "Detected DHCP server for $dev at $ETH0_DHCP_SERVER."
+    else
+        echo "Warning: Unable to detect DHCP server for $dev; checked fallback addresses 192.168.129.1 and 192.168.1.1." >&2
+    fi
 }
 validate_subnet_octet() {
     local value="$1"
@@ -1333,6 +1408,7 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
         fi
         nmcli connection up "$target_conn" >/dev/null 2>&1 || true
         if [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
+            ensure_dhcp_client_registration eth0
             echo "Configured eth0 for DHCP client mode via NetworkManager profile '$ETH0_CONNECTION_CLIENT'."
         else
             echo "Configured eth0 for DHCP server mode via NetworkManager profile '$ETH0_CONNECTION_SHARED' (${eth0_ip})."
@@ -1391,7 +1467,16 @@ if [[ $RUN_ROUTING == true ]]; then
             echo "Skipping default route change to preserve '$PROTECTED_CONN'."
             DEFAULT_ROUTE_SET=true
         else
-            ETH0_GW=$(nmcli -g IP4.GATEWAY device show eth0 2>/dev/null | head -n1)
+            ETH0_GW=$(nmcli -g IP4.GATEWAY device show eth0 2>/dev/null | head -n1 || true)
+            if [[ -z "$ETH0_GW" && -n "$ETH0_DHCP_SERVER" ]]; then
+                ETH0_GW="$ETH0_DHCP_SERVER"
+            fi
+            if [[ -z "$ETH0_GW" ]]; then
+                ETH0_GW=$(discover_dhcp_server eth0 || true)
+                if [[ -n "$ETH0_GW" ]]; then
+                    echo "Using discovered DHCP server $ETH0_GW as default gateway for eth0."
+                fi
+            fi
             if [[ -n "$ETH0_GW" ]]; then
                 ip route replace default via "$ETH0_GW" dev eth0 2>/dev/null || true
                 DEFAULT_ROUTE_SET=true
