@@ -2083,7 +2083,7 @@ class ControlNavTests(TestCase):
 
     def test_readme_pill_visible(self):
         resp = self.client.get(reverse("pages:readme"))
-        self.assertContains(resp, 'href="/read/"')
+        self.assertContains(resp, 'href="/read/docs/cookbooks/install-start-stop-upgrade-uninstall"')
         self.assertContains(resp, 'badge rounded-pill text-bg-secondary">COOKBOOKS')
 
     def test_cookbook_pill_has_no_dropdown(self):
@@ -2099,7 +2099,7 @@ class ControlNavTests(TestCase):
 
         self.assertContains(
             resp,
-            '<a class="nav-link" href="/read/"><span class="badge rounded-pill text-bg-secondary">COOKBOOKS</span></a>',
+            '<a class="nav-link" href="/read/docs/cookbooks/install-start-stop-upgrade-uninstall"><span class="badge rounded-pill text-bg-secondary">COOKBOOKS</span></a>',
             html=True,
         )
         self.assertNotContains(resp, 'dropdown-item" href="/man/"')
@@ -2205,7 +2205,7 @@ class SatelliteNavTests(TestCase):
 
     def test_readme_pill_visible(self):
         resp = self.client.get(reverse("pages:readme"))
-        self.assertContains(resp, 'href="/read/"')
+        self.assertContains(resp, 'href="/read/docs/cookbooks/install-start-stop-upgrade-uninstall"')
         self.assertContains(resp, 'badge rounded-pill text-bg-secondary">COOKBOOKS')
 
 
