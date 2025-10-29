@@ -3622,6 +3622,10 @@ class PackageRelease(Entity):
             if old_name not in expected and old_path.exists():
                 old_path.unlink()
 
+    def delete(self, using=None, keep_parents=False):
+        user_data.delete_user_fixture(self)
+        super().delete(using=using, keep_parents=keep_parents)
+
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"{self.package.name} {self.version}"
 

@@ -201,9 +201,49 @@ def dump_user_fixture(instance, user=None) -> None:
 
 def delete_user_fixture(instance, user=None) -> None:
     target_user = user or _resolve_fixture_user(instance)
-    if target_user is None:
+    filename = (
+        f"{instance._meta.app_label}_{instance._meta.model_name}_{instance.pk}.json"
+    )
+
+    def _remove_for_user(candidate) -> None:
+        if candidate is None:
+            return
+        base_path = Path(
+            getattr(candidate, "data_path", "") or Path(settings.BASE_DIR) / "data"
+        )
+        username = _username_for(candidate)
+        if not username:
+            return
+        user_dir = base_path / username
+        if user_dir.exists():
+            (user_dir / filename).unlink(missing_ok=True)
+
+    if target_user is not None:
+        _remove_for_user(target_user)
         return
-    _fixture_path(target_user, instance).unlink(missing_ok=True)
+
+    root = Path(settings.BASE_DIR) / "data"
+    if root.exists():
+        (root / filename).unlink(missing_ok=True)
+        for path in root.iterdir():
+            if path.is_dir():
+                (path / filename).unlink(missing_ok=True)
+
+    UserModel = get_user_model()
+    manager = getattr(UserModel, "all_objects", UserModel._default_manager)
+    for candidate in manager.all():
+        data_path = getattr(candidate, "data_path", "")
+        if not data_path:
+            continue
+        base_path = Path(data_path)
+        if not base_path.exists():
+            continue
+        username = _username_for(candidate)
+        if not username:
+            continue
+        user_dir = base_path / username
+        if user_dir.exists():
+            (user_dir / filename).unlink(missing_ok=True)
 
 
 def _mark_fixture_user_data(path: Path) -> None:
