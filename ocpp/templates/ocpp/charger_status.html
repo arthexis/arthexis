@@ -83,17 +83,48 @@
       min-width: 2px;
       display: block;
     }
+    .charger-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.125rem;
+    }
+    .charger-meta-label {
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--bs-secondary-color, rgba(108, 117, 125, 0.85));
+    }
+    .charger-meta-value {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--bs-body-color);
+      max-width: 16rem;
+      word-break: break-word;
+      text-align: left;
+    }
+    @media (min-width: 768px) {
+      .charger-meta {
+        align-items: flex-end;
+      }
+      .charger-meta-value {
+        text-align: right;
+      }
+    }
   </style>
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start align-items-stretch gap-3 mb-3">
-      <div>
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
+      <div class="flex-grow-1">
         <h1 class="mb-1">{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
-        <div class="d-flex flex-column flex-sm-row gap-2 text-muted">
-          <span>{{ charger.charger_id }}</span>
-        </div>
       </div>
-      <div class="d-flex align-items-center">
-        <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
-        <strong id="charger-state">{{ state }}</strong>
+      <div class="d-flex flex-column align-items-start align-items-md-end gap-2 flex-shrink-0">
+        <div class="d-flex align-items-center">
+          <span class="d-inline-block rounded-circle me-2" style="width:20px;height:20px;background-color: {{ color }};"></span>
+          <strong id="charger-state">{{ state }}</strong>
+        </div>
+        <div class="charger-meta text-muted">
+          <span class="charger-meta-label">{% trans "Serial Number" %}</span>
+          <span class="charger-meta-value">{{ charger.charger_id }}</span>
+        </div>
       </div>
     </div>
     {% if past_session %}
